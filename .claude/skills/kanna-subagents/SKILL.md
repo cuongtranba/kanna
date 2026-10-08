@@ -15,9 +15,8 @@ the main model then synthesizes it into its own response.
 - **Roster injection:** `buildKannaSystemPromptAppend(subagents)` in
   `src/shared/kanna-system-prompt.ts` builds a dynamic system-prompt
   suffix listing every configured subagent's `name`, `id`, and
-  `description`. Computed per-spawn in `agent.ts` and passed to both
-  drivers (SDK via `systemPrompt.append`, PTY via
-  `--append-system-prompt`). Truncated at 20 entries by `updatedAt`
+  `description`. Computed per-spawn in `agent.ts` and passed to the Claude
+  session via `systemPrompt.append`. Truncated at 20 entries by `updatedAt`
   descending; remainder surfaced as "(N more subagents omitted ...)".
 - **MCP tool:** registered in `kanna-mcp.ts` only when the spawn
   supplies both `subagentOrchestrator` AND `delegationContext`. Main
@@ -53,7 +52,7 @@ return pool.hasUsable(reservedFor)
 ```
 
 **An OAuth-pool token is required only once the user has configured one.** With
-`claudeAuth.tokens: []` the driver falls through to the local `claude` CLI
+`claudeAuth.tokens: []` the session falls through to the local `claude` CLI
 credentials, exactly as `claude-session-spawner.ts` / `quick-response.ts` do
 (their `hasAnyToken() && !picked` refusal is the same condition, kept in that
 form because they also need the picked token — TOCTOU-closed per c3-224). A
@@ -72,52 +71,30 @@ a gate that consulted it read every user as unauthenticated. `AppSettingsSnapsho
 deliberately omits `claudeAuth` so re-reading it is a compile error — do not
 re-add it.
 
-## Keep-alive multi-turn subagents (claude SDK + PTY)
+## Keep-alive multi-turn subagents
 
 `delegate_subagent({ subagent_id, prompt, keep_alive: true })` keeps the
 subagent's claude session open after the first `result` instead of tearing it
 down. The main agent then drives further turns into the SAME warm session — no
-re-spawn, no re-trust, warm cache. Star topology preserved: the main agent is
-always the one calling these tools.
+re-spawn, warm cache. Star topology preserved: the main agent is always the one
+calling these tools.
 
-- **SDK transport (`adr-20260616-adr-20260616-sdk-pty-feature-parity`):** the SDK
-  driver uses its native streaming-input prompt queue —
+- **Transport (`adr-20260616-adr-20260616-sdk-pty-feature-parity`):** the SDK
+  session uses its native streaming-input prompt queue —
   `startClaudeSession({ keepAlive })` leaves the `AsyncMessageQueue` open after
   the initial prompt and exposes the handle's `pushChannelPrompt` field backed
-  by a queue push (shared with `sendPrompt` via `enqueueUserPrompt`). No
-  channel/dev-channels flag is needed.
-- **PTY transport:** as below — a kanna channel push.
-
-- **Transport:** each turn is a kanna channel push (`pushChannelPrompt`, the
-  same MCP-notification transport shipped in PR #333) followed by draining
-  the persistent `HarnessEvent` stream until the next synthesized
-  `kind:"result"` event. Interactive TUI claude never writes a
-  `type:"result"` row; the turn-end signal depends on CLI version (see
-  **PTY turn-end detection** in `.claude/skills/kanna-pty/SKILL.md`).
-  `createJsonlEventParser` (`jsonl-to-event.ts`) synthesizes one
-  `kind:"result"` per turn either way, so a per-turn drain (`drainOneTurn` in
-  `subagent-provider-run.ts`) returns once per turn and leaves the iterator open.
-- **Auto-wake filter exemption (do NOT remove):** a channel push lands in the
-  transcript as a `user isMeta:true` line at a turn boundary, which the
-  `jsonl-to-event.ts` auto-wake filter (added in 216392b to drop CC's own
-  `<task-notification>` background wakes) would otherwise eat — dropping the
-  synthesized `result` and hanging `drainOneTurn` forever. The parser detects
-  the `<channel source="kanna">` tag (`userMessageContainsKannaChannel`) and
-  treats those lines as real turns. Genuine `<task-notification>` wakes stay
-  filtered. Unit fakes emit `kind:"result"` directly and bypass this path, so
-  this invariant is only covered by the parser tests + the real-OAuth e2e.
-- **Driver:** `StartClaudeSessionPtyArgs.keepAlive` suppresses
-  `oneShotClose()` on the first result and exposes
-  `pushChannelPrompt` on the handle (`claude-pty/driver.ts`). Keep-alive
-  REQUIRES channel delivery — a keep-alive run with no `pushChannelPrompt`
-  fails closed. The subagent system prompt gets the plural channel framing
-  (`buildChannelPromptFraming(true)`) so the model expects multiple channel
-  messages over the session and does not treat turn 2+ as a suspicious
-  interrupt.
+  by a queue push (shared with `sendPrompt` via `enqueueUserPrompt`). The field
+  keeps the name of the channel-push transport the removed PTY driver used; no
+  channel/dev-channels flag exists any more.
+- **Turn drain:** each turn is a `pushChannelPrompt` followed by draining the
+  persistent `HarnessEvent` stream until the next `kind:"result"` event, so a
+  per-turn drain (`drainOneTurn` in `subagent-provider-run.ts`) returns once per
+  turn and leaves the iterator open. A keep-alive run whose handle has no
+  `pushChannelPrompt` fails closed.
 - **Provider run:** `runClaudeSubagent` drains turn 1, then returns a
   `LiveTurnSource` (`runTurn(prompt, onChunk, onEntry)` + `close()`) via the
   widened `ProviderRunStart.start(onChunk, onEntry, { keepAlive })`. Codex is
-  out of scope — keep-alive is claude-PTY only; the MCP layer rejects
+  out of scope — keep-alive is Claude only; the MCP layer rejects
   `keep_alive` for non-claude subagents.
 - **Orchestrator:** a `liveSessions` registry (keyed by `runId`) holds each
   warm session. Turn 1 runs through the normal `spawnRun` plumbing (permit,
@@ -165,7 +142,7 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   background run holds a permit while in flight, so concurrency is bounded by
   the existing permit pool (default 4) + run timeout. No live-session registry
   (background runs are one-shot, not keep-alive).
-- **Re-entry (driver-agnostic, always /clears main).** `AgentCoordinator.deliverSubagentToMain`
+- **Re-entry (provider-agnostic, always /clears main).** `AgentCoordinator.deliverSubagentToMain`
   is wired as `onBackgroundRunComplete`. On every delivery it (1) wipes the
   chat's Claude `session_token` (main /clear equivalent — same machinery
   `exit_plan_mode`'s clearContext branch uses), (2) appends a `context_cleared`
@@ -178,7 +155,7 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   result rides exactly one fresh prompt, context never accumulates. ARMED loop
   deliveries omit `<result>` (PROGRESS.md stays the loop's only durability
   contract) and append the full loop discipline prompt after the notification.
-  `fireAutoContinue` → `enqueueMessage` delivers to both drivers; because
+  `fireAutoContinue` → `enqueueMessage` delivers it through the normal queue; because
   session_token is null, the next main turn is a FRESH Claude spawn.
 - **No wake cap.** Concurrency is bounded by the subagent permit pool + run
   timeout. Every delivery is a real event, never a self-poll — no runaway

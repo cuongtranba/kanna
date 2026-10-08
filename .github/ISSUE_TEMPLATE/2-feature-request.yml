@@ -44,7 +44,7 @@ body:
         - "Cron & scheduled jobs (c3-120, c3-233, c3-311)"
         - "Terminal workspace (c3-118, c3-216)"
         - "Sessions, turns & agent coordinator (c3-210)"
-        - "Claude driver — SDK or PTY (c3-210, src/server/claude-pty)"
+        - "Claude sessions — Agent SDK (c3-210, src/server/claude-session-start.ts)"
         - "Codex provider (c3-211)"
         - "OpenRouter, provider catalog & models (c3-212, c3-230)"
         - "Subagents, loops & workflows (c3-210, src/server/loop-template.ts)"

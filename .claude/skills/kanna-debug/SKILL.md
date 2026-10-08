@@ -1,6 +1,6 @@
 ---
 name: kanna-debug
-description: Read a Kanna chat's on-disk transcript and event logs to find out what actually happened in a session. Scope — this reads Kanna's OWN chat transcripts, identified by a chat/session id; an ordinary stack trace, exception, or application log from any other program is not one of these and needs no skill, so do not reach for it there. Use whenever a chat/session id appears (a UUID like `ab06e5ab-6f15-42ab-b630-fbb7abfe7640`), or the user says "debug this session", "what happened in chat X", "the chat got stuck", "this session crashed", "investigate session Y", "why did the tool fail", "the turn never finished", "it says running forever", "the loop stopped waking", "the cron job never fired", "my queued message vanished", "it cleared context on its own", or reports a wrong model or billing hitting the API instead of the subscription. Also use when debugging Kanna server behavior — event store, agent loop, tool callbacks, auto-continue, PTY driver — since the transcript records every tool call, its result, and where the error surfaced. Reach for it before theorizing about a session; skip it for stack traces or logs that are not Kanna transcripts.
+description: Read a Kanna chat's on-disk transcript and event logs to find out what actually happened in a session. Scope — this reads Kanna's OWN chat transcripts, identified by a chat/session id; an ordinary stack trace, exception, or application log from any other program is not one of these and needs no skill, so do not reach for it there. Use whenever a chat/session id appears (a UUID like `ab06e5ab-6f15-42ab-b630-fbb7abfe7640`), or the user says "debug this session", "what happened in chat X", "the chat got stuck", "this session crashed", "investigate session Y", "why did the tool fail", "the turn never finished", "it says running forever", "the loop stopped waking", "the cron job never fired", "my queued message vanished", "it cleared context on its own", or reports a wrong model or billing hitting the API instead of the subscription. Also use when debugging Kanna server behavior — event store, agent loop, tool callbacks, auto-continue — since the transcript records every tool call, its result, and where the error surfaced. Reach for it before theorizing about a session; skip it for stack traces or logs that are not Kanna transcripts.
 user-invocable: false
 ---
 
@@ -51,7 +51,7 @@ The summarizer prints each entry's `_id`. Use `jq` to retrieve the full JSON, wh
 jq -c 'select(._id == "<entry-id>")' "$TRANSCRIPT"
 ```
 
-For a tool call, the interesting fields are `tool.toolName`, `tool.input`, and the matching `tool_result.content` / `isError`. For an assistant message, `text` is what the model said. The `debugRaw` field is the unparsed JSONL frame the SDK or PTY driver wrote — useful when you suspect the parser dropped data.
+For a tool call, the interesting fields are `tool.toolName`, `tool.input`, and the matching `tool_result.content` / `isError`. For an assistant message, `text` is what the model said. The `debugRaw` field is the unparsed frame the SDK emitted — useful when you suspect the parser dropped data.
 
 ## Entry shapes
 
@@ -74,7 +74,7 @@ Pair `tool_call.tool.toolId` with `tool_result.toolId` to match a call to its re
 - **"Tool failed"** → `--errors-only` lists every `isError: true`. The `content` field has the error string the SDK surfaced.
 - **"Model did the wrong thing"** → read the `user_prompt` then the next 1-2 `assistant_text` and `tool_call` entries. Often the prompt was ambiguous or an attachment was missing.
 - **"Permission denied / approval loop"** → search for `tool` names matching `mcp__kanna__*` and look at the result content; the durable approval protocol writes a deny reason there.
-- **"Billing went to API not subscription"** → check the `system_init.debugRaw.apiKeySource` and the `account_info.tokenSource`. PTY driver requires `apiKeySource: "none"` and a CLAUDE_CODE_OAUTH_TOKEN source.
+- **"Billing went to API not subscription"** → check the `system_init.debugRaw.apiKeySource` (where the SDK found its credential; `none` means no API key) and the `account_info.tokenSource` (for example `CLAUDE_CODE_OAUTH_TOKEN` for an OAuth-pool token).
 - **"Wrong model / unexpected model switch"** → `system_init.model` shows the start model; the SDK writes a new `system_init` on model switch, so multiple `system_init` lines = mid-session switch.
 - **"The loop stopped waking"** → an armed loop should always hold exactly one pending wake: a running subagent, a queued message, or an active turn. Find which one is missing. Look for the last `loop_run_outcome` and whether an `auto_continue_accepted` followed it — a gap between them is a wake lost to a crash mid-delivery, which boot recovery is supposed to re-emit.
 - **"A cron job never ran / ran but nothing happened"** → a fired run should produce a `cron_run_outcome`. Runs that finish unattributed stay `running` forever, so later ticks either heal them as `orphaned` or skip them as `previous_run_active`. The tell is `turn_finished` events present with no `cron_run_outcome {ok: true}` anywhere.

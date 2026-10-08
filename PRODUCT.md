@@ -28,7 +28,7 @@ The following implementation facts are inferred from the repository and README a
 
 - The app supports Claude, Codex, and OpenRouter-backed chats, real-time WebSocket updates, local project discovery, transcript export, worktree isolation, and responsive PWA use.
 - It provides agent steering, plan-mode prompts, background-task visibility, subagent orchestration, OAuth token pooling, custom MCP servers, and configurable notifications.
-- The app is local-first and may be password-protected; it preserves subscription billing for the optional Claude PTY driver.
+- The app is local-first and may be password-protected.
 
 Open product decisions: no pricing, licensing, deployment, customer, benchmark, or external proof claims are recorded here.
 

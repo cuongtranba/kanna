@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 3dad56f5f5685fb4a0784d638b17f26d1accb3c32f24329647f6ef88b0774a14
+c3-seal: 189fddf2665066bcb145bcc9408c2272e6f8f7f9c10db5fdf24b0bb8a1c4fb40
 title: Server
 type: container
 boundary: service
@@ -17,8 +17,8 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 
 - Own the authoritative event log and derived read models; every state mutation lands as a JSONL event first.
 - Accept WebSocket subscriptions and commands; push fresh snapshots on every change.
-- Drive multi-provider agent turns (Claude Agent SDK, Claude CLI under PTY, Codex App Server) through a single coordinator.
-- Host the in-process loopback MCP server for `mcp__kanna__*` shims and route interactive tool requests through a durable approval protocol that survives restart.
+- Drive multi-provider agent turns (Claude Agent SDK, Codex App Server) through a single coordinator.
+- Host the in-process MCP server for `mcp__kanna__*` shims and route interactive tool requests through a durable approval protocol that survives restart.
 - Detect rate-limit / auth-error turn endings and auto-resume the chat at the right wake-up moment without user intervention.
 - Discover local projects, manage terminals and uploads, operate share tunnels.
 - Gate network access (auth), supervise its own CLI lifecycle, and refuse to leave localhost unless explicitly asked.
@@ -52,11 +52,10 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-222 | keybindings | feature | active | Persist user keybindings |
 | c3-223 | cloudflare-tunnel | feature | active | Detect dev-server ports and expose via cloudflared quick tunnels |
 | c3-224 | oauth-token-pool | feature | active | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
-| c3-225 | claude-pty-driver |  | active | Claude CLI PTY transport: parse subprocess stdout JSONL into normalized events, preserve subscription billing |
-| c3-226 | kanna-mcp-host | feature | active | Loopback MCP server + built-in shims + durable approval protocol + path-deny |
+| c3-226 | kanna-mcp-host | feature | active | In-process MCP server + built-in shims + durable approval protocol + path-deny |
 | c3-227 | auto-continue |  | active | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | active | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
-| c3-229 | workflow-status |  | active | Disk-watch sidecar read-model for PTY workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
+| c3-229 | workflow-status |  | active | Disk-watch sidecar read-model for Claude workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |
 | c3-230 | openrouter-models | feature | active | Tool-capable OpenRouter model catalog: HTTPS fetch + parse + TTL cache; feeds the composer model picker via settings.listOpenRouterModels RPC |
 | c3-231 | local-catalog | feature | active | Scan local Claude skills + slash commands (user, project, plugin) and merge them into ChatSnapshot.slashCommands so the composer / picker mirrors Claude Code |
 | c3-232 | boards | feature | active | Persist boards, project them to subscribers, turn a card into an isolated worktree-branch-chat, reconcile a bound tracker, and expose the board to the agent as a work queue. |

@@ -3,6 +3,10 @@ claim: "workflow status panel is at src/server/workflow-*.ts and src/client/app/
 code:
   - src/server/agent-transcript-parse.test.ts
   - src/server/agent-transcript-parse.ts
+  - src/server/claude-projects-path.adapter.test.ts
+  - src/server/claude-projects-path.adapter.ts
+  - src/server/output-ring.test.ts
+  - src/server/output-ring.ts
   - src/server/watched-registry.test.ts
   - src/server/watched-registry.ts
   - src/client/app/WorkflowAgentTranscriptPanel.store.ts

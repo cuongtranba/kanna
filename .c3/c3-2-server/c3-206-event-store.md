@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: b4da0e649dd9c95079ff62073af6e20099c4df683c5599712655c894ed9dda9b
+c3-seal: 0f13e128510bf941fbd93f181c6b930fb29155f17be9aa8fe38fac269bb8f381
 title: event-store
 type: component
 category: foundation
@@ -136,6 +136,6 @@ Cold `getRecentMessagesPage` (cache miss, non-legacy) serves the window via
 > > `context_window_updated` coalescing stays exact via a sentinel parse of the
 > > newer page's first line. When the tail reaches BOF the complete transcript
 > > is promoted into the FULL cache WITH messageId dedup seeding. A PARTIAL tail
-> > is never promoted there and never touches the dedup set (PTY resume safety),
+> > is never promoted there and never touches the dedup set (resume safety),
 > > but it IS kept in the separate tail-window cache — that cache holds parsed
 > > entries only, seeds no dedup state, and so cannot affect resume.

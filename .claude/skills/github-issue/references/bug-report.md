@@ -80,9 +80,9 @@ places that misbehave because of it. Each entry is a checkpoint for the fix and,
 usually, a test. Without it the implementer patches the line, sees the symptom
 persist somewhere else, and reopens.
 
-**The scope boundary** stops wasted and wrong work. #806 explains why PTY is
-unaffected; without it an implementer "fixing" both drivers would break the one
-that works.
+**The scope boundary** stops wasted and wrong work. #806 explained why the PTY
+driver (since removed) was unaffected; without it an implementer "fixing" both
+drivers would have broken the one that worked.
 
 **Fix** describes direction because the implementer has the current file open and
 better information than your snapshot — a pasted patch goes stale and gets
@@ -136,7 +136,7 @@ if (!session.backgroundTasks.has(id)) {          // <-- always false on SDK
 ```
 
 Then the compensation check, then the consequences as `file:line — effect`
-triples, then the boundary paragraph explaining why PTY is fine.
+triples, then the boundary paragraph explaining why the PTY driver was fine.
 
 **Fix** — direction plus the two non-obvious constraints:
 

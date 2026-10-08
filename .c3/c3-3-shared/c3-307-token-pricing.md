@@ -1,6 +1,6 @@
 ---
 id: c3-307
-c3-seal: d0a43da5f84c20d0658f3f988ce861559296fbdb123355d64a165021fbdaa568
+c3-seal: d248be2fc7a96b90ad3b0b698974e8e530474aafdd26b36d10e9f94c7598869f
 title: token-pricing
 type: component
 category: foundation
@@ -47,7 +47,6 @@ Owns the USD cost arithmetic for per-turn token usage and model-price resolution
 | --- | --- | --- |
 | Outcome | Every turn in every provider carries a costUsd field so the UI can display cumulative spend | c3-210 |
 | Primary path — Claude SDK | agent-coordinator calls resolveModelPrice with live OpenRouter pricing then computeCostUsd on the usage snapshot; attaches result to context_window_updated and result entries | c3-210 |
-| Primary path — PTY | jsonl-to-event.ts mirrors the same enrichment on the synthesized result entry from CLI ≥ 2.1.x transcripts | c3-225 |
 | Primary path — Codex | codex-app-server calls resolveModelPrice (static table only; no OpenRouter) then computeCostUsd on the Codex usage snapshot; attaches to context_window_updated and turn-completed/failure result entries | c3-211 |
 | Alternate — no price match | resolveModelPrice returns null; callers omit costUsd; UI shows no cost | c3-210 |
 | Client readout | computeSessionTotals (c3-110) sums per-turn result.costUsd fields to display cumulative session spend in SessionTokenPill | c3-115 |

@@ -1,0 +1,6 @@
+---
+target: c3-210
+scope: block
+base: c3-210#n11253@v1:sha256:74e543ad60d270d134ac56b7bf0b053cbdc0095879d5f860a988df9bf6b18026
+---
+| Alternate — background-task keep-alive | A pending background task holds its Claude session warm against the idle reaper and the budget enforcer, because the task is a child of the CLI process. WHAT bounds that hold depends on the signal available (adr-20260808-background-task-level-signal-authoritative): once the SDK has sent a background_tasks_changed LEVEL snapshot the session is backgroundTasksLevelSourced and SET MEMBERSHIP alone is authoritative — no clock may expire it, because a healthy dev server is silent for hours and every timer and output-growth probe reads that silence as death. Absent the level signal (an old CLI, or before an SDK session's first snapshot) the fixed backgroundTaskMaxMs deadline governs and a lapsed deadline escalates through the visible wake ladder to abandonment (adr-20260801-background-task-wake-escalation) rather than a silent reap. Consequence: hasPendingBackgroundTask and backgroundTaskGuardExpired no longer partition size > 0, and a level-sourced hold is bounded only by the SDK's REPLACE semantics plus the runner's finally releasing on transport death | c3-207 |

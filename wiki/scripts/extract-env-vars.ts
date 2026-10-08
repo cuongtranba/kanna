@@ -2,8 +2,8 @@
 // Scrapes src/**/*.ts for process.env.KANNA_* accesses, emits a TS data file.
 // Hand-curated descriptions live in DESCRIPTIONS below.
 //
-// Test files are skipped on purpose: a knob only a suite reads (KANNA_PTY_E2E,
-// KANNA_RUN_LIVE_TITLE_TESTS) is not something a user can usefully set, and
+// Test files are skipped on purpose: a knob only a suite reads
+// (KANNA_RUN_LIVE_TITLE_TESTS) is not something a user can usefully set, and
 // listing it in a public reference invites configuring it.
 //
 // Only vars this scan FINDS are published, so a DESCRIPTIONS entry for a var
@@ -20,13 +20,12 @@ const SRC = path.join(REPO_ROOT, 'src')
 const OUT = path.join(import.meta.dir, '../src/content/docs/reference/env-vars-data.ts')
 
 const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
-  KANNA_CLAUDE_DRIVER: { default: 'sdk', description: 'Claude driver. Leave unset. "sdk" runs the Claude Agent SDK and is the supported mode; "pty" is a legacy path that drives the claude CLI under a pseudo-terminal, kept only for compatibility.' },
+  KANNA_CLAUDE_DRIVER: { default: '(unset)', description: 'Ignored. The PTY driver was removed and every Claude chat runs on the Claude Agent SDK. Setting it to "pty" only logs a warning at boot; leave it unset.' },
   KANNA_MCP_TOOL_CALLBACKS: { default: '0', description: 'Set to "1" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol.' },
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
   KANNA_PROACTIVE_COMPACT: { default: 'disabled', description: 'Set to "enabled" to restore Kanna\'s own proactive /compact injection. Off by default because the Claude Code CLI auto-compacts on its own (Settings.autoCompactEnabled, on by default), and Kanna\'s threshold is lower, so both running means Kanna always wins and the CLI never compacts. Turn it on only if you have set autoCompactEnabled: false in your CLI settings.' },
   KANNA_CRON_REPAIR: { default: 'enabled', description: 'Set to "disabled" to stop handing an invalid /cron line to the agent for repair. It only ever fires where Kanna has no corrected command of its own; the validate_cron / arm_cron tools stay registered either way.' },
   KANNA_CRON_CONFIRM: { default: 'enabled', description: 'Set to "disabled" to stop the host from escalating a typed /cron arm to a model review turn. When enabled, the model presents the full job config and asks the user to confirm, change, or disarm. Only fires on the typed path — arm_cron already confirms in-turn.' },
-  KANNA_PTY_SANDBOX: { default: '(unset)', description: 'Set to "off" to disable the PTY driver\'s OS-level sandbox. On by default on macOS, and on Linux when bubblewrap (bwrap) is on PATH. Turning it off loses defense-in-depth against the CLI\'s built-in credential reads; it also silences the warning logged when bwrap is missing.' },
   KANNA_STACK_MEMORY: { default: 'enabled', description: 'Set to "disabled" to stop a multi-root (stack) spawn from loading each additional project\'s CLAUDE.md / .claude/rules. Enabled, Kanna sets CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD on any spawn that has additional roots, so a chat that can WRITE a bound project also reads its conventions — at the cost of those memory files in every turn\'s context. A single-project chat is unaffected either way.' },
   KANNA_UPDATE_COMMAND: { default: '(auto-detected)', description: 'Overrides the command Kanna runs to install a self-update. Set it when npm, bun, pnpm and yarn are all absent or the wrong one is picked.' },
   KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn.' },
@@ -44,7 +43,8 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_LOG_ANALYTICS: { default: '0', description: 'Set to "1" to log analytics payloads to stderr. Debugging aid.' },
   KANNA_LOG_CLAUDE_STEER: { default: '0', description: 'Set to "1" to log mid-turn steering messages sent to Claude. Debugging aid.' },
   KANNA_PROFILE_SEND_TO_STARTING: { default: '0', description: 'Set to "1" to log timing for each stage between a send and the turn actually starting. Use when a chat feels slow to begin.' },
-  KANNA_PTY_BACKGROUND_TASK_MAX_MS: { default: '1800000', description: 'How long a launched background task may hold a session warm against the idle reaper (30 min). Only applies to a session with no live task list from the SDK; when the SDK reports its background tasks, set membership decides and this deadline is never consulted. The KANNA_PTY_ prefix is historical.' },
+  KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS: { default: '1800000', description: 'How long a launched background task may hold a session warm against the idle reaper (30 min). Only applies to a session with no live task list from the SDK; when the SDK reports its background tasks, set membership decides and this deadline is never consulted.' },
+  KANNA_PTY_BACKGROUND_TASK_MAX_MS: { default: '(unset)', description: 'Former name of KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS. Still read, but only when the new name is unset.' },
   KANNA_BACKGROUND_TASK_MAX_WAKES: { default: '3', description: 'How many times a background task may wake its chat after the keep-alive deadline passes before Kanna stops re-waking it.' },
   KANNA_IMPORT_FOLLOW_POLL_MS: { default: '2000', description: 'Stat-poll tick interval driving the single-session-import live-tail FollowedSessionRegistry.' },
   KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS: { default: '600000', description: 'A single-session import only auto-arms live-tailing when the source file mtime is within this window of "now".' },
