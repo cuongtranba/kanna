@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.66.0](https://github.com/cuongtranba/kanna/compare/v1.65.0...v1.66.0) (2026-10-08)
+
+
+### Features
+
+* **chat:** stream the model's output live while it is generated ([#1219](https://github.com/cuongtranba/kanna/issues/1219)) ([10f1204](https://github.com/cuongtranba/kanna/commit/10f12044510c34f61eeaf52a1cf5866f213e247c))
+
 ## [1.65.0](https://github.com/cuongtranba/kanna/compare/v1.64.1...v1.65.0) (2026-10-08)
 
 
