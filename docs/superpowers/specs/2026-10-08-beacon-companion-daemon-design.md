@@ -289,9 +289,12 @@ gets verb logic (`permission-gate.ts:186`), and the read-root check covers only
 `READ_PATH_TOOLS` (`:100`); every other name falls through to the chat's
 `defaultAction`, which is `ask` (`:254`). So the gate gains a **beacon branch**
 that resolves the beacon's scope and: denies anything outside `readRoots` or
-with `exec: false`; auto-allows a `beacon_exec` whose verb is in
-`execAllowlist`; and asks for everything else. This gives the user both a
-standing grant for routine commands and a consent prompt for everything novel.
+with `exec: false`; auto-allows every `beacon_exec` and `beacon_script` when the
+beacon's `autoRunScripts` is on (the one-time install consent, §3a), or a
+`beacon_exec` whose verb is in `execAllowlist`, or a `beacon_script` whose body
+hash is trusted; and asks for everything else. So a machine the user authorized
+at install runs without prompts, while one that only has an allowlist still
+gets a consent prompt for anything novel.
 
 **The consent card must name the machine.** The generic pending card
 (`PendingToolRequestMessage.tsx`, `GenericPending`) previews only `command`,
@@ -303,40 +306,48 @@ beacon calls rather than `unknown_tool`.
 
 ---
 
-## 3a. Running scripts, and the consent that keeps this a tool
+## 3a. Running scripts — one consent at install, then no nagging
 
 `beacon_script` runs a multi-line PowerShell (Windows) or `sh`/`zsh`
 (macOS/Linux) script in the user's **login session**, so it can reach the same
 apps, files, and environment the user has — that is the point of a companion on
-the user's own machine. The whole script text is shown on the approval card
-before it runs; the per-command `execAllowlist` never auto-approves a
-`beacon_script`, because a verb allowlist cannot vouch for an arbitrary script
-body.
+the user's own machine.
 
-**Consent is what separates this from a remote-access trojan, so the default is
-to ask.** The friction is the feature: a user who can see the exact script and
-the exact machine before it runs is delegating their own authority, not handing
-it away.
+**The authorization model is one-time informed consent, not a prompt per
+script.** Prompting on every script would nag a user who already decided to trust
+this machine; silently running with no consent at all would make this a
+remote-access trojan. The resolution is a single, explicit, revocable gesture at
+install time — the same shape as adding an SSH `authorized_keys` entry or
+enabling Tailscale: you authorize once, and then it works.
 
-For the non-technical user who wants one-click convenience, that consent is made
-**cheap and explicit, never silent**:
+- **The installer's final step is the consent.** It is a clear, un-pre-checked
+  choice in plain words — *"Let this machine run commands and scripts sent from
+  your Kanna, without asking each time? Anyone who can sign into your Kanna will
+  be able to run things on this computer. You can turn this off anytime in
+  Settings or from the tray icon."* Agreeing sets the beacon's `autoRunScripts`
+  flag; from then on `beacon_script` and `beacon_exec` run **without a per-call
+  prompt** on that machine. Declining leaves the flag off, and the beacon asks
+  per script instead.
+- **It stays visible and one-click revocable.** The Beacons UI and the tray menu
+  show the auto-run state prominently, never buried, and turning it off takes one
+  click. Deleting or pausing the beacon stops it entirely.
+- **The audit trail is unchanged.** Every `beacon_script` and `beacon_exec` still
+  lands in the chat transcript with its full body or command and the machine it
+  ran on, so "no prompt" never means "no record".
 
-- **Trusted scripts.** A user may mark one reviewed script (keyed by a hash of
-  its body) as trusted, so an identical later run skips the prompt. A one-byte
-  change is a different hash and asks again.
-- **Auto-run mode, opt-in per beacon.** A beacon carries an `autoRunScripts`
-  flag, default **off**. When on, `beacon_script` runs without a prompt on that
-  one machine. The installer's final step offers to enable it in plain words —
-  *"Let this machine run commands from your Kanna without asking each time? You
-  can turn this off anytime in Settings."* — so the user chooses it knowingly.
-  The Beacons UI shows it as a prominent, one-click-revocable state, never
-  buried, and the audit trail (the transcript) still records every script that
-  ran.
+Two conditions bound this so the one-time consent is real authorization and not a
+blank cheque:
 
-The recommended default ships **off**: convenience is a switch the user flips,
-not a property of having installed the binary. A deployment that wants the
-switch pre-flipped changes one default, and that choice is the install owner's
-to make.
+- **A Kanna password is required (§1).** Auto-run means anyone who can sign into
+  the Kanna can run scripts on the paired machine, so an install with no password
+  — where `/ws` is open — must not pair at all.
+- **`autoRunScripts` is per beacon.** Consenting on one machine says nothing about
+  another; each pairing makes its own choice.
+
+The shipped default when the flag is unset is to **ask**, so a beacon paired
+through the bare CLI (which shows no consent screen) is safe until the user turns
+auto-run on. The installer is what turns it on, once, with the sentence above in
+front of the user.
 
 ---
 
@@ -581,4 +592,4 @@ shims onto a bound beacon once the explicit tools are trusted.
 | Installer for non-technical users | `.pkg` / `.exe` installer with a 6-digit code prompt, then a background service with a tray/menu-bar icon (§1). |
 | Code signing | Unsigned in Phase 1 with an in-product first-run bypass guide; signed and notarized in Phase 2 (§10). |
 | Large files | `beacon_read` (windowed), `beacon_grep` (search on the machine), and `beacon_fetch` (copy to the workspace) — the model routes itself (§3). |
-| Running scripts | `beacon_script` with the full body shown; **ask by default**, with a trusted-script hash and an opt-in per-beacon `autoRunScripts` switch the installer offers (§3a). The recommended default is to ask. |
+| Running scripts | One-time informed consent at install: the installer's final step asks once, and agreeing turns on per-beacon `autoRunScripts` so `beacon_script`/`beacon_exec` run with no further prompt on that machine (§3a). Revocable in one click; the transcript still records every run; requires a Kanna password. A CLI-paired beacon with no consent screen asks until the user turns it on. |

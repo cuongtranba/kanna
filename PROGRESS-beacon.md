@@ -42,12 +42,15 @@ M0 (design PR) in progress on `docs/beacon-design`.
   guide; signing/notarization is Phase 2.
 - 2026-10-08 Large files: beacon_read (windowed), beacon_grep, beacon_fetch;
   the model routes itself, none privileged.
-- 2026-10-08 beacon_script runs a full script in the login session, ASK by
-  default. Convenience is an opt-in per-beacon autoRunScripts switch (offered by
-  the installer) plus trusted-script hashes — not a silent default. The user
-  asked for bypass-by-default; recorded as a one-line default change the install
-  owner can make, but the shipped default asks, because per-action consent is
-  what keeps this a user-authorized tool rather than a remote-access trojan.
+- 2026-10-08 beacon_script runs a full script in the login session. Consent is
+  ONE-TIME at install, not per-script: the installer's final step asks once,
+  agreeing turns on per-beacon autoRunScripts so scripts and commands then run
+  with no prompt on that machine (same shape as adding an SSH key). Revocable in
+  one click; transcript still records every run; requires a Kanna password; per
+  beacon. Default when unset = ask, so a CLI-paired beacon with no consent
+  screen is safe until the user turns it on. This matches the user's ask (prompt
+  once at install, bypass after) while keeping an explicit, revocable
+  authorization gesture rather than silent bypass.
 - 2026-10-08 Beacons require a Kanna password, because `/ws` is unauthenticated
   without one.
 - 2026-10-08 Live status follows the global `cron-jobs` topic; the

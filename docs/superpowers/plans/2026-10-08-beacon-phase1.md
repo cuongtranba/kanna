@@ -64,9 +64,10 @@ and their tests.
 - [ ] `beacon-scope.ts`: `BeaconScope` (with `autoRunScripts: boolean`, default
   false), `DEFAULT_BEACON_SCOPE` (grants nothing), and
   `evaluateBeaconRequest(scope, request, trustedScriptHashes)` returning
-  `deny | allow | ask`. A `script` asks unless `autoRunScripts` is on or its body
-  hash is trusted; the allowlist never covers a script. Path containment here is
-  lexical; the beacon re-checks with realpath (M4).
+  `deny | allow | ask`. When `autoRunScripts` is on, `exec` and `script`
+  auto-allow (the one-time install consent); otherwise `exec` auto-allows only an
+  allowlisted verb and `script` only a trusted body hash, else ask. Path
+  containment here is lexical; the beacon re-checks with realpath (M4).
 - [ ] Tests: the scope evaluator's verdict table (outside roots, exec off,
   allowlisted verb, unlisted verb, `..` traversal, script with `autoRunScripts`
   off/on, trusted vs untrusted script hash), and the parser refusing an unknown
@@ -192,8 +193,10 @@ threading (as `boardRegistry` does), and the client pending card.
   install, `systemd --user` unit on Linux); write `SHA256SUMS`; upload all with
   `gh release upload`.
 - [ ] Installer UX: pairing-code window on first launch, then background run with
-  a tray icon exposing online state, Pause, and Unpair, and the installer's
-  final opt-in for `autoRunScripts`.
+  a tray icon exposing online state, Pause, and Unpair. The installer's final
+  step is the one-time auto-run consent — an un-pre-checked choice naming the
+  consequence; agreeing sets `autoRunScripts` on that beacon, declining leaves it
+  asking. Refuse to pair at all when the Kanna has no password.
 - [ ] A workflow test pins the job's trigger and permissions, the way
   `perf-alert-workflow.test.ts` does.
 - [ ] Phase 1 is unsigned: the Settings download screen carries the first-run

@@ -1,6 +1,6 @@
 ---
 id: adr-20261008-beacon-companion-daemon
-c3-seal: 45834eeb6fde0575b39bbb73808b1eac52db9fb54a019b6cd604ef3e2dcac5bb
+c3-seal: 4b9331cfb29173b4ac442b7aa69732fe7553b03b76e5a2786b48faa898f88979
 title: beacon-companion-daemon
 type: adr
 goal: |-
@@ -64,11 +64,17 @@ commands. Large files are handled three ways the model routes between — a
 windowed `beacon_read`, an on-machine `beacon_grep`, and a chunked `beacon_fetch`
 into the chat workspace — so a whole multi-gigabyte file is never shipped blindly.
 `beacon_script` runs a full PowerShell or shell script in the user's login
-session; it always shows the whole script and asks by default. Convenience for a
-non-technical user is an opt-in, per-beacon `autoRunScripts` switch (default off,
-offered by the installer) plus trusted-script hashes — never a silent default,
-because per-action consent is what keeps this a user-authorized tool rather than
-a remote-access trojan. Capability scope is default-deny (exec off, empty
+session. The authorization model is one-time informed consent, not a prompt per
+script: the installer's final step asks once, in plain words naming the
+consequence, and agreeing turns on the per-beacon `autoRunScripts` flag so
+`beacon_script` and `beacon_exec` then run with no further prompt on that
+machine. This is the shape of adding an SSH key or enabling Tailscale — authorize
+once, revocable in one click, with the transcript still recording every run.
+Two bounds keep it real authorization: a Kanna password is required (auto-run
+means anyone who can sign in can run scripts there), and the flag is per beacon.
+When the flag is unset the default is to ask, so a beacon paired through the bare
+CLI (no consent screen) is safe until the user turns auto-run on; the installer
+is what turns it on. Capability scope is default-deny (exec off, empty
 read and write roots) and enforced twice: on the Kanna side to fail fast,
 mirroring `permission-gate.ts`, and on the beacon side as the final authority over
 its own filesystem, using realpath. Paired-beacon entries live in a new
@@ -125,7 +131,8 @@ wire.
 | Command-line-only install | The target user is non-technical; a terminal pair command excludes them. A graphical installer, a typed 6-digit code, and a tray app are the supported path, with the CLI kept underneath for advanced users |
 | Embed the pairing secret in the downloaded installer | A one-time secret in a downloaded file rides the browser cache, Downloads, and any sync; a 6-digit code read off one screen and typed into another never lands in a file, and is single-use with a 5-minute expiry |
 | Ship a whole file for a large-file read | A beacon serves the user's whole disk; a windowed read, an on-machine grep, and a chunked resumable fetch each answer a different question without moving gigabytes, and the model routes between them |
-| Run scripts without consent once installed (the ask-free default the install owner requested) | Silent arbitrary-script execution collapses the security boundary to the Kanna password and is the defining behaviour of a remote-access trojan; the shipped default asks, convenience is an opt-in per-beacon switch plus trusted-script hashes, and the ask-free default is left as a one-line change the install owner can make knowingly |
+| Prompt on every script | Nags a user who already decided to trust this machine; the resolution is one informed consent at install, after which auto-run skips the prompt |
+| Silently auto-run with no consent at all | Collapses the security boundary to the Kanna password with nothing the user agreed to — the defining behaviour of a remote-access trojan; the installer makes the one-time consent explicit and revocable, and requires a password before pairing |
 
 ## Verification
 
