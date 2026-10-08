@@ -1,6 +1,6 @@
 import { homedir } from "node:os"
 import path from "node:path"
-import { computeProjectDir } from "./claude-pty/jsonl-path.adapter"
+import { computeProjectDir } from "./claude-projects-path.adapter"
 
 export function deriveImportedSubagentsDir(args: {
   cwd: string

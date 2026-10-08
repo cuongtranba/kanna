@@ -447,7 +447,6 @@ describe("EventStore", () => {
       model: "claude-opus-4-8",
       effort: "high",
       planMode: true,
-      driver: "pty",
     })
 
     const raw = await readFile(join(dataDir, "turns.jsonl"), "utf8")
@@ -462,7 +461,6 @@ describe("EventStore", () => {
       model: "claude-opus-4-8",
       effort: "high",
       planMode: true,
-      driver: "pty",
     })
   })
 

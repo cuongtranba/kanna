@@ -1728,7 +1728,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({
             type: "transcript" as const,
@@ -1795,7 +1794,6 @@ describe("AgentCoordinator claude integration", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async (content: string) => {
             prompts.push(content)
             if (prompts.length === 1) {
@@ -1871,7 +1869,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "claude-session-1" })
           events.push({
@@ -1946,7 +1943,6 @@ describe("AgentCoordinator claude integration", () => {
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "poisoned-new" })
           events.push({
@@ -1996,7 +1992,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "good-token" })
           events.push({
@@ -2071,7 +2066,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async (content: string) => {
             prompts.push(content)
             if (prompts.length === 1) {
@@ -2156,7 +2150,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         },
         localPath: "/tmp/project",
         additionalDirectories: [],
@@ -2227,7 +2220,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         },
         localPath: "/tmp/project",
         additionalDirectories: [],
@@ -2300,7 +2292,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         },
         localPath: "/tmp/project",
         additionalDirectories: [],
@@ -2360,7 +2351,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -2444,7 +2434,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -2509,7 +2498,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -2567,7 +2555,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         },
         localPath: "/tmp/project",
         additionalDirectories: [],
@@ -2626,7 +2613,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -2688,7 +2674,6 @@ describe("AgentCoordinator claude integration", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -2781,57 +2766,6 @@ describe("AgentCoordinator claude integration", () => {
     coordinator.dispose()
   })
 
-  test("does not load slash commands from the CLI on a fresh Claude session", async () => {
-    const events = new AsyncEventQueue<any>()
-    const store = createFakeStore()
-    let getSupportedCalled = false
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      startClaudeSession: async () => ({
-        provider: "claude",
-        stream: events,
-        getAccountInfo: async () => null,
-        interrupt: async () => {},
-        close: () => {},
-                closed: Promise.resolve(),
-        setModel: async () => {},
-        setPermissionMode: async () => {},
-        getSupportedCommands: async () => {
-          getSupportedCalled = true
-          return []
-        },
-        sendPrompt: async () => {
-          events.push({
-            type: "transcript" as const,
-            entry: timestamped({
-              kind: "result",
-              subtype: "success",
-              isError: false,
-              durationMs: 0,
-              result: "done",
-            }),
-          })
-        },
-      }),
-    })
-
-    await coordinator.send({
-      type: "chat.send",
-      chatId: "chat-1",
-      provider: "claude",
-      content: "hello",
-      model: "claude-opus-4-1",
-    })
-    await waitFor(() => store.turnFinishedCount === 1)
-    await new Promise((r) => setTimeout(r, 50))
-
-    expect(getSupportedCalled).toBe(false)
-    expect(store.commandsLoaded).toHaveLength(0)
-
-    events.close()
-  })
-
   test("Claude final results clear running state without using draining mode", async () => {
     const events = new AsyncEventQueue<any>()
 
@@ -2848,7 +2782,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({
             type: "transcript" as const,
@@ -2917,7 +2850,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
         },
@@ -2983,7 +2915,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           if (prompts.length === 1) {
@@ -3062,7 +2993,6 @@ describe("AgentCoordinator claude integration", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({ type: "session_token" as const, sessionToken: "claude-fork-1" })
             events.push({
@@ -3297,7 +3227,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           events.push({
@@ -3354,7 +3283,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           events.push({
@@ -3409,7 +3337,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           events.push({
@@ -3463,7 +3390,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           events.push({
@@ -3521,7 +3447,6 @@ describe("AgentCoordinator claude integration", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async (content: string) => {
           prompts.push(content)
           const pushResult = () => events.push({
@@ -3573,170 +3498,7 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
-  test("PTY: compact_boundary finalizes the proactive compact turn and drains the queue", async () => {
-    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
-    const events = new AsyncEventQueue<any>()
-    const prompts: string[] = []
-    let releaseBoundary!: () => void
-    const boundaryGate = new Promise<void>((resolve) => { releaseBoundary = resolve })
-
-    const store = createFakeStore()
-    store.chat.provider = "claude"
-    store.chat.sessionTokensByProvider = { claude: "sess-huge" }
-    store.messages.push(timestamped({
-      kind: "context_window_updated",
-      usage: { usedTokens: 180_000, maxTokens: 200_000, compactsAutomatically: false },
-    }))
-
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
-      startClaudeSession: async () => {
-        throw new Error("SDK driver must not be used under PTY preference")
-      },
-      startClaudeSessionPTY: async () => ({
-        provider: "claude",
-        stream: events,
-        getAccountInfo: async () => null,
-        interrupt: async () => {},
-        close: () => {},
-                closed: Promise.resolve(),
-        setModel: async () => {},
-        setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
-        sendPrompt: async (content: string) => {
-          prompts.push(content)
-          if (content === "/compact") {
-            void boundaryGate.then(() => events.push({
-              type: "transcript" as const,
-              entry: timestamped({ kind: "compact_boundary" }),
-            }))
-            return
-          }
-          events.push({
-            type: "transcript" as const,
-            entry: timestamped({
-              kind: "result",
-              subtype: "success",
-              isError: false,
-              durationMs: 0,
-              result: "done",
-            }),
-          })
-        },
-      }),
-    })
-
-    const sendResult = await coordinator.send({
-      type: "chat.send",
-      chatId: "chat-1",
-      provider: "claude",
-      content: "user's real prompt",
-      model: "claude-opus-4-7",
-    })
-
-    expect(sendResult).toMatchObject({ queued: true })
-    expect(store.queuedMessages.length).toBe(1)
-    const queuedId = store.queuedMessages[0].id
-
-    await expect(
-      coordinator.dequeue({
-        type: "message.dequeue",
-        chatId: "chat-1",
-        queuedMessageId: queuedId,
-      })
-    ).rejects.toThrow(/compact is running/)
-
-    releaseBoundary()
-
-    await waitFor(() => prompts.length >= 2, 2000)
-    expect(prompts).toEqual(["/compact", "user's real prompt"])
-    expect(store.queuedMessages.length).toBe(0)
-    await waitFor(() => store.turnFinishedCount >= 2, 2000)
-
-    events.close()
-  })
-
-  test("PTY: loop armed-state flip respawns the session; steady state reuses it", async () => {
-    const store = createFakeStore()
-    store.chat.provider = "claude"
-
-    let armed = true
-    let spawnCount = 0
-    const queues: AsyncEventQueue<any>[] = []
-
-    const coordinator = new AgentCoordinator({
-      store: store as never,
-      onStateChange: () => {},
-      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
-      startClaudeSession: async () => {
-        throw new Error("SDK driver must not be used under PTY preference")
-      },
-      startClaudeSessionPTY: async () => {
-        spawnCount += 1
-        const events = new AsyncEventQueue<any>()
-        queues.push(events)
-        return {
-          provider: "claude",
-          stream: events,
-          getAccountInfo: async () => null,
-          interrupt: async () => {},
-          close: () => {},
-                    closed: Promise.resolve(),
-          setModel: async () => {},
-          setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
-          sendPrompt: async () => {
-            events.push({
-              type: "transcript" as const,
-              entry: timestamped({
-                kind: "result",
-                subtype: "success",
-                isError: false,
-                durationMs: 0,
-                result: "done",
-              }),
-            })
-          },
-        }
-      },
-    })
-
-    coordinator.isLoopArmed = () => (armed ? { subagentId: "sa-1", prompt: "loop prompt", armedAt: 0, consecutiveFailures: 0, verifyCommand: null, workdirAbs: null, trackingFileRel: null, parallelism: 1 } : null)
-
-    const sendTurn = async (content: string, expectedFinished: number) => {
-      await coordinator.send({
-        type: "chat.send",
-        chatId: "chat-1",
-        provider: "claude",
-        content,
-        model: "claude-opus-4-7",
-      })
-      await waitFor(() => store.turnFinishedCount >= expectedFinished, 2000)
-    }
-
-    await sendTurn("turn 1 (armed)", 1)
-    expect(spawnCount).toBe(1)
-
-    await sendTurn("turn 2 (armed)", 2)
-    expect(spawnCount).toBe(1)
-
-    armed = false
-    await sendTurn("turn 3 (disarmed)", 3)
-    expect(spawnCount).toBe(2)
-
-    await sendTurn("turn 4 (disarmed)", 4)
-    expect(spawnCount).toBe(2)
-
-    armed = true
-    await sendTurn("turn 5 (armed)", 5)
-    expect(spawnCount).toBe(3)
-
-    for (const q of queues) q.close()
-  })
-
-  test("SDK: loop armed-state flip respawns the session; steady state reuses it", async () => {
+  test("loop armed-state flip respawns the session; steady state reuses it", async () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
 
@@ -3760,7 +3522,6 @@ describe("AgentCoordinator claude integration", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -4048,7 +3809,6 @@ describe("AgentCoordinator rate-limit detection (manual mode)", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.throw(limitErr)
         },
@@ -4093,7 +3853,6 @@ describe("AgentCoordinator rate-limit detection (manual mode)", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.throw(limitErr)
         },
@@ -4178,7 +3937,6 @@ describe("AgentCoordinator auto-continue firing", () => {
                 closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.throw(limitErr)
         },
@@ -4283,7 +4041,6 @@ describe("AgentCoordinator.deliverSubagentToMain (notification-driven /clear)", 
         closed: Promise.resolve(),
         setModel: async () => {},
         setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
         sendPrompt: async () => {
           events.push({ type: "session_token" as const, sessionToken: "warm-token" })
           events.push({
@@ -4551,7 +4308,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({ type: "session_token" as const, sessionToken: "pre-clear-token" })
             events.push({
@@ -5062,7 +4818,6 @@ describe("AgentCoordinator subagent mention gating", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -5151,7 +4906,6 @@ describe("AgentCoordinator subagent mention gating", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -5240,7 +4994,6 @@ describe("AgentCoordinator subagent mention gating", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -5307,7 +5060,6 @@ describe("AgentCoordinator subagent mention gating", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -5658,7 +5410,6 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
           },
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }
       },
     })
@@ -5675,72 +5426,6 @@ describe("AgentCoordinator chatPolicy plumbing", () => {
     expect(received?.chatPolicy?.defaultAction).toBe("auto-deny")
 
     events.close()
-  })
-})
-
-
-describe("AgentCoordinator PTY driver selection", () => {
-  test("AgentCoordinator selects PTY driver when KANNA_CLAUDE_DRIVER=pty", async () => {
-    process.env.KANNA_CLAUDE_DRIVER = "pty"
-    try {
-      const events = new AsyncEventQueue<any>()
-      let sdkCalls = 0
-      let ptyCalls = 0
-
-      const fakeSession = {
-        provider: "claude" as const,
-        stream: events,
-        getAccountInfo: async () => null,
-        interrupt: async () => {},
-        close: () => {},
-        closed: Promise.resolve(),
-        sendPrompt: async () => {
-          events.push({
-            type: "transcript" as const,
-            entry: timestamped({
-              kind: "result",
-              subtype: "success",
-              isError: false,
-              durationMs: 0,
-              result: "done",
-            }),
-          })
-        },
-        setModel: async () => {},
-        setPermissionMode: async () => {},
-        getSupportedCommands: async () => [],
-      }
-
-      const store = createFakeStore()
-      const coordinator = new AgentCoordinator({
-        store: store as never,
-        onStateChange: () => {},
-        startClaudeSession: async (_args) => {
-          sdkCalls++
-          return fakeSession
-        },
-        startClaudeSessionPTY: async (_args) => {
-          ptyCalls++
-          return fakeSession
-        },
-      })
-
-      await coordinator.send({
-        type: "chat.send",
-        chatId: "chat-1",
-        provider: "claude",
-        content: "hello",
-        model: "claude-opus-4-1",
-      })
-      await waitFor(() => store.turnFinishedCount === 1)
-
-      expect(ptyCalls).toBe(1)
-      expect(sdkCalls).toBe(0)
-
-      events.close()
-    } finally {
-      delete process.env.KANNA_CLAUDE_DRIVER
-    }
   })
 })
 
@@ -5765,7 +5450,6 @@ describe("AgentCoordinator late tool request", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript" as const,
@@ -6034,7 +5718,6 @@ describe("AgentCoordinator.dispose — awaits session closed promises", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }),
       } as never)
 
@@ -6079,7 +5762,6 @@ describe("AgentCoordinator.dispose — awaits session closed promises", () => {
           sendPrompt: async () => {},
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
         }),
       } as never)
 

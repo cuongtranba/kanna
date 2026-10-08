@@ -28,7 +28,6 @@ import type {
 } from "./types"
 import type { ChatOpsEvent } from "./chat-ops"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
-import type { PtyInstanceDelta, PtyInstancesSnapshot } from "./pty-instance"
 import type {
   BoardOwnerKind,
   BoardSummary,
@@ -58,7 +57,6 @@ export type SubscriptionTopic =
   | { type: "project-git"; projectId: string; chatId?: string }
   | { type: "project-commands"; projectId: string }
   | { type: "terminal"; terminalId: string }
-  | { type: "pty-instances" }
   | { type: "workflows"; chatId: string }
   | { type: "boards"; ownerKind: BoardOwnerKind; ownerId: string }
   | { type: "board"; boardId: string; pageSize?: number }
@@ -90,11 +88,6 @@ export type SubagentCommandResult =
   | { ok: false; error: SubagentValidationError }
 
 export type SubagentDeleteResult = { ok: true }
-
-export type PtyInstancesEvent =
-  | { type: "pty-instances.added"; instance: Extract<PtyInstanceDelta, { type: "added" }>["instance"] }
-  | { type: "pty-instances.updated"; instance: Extract<PtyInstanceDelta, { type: "updated" }>["instance"] }
-  | { type: "pty-instances.removed"; chatId: string }
 
 export interface WorkflowsSnapshot {
   chatId: string
@@ -140,7 +133,7 @@ export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
   return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
 }
 
-export type WsEvent = TerminalEvent | PtyInstancesEvent | ChatOpsEvent
+export type WsEvent = TerminalEvent | ChatOpsEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }
@@ -412,8 +405,6 @@ export type ClientCommand =
   | { type: "terminal.input"; terminalId: string; data: string }
   | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
   | { type: "terminal.close"; terminalId: string }
-  | { type: "pty.cancel"; chatId: string }
-  | { type: "pty.kill"; chatId: string }
   | { type: "push.identifyDevice"; pushDeviceId: string | null }
   | { type: "push.subscribe"; subscription: PushSubscribeRequestPayload; label: string; userAgent: string }
   | { type: "push.unsubscribe"; pushDeviceId: string }
@@ -442,7 +433,6 @@ export type ServerSnapshot =
   | { type: "project-git"; data: ChatDiffSnapshot | null }
   | { type: "project-commands"; data: ProjectCommandsSnapshot }
   | { type: "terminal"; data: TerminalSnapshot | null }
-  | { type: "pty-instances"; data: PtyInstancesSnapshot }
   | { type: "workflows"; data: WorkflowsSnapshot }
   | { type: "boards"; data: BoardsSnapshot }
   | { type: "board"; data: BoardSnapshot }

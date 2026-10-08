@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BackgroundTaskOutputDeps } from "./background-task-output-registry"
-import { OUTPUT_RING_DEFAULT_BYTES } from "./claude-pty/output-ring"
+import { OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 
 function makeDeps(fileContents: Map<string, string> = new Map()): BackgroundTaskOutputDeps & { advance(path: string, append: string): void } {
   const contents = new Map(fileContents)

@@ -32,9 +32,8 @@ the filesystem access is granted:
 
 | Provider | Reach |
 | --- | --- |
-| Claude (SDK) | Every bound root, via the SDK's `additionalDirectories`. |
-| Claude (PTY) | Every bound root, via one `--add-dir` per root. |
-| OpenRouter | Same as Claude SDK — it runs the SDK path. |
+| Claude | Every bound root, via the SDK's `additionalDirectories`. |
+| OpenRouter | Same as Claude — it runs the SDK path. |
 | Codex | The session declares one working directory (the primary), but runs with full filesystem access, so peer roots are reachable **by absolute path**. |
 
 ### Member projects' `CLAUDE.md` is loaded

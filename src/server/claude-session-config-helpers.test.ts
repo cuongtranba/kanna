@@ -1,10 +1,8 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test"
+import { describe, test, expect, mock } from "bun:test"
 import {
-  resolveClaudeDriverPreference,
   getEnabledCustomMcpServers,
   buildOAuthBearers,
   resolveChatPolicy,
-  killPtyInstance,
   type ClaudeSessionConfigHelpersDeps,
 } from "./claude-session-config-helpers"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -31,49 +29,11 @@ function makeDeps(overrides: Partial<ClaudeSessionConfigHelpersDeps> = {}): Clau
     getAppSettingsSnapshot: () => ({}),
     chatPolicy: POLICY_DEFAULT,
     store: { state: null },
-    ptyInstanceRegistry: null,
     ensureFreshToken: async () => "test-token",
     persistOAuthState: null,
-    killProcessTree: async (_pid) => {},
     ...overrides,
   }
 }
-
-
-describe("resolveClaudeDriverPreference", () => {
-  const originalEnv = process.env.KANNA_CLAUDE_DRIVER
-
-  beforeEach(() => {
-    delete process.env.KANNA_CLAUDE_DRIVER
-  })
-
-  test("returns 'pty' when settings preference is 'pty'", () => {
-    const deps = makeDeps({
-      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "pty" } }),
-    })
-    expect(resolveClaudeDriverPreference(deps)).toBe("pty")
-  })
-
-  test("returns 'sdk' when settings preference is 'sdk'", () => {
-    const deps = makeDeps({
-      getAppSettingsSnapshot: () => ({ claudeDriver: { preference: "sdk" } }),
-    })
-    expect(resolveClaudeDriverPreference(deps)).toBe("sdk")
-  })
-
-  test("falls through to env var when settings have no preference", () => {
-    process.env.KANNA_CLAUDE_DRIVER = "pty"
-    const deps = makeDeps({ getAppSettingsSnapshot: () => ({}) })
-    expect(resolveClaudeDriverPreference(deps)).toBe("pty")
-    process.env.KANNA_CLAUDE_DRIVER = originalEnv ?? ""
-    if (!originalEnv) delete process.env.KANNA_CLAUDE_DRIVER
-  })
-
-  test("defaults to 'sdk' when no settings and no env var", () => {
-    const deps = makeDeps({ getAppSettingsSnapshot: () => ({}) })
-    expect(resolveClaudeDriverPreference(deps)).toBe("sdk")
-  })
-})
 
 
 describe("getEnabledCustomMcpServers", () => {
@@ -243,54 +203,5 @@ describe("resolveChatPolicy", () => {
     })
     const result = resolveChatPolicy(deps, "nonexistent")
     expect(result).toEqual(POLICY_DEFAULT)
-  })
-})
-
-
-describe("killPtyInstance", () => {
-  test("throws when no PTY instance found for chat", async () => {
-    const deps = makeDeps({
-      ptyInstanceRegistry: {
-        snapshot: () => [],
-        markExitedIfCurrent: () => {},
-      },
-    })
-    await expect(killPtyInstance(deps, "chat-1")).rejects.toThrow("No live PTY instance for chat")
-  })
-
-  test("throws when PTY instance has no pid", async () => {
-    const deps = makeDeps({
-      ptyInstanceRegistry: {
-        snapshot: () => [{ chatId: "chat-1", pid: null }],
-        markExitedIfCurrent: () => {},
-      },
-    })
-    await expect(killPtyInstance(deps, "chat-1")).rejects.toThrow("No live PTY instance for chat")
-  })
-
-  test("calls killProcessTree with the instance pid", async () => {
-    const killed: number[] = []
-    const deps = makeDeps({
-      ptyInstanceRegistry: {
-        snapshot: () => [{ chatId: "chat-1", pid: 42 }],
-        markExitedIfCurrent: () => {},
-      },
-      killProcessTree: async (pid) => { killed.push(pid) },
-    })
-    await killPtyInstance(deps, "chat-1")
-    expect(killed).toEqual([42])
-  })
-
-  test("calls markExitedIfCurrent after killProcessTree", async () => {
-    const marked: Array<{ chatId: string; pid: number }> = []
-    const deps = makeDeps({
-      ptyInstanceRegistry: {
-        snapshot: () => [{ chatId: "chat-1", pid: 99 }],
-        markExitedIfCurrent: (chatId, pid) => { marked.push({ chatId, pid }) },
-      },
-    })
-    await killPtyInstance(deps, "chat-1")
-    expect(marked).toHaveLength(1)
-    expect(marked[0]).toMatchObject({ chatId: "chat-1", pid: 99 })
   })
 })

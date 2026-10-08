@@ -13,7 +13,6 @@ import type { EventStore } from "./event-store"
 import type { AgentCoordinator } from "./agent"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardRegistry } from "./board-registry"
@@ -65,7 +64,6 @@ export interface EnvelopeDeps {
     "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" |
     "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" |
     "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
-  ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   boardRegistry?: BoardRegistry
@@ -158,7 +156,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     resolvedAppSettings,
     keybindings,
     resolvedDiffStore,
-    ptyInstances,
     workflowRegistry,
     backgroundTaskOutputRegistry,
     boardRegistry,
@@ -323,18 +320,6 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
               ? localCommandsForCwd({ localCatalog: agent.localCatalog }, project.localPath)
               : [],
           },
-        },
-      }
-    }
-
-    if (topic.type === "pty-instances") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "pty-instances",
-          data: { instances: ptyInstances?.snapshot() ?? [] },
         },
       }
     }

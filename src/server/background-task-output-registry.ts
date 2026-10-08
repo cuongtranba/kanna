@@ -1,4 +1,4 @@
-import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./claude-pty/output-ring"
+import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 
 export interface BackgroundTaskOutputDeps {
   statSize(path: string): number | null

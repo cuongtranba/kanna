@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: 5d9cd2377b2951e0907a38c582495b9a84b34acf0bd485f5abaf6776c0d4d973
+c3-seal: b99578cbe6d16cd407192ba783956a44f20da0f96a1e265a6b696ec464e5353b
 title: oauth-token-pool
 type: component
 category: feature
@@ -83,8 +83,7 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | TOCTOU between hasUsable preflight and pickActive | Eligibility predicate diverges between read-only and mutating paths under cap-aware logic | Refusal banner appears but pickActive would succeed (or vice versa) | bun test src/server/oauth-pool/oauth-token-pool.test.ts — hasUsable/pickActive parity tests |
 | Expired-limited token never revived | Revive logic skipped post-sort | Token remains limited past limitedUntil and never picked again | bun test src/server/oauth-pool/oauth-token-pool.test.ts — revive test |
 | Refcount leak — release frees a slot still in use by another chat | release(chatId) clobbers entire Set instead of removing the single chat | A shared token reports fewer owners than reality; cap admits over the limit | bun test src/server/oauth-pool/oauth-token-pool.test.ts — release refcount case |
-| Rotation herd when N owners simultaneously detect limit/401 on shared token | acquireRotationSlot in agent.ts does not dedupe within TOKEN_ROTATION_DEDUPE_WINDOW_MS or skips stagger application | All N respawns fire at once; PTY cold-boot stampede; second pickActive on same chatId double-claims | Existing bun test src/server/agent.oauth-rotation.test.ts + manual smoke (cap=2 on one token, force 401, observe staggered respawn) |
-| PTY smoke-probe race on cold cache | smoke-test.ts singleflight removed or keyed wrong | Two concurrent probes hit Anthropic on the same OAuth token at boot — 429 cascade | bun test src/server/claude-pty/smoke-test.test.ts — singleflight collapse case |
+| Rotation herd when N owners simultaneously detect limit/401 on shared token | acquireRotationSlot in agent.ts does not dedupe within TOKEN_ROTATION_DEDUPE_WINDOW_MS or skips stagger application | All N respawns fire at once; cold-boot stampede; second pickActive on same chatId double-claims | Existing bun test src/server/agent.oauth-rotation.test.ts + manual smoke (cap=2 on one token, force 401, observe staggered respawn) |
 | Refusal transcript entry loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> links for the multi-owner case | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx |
 | Reservation pinned across restart | reservedBy persisted (it must not be) | Restart cannot pick any token until manual fix | reservedBy lives in memory only — confirmed by private readonly reservedBy = new Map(...) in oauth-token-pool.ts |
 

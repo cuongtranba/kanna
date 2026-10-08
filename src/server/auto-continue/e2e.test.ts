@@ -100,7 +100,6 @@ describe("auto-continue end-to-end", () => {
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.throw(makeRateLimitError(resetAtMs))
           },

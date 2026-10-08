@@ -61,7 +61,7 @@ describe("ApiErrorMessage", () => {
 
   const VERSION_TOO_OLD_TEXT = "API Error: 400 Claude Code 2.1.272 does not support this model; version 2.1.280 or newer is required. Run 'claude update', or update the Claude desktop app, then try again."
 
-  test("400 with claude_code_version_too_old explains the version mismatch and gives a both-driver remedy", () => {
+  test("400 with claude_code_version_too_old explains the version mismatch and gives a remedy for bundled and own binaries", () => {
     const html = renderToStaticMarkup(
       <ApiErrorMessage
         message={buildMessage({ status: 400, text: VERSION_TOO_OLD_TEXT, apiErrorReason: "claude_code_version_too_old" })}

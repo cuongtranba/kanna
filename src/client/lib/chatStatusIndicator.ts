@@ -62,10 +62,10 @@ export function sessionStateBadge(
   state: ClaudeSessionLifecycleStatus | undefined,
 ): SessionStateBadge | null {
   switch (state) {
-    case "active": return { kind: "filled", toneClass: "text-success-text", title: "Claude PTY session active" }
-    case "warming": return { kind: "half", toneClass: "text-warning-text", title: "Claude PTY session warming" }
-    case "idle": return { kind: "ring", toneClass: "text-muted-foreground", title: "Claude PTY session idle" }
-    case "cooling": return { kind: "dashed", toneClass: "text-muted-foreground", title: "Claude PTY session cooling down" }
+    case "active": return { kind: "filled", toneClass: "text-success-text", title: "Claude session active" }
+    case "warming": return { kind: "half", toneClass: "text-warning-text", title: "Claude session warming" }
+    case "idle": return { kind: "ring", toneClass: "text-muted-foreground", title: "Claude session idle" }
+    case "cooling": return { kind: "dashed", toneClass: "text-muted-foreground", title: "Claude session cooling down" }
     case "cold":
     default:
       return null

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
-import { encodeCwd } from "./claude-pty/jsonl-path.adapter"
+import { encodeCwd } from "./claude-projects-path.adapter"
 
 const REAL_CWD = process.cwd()
 const encodedCwd = encodeCwd(REAL_CWD)

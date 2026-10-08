@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:ac31e767ed7d0617a3cfcd44043d33e982c972243b05acafe4dd011b399d88cb -->
+<!-- hash: sha256:0bf0f554b88b50942c18f6dfdaf6c6c7da87e89d6faa8c3dea0c8c010b508de4 -->
 
 ## c3-0 — Kanna (system)
 
@@ -219,11 +219,6 @@ container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, rule-colocated-bun-test, rule-strong-typing
 files: src/server/oauth-pool/**/*.ts
 
-## c3-225 — claude-pty-driver (component)
-container: c3-2 | context: c3-0
-refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, rule-colocated-bun-test, rule-strong-typing
-files: src/server/claude-pty/**
-
 ## c3-226 — kanna-mcp-host (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, ref-tool-hydration, rule-colocated-bun-test, rule-strong-typing
@@ -242,7 +237,7 @@ files: src/server/session-share/**/*.ts
 ## c3-229 — workflow-status (component)
 container: c3-2 | context: c3-0
 refs: ref-cqrs-read-models, ref-event-sourcing, ref-provider-adapter, ref-side-effect-adapter, ref-strong-typing, ref-tool-hydration, ref-ws-subscription, ref-zustand-store, rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
-files: src/client/app/WorkflowAgentTranscriptPanel.store.ts, src/client/app/WorkflowAgentTranscriptPanel.test.tsx, src/client/app/WorkflowAgentTranscriptPanel.tsx, src/client/app/WorkflowsPage.store.ts, src/client/app/WorkflowsPage.test.tsx, src/client/app/WorkflowsPage.tsx, src/client/app/WorkflowsSection.store.ts, src/client/app/WorkflowsSection.tsx, src/client/components/messages/WorkflowMessage.tsx, src/client/lib/workflowGrouping.test.ts, src/client/lib/workflowGrouping.ts, src/client/stores/workflowsStore.ts, src/server/agent-transcript-parse.test.ts, src/server/agent-transcript-parse.ts, src/server/watched-registry.test.ts, src/server/watched-registry.ts, src/server/workflow-agent-transcript-io.adapter.test.ts, src/server/workflow-agent-transcript-io.adapter.ts, src/server/workflow-registry.test.ts, src/server/workflow-registry.ts, src/server/workflow-watch-io.adapter.test.ts, src/server/workflow-watch-io.adapter.ts, src/shared/workflow-types.test.ts, src/shared/workflow-types.ts
+files: src/client/app/WorkflowAgentTranscriptPanel.store.ts, src/client/app/WorkflowAgentTranscriptPanel.test.tsx, src/client/app/WorkflowAgentTranscriptPanel.tsx, src/client/app/WorkflowsPage.store.ts, src/client/app/WorkflowsPage.test.tsx, src/client/app/WorkflowsPage.tsx, src/client/app/WorkflowsSection.store.ts, src/client/app/WorkflowsSection.tsx, src/client/components/messages/WorkflowMessage.tsx, src/client/lib/workflowGrouping.test.ts, src/client/lib/workflowGrouping.ts, src/client/stores/workflowsStore.ts, src/server/agent-transcript-parse.test.ts, src/server/agent-transcript-parse.ts, src/server/claude-projects-path.adapter.test.ts, src/server/claude-projects-path.adapter.ts, src/server/output-ring.test.ts, src/server/output-ring.ts, src/server/watched-registry.test.ts, src/server/watched-registry.ts, src/server/workflow-agent-transcript-io.adapter.test.ts, src/server/workflow-agent-transcript-io.adapter.ts, src/server/workflow-registry.test.ts, src/server/workflow-registry.ts, src/server/workflow-watch-io.adapter.test.ts, src/server/workflow-watch-io.adapter.ts, src/shared/workflow-types.test.ts, src/shared/workflow-types.ts
 
 ## c3-230 — openrouter-models (component)
 container: c3-2 | context: c3-0
@@ -368,24 +363,24 @@ refs: rule-colocated-bun-test, rule-strong-typing
 files: src/shared/genui/*.ts
 
 ## ref-colocated-bun-test — Colocated Bun Test (ref)
-reverse deps: c3-102, c3-104, c3-206, c3-208, c3-210, c3-225, c3-231, c3-303, c3-310
-citers: c3-102, c3-104, c3-206, c3-208, c3-210, c3-225, c3-231, c3-303, c3-310
+reverse deps: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
+citers: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
 
 ## ref-cqrs-read-models — CQRS Read Models (ref)
 reverse deps: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3-228, c3-229, c3-230, c3-232, c3-233
 citers: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3-228, c3-229, c3-230, c3-232, c3-233
 
 ## ref-event-sourcing — Event Sourcing (ref)
-reverse deps: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233, c3-238
-citers: c3-205, c3-206, c3-210, c3-225, c3-227, c3-228, c3-229, c3-233, c3-238
+reverse deps: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238
+citers: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238
 
 ## ref-local-first-data — Local-First Data (ref)
 reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-305
 citers: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-305
 
 ## ref-provider-adapter — Provider Adapter (ref)
-reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
-citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-225, c3-229
+reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
+citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
 reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-312, c3-313
@@ -408,16 +403,16 @@ reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
-reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
-citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-225, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
+reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
+citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
 
 ## rule-mcp-name-reserved — mcp-name-reserved (rule)
 reverse deps: c3-232
 citers: c3-232
 
 ## rule-strong-typing — strong-typing (rule)
-reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
-citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-225, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
 reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-229
@@ -675,7 +670,6 @@ src/server/keybindings.test.ts → c3-222
 src/server/keybindings.ts → c3-222
 src/server/cloudflare-tunnel/**/*.ts → c3-223
 src/server/oauth-pool/**/*.ts → c3-224
-src/server/claude-pty/** → c3-225
 src/server/mcp-oauth.adapter.ts → c3-226
 src/server/mcp-validator.ts → c3-226
 src/server/auto-continue/**/*.ts → c3-227
@@ -694,6 +688,10 @@ src/client/lib/workflowGrouping.ts → c3-229
 src/client/stores/workflowsStore.ts → c3-229
 src/server/agent-transcript-parse.test.ts → c3-229
 src/server/agent-transcript-parse.ts → c3-229
+src/server/claude-projects-path.adapter.test.ts → c3-229
+src/server/claude-projects-path.adapter.ts → c3-229
+src/server/output-ring.test.ts → c3-229
+src/server/output-ring.ts → c3-229
 src/server/watched-registry.test.ts → c3-229
 src/server/watched-registry.ts → c3-229
 src/server/workflow-agent-transcript-io.adapter.test.ts → c3-229

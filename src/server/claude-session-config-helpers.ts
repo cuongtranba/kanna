@@ -1,5 +1,5 @@
 
-import type { ClaudeDriverPreference, McpServerConfig, McpOAuthState } from "../shared/types"
+import type { McpServerConfig, McpOAuthState } from "../shared/types"
 import type { ChatPermissionPolicy, ChatPermissionPolicyOverride } from "../shared/permission-policy"
 import { mergePolicyOverride } from "../shared/permission-policy"
 import { log } from "../shared/log"
@@ -7,7 +7,6 @@ import { bearerUsableUntil } from "./mcp-oauth.adapter"
 
 
 interface AppSettingsLike {
-  claudeDriver?: { preference?: ClaudeDriverPreference }
   customMcpServers?: readonly McpServerConfig[]
 }
 
@@ -23,37 +22,17 @@ interface StoreLike {
   state?: { chatsById?: ChatsByIdLike } | null
 }
 
-interface PtyInstanceRegistryLike {
-  snapshot(): ReadonlyArray<{ chatId: string; pid: number | null }>
-  markExitedIfCurrent(
-    chatId: string,
-    pid: number,
-    patch: { phase: "exited"; exitedAt: number; lastEventAt: number },
-  ): void
-}
-
-
 export interface ClaudeSessionConfigHelpersDeps {
   getAppSettingsSnapshot: () => AppSettingsLike
   chatPolicy: ChatPermissionPolicy
   store: StoreLike
-  ptyInstanceRegistry: PtyInstanceRegistryLike | null
   ensureFreshToken: (
     server: McpServerConfig,
     opts: { persist: (oauth: McpOAuthState) => void },
   ) => Promise<string>
   persistOAuthState: ((id: string, oauth: McpOAuthState) => void) | null
-  killProcessTree: (pid: number) => Promise<void>
 }
 
-
-export function resolveClaudeDriverPreference(
-  deps: ClaudeSessionConfigHelpersDeps,
-): ClaudeDriverPreference {
-  const fromSettings = deps.getAppSettingsSnapshot().claudeDriver?.preference
-  if (fromSettings === "pty" || fromSettings === "sdk") return fromSettings
-  return process.env.KANNA_CLAUDE_DRIVER === "pty" ? "pty" : "sdk"
-}
 
 export function getEnabledCustomMcpServers(
   deps: ClaudeSessionConfigHelpersDeps,
@@ -106,20 +85,4 @@ export function resolveChatPolicy(
 ): ChatPermissionPolicy {
   const override = deps.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
   return mergePolicyOverride(deps.chatPolicy, override)
-}
-
-export async function killPtyInstance(
-  deps: ClaudeSessionConfigHelpersDeps,
-  chatId: string,
-): Promise<void> {
-  const instance = deps.ptyInstanceRegistry?.snapshot().find((entry) => entry.chatId === chatId)
-  if (!instance || instance.pid === null) {
-    throw new Error("No live PTY instance for chat")
-  }
-  await deps.killProcessTree(instance.pid)
-  deps.ptyInstanceRegistry?.markExitedIfCurrent(chatId, instance.pid, {
-    phase: "exited",
-    exitedAt: Date.now(),
-    lastEventAt: Date.now(),
-  })
 }

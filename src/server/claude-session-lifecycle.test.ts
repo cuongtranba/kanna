@@ -26,7 +26,6 @@ function makeFakeHandle() {
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
   }
 }
 
@@ -76,7 +75,6 @@ function makeDeps(overrides: Partial<SessionLifecycleDeps> = {}): SessionLifecyc
     pendingTools: { has: () => false },
     oauthPool: null,
     workflowRegistry: null,
-    resolveClaudeDriverPreference: () => "sdk",
     emitStateChange: () => {},
     store: {
       getChat: () => null,
@@ -284,7 +282,7 @@ describe("background-task guard with an SDK level signal", () => {
     expect(backgroundTaskGuardExpired(session, now)).toBe(false)
   })
 
-  test("without a level signal the deadline still governs (PTY / old CLI)", () => {
+  test("without a level signal the deadline still governs (before the first snapshot, or an old CLI)", () => {
     const now = Date.now()
     const session = makeSession({
       backgroundTasks: oneTask(),
@@ -340,11 +338,10 @@ describe("closeClaudeSession", () => {
     expect(released).toBe(false)
   })
 
-  test("unregisters workflow for SDK driver", () => {
+  test("unregisters the chat workflow watch on close", () => {
     let unregisteredChat = ""
     const session = makeSession({ chatId: "chat-1" })
     const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "sdk",
       workflowRegistry: {
         hasActiveRun: () => false,
         register: () => {},
@@ -353,21 +350,6 @@ describe("closeClaudeSession", () => {
     })
     closeClaudeSession(deps, "chat-1", session)
     expect(unregisteredChat).toBe("chat-1")
-  })
-
-  test("does NOT unregister workflow for PTY driver", () => {
-    let unregistered = false
-    const session = makeSession({ chatId: "chat-1" })
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "pty",
-      workflowRegistry: {
-        hasActiveRun: () => false,
-        register: () => {},
-        unregister: () => { unregistered = true },
-      },
-    })
-    closeClaudeSession(deps, "chat-1", session)
-    expect(unregistered).toBe(false)
   })
 
   test("does not error when session is already removed from map", () => {
@@ -406,21 +388,6 @@ describe("maybeRegisterSdkWorkflowsDir", () => {
     expect(registered).toBe(false)
   })
 
-  test("no-ops when driver is PTY", () => {
-    let registered = false
-    const session = makeSession({ sessionToken: "tok-abc", workflowsDirRegistered: false })
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "pty",
-      workflowRegistry: {
-        hasActiveRun: () => false,
-        register: () => { registered = true },
-        unregister: () => {},
-      },
-    })
-    maybeRegisterSdkWorkflowsDir(deps, session)
-    expect(registered).toBe(false)
-  })
-
   test("no-ops when sessionToken is null", () => {
     let registered = false
     const session = makeSession({ sessionToken: null, workflowsDirRegistered: false })
@@ -445,7 +412,6 @@ describe("maybeRegisterSdkWorkflowsDir", () => {
       workflowsDirRegistered: false,
     })
     const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "sdk",
       homeDir: "/home/user",
       workflowRegistry: {
         hasActiveRun: () => false,

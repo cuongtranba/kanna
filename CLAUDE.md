@@ -15,7 +15,6 @@ task that matches none of them cleanly still lands somewhere.
 | `kanna-test` | Running tests; the lint, ast-grep, and design gates |
 | `kanna-loop` | Autonomous loops: `setup_loop`, the oracle, the durable task list, wake recovery |
 | `kanna-subagents` | `delegate_subagent`, the spawn gate, keep-alive and background runs |
-| `kanna-pty` | The PTY driver — TUI spawn, transcript follower, `KANNA_PTY_*` |
 | `release` | Version bump + npm publish |
 | `review-pr` | Security-focused PR review via the GitHub API |
 | `github-issue` | Writing bug reports and feature requests detailed enough to implement from |
@@ -342,8 +341,8 @@ Two budgets, deliberately shaped differently:
   issue this PR just made worse rather than printing a bare number.
 
 **ESLint owns the complexity measurement; the budget owns the direction.**
-`eslint.config.js` sets four production ceilings — `complexity` 138,
-`max-params` 12, `max-depth` 7, `max-nested-callbacks` 4 — at today's maxima, so
+`eslint.config.js` sets four production ceilings — `complexity` 127,
+`max-params` 11, `max-depth` 7, `max-nested-callbacks` 4 — at today's maxima, so
 they are unbreached but hard. `ESLINT_LIMIT_PINS` must **equal** each configured
 value: raising the ceiling fails `check:arch` as `limit_raised`, and lowering it
 without lowering the pin fails as `limit_slack`. The adapter reads the real
@@ -352,9 +351,10 @@ agree on paper while disagreeing in fact. A pin whose rule ESLint no longer
 configures fails as `limit_unconfigured` rather than passing vacuously.
 
 The peaks are the audit's own findings, which is why these are defect counts and
-not style knobs: `complexity` 138 is `handleCommand` in `ws-router.ts` (`runClaudeSession`
-dropped from 141 → 132 after the `ClaudeSessionState` class refactor, #923),
-`max-depth` 7 is `runClaudeSession`'s `for await` loop, and `max-params` 12 is `deriveChatSnapshot`.
+not style knobs: `complexity` 127 is the `SettingsPage` component (`runClaudeSession`,
+once the peak, is 122 since the PTY driver's `compact_boundary` finalize branch was
+deleted; `handleCommand` in `ws-router.ts` is 116), `max-depth` 7 is
+`runClaudeSession`'s `for await` loop, and `max-params` 11 is `deriveChatSnapshot`.
 
 **`bun run lint:limits` proves a ceiling is still TIGHT.** A ceiling nothing
 reaches gates nothing — pinned at 141 while the worst function is 90 leaves 50
@@ -733,20 +733,14 @@ Setting `KANNA_MCP_TOOL_CALLBACKS=1` routes `AskUserQuestion` and
 `src/server/tool-callback.ts`. Pending requests survive server restart
 (resolved as `session_closed` fail-closed on boot) and are replayed to the
 client on reconnect as `pending_tool_request` transcript entries. Default is
-off; the SDK driver uses the legacy `canUseTool` → `onToolRequest` path.
+off; without the flag the legacy `canUseTool` → `onToolRequest` path runs.
 
-**PTY exception (issue #215):** under `KANNA_CLAUDE_DRIVER=pty` the
-`ask_user_question` / `exit_plan_mode` shims are **always registered**
-regardless of this flag — the PTY driver passes
-`forceInteractiveToolCallbacks: true` to `buildKannaMcpTools` because
-PTY has no `canUseTool` hook (the durable approval protocol is the only
-host path). The PTY CLI args also include
-`--disallowedTools AskUserQuestion ExitPlanMode` so the model cannot
-pick the native built-ins (which the CLI auto-rejects with
-`is_error: "Answer questions?"`, mis-read as a user cancel). The flag
-still **exclusively** gates the 8 built-in shims
-(`read/glob/grep/bash/edit/write/webfetch/websearch`) and the SDK
-driver's `canUseTool` routing — those are never force-enabled under PTY.
+The model's native `AskUserQuestion` / `ExitPlanMode` reach the durable protocol
+through `buildCanUseTool` (`claude-spawn-helpers.ts`), so Kanna registers no
+`ask_user_question` / `exit_plan_mode` MCP stand-ins and there is no
+`forceInteractiveToolCallbacks` argument. The flag **exclusively** gates that
+`canUseTool` routing and the 8 built-in shims
+(`read/glob/grep/bash/edit/write/webfetch/websearch`).
 
 ## Pending-tool lifecycle (legacy `canUseTool` path — PendingToolSlots)
 
@@ -797,20 +791,30 @@ because `recoverOnStartup()` fail-closes all pending records on boot.
 Periodic `tickTimeouts` driver fires every 5s; default request timeout is
 600s. Pending requests time out as `{kind:"deny", reason:"timeout"}`.
 
-# Claude driver flag (`KANNA_CLAUDE_DRIVER`)
+# Claude sessions run on the Agent SDK only
 
-`sdk` (the default) runs the Claude Agent SDK and bills at API rates. `pty`
-launches the `claude` CLI **interactively** under a Bun.Terminal pseudo-terminal,
-tails the on-disk transcript JSONL as its sole event source, and preserves
-Pro/Max subscription billing. PTY is macOS/Linux only and OAuth-only —
-`buildPtyEnv` unconditionally strips `ANTHROPIC_API_KEY`, and the token comes
-from the OAuth pool via `CLAUDE_CODE_OAUTH_TOKEN`.
+Every Claude chat runs the Claude Agent SDK (`startClaudeSession`); OpenRouter
+chats go through the same entry point. The PTY driver — the
+`claude` CLI under a pseudo-terminal, with the on-disk transcript JSONL as its
+event source — was removed in `adr-20261008-remove-pty-driver`, along with its
+loopback MCP server, instance registry, status panel and `kanna-pty` skill. The
+embedded terminal (`terminal-manager*`) is a different feature and is untouched.
 
-**`.claude/skills/kanna-pty/SKILL.md`** holds the detail: the encoded-cwd path,
-the trust dialog, the TUI-ready gates on both first and follow-up turns, the
-50 ms tail-poll transcript follower (and why there is no `fs.watch`), turn-end
-detection under CLI ≥ 2.1.x, the spawn smoke test, `setPermissionMode` /
-`setModel` / `interrupt`, OAuth-pool rotation, and every `KANNA_PTY_*` env var.
+- **Compatibility, not configuration.** `claudeDriver.preference` is no longer a
+  setting: `normalizeClaudeDriverSettings` drops a saved value, `pty` included,
+  without a warning, and the file is rewritten without it on the next save.
+  `KANNA_CLAUDE_DRIVER=pty` logs one warning at boot and is otherwise ignored.
+  `TurnRunConfig.driver` is optional so turn logs written before the removal still
+  describe themselves; new turns do not write it.
+- **`claudeDriver.lifecycle` stayed**, because SDK sessions use it: the idle
+  timeout and the resident-session limit (Settings → Providers).
+- **What looks PTY-shaped but is not dead.** The background-task launch-text
+  regex (`backgroundTaskIdsFromToolResult`) is the SDK's version-skew fallback.
+  `pushChannelPrompt` feeds keep-alive subagent sessions. `OutputRing`
+  (`output-ring.ts`) backs background-task output tracking, and
+  `claude-projects-path.adapter.ts` (`encodeCwd`, `computeProjectDir`,
+  `computeWorkflowsDir`) locates Claude's on-disk project directory for
+  workflows, imports and subagent transcripts.
 
 # Builtin slash commands — `/clear` and `/compact [instructions]`
 
@@ -848,16 +852,17 @@ the busy check.
 ## `CompactionTurnKind` — one field, two questions
 
 `ActiveTurn.compactionTurn` is `"proactive" | "user" | "codex_summary"` (it
-replaced the boolean `proactiveCompactInjection`). Two predicates read it, and
-they are deliberately different:
+replaced the boolean `proactiveCompactInjection`). One predicate reads it:
 
-- `isCliCompactTurn` — gates the PTY `compact_boundary` finalize
-  (`adr-20260608-pty-compact-boundary-dequeue-finalize`). Covers `proactive` AND
-  `user`: both reach the CLI verbatim, so both go quiet the same way.
 - `isProactiveCompactTurn` — gates the `compactFailureCount` circuit breaker and
   the `message.dequeue` refusal. `proactive` only. Both exist to bound Kanna's
   **own** automatic injection; a user-typed `/compact` owns no queued message
   and must not consume that budget.
+
+A `compact_boundary` entry never finalizes a turn; the turn ends on its `result`
+entry. The PTY driver finalized on the boundary because the CLI wrote no result
+row for a compaction, which is why `isCliCompactTurn` existed — both went away in
+`adr-20261008-remove-pty-driver`.
 
 ## History primer is scoped to the last context reset
 
@@ -910,27 +915,27 @@ path is next accessed, so a global invariant must not live only there.
 `compact_metadata` was always on the wire and never read: `trigger` and
 `pre_tokens` sat inside `debugRaw` as untyped text. `CompactBoundaryEntry` now
 carries a typed `compactMetadata` (`transcript-types.ts`), parsed by
-`parseCompactMetadata` in the normalizer — so it covers the SDK **and** PTY
-drivers, which share that function.
+`parseCompactMetadata` in the normalizer — so it covers the live SDK stream and
+the on-disk JSONL reader (`agent-transcript-parse.ts`), which share that function.
 
 **Both wire spellings are real, and neither is defensive.** The SDK stream emits
-`compact_metadata` / `pre_tokens`; the CLI's on-disk transcript JSONL, which PTY
-reads through `claude-pty/jsonl-to-event.ts`, emits `compactMetadata` /
+`compact_metadata` / `pre_tokens`; the CLI's on-disk transcript JSONL, which
+session import and subagent transcripts read, emits `compactMetadata` /
 `preTokens`. `parseCompactMetadata` reads both per field, exactly as
 `ClaudeRawUsage` already does for `input_tokens` / `inputTokens`. Dropping
-either spelling silently disables one driver.
+either spelling silently breaks one of the two readers.
 
-**Assistant usage is NESTED under `.message` on both drivers, and reading it
-from the top level silently emits nothing.** `normalizeClaudeUsageSnapshot`
-returns `null` for `undefined`, so the wrong path costs no error — just no
-`context_window_updated` entry, ever, which takes out the composer's
-session-token pill and the context-window meter. #344 fixed exactly this in
-`claude-pty/jsonl-to-event.ts` and left `claude-harness-stream.ts` alone on the
-belief that "the SDK stream-json shape keeps `usage` at the top level"; it does
-not. Measured before the fix: **0 of the 40 most recent chats**, all `sdk`, held
-a single `context_window_updated` entry. Both readers now spell it
-`message?.usage ?? usage`, and the SDK suite's fixtures carry the nested shape —
-the flat fixtures are what masked the defect on both drivers.
+**Assistant usage is NESTED under `.message`, and reading it from the top level
+silently emits nothing.** `normalizeClaudeUsageSnapshot` returns `null` for
+`undefined`, so the wrong path costs no error — just no `context_window_updated`
+entry, ever, which takes out the composer's session-token pill and the
+context-window meter. #344 fixed exactly this in the PTY driver's JSONL reader
+and left `claude-harness-stream.ts` alone on the belief that "the SDK stream-json
+shape keeps `usage` at the top level"; it does not. Measured before the fix:
+**0 of the 40 most recent chats**, all `sdk`, held a single
+`context_window_updated` entry. `claude-harness-stream.ts` now spells it
+`message?.usage ?? usage`, and its suite's fixtures carry the nested shape — the
+flat fixtures are what masked the defect.
 
 **`PostCompact` exists to keep the primer whole, not for diagnostics.**
 `selectPrimerEntries` scopes from the newest `compact_boundary` and carries
@@ -965,8 +970,8 @@ compaction; both return `{}`. Three bounds are load-bearing:
   summary, so a re-fire dedupes.
 
 **Telemetry is recorded at `EventStore.appendMessage`, not in the runner**, and
-both reasons matter. `runClaudeSession` sits at the `complexity` ceiling pinned
-in `budget.ts` (131) with zero headroom, so one added `if` fails lint. And it is
+both reasons matter. `runClaudeSession` measures 122 against the `complexity`
+ceiling pinned in `budget.ts` (127), so it has almost no headroom. And it is
 Claude-only: Codex's synthesized boundary (`claude-turn-runner.ts`) and its
 native one (`codex-app-server.ts`) never reach it, while every producer funnels
 through `appendMessage`. Attributes are `{provider, trigger}` only — at that
@@ -1088,8 +1093,8 @@ before they can stand.** Two layers, deliberately covering each other:
   with a diagram source and gets back `VALID`, or an `isError` result carrying
   the offending line, mermaid's caret excerpt, and a hint. It self-corrects in
   the same turn — no extra turn, and the user never sees the bad version.
-  Registered whenever a `chatId` is present (subagents included); one `tool()`
-  call covers both drivers via `kanna-mcp-http.ts`.
+  Registered whenever a `chatId` is present (subagents included), as one
+  `tool()` on the in-process Kanna MCP server.
 - **End-of-turn guard** (`src/server/mermaid-guard.ts`, reactive backstop). At
   the runner's success finalize (`claude-session-runner.ts`, after
   `recordTurnFinished`, **before** `maybeStartNextQueuedMessage` so the drain
@@ -1197,8 +1202,8 @@ ADR `adr-20260929-generative-ui`.
   model wrote.
 - **One turn-end seam for both guards.** `composeTurnEndGuards` (`turn-end-guard.ts`)
   feeds the mermaid guard and the GenUI guard through the runner's existing
-  `turnEndGuard` dep — `runClaudeSession` sits on the complexity ceiling, so adding a
-  second call there fails lint. Codex turns get the GenUI guard only (its correction
+  `turnEndGuard` dep — `runClaudeSession` has little complexity headroom (122 against a
+  127 ceiling), so a second call there is the wrong place for it. Codex turns get the GenUI guard only (its correction
   wording names no tool, because Codex has none). The escalation key is a content
   HASH: `ModelEscalation` logs its key, and a spec can carry inline financial rows.
 - **Actions have three classes** (`GENUI_ACTIONS`): `local` (json-render state),
@@ -1399,7 +1404,7 @@ the change path: arm a corrected line, then `/cron remove <old-jobId>`.
 
 `armCron` now returns `Promise<{ jobId: string }>` instead of `void`. Every
 call site that forwards it (`claude-session-spawner.ts`, `claude-session-start.ts`,
-`claude-pty/driver.ts`, `agent-coordinator-types.ts`) and every interface that
+`agent-coordinator-types.ts`) and every interface that
 owns a `runCronCommand` slot (`claude-send-command.ts`, `ws-router-agent-ctrl.ts`)
 carry the updated return type. See `adr-20260818-cron-arm-confirm-tool-result`.
 
@@ -1466,9 +1471,9 @@ write, webfetch, websearch}`. They route through the durable approval
 protocol with the same path-deny rules as the bash tool from P1 (readPathDeny
 for `read`/`glob`/`grep`, writePathDeny for `edit`/`write`).
 
-These shims are inert until the PTY driver applies `--tools "mcp__kanna__*"`
-(P3b — landing in a follow-up PR). With the SDK driver (default), the model
-still uses its native built-ins and these shims sit unused.
+These shims are inert: the SDK session keeps the model's native built-ins, so
+nothing routes a call to them. The PTY driver was the only caller that applied
+`--tools "mcp__kanna__*"`, and it is gone.
 
 `websearch` is a stub that always returns `isError: true` — real web search
 needs an external API integration which is out of scope for P3a.
@@ -1511,9 +1516,8 @@ of the process that spawns claude, which is not necessarily your shell's:
 `go install` and Homebrew write to `~/go/bin` and `/opt/homebrew/bin`, and a
 server launched from a profile-less context may see neither.
 
-**Both restricted paths deliberately strip `LSP`** — it is in
-`SDK_RESTRICTED_FS_NATIVE_TOOLS` and in the PTY `RESTRICTED_FS_NATIVE_TOOLS`.
-Restricted mode exists to confine a subagent to `restrictedAllowedPaths`, and it
+**The restricted path deliberately strips `LSP`** — it is in
+`SDK_RESTRICTED_FS_NATIVE_TOOLS`. Restricted mode exists to confine a subagent to `restrictedAllowedPaths`, and it
 does that by removing the native FS tools so the `mcp__kanna__*` shims can route
 every read through `permission-gate.ts`. **`LSP` is a file-read primitive that
 gate cannot see**: `goToDefinition` returns file locations and contents, so a
@@ -1531,25 +1535,18 @@ continue this agent`, the text `claude-prompt-helpers.test.ts` pins). With it
 absent from the allowlist the model followed that advice and got `No such tool
 available: SendMessage. SendMessage is disabled for this session` (chat
 `11e60231`, 2026-09-15), then had to relaunch a fresh `Agent` with a full
-re-brief — the prior agent's context was unreachable. The PTY driver was never
-affected: it passes no `--tools` outside restricted mode, so it gets every native
-tool. `SendMessage` is not a file-read primitive and stays available on the
-restricted paths.
+re-brief — the prior agent's context was unreachable. `SendMessage` is not a
+file-read primitive and stays available on the restricted path.
 
 # Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist
 in `settings.json` under `customMcpServers` (file mode 0600) and are
-merged into both Claude drivers at chat spawn time:
-
-- **SDK driver** (`agent.ts`): `buildUserMcpServers` maps each enabled
-  entry to the SDK's per-transport config and merges it into the
-  `mcpServers` map passed to `query()` alongside `mcp__kanna__*`.
-- **PTY driver** (`kanna-mcp-http.ts:buildMcpConfigJson` +
-  `claude-pty/driver.ts`): entries serialize into the same
-  `mcp-config.json` the driver hands to `--strict-mcp-config`. Kanna
-  settings remain the single source of truth; `~/.claude.json` stays
-  ignored.
+merged into the Claude session at chat spawn time: `buildUserMcpServers`
+(`agent.ts`) maps each enabled entry to the SDK's per-transport config and
+merges it into the `mcpServers` map passed to `query()` alongside
+`mcp__kanna__*`. Kanna settings remain the single source of truth for which
+servers a session sees.
 
 User MCP tool calls auto-allow (`canUseTool` already returns
 `{ behavior: "allow" }` for any tool that isn't `AskUserQuestion` /
@@ -1646,9 +1643,9 @@ enabled network servers, calls `ensureFreshMcpToken` (refresh if needed, then
 return the access token), and returns `OAuthBearers` — the
 `ReadonlyMap<serverId, token>` plus `usableUntil`, the soonest moment any of
 those tokens stops being usable (`bearerUsableUntil`: expiry minus the same 60 s
-skew the refresh uses; `null` when no token carries an expiry). Both
-`buildUserMcpServers` (SDK driver) and `buildMcpConfigJson` (PTY driver) merge
-`Authorization: Bearer <token>` into the transport headers for that server.
+skew the refresh uses; `null` when no token carries an expiry).
+`buildUserMcpServers` merges `Authorization: Bearer <token>` into the transport
+headers for that server.
 `validateMcpServer` also accepts an optional `bearer` for the manual "Test"
 action on OAuth servers.
 
@@ -1809,7 +1806,7 @@ every delivery.
 
 # A project's process never inherits Kanna's runtime env (`projectProcessEnv`)
 
-Anything Kanna starts to run a PROJECT's code — a Claude SDK or PTY session, the
+Anything Kanna starts to run a PROJECT's code — a Claude SDK session, the
 Codex app-server, the embedded terminal, the loop oracle, an MCP stdio server —
 builds its environment through `projectProcessEnv` (`src/server/project-process-env.ts`),
 which drops the variables that describe Kanna rather than the project. Today that
@@ -2015,9 +2012,8 @@ metric is therefore the billable total; `sum by (kind)` splits it.
 usage means the provider told us nothing, which is a different claim from "this
 turn was free" — and the providers really are uneven here: Codex reports usage
 only after a `thread/tokenUsageUpdated` notification, OpenRouter's token counts
-come from upstream, and **PTY-mode turns have no price resolver wired at all**
-(`createJsonlEventParser` takes none), so `kanna.turn.cost_usd` is deliberately
-sparser than `kanna.turn.tokens`. Read a missing series as unknown, not zero.
+come from upstream, so `kanna.turn.cost_usd` is deliberately sparser than
+`kanna.turn.tokens`. Read a missing series as unknown, not zero.
 
 **Usage reaches the metric on `ActiveTurn.usage`, not through the callback.**
 `onTurnTerminal` carries only `(chatId, outcome)` and must keep doing so, so
@@ -2372,8 +2368,8 @@ which cost a measured regression to find:
   already seen: measured 644 ms / 791 MB versus the full load's 216 ms / 291 MB
   — slower and heavier than the code it replaced.
 - **`USAGE_SCAN_MAX_LOOKBACK_BYTES` (8 MiB) bounds the walk.** MEASURED: 241 of
-  264 transcripts contain NO usage marker at all (imported and PTY sessions never
-  emit one), so "scan to BOF" is the common path, not the tail case. A marker
+  264 transcripts contain NO usage marker at all (imported sessions, and the PTY
+  sessions Kanna used to run, never emit one), so "scan to BOF" is the common path, not the tail case. A marker
   further back than one turn cannot describe the current context window anyway.
 
 `SendCommandStore.getLatestContextWindowUsage` is **optional by design** and must
@@ -2459,7 +2455,7 @@ orchestrator is a fresh context every turn, the worst place for a multi-step
 stateful git operation. Each parallel task must name its OWN git worktree; a task
 with no worktree, or one naming the loop workdir itself, is refused at claim.
 
-# Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_PTY_BACKGROUND_TASK_MAX_MS)
+# Background Task Keep-Alive (Bash + Agent + Workflow — KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS)
 
 Claude-Code background tasks (`Bash(run_in_background: true)`, background
 `Agent`/Task-tool runs, workflows) run as children of the claude process. If
@@ -2487,9 +2483,9 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   the user at 13:14:39, so an output-growth probe would have fired too. The
   flag is sticky across an emptied set but starts `false` at every spawn,
   matching the SDK's per-process reset rule. The launch regex must NEVER call
-  `applyLevelSnapshot` — it is PTY's only signal. Note the two predicates
-  therefore no longer partition `size > 0`.
-- **Primary signal (SDK driver).** The SDK's `system/background_tasks_changed`
+  `applyLevelSnapshot` — it is a fallback, not the level signal. Note the two
+  predicates therefore no longer partition `size > 0`.
+- **Primary signal.** The SDK's `system/background_tasks_changed`
   LEVEL event — the full set of live background tasks after every membership
   change, REPLACE semantics (a missed edge bookend can never wedge a stale
   set). Normalized to a hidden `status` entry carrying
@@ -2497,16 +2493,15 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   for each snapshot. `in_process_teammate` tasks are filtered (long-lived by
   design; claude-code gh-30008 excludes them from its own wait loop too).
   `system/task_notification` remains the per-task edge clear.
-- **Fallback / PTY detection.** The stream consumer parses each `tool_result`
+- **Fallback detection.** The stream consumer parses each `tool_result`
   (`backgroundTaskIdsFromToolResult`) for BashTool's
   `Command running in background with ID: <id>` line AND AgentTool's
   `Async agent launched successfully… agentId: <id>` launch text (marker-gated
-  so incidental "agentId:" strings never arm). This is the only launch signal
-  on the PTY driver (CLI ≥ 2.1.x writes no system rows to the transcript
-  JSONL, so `session.applyLevelSnapshot(...)` is never called there and the
-  guard stays **deadline-based**) and a version-skew fallback on SDK. Duplicate
-  arms vs the level signal are harmless (Set). Arming through this path must
-  never call `applyLevelSnapshot`.
+  so incidental "agentId:" strings never arm). It is the version-skew fallback
+  for a CLI that sends no `background_tasks_changed`: it arms the guard but never
+  calls `session.applyLevelSnapshot(...)`, so the guard stays **deadline-based**
+  until a real snapshot arrives. Duplicate arms vs the level signal are harmless
+  (Set).
 - **Stream activity bump.** The runner refreshes `session.lastUsedAt` on every
   appended transcript entry, so task-notification self-wake turns (which start
   no Kanna turn) never count as idle — mirrors claude-code's own invariant
@@ -2517,9 +2512,10 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   it does not release anything (`claude-send-command.ts`). Clearing on send is
   what let the reaper silently kill a healthy long-running watch ~10 min after
   any user message; `adr-20260801` inverted it.
-- **Bound.** `KANNA_PTY_BACKGROUND_TASK_MAX_MS` (default 1_800_000 = 30 min,
-  via `positiveIntegerFromEnv`) caps how long a hung/never-completing task can
-  pin a process — but ONLY for a session with no level signal (PTY / old CLI /
+- **Bound.** `KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS` (default 1_800_000 = 30 min,
+  via `positiveIntegerFromEnv`; the former name `KANNA_PTY_BACKGROUND_TASK_MAX_MS`
+  is still read when the new one is unset) caps how long a hung/never-completing
+  task can pin a process — but ONLY for a session with no level signal (old CLI /
   pre-first-snapshot). There is deliberately no ceiling on a level-sourced
   session: the SDK imposes no time limit on background tasks either, so a task
   in the set holds its session until the SDK retracts it. The residual risk is a
@@ -2536,7 +2532,7 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   and `getActiveStatuses` overlays it as status `"running"` (pure live
   overlay; event-sourced turn timings untouched). `cancelChat` gained a
   no-active-turn branch: when `selfWakeActive`, it appends `interrupted`,
-  interrupts the session stream in-band (SDK; PTY drops the dead session),
+  interrupts the session stream in-band,
   and suppresses the interrupt tail result via `cancelledResultPending`.
   The guard set was upgraded `backgroundTaskIds: Set<string>` →
   `backgroundTasks: Map<string, SessionBackgroundTask>` (single source;
@@ -2550,35 +2546,32 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   eviction skips `selfWakeActive` sessions; the idle reaper still keys on
   `lastUsedAt`, so a wedged flag cannot pin a session forever.
 
-# Workflow Status Panel (disk-watch, read-only — SDK + PTY)
+# Workflow Status Panel (disk-watch, read-only)
 
 Surfaces Claude Code's native `Workflow` tool (dynamic multi-agent
 orchestration) in the UI: a per-chat panel listing every run with live status +
-drill-in progress, plus an inline transcript card on the launch. **Read-only,
-both drivers.** Since the move to notification-driven loop orchestration the
+drill-in progress, plus an inline transcript card on the launch. **Read-only.**
+Since the move to notification-driven loop orchestration the
 model handles workflow harvest via `delegate_subagent({run_in_background: true})`
 status-check spawns; this panel *displays* the workflow.
 
-**SDK driver registration (`adr-20260616-adr-20260616-sdk-pty-feature-parity`).** Claude writes
-the `wf_*.json` sidecars regardless of driver, so the SDK reuses the same
-disk-watch read-model. `AgentCoordinator.maybeRegisterSdkWorkflowsDir` derives
+**Registration.** `AgentCoordinator.maybeRegisterSdkWorkflowsDir` derives
 `<projectDir>/<session-uuid>/workflows` (via `computeWorkflowsDir`) from the
 SDK's first `session_token` HarnessEvent and calls `workflowRegistry.register`
-once per session; `closeClaudeSession` unregisters. The PTY path keeps its own
-transcript-path registration (guarded by driver preference so neither
-double-fires).
+once per session; `closeClaudeSession` unregisters.
 
-**Why disk-watch, not the event stream.** The PTY transcript JSONL (PTY's sole
-event source) carries the `Workflow` tool_use launch but **no**
-`task_started`/`task_updated`/`tool_progress` lifecycle lines — those flow only
-through the SDK live stream-json channel, which PTY never reads. Claude instead
-writes a complete, self-updating sidecar per run:
+**Why disk-watch, not the event stream.** The panel was built when the PTY
+driver — whose only event source was the on-disk transcript JSONL, which carries
+the `Workflow` tool_use launch but **no** `task_started`/`task_updated`/
+`tool_progress` lifecycle lines — had to show workflow progress too. Claude
+writes a complete, self-updating sidecar per run, so the disk-watch read-model
+stayed when the PTY driver was removed:
 `~/.claude/projects/<encoded-cwd>/<session-uuid>/workflows/wf_<runId>.json`
 (`runId`, `taskId`, `workflowName`, `status`, `agentCount`, `totalTokens`,
 `phases[]`, `workflowProgress[]` per-agent tree, `result`/`error`/`summary`).
 `taskId` joins a run to the transcript's `Task ID: X` launch text.
 
-**Independent read-model (does NOT violate c3-225).** The watcher feeds a sibling
+**Independent read-model.** The watcher feeds a sibling
 read-model, never the transcript/turn event pipeline (same spirit as reading
 subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
 
@@ -2588,8 +2581,8 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   creates it lazily on the first Workflow call, after registration).
 - **Registry** `src/server/workflow-registry.ts` — per-chat watch + parse
   (one defensive choke-point `parseWorkflowRunFile`) + `snapshot()` (light,
-  heavy fields stripped) + `getRun()` (full) + `subscribe()`. Mirrors
-  `PtyInstanceRegistry`. IO injected (side-effect seal). **Re-run masking
+  heavy fields stripped) + `getRun()` (full) + `subscribe()`. IO injected
+  (side-effect seal). **Re-run masking
   (no ADR — the decision is recorded only here and in `workflow-registry.ts`):**
   Claude embeds the `runId` in the
   persisted workflow script filename, so a fix-and-relaunch via `scriptPath`
@@ -2604,15 +2597,10 @@ subagent files). See `adr-20260603-workflow-disk-watch-read-model`.
   under concurrency). `completed`/`killed`/`failed-with-agents` sidecars win
   unconditionally; a true crash (empty journal) stays `failed`. Re-run over a
   completed/killed run is out of scope (the synthetic row has no `taskId` from
-  disk, and reading the transcript taskId would breach the c3-225 invariant).
-- **Driver** registers `<projectDir>/<claude-uuid>/workflows` derived from the
-  resolved `transcriptStream.filePath` basename (Claude mints its OWN session
-  UUID and ignores `--session-id` on new sessions, so kanna's `sessionId` is
-  NOT the dir name). A `workflowRegistrationCancelled` flag prevents a late
-  `register()` after `cleanupResources` `unregister()` on fast-failing spawns.
+  disk, and reading the transcript taskId would couple this read-model to the
+  transcript pipeline it is deliberately independent of).
 - **Transport** WS topic `{type:"workflows", chatId}` → `workflowRunsUpdated`
-  snapshot push (mirrors `pty-instances`); `workflows.getRun` command for the
-  heavy drill-in payload.
+  snapshot push; `workflows.getRun` command for the heavy drill-in payload.
 - **Client** `workflowsStore` (stable `EMPTY` ref), `WorkflowsSection` panel
   (mirrors `SubagentsSection`), `WorkflowMessage` transcript card (live pill
   joined by `taskId` once `chatId` is threaded through the transcript rows).
@@ -3023,8 +3011,8 @@ reported nothing after a reboot, while the bundles sat on disk the whole time.
 
 **Two boot points configure it, and both are deliberate.** The server wires it
 in `createHttpDispatcher` — that factory runs once, already holds `appSettings`,
-and using it avoids touching `server.ts`, which sits EXACTLY on its 807-line
-budget ceiling. The CLI wires it in its own `plugin` arm, because it is a
+and using it avoids growing `server.ts`, which then sat exactly on its line-budget
+ceiling (it has since dropped under the 700-line threshold and been delisted). The CLI wires it in its own `plugin` arm, because it is a
 separate process. That CLI boot step is **injectable** (`preparePluginService`):
 the default constructs a real `AppSettingsManager`, so a test driving
 `setPluginServiceForTest` must pass a no-op or the real wiring silently replaces

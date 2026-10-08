@@ -14,11 +14,9 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/agent-coordinator.ts": 1484,
   "src/server/app-settings.ts": 1900,
   "src/server/board-store.adapter.ts": 1366,
-  "src/server/claude-pty/driver.ts": 1095,
   "src/server/codex-app-server.ts": 1023,
   "src/server/codex-transcript-translator.ts": 767,
   "src/server/kanna-mcp.ts": 1326,
-  "src/server/server.ts": 808,
   "src/server/subagent-orchestrator.ts": 1375,
 }
 
@@ -117,7 +115,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "settings-bound-throws",
     include: ["src/server/app-settings.ts"],
     pattern: "throw new Error\\(",
-    max: 14,
+    max: 13,
     issue: 898,
     rationale:
       "Each restates a bound that a normalize* function also enforces, with opposite semantics — the WS path throws where the file path clamps, so the same out-of-range value is rejected or silently corrected depending on how it arrived.",
@@ -143,10 +141,10 @@ export interface EslintLimitPin {
 export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
   {
     rule: "complexity",
-    max: 131,
+    max: 127,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (131) — down from 132 when the untyped-value migration removed a narrowing branch there. handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
+      "Cyclomatic complexity per function. The peak is the SettingsPage component in SettingsPage.tsx (127). runClaudeSession in claude-session-runner.ts dropped from 131 to 122 when the PTY driver's compact_boundary finalize branch was deleted, and handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
   },
   {
     rule: "max-params",

@@ -40,7 +40,7 @@ body:
         - "Cron & scheduled jobs (c3-120, c3-233, c3-311)"
         - "Terminal workspace (c3-118, c3-216)"
         - "Sessions, turns & agent coordinator (c3-210)"
-        - "Claude driver — SDK or PTY (c3-210, src/server/claude-pty)"
+        - "Claude sessions — Agent SDK (c3-210, src/server/claude-session-start.ts)"
         - "Codex provider (c3-211)"
         - "OpenRouter, provider catalog & models (c3-212, c3-230)"
         - "Subagents, loops & workflows (c3-210, src/server/loop-template.ts)"
@@ -97,7 +97,6 @@ body:
         - Bun: 1.3.11
         - Install: bun install -g @cuongtran001/kanna  (or: Docker, source checkout, PM2, systemd)
         - Provider & model: claude / sonnet-5
-        - KANNA_CLAUDE_DRIVER: sdk (or pty)
         - Other KANNA_* env vars set: none
         - Browser: Chrome 141 (n/a for server-only bugs)
         - Last known good version: 1.44.1
@@ -206,8 +205,8 @@ body:
         Optional, and the highest value per line in this form. What looks affected but is not, and what an
         implementer might "fix" that is already right. Three lines here prevent a whole class of over-reach.
       placeholder: |
-        The SDK driver is unaffected — it takes the level-snapshot path and drains correctly. Do not "fix" both.
-        No new env var: KANNA_CLAUDE_DRIVER already selects the path.
+        Codex sessions are unaffected — they never reach this branch. Do not "fix" them too.
+        No new env var: the existing KANNA_CLAUDE_SESSION_IDLE_MS already bounds this.
 
   - type: checkboxes
     id: gates

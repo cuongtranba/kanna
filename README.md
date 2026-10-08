@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <em>Subscription-billing PTY mode, OAuth token pooling, multi-provider chat (Claude + Codex + OpenRouter), subagent orchestration, custom MCP servers, a workflow status panel, durable tool-approval protocol, in-app self-update, and more.</em>
+  <em>OAuth token pooling, multi-provider chat (Claude + Codex + OpenRouter), subagent orchestration, custom MCP servers, a workflow status panel, durable tool-approval protocol, in-app self-update, and more.</em>
 </p>
 
 <p align="center">
@@ -41,12 +41,11 @@ Kanna (`@cuongtran001/kanna`) is a clean web UI for the Claude Code and Codex CL
 
 **Headline features:**
 
-- **Subscription-billing PTY driver** (`KANNA_CLAUDE_DRIVER=pty`) — runs the `claude` CLI under a pseudo-terminal so Pro/Max plans are charged instead of API rates. Parses the on-disk transcript JSONL as the sole event source, with HarnessEvent parity with the SDK driver, a cached per-spawn smoke-test gate, and failure-mode parity.
 - **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat with automatic fallover on rate-limit and an explicit disabled state.
 - **Multi-provider chat** — switch between Claude, Codex (OpenAI), and OpenRouter from the composer with per-provider model + reasoning-effort controls and Codex fast mode. OpenRouter populates its model picker live from the public catalog (tool-capable models).
 - **Subagent orchestration** — first-class subagent CRUD, `@agent/` mentions, parallel runs, live activity labels, MCP progress notifications, and `mcp__kanna__delegate_subagent` so the main agent itself can delegate — including **keep-alive multi-turn** sessions (`send_subagent_message` / `close_subagent`) and **background** runs that report back as a fresh turn.
-- **Custom MCP servers** — register your own `stdio` / `http` / `sse` / `ws` MCP servers from Settings (with OAuth 2.1 for network transports); they merge into both drivers and their tools surface as `mcp__<name>__<tool>`.
-- **Workflow status panel** — read-only per-chat panel surfacing Claude Code's native Workflow tool runs (live status, drill-in progress, token totals) via disk-watch, under both drivers.
+- **Custom MCP servers** — register your own `stdio` / `http` / `sse` / `ws` MCP servers from Settings (with OAuth 2.1 for network transports); they merge into every Claude session and their tools surface as `mcp__<name>__<tool>`.
+- **Workflow status panel** — read-only per-chat panel surfacing Claude Code's native Workflow tool runs (live status, drill-in progress, token totals) via disk-watch.
 - **Agent self-scheduled wake** — `mcp__kanna__schedule_wakeup` lets the agent re-enter the chat to harvest long-running background work, with a runaway-loop cap.
 - **Durable tool-approval protocol** (`KANNA_MCP_TOOL_CALLBACKS=1`) — pending `AskUserQuestion` / `ExitPlanMode` / built-in shims survive server restart and replay to the client on reconnect.
 - **Cloudflare `expose_port` MCP tool** — agent-callable port exposure with always-ask or auto-expose modes, replacing bash-output sniffing.
@@ -82,8 +81,7 @@ That's it. Kanna opens in your browser at [`localhost:3210`](http://localhost:32
 - **Multi-provider support** — switch between Claude, Codex (OpenAI), and OpenRouter from the chat input, with per-provider model selection, reasoning-effort controls, and Codex fast mode
 - **OpenRouter** — set an OpenRouter API key in Settings; the model picker populates live from OpenRouter's catalog (tool-capable models), routed through its Anthropic-compatible endpoint
 - **OAuth token pool** — register multiple Claude OAuth tokens; Kanna rotates across them per chat
-- **Subscription-billing PTY driver** — optional `KANNA_CLAUDE_DRIVER=pty` runs the `claude` CLI under a pseudo-terminal so Pro/Max subscription billing is preserved instead of API rates
-- **Custom MCP servers** — register `stdio` / `http` / `sse` / `ws` MCP servers from Settings (OAuth 2.1 for network transports); merged into both drivers
+- **Custom MCP servers** — register `stdio` / `http` / `sse` / `ws` MCP servers from Settings (OAuth 2.1 for network transports); merged into every Claude session
 
 **Chat & transcript**
 
@@ -163,7 +161,6 @@ flowchart LR
         WS --> RM
         Agent --> ES
         Agent -.spawn.-> SpA
-        Agent -.spawn.-> PtyA
         ES -.fs.-> FsA
         Diff -.fs+spawn.-> SpA
         Diff -.fs.-> FsA
@@ -181,7 +178,7 @@ flowchart LR
     end
 
     subgraph External["External processes"]
-        CC["Claude Agent SDK / claude CLI (PTY)"]
+        CC["Claude Agent SDK / claude CLI"]
         CX["Codex App Server"]
         FS["Local FS<br/>~/.kanna/data/, project dirs"]
     end
@@ -399,7 +396,6 @@ src/
 │   ├── ws-router.ts              WebSocket routing & subscriptions
 │   ├── agent.ts                  AgentCoordinator (multi-provider turns)
 │   ├── codex-app-server.ts       Codex App Server JSON-RPC client
-│   ├── claude-pty/               PTY driver (subscription billing)
 │   ├── oauth-pool/               Claude OAuth token rotation
 │   ├── provider-catalog.ts       provider/model/effort normalization
 │   ├── openrouter-models.ts      live OpenRouter catalog (tool-capable models)

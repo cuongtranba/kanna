@@ -3,7 +3,6 @@ import { turnDurationsFromMessages } from "../../lib/reduction"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { type LegendListRef } from "@legendapp/list/react"
-import { useNavigate } from "react-router-dom"
 import { ChatInput, type ChatInputHandle } from "../../components/chat-ui/ChatInput"
 import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { Card, CardContent } from "../../components/ui/card"
@@ -207,11 +206,6 @@ export function ChatTabContent({
         : { ...current, [groupId]: next }
     ))
   }, [setToolGroupExpanded])
-
-  const navigate = useNavigate()
-  const handleOpenPtyChat = useCallback((chatId: string) => {
-    navigate(`/chat/${chatId}`)
-  }, [navigate])
 
   const projectId = state.activeProjectId
   const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
@@ -633,8 +627,6 @@ export function ChatTabContent({
           gitStatus={state.chatDiffSnapshot?.status}
           timings={state.runtime?.timings}
           status={state.runtime?.status}
-          socket={state.socket}
-          onOpenPtyChat={handleOpenPtyChat}
           currentChatId={state.activeChatId ?? undefined}
           shareShares={shareShares}
           onShareMint={handleShareMint}

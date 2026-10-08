@@ -20,7 +20,6 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     closed: Promise.resolve(),
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
   }
   return new ClaudeSessionState({
     id: "sess-1",
@@ -149,7 +148,6 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
     handleAuthFailure: async () => false,
     closeClaudeSession: () => {},
     maybeStartNextQueuedMessage: async () => {},
-    resolveClaudeDriverPreference: () => "sdk",
     ...overrides,
   }
 }
@@ -422,7 +420,6 @@ describe("runClaudeSession", () => {
 
   function runCompactBoundary(args: {
     compactionTurn: CompactionTurnKind
-    driver: "pty" | "sdk"
   }) {
     const session = makeSession()
     session.pendingPromptSeqs = [1]
@@ -443,7 +440,6 @@ describe("runClaudeSession", () => {
         recordTurnFinished: async (chatId) => { finishedCalls.push(chatId) },
         setCompactFailureCount: async (_chatId, count) => { breakerCalls.push(count) },
       },
-      resolveClaudeDriverPreference: () => args.driver,
     })
     const compactBoundaryEntry = {
       _id: "compact-1",
@@ -457,32 +453,8 @@ describe("runClaudeSession", () => {
     return { session, active, activeTurns, finishedCalls, breakerCalls, deps }
   }
 
-  test("compact_boundary on a proactive compact (PTY) finalizes and resets the breaker", async () => {
-    const ctx = runCompactBoundary({ compactionTurn: "proactive", driver: "pty" })
-
-    await runClaudeSession(ctx.deps, ctx.session)
-
-    expect(ctx.finishedCalls).toHaveLength(1)
-    expect(ctx.active.hasFinalResult).toBe(true)
-    expect(ctx.activeTurns.size).toBe(0)
-    expect(ctx.session.pendingPromptSeqs).toEqual([])
-    expect(ctx.breakerCalls).toEqual([0])
-  })
-
-  test("compact_boundary on a user-typed compact (PTY) finalizes without touching the breaker", async () => {
-    const ctx = runCompactBoundary({ compactionTurn: "user", driver: "pty" })
-
-    await runClaudeSession(ctx.deps, ctx.session)
-
-    expect(ctx.finishedCalls).toHaveLength(1)
-    expect(ctx.active.hasFinalResult).toBe(true)
-    expect(ctx.activeTurns.size).toBe(0)
-    expect(ctx.session.pendingPromptSeqs).toEqual([])
-    expect(ctx.breakerCalls).toEqual([])
-  })
-
-  test("compact_boundary on a user-typed compact under the SDK driver does NOT finalize", async () => {
-    const ctx = runCompactBoundary({ compactionTurn: "user", driver: "sdk" })
+  test("compact_boundary on a user-typed compact does NOT finalize the turn", async () => {
+    const ctx = runCompactBoundary({ compactionTurn: "user" })
 
     await runClaudeSession(ctx.deps, ctx.session)
 
@@ -706,21 +678,21 @@ describe("runClaudeSession", () => {
     expect(session.backgroundTasksLevelSourced).toBe(true)
   })
 
-  test("a launch tool_result paired with its tool_call does NOT promote the session (PTY invariant)", async () => {
+  test("a launch tool_result paired with its tool_call does NOT promote the session (version-skew fallback invariant)", async () => {
     const session = makeSession()
     const toolCallEntry = {
-      _id: "tool-call-pty",
+      _id: "tool-call-fallback",
       createdAt: Date.now(),
       kind: "tool_call",
-      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_pty1",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "toolu_fallback1",
         input: { command: "watch.sh", runInBackground: true } },
     } as unknown as TranscriptEntry
     const bgToolResultEntry = {
       _id: "tool-res-no-promote",
       createdAt: Date.now(),
       kind: "tool_result",
-      toolId: "toolu_pty1",
-      content: "Command running in background with ID: ptyonly1",
+      toolId: "toolu_fallback1",
+      content: "Command running in background with ID: fallbackonly1",
     } as unknown as TranscriptEntry
     const deps = makeDeps(session)
     session.session.stream = fakeStream([
@@ -730,7 +702,7 @@ describe("runClaudeSession", () => {
 
     await runClaudeSession(deps, session)
 
-    expect(session.backgroundTasks.has("ptyonly1")).toBe(true)
+    expect(session.backgroundTasks.has("fallbackonly1")).toBe(true)
     expect(session.backgroundTasksLevelSourced).toBe(false)
     expect(session.backgroundTaskDeadlineAt).toBeGreaterThan(Date.now())
   })

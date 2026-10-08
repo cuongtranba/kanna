@@ -18,7 +18,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >()
 
-  const fakeSession = { interrupt: () => {}, getAccountInfo: async () => null, close: () => {}, closed: Promise.resolve(), getSupportedCommands: async () => [], setModel: async () => {}, setPermissionMode: async () => {}, sendPrompt: NOOP_PROMISE, pushChannelPrompt: NOOP_PROMISE }
+  const fakeSession = { interrupt: () => {}, getAccountInfo: async () => null, close: () => {}, closed: Promise.resolve(), setModel: async () => {}, setPermissionMode: async () => {}, sendPrompt: NOOP_PROMISE, pushChannelPrompt: NOOP_PROMISE }
 
   return {
     store: {
@@ -49,12 +49,6 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
       appendSubagentEvent: async () => {},
     },
     startClaudeSessionFn: async (_a) => fakeSession as never,
-    startClaudeSessionPTYFn: async (_a) => fakeSession as never,
-    toolCallback: null,
-    tunnelGateway: null,
-    claudePtyRegistry: null,
-    ptyInstanceRegistry: null,
-    workflowRegistry: null,
     subagentOrchestrator: {
       notifySubagentToolPending: () => {},
     } as never,
@@ -62,7 +56,6 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     oauthPool: null,
     subagentPendingResolvers: pendingResolvers as never,
     realpath: (p) => p,
-    resolveClaudeDriverPreference: () => "sdk",
     getEnabledCustomMcpServers: () => [],
     buildOAuthBearers: async () => ({ byServerId: new Map(), usableUntil: null }),
     resolveChatPolicy: () => ({ mode: "acceptEdits" } as never),
@@ -111,10 +104,9 @@ describe("buildClaudeSubagentStarter", () => {
     expect(typeof starter).toBe("function")
   })
 
-  test("SDK preference — calls startClaudeSessionFn with merged mcpServers", async () => {
+  test("calls startClaudeSessionFn with merged mcpServers", async () => {
     let capturedArgs: unknown = null
     const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "sdk",
       startClaudeSessionFn: async (a) => {
         capturedArgs = a
         return {} as never
@@ -140,64 +132,6 @@ describe("buildClaudeSubagentStarter", () => {
     expect(Array.isArray(args.customMcpServers)).toBe(true)
     expect((args.customMcpServers as unknown[]).length).toBe(1)
     expect(args.oauthBearers).toBeInstanceOf(Map)
-  })
-
-  test("PTY preference — calls startClaudeSessionPTYFn with oneShot: true", async () => {
-    let ptyCalled = false
-    let capturedPtyArgs: unknown = null
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "pty",
-      startClaudeSessionPTYFn: async (a) => {
-        ptyCalled = true
-        capturedPtyArgs = a
-        return {} as never
-      },
-    })
-    const starter = buildClaudeSubagentStarter(deps)
-    await starter({
-      chatId: "chat-x",
-      projectId: "proj",
-      localPath: "/tmp/x",
-      model: "claude-opus-4-5",
-      effort: undefined,
-      planMode: false,
-      sessionToken: null,
-      forkSession: false,
-      oauthToken: null,
-      onToolRequest: async () => null,
-    } as never)
-
-    expect(ptyCalled).toBe(true)
-    const ptyArgs = capturedPtyArgs as Record<string, unknown>
-    expect(ptyArgs.oneShot).toBe(true)
-  })
-
-  test("PTY preference — forwards maxTurns to startClaudeSessionPTYFn", async () => {
-    let capturedPtyArgs: unknown = null
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "pty",
-      startClaudeSessionPTYFn: async (a) => {
-        capturedPtyArgs = a
-        return {} as never
-      },
-    })
-    const starter = buildClaudeSubagentStarter(deps)
-    await starter({
-      chatId: "chat-x",
-      projectId: "proj",
-      localPath: "/tmp/x",
-      model: "claude-opus-4-5",
-      effort: undefined,
-      planMode: false,
-      sessionToken: null,
-      forkSession: false,
-      oauthToken: null,
-      onToolRequest: async () => null,
-      maxTurns: 5,
-    } as never)
-
-    const ptyArgs = capturedPtyArgs as Record<string, unknown>
-    expect(ptyArgs.maxTurns).toBe(5)
   })
 })
 

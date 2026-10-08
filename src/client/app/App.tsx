@@ -11,7 +11,6 @@ import { AppDialogProvider, useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
-import { NoticeBanner } from "../components/ui/notice-banner"
 import { TooltipProvider } from "../components/ui/tooltip"
 import { Toaster } from "../components/ui/toaster"
 import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
@@ -516,8 +515,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     runDetached("chat notification sound", playChatNotificationSound(chatSoundId, burstCount))
   }, [appSettings, chatSoundId, chatSoundPreference, state.sidebarData])
 
-  const ptyDriverActive = appSettings?.claudeDriver.preference === "pty"
-
   if (state.uiRestartActive) {
     return <AppBootstrap label={state.uiRestartLabel} />
   }
@@ -528,14 +525,6 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
 
   return (
     <div className="flex flex-col h-[100dvh] min-h-[100dvh] overflow-hidden">
-      {ptyDriverActive ? (
-        <NoticeBanner variant="warning">
-          <span className="font-medium text-foreground">PTY driver active.</span>
-          <span className="text-muted-foreground">
-            Tools run under the <code className="font-mono">claude</code> CLI with subscription billing. Use a worktree for risky tasks.
-          </span>
-        </NoticeBanner>
-      ) : null}
       <div
         className="flex flex-1 min-h-0 overflow-hidden"
         data-kanna-spawning={isSpawningChat ? "true" : undefined}

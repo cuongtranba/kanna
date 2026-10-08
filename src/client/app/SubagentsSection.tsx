@@ -490,7 +490,7 @@ function SubagentForm(props: SubagentFormProps) {
 
       <FormRow
         label="Max turns"
-        hint="Optional. Caps the agentic turns per run (like Claude Code's per-agent maxTurns). Empty = unbounded. Claude SDK runs stop gracefully at the limit; PTY/Codex runs are aborted."
+        hint="Optional. Caps the agentic turns per run (like Claude Code's per-agent maxTurns). Empty = unbounded. Claude SDK runs stop gracefully at the limit; Codex runs are aborted."
       >
         <Input
           data-testid="subagent-form-max-turns"

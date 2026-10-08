@@ -20,8 +20,6 @@ import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/
 import { inferAttachmentContentType, inferProjectFileContentType } from "./uploads"
 import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
-import { createAskUserQuestionTool } from "./kanna-mcp-tools/ask-user-question"
-import { createExitPlanModeTool } from "./kanna-mcp-tools/exit-plan-mode"
 import { createReadTool } from "./kanna-mcp-tools/read.adapter"
 import { createGlobTool } from "./kanna-mcp-tools/glob.adapter"
 import { createGrepTool } from "./kanna-mcp-tools/grep.adapter"
@@ -81,7 +79,6 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   chatPolicy?: ChatPermissionPolicy
   subagentOrchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
-  forceInteractiveToolCallbacks?: boolean
   restrictedAllowedPaths?: readonly string[]
   setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
   stopLoop?: () => Promise<void>
@@ -1046,50 +1043,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     )
   }
 
-  const envCallbacksEnabled = process.env.KANNA_MCP_TOOL_CALLBACKS === "1"
-  const interactiveEnabled =
-    (envCallbacksEnabled || args.forceInteractiveToolCallbacks === true) && Boolean(args.toolCallback)
-  const builtinShimsEnabled = envCallbacksEnabled && Boolean(args.toolCallback)
-
-  if (interactiveEnabled && args.toolCallback) {
-    const askTool = createAskUserQuestionTool({ toolCallback: args.toolCallback })
-    const exitPlanTool = createExitPlanModeTool({ toolCallback: args.toolCallback })
-
-    tools.push(
-      tool(
-        askTool.name,
-        "Ask the user a question with multiple choice answers",
-        askTool.schema.shape,
-        async (input, extra) => {
-          const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
-          const toolUseId = requestId != null ? String(requestId) : randomUUID()
-          return await askTool.handler(input, {
-            chatId: chatId ?? "",
-            sessionId,
-            toolUseId,
-            cwd,
-            chatPolicy,
-          })
-        },
-      ),
-      tool(
-        exitPlanTool.name,
-        "Submit a plan for user approval before continuing",
-        exitPlanTool.schema.shape,
-        async (input, extra) => {
-          const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
-          const toolUseId = requestId != null ? String(requestId) : randomUUID()
-          return await exitPlanTool.handler(input, {
-            chatId: chatId ?? "",
-            sessionId,
-            toolUseId,
-            cwd,
-            chatPolicy,
-          })
-        },
-      ),
-    )
-  }
+  const builtinShimsEnabled = process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && Boolean(args.toolCallback)
 
   if (builtinShimsEnabled && args.toolCallback) {
     const readTool = createReadTool({ toolCallback: args.toolCallback })

@@ -136,37 +136,27 @@ export function normalizeAnthropicBaseUrl(raw: string): string | null {
 export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000
 
 
-export type ClaudeDriverPreference = "sdk" | "pty"
-
-export const CLAUDE_DRIVER_VALUES: readonly ClaudeDriverPreference[] = ["sdk", "pty"]
-
-export function isClaudeDriverPreference(value: string | null | undefined): value is ClaudeDriverPreference {
-  return value === "sdk" || value === "pty"
-}
-
-export interface ClaudePtyLifecycleSettings {
+export interface ClaudeLifecycleSettings {
   idleTimeoutMs: number
   maxConcurrent: number
 }
 
-export const CLAUDE_PTY_LIFECYCLE_DEFAULTS: ClaudePtyLifecycleSettings = {
+export const CLAUDE_LIFECYCLE_DEFAULTS: ClaudeLifecycleSettings = {
   idleTimeoutMs: 600_000,
   maxConcurrent: 4,
 }
 
-export const CLAUDE_PTY_IDLE_TIMEOUT_MS_MIN = 60_000
-export const CLAUDE_PTY_IDLE_TIMEOUT_MS_MAX = 3_600_000
-export const CLAUDE_PTY_MAX_CONCURRENT_MIN = 1
-export const CLAUDE_PTY_MAX_CONCURRENT_MAX = 16
+export const CLAUDE_IDLE_TIMEOUT_MS_MIN = 60_000
+export const CLAUDE_IDLE_TIMEOUT_MS_MAX = 3_600_000
+export const CLAUDE_MAX_CONCURRENT_MIN = 1
+export const CLAUDE_MAX_CONCURRENT_MAX = 16
 
 export interface ClaudeDriverSettings {
-  preference: ClaudeDriverPreference
-  lifecycle: ClaudePtyLifecycleSettings
+  lifecycle: ClaudeLifecycleSettings
 }
 
 export const CLAUDE_DRIVER_DEFAULTS: ClaudeDriverSettings = {
-  preference: "sdk",
-  lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS },
+  lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS },
 }
 
 export type ClaudeSessionLifecycleStatus = "cold" | "warming" | "active" | "idle" | "cooling"
@@ -386,8 +376,7 @@ export interface AppSettingsPatch {
     delete?: { id: string }
   }
   claudeDriver?: {
-    preference?: ClaudeDriverPreference
-    lifecycle?: Partial<ClaudePtyLifecycleSettings>
+    lifecycle?: Partial<ClaudeLifecycleSettings>
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number

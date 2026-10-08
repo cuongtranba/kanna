@@ -76,9 +76,9 @@ anything, and it survives the code drifting under it.
 Each consequence is a place the implementer must check, and enumerating them is what
 turns a one-line fix into a correct one.
 
-**Find the scope boundary.** What looks affected but isn't? #806 spends a paragraph
-explaining why the PTY driver is fine — that paragraph stops the implementer from
-"fixing" working code. Boundaries are as valuable as the work itself.
+**Find the scope boundary.** What looks affected but isn't? #806 spent a paragraph
+explaining why the PTY driver (since removed) was fine — that paragraph stopped the
+implementer from "fixing" working code. Boundaries are as valuable as the work itself.
 
 For a feature, the same discipline points elsewhere: find where the thing would
 live, what already exists nearby that it should match, which existing hook or field

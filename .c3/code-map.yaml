@@ -240,8 +240,6 @@ c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
 c3-224:
   - src/server/oauth-pool/**/*.ts
-c3-225:
-  - src/server/claude-pty/**
 c3-226:
   - src/server/mcp-oauth.adapter.ts
   - src/server/mcp-validator.ts
@@ -255,6 +253,10 @@ c3-229:
   - src/server/background-task-output-io.adapter.ts
   - src/server/background-task-output-registry.test.ts
   - src/server/background-task-output-registry.ts
+  - src/server/claude-projects-path.adapter.test.ts
+  - src/server/claude-projects-path.adapter.ts
+  - src/server/output-ring.test.ts
+  - src/server/output-ring.ts
   - src/server/watched-registry.test.ts
   - src/server/watched-registry.ts
   - src/client/app/BackgroundTasksSection.store.ts

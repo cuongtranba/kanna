@@ -54,7 +54,6 @@ export interface BuildSubagentProviderRunArgs {
     getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
     chatTaskStore?: ChatTaskStorePort
   }) => Promise<ClaudeSessionHandle>
-  claudeDriverIsPty?: boolean
   subagentOrchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
@@ -85,7 +84,7 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     systemPrompt: args.subagent.systemPrompt,
     preamble: args.primer,
     maxTurns: args.subagent.maxTurns,
-    nativeMaxTurns: args.subagent.provider === "claude" && !args.claudeDriverIsPty,
+    nativeMaxTurns: args.subagent.provider === "claude",
     authReady: async () => args.authReady(args.subagent.provider),
     async start(onChunk, onEntry, opts) {
       const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)

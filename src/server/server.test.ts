@@ -3,7 +3,7 @@ import {
   AUTH_DEFAULTS,
   CLAUDE_AUTH_DEFAULTS,
   CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_PTY_LIFECYCLE_DEFAULTS,
+  CLAUDE_LIFECYCLE_DEFAULTS,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PLUGIN_SETTINGS_DEFAULTS,
@@ -58,7 +58,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     customMcpServers: [],
     customModels: [],
     textSnippets: [],
-    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS } },
+    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
@@ -97,17 +97,15 @@ describe("buildAgentAppSettingsView", () => {
     expect(view.providerDefaults.claude.modelOptions.contextWindow).toBe("1m")
   })
 
-  test("forwards claudeDriver preference and lifecycle", () => {
+  test("forwards claudeDriver lifecycle", () => {
     const view = buildAgentAppSettingsView(
       makeSnapshot({
         claudeDriver: {
-          preference: "pty",
-          lifecycle: { ...CLAUDE_PTY_LIFECYCLE_DEFAULTS, idleTimeoutMs: 1234, maxConcurrent: 7 },
+          lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS, idleTimeoutMs: 1234, maxConcurrent: 7 },
         },
       }),
     )
 
-    expect(view.claudeDriver.preference).toBe("pty")
     expect(view.claudeDriver.lifecycle.idleTimeoutMs).toBe(1234)
     expect(view.claudeDriver.lifecycle.maxConcurrent).toBe(7)
   })
@@ -117,7 +115,7 @@ describe("buildAgentAppSettingsView", () => {
     expect(view.globalPromptAppend).toBe("")
   })
 
-  test("forwards customMcpServers so both drivers receive the user's MCP entries", () => {
+  test("forwards customMcpServers so the agent receives the user's MCP entries", () => {
     const context7: McpServerConfig = {
       id: "mcp-context7",
       name: "context7",

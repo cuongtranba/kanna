@@ -118,7 +118,7 @@ describe("PaneTabStrip chat status", () => {
     expect(html).toContain("Running")
   })
 
-  test("the PTY session badge rides along with the same drawn mark as the sidebar", () => {
+  test("the session badge rides along with the same drawn mark as the sidebar", () => {
     const html = render(createPane("p", [chat]), true, 800, running)
     expect(html).toContain("data-tab-session-badge")
     expect(html).toContain("<svg")

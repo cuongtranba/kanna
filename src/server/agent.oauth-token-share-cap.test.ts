@@ -226,7 +226,6 @@ describe("AgentCoordinator OAuth share-cap smoke (adr-20260522-oauth-token-share
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (tokenId === "a") {
                 tokens = tokens.map((t) => (

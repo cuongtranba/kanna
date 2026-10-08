@@ -5,7 +5,6 @@ import { toError } from "../shared/errors"
 import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
-import type { ClaudeDriverPreference } from "../shared/types"
 import {
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
@@ -15,7 +14,7 @@ import {
 import { timestamped } from "./claude-message-normalizer"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
-import { isCliCompactTurn, isProactiveCompactTurn } from "./claude-session-state"
+import { isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { TurnEndGuard } from "./turn-end-guard"
 
@@ -74,7 +73,6 @@ export interface RunClaudeSessionDeps {
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
-  resolveClaudeDriverPreference(): ClaudeDriverPreference
   turnEndGuard?: TurnEndGuard
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
   onBackgroundTaskSettle?(chatId: string, taskId: string): void
@@ -289,29 +287,6 @@ export async function runClaudeSession(
         activeStatus: active?.status ?? null,
         pendingPromptSeqs: [...session.pendingPromptSeqs],
       })
-
-      if (
-        event.entry.kind === "compact_boundary"
-        && active !== undefined
-        && isCliCompactTurn(active)
-        && !active.cancelRequested
-        && deps.resolveClaudeDriverPreference() === "pty"
-      ) {
-        active.hasFinalResult = true
-        await deps.store.recordTurnFinished(session.chatId)
-        if (isProactiveCompactTurn(active)) {
-          await deps.store.setCompactFailureCount(session.chatId, 0)
-        }
-        if (active.claudePromptSeq != null) {
-          const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
-          if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
-        }
-        deps.activeTurns.delete(session.chatId)
-        deps.oauthPool?.release(session.chatId)
-        await deps.maybeStartNextQueuedMessage(session.chatId)
-        deps.emitStateChange(session.chatId)
-        continue
-      }
 
       if (
         event.entry.kind === "result"

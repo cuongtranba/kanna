@@ -229,7 +229,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                         closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               events.throw(limitErr)
             },
@@ -306,7 +305,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "rate_limit",
@@ -387,7 +385,6 @@ describe("AgentCoordinator OAuth rotation", () => {
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (sessionIndex === 0) {
                 events.push({
@@ -469,7 +466,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                         closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (sessionIndex === 0) {
                 events.push({
@@ -554,7 +550,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                         closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (sessionIndex === 0) {
                 events.push({ type: "rate_limit", rateLimit: { resetAt: aResetAt, tz: "system" } })
@@ -679,7 +674,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",
@@ -760,7 +754,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",
@@ -842,7 +835,6 @@ describe("AgentCoordinator OAuth rotation", () => {
             closed: Promise.resolve(),
             setModel: async () => {},
             setPermissionMode: async () => {},
-            getSupportedCommands: async () => [],
             sendPrompt: async () => {
               if (sessionIndex === 0) {
                 events.push({ type: "rate_limit", rateLimit: { resetAt, tz: "system" } })
@@ -928,7 +920,6 @@ describe("AgentCoordinator OAuth rotation", () => {
                     closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
-          getSupportedCommands: async () => [],
           sendPrompt: async () => {
             events.push({
               type: "transcript",

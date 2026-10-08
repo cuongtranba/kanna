@@ -3,7 +3,6 @@ import type { ChatTaskStorePort } from "./kanna-mcp"
 import type { JsonValue } from "../shared/json"
 import type {
   AgentProvider,
-  ClaudeDriverPreference,
   LlmProviderSnapshot,
   McpServerConfig,
   OpenRouterModel,
@@ -25,14 +24,9 @@ import type { BoardRegistry } from "./board-registry"
 import type { LoopState } from "./auto-continue/read-model"
 import { toArmedLoopInfo } from "./claude-loop-commands"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { StartClaudeSessionPtyArgs } from "./claude-pty/driver"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { ToolCallbackService } from "./tool-callback"
-import type { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
-import type { WorkflowRegistry } from "./workflow-registry"
-import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import { isGenUIEnabled } from "./genui/genui-config"
@@ -71,17 +65,11 @@ export interface SpawnClaudeTurnDeps {
   oauthPool: SpawnOAuthPool | null
 
   startClaudeSessionFn: typeof StartClaudeSessionFn
-  startClaudeSessionPTYFn: (args: StartClaudeSessionPtyArgs) => Promise<ClaudeSessionHandle>
 
   subagentOrchestrator: SubagentOrchestrator
   toolCallback: ToolCallbackService | null
   tunnelGateway: TunnelGateway | null
-  claudePtyRegistry: ClaudePtyRegistry | null
-  ptyInstanceRegistry: PtyInstanceRegistry | null
-  workflowRegistry: WorkflowRegistry | null
-  subagentTranscriptRegistry: SubagentTranscriptRegistry | null
 
-  resolveClaudeDriverPreference: () => ClaudeDriverPreference
   isLoopArmed: (chatId: string) => LoopState | null
   isRunAlive: (chatId: string, runId: string) => boolean
   chatTaskStore?: ChatTaskStorePort
@@ -114,8 +102,6 @@ export async function spawnClaudeTurn(
 ): Promise<HarnessTurn> {
   let session = deps.claudeSessions.get(args.chatId)
 
-  const driverIsPty = args.provider !== "openrouter"
-    && deps.resolveClaudeDriverPreference() === "pty"
   const loopArmedNow = deps.isLoopArmed(args.chatId) !== null
 
   if (
@@ -156,7 +142,6 @@ export async function spawnClaudeTurn(
       }
     }
 
-    const usePty = driverIsPty
     const systemPromptAppend = buildKannaSystemPromptAppend(deps.getSubagents(), {
       globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
       ...args.instructions,
@@ -177,106 +162,55 @@ export async function spawnClaudeTurn(
       await deps.buildOAuthBearers(enabledMcpServers)
     let started: ClaudeSessionHandle
     try {
-      started = usePty
-        ? await deps.startClaudeSessionPTYFn({
-            chatId: args.chatId,
-            projectId: args.projectId,
-            localPath: args.localPath,
-            model: args.model,
-            effort: args.effort,
-            planMode: args.planMode,
-            sessionToken: args.sessionToken,
-            forkSession: args.forkSession,
-            oauthToken: picked?.token ?? null,
-            oauthBaseUrl: picked?.baseUrl ?? null,
-            oauthLabel: picked?.label,
-            oauthKeyMasked: picked ? maskOauthKey(picked.token) : undefined,
-            additionalDirectories: args.additionalDirectories,
-            onToolRequest: args.onToolRequest,
-            systemPromptAppend,
-            subagentOrchestrator: deps.subagentOrchestrator,
-            delegationContext,
-            setupLoop: delegationContext.depth === 0
-              ? (input) => deps.setupLoop(chatIdForCtx, input)
-              : undefined,
-            armCron: delegationContext.depth === 0
-              ? (command: string) => deps.armCron(chatIdForCtx, command)
-              : undefined,
-            updateCron: delegationContext.depth === 0 && deps.updateCron
-              ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
-              : undefined,
-            stopLoop: delegationContext.depth === 0
-              ? () => deps.stopLoop(chatIdForCtx, "goal_met")
-              : undefined,
-            resumeLoop: delegationContext.depth === 0
-              ? () => deps.resumeLoop(chatIdForCtx)
-              : undefined,
-            isLoopArmed: delegationContext.depth === 0
-              ? () => deps.isLoopArmed(chatIdForCtx) !== null
-              : undefined,
-            getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
-            isRunAlive: deps.isRunAlive,
-            chatTaskStore: deps.chatTaskStore,
-            boardRegistry: deps.boardRegistry,
-            toolCallback: deps.toolCallback ?? undefined,
-            tunnelGateway: deps.tunnelGateway,
-            chatPolicy: deps.resolveChatPolicy(args.chatId),
-            ptyRegistry: deps.claudePtyRegistry ?? undefined,
-            ptyInstanceRegistry: deps.ptyInstanceRegistry ?? undefined,
-            workflowRegistry: deps.workflowRegistry ?? undefined,
-            subagentTranscriptRegistry: deps.subagentTranscriptRegistry ?? undefined,
-            customMcpServers: enabledMcpServers,
-            oauthBearers,
-          })
-        : await deps.startClaudeSessionFn({
-            projectId: args.projectId,
-            localPath: args.localPath,
-            model: args.model,
-            effort: args.effort,
-            planMode: args.planMode,
-            sessionToken: args.sessionToken,
-            forkSession: args.forkSession,
-            oauthToken: picked?.token ?? null,
-            oauthBaseUrl: picked?.baseUrl ?? null,
-            openrouterApiKey,
-            additionalDirectories: args.additionalDirectories,
-            chatId: args.chatId,
-            tunnelGateway: deps.tunnelGateway,
-            onToolRequest: args.onToolRequest,
-            systemPromptAppend,
-            subagentOrchestrator: deps.subagentOrchestrator,
-            delegationContext,
-            setupLoop: delegationContext.depth === 0
-              ? (input) => deps.setupLoop(chatIdForCtx, input)
-              : undefined,
-            armCron: delegationContext.depth === 0
-              ? (command: string) => deps.armCron(chatIdForCtx, command)
-              : undefined,
-            updateCron: delegationContext.depth === 0 && deps.updateCron
-              ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
-              : undefined,
-            stopLoop: delegationContext.depth === 0
-              ? () => deps.stopLoop(chatIdForCtx, "goal_met")
-              : undefined,
-            resumeLoop: delegationContext.depth === 0
-              ? () => deps.resumeLoop(chatIdForCtx)
-              : undefined,
-            isLoopArmed: delegationContext.depth === 0
-              ? () => deps.isLoopArmed(chatIdForCtx) !== null
-              : undefined,
-            getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
-            isRunAlive: deps.isRunAlive,
-            chatTaskStore: deps.chatTaskStore,
-            boardRegistry: deps.boardRegistry,
-            toolCallback: deps.toolCallback ?? undefined,
-            chatPolicy: deps.resolveChatPolicy(args.chatId),
-            customMcpServers: enabledMcpServers,
-            oauthBearers,
-            turnPrice: openrouterTurnPrice,
-            costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
-            contextWindowOverride: openrouterContextWindow,
-            onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
-          })
+      started = await deps.startClaudeSessionFn({
+        projectId: args.projectId,
+        localPath: args.localPath,
+        model: args.model,
+        effort: args.effort,
+        planMode: args.planMode,
+        sessionToken: args.sessionToken,
+        forkSession: args.forkSession,
+        oauthToken: picked?.token ?? null,
+        oauthBaseUrl: picked?.baseUrl ?? null,
+        openrouterApiKey,
+        additionalDirectories: args.additionalDirectories,
+        chatId: args.chatId,
+        tunnelGateway: deps.tunnelGateway,
+        onToolRequest: args.onToolRequest,
+        systemPromptAppend,
+        subagentOrchestrator: deps.subagentOrchestrator,
+        delegationContext,
+        setupLoop: delegationContext.depth === 0
+          ? (input) => deps.setupLoop(chatIdForCtx, input)
+          : undefined,
+        armCron: delegationContext.depth === 0
+          ? (command: string) => deps.armCron(chatIdForCtx, command)
+          : undefined,
+        updateCron: delegationContext.depth === 0 && deps.updateCron
+          ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
+          : undefined,
+        stopLoop: delegationContext.depth === 0
+          ? () => deps.stopLoop(chatIdForCtx, "goal_met")
+          : undefined,
+        resumeLoop: delegationContext.depth === 0
+          ? () => deps.resumeLoop(chatIdForCtx)
+          : undefined,
+        isLoopArmed: delegationContext.depth === 0
+          ? () => deps.isLoopArmed(chatIdForCtx) !== null
+          : undefined,
+        getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+        isRunAlive: deps.isRunAlive,
+        chatTaskStore: deps.chatTaskStore,
+        boardRegistry: deps.boardRegistry,
+        toolCallback: deps.toolCallback ?? undefined,
+        chatPolicy: deps.resolveChatPolicy(args.chatId),
+        customMcpServers: enabledMcpServers,
+        oauthBearers,
+        turnPrice: openrouterTurnPrice,
+        costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
+        contextWindowOverride: openrouterContextWindow,
+        onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
+      })
     } catch (err) {
       if (picked) deps.oauthPool?.release(args.chatId)
       throw err

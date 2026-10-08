@@ -12,7 +12,6 @@ function makeHandle(): import("./harness-types").ClaudeSessionHandle {
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
   }
 }
 

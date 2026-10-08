@@ -316,14 +316,6 @@ export async function startClaudeSession(args: {
     setPermissionMode: async (planMode: boolean) => {
       await q.setPermissionMode(planMode ? "plan" : "acceptEdits")
     },
-    getSupportedCommands: async () => {
-      try {
-        return await q.supportedCommands()
-      } catch (error) {
-        log.warn("[kanna/claude] supportedCommands failed", String(error))
-        return []
-      }
-    },
     ...(args.keepAlive ? {
       pushChannelPrompt: async (content: string) => {
         enqueueUserPrompt(content)

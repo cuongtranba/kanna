@@ -1,4 +1,4 @@
-import type { AccountInfo, AgentProvider, NormalizedToolCall, SlashCommand, TranscriptEntry } from "../shared/types"
+import type { AccountInfo, AgentProvider, NormalizedToolCall, TranscriptEntry } from "../shared/types"
 
 export type HarnessEvent =
   | { type: "transcript"; entry: TranscriptEntry }
@@ -27,6 +27,5 @@ export interface ClaudeSessionHandle {
   sendPrompt: (content: string) => Promise<void>
   setModel: (model: string) => Promise<void>
   setPermissionMode: (planMode: boolean) => Promise<void>
-  getSupportedCommands: () => Promise<SlashCommand[]>
   pushChannelPrompt?: (text: string) => Promise<void>
 }

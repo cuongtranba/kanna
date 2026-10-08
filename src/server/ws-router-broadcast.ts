@@ -1,8 +1,6 @@
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerWebSocket } from "bun"
-import type { PtyInstanceDelta } from "../shared/pty-instance"
-import type { PtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BoardChange, BoardRegistry } from "./board-registry"
@@ -38,7 +36,6 @@ export interface BroadcastManagerDeps {
   resolvedAppSettings: ResolvedAppSettings
   updateManager: UpdateManager | null
   packageUpdateManager?: PackageUpdateManager
-  ptyInstances?: PtyInstanceRegistry
   workflowRegistry?: WorkflowRegistry
   boardRegistry?: BoardRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
@@ -57,7 +54,6 @@ export class BroadcastManager {
   private readonly disposeKeybindingEvents: () => void
   private readonly disposeAppSettingsEvents: () => void
   private readonly disposeUpdateEvents: () => void
-  private readonly disposePtyInstances: () => void
   private readonly disposeWorkflows: () => void
   private readonly disposeBoards: () => void
   private readonly disposeBackgroundTaskOutput: () => void
@@ -71,7 +67,6 @@ export class BroadcastManager {
       resolvedAppSettings,
       updateManager,
       packageUpdateManager,
-      ptyInstances,
       workflowRegistry,
       boardRegistry,
       backgroundTaskOutputRegistry,
@@ -125,16 +120,6 @@ export class BroadcastManager {
           snapshotSignatures.set(id, signature)
           send(ws, envelope)
         }
-      }
-    }) ?? (() => {})
-
-    this.disposePtyInstances = ptyInstances?.subscribe((delta: PtyInstanceDelta) => {
-      if (delta.type === "added") {
-        this.pushPtyInstancesEvent({ type: "pty-instances.added", instance: delta.instance })
-      } else if (delta.type === "updated") {
-        this.pushPtyInstancesEvent({ type: "pty-instances.updated", instance: delta.instance })
-      } else {
-        this.pushPtyInstancesEvent({ type: "pty-instances.removed", chatId: delta.chatId })
       }
     }) ?? (() => {})
 
@@ -532,17 +517,6 @@ export class BroadcastManager {
     }
   }
 
-  private pushPtyInstancesEvent(
-    event: Extract<ServerEnvelope, { type: "event" }>["event"]
-  ): void {
-    for (const ws of this.sockets) {
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "pty-instances") continue
-        send(ws, { v: PROTOCOL_VERSION, type: "event", id, event })
-      }
-    }
-  }
-
   pushFollowedSessions(): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -584,7 +558,6 @@ export class BroadcastManager {
     this.disposeKeybindingEvents()
     this.disposeAppSettingsEvents()
     this.disposeUpdateEvents()
-    this.disposePtyInstances()
     this.disposeWorkflows()
     this.disposeBoards()
     this.disposeBackgroundTaskOutput()

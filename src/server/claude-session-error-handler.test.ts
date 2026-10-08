@@ -29,7 +29,6 @@ function makeHandle() {
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
     pushChannelPrompt: async () => {},
   }
 }

@@ -1,7 +1,6 @@
 import type {
   AgentProvider,
   ChatAttachment,
-  ClaudeDriverPreference,
   ResolvedStackBinding,
   SlashCommandKind,
   Subagent,
@@ -52,8 +51,6 @@ export interface StartTurnDeps {
 
   clearDrainingStream: (chatId: string) => void
   emitStateChange: (chatId: string, options?: { immediate?: boolean }) => void
-  resolveClaudeDriverPreference: () => ClaudeDriverPreference
-  closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   getSubagents: () => Subagent[]
   getAppSettingsSnapshot: () => StartTurnAppSettings
   listSkills: (chatId: string) => SkillRosterEntry[]

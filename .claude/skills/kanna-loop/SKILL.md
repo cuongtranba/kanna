@@ -66,12 +66,10 @@ worry about.
 - `AutoContinueSource` variants `agent_wakeup` and `pending_workflow`.
 - Env vars `KANNA_MAX_AGENT_WAKES` and `KANNA_PENDING_WORKFLOW_POLL_MS`.
 
-**PTY behaviour:** native `ScheduleWakeup` stays disallowed
-(`PTY_DISALLOWED_NATIVE_TOOLS` still includes it) — the CLI cron is a
-dead-letter under Kanna's spawn model and there is no Kanna replacement.
-Native `/loop` slash command inside PTY-mode chats will not have a way to
-schedule (its `ScheduleWakeup` calls hit the disallowed list); use
-`delegate_subagent({run_in_background: true})` instead.
+**Native `ScheduleWakeup`** is not in `CLAUDE_TOOLSET`, so the model cannot call
+it — the CLI cron is a dead-letter under Kanna's spawn model and there is no
+Kanna replacement. The native `/loop` slash command therefore has no way to
+schedule; use `delegate_subagent({run_in_background: true})` instead.
 
 **Example task list (what `mcp__kanna__task_list` returns):**
 ```json
@@ -423,10 +421,9 @@ the resolved `subagentId` + rendered prompt; replayed by `deriveLoopState`).
 `mcp__kanna__stop_loop` (model, on GOAL MET) and a real user `chat.send`
 (takeover — awaited before the turn starts) emit `loop_disarmed`. While armed:
 
-- **Filter-at-spawn (Claude Code's `filterToolsForAgent` pattern), both
-  drivers.** `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/NotebookEdit/Task/Agent)
-  are removed at spawn — PTY via `--disallowedTools` CLI args, SDK via
-  `options.disallowedTools` — so the model never sees them.
+- **Filter-at-spawn (Claude Code's `filterToolsForAgent` pattern).**
+  `LOOP_BLOCKED_NATIVE_TOOLS` (Edit/Write/NotebookEdit/Task/Agent) are removed
+  at spawn via `options.disallowedTools`, so the model never sees them.
 - **Mid-turn guard is a PreToolUse hook, not `canUseTool`.** The SDK never
   consults `canUseTool` for a call the permission mode already approved, and
   under `acceptEdits` that is every Edit/Write inside the working
@@ -452,7 +449,7 @@ either; CC hardcodes 200 only for its fork agent). Enforcement:
 - **Claude SDK runs:** threaded natively into `query()` `options.maxTurns` —
   the SDK stops gracefully at the limit and the accumulated output is kept
   (CC's `max_turns_reached` semantics).
-- **PTY claude + Codex runs:** no native bound — `SubagentOrchestrator`
+- **Codex and OpenRouter runs:** no native bound — `SubagentOrchestrator`
   applies a host-side backstop (`ProviderRunStart.maxTurns` +
   `nativeMaxTurns: false`): the run is aborted with error code `MAX_TURNS`
   once its `tool_call` entry count exceeds the bound. Harder semantics than

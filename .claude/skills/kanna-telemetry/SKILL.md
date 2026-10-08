@@ -115,8 +115,8 @@ curl -s -u "admin:$GF_PW" --get "$PROM/query" \
 ```
 
 `kanna_turn_cost_usd_total` is deliberately SPARSER than the token counters —
-PTY-mode turns have no price resolver wired, so a missing cost series means
-unknown, never free. Derive spend from tokens × your own rates when it is
+a turn whose provider reports tokens but no cost leaves no cost series, so a
+missing one means unknown, never free. Derive spend from tokens × your own rates when it is
 absent. Installs older than the release that added these report no token series
 at all; that is a version gap, not a quiet install.
 

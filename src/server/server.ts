@@ -30,8 +30,6 @@ import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
 import { getMachineDisplayName } from "./machine-name.adapter"
 import { TerminalManager } from "./terminal-manager"
 import { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
-import { ClaudePtyRegistry } from "./claude-pty/pid-registry.adapter"
-import { createPtyInstanceRegistry } from "./claude-pty/pty-instance-registry"
 import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import { createBoardSync } from "./board-sync"
@@ -215,8 +213,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   if (reapedTerminals.length > 0) {
     log.info(`[kanna] reaped ${reapedTerminals.length} orphan terminal process group(s) from previous run`)
   }
-  const claudePtyRegistry = new ClaudePtyRegistry(path.join(store.dataDir, "claude-pty.json"))
-  const ptyInstanceRegistry = createPtyInstanceRegistry()
   const boardStore = createBoardStore({ filePath: path.join(store.dataDir, "boards.db") })
   const boardRegistry = createBoardRegistry({ store: boardStore })
   const boardSync = createBoardSync({
@@ -236,9 +232,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const backgroundTaskOutputRegistry = createBackgroundTaskOutputRegistry(backgroundTaskOutputIo)
-  const reapedClaudePty = await claudePtyRegistry.reapStale()
-  if (reapedClaudePty.length > 0) {
-    log.info(`[kanna] reaped ${reapedClaudePty.length} orphan claude PTY process group(s) from previous run`)
+  if (process.env.KANNA_CLAUDE_DRIVER === "pty") {
+    log.warn("[kanna] KANNA_CLAUDE_DRIVER=pty is ignored: the PTY driver was removed and Claude chats run on the Agent SDK. Unset the variable to silence this warning.")
   }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
@@ -390,8 +385,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     tunnelGateway,
     oauthPool,
     toolCallback,
-    claudePtyRegistry,
-    ptyInstanceRegistry,
     workflowRegistry,
     boardRegistry,
     backgroundTaskOutputRegistry,
@@ -526,7 +519,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     machineDisplayName,
     updateManager,
     pushManager,
-    ptyInstances: ptyInstanceRegistry,
     workflowRegistry,
     boardRegistry,
     boardSync,
@@ -538,14 +530,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     backgroundTaskOutputRegistry,
     subagentTranscriptRegistry,
     followedSessionRegistry,
-    killPtyInstance: async (chatId: string) => {
-      try {
-        await agent.killPtyInstance(chatId)
-        return { ok: true }
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) }
-      }
-    },
     sessionShare: sessionShareService,
     packageUpdateManager,
     genuiDatasets,

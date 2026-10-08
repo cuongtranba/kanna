@@ -94,7 +94,6 @@ export function mergeAppSettingsPatch(
     },
     installedPlugins: settings.installedPlugins,
     claudeDriver: {
-      preference: patch.claudeDriver?.preference ?? settings.claudeDriver.preference,
       lifecycle: {
         ...settings.claudeDriver.lifecycle,
         ...patch.claudeDriver?.lifecycle,

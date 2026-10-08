@@ -38,7 +38,6 @@ const GLOBAL_TOPICS = [
   "keybindings",
   "app-settings",
   "push-config",
-  "pty-instances",
   "followed-sessions",
 ] as const
 

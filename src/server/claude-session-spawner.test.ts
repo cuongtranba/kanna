@@ -20,7 +20,6 @@ function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSes
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
     pushChannelPrompt: undefined,
     ...overrides,
   }
@@ -103,15 +102,9 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     mentionedSubagentIdsByChat,
     oauthPool: null,
     startClaudeSessionFn: async () => fakeHandle,
-    startClaudeSessionPTYFn: async () => fakeHandle,
     subagentOrchestrator: {} as SpawnClaudeTurnDeps["subagentOrchestrator"],
     toolCallback: null,
     tunnelGateway: null,
-    claudePtyRegistry: null,
-    ptyInstanceRegistry: null,
-    workflowRegistry: null,
-    subagentTranscriptRegistry: null,
-    resolveClaudeDriverPreference: () => "sdk",
     isLoopArmed: () => null,
     closeClaudeSession: () => {},
     enforceClaudeSessionBudget: () => {},
@@ -153,50 +146,16 @@ describe("spawnClaudeTurn", () => {
       expect(turn.provider).toBe("claude")
     })
 
-    test("uses SDK driver when resolveClaudeDriverPreference returns sdk", async () => {
-      let sdkCalled = false
-      let ptyCalled = false
+    test("starts an openrouter session through the SDK with the stored API key", async () => {
+      let forwardedKey: string | null | undefined
       const deps = makeDeps({
-        resolveClaudeDriverPreference: () => "sdk",
-        startClaudeSessionFn: async () => { sdkCalled = true; return makeFakeHandle() },
-        startClaudeSessionPTYFn: async () => { ptyCalled = true; return makeFakeHandle() },
-      })
-
-      await spawnClaudeTurn(deps, makeArgs({ provider: "claude" }))
-
-      expect(sdkCalled).toBe(true)
-      expect(ptyCalled).toBe(false)
-    })
-
-    test("uses PTY driver when resolveClaudeDriverPreference returns pty", async () => {
-      let sdkCalled = false
-      let ptyCalled = false
-      const deps = makeDeps({
-        resolveClaudeDriverPreference: () => "pty",
-        startClaudeSessionFn: async () => { sdkCalled = true; return makeFakeHandle() },
-        startClaudeSessionPTYFn: async () => { ptyCalled = true; return makeFakeHandle() },
-      })
-
-      await spawnClaudeTurn(deps, makeArgs({ provider: "claude" }))
-
-      expect(sdkCalled).toBe(false)
-      expect(ptyCalled).toBe(true)
-    })
-
-    test("always uses SDK driver for openrouter provider even when pty is preferred", async () => {
-      let sdkCalled = false
-      let ptyCalled = false
-      const deps = makeDeps({
-        resolveClaudeDriverPreference: () => "pty",
-        startClaudeSessionFn: async () => { sdkCalled = true; return makeFakeHandle() },
-        startClaudeSessionPTYFn: async () => { ptyCalled = true; return makeFakeHandle() },
+        startClaudeSessionFn: async (a) => { forwardedKey = a.openrouterApiKey; return makeFakeHandle() },
         readLlmProvider: async () => makeOpenRouterProvider("or-key"),
       })
 
       await spawnClaudeTurn(deps, makeArgs({ provider: "openrouter" }))
 
-      expect(sdkCalled).toBe(true)
-      expect(ptyCalled).toBe(false)
+      expect(forwardedKey).toBe("or-key")
     })
 
     test("fires runClaudeSession in fire-and-forget manner", async () => {
@@ -382,7 +341,6 @@ describe("spawnClaudeTurn", () => {
           release: () => { released = true },
         },
         startClaudeSessionFn: async () => { throw new Error("spawn failed") },
-        startClaudeSessionPTYFn: async () => { throw new Error("spawn failed") },
       })
 
       await expect(spawnClaudeTurn(deps, makeArgs())).rejects.toThrow("spawn failed")
@@ -461,10 +419,9 @@ describe("cost baseline wiring", () => {
 })
 
 describe("compaction observer wiring", () => {
-  test("the SDK branch forwards onCompaction so the hooks can be registered", async () => {
+  test("forwards onCompaction so the compaction hooks can be registered", async () => {
     let forwarded: unknown = "unset"
     const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "sdk",
       startClaudeSessionFn: async (a) => {
         forwarded = a.onCompaction
         return makeFakeHandle()
@@ -474,21 +431,5 @@ describe("compaction observer wiring", () => {
     await spawnClaudeTurn(deps, makeArgs())
 
     expect(typeof forwarded).toBe("function")
-  })
-
-  test("the PTY branch never receives it, since hooks are an SDK transport feature", async () => {
-    let sdkCalled = false
-    const deps = makeDeps({
-      resolveClaudeDriverPreference: () => "pty",
-      startClaudeSessionFn: async () => { sdkCalled = true; return makeFakeHandle() },
-      startClaudeSessionPTYFn: async (a) => {
-        expect("onCompaction" in a).toBe(false)
-        return makeFakeHandle()
-      },
-    })
-
-    await spawnClaudeTurn(deps, makeArgs())
-
-    expect(sdkCalled).toBe(false)
   })
 })

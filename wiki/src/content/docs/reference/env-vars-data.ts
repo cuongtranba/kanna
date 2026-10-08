@@ -2,7 +2,8 @@
 export interface EnvVar { name: string; default: string; description: string }
 export const envVars: EnvVar[] = [
   { name: 'KANNA_BACKGROUND_TASK_MAX_WAKES', default: "3", description: "How many times a background task may wake its chat after the keep-alive deadline passes before Kanna stops re-waking it." },
-  { name: 'KANNA_CLAUDE_DRIVER', default: "sdk", description: "Claude driver. Leave unset. \"sdk\" runs the Claude Agent SDK and is the supported mode; \"pty\" is a legacy path that drives the claude CLI under a pseudo-terminal, kept only for compatibility." },
+  { name: 'KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS', default: "1800000", description: "How long a launched background task may hold a session warm against the idle reaper (30 min). Only applies to a session with no live task list from the SDK; when the SDK reports its background tasks, set membership decides and this deadline is never consulted." },
+  { name: 'KANNA_CLAUDE_DRIVER', default: "(unset)", description: "Ignored. The PTY driver was removed and every Claude chat runs on the Claude Agent SDK. Setting it to \"pty\" only logs a warning at boot; leave it unset." },
   { name: 'KANNA_CLAUDE_SESSION_IDLE_MS', default: "600000", description: "Idle window before a resident Claude session is reaped (10 min)." },
   { name: 'KANNA_CLAUDE_SESSION_MAX_RESIDENT', default: "4", description: "Max simultaneously resident Claude sessions before the least-recently-used is reaped." },
   { name: 'KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS', default: "60000", description: "How often the resident-session reaper sweeps for idle sessions." },
@@ -25,8 +26,7 @@ export const envVars: EnvVar[] = [
   { name: 'KANNA_OTEL_SERVICE_NAME', default: "kanna-<machine name>", description: "OTel service.name for this install. Overrides the name derived from the computer name." },
   { name: 'KANNA_PROACTIVE_COMPACT', default: "disabled", description: "Set to \"enabled\" to restore Kanna's own proactive /compact injection. Off by default because the Claude Code CLI auto-compacts on its own (Settings.autoCompactEnabled, on by default), and Kanna's threshold is lower, so both running means Kanna always wins and the CLI never compacts. Turn it on only if you have set autoCompactEnabled: false in your CLI settings." },
   { name: 'KANNA_PROFILE_SEND_TO_STARTING', default: "0", description: "Set to \"1\" to log timing for each stage between a send and the turn actually starting. Use when a chat feels slow to begin." },
-  { name: 'KANNA_PTY_BACKGROUND_TASK_MAX_MS', default: "1800000", description: "How long a launched background task may hold a session warm against the idle reaper (30 min). Only applies to a session with no live task list from the SDK; when the SDK reports its background tasks, set membership decides and this deadline is never consulted. The KANNA_PTY_ prefix is historical." },
-  { name: 'KANNA_PTY_SANDBOX', default: "(unset)", description: "Set to \"off\" to disable the PTY driver's OS-level sandbox. On by default on macOS, and on Linux when bubblewrap (bwrap) is on PATH. Turning it off loses defense-in-depth against the CLI's built-in credential reads; it also silences the warning logged when bwrap is missing." },
+  { name: 'KANNA_PTY_BACKGROUND_TASK_MAX_MS', default: "(unset)", description: "Former name of KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS. Still read, but only when the new name is unset." },
   { name: 'KANNA_RELOADER', default: "supervisor", description: "Self-update reload strategy: \"supervisor\" (default, end-user) or \"pm2\" (self-host, requires KANNA_REPO_DIR)." },
   { name: 'KANNA_REPO_DIR', default: "(unset)", description: "Repo checkout the pm2 reloader pulls/rebuilds. Required when KANNA_RELOADER=pm2." },
   { name: 'KANNA_SERVER_SECRET', default: "(random per process)", description: "Stabilises HMAC tool-request ids across process restarts." },

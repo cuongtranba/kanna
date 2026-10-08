@@ -28,7 +28,6 @@ function makeFakeHandle(): ClaudeSessionHandle {
     sendPrompt: async () => {},
     setModel: async () => {},
     setPermissionMode: async () => {},
-    getSupportedCommands: async () => [],
   }
 }
 
@@ -107,8 +106,6 @@ type DepOverrides = {
   stateChanges?: string[]
   rejectCalled?: string[]
   orchestratorCancelled?: string[]
-  closedSessions?: string[]
-  driver?: "sdk" | "pty"
 }
 
 function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
@@ -122,8 +119,6 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   const stateChanges = overrides.stateChanges ?? []
   const rejectCalled = overrides.rejectCalled ?? []
   const orchestratorCancelled = overrides.orchestratorCancelled ?? []
-  const closedSessions = overrides.closedSessions ?? []
-  const driver = overrides.driver ?? "sdk"
 
   return {
     drainingStreams,
@@ -138,8 +133,6 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
     },
     claudeSessions,
     emitStateChange: (chatId) => { stateChanges.push(chatId) },
-    resolveClaudeDriverPreference: () => driver,
-    closeClaudeSession: (chatId) => { closedSessions.push(chatId) },
   }
 }
 
@@ -274,24 +267,6 @@ describe("self-wake turn cancel", () => {
     expect(session.cancelledResultPending).toBe(1)
     expect(appendedMessages.map((entry) => entry.kind)).toContain("interrupted")
     expect(stateChanges).toContain("chat-1")
-  })
-
-  test("PTY driver drops the dead session after a self-wake interrupt", async () => {
-    const session = makeSession({ selfWakeActive: true })
-    session.session = {
-      ...session.session,
-      interrupt: async () => {},
-    }
-    const closedSessions: string[] = []
-    const deps = makeDeps({
-      claudeSessions: new Map([["chat-1", session]]),
-      closedSessions,
-      driver: "pty",
-    })
-
-    await cancelChat(deps, "chat-1")
-
-    expect(closedSessions).toContain("chat-1")
   })
 
   test("no self-wake, no session interrupt — stays a no-op", async () => {
@@ -556,39 +531,6 @@ describe("interrupt and close", () => {
     const activeTurns = new Map([["chat-1", active]])
     const deps = makeDeps({ activeTurns })
     await expect(cancelChat(deps, "chat-1")).resolves.toBeUndefined()
-  })
-
-  test("closes Claude session on PTY driver for claude provider", async () => {
-    const closedSessions: string[] = []
-    const session = makeSession({ chatId: "chat-1" })
-    const claudeSessions = new Map([["chat-1", session]])
-    const active = makeActiveTurn({ provider: "claude" })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, claudeSessions, closedSessions, driver: "pty" })
-    await cancelChat(deps, "chat-1")
-    expect(closedSessions).toContain("chat-1")
-  })
-
-  test("does NOT close Claude session on SDK driver", async () => {
-    const closedSessions: string[] = []
-    const session = makeSession({ chatId: "chat-1" })
-    const claudeSessions = new Map([["chat-1", session]])
-    const active = makeActiveTurn({ provider: "claude" })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, claudeSessions, closedSessions, driver: "sdk" })
-    await cancelChat(deps, "chat-1")
-    expect(closedSessions.length).toBe(0)
-  })
-
-  test("does NOT close Claude session for codex provider even on PTY", async () => {
-    const closedSessions: string[] = []
-    const session = makeSession({ chatId: "chat-1" })
-    const claudeSessions = new Map([["chat-1", session]])
-    const active = makeActiveTurn({ provider: "codex" })
-    const activeTurns = new Map([["chat-1", active]])
-    const deps = makeDeps({ activeTurns, claudeSessions, closedSessions, driver: "pty" })
-    await cancelChat(deps, "chat-1")
-    expect(closedSessions.length).toBe(0)
   })
 })
 
