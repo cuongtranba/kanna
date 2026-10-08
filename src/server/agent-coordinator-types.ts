@@ -107,5 +107,6 @@ export interface AgentCoordinatorArgs {
   localCatalog?: import("./local-catalog").LocalCatalogService
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
   backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
+  liveBlocks?: import("./live-block-throttle").LiveBlockHub
   genuiDatasets?: import("./genui/dataset-service").GenUIDatasetService
 }

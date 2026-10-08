@@ -12,6 +12,8 @@ import type { KeybindingsManager } from "./keybindings"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
 import type { ServerEnvelope } from "../shared/protocol"
+import type { LiveBlock } from "../shared/live-block"
+import type { LiveBlockHub } from "./live-block-throttle"
 import type { ResolvedAppSettings } from "./ws-router-defaults"
 import type { EnvelopeBuilder } from "./ws-router-envelope"
 import {
@@ -41,6 +43,7 @@ export interface BroadcastManagerDeps {
   boardRegistry?: BoardRegistry
   beaconRegistry?: BeaconRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
+  liveBlocks?: LiveBlockHub
   envelopeBuilder: EnvelopeBuilder
 }
 
@@ -61,6 +64,7 @@ export class BroadcastManager {
   private readonly disposeBeacons: () => void
   private readonly disposeBackgroundTaskOutput: () => void
   private readonly disposePackageUpdateEvents: () => void
+  private readonly disposeLiveBlocks: () => void
 
   constructor(private readonly deps: BroadcastManagerDeps) {
     const {
@@ -74,6 +78,7 @@ export class BroadcastManager {
       boardRegistry,
       beaconRegistry,
       backgroundTaskOutputRegistry,
+      liveBlocks,
     } = deps
 
     agent.setBackgroundErrorReporter?.(this.broadcastError.bind(this))
@@ -81,6 +86,10 @@ export class BroadcastManager {
     this.disposeTerminalEvents = terminals.onEvent((event) => {
       this.pushTerminalEvent(event.terminalId, event)
     })
+
+    this.disposeLiveBlocks = liveBlocks?.subscribe((chatId, block) => {
+      this.pushLiveBlock(chatId, block)
+    }) ?? (() => {})
 
     this.disposeKeybindingEvents = keybindings.onChange(() => {
       for (const ws of this.sockets) {
@@ -536,6 +545,34 @@ export class BroadcastManager {
     }
   }
 
+  pushLiveBlock(chatId: string, block: LiveBlock | null): void {
+    for (const ws of this.sockets) {
+      for (const [id, topic] of ws.data.subscriptions.entries()) {
+        if (topic.type !== "chat" || topic.chatId !== chatId) continue
+        this.sendLiveBlock(ws, id, chatId, block)
+      }
+    }
+  }
+
+  pushLatestLiveBlock(ws: ServerWebSocket<ClientState>, subscriptionId: string, chatId: string): void {
+    const block = this.deps.liveBlocks?.latest(chatId) ?? null
+    if (block !== null) this.sendLiveBlock(ws, subscriptionId, chatId, block)
+  }
+
+  private sendLiveBlock(
+    ws: ServerWebSocket<ClientState>,
+    subscriptionId: string,
+    chatId: string,
+    block: LiveBlock | null,
+  ): void {
+    send(ws, {
+      v: PROTOCOL_VERSION,
+      type: "event",
+      id: subscriptionId,
+      event: { type: "chat.live", chatId, block },
+    })
+  }
+
   pushFollowedSessions(): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
@@ -582,5 +619,6 @@ export class BroadcastManager {
     this.disposeBeacons()
     this.disposeBackgroundTaskOutput()
     this.disposePackageUpdateEvents()
+    this.disposeLiveBlocks()
   }
 }

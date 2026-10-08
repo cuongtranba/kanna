@@ -7,3 +7,5 @@ code:
   - src/server/project-kanna-files.adapter.ts
   - src/server/ws-router.test.ts
   - src/server/ws-router.ts
+  - src/server/live-block-throttle.ts
+  - src/server/live-block-throttle.test.ts

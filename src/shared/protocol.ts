@@ -28,6 +28,7 @@ import type {
   EditorPreset,
 } from "./types"
 import type { ChatOpsEvent } from "./chat-ops"
+import type { LiveBlock } from "./live-block"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
 import type {
   BoardOwnerKind,
@@ -135,7 +136,13 @@ export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
   return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
 }
 
-export type WsEvent = TerminalEvent | ChatOpsEvent
+export interface ChatLiveEvent {
+  type: "chat.live"
+  chatId: string
+  block: LiveBlock | null
+}
+
+export type WsEvent = TerminalEvent | ChatOpsEvent | ChatLiveEvent
 
 export type ClientCommand =
   | { type: "project.open"; localPath: string }

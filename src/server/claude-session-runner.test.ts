@@ -8,6 +8,7 @@ import type { ActiveTurn, CompactionTurnKind } from "./claude-session-state"
 import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
 import type { HarnessEvent } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
+import type { LiveBlock } from "../shared/live-block"
 
 
 function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]> = {}): ClaudeSessionState {
@@ -1355,5 +1356,58 @@ test("a second Stop during the orphaned stream does not re-arm selfWakeActive vi
     await runClaudeSession(deps, session)
 
     expect(observed).not.toContain(true)
+  })
+})
+
+describe("runClaudeSession live blocks", () => {
+  test("a live block is published and cleared once the completed entry arrives", async () => {
+    const session = makeSession()
+    const published: (LiveBlock | null)[] = []
+    const deps = makeDeps(session, { onLiveBlock: (_chatId, block) => { published.push(block) } })
+    const assistantText = {
+      _id: "entry-text",
+      createdAt: Date.now(),
+      kind: "assistant_text",
+      text: "Hello",
+    } as unknown as TranscriptEntry
+    session.session.stream = fakeStream([
+      { type: "live", block: { kind: "text", text: "Hel" } },
+      { type: "live", block: { kind: "text", text: "Hello" } },
+      { type: "transcript", entry: assistantText },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(published).toEqual([
+      { kind: "text", text: "Hel" },
+      { kind: "text", text: "Hello" },
+      null,
+    ])
+  })
+
+  test("a live block is cleared when the stream ends without a completed entry", async () => {
+    const session = makeSession()
+    const published: (LiveBlock | null)[] = []
+    const deps = makeDeps(session, { onLiveBlock: (_chatId, block) => { published.push(block) } })
+    session.session.stream = fakeStream([{ type: "live", block: { kind: "thinking", text: "hmm" } }])
+
+    await runClaudeSession(deps, session)
+
+    expect(published).toEqual([{ kind: "thinking", text: "hmm" }, null])
+  })
+
+  test("a session that has been replaced publishes nothing", async () => {
+    const session = makeSession({ id: "sess-old" })
+    const replacement = makeSession({ id: "sess-new" })
+    const published: (LiveBlock | null)[] = []
+    const deps = makeDeps(session, {
+      claudeSessions: new Map([["chat-1", replacement]]),
+      onLiveBlock: (_chatId, block) => { published.push(block) },
+    })
+    session.session.stream = fakeStream([{ type: "live", block: { kind: "text", text: "stale" } }])
+
+    await runClaudeSession(deps, session)
+
+    expect(published).toEqual([])
   })
 })

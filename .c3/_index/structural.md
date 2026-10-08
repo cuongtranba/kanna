@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:e4744a4f51a34b8e4ede0cd4f2ab9f7d14d49e7c663a189608a80949b887831e -->
+<!-- hash: sha256:6625c1aefacd557421aac30023914fe37949060200b9a6bda328b71c74b5e7cb -->
 
 ## c3-0 — Kanna (system)
 
@@ -136,7 +136,7 @@ files: src/server/read-models.test.ts, src/server/read-models.ts
 ## c3-208 — ws-router (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-cqrs-read-models, ref-ws-subscription, rule-colocated-bun-test
-files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
+files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/live-block-throttle.test.ts, src/server/live-block-throttle.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
 
 ## c3-209 — process-utils (component)
 container: c3-2 | context: c3-0
@@ -147,7 +147,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/tracking-file-lock.test.ts, src/server/tracking-file-lock.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/tracking-file-lock.test.ts, src/server/tracking-file-lock.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -310,7 +310,7 @@ files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.te
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/beacon-config.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/protocol.ts
+files: src/shared/beacon-config.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -606,6 +606,8 @@ src/server/read-models.test.ts → c3-207
 src/server/read-models.ts → c3-207
 src/server/chat-ops-diff.test.ts → c3-208
 src/server/chat-ops-diff.ts → c3-208
+src/server/live-block-throttle.test.ts → c3-208
+src/server/live-block-throttle.ts → c3-208
 src/server/project-kanna-files.adapter.test.ts → c3-208
 src/server/project-kanna-files.adapter.ts → c3-208
 src/server/ws-router.test.ts → c3-208
@@ -616,6 +618,8 @@ src/server/agent.test.ts → c3-210
 src/server/agent.ts → c3-210
 src/server/claude-context-commands.test.ts → c3-210
 src/server/claude-context-commands.ts → c3-210
+src/server/claude-live-block.ts → c3-210
+src/server/claude-live-publisher.ts → c3-210
 src/server/claude-send-command.test.ts → c3-210
 src/server/claude-send-command.ts → c3-210
 src/server/claude-session-lifecycle.test.ts → c3-210
@@ -845,6 +849,7 @@ src/shared/beacon-tool-request.ts → c3-302
 src/shared/beacon-tools.ts → c3-302
 src/shared/chat-ops.test.ts → c3-302
 src/shared/chat-ops.ts → c3-302
+src/shared/live-block.ts → c3-302
 src/shared/protocol.ts → c3-302
 src/shared/tools.test.ts → c3-303
 src/shared/tools.ts → c3-303

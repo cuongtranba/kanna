@@ -18,10 +18,12 @@ import { canCancelStatus, getLatestToolIds, isPrimaryChatInstance, isProcessingS
 import type { KannaSocket, SocketStatus } from "./socket"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
 import { useWorkflowsStore } from "../stores/workflowsStore"
+import { useLiveBlockStore } from "../stores/liveBlockStore"
+import { opsSettleLiveBlock } from "../../shared/live-block"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { useChatStateStore, selectChatSlice } from "../stores/chatStateStore"
-import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, WorkflowsSnapshot } from "../../shared/protocol"
+import type { ChatLiveEvent, EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction, WorkflowsSnapshot } from "../../shared/protocol"
 import { log } from "../../shared/log"
 import type { JsonObject, JsonValue } from "../../shared/json"
 import { encodeAskUserQuestionResult } from "../lib/askUserQuestionJson"
@@ -741,7 +743,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     })
     useChatStateStore.getState().setChatSnapshot(activeChatId, null)
     useChatStateStore.getState().setChatReady(activeChatId, false)
-    const unsubscribe = socket.subscribe<ChatSnapshot | null, ChatOpsEvent>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
+    const unsubscribe = socket.subscribe<ChatSnapshot | null, ChatOpsEvent | ChatLiveEvent>({ type: "chat", chatId: activeChatId, recentLimit: INITIAL_CHAT_RECENT_LIMIT }, (snapshot) => {
       if (snapshot?.runtime.chatId) {
         const matchingTrace = [...sendToStartingProfilesRef.current.values()]
           .filter((trace) => trace.serverChatId === snapshot.runtime.chatId)
@@ -781,12 +783,16 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       chatStore.setChatReady(activeChatId, true)
       useKannaStateStore.getState().setCommandError(null)
     }, (event) => {
+      if (event.type === "chat.live") {
+        if (event.chatId === activeChatId) useLiveBlockStore.getState().setLiveBlock(activeChatId, event.block)
+        return
+      }
       if (event.type !== "chat.ops" || event.chatId !== activeChatId) return
       const result = useChatStateStore.getState().applyChatOpsEvent(activeChatId, event)
       if (result === "gap") {
         logKannaState("chat.ops gap — forcing resubscribe", { subscriptionId, activeChatId, fromSeq: event.fromSeq, toSeq: event.toSeq })
         useChatStateStore.getState().bumpChatResyncNonce(activeChatId)
-      }
+      } else if (opsSettleLiveBlock(event.ops)) useLiveBlockStore.getState().setLiveBlock(activeChatId, null)
     })
     return () => {
       logKannaState("unsubscribing from chat", {
@@ -796,6 +802,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         sidebarChatCount: sidebarProjectGroupsForLogRef.current.reduce((count, group) => count + group.chats.length, 0),
       })
       unsubscribe()
+      useLiveBlockStore.getState().setLiveBlock(activeChatId, null)
     }
     })
   }, [activeChatId, localStore, sessStore, socket, chatResyncNonce])

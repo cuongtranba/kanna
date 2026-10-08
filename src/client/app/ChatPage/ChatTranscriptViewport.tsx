@@ -8,7 +8,7 @@ import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../../components/messages/shared"
 import { SubagentTranscriptFetchProvider } from "../../components/messages/subagent-fetch-context"
-import { ProcessingMessage } from "../../components/messages/ProcessingMessage"
+import { LiveTurnIndicator } from "../../components/messages/LiveTurnIndicator"
 import { ContextMenu, ContextMenuTrigger } from "../../components/ui/context-menu"
 import { OpenExternalContextMenuContent } from "../../components/open-external-menu"
 import { cn } from "../../lib/utils"
@@ -462,7 +462,7 @@ export const ChatTranscriptViewport = memo(({
           <BackgroundTasksSection chatId={activeChatId} tasks={backgroundTasks} />
         </div>
       ) : null}
-      {isProcessing ? <ProcessingMessage status={runtimeStatus ?? undefined} /> : null}
+      {isProcessing ? <LiveTurnIndicator chatId={activeChatId} status={runtimeStatus ?? undefined} /> : null}
       {queuedMessages.map((message) => (
         <QueuedUserMessage
           key={message.id}

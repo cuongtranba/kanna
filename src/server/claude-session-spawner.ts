@@ -179,6 +179,7 @@ export async function spawnClaudeTurn(
         openrouterApiKey,
         additionalDirectories: args.additionalDirectories,
         chatId: args.chatId,
+        streamLiveBlocks: true,
         tunnelGateway: deps.tunnelGateway,
         onToolRequest: args.onToolRequest,
         systemPromptAppend,

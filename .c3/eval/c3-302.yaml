@@ -13,3 +13,4 @@ code:
   - src/shared/beacon-status.test.ts
   - src/shared/beacon-tools.ts
   - src/shared/beacon-tool-request.ts
+  - src/shared/live-block.ts

@@ -80,6 +80,7 @@ import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
+import { createLiveBlockHub } from "./live-block-throttle"
 import { backgroundTaskOutputIo } from "./background-task-output-io.adapter"
 import { importOneSession } from "./claude-session-importer.adapter"
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
@@ -232,6 +233,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   const subagentTranscriptRegistry = createSubagentTranscriptRegistry()
   const backgroundTaskOutputRegistry = createBackgroundTaskOutputRegistry(backgroundTaskOutputIo)
+  const liveBlocks = createLiveBlockHub()
   if (process.env.KANNA_CLAUDE_DRIVER === "pty") {
     log.warn("[kanna] KANNA_CLAUDE_DRIVER=pty is ignored: the PTY driver was removed and Claude chats run on the Agent SDK. Unset the variable to silence this warning.")
   }
@@ -391,6 +393,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     beaconRegistry: beacon.registry,
     getBeacons: () => appSettings.getSnapshot().customBeacons,
     backgroundTaskOutputRegistry,
+    liveBlocks,
     subagentTranscriptRegistry,
     localCatalog,
     genuiDatasets,
@@ -533,6 +536,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     resolveCleanup,
     suggestSyncRepos,
     backgroundTaskOutputRegistry,
+    liveBlocks,
     subagentTranscriptRegistry,
     followedSessionRegistry,
     sessionShare: sessionShareService,

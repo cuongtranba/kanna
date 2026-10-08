@@ -87,6 +87,8 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
 
         case "rate_limit": break
 
+        case "live": break
+
         case "transcript": {
           if (isCodexSummary && event.entry.kind === "assistant_text") {
             summaryParts.push(event.entry.text)

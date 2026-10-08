@@ -189,6 +189,7 @@ export async function startClaudeSession(args: {
   costBaselineUsd?: number
   contextWindowOverride?: number
   onCompaction?: (event: CompactionEvent) => void
+  streamLiveBlocks?: boolean
 },
   _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
 ): Promise<ClaudeSessionHandle> {
@@ -213,6 +214,8 @@ export async function startClaudeSession(args: {
         : {}),
       model: args.model,
       effort: toSdkEffort(args.effort),
+      extraArgs: { "thinking-display": "summarized" },
+      ...(args.streamLiveBlocks === true ? { includePartialMessages: true } : {}),
       resume: args.sessionToken ?? undefined,
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",

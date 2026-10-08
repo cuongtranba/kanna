@@ -271,6 +271,7 @@ export class AgentCoordinator {
   readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
   readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
+  readonly liveBlocks: import("./live-block-throttle").LiveBlockHub | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly skillAccess: LocalSkillAccess
@@ -413,6 +414,7 @@ export class AgentCoordinator {
     this.beaconRegistry = args.beaconRegistry ?? null
     this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
+    this.liveBlocks = args.liveBlocks ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
     this.skillAccess = createLocalSkillAccess(this.localCatalog, (id) => resolveChatCwd(this.store, id), readCatalogFileBody)
@@ -1096,6 +1098,9 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       turnEndGuard: this._turnEndGuard,
+      onLiveBlock: this.liveBlocks
+        ? (chatId, block) => { this.liveBlocks!.publish(chatId, block) }
+        : undefined,
       onBackgroundTaskLaunch: this.backgroundTaskOutputRegistry
         ? (chatId, taskId, outputPath) => {
             this.backgroundTaskOutputRegistry!.trackTask(chatId, taskId, outputPath)
