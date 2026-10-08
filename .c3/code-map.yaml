@@ -219,6 +219,11 @@ c3-216:
 c3-217:
   - src/server/uploads.test.ts
   - src/server/uploads.ts
+  - src/server/uploads.adapter.ts
+  - src/server/tus-uploads.adapter.ts
+  - src/server/http-file-response.ts
+  - src/client/lib/uploadFile.adapter.ts
+  - src/client/lib/uploadFile.adapter.test.ts
 c3-218:
   - src/server/share.test.ts
   - src/server/share.ts

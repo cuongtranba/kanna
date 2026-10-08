@@ -6,7 +6,6 @@ import { bin as cloudflaredBin } from "cloudflared"
 import { getRuntimeProfile } from "../shared/branding"
 import {
   CLOUDFLARE_TUNNEL_DEFAULTS,
-  UPLOAD_MAX_FILE_SIZE_MB_MAX,
   type AppSettingsSnapshot,
 } from "../shared/types"
 import type { ShareMode } from "../shared/share"
@@ -93,7 +92,6 @@ import { startSnapshotSweep } from "./session-share/sweep"
 import { log } from "../shared/log"
 import { createHttpDispatcher } from "./http-dispatcher"
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
-export { persistUploadedFiles } from "./http-api-routes"
 
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback
@@ -130,8 +128,7 @@ const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 const IMPORT_FOLLOW_POLL_MS = 2000
 const IMPORT_FOLLOW_ACTIVE_WINDOW_MS = 600_000
 const IMPORT_FOLLOW_IDLE_MS = 600_000
-const MULTIPART_OVERHEAD_BYTES = 16 * 1024 * 1024
-export const MAX_REQUEST_BODY_BYTES = UPLOAD_MAX_FILE_SIZE_MB_MAX * 1024 * 1024 + MULTIPART_OVERHEAD_BYTES
+export const MAX_REQUEST_BODY_BYTES = 128 * 1024 * 1024
 
 export interface StartKannaServerOptions {
   port?: number

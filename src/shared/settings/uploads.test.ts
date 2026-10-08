@@ -21,6 +21,14 @@ describe("normalizeUploadSettings", () => {
     expect(warnings).toContain("uploads must be an object")
   })
 
+  test("defaults to 2 GB and accepts up to 50 GB per file", () => {
+    const warnings: string[] = []
+    expect(UPLOAD_DEFAULTS.maxFileSizeMb).toBe(2048)
+    expect(normalizeUploadSettings({ maxFileSizeMb: 51200 }, warnings).maxFileSizeMb).toBe(51200)
+    expect(normalizeUploadSettings({ maxFileSizeMb: 51201 }, warnings).maxFileSizeMb).toBe(51200)
+    expect(warnings).toHaveLength(1)
+  })
+
   test("accepts a valid maxFileSizeMb", () => {
     const warnings: string[] = []
     const result = normalizeUploadSettings({ maxFileSizeMb: 200 }, warnings)

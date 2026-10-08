@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:0bf0f554b88b50942c18f6dfdaf6c6c7da87e89d6faa8c3dea0c8c010b508de4 -->
+<!-- hash: sha256:6634aa58c25178b43c11f85d3cc6b6a3b7078a7a9a6a00d155a27ebb4adab76c -->
 
 ## c3-0 — Kanna (system)
 
@@ -182,7 +182,7 @@ files: src/server/terminal-manager.test.ts, src/server/terminal-manager.ts, src/
 ## c3-217 — uploads (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data
-files: src/server/uploads.test.ts, src/server/uploads.ts
+files: src/client/lib/uploadFile.adapter.test.ts, src/client/lib/uploadFile.adapter.ts, src/server/http-file-response.ts, src/server/tus-uploads.adapter.ts, src/server/uploads.adapter.ts, src/server/uploads.test.ts, src/server/uploads.ts
 
 ## c3-218 — share (component)
 container: c3-2 | context: c3-0
@@ -654,6 +654,11 @@ src/server/diff-store.ts → c3-215
 src/server/terminal-manager.test.ts → c3-216
 src/server/terminal-manager.ts → c3-216
 src/server/terminal-pid-registry.test.ts → c3-216
+src/client/lib/uploadFile.adapter.test.ts → c3-217
+src/client/lib/uploadFile.adapter.ts → c3-217
+src/server/http-file-response.ts → c3-217
+src/server/tus-uploads.adapter.ts → c3-217
+src/server/uploads.adapter.ts → c3-217
 src/server/uploads.test.ts → c3-217
 src/server/uploads.ts → c3-217
 src/server/share.test.ts → c3-218

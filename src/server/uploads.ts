@@ -1,6 +1,6 @@
 import path from "node:path"
 
-export { persistProjectUpload, deleteProjectUpload } from "./uploads.adapter"
+export { persistProjectUpload, deleteProjectUpload, finalizeUploadFromFile } from "./uploads.adapter"
 
 const TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
 const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"

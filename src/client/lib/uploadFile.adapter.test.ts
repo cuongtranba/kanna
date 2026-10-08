@@ -1,196 +1,173 @@
 import { describe, expect, test } from "bun:test"
-import { UploadAbortedError, uploadFile } from "./uploadFile.adapter"
+import type { PreviousUpload, UploadOptions } from "tus-js-client"
+import { UploadAbortedError, uploadFile, type LoadTus, type TusUploadLike } from "./uploadFile.adapter"
 
-interface MockListener {
-  type: string
-  listener: (event: ProgressEvent | Event) => void
-}
+const CHUNK_SIZE_BYTES = 8 * 1024 * 1024
 
-class MockXMLHttpRequest {
-  static instances: MockXMLHttpRequest[] = []
+function createFakeTus(previousUploads: PreviousUpload[] = []) {
+  let markStarted: (upload: FakeUpload) => void = () => {}
+  const started = new Promise<FakeUpload>((resolve) => {
+    markStarted = resolve
+  })
 
-  status = 0
-  responseText = ""
-  upload = { listeners: [] as MockListener[], addEventListener: (type: string, listener: (event: Event) => void) => {
-    this.upload.listeners.push({ type, listener })
-  } }
-  private listeners: MockListener[] = []
-  private aborted = false
-  openedUrl = ""
-  openedMethod = ""
-  sentBody: BodyInit | null = null
+  class FakeUpload implements TusUploadLike {
+    resumedFrom: PreviousUpload | null = null
+    resumedFromAtStart: PreviousUpload | null = null
+    terminated: boolean | undefined
+    constructor(readonly file: File, readonly options: UploadOptions) {}
 
-  constructor() {
-    MockXMLHttpRequest.instances.push(this)
-  }
+    findPreviousUploads() {
+      return Promise.resolve(previousUploads)
+    }
 
-  addEventListener(type: string, listener: (event: Event) => void) {
-    this.listeners.push({ type, listener })
-  }
+    resumeFromPreviousUpload(previous: PreviousUpload) {
+      this.resumedFrom = previous
+    }
 
-  open(method: string, url: string) {
-    this.openedMethod = method
-    this.openedUrl = url
-  }
+    start() {
+      this.resumedFromAtStart = this.resumedFrom
+      markStarted(this)
+    }
 
-  send(body: BodyInit | null) {
-    this.sentBody = body
-  }
+    abort(shouldTerminate?: boolean) {
+      this.terminated = shouldTerminate
+      return Promise.resolve()
+    }
 
-  abort() {
-    this.aborted = true
-    this.dispatch("abort")
-  }
+    progress(loaded: number, total: number) {
+      this.options.onProgress?.(loaded, total)
+    }
 
-  emitProgress(loaded: number, total: number) {
-    const event = { loaded, total, lengthComputable: true } as ProgressEvent
-    for (const entry of this.upload.listeners) {
-      if (entry.type === "progress") entry.listener(event)
+    succeed(body: string) {
+      this.options.onSuccess?.({
+        lastResponse: {
+          getStatus: () => 200,
+          getHeader: () => undefined,
+          getBody: () => body,
+          getUnderlyingObject: () => ({}),
+        },
+      })
+    }
+
+    fail(responseBody: string | null) {
+      const error = Object.assign(new Error("tus: unexpected response while creating upload"), {
+        originalResponse: responseBody === null ? null : { getBody: () => responseBody },
+      })
+      this.options.onError?.(error)
     }
   }
 
-  finishUploadStream() {
-    for (const entry of this.upload.listeners) {
-      if (entry.type === "load") entry.listener({} as Event)
-    }
-  }
-
-  finish(status: number, body: unknown) {
-    this.status = status
-    this.responseText = body == null ? "" : JSON.stringify(body)
-    this.dispatch("load")
-  }
-
-  fail() {
-    this.dispatch("error")
-  }
-
-  private dispatch(type: string) {
-    if (this.aborted && type === "load") return
-    for (const entry of this.listeners) {
-      if (entry.type === type) entry.listener({} as Event)
-    }
-  }
-}
-
-function createMockXHR() {
-  MockXMLHttpRequest.instances = []
-  return MockXMLHttpRequest as unknown as typeof XMLHttpRequest
+  const loadTus: LoadTus = () => Promise.resolve({ Upload: FakeUpload })
+  return { loadTus, started }
 }
 
 function createTestFile(size: number, name = "test.bin") {
   return new File([new Uint8Array(size)], name, { type: "application/octet-stream" })
 }
 
+const PREVIOUS_UPLOAD: PreviousUpload = {
+  size: 1000,
+  metadata: { filename: "test.bin" },
+  creationTime: "2026-10-08T00:00:00.000Z",
+  urlStorageKey: "tus::fingerprint::1",
+  uploadUrl: "/api/projects/proj-1/uploads/tus/abc",
+  parallelUploadUrls: null,
+}
+
+async function rejectionOf(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise
+  } catch (error) {
+    if (error instanceof Error) return error
+  }
+  throw new Error("expected the upload to reject")
+}
+
 describe("uploadFile", () => {
-  test("emits progress and resolves with attachments on 2xx", async () => {
-    const XHR = createMockXHR()
+  test("uploads in 8 MiB chunks to the project's tus endpoint and resolves with the finish body's attachments", async () => {
+    const tus = createFakeTus()
     const events: Array<{ loaded: number; total: number }> = []
 
     const handle = uploadFile({
       projectId: "proj-1",
       file: createTestFile(1000, "hello.txt"),
       onProgress: (event) => events.push(event),
-      XHR,
+      loadTus: tus.loadTus,
     })
 
-    const xhr = MockXMLHttpRequest.instances[0]!
-    expect(xhr.openedMethod).toBe("POST")
-    expect(xhr.openedUrl).toBe("/api/projects/proj-1/uploads")
+    const upload = await tus.started
+    expect(upload.options.endpoint).toBe("/api/projects/proj-1/uploads/tus")
+    expect(upload.options.chunkSize).toBe(CHUNK_SIZE_BYTES)
+    expect(upload.options.metadata).toEqual({ filename: "hello.txt", filetype: "application/octet-stream" })
 
-    xhr.emitProgress(0, 1000)
-    xhr.emitProgress(500, 1000)
-    xhr.finishUploadStream()
-    xhr.finish(200, { attachments: [{ id: "a1", displayName: "hello.txt" }] })
+    upload.progress(0, 1000)
+    upload.progress(500, 1000)
+    upload.succeed(JSON.stringify({ attachments: [{ id: "a1", displayName: "hello.txt", reused: true }] }))
 
     const result = await handle.promise
-    expect(result.attachments[0]?.id).toBe("a1")
+    expect(result.attachments[0]).toMatchObject({ id: "a1", reused: true })
     expect(events[events.length - 1]).toEqual({ loaded: 1000, total: 1000 })
     expect(events.length).toBeGreaterThanOrEqual(2)
   })
 
-  test("carries the server's reused flag on an uploaded attachment", async () => {
-    const XHR = createMockXHR()
-    const handle = uploadFile({
-      projectId: "proj-1",
-      file: createTestFile(10, "same.txt"),
-      onProgress: () => {},
-      XHR,
-    })
+  test("resumes a previous upload of the same file instead of starting over", async () => {
+    const tus = createFakeTus([PREVIOUS_UPLOAD])
 
-    MockXMLHttpRequest.instances[0]!.finish(200, {
-      attachments: [
-        { id: "a1", displayName: "same.txt", reused: true },
-        { id: "a2", displayName: "fresh.txt" },
-      ],
-    })
+    const handle = uploadFile({ projectId: "proj-1", file: createTestFile(1000), onProgress: () => {}, loadTus: tus.loadTus })
 
-    const result = await handle.promise
-    expect(result.attachments.map((attachment) => attachment.reused)).toEqual([true, undefined])
+    const upload = await tus.started
+    expect(upload.resumedFromAtStart).toBe(PREVIOUS_UPLOAD)
+    upload.succeed(JSON.stringify({ attachments: [{ id: "a1" }] }))
+    await handle.promise
   })
 
-  test("rejects with server error message on non-2xx", async () => {
-    const XHR = createMockXHR()
-    const handle = uploadFile({
-      projectId: "p",
-      file: createTestFile(10),
-      onProgress: () => {},
-      XHR,
-    })
+  test("rejects with the server's JSON error message", async () => {
+    const tus = createFakeTus()
+    const handle = uploadFile({ projectId: "p", file: createTestFile(10), onProgress: () => {}, loadTus: tus.loadTus })
 
-    const xhr = MockXMLHttpRequest.instances[0]!
-    xhr.finish(413, { error: "File \"big.bin\" exceeds the 1 MB limit." })
+    const upload = await tus.started
+    upload.fail(JSON.stringify({ error: "File exceeds the 1 MB limit." }))
 
-    let thrown: unknown
-    try { await handle.promise } catch (error) { thrown = error }
-    expect((thrown as Error)?.message).toBe("File \"big.bin\" exceeds the 1 MB limit.")
+    expect((await rejectionOf(handle.promise)).message).toBe("File exceeds the 1 MB limit.")
   })
 
-  test("rejects with UploadAbortedError when handle.abort() called", async () => {
-    const XHR = createMockXHR()
-    const handle = uploadFile({
-      projectId: "p",
-      file: createTestFile(10),
-      onProgress: () => {},
-      XHR,
-    })
+  test("rejects with a generic message when the failure carries no server error body", async () => {
+    const tus = createFakeTus()
+    const handle = uploadFile({ projectId: "p", file: createTestFile(10), onProgress: () => {}, loadTus: tus.loadTus })
+
+    const upload = await tus.started
+    upload.fail("<html>Cloudflare 413</html>")
+
+    expect((await rejectionOf(handle.promise)).message).toBe("Upload failed")
+  })
+
+  test("rejects when the finish response is malformed", async () => {
+    const tus = createFakeTus()
+    const handle = uploadFile({ projectId: "p", file: createTestFile(10), onProgress: () => {}, loadTus: tus.loadTus })
+
+    const upload = await tus.started
+    upload.succeed(JSON.stringify({ attachments: "not-an-array" }))
+
+    expect((await rejectionOf(handle.promise)).message).toBe("Upload failed: malformed response")
+  })
+
+  test("abort terminates the partial upload on the server and rejects with UploadAbortedError", async () => {
+    const tus = createFakeTus()
+    const handle = uploadFile({ projectId: "p", file: createTestFile(10), onProgress: () => {}, loadTus: tus.loadTus })
+
+    const upload = await tus.started
+    handle.abort()
+
+    expect(await rejectionOf(handle.promise)).toBeInstanceOf(UploadAbortedError)
+    expect(upload.terminated).toBe(true)
+  })
+
+  test("abort before the upload library has loaded still rejects with UploadAbortedError", async () => {
+    const tus = createFakeTus()
+    const handle = uploadFile({ projectId: "p", file: createTestFile(10), onProgress: () => {}, loadTus: tus.loadTus })
 
     handle.abort()
 
-    let thrown: unknown
-    try { await handle.promise } catch (error) { thrown = error }
-    expect(thrown).toBeInstanceOf(UploadAbortedError)
-  })
-
-  test("rejects with generic error on network failure", async () => {
-    const XHR = createMockXHR()
-    const handle = uploadFile({
-      projectId: "p",
-      file: createTestFile(10),
-      onProgress: () => {},
-      XHR,
-    })
-
-    MockXMLHttpRequest.instances[0]!.fail()
-
-    let thrown: unknown
-    try { await handle.promise } catch (error) { thrown = error }
-    expect((thrown as Error)?.message).toBe("Upload failed")
-  })
-
-  test("rejects when 2xx response is malformed", async () => {
-    const XHR = createMockXHR()
-    const handle = uploadFile({
-      projectId: "p",
-      file: createTestFile(10),
-      onProgress: () => {},
-      XHR,
-    })
-
-    MockXMLHttpRequest.instances[0]!.finish(200, { attachments: "not-an-array" })
-
-    let thrown: unknown
-    try { await handle.promise } catch (error) { thrown = error }
-    expect((thrown as Error)?.message).toBe("Upload failed: malformed response")
+    expect(await rejectionOf(handle.promise)).toBeInstanceOf(UploadAbortedError)
   })
 })

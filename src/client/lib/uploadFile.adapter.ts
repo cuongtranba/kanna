@@ -1,5 +1,7 @@
 import type { AttachmentKind, UploadedAttachment } from "../../shared/types"
+import type { DetailedError, PreviousUpload, UploadOptions } from "tus-js-client"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
+import { runDetached } from "./runDetached"
 
 const ATTACHMENT_KINDS = new Set<string>(["image", "file", "mention"] satisfies AttachmentKind[])
 
@@ -59,23 +61,51 @@ export interface UploadHandle {
   abort: () => void
 }
 
+export interface TusUploadLike {
+  start(): void
+  abort(shouldTerminate?: boolean): Promise<void>
+  findPreviousUploads(): Promise<PreviousUpload[]>
+  resumeFromPreviousUpload(previousUpload: PreviousUpload): void
+}
+
+export interface TusModule {
+  Upload: new (file: File, options: UploadOptions) => TusUploadLike
+}
+
+export type LoadTus = () => Promise<TusModule>
+
 export interface UploadFileArgs {
   projectId: string
   file: File
   onProgress: (event: UploadProgressEvent) => void
-  XHR?: typeof XMLHttpRequest
+  loadTus?: LoadTus
 }
 
 const PROGRESS_THROTTLE_MS = 80
+const CHUNK_SIZE_BYTES = 8 * 1024 * 1024
+const RETRY_DELAYS_MS = [0, 1000, 3000, 5000, 10000]
+const GENERIC_ERROR_MESSAGE = "Upload failed"
+
+const loadTusClient: LoadTus = () => import("tus-js-client")
+
+function serverErrorMessage(error: Error | DetailedError): string {
+  const body = "originalResponse" in error ? error.originalResponse?.getBody() : undefined
+  const payload: JsonValue = body ? safeJsonParse(body) : null
+  const message = isJsonObject(payload) ? payload.error : null
+  return typeof message === "string" && message ? message : GENERIC_ERROR_MESSAGE
+}
 
 export function uploadFile(args: UploadFileArgs): UploadHandle {
-  const XHRImpl = args.XHR ?? XMLHttpRequest
-  const xhr = new XHRImpl()
+  const loadTus = args.loadTus ?? loadTusClient
   let aborted = false
+  let activeUpload: TusUploadLike | null = null
+  let rejectUpload: (error: Error) => void = () => {}
   let lastEmittedAt = 0
   let lastEmittedPercent = -1
 
   const promise = new Promise<UploadFileResponse>((resolve, reject) => {
+    rejectUpload = reject
+
     function emitProgress(loaded: number, total: number, force = false) {
       const safeTotal = total > 0 ? total : args.file.size
       const percent = safeTotal > 0 ? Math.floor((loaded / safeTotal) * 100) : 0
@@ -88,48 +118,50 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
       args.onProgress({ loaded, total: safeTotal })
     }
 
-    xhr.upload.addEventListener("progress", (event) => {
-      emitProgress(event.loaded, event.lengthComputable ? event.total : args.file.size)
-    })
-
-    xhr.upload.addEventListener("load", () => {
-      emitProgress(args.file.size, args.file.size, true)
-    })
-
-    xhr.addEventListener("load", () => {
+    async function run() {
+      const { Upload } = await loadTus()
       if (aborted) return
-      const payload: JsonValue = xhr.responseText ? safeJsonParse(xhr.responseText) : null
 
-      const body = isJsonObject(payload) ? payload : null
+      const upload = new Upload(args.file, {
+        endpoint: `/api/projects/${encodeURIComponent(args.projectId)}/uploads/tus`,
+        chunkSize: CHUNK_SIZE_BYTES,
+        retryDelays: RETRY_DELAYS_MS,
+        storeFingerprintForResuming: true,
+        removeFingerprintOnSuccess: true,
+        metadata: {
+          filename: args.file.name,
+          ...(args.file.type ? { filetype: args.file.type } : {}),
+        },
+        onProgress: (loaded, total) => emitProgress(loaded, total),
+        onSuccess: ({ lastResponse }) => {
+          if (aborted) return
+          emitProgress(args.file.size, args.file.size, true)
+          const body = lastResponse.getBody()
+          const payload: JsonValue = body ? safeJsonParse(body) : null
+          const attachments = isJsonObject(payload) ? parseAttachments(payload.attachments) : null
+          if (!attachments) {
+            reject(new Error("Upload failed: malformed response"))
+            return
+          }
+          resolve({ attachments })
+        },
+        onError: (error) => {
+          if (aborted) return
+          reject(new Error(serverErrorMessage(error)))
+        },
+      })
+      activeUpload = upload
 
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const attachments = body ? parseAttachments(body.attachments) : null
-        if (!attachments) {
-          reject(new Error("Upload failed: malformed response"))
-          return
-        }
-        resolve({ attachments })
-        return
-      }
-
-      const errorMessage = body?.error
-      reject(new Error(typeof errorMessage === "string" ? errorMessage : "Upload failed"))
-    })
-
-    xhr.addEventListener("error", () => {
+      const [previous] = await upload.findPreviousUploads()
       if (aborted) return
-      reject(new Error("Upload failed"))
+      if (previous) upload.resumeFromPreviousUpload(previous)
+      upload.start()
+    }
+
+    run().then(undefined, (error: Error) => {
+      if (aborted) return
+      reject(error instanceof Error ? error : new Error(GENERIC_ERROR_MESSAGE))
     })
-
-    xhr.addEventListener("abort", () => {
-      reject(new UploadAbortedError())
-    })
-
-    const formData = new FormData()
-    formData.append("files", args.file)
-
-    xhr.open("POST", `/api/projects/${encodeURIComponent(args.projectId)}/uploads`)
-    xhr.send(formData)
   })
 
   return {
@@ -137,10 +169,8 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
     abort: () => {
       if (aborted) return
       aborted = true
-      try {
-        xhr.abort()
-      } catch {
-      }
+      rejectUpload(new UploadAbortedError())
+      if (activeUpload) runDetached("terminating aborted upload", activeUpload.abort(true))
     },
   }
 }

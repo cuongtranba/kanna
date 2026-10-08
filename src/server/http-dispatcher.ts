@@ -10,13 +10,21 @@ import {
   handleLocalFileContent,
   handleProjectFileContent,
   handleProjectPaths,
-  handleProjectUpload,
   handleProjectUploadDelete,
 } from "./http-api-routes"
 import { serveStatic } from "./http-static"
+import { createTusUploads } from "./tus-uploads.adapter"
 import { handlePluginRequest } from "./plugin-http-routes"
 import { configurePluginService, getPluginService } from "./plugins/plugin-service-host"
 import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
+
+const BYTES_PER_MB = 1024 * 1024
+const TUS_UPLOAD_ROUTE = /^\/api\/projects\/([^/]+)\/uploads\/tus(\/(?!content$)[^/]+)?$/
+const TUS_COLLECTION_METHODS = new Set(["POST", "OPTIONS"])
+
+function isTusRequest(match: RegExpExecArray | null, method: string): match is RegExpExecArray {
+  return match !== null && (match[2] !== undefined || TUS_COLLECTION_METHODS.has(method))
+}
 
 export interface HttpDispatcherDeps {
   store: EventStore
@@ -44,6 +52,11 @@ export function createHttpDispatcher(
   const { store, appSettings, auth, sessionShare, distDir } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
+
+  const tusUploads = createTusUploads(
+    (projectId) => store.getProject(projectId) ?? null,
+    () => appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB,
+  )
 
   return async function dispatch(req: Request, server: Server<ClientState>): Promise<Response | undefined> {
     const url = new URL(req.url)
@@ -103,8 +116,8 @@ export function createHttpDispatcher(
       if (pluginResponse) return pluginResponse
     }
 
-    const uploadResponse = await handleProjectUpload(req, url, store, appSettings)
-    if (uploadResponse) return uploadResponse
+    const tusMatch = TUS_UPLOAD_ROUTE.exec(url.pathname)
+    if (isTusRequest(tusMatch, req.method)) return tusUploads.handle(req, tusMatch[1])
 
     const deleteUploadResponse = await handleProjectUploadDelete(req, url, store)
     if (deleteUploadResponse) return deleteUploadResponse
