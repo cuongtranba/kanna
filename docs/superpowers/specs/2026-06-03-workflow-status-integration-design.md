@@ -1,5 +1,7 @@
 # Workflow Status Integration (PTY disk-watch) — Design
 
+> **Note (2026-10-08).** The PTY driver named in this spec's scope was removed in `adr-20261008-remove-pty-driver` (#1206). The disk-watch panel it designed survives and now serves SDK sessions, which register their workflows directory through `maybeRegisterSdkWorkflowsDir`. Kept as history.
+
 **Date:** 2026-06-03
 **Status:** Approved (brainstorm) — ready for implementation plan
 **Driver scope:** PTY only (`KANNA_CLAUDE_DRIVER=pty`)

@@ -1,5 +1,7 @@
 # PTY TUI Shannon — Design Spec
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 **Date:** 2026-05-21
 **Branch:** `feat/pty-tui-shannon`
 **Status:** Approved (brainstorm phase)

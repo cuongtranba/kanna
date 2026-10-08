@@ -1,5 +1,7 @@
 # Claude PTY Linux Sandbox Implementation Plan (P4.1)
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Extend the macOS sandbox (P4) to Linux via `bwrap` (bubblewrap). Same policy → equivalent filesystem denies. Detect `bwrap` binary at runtime; refuse to enable Linux sandbox if not installed.

@@ -253,8 +253,7 @@ crash must not take the daemon down.
 - zod validates input **before** dispatch and output **after** the handler, both sides.
 - Per-call timeout (reuse the 600s tool-callback default shape); on subprocess death every pending
   call rejects, mirroring the `PendingToolSlots` "never drop a continuation" discipline.
-- Teardown runs `cleanup()`, then SIGTERM → SIGKILL with a grace window, like
-  `KANNA_PTY_SESSION_END_GRACE_MS`.
+- Teardown runs `cleanup()`, then SIGTERM → SIGKILL with a grace window.
 
 **Logs:** the ring survives reload and crash, clears on remove, and the Settings viewer carries
 Paseo's warning verbatim — *do not log credentials; connected users can read this tail.*

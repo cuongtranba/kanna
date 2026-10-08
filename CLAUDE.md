@@ -1471,9 +1471,15 @@ write, webfetch, websearch}`. They route through the durable approval
 protocol with the same path-deny rules as the bash tool from P1 (readPathDeny
 for `read`/`glob`/`grep`, writePathDeny for `edit`/`write`).
 
-These shims are inert: the SDK session keeps the model's native built-ins, so
-nothing routes a call to them. The PTY driver was the only caller that applied
-`--tools "mcp__kanna__*"`, and it is gone.
+An ordinary SDK session keeps the model's native built-ins, so the model has no
+reason to call the shims there. **A restricted subagent is different:**
+`claude-session-start.ts` strips `SDK_RESTRICTED_FS_NATIVE_TOOLS` from its
+toolset whenever `restrictedAllowedPaths` is set, and the shims — registered
+with those paths — become its only file tools, each call checked by
+`permission-gate.ts`. With the flag off, such a subagent has no file tools at
+all; PR 4 of `PLAN-agent-sdk-builtins.md` replaces this with a PreToolUse hook
+that keeps the native tools. The removed PTY driver also routed through the
+shims, via `--tools "mcp__kanna__*"`.
 
 `websearch` is a stub that always returns `isError: true` — real web search
 needs an external API integration which is out of scope for P3a.

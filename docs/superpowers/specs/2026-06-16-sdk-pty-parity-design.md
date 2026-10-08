@@ -1,5 +1,7 @@
 # SDK ↔ PTY Driver Parity — Design
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 Date: 2026-06-16
 Branch: `feat/sdk-pty-parity`
 Components: c3-210 (agent-coordinator), c3-229 (workflow-status), c3-225 (claude-pty-driver)

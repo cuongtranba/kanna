@@ -1,5 +1,7 @@
 # Kanna-MCP Built-in Tool Shims Implementation Plan (P3a)
 
+> **Partly superseded (2026-10-08).** The PTY driver that applied `--tools "mcp__kanna__*"` was removed in `adr-20261008-remove-pty-driver` (#1206). The shims still exist behind `KANNA_MCP_TOOL_CALLBACKS=1`, where they serve as a restricted subagent's file tools; PR 4 of `PLAN-agent-sdk-builtins.md` replaces them with a PreToolUse hook. Kept as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship `mcp__kanna__bash`, `read`, `glob`, `grep`, `edit`, `write`, `webfetch`, `websearch` MCP tools that route through the durable approval protocol from P1. These are the replacements that let P3b's allowlist preflight + `--tools "mcp__kanna__*"` work without crippling the model.

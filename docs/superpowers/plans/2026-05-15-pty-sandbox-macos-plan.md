@@ -1,5 +1,7 @@
 # Claude PTY macOS Sandbox Implementation Plan (P4)
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Wrap `claude` PTY spawns with macOS `sandbox-exec` to deny filesystem access to credential paths (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.gitconfig`) and other entries from `readPathDeny` / `writePathDeny`. Boot-time preflight verifies the sandbox actually denies. Linux `bwrap` + per-tool-subprocess profile are deferred to P4.1.

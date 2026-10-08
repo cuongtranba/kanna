@@ -1,5 +1,7 @@
 # Claude PTY Driver — Design
 
+> **Superseded (2026-10-08).** The PTY Claude driver this document was written for was removed in `adr-20261008-remove-pty-driver` (#1206); every Claude chat now runs on the Agent SDK. Kept as history; do not implement from it.
+
 **Date:** 2026-05-14
 **Status:** Draft v18 — sixteenth codex adversarial pass applied (pidfd downgraded to within-process optimization; ProcessIdentity tuple is the sole restart-safe recovery mechanism), awaiting user review
 **Author:** session-collaborative
