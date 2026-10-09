@@ -142,6 +142,53 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
 
+  # The Windows 7 beacon (apps/beacon-win7) is Go 1.20, the last Go whose
+  # runtime runs on Windows 7. It writes its own SHA256SUMS-win7 because
+  # beacon-binaries uploads SHA256SUMS with --clobber, and one job must not
+  # overwrite the other's checksums. Separate from publish for the same reason
+  # as beacon-binaries.
+  beacon-win7:
+    needs: release-please
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.20.14"
+          cache-dependency-path: apps/beacon-win7/go.sum
+
+      - name: Build the Windows 7 beacon
+        run: |
+          version="$(jq -r .version package.json)"
+          out="$GITHUB_WORKSPACE/dist-beacon-win7"
+          rm -rf "$out" && mkdir -p "$out"
+          cd apps/beacon-win7
+          stamp="-s -w -X github.com/cuongtranba/kanna/apps/beacon-win7/internal/version.Version=${version}"
+          for pair in amd64:x64 386:x86; do
+            arch="${pair%%:*}"
+            label="${pair##*:}"
+            GOOS=windows GOARCH="$arch" go build -trimpath -ldflags "$stamp" -o "$out/kanna-beacon-win7-$label.exe" ./cmd/kanna-beacon
+            GOOS=windows GOARCH="$arch" go build -trimpath -ldflags "$stamp -H=windowsgui" -o "$out/kanna-beacon-tray-win7-$label.exe" ./cmd/kanna-beacon-tray
+          done
+          go run ./cmd/peimports -allow kernel32.dll "$out"/*.exe
+          cd "$out"
+          sha256sum kanna-beacon-win7-x64.exe kanna-beacon-win7-x86.exe kanna-beacon-tray-win7-x64.exe kanna-beacon-tray-win7-x86.exe > SHA256SUMS-win7
+
+      - name: Upload the Windows 7 beacon to the release
+        run: gh release upload "${TAG}" dist-beacon-win7/* --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || needs.release-please.outputs.tag_name }}
+
   # The desktop app (apps/beacon-desktop) is built with Electrobun, which only
   # builds for the host OS, so each platform needs its own runner. Kept apart
   # from beacon-binaries so a failed app build never blocks the CLI binaries.
