@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.68.0](https://github.com/cuongtranba/kanna/compare/v1.67.0...v1.68.0) (2026-10-09)
+
+
+### Features
+
+* **beacon:** Windows 7 beacon in Go 1.20 (CLI + tray) ([#1227](https://github.com/cuongtranba/kanna/issues/1227)) ([146d9d0](https://github.com/cuongtranba/kanna/commit/146d9d055b5ebcf5db3faa8017931f5ac4087472))
+
+
+### Bug Fixes
+
+* **client:** show a green Copied tick after every copy-to-clipboard button ([#1224](https://github.com/cuongtranba/kanna/issues/1224)) ([33c60c8](https://github.com/cuongtranba/kanna/commit/33c60c82792c07a5fc9af02aad4b4e82c7ce344a))
+
 ## [1.67.0](https://github.com/cuongtranba/kanna/compare/v1.66.0...v1.67.0) (2026-10-08)
 
 
