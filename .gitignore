@@ -60,6 +60,10 @@ dist-beacon/
 # Kanna Beacon desktop app (scripts/build-beacon-desktop.ts stages into dist-beacon-desktop/)
 dist-beacon-desktop/
 apps/beacon-desktop/.hutch/
+
+# Windows 7 beacon (apps/beacon-win7): release assets and CI cross-builds
+dist-beacon-win7/
+apps/beacon-win7/bin/
 apps/beacon-desktop/build/
 apps/beacon-desktop/artifacts/
 
