@@ -93,8 +93,8 @@ fixtures and this port in the same pull request.
 `internal/transport/cacert.pem` is curl's extract of the Mozilla CA store,
 "Certificate data from Mozilla as of: Fri Sep 25 03:12:01 2026 GMT", fetched
 from https://curl.se/ca/cacert.pem on 2026-10-09. A server chain is verified
-against the Windows store first; only when Windows does not know the issuing
-authority (an un-updated Windows 7 lacks ISRG Root X1, for example) is it
+against the Windows store first; when Windows rejects it (an un-updated
+Windows 7 lacks ISRG Root X1, or chains to the expired DST Root CA X3), it is
 verified again against this bundle. Both passes check the full chain, validity
 dates and host name. Refresh the file by downloading it again and updating the
 date above.
@@ -119,6 +119,8 @@ The tray takes the place of the Electrobun window on Windows 7:
 
 - **Pairing code.** `kanna-beacon pair` normalises the code (whitespace and `-`
   removed, upper-cased) before sending it; the Bun CLI sends it verbatim.
+- **No-argument hint.** Run with no arguments, the CLI points at the Windows 7
+  tray exe rather than the Electrobun app, which cannot start on Windows 7.
 - **Command lookup.** `exec` resolves a bare command name with Go's
   `exec.LookPath`, which on Windows honours `PATHEXT` (`.com`, `.exe`, `.bat`,
   `.cmd`, …); Bun's spawn finds only `.com` and `.exe`. Go also refuses to run a

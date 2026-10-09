@@ -31,8 +31,8 @@ func mozillaPool() *x509.CertPool {
 }
 
 // TLSConfig verifies a server's chain and its name against the system roots,
-// and only when the system store does not know the issuing authority, against
-// the embedded Mozilla bundle.
+// and when the system store rejects the chain, against the embedded Mozilla
+// bundle.
 func TLSConfig(serverName string) *tls.Config {
 	return newTLSConfig(serverName, nil, mozillaPool())
 }
@@ -71,14 +71,13 @@ func verifyPeer(state tls.ConnectionState, serverName string, system, fallback *
 	}
 	leaf := state.PeerCertificates[0]
 	_, err := leaf.Verify(options)
-	if err == nil {
-		return nil
-	}
-	var unknownAuthority x509.UnknownAuthorityError
-	var noSystemRoots x509.SystemRootsError
-	if fallback == nil || (!errors.As(err, &unknownAuthority) && !errors.As(err, &noSystemRoots)) {
+	if err == nil || fallback == nil {
 		return err
 	}
+	// Any system failure retries against the bundle, not only an unknown
+	// authority: an un-updated Windows 7 can also build a chain to an expired
+	// root it does know (DST Root CA X3) and report that as a validity error.
+	// The retry enforces the same chain, validity and host-name checks.
 	options.Roots = fallback
 	if _, fallbackErr := leaf.Verify(options); fallbackErr != nil {
 		return err

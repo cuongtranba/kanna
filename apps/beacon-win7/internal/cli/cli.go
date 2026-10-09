@@ -17,7 +17,7 @@ import (
 // Messages and exit codes identical to the TypeScript CLI.
 const (
 	Usage                 = "usage: kanna-beacon pair <kanna-url> <code> | kanna-beacon run"
-	DesktopAppHint        = "This is the command-line beacon. To pair and run it from a window instead, install Kanna Beacon: " + pairing.DownloadPage
+	DesktopAppHint        = "This is the command-line beacon. To pair and run it from the system tray instead, download kanna-beacon-tray-win7 (x64 or x86) from: " + pairing.DownloadPage
 	UsageExitCode         = 64
 	FailureExitCode       = 1
 	IncompatibleExitCode  = 2
