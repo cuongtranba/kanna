@@ -503,6 +503,30 @@ Run it by hand with `bun run check:commits --range origin/main..HEAD`.
 
 **Leak response runbook:** see the wiki's [Secret Scanning](https://kanna-wiki.lowbit.link/guides/contributing/secret-scanning/) page. The summary: **rotate the credential first**, then remove it from the tree. History rewrite (`git filter-repo` / BFG) breaks every open PR and worktree — rewrite only when the credential cannot be rotated; a rotated credential in history is inert.
 
+# Windows 7 beacon (apps/beacon-win7, Go 1.20)
+
+`apps/beacon-win7` is a second beacon, in Go, for Windows 7 and 8.1, where Bun
+and WebView2 cannot run. It is a port of `src/beacon/**` (CLI plus a native
+tray), not a fork of the protocol: the server is the same for both. Details
+and the deliberate divergences are in `apps/beacon-win7/README.md`.
+
+- **Go 1.20.14 is the pin, on purpose** — the last Go whose runtime runs on
+  Windows 7. `go.mod` says `go 1.20` with no `toolchain` line. Never raise it,
+  and never add or bump a dependency whose own `go.mod` declares a `go`
+  directive above 1.20 (`curl -s https://proxy.golang.org/<module>/@v/<version>.mod`).
+  Go 1.20 does not enforce that, so the `beacon-win7` CI job checks it; keep
+  `golang.org/x/sys` at a version whose `go.mod` says `go 1.18` (≤ v0.30.0).
+- **The protocol has two implementations now.** Any change to
+  `src/shared/beacon-protocol.ts` (or `isPathInsideRoots` in
+  `beacon-scope.ts`, or the signing in `key-store.adapter.ts`) must update the
+  Go port and `apps/beacon-win7/testdata/conformance/` in the same PR.
+  `src/shared/beacon-conformance.test.ts` and the Go `protocol` / `keystore`
+  tests read the same fixture files, so a fixture change that only one side
+  honours fails CI.
+- No repo TypeScript gate (eslint, tsc, `lint:comments`, `check:arch`,
+  ast-grep) scans the module; `go vet` and `go test` on Linux and Windows,
+  plus a PE import-table check of the cross-built `.exe` files, do.
+
 # Design System (MANDATORY)
 
 `DESIGN.md` (repo root) is the single source of truth for Kanna's visual
