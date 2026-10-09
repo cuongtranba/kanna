@@ -12,6 +12,7 @@ import (
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/session"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/state"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transfer"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transport"
 )
 
@@ -117,6 +118,8 @@ type Runner struct {
 	url  string
 	fs   *fsops.FS
 
+	transfer *transfer.Transferer
+
 	publishMu sync.Mutex
 	mu        sync.Mutex
 	status    Status
@@ -147,7 +150,22 @@ func New(deps Deps) *Runner {
 		listeners: make(map[int]func(Snapshot)),
 	}
 	r.fs = fsops.New(r.readRoots)
+	r.transfer = transfer.New(transfer.Config{
+		BaseURL:     deps.State.KannaURL,
+		Version:     deps.BeaconVersion,
+		ContainRead: r.fs.Contain,
+		WriteRoots:  r.writeRoots,
+	})
 	return r
+}
+
+func (r *Runner) writeRoots() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.scope == nil {
+		return nil
+	}
+	return r.scope.WriteRoots
 }
 
 func (r *Runner) readRoots() []string {
@@ -229,6 +247,7 @@ func (r *Runner) attempt() outcome {
 		Transport:     conn,
 		Signer:        r.deps.Signer,
 		FS:            r.fs,
+		Transfer:      r.transfer,
 		OnReady: func(granted protocol.Scope, serverProtocol float64) {
 			resultMu.Lock()
 			result.wasOnline = true

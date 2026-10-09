@@ -129,7 +129,17 @@ export interface ImageGenerationToolResult {
 export interface ImageViewToolCall
   extends ToolCallBase<"image_view", { path: string; contentUrl: string; mimeType: string }> { }
 
-export type BeaconToolOp = "list" | "read" | "stat" | "glob" | "grep" | "fetch" | "exec" | "script"
+export type BeaconToolOp =
+  | "list"
+  | "read"
+  | "stat"
+  | "glob"
+  | "grep"
+  | "fetch"
+  | "exec"
+  | "script"
+  | "upload"
+  | "download"
 
 export interface BeaconToolCall
   extends ToolCallBase<"beacon", { op: BeaconToolOp; beaconId: string; summary: string }> { }

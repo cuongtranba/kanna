@@ -55,6 +55,11 @@ Still deferred: the signed native .pkg/.exe installer and the menu-bar/tray app
 - 2026-10-08 M8: c3 bound (c3-241 beacon-daemon created; beacon files bound into c3-202/
   c3-226/c3-302/c3-116), c3x check clean; ADR set accepted + resealed; wiki pairing guide;
   CLAUDE.md 0600 settings.json claim corrected to 0644.
+- 2026-10-09 File transfer (beacon_pull / beacon_push), server + shared + Bun daemon
+  + UI + docs half: protocol 3 with the upload and download ops, ticket store,
+  /beacon/transfer streaming route, registry version gate, writeRoots editor,
+  adr-20261009-beacon-file-transfer. The Go port is implemented separately in
+  apps/beacon-win7.
 
 ## Remaining
 
@@ -99,6 +104,10 @@ Still deferred: the signed native .pkg/.exe installer and the menu-bar/tray app
   settings, /beacon transport, registry, beacon tools, daemon CLI), skipping the
   native .pkg/.exe installer and tray app. Running the milestones continuously,
   reporting at the end. Branch feat/beacon-phase1 off docs/beacon-design.
+
+- 2026-10-09 Large-file transfer goes over HTTP with a one-file ticket, not the
+  WebSocket and not a session cookie; bounded by an idle timeout, not a deadline.
+  Design: docs/superpowers/specs/2026-10-09-beacon-file-transfer-design.md.
 
 ## Failed approaches
 

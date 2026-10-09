@@ -120,3 +120,28 @@ test("a scope change naming a relative, empty or oversized folder is refused who
   const many = Array.from({ length: MAX_READ_ROOTS + 1 }, (_, index) => `/r${index}`)
   expect(applyScopeChange(DEFAULT_BEACON_SCOPE, { readRoots: many })).toBeNull()
 })
+
+const DIGEST = "0".repeat(64)
+
+function upload(path: string): BeaconRequest {
+  return { op: "upload", path, ticket: "tok" }
+}
+
+function download(path: string): BeaconRequest {
+  return { op: "download", path, ticket: "tok", size: 1, sha256: DIGEST, overwrite: false }
+}
+
+test("an upload is judged by the read roots", () => {
+  const scope = { ...DEFAULT_BEACON_SCOPE, readRoots: ["/srv/app"], writeRoots: ["/srv/out"] }
+  expect(evaluateBeaconRequest(scope, upload("/srv/app/a.bin"), NO_TRUST)).toBe("ask")
+  expect(evaluateBeaconRequest({ ...scope, autoRunScripts: true }, upload("/srv/app/a.bin"), NO_TRUST)).toBe("allow")
+  expect(evaluateBeaconRequest(scope, upload("/srv/out/a.bin"), NO_TRUST)).toBe("deny")
+})
+
+test("a download is judged by the write roots, never the read roots", () => {
+  const scope = { ...DEFAULT_BEACON_SCOPE, readRoots: ["/srv/app"], writeRoots: ["/srv/out"] }
+  expect(evaluateBeaconRequest(scope, download("/srv/out/a.bin"), NO_TRUST)).toBe("ask")
+  expect(evaluateBeaconRequest({ ...scope, autoRunScripts: true }, download("/srv/out/a.bin"), NO_TRUST)).toBe("allow")
+  expect(evaluateBeaconRequest({ ...scope, autoRunScripts: true }, download("/srv/app/a.bin"), NO_TRUST)).toBe("deny")
+  expect(evaluateBeaconRequest({ ...scope, writeRoots: [] }, download("/srv/out/a.bin"), NO_TRUST)).toBe("deny")
+})

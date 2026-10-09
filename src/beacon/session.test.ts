@@ -7,6 +7,7 @@ import {
   type BeaconFsPort,
   type BeaconRequestSink,
   type BeaconShellPort,
+  type BeaconTransferPort,
   type BeaconTransport,
 } from "./ports"
 import type { BeaconActivity } from "./activity"
@@ -56,6 +57,11 @@ function createFakeShell(): BeaconShellPort & { calls: string[] } {
   }
 }
 
+function createFakeTransfer(): BeaconTransferPort {
+  const result = { path: "/data/out.bin", bytes: 4, sha256: "0".repeat(64) }
+  return { upload: async () => result, download: async () => result }
+}
+
 const READY_SCOPE: BeaconScope = { ...DEFAULT_BEACON_SCOPE, exec: true, readRoots: ["/data"] }
 
 function setup(options: { fs?: BeaconFsPort; scope?: BeaconScope; serverProtocol?: number } = {}) {
@@ -71,6 +77,7 @@ function setup(options: { fs?: BeaconFsPort; scope?: BeaconScope; serverProtocol
     keyStore: { publicKeySpkiBase64: () => "pub", sign: (nonce) => `signed:${nonce}` },
     fs: options.fs ?? createFakeFs(),
     shell,
+    transfer: createFakeTransfer(),
     now: () => 1_000,
     onActivity: (activity) => activities.push(activity),
     onScope: (scope) => scopes.push(scope),
@@ -104,6 +111,7 @@ describe("beacon session", () => {
       keyStore: { publicKeySpkiBase64: () => "pub", sign: () => "sig" },
       fs: createFakeFs(),
       shell: createFakeShell(),
+      transfer: createFakeTransfer(),
     }).start()
     expect(fake.sent).toEqual([
       { kind: "hello", beaconId: "b1", protocolVersion: BEACON_PROTOCOL_VERSION, beaconVersion: "0.1.0", os: "darwin" },
@@ -120,6 +128,7 @@ describe("beacon session", () => {
       keyStore: { publicKeySpkiBase64: () => "pub", sign: (nonce) => `signed:${nonce}` },
       fs: createFakeFs(),
       shell: createFakeShell(),
+      transfer: createFakeTransfer(),
     }).start()
     fake.push({ kind: "challenge", nonce: "abc" })
     expect(fake.sent[1]).toEqual({ kind: "auth", signature: "signed:abc" })
@@ -145,6 +154,22 @@ describe("beacon session", () => {
     harness.push({ kind: "request", id: "r2", request: { op: "read", path: "/etc/passwd", offset: 0, limit: 10 } })
     await settled()
     expect(harness.sent).toEqual([{ kind: "error", id: "r2", message: "outside roots" }])
+  })
+
+  test("serves an upload and a download through the transfer port", async () => {
+    const harness = setup()
+    harness.push({ kind: "request", id: "u1", request: { op: "upload", path: "/data/a.bin", ticket: "tok" } })
+    harness.push({
+      kind: "request",
+      id: "d1",
+      request: { op: "download", path: "/data/b.bin", ticket: "tok", size: 4, sha256: "0".repeat(64), overwrite: true },
+    })
+    await settled()
+    const result = { path: "/data/out.bin", bytes: 4, sha256: "0".repeat(64) }
+    expect(harness.sent).toEqual([
+      { kind: "result", id: "u1", result },
+      { kind: "result", id: "d1", result },
+    ])
   })
 
   test("streams exec output and then the exit code", async () => {
@@ -176,6 +201,7 @@ describe("beacon session", () => {
       keyStore: { publicKeySpkiBase64: () => "pub", sign: () => "sig" },
       fs: createFakeFs(),
       shell: createFakeShell(),
+      transfer: createFakeTransfer(),
     }).start()
     fake.sent.length = 0
     fake.push({ kind: "request", id: "r5", request: { op: "stat", path: "/data" } })
@@ -239,6 +265,7 @@ describe("beacon session", () => {
       keyStore: { publicKeySpkiBase64: () => "pub", sign: () => "sig" },
       fs: createFakeFs(),
       shell: createFakeShell(),
+      transfer: createFakeTransfer(),
       onRefused: (reason) => refusals.push(reason),
     }).start()
     fake.push({ kind: "refused", reason: "unknown-beacon" })

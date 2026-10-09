@@ -107,6 +107,10 @@ function createRunner(greetings: Greeting[], overrides: Partial<BeaconRunnerDeps
       fetchChunk: async () => null,
     }),
     createShell: () => ({ exec: async () => 0, script: async () => 0 }),
+    createTransfer: () => ({
+      upload: async () => ({ path: "", bytes: 0, sha256: "" }),
+      download: async () => ({ path: "", bytes: 0, sha256: "" }),
+    }),
     sleep: sleeper.sleep,
     now: () => 50_000,
     onActivity: (activity) => activities.push(activity),

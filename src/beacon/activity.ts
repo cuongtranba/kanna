@@ -1,7 +1,7 @@
 import type { BeaconRequest } from "../shared/beacon-protocol"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 
-export type BeaconActivityVerb = "read" | "list" | "search" | "run" | "script"
+export type BeaconActivityVerb = "read" | "list" | "search" | "run" | "script" | "send" | "receive"
 
 export type BeaconActivityOutcome =
   | { kind: "done" }
@@ -39,10 +39,14 @@ export function describeBeaconRequest(request: BeaconRequest): { verb: BeaconAct
       return { verb: "run", target: [request.cmd, ...request.args].join(" ") }
     case "script":
       return { verb: "script", target: firstLine(request.body) }
+    case "upload":
+      return { verb: "send", target: request.path }
+    case "download":
+      return { verb: "receive", target: request.path }
   }
 }
 
-const VERBS: ReadonlySet<string> = new Set<BeaconActivityVerb>(["read", "list", "search", "run", "script"])
+const VERBS: ReadonlySet<string> = new Set<BeaconActivityVerb>(["read", "list", "search", "run", "script", "send", "receive"])
 
 function isVerb(value: JsonValue | undefined): value is BeaconActivityVerb {
   return typeof value === "string" && VERBS.has(value)

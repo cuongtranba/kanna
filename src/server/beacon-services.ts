@@ -2,7 +2,11 @@ import type { ServerWebSocket } from "bun"
 import type { AppSettingsManager } from "./app-settings"
 import { createBeaconConnection, type BeaconConnection, type BeaconConnectionSettings } from "./beacon-connection"
 import { createBeaconRegistry, PING_INTERVAL_MS, type BeaconRegistry } from "./beacon-registry"
+import { getBeaconTransferTickets, setBeaconTransferMaxBytes } from "./beacon-transfer-host"
 import type { ClientState } from "./ws-router-utils"
+
+const TRANSFER_SWEEP_INTERVAL_MS = 5_000
+const BYTES_PER_MB = 1024 * 1024
 
 export interface BeaconServices {
   registry: BeaconRegistry
@@ -22,6 +26,8 @@ export function createBeaconServices(deps: { appSettings: BeaconServicesSettings
   const registry = createBeaconRegistry()
   const connection = createBeaconConnection({ registry, appSettings: deps.appSettings })
   const sweepTimer = setInterval(() => registry.sweep(), PING_INTERVAL_MS)
+  setBeaconTransferMaxBytes(() => deps.appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB)
+  const transferSweepTimer = setInterval(() => getBeaconTransferTickets().sweep(), TRANSFER_SWEEP_INTERVAL_MS)
   const stopScopePush = deps.appSettings.onChange((snapshot) => {
     for (const beacon of snapshot.customBeacons) registry.pushScope(beacon.id, beacon.scope)
   })
@@ -30,6 +36,7 @@ export function createBeaconServices(deps: { appSettings: BeaconServicesSettings
     connection,
     stop() {
       clearInterval(sweepTimer)
+      clearInterval(transferSweepTimer)
       stopScopePush()
     },
   }

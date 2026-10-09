@@ -14,6 +14,7 @@ code:
   - src/beacon/session.test.ts
   - src/beacon/shell.adapter.ts
   - src/beacon/shell.adapter.test.ts
+  - src/beacon/transfer.adapter.ts
   - src/beacon/state-store.adapter.ts
   - src/beacon/transport.adapter.ts
   - src/beacon/activity.ts

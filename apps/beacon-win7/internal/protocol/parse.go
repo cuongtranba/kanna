@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"strconv"
 )
 
@@ -315,9 +316,50 @@ func parseRequest(value any) (Request, bool) {
 	case OpStat, OpGlob:
 		path, pathOK := readString(object, "path")
 		return Request{Op: op, Path: path}, pathOK
+	case OpUpload:
+		path, pathOK := readString(object, "path")
+		ticket, ticketOK := readTicket(object)
+		return Request{Op: op, Path: path, Ticket: ticket}, pathOK && ticketOK
+	case OpDownload:
+		path, pathOK := readString(object, "path")
+		ticket, ticketOK := readTicket(object)
+		size, sizeOK := readByteCount(object, "size")
+		digest, digestOK := readSha256(object, "sha256")
+		overwrite, overwriteOK := readBool(object, "overwrite")
+		return Request{Op: op, Path: path, Ticket: ticket, Size: size, Sha256: digest, Overwrite: overwrite},
+			pathOK && ticketOK && sizeOK && digestOK && overwriteOK
 	default:
 		return Request{}, false
 	}
+}
+
+func readTicket(object map[string]any) (string, bool) {
+	ticket, ok := readString(object, "ticket")
+	return ticket, ok && ticket != ""
+}
+
+// readByteCount reads a non-negative integer, the shape of a file size.
+func readByteCount(object map[string]any, key string) (float64, bool) {
+	value, ok := readNumber(object, key)
+	if !ok || value < 0 || math.IsInf(value, 0) || value != math.Trunc(value) {
+		return 0, false
+	}
+	return value, true
+}
+
+// readSha256 reads 64 lowercase hexadecimal digits.
+func readSha256(object map[string]any, key string) (string, bool) {
+	value, ok := readString(object, key)
+	if !ok || len(value) != 64 {
+		return "", false
+	}
+	for index := 0; index < len(value); index++ {
+		c := value[index]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return "", false
+		}
+	}
+	return value, true
 }
 
 func parseOutput(object map[string]any, kind string) (Frame, bool) {

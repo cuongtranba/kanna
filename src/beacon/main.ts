@@ -1,6 +1,13 @@
 import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import type { BeaconOs } from "../shared/beacon-protocol"
-import { backoffMs, beaconSocketUrl, createBeaconRunner, MAX_BACKOFF_MS, type BeaconRunnerStatus } from "./runner"
+import {
+  backoffMs,
+  beaconSocketUrl,
+  createBeaconRunner,
+  MAX_BACKOFF_MS,
+  type BeaconRunnerStatus,
+  type BeaconTransferContext,
+} from "./runner"
 import type {
   BeaconFsPort,
   BeaconKeyStore,
@@ -8,6 +15,7 @@ import type {
   BeaconShellPort,
   BeaconState,
   BeaconStateStore,
+  BeaconTransferPort,
   BeaconTransport,
 } from "./ports"
 
@@ -50,6 +58,7 @@ export interface BeaconCliDeps {
   openTransport: (url: string) => BeaconTransport
   createFs: (getReadRoots: () => readonly string[]) => BeaconFsPort
   createShell: (os: BeaconOs) => BeaconShellPort
+  createTransfer: (context: BeaconTransferContext) => BeaconTransferPort
   sleep: (ms: number) => Promise<void>
   log: (line: string) => void
 }
@@ -99,6 +108,7 @@ async function runBeacon(deps: BeaconCliDeps, state: BeaconState): Promise<numbe
     openTransport: deps.openTransport,
     createFs: deps.createFs,
     createShell: deps.createShell,
+    createTransfer: deps.createTransfer,
     sleep: deps.sleep,
     now: Date.now,
   })

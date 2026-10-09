@@ -1025,6 +1025,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       beaconRegistry: args.beaconRegistry,
       getBeacons: args.getBeacons ?? (() => []),
       chatId,
+      projectRoot: cwd,
       allowed: args.beaconToolsAllowed ?? (args.delegationContext?.depth ?? 0) === 0,
       approval: args.toolCallback
         ? { toolCallback: args.toolCallback, sessionId, cwd, chatPolicy, restrictedAllowedPaths: args.restrictedAllowedPaths }

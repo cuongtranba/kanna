@@ -11,9 +11,10 @@ import (
 
 // Protocol versions, identical to the TypeScript constants.
 const (
-	BeaconProtocolVersion = 2
+	BeaconProtocolVersion = 3
 	MinBeaconProtocol     = 1
 	ScopeSyncProtocol     = 2
+	TransferProtocol      = 3
 )
 
 // Operating systems a beacon may announce.
@@ -59,6 +60,9 @@ const (
 	OpFetch  = "fetch"
 	OpStat   = "stat"
 	OpGlob   = "glob"
+
+	OpUpload   = "upload"
+	OpDownload = "download"
 )
 
 // IsSupportedProtocol reports whether version lies inside the supported window.
@@ -106,6 +110,10 @@ type Request struct {
 	Root      string
 	Pattern   string
 	ChunkFrom *float64
+	Ticket    string
+	Size      float64
+	Sha256    string
+	Overwrite bool
 }
 
 // MarshalJSON encodes the request with the keys its op carries, in the order
@@ -152,6 +160,21 @@ func (r Request) MarshalJSON() ([]byte, error) {
 			Op   string `json:"op"`
 			Path string `json:"path"`
 		}{r.Op, r.Path})
+	case OpUpload:
+		return marshal(struct {
+			Op     string `json:"op"`
+			Path   string `json:"path"`
+			Ticket string `json:"ticket"`
+		}{r.Op, r.Path, r.Ticket})
+	case OpDownload:
+		return marshal(struct {
+			Op        string  `json:"op"`
+			Path      string  `json:"path"`
+			Ticket    string  `json:"ticket"`
+			Size      float64 `json:"size"`
+			Sha256    string  `json:"sha256"`
+			Overwrite bool    `json:"overwrite"`
+		}{r.Op, r.Path, r.Ticket, r.Size, r.Sha256, r.Overwrite})
 	default:
 		return nil, fmt.Errorf("protocol: unknown request op %q", r.Op)
 	}
