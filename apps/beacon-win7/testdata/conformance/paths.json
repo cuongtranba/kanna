@@ -1,0 +1,32 @@
+{
+  "description": "isPathInsideRoots cases from src/shared/beacon-scope.ts, asserted by the TypeScript and Go suites.",
+  "cases": [
+    { "name": "inside a posix root", "target": "/srv/app/log.txt", "roots": ["/srv/app"], "inside": true },
+    { "name": "the root itself", "target": "/srv/app", "roots": ["/srv/app"], "inside": true },
+    { "name": "root with a trailing separator", "target": "/srv/app/x", "roots": ["/srv/app/"], "inside": true },
+    { "name": "outside every root", "target": "/etc/passwd", "roots": ["/srv/app"], "inside": false },
+    { "name": "no roots granted", "target": "/srv/app/log.txt", "roots": [], "inside": false },
+    { "name": "dot-dot escaping the root", "target": "/srv/app/../secrets/key", "roots": ["/srv/app"], "inside": false },
+    { "name": "dot-dot staying inside the root", "target": "/srv/app/a/../../app/x", "roots": ["/srv/app"], "inside": true },
+    { "name": "dot-dot above an absolute top is dropped", "target": "/../srv/app/x", "roots": ["/srv/app"], "inside": true },
+    { "name": "single dot segments are ignored", "target": "/srv/./app/./x", "roots": ["/srv/app"], "inside": true },
+    { "name": "repeated separators collapse", "target": "//srv///app//x", "roots": ["/srv/app"], "inside": true },
+    { "name": "sibling sharing the root's name prefix", "target": "/srv/app-old/log.txt", "roots": ["/srv/app"], "inside": false },
+    { "name": "segments compare case-sensitively", "target": "/SRV/app/x", "roots": ["/srv/app"], "inside": false },
+    { "name": "windows root across separators and drive case", "target": "c:/Users/dev/src", "roots": ["C:\\Users\\dev"], "inside": true },
+    { "name": "windows root on another drive", "target": "D:/Users/dev/src", "roots": ["C:\\Users\\dev"], "inside": false },
+    { "name": "windows segments compare case-sensitively", "target": "C:\\users\\dev\\x", "roots": ["C:\\Users\\dev"], "inside": false },
+    { "name": "a drive root holds everything on that drive", "target": "C:\\Windows\\System32", "roots": ["C:\\"], "inside": true },
+    { "name": "a bare drive is its own root", "target": "C:", "roots": ["c:\\"], "inside": true },
+    { "name": "drive-less absolute path is not on a drive", "target": "\\Users\\dev\\x", "roots": ["C:\\Users\\dev"], "inside": false },
+    { "name": "UNC share root", "target": "\\\\server\\share\\x", "roots": ["\\\\server\\share"], "inside": true },
+    { "name": "relative target against an absolute root", "target": "srv/app/x", "roots": ["/srv/app"], "inside": false },
+    { "name": "relative root holds a relative target", "target": "srv/app/x", "roots": ["srv"], "inside": true },
+    { "name": "relative dot-dot is kept, not dropped", "target": "../x/y", "roots": ["../x"], "inside": true },
+    { "name": "relative dot-dot does not match without it", "target": "../x/y", "roots": ["x"], "inside": false },
+    { "name": "a relative root with no segments matches nothing", "target": "a", "roots": ["."], "inside": false },
+    { "name": "an empty root matches nothing", "target": "a", "roots": [""], "inside": false },
+    { "name": "posix root slash holds every absolute path", "target": "/etc/passwd", "roots": ["/"], "inside": true },
+    { "name": "any one matching root is enough", "target": "/b/c", "roots": ["/a", "/b"], "inside": true }
+  ]
+}
