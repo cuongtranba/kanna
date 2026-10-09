@@ -128,6 +128,12 @@ c3-202:
   - src/server/beacon-pairing.ts
   - src/server/beacon-pairing.test.ts
   - src/server/beacon-pairing-host.ts
+  - src/server/beacon-transfer-tickets.ts
+  - src/server/beacon-transfer-host.ts
+  - src/server/beacon-transfer-files.ts
+  - src/server/beacon-transfer-files.adapter.ts
+  - src/server/beacon-transfer-http.adapter.ts
+  - src/server/beacon-transfer-http.test.ts
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
@@ -273,6 +279,8 @@ c3-226:
   - src/server/mcp-validator.ts
   - src/server/kanna-mcp-beacon.ts
   - src/server/kanna-mcp-beacon.test.ts
+  - src/server/kanna-mcp-beacon-transfer.ts
+  - src/server/kanna-mcp-beacon-transfer.test.ts
   - src/server/kanna-mcp.ts
   - src/server/kanna-mcp.test.ts
   - src/server/tool-callback.ts
@@ -368,6 +376,7 @@ c3-302:
   - src/shared/beacon-status.test.ts
   - src/shared/beacon-tools.ts
   - src/shared/beacon-tool-request.ts
+  - src/shared/beacon-transfer.ts
   - src/shared/live-block.ts
 c3-303:
   - src/shared/tools.test.ts
@@ -494,6 +503,7 @@ c3-241:
   - src/beacon/session.test.ts
   - src/beacon/shell.adapter.ts
   - src/beacon/shell.adapter.test.ts
+  - src/beacon/transfer.adapter.ts
   - src/beacon/state-store.adapter.ts
   - src/beacon/transport.adapter.ts
   - src/beacon/activity.ts

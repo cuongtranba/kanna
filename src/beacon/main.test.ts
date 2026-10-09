@@ -24,6 +24,10 @@ function createDeps(overrides: Partial<BeaconCliDeps> = {}): { deps: BeaconCliDe
       fetchChunk: async () => null,
     }),
     createShell: () => ({ exec: async () => 0, script: async () => 0 }),
+    createTransfer: () => ({
+      upload: async () => ({ path: "", bytes: 0, sha256: "" }),
+      download: async () => ({ path: "", bytes: 0, sha256: "" }),
+    }),
     sleep: async () => {},
     log: (line) => {
       logs.push(line)

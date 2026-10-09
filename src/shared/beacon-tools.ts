@@ -9,6 +9,8 @@ export const BEACON_GREP_TOOL_NAME = "mcp__kanna__beacon_grep"
 export const BEACON_FETCH_TOOL_NAME = "mcp__kanna__beacon_fetch"
 export const BEACON_EXEC_TOOL_NAME = "mcp__kanna__beacon_exec"
 export const BEACON_SCRIPT_TOOL_NAME = "mcp__kanna__beacon_script"
+export const BEACON_PULL_TOOL_NAME = "mcp__kanna__beacon_pull"
+export const BEACON_PUSH_TOOL_NAME = "mcp__kanna__beacon_push"
 export const BEACON_TOOL_PREFIX = "mcp__kanna__beacon_"
 
 const BEACON_TOOL_OPS: ReadonlyMap<string, BeaconToolOp> = new Map([
@@ -20,6 +22,8 @@ const BEACON_TOOL_OPS: ReadonlyMap<string, BeaconToolOp> = new Map([
   [BEACON_FETCH_TOOL_NAME, "fetch"],
   [BEACON_EXEC_TOOL_NAME, "exec"],
   [BEACON_SCRIPT_TOOL_NAME, "script"],
+  [BEACON_PULL_TOOL_NAME, "upload"],
+  [BEACON_PUSH_TOOL_NAME, "download"],
 ])
 
 export function beaconToolOp(toolName: string): BeaconToolOp | null {
@@ -48,5 +52,9 @@ export function summarizeBeaconCall(op: BeaconToolOp, input: JsonObject): string
     }
     case "script":
       return `script (${readStringInput(input, "body").length} chars)`
+    case "upload":
+      return `pull ${readStringInput(input, "path")}`
+    case "download":
+      return `push ${readStringInput(input, "source")} to ${readStringInput(input, "path")}`
   }
 }

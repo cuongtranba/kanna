@@ -9,7 +9,11 @@ import { errorMessage } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { BeaconRegistry } from "./beacon-registry"
-import type { BoardToolFactory } from "./kanna-mcp-boards"
+import { getBeaconTransferMaxBytes, getBeaconTransferTickets } from "./beacon-transfer-host"
+import type { BeaconTransferFiles } from "./beacon-transfer-files"
+import { createBeaconTransferFiles } from "./beacon-transfer-files.adapter"
+import type { BeaconTransferTickets } from "./beacon-transfer-tickets"
+import { buildBeaconTransferTools, type BeaconTransferToolFactory } from "./kanna-mcp-beacon-transfer"
 import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
 import type { ToolCallbackService } from "./tool-callback"
 
@@ -18,7 +22,8 @@ export const BEACON_REQUEST_TIMEOUT_MS = 600_000
 
 export interface BeaconDispatchOptions {
   captureBytes?: number
-  timeoutMs?: number
+  timeoutMs?: number | null
+  interrupt?: (stop: (message: string) => void) => () => void
 }
 
 export interface BeaconDispatchOutcome {
@@ -44,6 +49,9 @@ export interface BeaconToolContext {
   allowed: boolean
   approval?: BeaconApproval
   dispatchOptions?: BeaconDispatchOptions
+  projectRoot?: string
+  transferTickets?: BeaconTransferTickets
+  transferFiles?: BeaconTransferFiles
 }
 
 const LIST_DESCRIPTION =
@@ -89,21 +97,26 @@ export function dispatchBeaconRequest(
   options: BeaconDispatchOptions = {},
 ): Promise<BeaconDispatchOutcome> {
   const captureBytes = options.captureBytes ?? BEACON_CAPTURE_BYTES
-  const timeoutMs = options.timeoutMs ?? BEACON_REQUEST_TIMEOUT_MS
+  const timeoutMs = options.timeoutMs === undefined ? BEACON_REQUEST_TIMEOUT_MS : options.timeoutMs
   return new Promise((resolve, reject) => {
     let stdout = ""
     let stderr = ""
     let truncated = false
     let settled = false
     let cancel: () => void = () => undefined
-    const timer = setTimeout(() => {
-      finish(() => reject(new Error(`no answer from the beacon within ${String(timeoutMs)} ms`)))
-    }, timeoutMs)
+    let release: () => void = () => undefined
+    const timer =
+      timeoutMs === null
+        ? null
+        : setTimeout(() => {
+            finish(() => reject(new Error(`no answer from the beacon within ${String(timeoutMs)} ms`)))
+          }, timeoutMs)
 
     function finish(settle: () => void): void {
       if (settled) return
       settled = true
-      clearTimeout(timer)
+      if (timer !== null) clearTimeout(timer)
+      release()
       cancel()
       settle()
     }
@@ -117,6 +130,9 @@ export function dispatchBeaconRequest(
       if (stream === "stdout") stdout = appended.text
       else stderr = appended.text
     }
+
+    release = options.interrupt?.((message) => finish(() => reject(new Error(message)))) ?? release
+    if (settled) release()
 
     const dispatched = registry.dispatch(beaconId, request, {
       onStdout: (chunk) => capture("stdout", chunk),
@@ -150,7 +166,12 @@ function formatOutcome(beacon: BeaconConfig, op: BeaconToolOp, outcome: BeaconDi
   return `${head}: exit ${String(outcome.exit)}${formatStream("stdout", outcome.stdout)}${formatStream("stderr", outcome.stderr)}${note}`
 }
 
-export function buildBeaconToolList<TTool>(deps: BeaconToolContext, tool: BoardToolFactory<TTool>): TTool[] {
+export type BeaconToolFactory<TTool, TExtra> = BeaconTransferToolFactory<TTool, TExtra>
+
+export function buildBeaconToolList<TTool, TExtra>(
+  deps: BeaconToolContext,
+  tool: BeaconToolFactory<TTool, TExtra>,
+): TTool[] {
   const { beaconRegistry, chatId } = deps
   if (!deps.allowed || !beaconRegistry || !chatId) return []
   const registry = beaconRegistry
@@ -200,7 +221,28 @@ export function buildBeaconToolList<TTool>(deps: BeaconToolContext, tool: BoardT
   const beaconId = z.string().min(1).describe("Id of the beacon, from beacon_list")
   const path = z.string().min(1)
 
+  const transferTools =
+    deps.projectRoot === undefined
+      ? []
+      : buildBeaconTransferTools(
+          {
+            chatId: owner,
+            projectRoot: deps.projectRoot,
+            tickets: deps.transferTickets ?? getBeaconTransferTickets(),
+            files: deps.transferFiles ?? createBeaconTransferFiles(),
+            maxPullBytes: getBeaconTransferMaxBytes,
+            chatPolicy: deps.approval?.chatPolicy,
+            resolveBeacon,
+            authorize,
+            dispatch: (id, request, options) => dispatchBeaconRequest(registry, id, request, options),
+            describeBeacon,
+            captureBytes: deps.dispatchOptions?.captureBytes,
+          },
+          tool,
+        )
+
   return [
+    ...transferTools,
     tool("beacon_list", LIST_DESCRIPTION, {}, async () => {
       const rows = buildBeaconStatusRows(deps.getBeacons(), registry.live())
       const summary = rows.map((row) => ({ id: row.id, label: row.label, os: row.os, online: row.online, enabled: row.enabled }))

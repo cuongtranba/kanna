@@ -1,4 +1,5 @@
 import type { BeaconFrame, BeaconOs } from "../shared/beacon-protocol"
+import type { BeaconTransferResult } from "../shared/beacon-transfer"
 import type { JsonValue } from "../shared/json"
 
 export class BeaconScopeError extends Error {
@@ -31,6 +32,17 @@ export interface BeaconFsPort {
   glob(path: string): Promise<JsonValue>
   grep(root: string, pattern: string): Promise<JsonValue>
   fetchChunk(path: string, from: number): Promise<JsonValue>
+}
+
+export interface BeaconTransferPort {
+  upload(request: { path: string; ticket: string }): Promise<BeaconTransferResult>
+  download(request: {
+    path: string
+    ticket: string
+    size: number
+    sha256: string
+    overwrite: boolean
+  }): Promise<BeaconTransferResult>
 }
 
 export interface BeaconExecLimits {

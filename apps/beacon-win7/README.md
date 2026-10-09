@@ -1,8 +1,8 @@
 # Kanna beacon for Windows 7 (Go 1.20)
 
 A port of the Bun beacon (`src/beacon/**`) for Windows 7 and 8.1, where Bun
-(Windows 10 1809+) and WebView2 cannot run. It speaks protocol 2 exactly as the
-Bun beacon does; the server is unchanged. The Bun beacon stays the primary
+(Windows 10 1809+) and WebView2 cannot run. It speaks protocol 3 exactly as the
+Bun beacon does. The Bun beacon stays the primary
 implementation: this module follows it, never the other way round.
 
 ## Toolchain
@@ -60,6 +60,7 @@ in that table is a load-time dependency that may not exist on Windows 7.
 | `internal/state` | `src/beacon/state-store.adapter.ts` and the home rule in `entry.adapter.ts` |
 | `internal/pairing` | `src/beacon/pair-client.adapter.ts`, `src/shared/beacon-pair-link.ts` |
 | `internal/fsops` | `src/beacon/fs.adapter.ts` |
+| `internal/transfer` | `src/beacon/transfer.adapter.ts` |
 | `internal/shell` | `src/beacon/shell.adapter.ts` |
 | `internal/session` | `src/beacon/session.ts` |
 | `internal/transport` | `src/beacon/transport.adapter.ts`, plus TLS roots |
@@ -71,6 +72,34 @@ in that table is a load-time dependency that may not exist on Windows 7.
 | `cmd/kanna-beacon` | `src/beacon/entry.adapter.ts` |
 | `cmd/kanna-beacon-tray` | the tray half of the Electrobun app |
 | `cmd/peimports` | CI check of the PE import table |
+
+## File transfer (`upload` and `download`)
+
+Protocol 3 adds two request ops that copy one file between this machine and
+Kanna (`docs/superpowers/specs/2026-10-09-beacon-file-transfer-design.md`). The
+bytes travel over HTTP to the paired Kanna URL, authorized by the request's
+one-file `ticket` as a bearer token; the WebSocket carries only the request and
+the `{path, bytes, sha256}` result.
+
+- `upload` (Kanna's `beacon_pull`) reads a file inside `readRoots`, hashes it,
+  asks Kanna where to resume, `PUT`s 8 MiB chunks, then `POST`s the size and
+  sha256 for Kanna to verify.
+- `download` (Kanna's `beacon_push`) writes inside `writeRoots`. It fetches
+  `Range` chunks into `<path>.kanna-part`, checks size and sha256 against the
+  request, and only then renames the part over the destination. `overwrite:
+  false` refuses an existing file; any failure deletes the part.
+
+Transfers run through the normal request queue, so they count toward
+`maxConcurrent`, but they ignore `perCallTimeoutMs` and `outputByteCap`: each
+chunk request has its own 10 minute deadline and a chunk is retried up to five
+times with a 1 s to 16 s backoff. A dropped connection cancels the transfer.
+Memory use is a fixed 256 KiB copy buffer regardless of file size.
+
+A beacon refuses to write outside `writeRoots` (empty by default), and
+`set-scope` cannot change `writeRoots`, so a beacon cannot grant itself write
+access. On Windows the destination must not be open in
+another program (Excel locks a workbook it has open): the rename then fails and
+the transfer reports that.
 
 ## Conformance fixtures
 

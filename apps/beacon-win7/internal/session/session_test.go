@@ -2,8 +2,12 @@ package session_test
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +19,7 @@ import (
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/keystore"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/session"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transfer"
 )
 
 const helperEnv = "KANNA_BEACON_SESSION_HELPER"
@@ -186,6 +191,11 @@ func readyScope(root string) protocol.Scope {
 
 func start(t *testing.T) *harness {
 	t.Helper()
+	return startWithTransfer(t, nil)
+}
+
+func startWithTransfer(t *testing.T, transferer *transfer.Transferer) *harness {
+	t.Helper()
 	root, err := fsops.Realpath(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +212,7 @@ func start(t *testing.T) *harness {
 		Transport:     h.transport,
 		Signer:        keys,
 		FS:            fsops.New(func() []string { return []string{root} }),
+		Transfer:      transferer,
 		OnScope: func(scope protocol.Scope) {
 			h.mu.Lock()
 			defer h.mu.Unlock()
@@ -245,7 +256,7 @@ func self(t *testing.T) string {
 
 func TestAnnouncesItselfWithAHelloOnStart(t *testing.T) {
 	h := start(t)
-	want := protocol.Hello{BeaconID: "b1", ProtocolVersion: 2, BeaconVersion: "0.1.0", OS: protocol.OSWindows}
+	want := protocol.Hello{BeaconID: "b1", ProtocolVersion: 3, BeaconVersion: "0.1.0", OS: protocol.OSWindows}
 	if frames := h.transport.frames(); len(frames) != 1 || frames[0] != want {
 		t.Fatalf("sent %#v, want only %#v", frames, want)
 	}
@@ -455,5 +466,45 @@ func TestAnIncompatibleServerIsReportedAndTheTransportClosed(t *testing.T) {
 	defer h.mu.Unlock()
 	if len(h.tooOld) != 1 || h.tooOld[0].MinSupported != 9 || !h.transport.closed || len(h.refusals) != 0 {
 		t.Fatalf("incompatible %v, refusals %v, closed %v", h.tooOld, h.refusals, h.transport.closed)
+	}
+}
+
+func TestServesADownloadRequestAndRepliesWithPathBytesAndSha256(t *testing.T) {
+	content := []byte("workbook bytes")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer tk" || r.Header.Get("Range") != "bytes=0-13" {
+			http.Error(w, "unexpected request", http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(content)
+	}))
+	defer server.Close()
+	var h *harness
+	h = startWithTransfer(t, transfer.New(transfer.Config{
+		BaseURL:     server.URL,
+		ContainRead: func(path string) (string, error) { return path, nil },
+		WriteRoots:  func() []string { return []string{h.root} },
+		Client:      server.Client(),
+	}))
+	scope := readyScope(h.root)
+	scope.WriteRoots = []string{h.root}
+	h.ready(scope, nil)
+	sum := sha256.Sum256(content)
+	digest := hex.EncodeToString(sum[:])
+	destination := filepath.Join(h.root, "book.xlsx")
+
+	h.transport.push(protocol.RequestFrame{ID: "d1", Request: protocol.Request{
+		Op: protocol.OpDownload, Path: destination, Ticket: "tk", Size: float64(len(content)), Sha256: digest,
+	}})
+
+	frames := h.transport.waitFor(t, "the download reply", hasReply("d1"))
+	want := protocol.Result{ID: "d1", Result: transfer.Result{Path: destination, Bytes: int64(len(content)), SHA256: digest}}
+	if len(frames) != 1 || frames[0] != want {
+		t.Fatalf("sent %#v, want %#v", frames, want)
+	}
+	encoded, err := protocol.Encode(frames[0])
+	if err != nil || !strings.Contains(string(encoded), `"result":{"path":`) || !strings.Contains(string(encoded), `"bytes":14,"sha256":"`+digest+`"`) {
+		t.Fatalf("result frame encodes as %s (%v)", encoded, err)
 	}
 }

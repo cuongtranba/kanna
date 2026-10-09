@@ -18,6 +18,7 @@ import {
   type BeaconKeyStore,
   type BeaconRequestSink,
   type BeaconShellPort,
+  type BeaconTransferPort,
   type BeaconTransport,
 } from "./ports"
 
@@ -29,6 +30,7 @@ export interface BeaconSessionDeps {
   keyStore: BeaconKeyStore
   fs: BeaconFsPort
   shell: BeaconShellPort
+  transfer: BeaconTransferPort
   now?: () => number
   onReady?: (scope: BeaconScope, serverProtocol: number) => void
   onScope?: (scope: BeaconScope) => void
@@ -106,6 +108,16 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         return deps.fs.grep(request.root, request.pattern)
       case "fetch":
         return deps.fs.fetchChunk(request.path, request.chunkFrom ?? 0)
+      case "upload":
+        return deps.transfer.upload({ path: request.path, ticket: request.ticket })
+      case "download":
+        return deps.transfer.download({
+          path: request.path,
+          ticket: request.ticket,
+          size: request.size,
+          sha256: request.sha256,
+          overwrite: request.overwrite,
+        })
       default:
         return Promise.reject(new Error("unsupported operation"))
     }

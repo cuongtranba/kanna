@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:6625c1aefacd557421aac30023914fe37949060200b9a6bda328b71c74b5e7cb -->
+<!-- hash: sha256:db2c42cee14ed2a9e30fbbac5b4e084ef1823a8b7910f3796b9fee0b2aacdac6 -->
 
 ## c3-0 — Kanna (system)
 
@@ -106,7 +106,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
+files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-host.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -222,7 +222,7 @@ files: src/server/oauth-pool/**/*.ts
 ## c3-226 — kanna-mcp-host (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, ref-tool-hydration, rule-colocated-bun-test, rule-strong-typing
-files: src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts
+files: src/server/kanna-mcp-beacon-transfer.test.ts, src/server/kanna-mcp-beacon-transfer.ts, src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts
 
 ## c3-227 — auto-continue (component)
 container: c3-2 | context: c3-0
@@ -297,7 +297,7 @@ files: src/server/genui/*.ts, src/server/turn-end-guard.ts, src/server/ws-router
 ## c3-241 — beacon-daemon (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter
-files: src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/transport.adapter.ts
+files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-icons.ts, scripts/build-beacon-desktop.ts, src/beacon/activity.test.ts, src/beacon/activity.ts, src/beacon/desktop/**/*.ts, src/beacon/desktop/**/*.tsx, src/beacon/desktop/view/beacon-desktop.css, src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/host-os.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/runner.test.ts, src/beacon/runner.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/transfer.adapter.ts, src/beacon/transport.adapter.ts, src/beacon/version.test.ts, src/beacon/version.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -310,7 +310,7 @@ files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.te
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/beacon-config.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
+files: src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -576,9 +576,16 @@ src/server/beacon-pairing.test.ts → c3-202
 src/server/beacon-pairing.ts → c3-202
 src/server/beacon-registry.test.ts → c3-202
 src/server/beacon-registry.ts → c3-202
+src/server/beacon-services.test.ts → c3-202
 src/server/beacon-services.ts → c3-202
 src/server/beacon-settings.test.ts → c3-202
 src/server/beacon-settings.ts → c3-202
+src/server/beacon-transfer-files.adapter.ts → c3-202
+src/server/beacon-transfer-files.ts → c3-202
+src/server/beacon-transfer-host.ts → c3-202
+src/server/beacon-transfer-http.adapter.ts → c3-202
+src/server/beacon-transfer-http.test.ts → c3-202
+src/server/beacon-transfer-tickets.ts → c3-202
 src/server/http-api-routes.ts → c3-202
 src/server/http-dispatcher.ts → c3-202
 src/server/http-static.ts → c3-202
@@ -702,6 +709,8 @@ src/server/keybindings.test.ts → c3-222
 src/server/keybindings.ts → c3-222
 src/server/cloudflare-tunnel/**/*.ts → c3-223
 src/server/oauth-pool/**/*.ts → c3-224
+src/server/kanna-mcp-beacon-transfer.test.ts → c3-226
+src/server/kanna-mcp-beacon-transfer.ts → c3-226
 src/server/kanna-mcp-beacon.test.ts → c3-226
 src/server/kanna-mcp-beacon.ts → c3-226
 src/server/kanna-mcp.test.ts → c3-226
@@ -803,21 +812,36 @@ src/server/ws-router.stack.test.ts → c3-239
 src/server/genui/*.ts → c3-240
 src/server/turn-end-guard.ts → c3-240
 src/server/ws-router-genui.ts → c3-240
+apps/beacon-desktop/**/* → c3-241
+apps/beacon-win7/**/* → c3-241
+scripts/beacon-desktop-icons.ts → c3-241
+scripts/build-beacon-desktop.ts → c3-241
+src/beacon/activity.test.ts → c3-241
+src/beacon/activity.ts → c3-241
+src/beacon/desktop/**/*.ts → c3-241
+src/beacon/desktop/**/*.tsx → c3-241
+src/beacon/desktop/view/beacon-desktop.css → c3-241
 src/beacon/entry.adapter.ts → c3-241
 src/beacon/fs.adapter.test.ts → c3-241
 src/beacon/fs.adapter.ts → c3-241
+src/beacon/host-os.ts → c3-241
 src/beacon/key-store.adapter.test.ts → c3-241
 src/beacon/key-store.adapter.ts → c3-241
 src/beacon/main.test.ts → c3-241
 src/beacon/main.ts → c3-241
 src/beacon/pair-client.adapter.ts → c3-241
 src/beacon/ports.ts → c3-241
+src/beacon/runner.test.ts → c3-241
+src/beacon/runner.ts → c3-241
 src/beacon/session.test.ts → c3-241
 src/beacon/session.ts → c3-241
 src/beacon/shell.adapter.test.ts → c3-241
 src/beacon/shell.adapter.ts → c3-241
 src/beacon/state-store.adapter.ts → c3-241
+src/beacon/transfer.adapter.ts → c3-241
 src/beacon/transport.adapter.ts → c3-241
+src/beacon/version.test.ts → c3-241
+src/beacon/version.ts → c3-241
 src/shared/analytics.ts → c3-301
 src/shared/dynamic-module.ts → c3-301
 src/shared/json.test.ts → c3-301
@@ -839,6 +863,8 @@ src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
 src/shared/beacon-config.ts → c3-302
+src/shared/beacon-pair-link.test.ts → c3-302
+src/shared/beacon-pair-link.ts → c3-302
 src/shared/beacon-protocol.test.ts → c3-302
 src/shared/beacon-protocol.ts → c3-302
 src/shared/beacon-scope.test.ts → c3-302
@@ -847,6 +873,7 @@ src/shared/beacon-status.test.ts → c3-302
 src/shared/beacon-status.ts → c3-302
 src/shared/beacon-tool-request.ts → c3-302
 src/shared/beacon-tools.ts → c3-302
+src/shared/beacon-transfer.ts → c3-302
 src/shared/chat-ops.test.ts → c3-302
 src/shared/chat-ops.ts → c3-302
 src/shared/live-block.ts → c3-302

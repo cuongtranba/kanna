@@ -25,7 +25,7 @@ function isMissing(error: Error): boolean {
   return "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
 }
 
-async function realRoots(roots: readonly string[]): Promise<string[]> {
+export async function realRoots(roots: readonly string[]): Promise<string[]> {
   const resolved: string[] = []
   for (const root of roots) {
     try {
@@ -37,7 +37,7 @@ async function realRoots(roots: readonly string[]): Promise<string[]> {
   return resolved
 }
 
-async function nearestExistingRealpath(path: string): Promise<string | null> {
+export async function nearestExistingRealpath(path: string): Promise<string | null> {
   let current = resolve(path)
   for (;;) {
     try {
@@ -51,11 +51,11 @@ async function nearestExistingRealpath(path: string): Promise<string | null> {
   }
 }
 
-function denied(path: string): BeaconScopeError {
-  return new BeaconScopeError(`path is outside the permitted read roots: ${path}`)
+export function denied(path: string, kind: "read" | "write" = "read"): BeaconScopeError {
+  return new BeaconScopeError(`path is outside the permitted ${kind} roots: ${path}`)
 }
 
-async function containedRealpath(path: string, roots: readonly string[]): Promise<string> {
+export async function containedRealpath(path: string, roots: readonly string[]): Promise<string> {
   const allowed = await realRoots(roots)
   let real: string
   try {

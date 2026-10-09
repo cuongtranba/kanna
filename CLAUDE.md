@@ -503,6 +503,42 @@ Run it by hand with `bun run check:commits --range origin/main..HEAD`.
 
 **Leak response runbook:** see the wiki's [Secret Scanning](https://kanna-wiki.lowbit.link/guides/contributing/secret-scanning/) page. The summary: **rotate the credential first**, then remove it from the tree. History rewrite (`git filter-repo` / BFG) breaks every open PR and worktree — rewrite only when the credential cannot be rotated; a rotated credential in history is inert.
 
+# Beacon file transfer (`beacon_pull`, `beacon_push`)
+
+Two MCP tools copy ONE file between a chat's project and a paired beacon, over
+HTTP, disk to disk. Design and the six invariants: `docs/superpowers/specs/2026-10-09-beacon-file-transfer-design.md`;
+ADR `adr-20261009-beacon-file-transfer`. Protocol 3 adds the `upload` (beacon →
+Kanna, tool `beacon_pull`, judged by `readRoots`) and `download` (Kanna →
+beacon, tool `beacon_push`, judged by `writeRoots`) request ops.
+
+- **The bytes never touch the model or the WebSocket.** The request frame
+  carries only a ticket; the beacon then talks to `/beacon/transfer` with
+  `Authorization: Bearer <ticket>`. No cookie, no origin check, and
+  `!auth → 403` like `/beacon/pair`. A tool result carries path, byte count and
+  sha256 only. Never `readFile` or `.arrayBuffer()` file content on either side.
+- **A ticket is one file, one direction, one beacon.** `beacon-transfer-tickets.ts`
+  is pure (clock and token injected); `beacon-transfer-http.adapter.ts` streams to
+  disk. Every piece moved calls `touch`, so a slow link that still moves bytes
+  never idles out. Idle, disconnect, cancel or a failed `complete` revokes the
+  ticket and the beacon's next request gets 401.
+- **No fixed deadline.** `dispatchBeaconRequest` takes `timeoutMs: null` for
+  transfers; the 600 s `BEACON_REQUEST_TIMEOUT_MS` and the beacon's
+  `perCallTimeoutMs` / `outputByteCap` do not apply.
+- **Atomic replace.** Both sides write `<dest>.kanna-part` and rename it only
+  after size and SHA-256 verify; a failure deletes the part. `beacon_pull`
+  deletes a stale part at mint time, otherwise a new ticket would "resume" a
+  different file's bytes.
+- **`writeRoots` stays out of `set-scope`**, so a beacon cannot grant itself
+  write access; only Kanna settings edit it.
+- **Kanna-side deny lists apply too:** `beacon_push` refuses a `source` matching
+  the chat's `readPathDeny` and `beacon_pull` a destination matching `writePathDeny`.
+- **Both beacons implement it.** The Bun daemon (`src/beacon/transfer.adapter.ts`)
+  and the Go port (`apps/beacon-win7/internal/transfer`) share the constants in
+  `src/shared/beacon-transfer.ts` and the request fixtures in
+  `apps/beacon-win7/testdata/conformance/frames.json`. The registry fails a
+  transfer op at once for a beacon below `TRANSFER_PROTOCOL` (3); without that
+  gate an old beacon drops the unknown op and the call hangs.
+
 # Windows 7 beacon (apps/beacon-win7, Go 1.20)
 
 `apps/beacon-win7` is a second beacon, in Go, for Windows 7 and 8.1, where Bun

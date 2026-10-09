@@ -176,6 +176,7 @@ beacon at once.
 | Setting | Effect |
 | --- | --- |
 | Folders the agent may read (`readRoots`) | The only directories the agent can read, list, search or fetch from. Anything outside is denied. Empty means no file access at all. In the app, **Add folder** opens the system folder picker. |
+| Folders the agent may write to (`writeRoots`) | The only directories `beacon_push` may put files into. Empty means the agent cannot write to this machine. Set this in Kanna; a beacon cannot widen it. |
 | Allow running commands (`exec`) | Off by default. Until it is on, the agent cannot run commands or scripts on this machine. |
 | Commands that always run without asking (`execAllowlist`) | With exec on, a command whose name is listed here runs immediately. Any other command asks you first. Set this in Kanna. |
 | Run commands and scripts from this chat without asking each time (`autoRunScripts`) | Removes the per-call approval prompt: reads inside your folders and any command you have enabled run immediately. In the app this is the **Ask me in Kanna before each read or command** box, turned off. |
@@ -193,6 +194,30 @@ your Kanna can do the same there (which is why a password is required). The
 flag is **off by default** and **per machine**, so a beacon paired through the
 bare CLI asks before every run until you turn it on. The transcript still
 records every run, and turning the setting off withdraws the consent.
+
+## Moving files
+
+Two tools move one whole file between a chat's project and a beacon, without
+the file passing through the model:
+
+- **`beacon_pull`** copies a file from the beacon into the project. It must be
+  inside the beacon's read folders. By default it lands in
+  `.kanna/uploads/<name>` (a taken name becomes `name (1).ext`); the agent can
+  name another project-relative destination, and replacing an existing file
+  needs `overwrite`.
+- **`beacon_push`** copies a project file to a path on the beacon. The path
+  must be inside a **write folder** you added under **Settings → Beacons →
+  Scope**; without one the push is refused. An existing file is only replaced
+  with `overwrite`.
+
+The bytes travel over HTTP in 8 MiB pieces and resume after a dropped
+connection. Both ends compute a SHA-256 and the file only appears at its final
+name once the checksums match, so a failed or cancelled transfer never leaves a
+half-written file. There is no total time limit: a transfer ends only when no
+data has moved for two minutes, the beacon disconnects, or you stop the chat.
+Both tools ask for approval like any other beacon action unless you turned on
+auto-run. The beacon must be updated to the version that speaks protocol 3;
+older ones answer that they are too old to transfer files.
 
 ## The record, pausing and unpairing (app)
 
@@ -223,6 +248,10 @@ stored state (`~/.kanna-beacon`).
 
 ## Troubleshooting
 
+- **A push is refused as outside the scope** — add the destination folder under
+  **Folders the agent may write to**.
+- **"too old to transfer files"** — update the beacon on that machine and
+  reconnect it.
 - **Pairing is refused** — no Kanna password is set. Set one first.
 - **Code expired** — mint a new one; codes are single-use and short-lived.
 - **Machine shows Offline** — check that `kanna-beacon run` is running and the

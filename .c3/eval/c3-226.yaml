@@ -5,6 +5,8 @@ code:
   - src/server/mcp-validator.ts
   - src/server/kanna-mcp-beacon.ts
   - src/server/kanna-mcp-beacon.test.ts
+  - src/server/kanna-mcp-beacon-transfer.ts
+  - src/server/kanna-mcp-beacon-transfer.test.ts
   - src/server/kanna-mcp.ts
   - src/server/kanna-mcp.test.ts
   - src/server/tool-callback.ts

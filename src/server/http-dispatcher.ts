@@ -18,6 +18,9 @@ import { handlePluginRequest } from "./plugin-http-routes"
 import { configurePluginService, getPluginService } from "./plugins/plugin-service-host"
 import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
 import { getBeaconPairingStore } from "./beacon-pairing-host"
+import { getBeaconTransferTickets } from "./beacon-transfer-host"
+import { createBeaconTransferHandler } from "./beacon-transfer-http.adapter"
+import { TRANSFER_COMPLETE_ROUTE, TRANSFER_ROUTE } from "../shared/beacon-transfer"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type { BeaconInput } from "../shared/beacon-config"
 
@@ -96,6 +99,8 @@ export function createHttpDispatcher(
 
   configurePluginService(createInstalledPluginStore(appSettings))
 
+  const beaconTransfer = createBeaconTransferHandler(getBeaconTransferTickets())
+
   const tusUploads = createTusUploads(
     (projectId) => store.getProject(projectId) ?? null,
     () => appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB,
@@ -139,6 +144,11 @@ export function createHttpDispatcher(
     if (url.pathname === "/beacon/pair") {
       if (!auth) return new Response("Beacons require a password", { status: 403 })
       return handleBeaconPair(req, appSettings)
+    }
+
+    if (url.pathname === TRANSFER_ROUTE || url.pathname === TRANSFER_COMPLETE_ROUTE) {
+      if (!auth) return new Response("Beacons require a password", { status: 403 })
+      return beaconTransfer(req, url)
     }
 
     if (url.pathname === "/beacon") {

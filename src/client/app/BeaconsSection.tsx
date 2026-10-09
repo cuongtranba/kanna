@@ -352,6 +352,10 @@ function ScopeEditor({
     commit({ ...scope, readRoots })
   }, [commit, scope])
 
+  const onWriteRoots = useCallback((writeRoots: readonly string[]) => {
+    commit({ ...scope, writeRoots })
+  }, [commit, scope])
+
   const onAllowlist = useCallback((execAllowlist: readonly string[]) => {
     commit({ ...scope, execAllowlist })
   }, [commit, scope])
@@ -379,6 +383,15 @@ function ScopeEditor({
         items={scope.readRoots}
         disabled={pending}
         onChange={onReadRoots}
+      />
+      <ScopeList
+        label="Folders the agent may write to"
+        description="beacon_push can only put files inside these folders. Leave empty and the agent cannot write to this machine."
+        placeholder="/Users/me/inbox"
+        draftKey={beaconDraftKey(beaconId, "writeRoots")}
+        items={scope.writeRoots}
+        disabled={pending}
+        onChange={onWriteRoots}
       />
       <ScopeList
         label="Commands that always run without asking"
@@ -418,6 +431,7 @@ function ScopeToggle({
 
 function ScopeList({
   label,
+  description,
   placeholder,
   draftKey,
   items,
@@ -425,6 +439,7 @@ function ScopeList({
   onChange,
 }: {
   label: string
+  description?: string
   placeholder: string
   draftKey: string
   items: readonly string[]
@@ -453,6 +468,7 @@ function ScopeList({
   return (
     <div className="flex flex-col gap-2">
       <span className="text-sm font-medium text-foreground">{label}</span>
+      {description !== undefined && <span className="text-13 text-muted-foreground">{description}</span>}
       {items.length === 0 ? (
         <span className="text-13 text-muted-foreground">None</span>
       ) : (

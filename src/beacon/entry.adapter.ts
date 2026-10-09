@@ -6,6 +6,7 @@ import { createKeyStore } from "./key-store.adapter"
 import { runBeaconCli } from "./main"
 import { createPairClient } from "./pair-client.adapter"
 import { createBeaconShell } from "./shell.adapter"
+import { createBeaconTransfer } from "./transfer.adapter"
 import { createStateStore } from "./state-store.adapter"
 import { createWebSocketTransport } from "./transport.adapter"
 import { BEACON_VERSION } from "./version"
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
     openTransport: (url) => createWebSocketTransport({ url }),
     createFs: createBeaconFs,
     createShell: createBeaconShell,
+    createTransfer: createBeaconTransfer,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: (line) => process.stderr.write(`${line}\n`),
   })

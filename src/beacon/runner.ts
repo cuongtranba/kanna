@@ -6,7 +6,14 @@ import {
 } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
 import type { BeaconActivity } from "./activity"
-import type { BeaconFsPort, BeaconKeyStore, BeaconShellPort, BeaconState, BeaconTransport } from "./ports"
+import type {
+  BeaconFsPort,
+  BeaconKeyStore,
+  BeaconShellPort,
+  BeaconState,
+  BeaconTransferPort,
+  BeaconTransport,
+} from "./ports"
 import { createBeaconSession, type BeaconSession } from "./session"
 
 export const MAX_BACKOFF_MS = 30_000
@@ -38,6 +45,13 @@ export interface BeaconRunnerSnapshot {
 
 export type BeaconRunnerExit = { reason: "incompatible" | "revoked" | "unpaired" | "stopped" }
 
+export interface BeaconTransferContext {
+  kannaUrl: string
+  beaconVersion: string
+  getReadRoots: () => readonly string[]
+  getWriteRoots: () => readonly string[]
+}
+
 export interface BeaconRunnerDeps {
   state: BeaconState
   os: BeaconOs
@@ -46,6 +60,7 @@ export interface BeaconRunnerDeps {
   openTransport: (url: string) => BeaconTransport
   createFs: (getReadRoots: () => readonly string[]) => BeaconFsPort
   createShell: (os: BeaconOs) => BeaconShellPort
+  createTransfer: (context: BeaconTransferContext) => BeaconTransferPort
   sleep: (ms: number) => Promise<void>
   now: () => number
   startPaused?: boolean
@@ -78,6 +93,12 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
   const url = beaconSocketUrl(deps.state.kannaUrl)
   const shell = deps.createShell(deps.os)
   const fs = deps.createFs(() => scope?.readRoots ?? [])
+  const transfer = deps.createTransfer({
+    kannaUrl: deps.state.kannaUrl,
+    beaconVersion: deps.beaconVersion,
+    getReadRoots: () => scope?.readRoots ?? [],
+    getWriteRoots: () => scope?.writeRoots ?? [],
+  })
   const listeners = new Set<(snapshot: BeaconRunnerSnapshot) => void>()
   let status: BeaconRunnerStatus = deps.startPaused ? { phase: "paused" } : { phase: "connecting", attempt: 1 }
   let scope: BeaconScope | null = null
@@ -130,6 +151,7 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
       keyStore: deps.keyStore,
       fs,
       shell,
+      transfer,
       now: deps.now,
       onReady: (granted, protocol) => {
         wasOnline = true

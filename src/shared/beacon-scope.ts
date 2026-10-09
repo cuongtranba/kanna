@@ -112,6 +112,11 @@ function evaluateRead(scope: BeaconScope, path: string): BeaconVerdict {
   return scope.autoRunScripts ? "allow" : "ask"
 }
 
+function evaluateWrite(scope: BeaconScope, path: string): BeaconVerdict {
+  if (!isPathInsideRoots(path, scope.writeRoots)) return "deny"
+  return scope.autoRunScripts ? "allow" : "ask"
+}
+
 function evaluateExec(scope: BeaconScope, cmd: string): BeaconVerdict {
   if (!scope.exec) return "deny"
   if (scope.autoRunScripts) return "allow"
@@ -138,7 +143,10 @@ export function evaluateBeaconRequest(
     case "stat":
     case "glob":
     case "fetch":
+    case "upload":
       return evaluateRead(scope, request.path)
+    case "download":
+      return evaluateWrite(scope, request.path)
     case "grep":
       return evaluateRead(scope, request.root)
     case "exec":

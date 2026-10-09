@@ -228,4 +228,17 @@ describe("beacon registry scope push", () => {
     registry.pushScope("b1", { ...DEFAULT_BEACON_SCOPE, exec: true }, { force: true })
     expect(socket.sent).toEqual([])
   })
+
+  test("a transfer request to a beacon that predates protocol 3 fails at once without being sent", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.0.0", protocolVersion: 2, scope: DEFAULT_BEACON_SCOPE })
+    const { sink, events } = recordingSink()
+
+    registry.dispatch("b1", { op: "upload", path: "/a", ticket: "tok" }, sink)
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toContain("too old to transfer files")
+    expect(socket.sent).toEqual([])
+  })
 })

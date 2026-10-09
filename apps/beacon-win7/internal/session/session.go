@@ -3,6 +3,7 @@
 package session
 
 import (
+	"context"
 	"errors"
 	"math"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/fsops"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/shell"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transfer"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transport"
 )
 
@@ -33,6 +35,7 @@ type Deps struct {
 	Transport      transport.Transport
 	Signer         Signer
 	FS             *fsops.FS
+	Transfer       *transfer.Transferer
 	OnReady        func(scope protocol.Scope, serverProtocol float64)
 	OnScope        func(scope protocol.Scope)
 	OnRefused      func(reason string)
@@ -59,11 +62,15 @@ type Session struct {
 	serverProtocol float64
 	running        int
 	queue          []func()
+
+	connection context.Context
+	closed     context.CancelFunc
 }
 
 // New returns an idle session; call Start to announce the beacon.
 func New(deps Deps) *Session {
-	return &Session{deps: deps, serverProtocol: protocol.MinBeaconProtocol}
+	connection, closed := context.WithCancel(context.Background())
+	return &Session{deps: deps, serverProtocol: protocol.MinBeaconProtocol, connection: connection, closed: closed}
 }
 
 // Start registers the session on its transport and sends the hello frame.
@@ -77,6 +84,7 @@ func (s *Session) Start() {
 		defer s.mu.Unlock()
 		s.phase = phaseStopped
 		s.queue = nil
+		s.closed()
 	})
 	s.deps.Transport.Send(protocol.Hello{
 		BeaconID:        s.deps.BeaconID,
@@ -246,7 +254,13 @@ func (s *Session) serve(id string, request protocol.Request, granted protocol.Sc
 		send(protocol.Exit{ID: id, Code: float64(code)})
 		return
 	}
-	result, err := s.runFS(request)
+	var result any
+	var err error
+	if request.Op == protocol.OpUpload || request.Op == protocol.OpDownload {
+		result, err = s.runTransfer(request)
+	} else {
+		result, err = s.runFS(request)
+	}
 	if err != nil {
 		send(protocol.ErrorFrame{ID: id, Message: err.Error()})
 		return
@@ -268,6 +282,24 @@ func (s *Session) runShell(id string, request protocol.Request, granted protocol
 		return shell.Exec(request.Cmd, request.Args, cwd, out, limits), nil
 	}
 	return shell.Script(request.Body, out, limits), nil
+}
+
+// runTransfer carries no per-call timeout and no output cap: a transfer ends
+// when it finishes, fails, or the connection drops, which cancels it.
+func (s *Session) runTransfer(request protocol.Request) (any, error) {
+	if s.deps.Transfer == nil {
+		return nil, errors.New(UnsupportedOperation)
+	}
+	if request.Op == protocol.OpUpload {
+		return result(s.deps.Transfer.Upload(s.connection, request.Path, request.Ticket))
+	}
+	return result(s.deps.Transfer.Download(s.connection, transfer.DownloadRequest{
+		Path:      request.Path,
+		Ticket:    request.Ticket,
+		Size:      int64(request.Size),
+		SHA256:    request.Sha256,
+		Overwrite: request.Overwrite,
+	}))
 }
 
 func (s *Session) runFS(request protocol.Request) (any, error) {

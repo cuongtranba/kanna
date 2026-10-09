@@ -118,7 +118,7 @@ function getPathArg(args: JsonObject): string | null {
   return null
 }
 
-function pathMatchesDeny(absPath: string, deny: string[]): string | null {
+export function pathMatchesDeny(absPath: string, deny: string[]): string | null {
   for (const pattern of deny) {
     let expanded = pattern.startsWith("~")
       ? path.join(homedir(), pattern.slice(1).replace(/^\//, ""))

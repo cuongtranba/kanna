@@ -1,7 +1,8 @@
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "./json"
 import type { BeaconScope } from "./beacon-scope"
+import { SHA256_HEX, TRANSFER_PROTOCOL } from "./beacon-transfer"
 
-export const BEACON_PROTOCOL_VERSION = 2
+export const BEACON_PROTOCOL_VERSION = TRANSFER_PROTOCOL
 export const MIN_BEACON_PROTOCOL = 1
 export const SCOPE_SYNC_PROTOCOL = 2
 
@@ -23,6 +24,8 @@ export type BeaconRequest =
   | { op: "fetch"; path: string; chunkFrom?: number }
   | { op: "stat"; path: string }
   | { op: "glob"; path: string }
+  | { op: "upload"; path: string; ticket: string }
+  | { op: "download"; path: string; ticket: string; size: number; sha256: string; overwrite: boolean }
 
 export type BeaconFrame =
   | { kind: "hello"; beaconId: string; protocolVersion: number; beaconVersion: string; os: BeaconOs }
@@ -161,6 +164,29 @@ function parseFetchRequest(object: JsonObject): BeaconRequest | null {
   return chunkFrom === undefined ? { op: "fetch", path } : { op: "fetch", path, chunkFrom }
 }
 
+function readTicket(object: JsonObject): string | null {
+  const ticket = readString(object, "ticket")
+  return ticket === null || ticket === "" ? null : ticket
+}
+
+function parseUploadRequest(object: JsonObject): BeaconRequest | null {
+  const path = readString(object, "path")
+  const ticket = readTicket(object)
+  if (path === null || ticket === null) return null
+  return { op: "upload", path, ticket }
+}
+
+function parseDownloadRequest(object: JsonObject): BeaconRequest | null {
+  const path = readString(object, "path")
+  const ticket = readTicket(object)
+  const size = readNumber(object, "size")
+  const sha256 = readString(object, "sha256")
+  const overwrite = readBoolean(object, "overwrite")
+  if (path === null || ticket === null || size === null || sha256 === null || overwrite === null) return null
+  if (!Number.isInteger(size) || size < 0 || !SHA256_HEX.test(sha256)) return null
+  return { op: "download", path, ticket, size, sha256, overwrite }
+}
+
 function parseBeaconRequest(value: JsonValue): BeaconRequest | null {
   if (!isJsonObject(value)) return null
   switch (readString(value, "op")) {
@@ -184,6 +210,10 @@ function parseBeaconRequest(value: JsonValue): BeaconRequest | null {
       const path = readString(value, "path")
       return path === null ? null : { op: "glob", path }
     }
+    case "upload":
+      return parseUploadRequest(value)
+    case "download":
+      return parseDownloadRequest(value)
     default:
       return null
   }

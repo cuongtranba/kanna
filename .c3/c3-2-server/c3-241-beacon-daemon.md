@@ -1,6 +1,6 @@
 ---
 id: c3-241
-c3-seal: 08fbfa863792c80c3ac335e378b9dd70f05ad1541cbc08aaffb260ddb59cf5c7
+c3-seal: 4af5f8d11cf35a2b246cab7652e54e7f0c086dbfb5da25931da3f3e813e7f934
 title: beacon-daemon
 type: component
 category: feature
@@ -44,7 +44,8 @@ Owns the beacon daemon: pairing client, key and state storage, the authenticated
 | Pair client | OUT | Redeems a one-time pairing code against the server and stores the resulting key | c3-202 | src/beacon/pair-client.adapter.ts |
 | Desktop app | IN/OUT | Pairs from a kanna-beacon link, edits the grant, records served requests, pauses and unpairs; the view and Electrobun glue only call this service | c3-302 | src/beacon/desktop/desktop-app.ts |
 | Runner | IN/OUT | Owns the reconnect loop for the CLI and the desktop app: pause, resume, stop, unpair, and typed status snapshots | c3-202 | src/beacon/runner.ts |
-| Windows 7 beacon | IN/OUT | Go 1.20 port of the CLI plus a Win32 tray, speaking protocol 2; its frame, path and signature behaviour is pinned by fixtures both suites assert | c3-302 | apps/beacon-win7/internal/session/session.go |
+| Windows 7 beacon | IN/OUT | Go 1.20 port of the CLI plus a Win32 tray, speaking protocol 3; its frame, path and signature behaviour is pinned by fixtures both suites assert | c3-302 | apps/beacon-win7/internal/session/session.go |
+| File transfer | IN/OUT | Serves the upload and download ops by streaming one file in 8 MiB chunks over HTTP with a bearer ticket, resuming after a 409 and verifying SHA-256 before an atomic rename; bounded by idle time, never by perCallTimeoutMs or outputByteCap | c3-202 | src/beacon/transfer.adapter.ts |
 
 ## Derived Materials
 
@@ -53,3 +54,4 @@ Owns the beacon daemon: pairing client, key and state storage, the authenticated
 | src/beacon/main.ts | c3-241 Contract | CLI argument wording | src/beacon/main.ts |
 | src/beacon/fs.adapter.ts | c3-241 Contract | Platform path handling | src/beacon/fs.adapter.ts |
 | src/beacon/shell.adapter.ts | c3-241 Contract | Platform shell selection | src/beacon/shell.adapter.ts |
+| src/beacon/transfer.adapter.ts | c3-241 Contract | Chunk size and retry timing | src/beacon/transfer.adapter.ts |

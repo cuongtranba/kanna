@@ -3,6 +3,7 @@ import type { ServerWebSocket } from "bun"
 import type { JsonValue } from "../shared/json"
 import { SCOPE_SYNC_PROTOCOL, type BeaconFrame, type BeaconRequest } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
+import { TRANSFER_PROTOCOL } from "../shared/beacon-transfer"
 import type { BeaconLiveState } from "../shared/beacon-status"
 import type { ClientState } from "./ws-router"
 
@@ -52,6 +53,13 @@ interface BeaconEntry {
 interface PendingRequest {
   beaconId: string
   sink: BeaconRequestSink
+}
+
+const TRANSFER_UNSUPPORTED =
+  "this beacon is too old to transfer files; update the beacon on that machine and reconnect it"
+
+function isTransferRequest(request: BeaconRequest): boolean {
+  return request.op === "upload" || request.op === "download"
 }
 
 export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconRegistry {
@@ -161,6 +169,11 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       const requestId = randomUUID()
       const cancel = () => {
         pending.delete(requestId)
+      }
+      const entry = entries.get(beaconId)
+      if (entry && isTransferRequest(request) && entry.protocolVersion < TRANSFER_PROTOCOL) {
+        sink.onError?.(TRANSFER_UNSUPPORTED)
+        return { requestId, cancel }
       }
       pending.set(requestId, { beaconId, sink })
       if (!send(beaconId, { kind: "request", id: requestId, request })) {

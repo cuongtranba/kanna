@@ -5,6 +5,7 @@ import type { BeaconToolOp } from "./tool-call-types"
 export type BeaconToolArgs = Readonly<Record<string, JsonValue | undefined>>
 
 export const DEFAULT_BEACON_READ_LIMIT = 65536
+export const UNMINTED_TICKET = ""
 
 function readText(args: BeaconToolArgs, key: string): string | null {
   const value = args[key]
@@ -76,6 +77,15 @@ export function buildBeaconRequest(op: BeaconToolOp, args: BeaconToolArgs): Beac
     case "script": {
       const body = readText(args, "body")
       return body === null ? null : { op: "script", body }
+    }
+    case "upload": {
+      const path = readText(args, "path")
+      return path === null ? null : { op: "upload", path, ticket: UNMINTED_TICKET }
+    }
+    case "download": {
+      const path = readText(args, "path")
+      if (path === null) return null
+      return { op: "download", path, ticket: UNMINTED_TICKET, size: 0, sha256: "", overwrite: args.overwrite === true }
     }
   }
 }
