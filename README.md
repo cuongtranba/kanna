@@ -135,6 +135,19 @@ bun run test          # never bare `bun test`
 
 Start with [`CLAUDE.md`](CLAUDE.md) and the [contributing guide](https://kanna-wiki.lowbit.link/guides/contributing/overview/). The server is event-sourced, IO is sealed behind `*.adapter.ts` files, and the lint gates enforce both; the [architecture page](https://kanna-wiki.lowbit.link/guides/contributing/architecture/) explains the shape. Releases are cut by release-please; see [Releasing](https://kanna-wiki.lowbit.link/guides/contributing/releasing/).
 
+## Documentation website
+
+The docs at [kanna-wiki.lowbit.link](https://kanna-wiki.lowbit.link) are built from [`wiki/`](wiki/) in this repo: an Astro Starlight site with its own `package.json`, kept apart from the root build, lint and tests. Every push to `main` that touches `wiki/**` rebuilds it and deploys it to GitHub Pages.
+
+```bash
+cd wiki
+bun install
+bun run dev           # live preview of the docs site
+bun run build         # the same build CI deploys
+```
+
+Pages live in `wiki/src/content/docs/`. Change a page in the same PR as the behavior it describes.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=cuongtranba%2Fkanna&type=date&legend=top-left">
