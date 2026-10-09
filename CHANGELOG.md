@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.70.0](https://github.com/cuongtranba/kanna/compare/v1.69.0...v1.70.0) (2026-10-09)
+
+
+### Features
+
+* **beacon:** stream files between Kanna and a beacon with beacon_pull and beacon_push ([#1231](https://github.com/cuongtranba/kanna/issues/1231)) ([45664e1](https://github.com/cuongtranba/kanna/commit/45664e164d5680d9b58f72f7ac87e2a86c159dea))
+
 ## [1.69.0](https://github.com/cuongtranba/kanna/compare/v1.68.0...v1.69.0) (2026-10-09)
 
 
