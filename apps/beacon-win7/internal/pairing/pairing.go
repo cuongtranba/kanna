@@ -163,6 +163,53 @@ func ParseInput(input string) (Target, bool) {
 	return toTarget(match[1], match[2])
 }
 
+var (
+	linkInText    = regexp.MustCompile(`(?i)kanna-beacon://\S+`)
+	commandInText = regexp.MustCompile(`(?i)kanna-beacon[\w.-]*["']?\s+pair\s+(\S+)\s+(\S+)`)
+	urlInText     = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
+	codeInText    = regexp.MustCompile(`\b(?:[A-Za-z2-9]{4}-[A-Za-z2-9]{4}|[A-Z2-9]{8})\b`)
+)
+
+func trimPunctuation(token string) string {
+	return strings.TrimRight(token, ".,;:!?)]}>\"'")
+}
+
+// FindInText looks for pairing details anywhere in text one person copied out
+// of a message from another: a kanna-beacon://pair link, a
+// "kanna-beacon pair <url> <code>" command, or a single Kanna address next to
+// a single pairing code. ParseInput stays strict for a clicked link; this is
+// its lenient sibling for chat messages with words around the details.
+func FindInText(text string) (Target, bool) {
+	for _, link := range linkInText.FindAllString(text, -1) {
+		if target, ok := parseLink(trimPunctuation(link)); ok {
+			return target, true
+		}
+	}
+	for _, match := range commandInText.FindAllStringSubmatch(text, -1) {
+		if target, ok := toTarget(trimPunctuation(match[1]), trimPunctuation(match[2])); ok {
+			return target, true
+		}
+	}
+	urls := urlInText.FindAllString(text, -1)
+	if len(urls) != 1 {
+		return Target{}, false
+	}
+	rest := strings.Replace(text, urls[0], " ", 1)
+	codes := map[string]bool{}
+	for _, candidate := range codeInText.FindAllString(rest, -1) {
+		if code := NormalizeCode(candidate); codePattern.MatchString(code) {
+			codes[code] = true
+		}
+	}
+	if len(codes) != 1 {
+		return Target{}, false
+	}
+	for code := range codes {
+		return toTarget(trimPunctuation(urls[0]), code)
+	}
+	return Target{}, false
+}
+
 // BuildLink renders the link Kanna shows for a pairing target.
 func BuildLink(target Target) string {
 	return LinkScheme + "://pair?url=" + encodeURIComponent(target.KannaURL) + "&code=" + encodeURIComponent(target.Code)

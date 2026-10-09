@@ -121,3 +121,36 @@ func TestAnythingElseIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestFindInTextReadsPairingDetailsOutOfAChatMessage(t *testing.T) {
+	want := Target{KannaURL: "https://kanna.example.com", Code: "ABCD2345"}
+	cases := map[string]string{
+		"command with words after it":  "Anh chạy lệnh này nhé: kanna-beacon pair https://kanna.example.com/ ABCD2345 rồi báo em",
+		"link ending a sentence":       "Bấm vào đây kanna-beacon://pair?url=https%3A%2F%2Fkanna.example.com&code=ABCD2345.",
+		"windows 7 exe name":           `C:\Tools> kanna-beacon-win7-x64.exe pair https://kanna.example.com abcd-2345`,
+		"address and a typed code":     "Địa chỉ: https://kanna.example.com\nMã: abcd-2345",
+		"address and an upper code":    "https://kanna.example.com, code ABCD2345 (5 phút)",
+		"command split over two lines": "kanna-beacon pair\nhttps://kanna.example.com\nABCD2345",
+	}
+	for name, text := range cases {
+		got, ok := FindInText(text)
+		if !ok || got != want {
+			t.Errorf("%s: FindInText = %+v, %v; want %+v", name, got, ok, want)
+		}
+	}
+}
+
+func TestFindInTextRefusesTextWithoutOneClearPairing(t *testing.T) {
+	cases := map[string]string{
+		"no details":          "Gửi anh link cài beacon nhé",
+		"address but no code": "https://kanna.example.com",
+		"two different codes": "https://kanna.example.com ABCD2345 hoặc WXYZ6789",
+		"ordinary words":      "https://kanna.example.com database settings",
+		"two addresses":       "https://kanna.example.com https://other.example.com ABCD2345",
+	}
+	for name, text := range cases {
+		if got, ok := FindInText(text); ok {
+			t.Errorf("%s: FindInText = %+v, want no match", name, got)
+		}
+	}
+}

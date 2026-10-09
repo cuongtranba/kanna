@@ -5,6 +5,7 @@ package tray
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -24,8 +25,69 @@ const (
 	MutexName      = `Local\KannaBeaconWin7Tray`
 	ReloadEvent    = `Local\KannaBeaconWin7TrayReload`
 	UnpairTimeout  = 5 * time.Second
-	NotPairedLabel = "Not paired. In Kanna, open Settings, Beacons, Pair a machine"
+	NotPairedLabel = "Not paired. Copy the pairing command from Kanna, then choose Pair from copied text"
+
+	PairFromClipboardLabel = "Pair from copied text..."
+	PairFromClipboardHint  = "Pairs with a kanna-beacon link or pairing command you copied, for example from a chat message"
 )
+
+// Explanations shown when copied text cannot be used to pair.
+const (
+	ClipboardEmpty = "Nothing is copied.\n\n" +
+		"In Kanna, open Settings, Beacons, Pair a machine, and press the copy button next to the pairing command. " +
+		"If someone else runs Kanna, ask them to send you that command, copy their whole message, then choose Pair from copied text again."
+	NoPairingFound = "The copied text has no pairing command or link.\n\n" +
+		"It should look like: kanna-beacon pair https://your-kanna-address ABCD2345\n\n" +
+		"Copy the whole command from Kanna (Settings, Beacons, Pair a machine), or the whole message someone sent you, then try again."
+	loopbackTemplate = "The copied command points at %s, which is the sender's own computer, so this computer cannot reach it.\n\n" +
+		"Ask them to open Kanna by an address this computer can reach (not localhost or 127.0.0.1), then send a new pairing command."
+	codeExpired = "This pairing code has expired or was already used. A code works once and only for 5 minutes.\n\n" +
+		"Ask for a new one in Kanna: Settings, Beacons, Pair a machine."
+	passwordMissingTemplate = "Kanna at %s has no password set, and beacons need one.\n\n" +
+		"Ask the person running Kanna to set a password, then send a new pairing command."
+	pairingFailedTemplate = "Pairing with %s failed: %s\n\nCheck that this computer can open %s in a browser."
+)
+
+// ClipboardTarget turns copied text into a pairing target. When the text
+// cannot be used it returns an explanation a person can act on instead.
+func ClipboardTarget(text string) (pairing.Target, string) {
+	if strings.TrimSpace(text) == "" {
+		return pairing.Target{}, ClipboardEmpty
+	}
+	target, ok := pairing.FindInText(text)
+	if !ok {
+		return pairing.Target{}, NoPairingFound
+	}
+	if isLoopback(target.KannaURL) {
+		return pairing.Target{}, fmt.Sprintf(loopbackTemplate, HostOf(target.KannaURL))
+	}
+	return target, ""
+}
+
+func isLoopback(kannaURL string) bool {
+	parsed, err := url.Parse(kannaURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+}
+
+// DescribePairingFailure explains a failed pairing request in words that say
+// what to do next, from the reason pairing.Pair reported.
+func DescribePairingFailure(kannaURL, reason string) string {
+	switch reason {
+	case "expired", "unknown":
+		return codeExpired
+	case "Beacons require a password":
+		return fmt.Sprintf(passwordMissingTemplate, HostOf(kannaURL))
+	}
+	return fmt.Sprintf(pairingFailedTemplate, HostOf(kannaURL), reason, kannaURL)
+}
 
 // HostOf returns the host part of a Kanna URL for display.
 func HostOf(kannaURL string) string {
