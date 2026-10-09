@@ -114,6 +114,13 @@ The tray takes the place of the Electrobun window on Windows 7:
   is already running (named mutex `Local\KannaBeaconWin7Tray`), signals it to
   reload through the named event `Local\KannaBeaconWin7TrayReload` and exits;
   otherwise it becomes the tray. There is no pairing window.
+- **Pair from copied text...** reads the clipboard and pairs from anything
+  `pairing.FindInText` recognises in it: a `kanna-beacon://pair` link, a
+  `kanna-beacon pair <url> <code>` command, or one Kanna address next to one
+  code, with words around them. It exists for the case where one person runs
+  Kanna and sends the pairing command to the person at the Windows 7 computer,
+  where a custom-scheme link in a chat app is usually not clickable. A
+  loopback address is refused, because it names the sender's computer.
 
 ## Where it differs from the Bun beacon
 

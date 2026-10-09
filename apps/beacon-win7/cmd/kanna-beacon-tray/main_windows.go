@@ -74,6 +74,13 @@ func pairFromLink(home, link string) bool {
 		fail("That isn't a valid pairing link. Copy it again from Kanna, Settings, Beacons.")
 		return false
 	}
+	return pairWith(home, target)
+}
+
+// pairWith redeems the code, stores the pairing and tells the person. The key
+// is reused when one exists, so re-pairing to another Kanna keeps this
+// computer's identity.
+func pairWith(home string, target pairing.Target) bool {
 	keys, err := keystore.Open(state.KeyPath(home))
 	if err != nil {
 		fail("Pairing failed: " + err.Error())
@@ -87,7 +94,7 @@ func pairFromLink(home, link string) bool {
 		OS:        protocol.OSWindows,
 	})
 	if !result.OK {
-		fail("Pairing failed: " + result.Error)
+		fail(tray.DescribePairingFailure(target.KannaURL, result.Error))
 		return false
 	}
 	if err := state.Save(state.Path(home), state.State{KannaURL: target.KannaURL, BeaconID: result.BeaconID}); err != nil {
@@ -132,6 +139,7 @@ func (a *trayApp) onReady() {
 	systray.SetTooltip(tray.AppName)
 	a.status = systray.AddMenuItem(tray.NotPairedLabel, "")
 	a.status.Disable()
+	pairItem := systray.AddMenuItem(tray.PairFromClipboardLabel, tray.PairFromClipboardHint)
 	systray.AddSeparator()
 	atLogin, _ := winsys.RunAtLogin(tray.RunValueName)
 	a.login = systray.AddMenuItemCheckbox("Start at login", "Start Kanna Beacon when you sign in to Windows", atLogin)
@@ -146,6 +154,8 @@ func (a *trayApp) onReady() {
 	go func() {
 		for {
 			select {
+			case <-pairItem.ClickedCh:
+				a.pairFromClipboard()
 			case <-a.login.ClickedCh:
 				a.toggleLogin()
 			case <-folder.ClickedCh:
@@ -271,6 +281,40 @@ func (a *trayApp) waitForReload() {
 		a.stop()
 		a.start()
 	}
+}
+
+// pairFromClipboard pairs with a command or link someone copied, typically
+// from a chat message sent by the person running Kanna on another computer.
+func (a *trayApp) pairFromClipboard() {
+	text, err := winsys.ClipboardText()
+	if err != nil {
+		fail("Could not read the copied text: " + err.Error())
+		return
+	}
+	target, problem := tray.ClipboardTarget(text)
+	if problem != "" {
+		fail(problem)
+		return
+	}
+	a.mu.Lock()
+	paired, previousLabel := a.paired, a.label
+	a.mu.Unlock()
+	if paired != nil {
+		question := fmt.Sprintf("This computer is paired with %s. Pair it with %s instead?", tray.HostOf(paired.KannaURL), tray.HostOf(target.KannaURL))
+		if winsys.MessageBox(tray.AppName, question, winsys.MBYesNo|winsys.MBIconWarning) != winsys.IDYes {
+			return
+		}
+	}
+	a.setLabel(func() string { return "Pairing with " + tray.HostOf(target.KannaURL) })
+	if !pairWith(a.home, target) {
+		if previousLabel == nil {
+			previousLabel = func() string { return tray.NotPairedLabel }
+		}
+		a.setLabel(previousLabel)
+		return
+	}
+	a.stop()
+	a.start()
 }
 
 func (a *trayApp) confirmUnpair() {

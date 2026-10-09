@@ -88,16 +88,29 @@ and 8.1 have a separate beacon instead, built from the same protocol:
 2. **Run the tray file once.** Keep it somewhere permanent, such as
    `%LOCALAPPDATA%\Kanna Beacon`, then double-click it. It registers the
    `kanna-beacon:` link handler and shows **Not paired** in its menu.
-3. **Pair.** In Kanna, choose **Pair a machine**, then click **Open in Kanna
-   Beacon**. The tray pairs, says so, and shows **Online**. With the
-   command-line file, run
-   `kanna-beacon-win7-x64.exe pair <kanna-url> <code>` and then
-   `kanna-beacon-win7-x64.exe run` instead.
+3. **Pair.** The tray has no pairing window; the pairing starts in Kanna,
+   under **Settings → Beacons → Pair a machine**, which shows a code that
+   works once, for 5 minutes. Use whichever of these fits:
+   - **Kanna is open on the Windows 7 computer:** click **Open in Kanna
+     Beacon** and allow the browser to open it.
+   - **Someone else runs Kanna** on another computer: they press the copy
+     button next to the pairing command and send it to you (chat, email,
+     TeamViewer). Copy their whole message on the Windows 7 computer, then in
+     the tray menu choose **Pair from copied text...**. The tray finds the
+     command, the `kanna-beacon://` link, or a Kanna address with a code
+     anywhere in what you copied.
+   - **Command line:** run `kanna-beacon-win7-x64.exe pair <kanna-url> <code>`
+     and then `kanna-beacon-win7-x64.exe run`.
+
+   The tray says when it is paired and shows **Online**. The pairing command
+   carries the address the sender opened Kanna at, so they must open Kanna at
+   an address the Windows 7 computer can reach; a command for `localhost` is
+   refused with that explanation.
 4. **Grant scope** in Kanna under **Settings → Beacons → Scope**. The tray has
    no scope window.
 
-The tray menu has **Start at login**, **Open beacon folder**, **Unpair this
-machine** and **Quit**. It shares `%USERPROFILE%\.kanna-beacon` with every
+The tray menu has **Pair from copied text...**, **Start at login**, **Open
+beacon folder**, **Unpair this machine** and **Quit**. It shares `%USERPROFILE%\.kanna-beacon` with every
 other beacon, so a machine you later upgrade to Windows 10 stays paired.
 
 Things to know:
