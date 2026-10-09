@@ -29,3 +29,4 @@ code:
   - apps/beacon-desktop/**/*
   - scripts/build-beacon-desktop.ts
   - scripts/beacon-desktop-icons.ts
+  - apps/beacon-win7/**/*

@@ -24,6 +24,11 @@ title = "Kanna"
     # pushClient.test.ts — VAPID *public* key used to test URL-safe
     # base64 decoding; public keys are not secrets.
     '''BPg4MhSNQjK4FjoUf4f9Ye_K2gM4ahK_5BWj9rYjZ8sHbqJj9oKkrFHBwZJh1XJF8AaXh''',
+
+    # apps/beacon-win7/testdata/conformance/signature.json — a synthetic
+    # Ed25519 test key whose seed is the bytes 0x00..0x1f, shared by the
+    # TypeScript and Go conformance suites. Not a credential.
+    '''MC4CAQAwBQYDK2VwBCIEIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f''',
   ]
 
   # Case-insensitive substrings matched against the extracted secret value.

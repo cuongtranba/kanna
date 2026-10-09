@@ -509,6 +509,7 @@ c3-241:
   - apps/beacon-desktop/**/*
   - scripts/build-beacon-desktop.ts
   - scripts/beacon-desktop-icons.ts
+  - apps/beacon-win7/**/*
 c3-123:
   - src/client/components/genui/**/*.ts
   - src/client/components/genui/**/*.tsx

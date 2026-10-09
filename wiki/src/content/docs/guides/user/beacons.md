@@ -60,12 +60,59 @@ For servers and scripts, the same beacon ships as a single binary:
   or `kanna-beacon-windows-x64.exe`, together with `SHA256SUMS`. Verify the
   checksum, rename the file to `kanna-beacon`, and mark it executable.
 
+- **Windows 7 / 8.1 only:** `kanna-beacon-tray-win7-x64.exe`,
+  `kanna-beacon-tray-win7-x86.exe`, `kanna-beacon-win7-x64.exe` and
+  `kanna-beacon-win7-x86.exe`, checked against `SHA256SUMS-win7`. See
+  [Windows 7](#windows-7) below.
+
 The command-line beacon has no window. Run it from a terminal (PowerShell on
 Windows). Opened by double-click on Windows, it prints its usage and a link to
 the app, then waits for Enter instead of closing at once.
 
 The app and the CLI share one identity on a machine (`~/.kanna-beacon`), so pair
 with one of them, not both.
+
+### Windows 7
+
+The Kanna Beacon app and `kanna-beacon-windows-x64.exe` need Windows 10 or
+newer; on Windows 7 the setup program fails with an `ntdll.dll` error. Windows 7
+and 8.1 have a separate beacon instead, built from the same protocol:
+
+1. **Pick the download.** `x64` is for 64-bit Windows, `x86` for 32-bit (see
+   **Control Panel → System → System type**). The **tray** files
+   (`kanna-beacon-tray-win7-x64.exe` or `kanna-beacon-tray-win7-x86.exe`) put an
+   icon in the notification area; the others (`kanna-beacon-win7-x64.exe`,
+   `kanna-beacon-win7-x86.exe`) are the command-line beacon. Check the file
+   against `SHA256SUMS-win7`, for example with
+   `certutil -hashfile kanna-beacon-tray-win7-x64.exe SHA256`.
+2. **Run the tray file once.** Keep it somewhere permanent, such as
+   `%LOCALAPPDATA%\Kanna Beacon`, then double-click it. It registers the
+   `kanna-beacon:` link handler and shows **Not paired** in its menu.
+3. **Pair.** In Kanna, choose **Pair a machine**, then click **Open in Kanna
+   Beacon**. The tray pairs, says so, and shows **Online**. With the
+   command-line file, run
+   `kanna-beacon-win7-x64.exe pair <kanna-url> <code>` and then
+   `kanna-beacon-win7-x64.exe run` instead.
+4. **Grant scope** in Kanna under **Settings → Beacons → Scope**. The tray has
+   no scope window.
+
+The tray menu has **Start at login**, **Open beacon folder**, **Unpair this
+machine** and **Quit**. It shares `%USERPROFILE%\.kanna-beacon` with every
+other beacon, so a machine you later upgrade to Windows 10 stays paired.
+
+Things to know:
+
+- **Install Windows Management Framework 5.1.** Scripts run through
+  `powershell.exe`, and Windows 7 ships PowerShell 2.0, which lacks most
+  commands written today. WMF 5.1 brings PowerShell 5.1.
+- **Not code-signed.** SmartScreen or your antivirus may warn; only run a copy
+  from the official release whose checksum matches.
+- **An older toolchain.** This beacon is built with Go 1.20, the last Go release
+  that runs on Windows 7, and Go 1.20 no longer receives security fixes. It
+  trusts the Windows certificate store first and falls back to a built-in copy
+  of Mozilla's root certificates, so it reaches an HTTPS Kanna even on a
+  machine that has not had certificate updates in years. Prefer a supported
+  Windows where you can.
 
 ### macOS first run (Gatekeeper)
 

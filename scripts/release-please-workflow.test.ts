@@ -123,4 +123,47 @@ describe("release-please workflow", () => {
     expect(evaluate(tag, released)).toBe("v1.60.0")
     expect(upload?.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}")
   })
+
+  it("builds the Windows 7 beacon in its own job, on the same gate as publish, with Go 1.20", () => {
+    const job = workflow.jobs["beacon-win7"]
+    expect(job).toBeDefined()
+    expect(job.needs).toBe("release-please")
+    expect(job.permissions).toEqual({ contents: "write" })
+    expect(job.if).toBe(workflow.jobs.publish.if)
+    expect(workflow.jobs.publish.needs).toBe("release-please")
+
+    const gate = job.if ?? "true"
+    expect(Boolean(evaluate(gate, pushEvent(true)))).toBe(true)
+    expect(Boolean(evaluate(gate, pushEvent(false)))).toBe(false)
+    expect(Boolean(evaluate(gate, dispatchEvent("v1.32.0")))).toBe(true)
+
+    const checkout = job.steps?.find((step) => step.uses?.startsWith("actions/checkout"))
+    expect(evaluate(String(checkout?.with?.ref ?? ""), dispatchEvent("v1.32.0"))).toBe("v1.32.0")
+
+    const setupGo = job.steps?.find((step) => step.uses?.startsWith("actions/setup-go"))
+    expect(setupGo?.with?.["go-version"]).toBe("1.20.14")
+  })
+
+  it("builds all four Windows 7 assets with their own checksum file and uploads them to the release", () => {
+    const job = workflow.jobs["beacon-win7"]
+    const build = (job.steps ?? []).map((step) => step.run ?? "").join("\n")
+    for (const asset of ["kanna-beacon-win7-", "kanna-beacon-tray-win7-"]) {
+      expect(build).toContain(`${asset}$label.exe`)
+    }
+    expect(build).toContain("amd64:x64")
+    expect(build).toContain("386:x86")
+    expect(build).toContain("-H=windowsgui")
+    expect(build).toContain("internal/version.Version=${version}")
+    expect(build).toContain("> SHA256SUMS-win7")
+    expect(build).not.toMatch(/>\s*SHA256SUMS\s*$/m)
+
+    const upload = job.steps?.find((step) => step.run?.includes("gh release upload"))
+    expect(upload?.run).toContain("dist-beacon-win7/*")
+    expect(upload?.run).toContain("--clobber")
+    const tag = String(upload?.env?.TAG ?? "")
+    expect(evaluate(tag, dispatchEvent("v1.32.0"))).toBe("v1.32.0")
+    const released = { ...pushEvent(true), needs: { "release-please": { outputs: { tag_name: "v1.60.0" } } } }
+    expect(evaluate(tag, released)).toBe("v1.60.0")
+    expect(upload?.env?.GH_TOKEN).toBe("${{ secrets.GITHUB_TOKEN }}")
+  })
 })

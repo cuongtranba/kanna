@@ -1,0 +1,8 @@
+{
+  "description": "A synthetic Ed25519 test key (seed = bytes 0x00..0x1f). Not a credential. The beacon signs the UTF-8 bytes of the nonce string; the server verifies with src/server/beacon-crypto.ts.",
+  "pkcs8Base64": "MC4CAQAwBQYDK2VwBCIEIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f",
+  "nonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+  "otherNonce": "not-the-signed-nonce",
+  "spkiBase64": "MCowBQYDK2VwAyEAA6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "signatureBase64": "fZtkK55Xv4epzYv9K/2+682/pyMQF1p5sIV7H0S2cY3SEYvEfz7+bdYvOlK0RROlxwEXnHOdw3GJlmOMZ2IpBw=="
+}
