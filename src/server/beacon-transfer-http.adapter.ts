@@ -12,7 +12,7 @@ import {
 import { hashFileStreaming } from "./beacon-transfer-files.adapter"
 import { partPathOf } from "./beacon-transfer-files"
 import type { BeaconTransferTickets, TransferOutcome, TransferTicket } from "./beacon-transfer-tickets"
-import { buildFileResponse } from "./http-file-response"
+import { buildFileResponse, parseByteRange } from "./http-file-response"
 
 const DIGITS = /^\d+$/
 const BEARER = /^Bearer\s+(\S+)$/i
@@ -134,15 +134,18 @@ export function createBeaconTransferHandler(
       return Response.json({ error: "the file is no longer available" }, { status: 404 })
     }
     if (!info.isFile()) return Response.json({ error: "the file is no longer available" }, { status: 404 })
+    const file = Bun.file(ticket.kannaPath)
     const response = buildFileResponse({
       req,
-      file: Bun.file(ticket.kannaPath),
+      file,
       size: info.size,
       mtimeMs: info.mtimeMs,
       contentType: "application/octet-stream",
     })
-    if (response.body === null) return response
-    const body = touchingStream(response.body, () => tickets.touch(token))
+    const range = parseByteRange(req.headers.get("range"), info.size)
+    if (response.status !== 206 || range.kind !== "range") return response
+    const slice = file.slice(range.start, range.end + 1).stream()
+    const body = touchingStream(slice, () => tickets.touch(token))
     return new Response(body, { status: response.status, headers: response.headers })
   }
 
