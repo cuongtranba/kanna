@@ -3,8 +3,15 @@ import type { BeaconOs } from "../../shared/beacon-protocol"
 import type { BeaconScope } from "../../shared/beacon-scope"
 import { errorMessage, onRejected } from "../../shared/errors"
 import type { BeaconActivity } from "../activity"
-import type { BeaconKeyStore, BeaconPairClient, BeaconPairingResult, BeaconState, BeaconStateStore } from "../ports"
-import type { BeaconRunner, BeaconRunnerSnapshot } from "../runner"
+import type {
+  BeaconKeyStore,
+  BeaconPairClient,
+  BeaconPairingResult,
+  BeaconState,
+  BeaconStateStore,
+  BeaconUpdateResult,
+} from "../ports"
+import type { BeaconRunner, BeaconRunnerExit, BeaconRunnerSnapshot } from "../runner"
 import type {
   DesktopCommandResult,
   DesktopGrant,
@@ -43,6 +50,7 @@ export interface DesktopAppDeps {
     startPaused: boolean
     onActivity: (activity: BeaconActivity) => void
   }): BeaconRunner
+  selfUpdate: { restart(): Promise<BeaconUpdateResult> }
   sleep: (ms: number) => Promise<void>
   log: (line: string) => void
 }
@@ -153,8 +161,22 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
     })
     next
       .run()
-      .then((exit) => deps.log(`beacon stopped: ${exit.reason}`))
+      .then((exit) => afterRunnerExit(next, state, exit))
       .catch(onRejected((error) => deps.log(`beacon run failed: ${error.message}`)))
+  }
+
+  async function afterRunnerExit(exited: BeaconRunner, state: BeaconState, exit: BeaconRunnerExit): Promise<void> {
+    deps.log(`beacon stopped: ${exit.reason}`)
+    if (exit.reason !== "update" || runner !== exited) return
+    const restarted = await deps.selfUpdate.restart()
+    if (restarted.ok) {
+      deps.log("restarting into the new version")
+      return
+    }
+    deps.log(`could not restart into the new version: ${restarted.error}`)
+    if (runner !== exited || pairing !== state) return
+    stopRunner()
+    startRunner(state)
   }
 
   function stopRunner(): void {

@@ -34,6 +34,30 @@ describe("status line", () => {
   })
 })
 
+describe("update status line", () => {
+  test("the last step before the app quits says it is restarting", () => {
+    const presented = presentStatus(
+      { status: { phase: "updating", version: "1.71.0", step: "restarting" }, scope: null, scopeSync: true },
+      en,
+      NOON,
+      "en",
+    )
+    expect(presented).toEqual({ tone: "attention", label: "Updating", detail: "restarting into version 1.71.0" })
+  })
+
+  test("a beacon too old for Kanna that could not update itself says why", () => {
+    const presented = presentStatus(
+      { status: { phase: "incompatible", minSupported: 4, updateError: "the latest release is 1.70.0" }, scope: null, scopeSync: false },
+      vi,
+      NOON,
+      "vi",
+    )
+    expect(presented.detail).toBe(
+      "Phiên bản Kanna Beacon này đã quá cũ so với Kanna của bạn. Tự cập nhật không thành công: the latest release is 1.70.0.",
+    )
+  })
+})
+
 describe("grant summary", () => {
   test("names every folder and states commands and approval separately", () => {
     expect(

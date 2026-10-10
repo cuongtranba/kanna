@@ -1,4 +1,4 @@
-import Electrobun, { BrowserView, BrowserWindow, Tray, Utils, type MenuItemConfig } from "electrobun/main"
+import Electrobun, { BrowserView, BrowserWindow, Tray, Updater, Utils, type MenuItemConfig } from "electrobun/main"
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import { homedir, hostname, platform, userInfo } from "node:os"
 import { dirname, join } from "node:path"
@@ -7,6 +7,7 @@ import { createBeaconDesktopApp } from "../../../src/beacon/desktop/desktop-app"
 import { createActivityLog, createLineLog, createPrefsStore } from "../../../src/beacon/desktop/desktop-files.adapter"
 import { AUTOSTART_ENV, BEACON_APP_NAME, desktopPaths } from "../../../src/beacon/desktop/desktop-os"
 import { createLoginItem, registerLinkHandler } from "../../../src/beacon/desktop/desktop-system.adapter"
+import { createDesktopSelfUpdate } from "../../../src/beacon/desktop/desktop-updater"
 import type { DesktopView } from "../../../src/beacon/desktop/desktop-types"
 import { listenAsPrimaryInstance, notifyRunningInstance } from "../../../src/beacon/desktop/single-instance.adapter"
 import { desktopStrings, type DesktopLocale } from "../../../src/beacon/desktop/strings"
@@ -15,7 +16,6 @@ import { beaconOsFor } from "../../../src/beacon/host-os"
 import { createKeyStore, eraseKeyStore } from "../../../src/beacon/key-store.adapter"
 import { createPairClient } from "../../../src/beacon/pair-client.adapter"
 import { createBeaconRunner } from "../../../src/beacon/runner"
-import { UNSUPPORTED_UPDATER } from "../../../src/beacon/self-update"
 import { createBeaconShell } from "../../../src/beacon/shell.adapter"
 import { createStateStore } from "../../../src/beacon/state-store.adapter"
 import { createBeaconTransfer } from "../../../src/beacon/transfer.adapter"
@@ -47,6 +47,18 @@ if (await notifyRunningInstance(paths.instanceEndpoint, { kind: "show" })) {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+const selfUpdate = createDesktopSelfUpdate({
+  localInfo: () => Updater.getLocalInfo(),
+  checkForUpdate: () => Updater.checkForUpdate(),
+  downloadUpdate: () => Updater.downloadUpdate(),
+  updateInfo: () => Updater.updateInfo(),
+  applyUpdate: () => Updater.applyUpdate(),
+})
+
+Updater.onStatusChange((entry) => {
+  if (entry.status !== "download-progress") log(`updater ${entry.status}: ${entry.message}`)
+})
+
 const app = createBeaconDesktopApp({
   os,
   machine: hostname(),
@@ -75,13 +87,14 @@ const app = createBeaconDesktopApp({
       createFs: createBeaconFs,
       createShell: createBeaconShell,
       createTransfer: createBeaconTransfer,
-      updater: UNSUPPORTED_UPDATER,
-      autoUpdate: false,
+      updater: selfUpdate.updater,
+      autoUpdate: process.env.KANNA_BEACON_AUTO_UPDATE !== "disabled",
       sleep,
       now: Date.now,
       startPaused,
       onActivity,
     }),
+  selfUpdate,
   sleep,
   log,
 })
@@ -200,10 +213,21 @@ function statusWord(view: DesktopView): string {
   }
 }
 
-async function quit(): Promise<void> {
+let released = false
+
+function releaseInstance(): void {
+  if (released) return
+  released = true
   app.shutdown()
   instance?.close()
+  instance = null
   tray.remove()
+}
+
+Electrobun.events.on("before-quit", releaseInstance)
+
+async function quit(): Promise<void> {
+  releaseInstance()
   Utils.quit()
 }
 
