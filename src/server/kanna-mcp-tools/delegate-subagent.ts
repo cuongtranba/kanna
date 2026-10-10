@@ -82,7 +82,7 @@ export function createDelegateSubagentTool(deps: {
         return {
           content: [{
             type: "text" as const,
-            text: "No active turn — delegate_subagent must be called inside a running chat turn.",
+            text: "delegate_subagent needs a running chat turn or a live background-task self-wake; neither is active right now.",
           }],
           isError: true,
         }

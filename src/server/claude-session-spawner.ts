@@ -33,6 +33,8 @@ import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import { isGenUIEnabled } from "./genui/genui-config"
 
+const SELF_WAKE_PROVENANCE_PREFIX = "self-wake:"
+
 
 interface SpawnOAuthPool {
   pickActive(chatId: string): { id: string; token: string; label: string; baseUrl?: string } | null | undefined
@@ -158,7 +160,12 @@ export async function spawnClaudeTurn(
       parentRunId: null,
       ancestorSubagentIds: [],
       depth: 0,
-      getParentUserMessageId: () => deps.activeTurns.get(chatIdForCtx)?.userMessageId ?? null,
+      getParentUserMessageId: () => {
+        const turn = deps.activeTurns.get(chatIdForCtx)
+        if (turn) return turn.userMessageId
+        const session = deps.claudeSessions.get(chatIdForCtx)
+        return session?.selfWakeActive ? `${SELF_WAKE_PROVENANCE_PREFIX}${session.id}` : null
+      },
       getMentionedSubagentIds: () => deps.mentionedSubagentIdsByChat.get(chatIdForCtx) ?? [],
     }
     const enabledMcpServers = deps.getEnabledCustomMcpServers()

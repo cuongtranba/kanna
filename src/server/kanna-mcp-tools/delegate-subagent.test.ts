@@ -118,7 +118,7 @@ describe("createDelegateSubagentTool", () => {
       { ...baseCtx(), getParentUserMessageId: () => null },
     )
     expect(result.isError).toBe(true)
-    expect(result.content[0].text).toContain("No active turn")
+    expect(result.content[0].text).toContain("delegate_subagent needs a running chat turn")
     expect(calls).toHaveLength(0)
   })
 
