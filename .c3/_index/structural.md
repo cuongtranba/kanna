@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:db2c42cee14ed2a9e30fbbac5b4e084ef1823a8b7910f3796b9fee0b2aacdac6 -->
+<!-- hash: sha256:6fb4ae2f65f694ee5cc6546d0346cb252a13034d02a1ef0ad5af1d55334bb83e -->
 
 ## c3-0 — Kanna (system)
 
@@ -297,7 +297,7 @@ files: src/server/genui/*.ts, src/server/turn-end-guard.ts, src/server/ws-router
 ## c3-241 — beacon-daemon (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter
-files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-icons.ts, scripts/build-beacon-desktop.ts, src/beacon/activity.test.ts, src/beacon/activity.ts, src/beacon/desktop/**/*.ts, src/beacon/desktop/**/*.tsx, src/beacon/desktop/view/beacon-desktop.css, src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/host-os.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/runner.test.ts, src/beacon/runner.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/transfer.adapter.ts, src/beacon/transport.adapter.ts, src/beacon/version.test.ts, src/beacon/version.ts
+files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-icons.ts, scripts/build-beacon-desktop.ts, scripts/build-beacon.ts, src/beacon/activity.test.ts, src/beacon/activity.ts, src/beacon/desktop/**/*.ts, src/beacon/desktop/**/*.tsx, src/beacon/desktop/view/beacon-desktop.css, src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/host-os.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/runner.test.ts, src/beacon/runner.ts, src/beacon/self-update.adapter.test.ts, src/beacon/self-update.adapter.ts, src/beacon/self-update.test.ts, src/beacon/self-update.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/supervisor.test.ts, src/beacon/supervisor.ts, src/beacon/transfer.adapter.ts, src/beacon/transport.adapter.ts, src/beacon/version.test.ts, src/beacon/version.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -816,6 +816,7 @@ apps/beacon-desktop/**/* → c3-241
 apps/beacon-win7/**/* → c3-241
 scripts/beacon-desktop-icons.ts → c3-241
 scripts/build-beacon-desktop.ts → c3-241
+scripts/build-beacon.ts → c3-241
 src/beacon/activity.test.ts → c3-241
 src/beacon/activity.ts → c3-241
 src/beacon/desktop/**/*.ts → c3-241
@@ -833,11 +834,17 @@ src/beacon/pair-client.adapter.ts → c3-241
 src/beacon/ports.ts → c3-241
 src/beacon/runner.test.ts → c3-241
 src/beacon/runner.ts → c3-241
+src/beacon/self-update.adapter.test.ts → c3-241
+src/beacon/self-update.adapter.ts → c3-241
+src/beacon/self-update.test.ts → c3-241
+src/beacon/self-update.ts → c3-241
 src/beacon/session.test.ts → c3-241
 src/beacon/session.ts → c3-241
 src/beacon/shell.adapter.test.ts → c3-241
 src/beacon/shell.adapter.ts → c3-241
 src/beacon/state-store.adapter.ts → c3-241
+src/beacon/supervisor.test.ts → c3-241
+src/beacon/supervisor.ts → c3-241
 src/beacon/transfer.adapter.ts → c3-241
 src/beacon/transport.adapter.ts → c3-241
 src/beacon/version.test.ts → c3-241

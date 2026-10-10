@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: b924b4ec8f5a4db286016db9161ada214427386a3b2cf94f33125700c9e5cc80
+c3-seal: ce3e3c461921b23e83db767c853bf21ce9c0f8a0a3e5b874b5c8bd8fbeb958ac
 title: http-ws-server
 type: component
 category: foundation
@@ -70,6 +70,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | /share/:token | OUT | Public read-only snapshot endpoint dispatched BEFORE the auth gate; serves frozen chat snapshot JSON | c3-228 | src/server/http.ts |
 | /assets/share-view/* | OUT | Reserved static path for the share viewer bundle, also pre-auth | c3-228 | src/server/http.ts |
 | /beacon scope sync | IN/OUT | Persists a validated set-scope, deletes the beacon on unpair, refuses unknown or disabled beacons before the challenge, and pushes the stored scope to connected protocol-2 beacons on every settings change | c3-241 | src/server/beacon-connection.ts |
+| /beacon update | IN/OUT | Sends the server version in ready and incompatible, keeps each beacon's last update_status until it reconnects, and answers beacons.update with a field-less update frame, refusing a beacon that is offline or below protocol 4; it never sends a URL or a version | c3-241 | src/server/beacon-registry.ts |
 
 ## Change Safety
 

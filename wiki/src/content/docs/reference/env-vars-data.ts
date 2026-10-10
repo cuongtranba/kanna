@@ -2,6 +2,9 @@
 export interface EnvVar { name: string; default: string; description: string }
 export const envVars: EnvVar[] = [
   { name: 'KANNA_BACKGROUND_TASK_MAX_WAKES', default: "3", description: "How many times a background task may wake its chat after the keep-alive deadline passes before Kanna stops re-waking it." },
+  { name: 'KANNA_BEACON_AUTO_UPDATE', default: "enabled", description: "Read by a beacon, not by the Kanna server. Set to \"disabled\" to stop the beacon from updating itself when it connects to a newer Kanna; Update now in Settings → Beacons still works. An app opened from Finder, the Start menu or at sign-in does not see shell variables." },
+  { name: 'KANNA_BEACON_HOME', default: "~/.kanna-beacon", description: "Read by a beacon, not by the Kanna server. The folder where the beacon keeps its key, its state and the app record; the app and the CLI on one machine share it." },
+  { name: 'KANNA_BEACON_RELEASE_BASE', default: "https://github.com/cuongtranba/kanna/releases/download", description: "Read by the command-line and Windows 7 beacons, not by the Kanna server or the desktop app. Replaces the location a beacon downloads its update from, for testing against a local copy of a release. Kanna cannot set it." },
   { name: 'KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS', default: "1800000", description: "How long a launched background task may hold a session warm against the idle reaper (30 min). Only applies to a session with no live task list from the SDK; when the SDK reports its background tasks, set membership decides and this deadline is never consulted." },
   { name: 'KANNA_CLAUDE_DRIVER', default: "(unset)", description: "Ignored. The PTY driver was removed and every Claude chat runs on the Claude Agent SDK. Setting it to \"pty\" only logs a warning at boot; leave it unset." },
   { name: 'KANNA_CLAUDE_SESSION_IDLE_MS', default: "600000", description: "Idle window before a resident Claude session is reaped (10 min)." },

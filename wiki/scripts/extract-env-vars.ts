@@ -56,6 +56,9 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_RELOADER: { default: 'supervisor', description: 'Self-update reload strategy: "supervisor" (default, end-user) or "pm2" (self-host, requires KANNA_REPO_DIR).' },
   KANNA_REPO_DIR: { default: '(unset)', description: 'Repo checkout the pm2 reloader pulls/rebuilds. Required when KANNA_RELOADER=pm2.' },
   KANNA_DISABLE_SELF_UPDATE: { default: '0', description: 'Set to "1" to disable the in-app self-update path.' },
+  KANNA_BEACON_HOME: { default: '~/.kanna-beacon', description: 'Read by a beacon, not by the Kanna server. The folder where the beacon keeps its key, its state and the app record; the app and the CLI on one machine share it.' },
+  KANNA_BEACON_AUTO_UPDATE: { default: 'enabled', description: 'Read by a beacon, not by the Kanna server. Set to "disabled" to stop the beacon from updating itself when it connects to a newer Kanna; Update now in Settings → Beacons still works. An app opened from Finder, the Start menu or at sign-in does not see shell variables.' },
+  KANNA_BEACON_RELEASE_BASE: { default: 'https://github.com/cuongtranba/kanna/releases/download', description: 'Read by the command-line and Windows 7 beacons, not by the Kanna server or the desktop app. Replaces the location a beacon downloads its update from, for testing against a local copy of a release. Kanna cannot set it.' },
 }
 
 const seen = new Set<string>()

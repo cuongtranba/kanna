@@ -1,6 +1,6 @@
 ---
 title: Beacons — pair a machine
-description: Install the kanna-beacon daemon, pair it with Kanna, grant it scope, and revoke it.
+description: Install the kanna-beacon daemon, pair it with Kanna, grant it scope, keep it updated, and revoke it.
 ---
 
 A **beacon** is a small companion daemon you install on a machine **you own**.
@@ -238,6 +238,61 @@ you unpair.
 Closing the window keeps the beacon running in the tray; quit it from the tray
 menu.
 
+## Updating
+
+A beacon keeps itself on the same version as your Kanna. When it connects to a
+Kanna that is newer than itself, it installs that version and restarts into it.
+It never moves to an older version, so updating Kanna is what updates your
+beacons. `kanna-beacon version` prints the version a command-line beacon runs.
+
+**Update now.** In **Settings → Beacons**, a beacon that is behind shows
+**Update available**, and while it is online the row also offers **Update
+now**. Next to the version, the row shows what the beacon is doing, for example
+**Checking 1.71.0…**, **Downloading 1.71.0…**, **Installing 1.71.0…** and
+**Restarting…**. Then the beacon comes back online at the new version. **Up to date** means it already runs
+Kanna's version. **Update failed:** names what went wrong, and the beacon stays
+online on its old version. Pressing **Update now** again retries at once.
+
+**Where the update comes from.** Kanna only tells the beacon to update; it never
+sends a download address, a version or a file. The beacon takes Kanna's version
+from the connection and downloads it from the official GitHub release. It
+checks the download against that release's `SHA256SUMS` (`SHA256SUMS-win7` for
+Windows 7) and deletes it if the checksum does not match. Then it runs the new
+copy once to confirm that it reports the right version. Before replacing itself,
+it waits for any read or command in progress to finish.
+
+**Right after a release.** Kanna is published a few minutes before the release
+finishes uploading the beacon files. In that window a beacon may report that the
+release has no file for it yet. It tries again on its own after 30 minutes, and
+**Update now** tries again at once.
+
+**Restarting.** `kanna-beacon run` stays in the foreground across updates. The
+first process watches the beacon and starts the new version whenever it exits
+for an update. Whatever started it (launchd, systemd, a scheduled task or a
+terminal) keeps seeing one long-running process. The app and the Windows 7 tray
+restart themselves.
+
+**Turning automatic updates off.** Set `KANNA_BEACON_AUTO_UPDATE=disabled` in
+the environment of the command-line or Windows 7 beacon. The beacon then no
+longer updates on connect, but **Update now** still works. The app reads the
+same variable, but an app opened from Finder, the Start menu or at sign-in does
+not see variables set in a shell profile. `KANNA_BEACON_RELEASE_BASE` replaces
+the download location, for testing against a local copy of a release; leave it
+unset. Both are read only on the machine, and Kanna cannot change them.
+
+**Beacons from 1.70 and older need one manual reinstall.** They predate
+self-update, so their **Update available** badge links to the download page
+instead of offering **Update now**. Install the current version once, as in
+[Install](#install). After that, updates happen automatically or with one click.
+
+**The Kanna Beacon app** updates through its built-in updater from the latest
+GitHub release. It can update only when the latest release is the same version
+as your Kanna. Otherwise it says "the latest release is X, but Kanna is Y" and
+downloads nothing; update Kanna to the latest release, then press **Update
+now**. On Windows the app must have been installed with `Kanna Beacon-Setup.exe`.
+A copy placed anywhere else cannot update itself and asks you to reinstall it
+with the installer.
+
 ## Revoke
 
 In **Settings → Beacons**, use **Revoke** on a machine. Kanna confirms, then the
@@ -256,9 +311,15 @@ stored state (`~/.kanna-beacon`).
 - **Code expired** — mint a new one; codes are single-use and short-lived.
 - **Machine shows Offline** — check that `kanna-beacon run` is running and the
   Kanna URL is reachable from that machine.
-- **Update available badge** — install a newer `kanna-beacon`; the daemon and
-  server must speak a compatible protocol version, and an incompatible daemon
-  exits rather than run.
+- **Update available badge** — press **Update now** on the row. If the badge is
+  a link instead, the beacon is 1.70 or older and needs one manual reinstall
+  (see [Updating](#updating)). A beacon outside the protocol range Kanna
+  supports is refused; one that can update itself installs Kanna's version, and
+  an older one exits rather than run.
+- **"release v… has no … yet"** — the release is still uploading its beacon
+  files. Wait a few minutes, then press **Update now**.
+- **"the latest release is X, but Kanna is Y"** (app) — the app updates only to
+  the latest release. Update Kanna to the latest release first.
 - **The pairing link does nothing** — open Kanna Beacon once so it can register
   the `kanna-beacon:` link handler, or paste the pairing command into its window.
 - **Saving the grant says the Kanna is too old** — update Kanna; until then set
