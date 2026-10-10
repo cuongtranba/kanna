@@ -136,6 +136,8 @@ function mintId(deps: ChatTaskToolDeps): string {
   return kannaTaskId((deps.newId ?? (() => crypto.randomUUID().slice(0, 8)))())
 }
 
+const NEEDS_ID_GUIDANCE = "needs takes the id values task_create returned (form k:xxxxxxxx), not positions. Create a task before another task's needs can name it, so create dependencies one at a time, not in one parallel batch."
+
 export interface CreateTaskInput {
   subject: string
   description?: string
@@ -156,7 +158,7 @@ export async function createChatTask(
   const known = new Set(projection.tasks.map((task) => task.id))
   const unknown = (input.needs ?? []).filter((need) => !known.has(need))
   if (unknown.length > 0) {
-    return { ok: false, error: `unknown task id in needs: ${unknown.join(", ")}` }
+    return { ok: false, error: `unknown task id in needs: ${unknown.join(", ")}. ${NEEDS_ID_GUIDANCE}` }
   }
 
   const taskId = mintId(deps)
@@ -448,7 +450,7 @@ export function buildChatTaskToolList<TTool>(
       subject: z.string().describe("One line naming the work"),
       description: z.string().optional().describe("Detail an implementer would need"),
       active_form: z.string().optional().describe("Present continuous label shown while the task runs"),
-      needs: z.array(z.string()).optional().describe("Task ids that must be completed first"),
+      needs: z.array(z.string()).optional().describe(`Task ids that must be completed first. ${NEEDS_ID_GUIDANCE}`),
       worktree: z.string().optional().describe("Absolute path of the git worktree this task is worked in"),
       branch: z.string().optional().describe("Branch name for this task's work"),
     }, async (input) => {
@@ -468,7 +470,7 @@ export function buildChatTaskToolList<TTool>(
       subject: z.string().optional(),
       description: z.string().optional(),
       active_form: z.string().optional(),
-      needs: z.array(z.string()).optional(),
+      needs: z.array(z.string()).optional().describe(`Task ids that must be completed first. ${NEEDS_ID_GUIDANCE}`),
       worktree: z.string().optional(),
       branch: z.string().optional(),
     }, async (input) => {
