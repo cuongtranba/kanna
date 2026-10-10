@@ -191,7 +191,10 @@ func TestWaitIdleGivesUpWhenItsContextEnds(t *testing.T) {
 	exe := self(t)
 	h.ready(float(4), text("1.71.0"))
 	flag := filepath.Join(h.root, "flag")
-	t.Cleanup(func() { _ = os.WriteFile(flag, nil, 0o644) })
+	t.Cleanup(func() {
+		_ = os.WriteFile(flag, nil, 0o644)
+		h.transport.waitFor(t, "the helper to exit", hasExit("a"))
+	})
 	h.transport.push(protocol.RequestFrame{ID: "a", Request: protocol.Request{Op: protocol.OpExec, Cmd: exe, Args: []string{"wait-for", flag}}})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
