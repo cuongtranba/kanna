@@ -72,6 +72,19 @@ export interface BeaconPairClient {
   pair(kannaUrl: string, request: BeaconPairingRequest): Promise<BeaconPairingResult>
 }
 
+export type BeaconUpdateStep = "checking" | "downloading" | "installing"
+
+export type BeaconUpdateResult = { ok: true } | { ok: false; error: string }
+
+export interface BeaconUpdateHooks {
+  onStep(step: BeaconUpdateStep): void
+  beforeSwap(): Promise<void>
+}
+
+export interface BeaconUpdater {
+  install(version: string, hooks: BeaconUpdateHooks): Promise<BeaconUpdateResult>
+}
+
 export interface BeaconState {
   kannaUrl: string
   beaconId: string

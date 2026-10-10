@@ -45,6 +45,8 @@ export function presentStatus(
       return { tone: "destructive", label: strings.status.revoked, detail: strings.status.revokedDetail }
     case "incompatible":
       return { tone: "destructive", label: strings.status.incompatible, detail: strings.status.incompatibleDetail }
+    case "updating":
+      return { tone: "attention", label: strings.status.updating, detail: strings.status.updatingDetail(status.version) }
     case "stopped":
       return { tone: "muted", label: strings.status.notPaired, detail: "" }
   }

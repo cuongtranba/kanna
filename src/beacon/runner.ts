@@ -1,10 +1,13 @@
 import {
   MIN_BEACON_PROTOCOL,
   SCOPE_SYNC_PROTOCOL,
+  type BeaconFrame,
   type BeaconOs,
   type BeaconScopeChange,
+  type BeaconUpdateStatus,
 } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
+import { errorMessage } from "../shared/errors"
 import type { BeaconActivity } from "./activity"
 import type {
   BeaconFsPort,
@@ -13,7 +16,11 @@ import type {
   BeaconState,
   BeaconTransferPort,
   BeaconTransport,
+  BeaconUpdater,
+  BeaconUpdateResult,
+  BeaconUpdateStep,
 } from "./ports"
+import { decideUpdate, type UpdateDecision, type UpdateFailure, type UpdateTrigger } from "./self-update"
 import { createBeaconSession, type BeaconSession } from "./session"
 
 export const MAX_BACKOFF_MS = 30_000
@@ -28,13 +35,16 @@ export function beaconSocketUrl(kannaUrl: string): string {
 
 export type BeaconOfflineReason = "unreachable" | "disabled"
 
+export type BeaconUpdatePhaseStep = BeaconUpdateStep | "restarting"
+
 export type BeaconRunnerStatus =
   | { phase: "connecting"; attempt: number }
   | { phase: "online"; since: number }
   | { phase: "offline"; attempt: number; retryAt: number; reason: BeaconOfflineReason }
   | { phase: "paused" }
   | { phase: "revoked" }
-  | { phase: "incompatible"; minSupported: number; downloadUrl?: string }
+  | { phase: "updating"; version: string; step: BeaconUpdatePhaseStep }
+  | { phase: "incompatible"; minSupported: number; downloadUrl?: string; serverVersion?: string; updateError?: string }
   | { phase: "stopped" }
 
 export interface BeaconRunnerSnapshot {
@@ -43,7 +53,7 @@ export interface BeaconRunnerSnapshot {
   scopeSync: boolean
 }
 
-export type BeaconRunnerExit = { reason: "incompatible" | "revoked" | "unpaired" | "stopped" }
+export type BeaconRunnerExit = { reason: "incompatible" | "revoked" | "unpaired" | "stopped" | "update" }
 
 export interface BeaconTransferContext {
   kannaUrl: string
@@ -61,6 +71,8 @@ export interface BeaconRunnerDeps {
   createFs: (getReadRoots: () => readonly string[]) => BeaconFsPort
   createShell: (os: BeaconOs) => BeaconShellPort
   createTransfer: (context: BeaconTransferContext) => BeaconTransferPort
+  updater: BeaconUpdater
+  autoUpdate: boolean
   sleep: (ms: number) => Promise<void>
   now: () => number
   startPaused?: boolean
@@ -78,15 +90,32 @@ export interface BeaconRunner {
   subscribe(listener: (snapshot: BeaconRunnerSnapshot) => void): () => void
 }
 
+type IncompatibleFrame = Extract<BeaconFrame, { kind: "incompatible" }>
+
 type AttemptOutcome =
   | { kind: "closed"; wasOnline: boolean; refusedDisabled: boolean }
-  | { kind: "incompatible"; minSupported: number; downloadUrl?: string }
+  | { kind: "incompatible"; frame: IncompatibleFrame }
   | { kind: "revoked" }
 
 interface LiveConnection {
   transport: BeaconTransport
   session: BeaconSession
   closed: Promise<void>
+}
+
+interface UpdateProgress {
+  version: string
+  step: BeaconUpdatePhaseStep
+}
+
+function incompatibleStatus(frame: IncompatibleFrame, updateError: string | null): BeaconRunnerStatus {
+  return {
+    phase: "incompatible",
+    minSupported: frame.minSupported,
+    ...(frame.downloadUrl === undefined ? {} : { downloadUrl: frame.downloadUrl }),
+    ...(frame.serverVersion === undefined ? {} : { serverVersion: frame.serverVersion }),
+    ...(updateError === null ? {} : { updateError }),
+  }
 }
 
 export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
@@ -107,11 +136,16 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
   let stopped = false
   let unpairing = false
   let live: LiveConnection | null = null
+  let connectedSince: number | null = null
   let wake: (() => void) | null = null
+  let update: UpdateProgress | null = null
+  let updateDetached = false
+  let lastFailure: UpdateFailure | null = null
+  let restartReady = false
 
   function snapshot(): BeaconRunnerSnapshot {
-    const online = status.phase === "online"
-    return { status, scope, scopeSync: online && serverProtocol >= SCOPE_SYNC_PROTOCOL }
+    const connected = connectedSince !== null
+    return { status, scope, scopeSync: connected && serverProtocol >= SCOPE_SYNC_PROTOCOL }
   }
 
   function publish(): void {
@@ -122,6 +156,94 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
   function setStatus(next: BeaconRunnerStatus): void {
     status = next
     publish()
+  }
+
+  function showConnected(): void {
+    if (update !== null && (connectedSince !== null || updateDetached)) {
+      setStatus({ phase: "updating", version: update.version, step: update.step })
+      return
+    }
+    if (connectedSince !== null) setStatus({ phase: "online", since: connectedSince })
+  }
+
+  function reportUpdate(report: BeaconUpdateStatus): void {
+    live?.session.sendUpdateStatus(report)
+  }
+
+  function advanceUpdate(next: UpdateProgress): void {
+    if (update !== null && update.version === next.version && update.step === next.step) return
+    update = next
+    reportUpdate({ state: next.step, version: next.version })
+    showConnected()
+  }
+
+  function decide(trigger: UpdateTrigger, serverVersion: string | null): UpdateDecision {
+    return decideUpdate({
+      beaconVersion: deps.beaconVersion,
+      serverVersion,
+      trigger,
+      autoEnabled: deps.autoUpdate,
+      lastFailure,
+      now: deps.now(),
+    })
+  }
+
+  async function installUpdate(version: string, beforeSwap: () => Promise<void>): Promise<BeaconUpdateResult> {
+    advanceUpdate({ version, step: "checking" })
+    let result: BeaconUpdateResult
+    try {
+      result = await deps.updater.install(version, {
+        onStep: (step) => advanceUpdate({ version, step }),
+        beforeSwap,
+      })
+    } catch (error) {
+      result = { ok: false, error: errorMessage(error) }
+    }
+    if (result.ok) {
+      advanceUpdate({ version, step: "restarting" })
+      return result
+    }
+    lastFailure = { version, at: deps.now() }
+    update = null
+    live?.session.resumeServing()
+    reportUpdate({ state: "failed", version, message: result.error })
+    showConnected()
+    return result
+  }
+
+  async function quiesceLive(): Promise<void> {
+    const current = live
+    if (current !== null) await current.session.quiesce()
+  }
+
+  async function updateWhileConnected(version: string): Promise<void> {
+    const result = await installUpdate(version, quiesceLive)
+    if (!result.ok) return
+    await quiesceLive()
+    restartReady = true
+    live?.transport.close()
+    nudge()
+  }
+
+  function considerUpdate(trigger: UpdateTrigger): void {
+    const current = live
+    if (current === null) return
+    if (update !== null) {
+      reportUpdate({ state: update.step, version: update.version })
+      return
+    }
+    const decision = decide(trigger, current.session.serverVersion())
+    if (decision.kind === "current") current.session.sendUpdateStatus({ state: "current", version: deps.beaconVersion })
+    if (decision.kind === "install") void updateWhileConnected(decision.version)
+  }
+
+  async function updateFromIncompatible(frame: IncompatibleFrame): Promise<{ installed: boolean; error: string | null }> {
+    const decision = decide("auto", frame.serverVersion ?? null)
+    if (decision.kind !== "install") return { installed: false, error: null }
+    updateDetached = true
+    const result = await installUpdate(decision.version, async () => {})
+    updateDetached = false
+    return result.ok ? { installed: true, error: null } : { installed: false, error: result.error }
   }
 
   function waitForWake(ms: number | null): Promise<void> {
@@ -157,7 +279,9 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
         wasOnline = true
         scope = granted
         serverProtocol = protocol
-        setStatus({ phase: "online", since: deps.now() })
+        connectedSince = deps.now()
+        showConnected()
+        considerUpdate("auto")
       },
       onScope: (granted) => {
         scope = granted
@@ -169,16 +293,15 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
         else refusedDisabled = true
       },
       onIncompatible: (frame) => {
-        outcome =
-          frame.downloadUrl === undefined
-            ? { kind: "incompatible", minSupported: frame.minSupported }
-            : { kind: "incompatible", minSupported: frame.minSupported, downloadUrl: frame.downloadUrl }
+        outcome = { kind: "incompatible", frame }
       },
+      onUpdateRequested: () => considerUpdate("manual"),
     })
     live = { transport, session, closed }
     session.start()
     return closed.then(() => {
       live = null
+      connectedSince = null
       return outcome ?? { kind: "closed", wasOnline, refusedDisabled }
     })
   }
@@ -187,6 +310,7 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
     let failures = 0
     for (;;) {
       if (stopped) return finish({ reason: "stopped" })
+      if (restartReady) return { reason: "update" }
       if (paused) {
         setStatus({ phase: "paused" })
         await waitForWake(null)
@@ -195,12 +319,11 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
       }
       setStatus({ phase: "connecting", attempt: failures + 1 })
       const outcome = await attempt()
+      if (restartReady) return { reason: "update" }
       if (outcome.kind === "incompatible") {
-        setStatus(
-          outcome.downloadUrl === undefined
-            ? { phase: "incompatible", minSupported: outcome.minSupported }
-            : { phase: "incompatible", minSupported: outcome.minSupported, downloadUrl: outcome.downloadUrl },
-        )
+        const updated = await updateFromIncompatible(outcome.frame)
+        if (updated.installed) return { reason: "update" }
+        setStatus(incompatibleStatus(outcome.frame, updated.error))
         return { reason: "incompatible" }
       }
       if (outcome.kind === "revoked") {

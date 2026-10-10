@@ -15,8 +15,10 @@ import { beaconOsFor } from "../../../src/beacon/host-os"
 import { createKeyStore, eraseKeyStore } from "../../../src/beacon/key-store.adapter"
 import { createPairClient } from "../../../src/beacon/pair-client.adapter"
 import { createBeaconRunner } from "../../../src/beacon/runner"
+import { UNSUPPORTED_UPDATER } from "../../../src/beacon/self-update"
 import { createBeaconShell } from "../../../src/beacon/shell.adapter"
 import { createStateStore } from "../../../src/beacon/state-store.adapter"
+import { createBeaconTransfer } from "../../../src/beacon/transfer.adapter"
 import { createWebSocketTransport } from "../../../src/beacon/transport.adapter"
 import { BEACON_VERSION } from "../../../src/beacon/version"
 import { RPC_MAX_REQUEST_MS, type BeaconDesktopRPC } from "./rpc"
@@ -72,6 +74,9 @@ const app = createBeaconDesktopApp({
       openTransport: (url) => createWebSocketTransport({ url }),
       createFs: createBeaconFs,
       createShell: createBeaconShell,
+      createTransfer: createBeaconTransfer,
+      updater: UNSUPPORTED_UPDATER,
+      autoUpdate: false,
       sleep,
       now: Date.now,
       startPaused,
@@ -186,6 +191,8 @@ function statusWord(view: DesktopView): string {
       return strings.status.revoked
     case "incompatible":
       return strings.status.incompatible
+    case "updating":
+      return strings.status.updating
     case "offline":
       return strings.status.offline
     default:

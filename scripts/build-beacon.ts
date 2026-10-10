@@ -1,26 +1,14 @@
 import { createHash } from "node:crypto"
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-
-interface BeaconTarget {
-  bunTarget: string
-  platform: NodeJS.Platform
-  arch: string
-  asset: string
-}
+import { BEACON_RELEASE_TARGETS, type BeaconReleaseTarget } from "../src/beacon/self-update"
 
 const ENTRY = "src/beacon/entry.adapter.ts"
 const OUT_DIR = "dist-beacon"
 
-const TARGETS: readonly BeaconTarget[] = [
-  { bunTarget: "bun-darwin-arm64", platform: "darwin", arch: "arm64", asset: "kanna-beacon-darwin-arm64" },
-  { bunTarget: "bun-darwin-x64", platform: "darwin", arch: "x64", asset: "kanna-beacon-darwin-x64" },
-  { bunTarget: "bun-linux-x64", platform: "linux", arch: "x64", asset: "kanna-beacon-linux-x64" },
-  { bunTarget: "bun-linux-arm64", platform: "linux", arch: "arm64", asset: "kanna-beacon-linux-arm64" },
-  { bunTarget: "bun-windows-x64", platform: "win32", arch: "x64", asset: "kanna-beacon-windows-x64.exe" },
-]
+const TARGETS = BEACON_RELEASE_TARGETS
 
-function selectTargets(argv: readonly string[]): readonly BeaconTarget[] {
+function selectTargets(argv: readonly string[]): readonly BeaconReleaseTarget[] {
   if (!argv.includes("--host")) return TARGETS
   const host = TARGETS.find((target) => target.platform === process.platform && target.arch === process.arch)
   if (!host) {
@@ -29,7 +17,7 @@ function selectTargets(argv: readonly string[]): readonly BeaconTarget[] {
   return [host]
 }
 
-async function compile(target: BeaconTarget): Promise<boolean> {
+async function compile(target: BeaconReleaseTarget): Promise<boolean> {
   const outfile = join(OUT_DIR, target.asset)
   const child = Bun.spawn(
     ["bun", "build", "--compile", `--target=${target.bunTarget}`, `--outfile=${outfile}`, ENTRY],
@@ -52,7 +40,7 @@ async function main(): Promise<number> {
   rmSync(OUT_DIR, { recursive: true, force: true })
   mkdirSync(OUT_DIR, { recursive: true })
 
-  const built: BeaconTarget[] = []
+  const built: BeaconReleaseTarget[] = []
   let failed = false
   for (const target of targets) {
     if (await compile(target)) built.push(target)
