@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.70.1](https://github.com/cuongtranba/kanna/compare/v1.70.0...v1.70.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **subagents:** allow delegate_subagent during an SDK self-wake ([#1236](https://github.com/cuongtranba/kanna/issues/1236)) ([11ceec9](https://github.com/cuongtranba/kanna/commit/11ceec9adcb547f0061ff7a5ee2331e1cac4d153))
+
 ## [1.70.0](https://github.com/cuongtranba/kanna/compare/v1.69.0...v1.70.0) (2026-10-09)
 
 
