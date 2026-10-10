@@ -433,3 +433,23 @@ describe("compaction observer wiring", () => {
     expect(typeof forwarded).toBe("function")
   })
 })
+
+describe("delegation provenance", () => {
+  test("a session in a live self-wake with no active turn still has a parent to delegate under", async () => {
+    let context: Parameters<SpawnClaudeTurnDeps["startClaudeSessionFn"]>[0]["delegationContext"]
+    const deps = makeDeps({
+      startClaudeSessionFn: async (a) => {
+        context = a.delegationContext
+        return makeFakeHandle()
+      },
+    })
+    await spawnClaudeTurn(deps, makeArgs())
+    const session = deps.claudeSessions.get("chat-1")
+    if (!session) throw new Error("session was not registered")
+    expect(context?.getParentUserMessageId()).toBeNull()
+
+    session.selfWakeActive = true
+
+    expect(context?.getParentUserMessageId()).toBe(`self-wake:${session.id}`)
+  })
+})
