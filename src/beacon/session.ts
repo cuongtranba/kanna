@@ -2,11 +2,13 @@ import {
   BEACON_PROTOCOL_VERSION,
   MIN_BEACON_PROTOCOL,
   SCOPE_SYNC_PROTOCOL,
+  UPDATE_PROTOCOL,
   type BeaconFrame,
   type BeaconOs,
   type BeaconRefusal,
   type BeaconRequest,
   type BeaconScopeChange,
+  type BeaconUpdateStatus,
 } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
 import { errorMessage } from "../shared/errors"
@@ -32,22 +34,29 @@ export interface BeaconSessionDeps {
   shell: BeaconShellPort
   transfer: BeaconTransferPort
   now?: () => number
-  onReady?: (scope: BeaconScope, serverProtocol: number) => void
+  onReady?: (scope: BeaconScope, serverProtocol: number, serverVersion: string | null) => void
   onScope?: (scope: BeaconScope) => void
   onActivity?: (activity: BeaconActivity) => void
   onRefused?: (reason: BeaconRefusal) => void
   onIncompatible?: (frame: Extract<BeaconFrame, { kind: "incompatible" }>) => void
+  onUpdateRequested?: () => void
 }
 
 export interface BeaconSession {
   start(): void
   requestScopeChange(change: BeaconScopeChange): boolean
   requestUnpair(): boolean
+  sendUpdateStatus(status: BeaconUpdateStatus): boolean
+  serverVersion(): string | null
+  inFlight(): number
+  quiesce(): Promise<void>
+  resumeServing(): void
 }
 
 type Phase = "idle" | "awaiting-challenge" | "awaiting-ready" | "ready" | "stopped"
 
 const EXEC_REFUSED = "exec not permitted"
+export const RESTARTING_REFUSAL = "this beacon is restarting to finish an update"
 
 class ExecRefusedError extends Error {
   constructor() {
@@ -67,8 +76,16 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
   let phase: Phase = "idle"
   let scope: BeaconScope | null = null
   let serverProtocol = MIN_BEACON_PROTOCOL
+  let serverVersion: string | null = null
   let running = 0
+  let quiescing = false
   const queue: Array<() => void> = []
+  const idleWaiters: Array<() => void> = []
+
+  function settleIdle(): void {
+    if (running > 0 || queue.length > 0) return
+    for (const resolve of idleWaiters.splice(0)) resolve()
+  }
 
   function sinkFor(id: string): BeaconRequestSink {
     return {
@@ -155,9 +172,15 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       void serve(id, request, granted).finally(() => {
         running -= 1
         drain()
+        settleIdle()
       })
     })
     drain()
+  }
+
+  function refuseWhileRestarting(id: string, request: BeaconRequest): void {
+    transport.send({ kind: "error", id, message: RESTARTING_REFUSAL })
+    record(id, request, { kind: "refused", message: RESTARTING_REFUSAL })
   }
 
   function adoptScope(next: BeaconScope): void {
@@ -170,6 +193,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       case "incompatible":
         if (phase === "awaiting-challenge") {
           phase = "stopped"
+          serverVersion = frame.serverVersion ?? null
           deps.onIncompatible?.(frame)
           transport.close()
         }
@@ -190,8 +214,9 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         if (phase !== "awaiting-ready") return
         phase = "ready"
         serverProtocol = frame.protocolVersion ?? MIN_BEACON_PROTOCOL
+        serverVersion = frame.serverVersion ?? null
         adoptScope(frame.scope)
-        deps.onReady?.(frame.scope, serverProtocol)
+        deps.onReady?.(frame.scope, serverProtocol, serverVersion)
         return
       case "scope":
         if (phase === "ready") adoptScope(frame.scope)
@@ -200,7 +225,12 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         if (phase === "ready") transport.send({ kind: "pong" })
         return
       case "request":
-        if (phase === "ready" && scope) enqueue(frame.id, frame.request, scope)
+        if (phase !== "ready" || !scope) return
+        if (quiescing) refuseWhileRestarting(frame.id, frame.request)
+        else enqueue(frame.id, frame.request, scope)
+        return
+      case "update":
+        if (phase === "ready") deps.onUpdateRequested?.()
         break
       default:
         break
@@ -218,6 +248,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       transport.onClose(() => {
         phase = "stopped"
         queue.length = 0
+        settleIdle()
       })
       transport.send({
         kind: "hello",
@@ -236,6 +267,22 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       if (!canSyncScope()) return false
       transport.send({ kind: "unpair" })
       return true
+    },
+    sendUpdateStatus(status) {
+      if (phase !== "ready" || serverProtocol < UPDATE_PROTOCOL) return false
+      transport.send({ kind: "update_status", ...status })
+      return true
+    },
+    serverVersion: () => serverVersion,
+    inFlight: () => running + queue.length,
+    quiesce() {
+      quiescing = true
+      const idle = new Promise<void>((resolve) => idleWaiters.push(resolve))
+      settleIdle()
+      return idle
+    },
+    resumeServing() {
+      quiescing = false
     },
   }
 }

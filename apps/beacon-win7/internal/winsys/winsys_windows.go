@@ -10,7 +10,9 @@ package winsys
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -195,4 +197,20 @@ func OpenFolder(path string) error {
 		return err
 	}
 	return windows.ShellExecute(0, verb, target, nil, nil, windows.SW_SHOWNORMAL)
+}
+
+const (
+	detachedProcess       = 0x00000008
+	createNewProcessGroup = 0x00000200
+)
+
+// StartDetached starts exe with args as an independent process that outlives
+// this one, and does not wait for it.
+func StartDetached(exe string, args []string) error {
+	command := exec.Command(exe, args...)
+	command.SysProcAttr = &syscall.SysProcAttr{CreationFlags: detachedProcess | createNewProcessGroup}
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
 }

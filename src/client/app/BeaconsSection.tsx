@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
-import { Check, Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
+import { ArrowUpCircle, Check, Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
 import { Button, buttonVariants } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Spinner } from "../components/ui/spinner"
@@ -8,12 +8,13 @@ import { HoverHint } from "../components/ui/truncated-text"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
 import { useNow } from "../hooks/useNow"
 import { formatCompactDuration, formatCountdown } from "../lib/formatDuration"
+import { beaconUpdateLabel, beaconUpdateTone, isBeaconUpdateInFlight } from "../lib/beaconUpdateStatus"
 import { useAppSettingsStore, selectCustomBeacons } from "../stores/appSettingsStore"
 import { beaconDraftKey, useBeaconsSectionStore } from "../stores/beaconsSectionStore"
 import { selectBeaconRows, useBeaconsStore } from "../stores/beaconsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
-import type { BeaconConfig, BeaconMintResult } from "../../shared/beacon-config"
+import type { BeaconConfig, BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
 import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
 import { buildBeaconStatusRows, isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
@@ -37,6 +38,7 @@ export interface BeaconsSectionHandlers {
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
   onSetScope: (id: string, scope: BeaconScope) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onUpdate: (id: string) => Promise<BeaconUpdateResult>
 }
 
 interface BeaconsSectionProps {
@@ -231,6 +233,61 @@ function lastSeenLabel(row: BeaconStatusRow, now: number): string {
   return `Last seen ${formatCompactDuration(now - row.lastSeenAt)} ago`
 }
 
+const MANUAL_REINSTALL_HINT =
+  "This beacon is too old to update itself. Reinstall it once from the download page; after that, updates are one click."
+
+function UpdateAvailablePill({ canSelfUpdate }: { canSelfUpdate: boolean }) {
+  const pillClass = cn("rounded-full border px-2 py-0.5 text-xs", STATUS_PILL_CLASS.outdated)
+  if (canSelfUpdate) return <span className={pillClass}>Update available</span>
+  return (
+    <HoverHint label={MANUAL_REINSTALL_HINT}>
+      <a href={BEACON_DOWNLOAD_PAGE} target="_blank" rel="noreferrer" className={pillClass}>
+        Update available
+      </a>
+    </HoverHint>
+  )
+}
+
+function BeaconUpdateControls({
+  row,
+  updateAvailable,
+  handlers,
+}: {
+  row: BeaconStatusRow
+  updateAvailable: boolean
+  handlers: BeaconsSectionHandlers
+}) {
+  const updateKey = pendingActionKey("beacons.update", row.id)
+  const updatePending = usePendingAction(updateKey)
+  const updateError = useBeaconsSectionStore((s) => s.updateErrors[row.id] ?? null)
+  const setUpdateError = useBeaconsSectionStore((s) => s.setUpdateError)
+  const canUpdateNow = updateAvailable && row.online && row.canSelfUpdate && !isBeaconUpdateInFlight(row.update)
+
+  const onUpdate = useCallback(() => {
+    runPendingAction(updateKey, async () => {
+      const result = await handlers.onUpdate(row.id)
+      setUpdateError(row.id, result.ok ? null : result.error)
+    })
+  }, [handlers, row.id, setUpdateError, updateKey])
+
+  return (
+    <>
+      {row.update !== null && <StateMarkLabel tone={beaconUpdateTone(row.update)} label={beaconUpdateLabel(row.update)} />}
+      {canUpdateNow && (
+        <Button variant="secondary" size="sm" onClick={onUpdate} pending={updatePending} aria-label={`Update ${row.label} now`}>
+          <ArrowUpCircle className="mr-1 h-4 w-4" />
+          Update now
+        </Button>
+      )}
+      {updateError !== null && (
+        <span role="alert" className="text-destructive-text">
+          {updateError}
+        </span>
+      )}
+    </>
+  )
+}
+
 function BeaconRow({
   row,
   scope,
@@ -280,11 +337,8 @@ function BeaconRow({
             <StateMarkLabel tone={row.online ? "active" : "muted"} label={row.online ? "Online" : "Offline"} />
             <span className="tabular-nums">{lastSeenLabel(row, now)}</span>
             {row.beaconVersion !== null && <span className="font-mono tabular-nums">v{row.beaconVersion}</span>}
-            {updateAvailable && (
-              <span className={cn("rounded-full border px-2 py-0.5 text-xs", STATUS_PILL_CLASS.outdated)}>
-                Update available
-              </span>
-            )}
+            {updateAvailable && <UpdateAvailablePill canSelfUpdate={row.canSelfUpdate} />}
+            <BeaconUpdateControls row={row} updateAvailable={updateAvailable} handlers={handlers} />
             <span>{row.os}</span>
           </span>
         </div>
@@ -514,11 +568,11 @@ function ScopeListItem({
 }
 
 export function BeaconsSettingsBranch(props: {
-  state: Pick<KannaState, "handleWriteAppSettings" | "handleMintBeaconPairingCode">
+  state: Pick<KannaState, "handleWriteAppSettings" | "handleMintBeaconPairingCode" | "handleUpdateBeacon">
 }) {
   const rows = useBeaconsStore(selectBeaconRows)
   const configs = useAppSettingsStore(selectCustomBeacons)
-  const { handleWriteAppSettings, handleMintBeaconPairingCode } = props.state
+  const { handleWriteAppSettings, handleMintBeaconPairingCode, handleUpdateBeacon } = props.state
 
   const handlers = useMemo<BeaconsSectionHandlers>(
     () => ({
@@ -532,8 +586,9 @@ export function BeaconsSettingsBranch(props: {
       onDelete: async (id) => {
         await handleWriteAppSettings({ customBeacons: { delete: { id } } })
       },
+      onUpdate: handleUpdateBeacon,
     }),
-    [handleWriteAppSettings, handleMintBeaconPairingCode],
+    [handleWriteAppSettings, handleMintBeaconPairingCode, handleUpdateBeacon],
   )
 
   return <BeaconsSection rows={rows} configs={configs} handlers={handlers} serverVersion={SERVER_VERSION} />

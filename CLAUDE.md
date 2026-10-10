@@ -539,6 +539,23 @@ beacon, tool `beacon_push`, judged by `writeRoots`) request ops.
   transfer op at once for a beacon below `TRANSFER_PROTOCOL` (3); without that
   gate an old beacon drops the unknown op and the call hangs.
 
+# Beacon self-update (protocol 4)
+
+ADR `adr-20261010-beacon-self-update`. Two invariants a refactor could quietly
+break:
+
+- **The server says "update" and nothing else.** The `update` frame has no
+  fields. The target is the `serverVersion` from the handshake, acted on only
+  when newer and when it matches `isReleaseVersion` (it is interpolated into the
+  download URL), fetched from the fixed GitHub release base and checked against
+  that release's `SHA256SUMS`. Never add a URL, version or binary to the frame;
+  that turns a compromised server into code execution on every paired machine.
+  `KANNA_BEACON_RELEASE_BASE` is a machine-local test override for that reason.
+- **`update_status` goes only to a server at `UPDATE_PROTOCOL` (4).** An older
+  server's `beacon-connection.ts` closes the socket on any frame it cannot
+  parse, so sending it unconditionally would drop the beacon mid-update. A new
+  beacon-to-server frame needs the same gate.
+
 # Windows 7 beacon (apps/beacon-win7, Go 1.20)
 
 `apps/beacon-win7` is a second beacon, in Go, for Windows 7 and 8.1, where Bun

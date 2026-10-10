@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: b70914f2f878bc22b19ada50dd125a725e75949d9bf89297f7a76077e5002a97
+c3-seal: 7f2170c9e00449ed4ead42e1b7a0be3e084696f901c7c51bd265bc2630d33312
 title: protocol
 type: component
 category: foundation
@@ -66,7 +66,7 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | WsInbound union | OUT | Client-to-server envelope kinds | c3-208 | src/shared/protocol.ts |
 | WsOutbound union | OUT | Server-to-client envelope kinds | c3-101 | src/shared/protocol.ts |
 | Beacon pairing link | OUT | kanna-beacon://pair with url and code; the parser also accepts the pasted CLI command and owns the pairing code alphabet | c3-241 | src/shared/beacon-pair-link.ts |
-| Beacon frames | IN/OUT | Protocol 2: ready carries the server version; refused, scope, set-scope and unpair frames; a beacon sends set-scope or unpair only to a server at SCOPE_SYNC_PROTOCOL or later | c3-241 | src/shared/beacon-protocol.ts |
+| Beacon frames | IN/OUT | Protocol 2: ready carries the server's protocol version; refused, scope, set-scope and unpair frames; a beacon sends set-scope or unpair only to a server at SCOPE_SYNC_PROTOCOL or later. Protocol 3 adds file transfer. Protocol 4 adds the field-less update frame, the update_status frame and an optional serverVersion on ready and incompatible; a beacon sends update_status only to a server at UPDATE_PROTOCOL or later, because an older server closes the socket on a frame it cannot parse | c3-241 | src/shared/beacon-protocol.ts |
 
 ## Change Safety
 

@@ -305,6 +305,7 @@ export function createWsRouter({
           resolvedLlmProvider,
           listOpenRouterModels,
           packageUpdateManager,
+          beaconRegistry,
           authEnabled,
           send: sendToClient,
         },

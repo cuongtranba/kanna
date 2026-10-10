@@ -44,7 +44,23 @@ export function presentStatus(
     case "revoked":
       return { tone: "destructive", label: strings.status.revoked, detail: strings.status.revokedDetail }
     case "incompatible":
-      return { tone: "destructive", label: strings.status.incompatible, detail: strings.status.incompatibleDetail }
+      return {
+        tone: "destructive",
+        label: strings.status.incompatible,
+        detail:
+          status.updateError === undefined
+            ? strings.status.incompatibleDetail
+            : `${strings.status.incompatibleDetail} ${strings.status.updateFailedDetail(status.updateError)}`,
+      }
+    case "updating":
+      return {
+        tone: "attention",
+        label: strings.status.updating,
+        detail:
+          status.step === "restarting"
+            ? strings.status.restartingDetail(status.version)
+            : strings.status.updatingDetail(status.version),
+      }
     case "stopped":
       return { tone: "muted", label: strings.status.notPaired, detail: "" }
   }

@@ -2,9 +2,20 @@ import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "./js
 import type { BeaconScope } from "./beacon-scope"
 import { SHA256_HEX, TRANSFER_PROTOCOL } from "./beacon-transfer"
 
-export const BEACON_PROTOCOL_VERSION = TRANSFER_PROTOCOL
+export const UPDATE_PROTOCOL = TRANSFER_PROTOCOL + 1
+export const BEACON_PROTOCOL_VERSION = UPDATE_PROTOCOL
 export const MIN_BEACON_PROTOCOL = 1
 export const SCOPE_SYNC_PROTOCOL = 2
+
+export const BEACON_UPDATE_STATES = ["checking", "downloading", "installing", "restarting", "current", "failed"] as const
+
+export type BeaconUpdateState = (typeof BEACON_UPDATE_STATES)[number]
+
+export interface BeaconUpdateStatus {
+  state: BeaconUpdateState
+  version: string
+  message?: string
+}
 
 export type BeaconOs = "darwin" | "linux" | "windows"
 
@@ -29,10 +40,10 @@ export type BeaconRequest =
 
 export type BeaconFrame =
   | { kind: "hello"; beaconId: string; protocolVersion: number; beaconVersion: string; os: BeaconOs }
-  | { kind: "incompatible"; minSupported: number; downloadUrl?: string }
+  | { kind: "incompatible"; minSupported: number; downloadUrl?: string; serverVersion?: string }
   | { kind: "challenge"; nonce: string }
   | { kind: "auth"; signature: string }
-  | { kind: "ready"; scope: BeaconScope; protocolVersion?: number }
+  | { kind: "ready"; scope: BeaconScope; protocolVersion?: number; serverVersion?: string }
   | { kind: "refused"; reason: BeaconRefusal }
   | { kind: "scope"; scope: BeaconScope }
   | { kind: "set-scope"; change: BeaconScopeChange }
@@ -45,6 +56,8 @@ export type BeaconFrame =
   | { kind: "exit"; id: string; code: number }
   | { kind: "result"; id: string; result: JsonValue }
   | { kind: "error"; id: string; message: string }
+  | { kind: "update" }
+  | ({ kind: "update_status" } & BeaconUpdateStatus)
 
 export function isSupportedProtocol(version: number): boolean {
   return version >= MIN_BEACON_PROTOCOL && version <= BEACON_PROTOCOL_VERSION
@@ -231,17 +244,45 @@ function parseHello(object: JsonObject): BeaconFrame | null {
 function parseIncompatible(object: JsonObject): BeaconFrame | null {
   const minSupported = readNumber(object, "minSupported")
   const downloadUrl = readOptionalString(object, "downloadUrl")
-  if (minSupported === null || downloadUrl === null) return null
-  return downloadUrl === undefined
-    ? { kind: "incompatible", minSupported }
-    : { kind: "incompatible", minSupported, downloadUrl }
+  const serverVersion = readOptionalString(object, "serverVersion")
+  if (minSupported === null || downloadUrl === null || serverVersion === null) return null
+  return {
+    kind: "incompatible",
+    minSupported,
+    ...(downloadUrl === undefined ? {} : { downloadUrl }),
+    ...(serverVersion === undefined ? {} : { serverVersion }),
+  }
 }
 
 function parseReady(object: JsonObject): BeaconFrame | null {
   const scope = parseBeaconScope(object.scope)
   const protocolVersion = readOptionalNumber(object, "protocolVersion")
-  if (scope === null || protocolVersion === null) return null
-  return protocolVersion === undefined ? { kind: "ready", scope } : { kind: "ready", scope, protocolVersion }
+  const serverVersion = readOptionalString(object, "serverVersion")
+  if (scope === null || protocolVersion === null || serverVersion === null) return null
+  return {
+    kind: "ready",
+    scope,
+    ...(protocolVersion === undefined ? {} : { protocolVersion }),
+    ...(serverVersion === undefined ? {} : { serverVersion }),
+  }
+}
+
+function readUpdateState(object: JsonObject): BeaconUpdateState | null {
+  const value = readString(object, "state")
+  return BEACON_UPDATE_STATES.find((state) => state === value) ?? null
+}
+
+function parseBeaconUpdateStatus(object: JsonObject): BeaconUpdateStatus | null {
+  const state = readUpdateState(object)
+  const version = readString(object, "version")
+  const message = readOptionalString(object, "message")
+  if (state === null || version === null || message === null) return null
+  return message === undefined ? { state, version } : { state, version, message }
+}
+
+function parseUpdateStatus(object: JsonObject): BeaconFrame | null {
+  const status = parseBeaconUpdateStatus(object)
+  return status === null ? null : { kind: "update_status", ...status }
 }
 
 function parseScopeFrame(object: JsonObject): BeaconFrame | null {
@@ -357,6 +398,10 @@ export function parseBeaconFrame(value: JsonValue): BeaconFrame | null {
       return parseResult(value)
     case "error":
       return parseErrorFrame(value)
+    case "update":
+      return { kind: "update" }
+    case "update_status":
+      return parseUpdateStatus(value)
     default:
       return null
   }

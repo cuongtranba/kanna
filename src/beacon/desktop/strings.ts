@@ -19,6 +19,10 @@ export interface DesktopStrings {
     revokedDetail: string
     incompatible: string
     incompatibleDetail: string
+    updating: string
+    updatingDetail: (version: string) => string
+    restartingDetail: (version: string) => string
+    updateFailedDetail: (error: string) => string
     notPaired: string
   }
   grantSummary: {
@@ -144,6 +148,10 @@ const EN: DesktopStrings = {
     revokedDetail: "This computer was removed in Kanna. Pair it again to reconnect.",
     incompatible: "Update needed",
     incompatibleDetail: "This version of Kanna Beacon is too old for your Kanna.",
+    updating: "Updating",
+    updatingDetail: (version) => `installing version ${version}`,
+    restartingDetail: (version) => `restarting into version ${version}`,
+    updateFailedDetail: (error) => `Updating itself failed: ${error}.`,
     notPaired: "Not paired",
   },
   grantSummary: {
@@ -280,6 +288,10 @@ const VI: DesktopStrings = {
     revokedDetail: "Máy này đã bị gỡ trong Kanna. Ghép đôi lại để kết nối.",
     incompatible: "Cần cập nhật",
     incompatibleDetail: "Phiên bản Kanna Beacon này đã quá cũ so với Kanna của bạn.",
+    updating: "Đang cập nhật",
+    updatingDetail: (version) => `đang cài phiên bản ${version}`,
+    restartingDetail: (version) => `đang khởi động lại vào phiên bản ${version}`,
+    updateFailedDetail: (error) => `Tự cập nhật không thành công: ${error}.`,
     notPaired: "Chưa ghép đôi",
   },
   grantSummary: {

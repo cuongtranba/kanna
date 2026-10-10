@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { JsonValue } from "../shared/json"
-import type { BeaconFrame } from "../shared/beacon-protocol"
+import { UPDATE_PROTOCOL, type BeaconFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry, STALE_MS, type BeaconRequestSink, type BeaconSocket } from "./beacon-registry"
 
@@ -44,7 +44,9 @@ describe("beacon registry", () => {
     const registry = createBeaconRegistry({ now: () => 42 })
     registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion: "1.0.0", protocolVersion: 1, scope: DEFAULT_BEACON_SCOPE })
     expect(registry.isOnline("b1")).toBe(true)
-    expect(registry.live()).toEqual([{ beaconId: "b1", online: true, lastSeenAt: 42, beaconVersion: "1.0.0" }])
+    expect(registry.live()).toEqual([
+      { beaconId: "b1", online: true, lastSeenAt: 42, beaconVersion: "1.0.0", canSelfUpdate: false, updateStatus: null },
+    ])
   })
 
   test("heartbeat advances lastSeenAt", () => {
@@ -240,5 +242,56 @@ describe("beacon registry scope push", () => {
     expect(events).toHaveLength(1)
     expect(events[0]).toContain("too old to transfer files")
     expect(socket.sent).toEqual([])
+  })
+})
+
+describe("beacon registry self-update", () => {
+  test("an update request to a beacon that never connected or has gone offline is refused without sending", () => {
+    const registry = createBeaconRegistry()
+    expect(registry.requestUpdate("never")).toEqual({ ok: false, error: expect.stringContaining("offline") })
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.70.0", protocolVersion: UPDATE_PROTOCOL, scope: DEFAULT_BEACON_SCOPE })
+    registry.disconnect("b1")
+    expect(registry.requestUpdate("b1")).toEqual({ ok: false, error: expect.stringContaining("offline") })
+    expect(socket.sent).toEqual([])
+  })
+
+  test("an update request to an online beacon that predates the update protocol is refused without sending", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.70.0", protocolVersion: UPDATE_PROTOCOL - 1, scope: DEFAULT_BEACON_SCOPE })
+    expect(registry.requestUpdate("b1")).toEqual({ ok: false, error: expect.stringContaining("reinstall") })
+    expect(socket.sent).toEqual([])
+    expect(registry.live()[0]?.canSelfUpdate).toBe(false)
+  })
+
+  test("an update request to an online beacon that speaks the update protocol sends a bare update frame", () => {
+    const registry = createBeaconRegistry()
+    const socket = fakeSocket()
+    registry.connect({ beaconId: "b1", socket, beaconVersion: "1.70.0", protocolVersion: UPDATE_PROTOCOL, scope: DEFAULT_BEACON_SCOPE })
+    expect(registry.requestUpdate("b1")).toEqual({ ok: true })
+    expect(socket.sent.map((raw) => JSON.parse(raw))).toEqual([{ kind: "update" }])
+    expect(registry.live()[0]?.canSelfUpdate).toBe(true)
+  })
+
+  test("a reported update status notifies subscribers, outlives a disconnect, and is cleared by the next connect", () => {
+    const registry = createBeaconRegistry()
+    const connect = (beaconVersion: string) =>
+      registry.connect({ beaconId: "b1", socket: fakeSocket(), beaconVersion, protocolVersion: UPDATE_PROTOCOL, scope: DEFAULT_BEACON_SCOPE })
+    connect("1.70.0")
+    let notified = 0
+    registry.subscribe(() => {
+      notified += 1
+    })
+
+    registry.setUpdateStatus("b1", { state: "restarting", version: "1.71.0" })
+    expect(notified).toBe(1)
+    expect(registry.live()[0]?.updateStatus).toEqual({ state: "restarting", version: "1.71.0" })
+
+    registry.disconnect("b1")
+    expect(registry.live()[0]?.updateStatus).toEqual({ state: "restarting", version: "1.71.0" })
+
+    connect("1.71.0")
+    expect(registry.live()[0]).toMatchObject({ beaconVersion: "1.71.0", updateStatus: null })
   })
 })

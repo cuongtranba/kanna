@@ -179,6 +179,7 @@ export type ClientCommand =
   | { type: "subagent.delete"; id: string }
   | { type: "settings.testMcpServer"; id: string }
   | { type: "beacons.mintPairingCode" }
+  | { type: "beacons.update"; beaconId: string }
   | { type: "settings.startMcpOAuth"; id: string }
   | { type: "settings.completeMcpOAuth"; id: string; callbackUrl: string }
   | { type: "settings.readLlmProvider" }

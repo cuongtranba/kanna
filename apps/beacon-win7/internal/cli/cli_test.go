@@ -87,6 +87,8 @@ func TestParseArgs(t *testing.T) {
 		{[]string{"pair", "a", "b", "c"}, cli.Command{Name: "invalid", Reason: "pair needs <kanna-url> and <code>"}},
 		{[]string{"pair", "kanna.example", "CODE"}, cli.Command{Name: "invalid", Reason: "kanna-url must start with http:// or https://"}},
 		{[]string{"run", "extra"}, cli.Command{Name: "invalid", Reason: "run takes no arguments"}},
+		{[]string{"version"}, cli.Command{Name: "version"}},
+		{[]string{"version", "extra"}, cli.Command{Name: "invalid", Reason: "version takes no arguments"}},
 	}
 	for _, tc := range cases {
 		if got := cli.ParseArgs(tc.argv); got != tc.want {
@@ -270,7 +272,7 @@ func TestRunCompletesTheHandshakeServesARequestAndStopsWhenRevoked(t *testing.T)
 			_, _, _ = conn.ReadMessage()
 			return
 		}
-		if hello != (protocol.Hello{BeaconID: "b-1", ProtocolVersion: 3, BeaconVersion: "0.1.0", OS: protocol.OSWindows}) {
+		if hello != (protocol.Hello{BeaconID: "b-1", ProtocolVersion: 4, BeaconVersion: "0.1.0", OS: protocol.OSWindows}) {
 			t.Errorf("hello = %#v", hello)
 		}
 		writeFrame(t, conn, protocol.Challenge{Nonce: "nonce-1"})
@@ -319,7 +321,13 @@ func TestDescribeStatus(t *testing.T) {
 		{runner.Status{Phase: runner.PhaseOnline}, "connected to https://k"},
 		{runner.Status{Phase: runner.PhaseOffline, RetryAt: now.Add(2 * time.Second), Reason: runner.ReasonUnreachable}, "disconnected; reconnecting in 2000 ms"},
 		{runner.Status{Phase: runner.PhaseOffline, RetryAt: now.Add(-time.Second), Reason: runner.ReasonDisabled}, "Kanna has switched this beacon off; reconnecting in 0 ms"},
-		{runner.Status{Phase: runner.PhaseIncompatible, MinSupported: 3}, "this beacon is too old for the server (it needs protocol 3 or newer)."},
+		{runner.Status{Phase: runner.PhaseIncompatible, MinSupported: 5}, "this beacon is too old for the server (it needs protocol 5 or newer)."},
+		{runner.Status{Phase: runner.PhaseIncompatible, MinSupported: 1}, "this beacon (protocol 4) is newer than the Kanna server. Update Kanna, then start the beacon again."},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateChecking}, "updating to 1.71.0: checking the release"},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateDownloading}, "updating to 1.71.0: downloading"},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateInstalling}, "updating to 1.71.0: installing"},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateRestarting}, "updated to 1.71.0; restarting"},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateFailed, Message: "no asset"}, "update to 1.71.0 failed: no asset"},
 		{runner.Status{Phase: runner.PhaseConnecting}, ""},
 	}
 	for _, tc := range cases {

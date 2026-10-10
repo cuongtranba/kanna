@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto"
 import type { ServerWebSocket } from "bun"
 import type { JsonValue } from "../shared/json"
-import { SCOPE_SYNC_PROTOCOL, type BeaconFrame, type BeaconRequest } from "../shared/beacon-protocol"
+import {
+  SCOPE_SYNC_PROTOCOL,
+  UPDATE_PROTOCOL,
+  type BeaconFrame,
+  type BeaconRequest,
+  type BeaconUpdateStatus,
+} from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
 import { TRANSFER_PROTOCOL } from "../shared/beacon-transfer"
 import type { BeaconLiveState } from "../shared/beacon-status"
+import type { BeaconUpdateResult } from "../shared/beacon-config"
 import type { ClientState } from "./ws-router"
 
 export const PING_INTERVAL_MS = 15_000
@@ -37,6 +44,8 @@ export interface BeaconRegistry {
   pushScope(beaconId: string, scope: BeaconScope, options?: { force?: boolean }): void
   dispatch(beaconId: string, request: BeaconRequest, sink: BeaconRequestSink): { requestId: string; cancel(): void }
   routeInbound(beaconId: string, frame: BeaconFrame): void
+  setUpdateStatus(beaconId: string, status: BeaconUpdateStatus): void
+  requestUpdate(beaconId: string): BeaconUpdateResult
   subscribe(cb: () => void): () => void
   sweep(): void
 }
@@ -48,12 +57,18 @@ interface BeaconEntry {
   beaconVersion: string
   protocolVersion: number
   sentScope: string
+  updateStatus: BeaconUpdateStatus | null
 }
 
 interface PendingRequest {
   beaconId: string
   sink: BeaconRequestSink
 }
+
+const UPDATE_OFFLINE = "this beacon is offline; start it on that machine, then update it"
+
+const UPDATE_UNSUPPORTED =
+  "this beacon is too old to update itself; reinstall it once on that machine and later updates will be one click"
 
 const TRANSFER_UNSUPPORTED =
   "this beacon is too old to transfer files; update the beacon on that machine and reconnect it"
@@ -131,6 +146,7 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
         beaconVersion,
         protocolVersion,
         sentScope: JSON.stringify(scope),
+        updateStatus: null,
       })
       notify()
     },
@@ -154,6 +170,8 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
         online: entry.online,
         lastSeenAt: entry.lastSeenAt,
         beaconVersion: entry.beaconVersion,
+        canSelfUpdate: entry.protocolVersion >= UPDATE_PROTOCOL,
+        updateStatus: entry.updateStatus,
       }))
     },
     send,
@@ -195,6 +213,19 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       const request = pending.get(frame.id)
       if (!request || request.beaconId !== beaconId) return
       deliver(request, frame.id, frame)
+    },
+    setUpdateStatus(beaconId, status) {
+      const entry = entries.get(beaconId)
+      if (!entry) return
+      entry.updateStatus = status
+      notify()
+    },
+    requestUpdate(beaconId) {
+      const entry = entries.get(beaconId)
+      if (!entry || !entry.socket) return { ok: false, error: UPDATE_OFFLINE }
+      if (entry.protocolVersion < UPDATE_PROTOCOL) return { ok: false, error: UPDATE_UNSUPPORTED }
+      send(beaconId, { kind: "update" })
+      return { ok: true }
     },
     sweep() {
       const current = now()

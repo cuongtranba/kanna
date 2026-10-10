@@ -18,15 +18,35 @@ function config(id: string, overrides: Partial<BeaconConfig> = {}): BeaconConfig
 }
 
 function liveState(beaconId: string, lastSeenAt: number): BeaconLiveState {
-  return { beaconId, online: true, lastSeenAt, beaconVersion: "1.2.3" }
+  return { beaconId, online: true, lastSeenAt, beaconVersion: "1.2.3", canSelfUpdate: true, updateStatus: null }
 }
 
 describe("buildBeaconStatusRows", () => {
   test("joins live state by id and defaults a beacon with no live entry to offline", () => {
     const rows = buildBeaconStatusRows([config("a"), config("b", { enabled: false, os: "windows" })], [liveState("a", 500)])
     expect(rows).toEqual([
-      { id: "a", label: "label-a", os: "linux", enabled: true, online: true, lastSeenAt: 500, beaconVersion: "1.2.3" },
-      { id: "b", label: "label-b", os: "windows", enabled: false, online: false, lastSeenAt: null, beaconVersion: null },
+      {
+        id: "a",
+        label: "label-a",
+        os: "linux",
+        enabled: true,
+        online: true,
+        lastSeenAt: 500,
+        beaconVersion: "1.2.3",
+        canSelfUpdate: true,
+        update: null,
+      },
+      {
+        id: "b",
+        label: "label-b",
+        os: "windows",
+        enabled: false,
+        online: false,
+        lastSeenAt: null,
+        beaconVersion: null,
+        canSelfUpdate: false,
+        update: null,
+      },
     ])
   })
 

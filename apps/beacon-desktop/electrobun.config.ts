@@ -11,6 +11,10 @@ export default {
   runtime: {
     exitOnLastWindowClosed: false,
   },
+  release: {
+    baseUrl: "https://github.com/cuongtranba/kanna/releases/latest/download",
+    generatePatch: false,
+  },
   build: {
     mainProcess: "bun",
     bun: {

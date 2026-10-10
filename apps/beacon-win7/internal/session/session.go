@@ -36,10 +36,13 @@ type Deps struct {
 	Signer         Signer
 	FS             *fsops.FS
 	Transfer       *transfer.Transferer
-	OnReady        func(scope protocol.Scope, serverProtocol float64)
+	OnReady        func(scope protocol.Scope, serverProtocol float64, serverVersion string)
 	OnScope        func(scope protocol.Scope)
 	OnRefused      func(reason string)
 	OnIncompatible func(frame protocol.Incompatible)
+	// OnUpdateRequested hears Kanna's Update now button. The frame carries
+	// nothing: the version to install is the one from the handshake.
+	OnUpdateRequested func()
 }
 
 type phase int
@@ -60,8 +63,10 @@ type Session struct {
 	phase          phase
 	scope          *protocol.Scope
 	serverProtocol float64
+	serverVersion  string
 	running        int
 	queue          []func()
+	idle           chan struct{}
 
 	connection context.Context
 	closed     context.CancelFunc
@@ -84,6 +89,7 @@ func (s *Session) Start() {
 		defer s.mu.Unlock()
 		s.phase = phaseStopped
 		s.queue = nil
+		s.signalIdleLocked()
 		s.closed()
 	})
 	s.deps.Transport.Send(protocol.Hello{
@@ -98,6 +104,61 @@ func (s *Session) canSyncScope() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.phase == phaseReady && s.serverProtocol >= protocol.ScopeSyncProtocol
+}
+
+func (s *Session) canReportUpdates() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.phase == phaseReady && s.serverProtocol >= protocol.UpdateProtocol
+}
+
+// ServerVersion is the Kanna version the server announced in ready or
+// incompatible, or "" when it announced none.
+func (s *Session) ServerVersion() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.serverVersion
+}
+
+// SendUpdateStatus reports self-update progress. It returns false, sending
+// nothing, unless the session is ready on a server that speaks protocol 4:
+// an older server closes the connection on a frame it cannot parse.
+func (s *Session) SendUpdateStatus(state, version string, message *string) bool {
+	if !s.canReportUpdates() {
+		return false
+	}
+	s.deps.Transport.Send(protocol.UpdateStatus{State: state, Version: version, Message: message})
+	return true
+}
+
+// WaitIdle returns once no request is running or queued, or with ctx's error
+// when ctx ends first.
+func (s *Session) WaitIdle(ctx context.Context) error {
+	for {
+		s.mu.Lock()
+		if s.running == 0 && len(s.queue) == 0 {
+			s.mu.Unlock()
+			return nil
+		}
+		if s.idle == nil {
+			s.idle = make(chan struct{})
+		}
+		changed := s.idle
+		s.mu.Unlock()
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// signalIdleLocked wakes WaitIdle callers so they look again.
+func (s *Session) signalIdleLocked() {
+	if s.idle != nil {
+		close(s.idle)
+		s.idle = nil
+	}
 }
 
 // RequestScopeChange asks the server to change the scope. It returns false,
@@ -125,6 +186,9 @@ func (s *Session) handleFrame(frame protocol.Frame) {
 	switch typed := frame.(type) {
 	case protocol.Incompatible:
 		if s.transition(phaseAwaitingChallenge, phaseStopped) {
+			s.mu.Lock()
+			s.serverVersion = valueOf(typed.ServerVersion)
+			s.mu.Unlock()
 			if s.deps.OnIncompatible != nil {
 				s.deps.OnIncompatible(typed)
 			}
@@ -152,15 +216,20 @@ func (s *Session) handleFrame(frame protocol.Frame) {
 		if typed.ProtocolVersion != nil {
 			s.serverProtocol = *typed.ProtocolVersion
 		}
-		serverProtocol := s.serverProtocol
+		s.serverVersion = valueOf(typed.ServerVersion)
+		serverProtocol, serverVersion := s.serverProtocol, s.serverVersion
 		s.mu.Unlock()
 		s.adoptScope(typed.Scope)
 		if s.deps.OnReady != nil {
-			s.deps.OnReady(typed.Scope, serverProtocol)
+			s.deps.OnReady(typed.Scope, serverProtocol, serverVersion)
 		}
 	case protocol.ScopeFrame:
 		if s.isReady() {
 			s.adoptScope(typed.Scope)
+		}
+	case protocol.Update:
+		if s.isReady() && s.deps.OnUpdateRequested != nil {
+			s.deps.OnUpdateRequested()
 		}
 	case protocol.Ping:
 		if s.isReady() {
@@ -210,6 +279,7 @@ func (s *Session) enqueue(id string, request protocol.Request, granted protocol.
 			s.serve(id, request, granted)
 			s.mu.Lock()
 			s.running--
+			s.signalIdleLocked()
 			s.mu.Unlock()
 			s.drain()
 		}()
@@ -322,6 +392,13 @@ func (s *Session) runFS(request protocol.Request) (any, error) {
 	default:
 		return nil, errors.New(UnsupportedOperation)
 	}
+}
+
+func valueOf(text *string) string {
+	if text == nil {
+		return ""
+	}
+	return *text
 }
 
 func result[T any](value T, err error) (any, error) {

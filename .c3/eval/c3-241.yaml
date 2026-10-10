@@ -24,6 +24,13 @@ code:
   - src/beacon/host-os.ts
   - src/beacon/version.ts
   - src/beacon/version.test.ts
+  - src/beacon/self-update.ts
+  - src/beacon/self-update.test.ts
+  - src/beacon/self-update.adapter.ts
+  - src/beacon/self-update.adapter.test.ts
+  - src/beacon/supervisor.ts
+  - src/beacon/supervisor.test.ts
+  - scripts/build-beacon.ts
   - src/beacon/desktop/**/*.ts
   - src/beacon/desktop/**/*.tsx
   - src/beacon/desktop/view/beacon-desktop.css

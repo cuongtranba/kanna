@@ -14,8 +14,9 @@ import type {
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { AnalyticsReporter } from "./analytics"
 import { KeybindingsManager } from "./keybindings"
-import type { BeaconMintResult } from "../shared/beacon-config"
+import type { BeaconMintResult, BeaconUpdateResult } from "../shared/beacon-config"
 import { getBeaconPairingStore } from "./beacon-pairing-host"
+import type { BeaconRegistry } from "./beacon-registry"
 import { validateMcpServer } from "./mcp-validator"
 import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { fetchGitHubReleases } from "./diff-store"
@@ -54,9 +55,12 @@ export interface SettingsCommandDeps {
   resolvedLlmProvider: ResolvedLlmProvider
   listOpenRouterModels: (() => Promise<OpenRouterModel[]>) | undefined
   packageUpdateManager?: PackageUpdateManager
+  beaconRegistry?: Pick<BeaconRegistry, "requestUpdate">
   authEnabled?: boolean
   send: (envelope: ServerEnvelope) => void
 }
+
+const BEACONS_UNAVAILABLE = "Beacons are not available on this server."
 
 
 export function isSubagentValidationError(
@@ -143,7 +147,7 @@ export async function handleSettingsCommand(
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
-  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, packageUpdateManager, authEnabled, send } = deps
+  const { keybindings, resolvedAppSettings, resolvedAnalytics, resolvedLlmProvider, listOpenRouterModels, packageUpdateManager, beaconRegistry, authEnabled, send } = deps
 
   switch (command.type) {
     case "settings.readKeybindings": {
@@ -288,6 +292,13 @@ export async function handleSettingsCommand(
         ? { ok: true, ...getBeaconPairingStore().mint() }
         : { ok: false, error: "Pairing a beacon requires a server password. Start Kanna with --password." }
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: minted })
+      return true
+    }
+    case "beacons.update": {
+      const requested: BeaconUpdateResult = beaconRegistry
+        ? beaconRegistry.requestUpdate(command.beaconId)
+        : { ok: false, error: BEACONS_UNAVAILABLE }
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: requested })
       return true
     }
     case "settings.startMcpOAuth": {

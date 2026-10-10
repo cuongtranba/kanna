@@ -3,7 +3,7 @@ import { buildBeaconPairLink } from "../../shared/beacon-pair-link"
 import type { BeaconScopeChange } from "../../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../../shared/beacon-scope"
 import type { BeaconActivity } from "../activity"
-import type { BeaconPairingRequest, BeaconPairingResult, BeaconState } from "../ports"
+import type { BeaconPairingRequest, BeaconPairingResult, BeaconState, BeaconUpdateResult } from "../ports"
 import type { BeaconRunner, BeaconRunnerExit, BeaconRunnerSnapshot } from "../runner"
 import { createBeaconDesktopApp, type DesktopAppDeps } from "./desktop-app"
 import type { DesktopPrefs } from "./desktop-types"
@@ -45,6 +45,9 @@ function createFakeRunner(initial: BeaconRunnerSnapshot) {
     runner,
     calls,
     scopeChanges,
+    end(exit: BeaconRunnerExit) {
+      finish(exit)
+    },
     emit(next: BeaconRunnerSnapshot) {
       current = next
       for (const listener of listeners) listener(next)
@@ -63,6 +66,7 @@ function createHarness(options: {
   prefs?: DesktopPrefs | null
   pairResult?: BeaconPairingResult
   runnerSnapshot?: BeaconRunnerSnapshot
+  restartResult?: BeaconUpdateResult
 } = {}) {
   let state = options.state ?? null
   let prefs = options.prefs ?? null
@@ -74,6 +78,7 @@ function createHarness(options: {
     pairs: [],
   }
   const runners: Array<ReturnType<typeof createFakeRunner> & { startPaused: boolean }> = []
+  let restarts = 0
   let onActivity: (activity: BeaconActivity) => void = () => {}
   const deps: DesktopAppDeps = {
     os: "windows",
@@ -121,6 +126,12 @@ function createHarness(options: {
       onActivity = listener
       return fake.runner
     },
+    selfUpdate: {
+      restart: async () => {
+        restarts += 1
+        return options.restartResult ?? { ok: true }
+      },
+    },
     sleep: () => new Promise(() => {}),
     log: () => {},
   }
@@ -129,6 +140,9 @@ function createHarness(options: {
     app,
     saved,
     runners,
+    get restarts() {
+      return restarts
+    },
     get state() {
       return state
     },
@@ -293,5 +307,29 @@ describe("beacon desktop app", () => {
     harness.app.receiveLink(LINK)
     expect(harness.app.view().screen).toEqual({ kind: "home" })
     expect(harness.app.view().notice).toEqual({ kind: "already-paired", kannaUrl: KANNA })
+  })
+
+  test("a beacon that downloaded an update restarts the app into it, and nothing else does", async () => {
+    const harness = createHarness({ state: PAIRED })
+    await harness.app.start()
+    harness.runners[0]?.end({ reason: "update" })
+    await Bun.sleep(0)
+    expect(harness.restarts).toBe(1)
+    expect(harness.runners).toHaveLength(1)
+    const other = createHarness({ state: PAIRED })
+    await other.app.start()
+    other.runners[0]?.end({ reason: "incompatible" })
+    await Bun.sleep(0)
+    expect(other.restarts).toBe(0)
+  })
+
+  test("when the restart into an update fails, the beacon comes back online", async () => {
+    const harness = createHarness({ state: PAIRED, restartResult: { ok: false, error: "Failed to start update helper" } })
+    await harness.app.start()
+    harness.runners[0]?.end({ reason: "update" })
+    await Bun.sleep(0)
+    expect(harness.restarts).toBe(1)
+    expect(harness.runners).toHaveLength(2)
+    expect(harness.app.view().runner?.status.phase).toBe("online")
   })
 })

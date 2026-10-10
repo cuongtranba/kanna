@@ -37,17 +37,32 @@ func TLSConfig(serverName string) *tls.Config {
 	return newTLSConfig(serverName, nil, mozillaPool())
 }
 
+// PerHostTLSConfig is TLSConfig for a client that talks to more than one host,
+// such as one following a GitHub release download from github.com to
+// release-assets.githubusercontent.com. Each connection is verified against
+// the name it was dialed with, which net/http sets per request, so every
+// redirect hop is checked under its own host name. Go sends no name for an IP
+// address, so such a host is refused; release downloads never use one.
+func PerHostTLSConfig() *tls.Config {
+	return newTLSConfig("", nil, mozillaPool())
+}
+
 // newTLSConfig takes the root pools explicitly; a nil system pool means the
-// operating system's verifier. InsecureSkipVerify only disables crypto/tls's
-// built-in check so VerifyConnection can run the two-step check above; that
-// check still verifies the full chain, validity and host name.
+// operating system's verifier. An empty serverName verifies each connection
+// against the name in its own handshake. InsecureSkipVerify only disables
+// crypto/tls's built-in check so VerifyConnection can run the two-step check
+// above; that check still verifies the full chain, validity and host name.
 func newTLSConfig(serverName string, system, fallback *x509.CertPool) *tls.Config {
 	return &tls.Config{
 		ServerName:         serverName,
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: true, //nolint:gosec // replaced by VerifyConnection below
 		VerifyConnection: func(state tls.ConnectionState) error {
-			return verifyPeer(state, serverName, system, fallback)
+			name := serverName
+			if name == "" {
+				name = state.ServerName
+			}
+			return verifyPeer(state, name, system, fallback)
 		},
 	}
 }

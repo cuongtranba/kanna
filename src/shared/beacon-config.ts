@@ -27,3 +27,5 @@ export interface BeaconPatch {
 export type BeaconMintResult =
   | { ok: true; code: string; expiresAt: number }
   | { ok: false; error: string }
+
+export type BeaconUpdateResult = { ok: true } | { ok: false; error: string }
