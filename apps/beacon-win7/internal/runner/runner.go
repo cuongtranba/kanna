@@ -3,6 +3,8 @@
 package runner
 
 import (
+	"context"
+	"errors"
 	"regexp"
 	"strings"
 	"sync"
@@ -10,11 +12,14 @@ import (
 
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/fsops"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/selfupdate"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/session"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/state"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transfer"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transport"
 )
+
+var errNoUpdater = errors.New("this beacon cannot update itself")
 
 // MaxBackoff caps the reconnect delay.
 const MaxBackoff = 30 * time.Second
@@ -52,6 +57,7 @@ const (
 	PhaseOffline      = "offline"
 	PhaseRevoked      = "revoked"
 	PhaseIncompatible = "incompatible"
+	PhaseUpdating     = "updating"
 	PhaseStopped      = "stopped"
 )
 
@@ -67,9 +73,14 @@ const (
 	ExitRevoked      = "revoked"
 	ExitUnpaired     = "unpaired"
 	ExitStopped      = "stopped"
+	// ExitUpdate means a new build replaced this executable; the caller
+	// restarts it.
+	ExitUpdate = "update"
 )
 
 // Status is the runner's current phase; only the fields of that phase are set.
+// An updating status carries the target Version and the Step, one of the
+// protocol.Update* states; a failed step also carries a Message.
 type Status struct {
 	Phase        string
 	Attempt      int
@@ -78,6 +89,16 @@ type Status struct {
 	Reason       string
 	MinSupported float64
 	DownloadURL  *string
+	Version      string
+	Step         string
+	Message      string
+}
+
+// Updater installs a release over the running executable. progress hears
+// each step; beforeSwap runs once the new build is verified and before it
+// replaces the running one, and an error from it abandons the install.
+type Updater interface {
+	Install(ctx context.Context, version string, progress func(step string), beforeSwap func() error) error
 }
 
 // Snapshot is what a status listener sees.
@@ -96,6 +117,11 @@ type Deps struct {
 	OpenTransport func(url string) transport.Transport
 	After         func(time.Duration) <-chan time.Time
 	Now           func() time.Time
+	// Updater, when set, lets the beacon update itself to its Kanna's
+	// version. AutoUpdate makes it do so on connecting to a newer Kanna;
+	// without it only Kanna's Update now button starts an update.
+	Updater    Updater
+	AutoUpdate bool
 }
 
 type outcome struct {
@@ -104,12 +130,18 @@ type outcome struct {
 	refusedDisabled bool
 	minSupported    float64
 	downloadURL     *string
+	serverVersion   string
 }
 
 type liveConnection struct {
 	transport transport.Transport
 	session   *session.Session
 	closed    chan struct{}
+	ctx       context.Context
+	since     time.Time
+	// installed is closed when an install started on this connection ends;
+	// nil when none started. Guarded by Runner.mu.
+	installed chan struct{}
 }
 
 // Runner keeps a beacon connected.
@@ -128,9 +160,15 @@ type Runner struct {
 	stopped   bool
 	unpairing bool
 	live      *liveConnection
-	wake      chan struct{}
-	listeners map[int]func(Snapshot)
-	nextID    int
+
+	stopCtx     context.Context
+	stopRun     context.CancelFunc
+	updating    bool
+	restartInto string
+	lastFailure *selfupdate.Failure
+	wake        chan struct{}
+	listeners   map[int]func(Snapshot)
+	nextID      int
 }
 
 // New returns a runner that has not started connecting.
@@ -141,8 +179,11 @@ func New(deps Deps) *Runner {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
+	stopCtx, stopRun := context.WithCancel(context.Background())
 	r := &Runner{
 		deps:      deps,
+		stopCtx:   stopCtx,
+		stopRun:   stopRun,
 		url:       SocketURL(deps.State.KannaURL),
 		status:    Status{Phase: PhaseConnecting, Attempt: 1},
 		protocol:  protocol.MinBeaconProtocol,
@@ -178,7 +219,7 @@ func (r *Runner) readRoots() []string {
 }
 
 func (r *Runner) snapshotLocked() Snapshot {
-	online := r.status.Phase == PhaseOnline
+	online := r.status.Phase == PhaseOnline || (r.status.Phase == PhaseUpdating && r.live != nil)
 	return Snapshot{Status: r.status, Scope: r.scope, ScopeSync: online && r.protocol >= protocol.ScopeSyncProtocol}
 }
 
@@ -205,9 +246,19 @@ func (r *Runner) Subscribe(listener func(Snapshot)) func() {
 }
 
 func (r *Runner) update(change func()) {
+	r.updateIf(func() bool { return true }, change)
+}
+
+// updateIf applies change and publishes the result when applies, read under
+// the same lock, holds.
+func (r *Runner) updateIf(applies func() bool, change func()) {
 	r.publishMu.Lock()
 	defer r.publishMu.Unlock()
 	r.mu.Lock()
+	if !applies() {
+		r.mu.Unlock()
+		return
+	}
 	change()
 	current := r.snapshotLocked()
 	listeners := make([]func(Snapshot), 0, len(r.listeners))
@@ -234,10 +285,17 @@ func (r *Runner) nudge() {
 }
 
 func (r *Runner) attempt() outcome {
-	conn := r.deps.OpenTransport(r.url)
+	ctx, cancel := context.WithCancel(r.stopCtx)
 	closed := make(chan struct{})
 	var once sync.Once
-	conn.OnClose(func() { once.Do(func() { close(closed) }) })
+	conn := r.deps.OpenTransport(r.url)
+	conn.OnClose(func() {
+		once.Do(func() {
+			cancel()
+			close(closed)
+		})
+	})
+	live := &liveConnection{transport: conn, closed: closed, ctx: ctx}
 	var resultMu sync.Mutex
 	result := outcome{kind: "closed"}
 	s := session.New(session.Deps{
@@ -248,15 +306,20 @@ func (r *Runner) attempt() outcome {
 		Signer:        r.deps.Signer,
 		FS:            r.fs,
 		Transfer:      r.transfer,
-		OnReady: func(granted protocol.Scope, serverProtocol float64) {
+		OnReady: func(granted protocol.Scope, serverProtocol float64, serverVersion string) {
 			resultMu.Lock()
 			result.wasOnline = true
 			resultMu.Unlock()
 			r.update(func() {
+				live.since = r.deps.Now()
 				r.scope = &granted
 				r.protocol = serverProtocol
-				r.status = Status{Phase: PhaseOnline, Since: r.deps.Now()}
+				r.status = Status{Phase: PhaseOnline, Since: live.since}
 			})
+			r.considerUpdate(live, serverVersion, selfupdate.Auto)
+		},
+		OnUpdateRequested: func() {
+			r.considerUpdate(live, live.session.ServerVersion(), selfupdate.Manual)
 		},
 		OnScope: func(granted protocol.Scope) {
 			r.update(func() { r.scope = &granted })
@@ -276,16 +339,24 @@ func (r *Runner) attempt() outcome {
 			result.kind = PhaseIncompatible
 			result.minSupported = frame.MinSupported
 			result.downloadURL = frame.DownloadURL
+			if frame.ServerVersion != nil {
+				result.serverVersion = *frame.ServerVersion
+			}
 		},
 	})
+	live.session = s
 	r.mu.Lock()
-	r.live = &liveConnection{transport: conn, session: s, closed: closed}
+	r.live = live
 	r.mu.Unlock()
 	s.Start()
 	<-closed
 	r.mu.Lock()
 	r.live = nil
+	installed := live.installed
 	r.mu.Unlock()
+	if installed != nil {
+		<-installed
+	}
 	resultMu.Lock()
 	defer resultMu.Unlock()
 	return result
@@ -297,8 +368,8 @@ func (r *Runner) flags() (stopped, unpairing bool) {
 	return r.stopped, r.unpairing
 }
 
-// Run connects until the runner is stopped, unpaired, revoked, or refused as
-// incompatible, and returns which of those ended it.
+// Run connects until the runner is stopped, unpaired, revoked, refused as
+// incompatible, or updated, and returns which of those ended it.
 func (r *Runner) Run() string {
 	failures := 0
 	for {
@@ -308,8 +379,19 @@ func (r *Runner) Run() string {
 		}
 		r.setStatus(Status{Phase: PhaseConnecting, Attempt: failures + 1})
 		result := r.attempt()
+		if version := r.takeRestart(); version != "" {
+			r.setStatus(Status{Phase: PhaseUpdating, Version: version, Step: protocol.UpdateRestarting})
+			return ExitUpdate
+		}
 		switch result.kind {
 		case PhaseIncompatible:
+			if r.updateWhileIncompatible(result.serverVersion) {
+				return ExitUpdate
+			}
+			if stopped, _ := r.flags(); stopped {
+				r.setStatus(Status{Phase: PhaseStopped})
+				return ExitStopped
+			}
 			r.setStatus(Status{Phase: PhaseIncompatible, MinSupported: result.minSupported, DownloadURL: result.downloadURL})
 			return ExitIncompatible
 		case PhaseRevoked:
@@ -342,12 +424,128 @@ func (r *Runner) Run() string {
 	}
 }
 
-// Stop ends the run, closing the live connection.
+func (r *Runner) takeRestart() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	version := r.restartInto
+	r.restartInto = ""
+	return version
+}
+
+// considerUpdate applies the update rule to serverVersion and, when it says
+// install, starts the install beside the live connection.
+func (r *Runner) considerUpdate(live *liveConnection, serverVersion string, trigger selfupdate.Trigger) {
+	r.mu.Lock()
+	if r.updating || live.ctx.Err() != nil {
+		r.mu.Unlock()
+		return
+	}
+	decision := selfupdate.Decide(r.deps.BeaconVersion, serverVersion, trigger, r.deps.AutoUpdate, r.lastFailure, r.deps.Now())
+	var installed chan struct{}
+	if decision.Kind == selfupdate.Install {
+		r.updating = true
+		installed = make(chan struct{})
+		live.installed = installed
+	}
+	r.mu.Unlock()
+	switch decision.Kind {
+	case selfupdate.Current:
+		live.session.SendUpdateStatus(protocol.UpdateCurrent, decision.Version, nil)
+	case selfupdate.Install:
+		go func() {
+			defer close(installed)
+			r.installOnline(live, decision.Version)
+		}()
+	}
+}
+
+// updateLive applies change and publishes it only while live is still the
+// runner's connection, so a late step never overwrites an offline status.
+func (r *Runner) updateLive(live *liveConnection, change func()) {
+	r.updateIf(func() bool { return r.live == live && live.ctx.Err() == nil }, change)
+}
+
+func (r *Runner) recordFailure(version string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lastFailure = &selfupdate.Failure{Version: version, At: r.deps.Now()}
+}
+
+// installOnline downloads at once, but swaps only when no request is running
+// or queued, so an exec in flight finishes first. On success it reports
+// restarting and closes the connection, and Run returns ExitUpdate. On
+// failure it reports why and the beacon stays online. A connection that
+// drops mid-install cancels it without counting as a failure; the
+// connection's attempt waits for it to return, so the next ready decides
+// afresh and starts it again.
+func (r *Runner) installOnline(live *liveConnection, version string) {
+	defer func() {
+		r.mu.Lock()
+		r.updating = false
+		r.mu.Unlock()
+	}()
+	report := func(step string) {
+		r.updateLive(live, func() { r.status = Status{Phase: PhaseUpdating, Version: version, Step: step} })
+		live.session.SendUpdateStatus(step, version, nil)
+	}
+	report(protocol.UpdateChecking)
+	err := errNoUpdater
+	if r.deps.Updater != nil {
+		err = r.deps.Updater.Install(live.ctx, version, report, func() error { return live.session.WaitIdle(live.ctx) })
+	}
+	if err == nil {
+		report(protocol.UpdateRestarting)
+		r.mu.Lock()
+		r.restartInto = version
+		r.mu.Unlock()
+		live.transport.Close()
+		return
+	}
+	if live.ctx.Err() != nil {
+		return
+	}
+	r.recordFailure(version)
+	message := err.Error()
+	live.session.SendUpdateStatus(protocol.UpdateFailed, version, &message)
+	r.updateLive(live, func() {
+		r.status = Status{Phase: PhaseUpdating, Version: version, Step: protocol.UpdateFailed, Message: message}
+	})
+	r.updateLive(live, func() { r.status = Status{Phase: PhaseOnline, Since: live.since} })
+}
+
+// updateWhileIncompatible handles a server that refused this beacon's
+// protocol but announced a newer version: installing that version is the way
+// back. It follows the automatic rule, since nobody pressed a button.
+func (r *Runner) updateWhileIncompatible(serverVersion string) bool {
+	r.mu.Lock()
+	decision := selfupdate.Decide(r.deps.BeaconVersion, serverVersion, selfupdate.Auto, r.deps.AutoUpdate, r.lastFailure, r.deps.Now())
+	r.mu.Unlock()
+	if decision.Kind != selfupdate.Install || r.deps.Updater == nil {
+		return false
+	}
+	version := decision.Version
+	report := func(step string) {
+		r.setStatus(Status{Phase: PhaseUpdating, Version: version, Step: step})
+	}
+	report(protocol.UpdateChecking)
+	if err := r.deps.Updater.Install(r.stopCtx, version, report, nil); err != nil {
+		if r.stopCtx.Err() == nil {
+			r.recordFailure(version)
+		}
+		return false
+	}
+	report(protocol.UpdateRestarting)
+	return true
+}
+
+// Stop ends the run, closing the live connection and abandoning any update
+// still downloading.
 func (r *Runner) Stop() {
 	r.mu.Lock()
 	r.stopped = true
 	live := r.live
 	r.mu.Unlock()
+	r.stopRun()
 	if live != nil {
 		live.transport.Close()
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/keystore"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/pairing"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/runner"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/state"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transport"
@@ -16,11 +17,14 @@ import (
 
 // Messages and exit codes identical to the TypeScript CLI.
 const (
-	Usage                 = "usage: kanna-beacon pair <kanna-url> <code> | kanna-beacon run"
-	DesktopAppHint        = "This is the command-line beacon. To pair and run it from the system tray instead, download kanna-beacon-tray-win7 (x64 or x86) from: " + pairing.DownloadPage
-	UsageExitCode         = 64
-	FailureExitCode       = 1
-	IncompatibleExitCode  = 2
+	Usage                = "usage: kanna-beacon pair <kanna-url> <code> | kanna-beacon run | kanna-beacon version"
+	DesktopAppHint       = "This is the command-line beacon. To pair and run it from the system tray instead, download kanna-beacon-tray-win7 (x64 or x86) from: " + pairing.DownloadPage
+	UsageExitCode        = 64
+	FailureExitCode      = 1
+	IncompatibleExitCode = 2
+	// RestartExitCode asks the supervising process to start the beacon
+	// again: a new build replaced the executable.
+	RestartExitCode       = 75
 	notPairedMessage      = "this machine is not paired. Run: kanna-beacon pair <kanna-url> <code>"
 	revokedMessage        = "Kanna no longer knows this beacon. Pair it again: kanna-beacon pair <kanna-url> <code>"
 	pairedMessageTemplate = "paired as %s. Start the beacon with: kanna-beacon run"
@@ -53,6 +57,11 @@ func ParseArgs(argv []string) Command {
 			return Command{Name: "invalid", Reason: "run takes no arguments"}
 		}
 		return Command{Name: "run"}
+	case "version":
+		if len(rest) != 0 {
+			return Command{Name: "invalid", Reason: "version takes no arguments"}
+		}
+		return Command{Name: "version"}
 	case "pair":
 		if len(rest) != 2 {
 			return Command{Name: "invalid", Reason: "pair needs <kanna-url> and <code>"}
@@ -81,6 +90,12 @@ type Deps struct {
 	After         func(time.Duration) <-chan time.Time
 	Now           func() time.Time
 	Log           func(line string)
+	// Print writes to standard output; the version command uses it, since
+	// the self-update smoke test reads the version from there.
+	Print func(line string)
+	// Updater and AutoUpdate are passed to the runner.
+	Updater    runner.Updater
+	AutoUpdate bool
 }
 
 // Run executes argv and returns the process exit code.
@@ -99,6 +114,13 @@ func Run(argv []string, deps Deps) int {
 		return UsageExitCode
 	case "pair":
 		return pairMachine(deps, parsed.KannaURL, parsed.Code)
+	case "version":
+		write := deps.Print
+		if write == nil {
+			write = deps.Log
+		}
+		write(deps.BeaconVersion)
+		return 0
 	}
 	paired := state.Load(state.Path(deps.Home))
 	if paired == nil {
@@ -151,11 +173,33 @@ func DescribeStatus(status runner.Status, kannaURL string, now time.Time) string
 	case runner.PhaseRevoked:
 		return revokedMessage
 	case runner.PhaseIncompatible:
+		if status.MinSupported <= protocol.BeaconProtocolVersion {
+			return fmt.Sprintf("this beacon (protocol %d) is newer than the Kanna server. Update Kanna, then start the beacon again.", protocol.BeaconProtocolVersion)
+		}
 		download := ""
 		if status.DownloadURL != nil {
 			download = " Download the latest beacon: " + *status.DownloadURL
 		}
 		return fmt.Sprintf("this beacon is too old for the server (it needs protocol %v or newer).%s", status.MinSupported, download)
+	case runner.PhaseUpdating:
+		return describeUpdate(status)
+	default:
+		return ""
+	}
+}
+
+func describeUpdate(status runner.Status) string {
+	switch status.Step {
+	case protocol.UpdateChecking:
+		return "updating to " + status.Version + ": checking the release"
+	case protocol.UpdateDownloading:
+		return "updating to " + status.Version + ": downloading"
+	case protocol.UpdateInstalling:
+		return "updating to " + status.Version + ": installing"
+	case protocol.UpdateRestarting:
+		return "updated to " + status.Version + "; restarting"
+	case protocol.UpdateFailed:
+		return "update to " + status.Version + " failed: " + status.Message
 	default:
 		return ""
 	}
@@ -175,6 +219,8 @@ func runBeacon(deps Deps, paired state.State) int {
 		OpenTransport: deps.OpenTransport,
 		After:         deps.After,
 		Now:           deps.Now,
+		Updater:       deps.Updater,
+		AutoUpdate:    deps.AutoUpdate,
 	})
 	beacon.Subscribe(func(snapshot runner.Snapshot) {
 		if line := DescribeStatus(snapshot.Status, paired.KannaURL, deps.Now()); line != "" {
@@ -186,6 +232,8 @@ func runBeacon(deps Deps, paired state.State) int {
 		return IncompatibleExitCode
 	case runner.ExitRevoked:
 		return FailureExitCode
+	case runner.ExitUpdate:
+		return RestartExitCode
 	default:
 		return 0
 	}

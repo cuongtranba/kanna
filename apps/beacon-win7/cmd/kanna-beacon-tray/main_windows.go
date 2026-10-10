@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/pairing"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/runner"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/selfupdate"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/state"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/transport"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/tray"
@@ -38,6 +40,13 @@ func fail(text string) {
 }
 
 func main() {
+	// "version" answers the self-update smoke test before anything else, the
+	// single-instance check included: the running tray is the one asking.
+	// The tray has no console, but writes to the pipe the updater hands it.
+	if len(os.Args) == 2 && os.Args[1] == "version" {
+		fmt.Println(version.Version)
+		return
+	}
 	home, err := state.Home()
 	if err != nil {
 		fail(err.Error())
@@ -48,7 +57,7 @@ func main() {
 		fail(err.Error())
 		os.Exit(1)
 	}
-	defer instance.Release()
+	defer func() { instance.Release() }()
 
 	if link := tray.LinkArgument(os.Args[1:]); link != "" {
 		if !pairFromLink(home, link) {
@@ -63,9 +72,25 @@ func main() {
 		return
 	}
 
-	app := &trayApp{home: home}
+	exe := executable()
+	if exe != "" {
+		go cleanupLeftovers(exe)
+	}
+	app := &trayApp{home: home, exe: exe, release: func() { instance.Release() }}
 	app.registerLinkHandler()
 	systray.Run(app.onReady, app.onExit)
+}
+
+// cleanupLeftovers removes the build an update replaced. The tray that
+// started this one may still be exiting with that file open, so removal is
+// retried for a while.
+func cleanupLeftovers(exe string) {
+	for attempt := 0; attempt < 30; attempt++ {
+		if selfupdate.CleanupLeftovers(exe) == nil {
+			return
+		}
+		time.Sleep(time.Second)
+	}
 }
 
 func pairFromLink(home, link string) bool {
@@ -106,7 +131,9 @@ func pairWith(home string, target pairing.Target) bool {
 }
 
 type trayApp struct {
-	home string
+	home    string
+	exe     string
+	release func()
 
 	mu     sync.Mutex
 	runner *runner.Runner
@@ -229,12 +256,20 @@ func (a *trayApp) start() {
 		a.setLabel(func() string { return "Cannot read this computer's key: " + err.Error() })
 		return
 	}
+	settings := selfupdate.FromEnvironment(os.Getenv)
 	beacon := runner.New(runner.Deps{
 		State:         *paired,
 		OS:            protocol.OSWindows,
 		BeaconVersion: version.Version,
 		Signer:        keys,
 		OpenTransport: func(url string) transport.Transport { return transport.Dial(url) },
+		Updater: selfupdate.NewUpdater(selfupdate.Options{
+			Kind:           selfupdate.Tray,
+			ExecPath:       a.exe,
+			CurrentVersion: version.Version,
+			ReleaseBase:    settings.ReleaseBase,
+		}),
+		AutoUpdate: settings.AutoUpdate && !strings.HasSuffix(version.Version, "-dev"),
 	})
 	a.mu.Lock()
 	a.paired, a.runner = paired, beacon
@@ -253,7 +288,29 @@ func (a *trayApp) start() {
 		systray.SetTooltip(tray.AppName + ": " + tray.StatusLabel(status, paired.KannaURL, time.Now()))
 		a.setLabel(func() string { return tray.StatusLabel(status, paired.KannaURL, time.Now()) })
 	})
-	go beacon.Run()
+	go a.run(beacon)
+}
+
+// run runs the beacon and, when it ends because a new build replaced this
+// executable, hands over to that build.
+func (a *trayApp) run(beacon *runner.Runner) {
+	if beacon.Run() != runner.ExitUpdate || !a.isCurrent(beacon) {
+		return
+	}
+	a.relaunch()
+}
+
+// relaunch releases the single-instance mutex, so the new build does not
+// take itself for a second copy, starts it detached with this tray's
+// arguments, and quits. If it cannot be started the tray says so and quits
+// anyway: this process would only download the same update again.
+func (a *trayApp) relaunch() {
+	a.release()
+	if err := winsys.StartDetached(a.exe, tray.RelaunchArgs(os.Args[1:])); err != nil {
+		fail("Kanna Beacon was updated but could not restart: " + err.Error() + "\n\nStart Kanna Beacon again from the Start menu or its folder.")
+	}
+	a.stop()
+	systray.Quit()
 }
 
 func (a *trayApp) isCurrent(beacon *runner.Runner) bool {

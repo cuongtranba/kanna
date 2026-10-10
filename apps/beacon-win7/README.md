@@ -1,7 +1,7 @@
 # Kanna beacon for Windows 7 (Go 1.20)
 
 A port of the Bun beacon (`src/beacon/**`) for Windows 7 and 8.1, where Bun
-(Windows 10 1809+) and WebView2 cannot run. It speaks protocol 3 exactly as the
+(Windows 10 1809+) and WebView2 cannot run. It speaks protocol 4 exactly as the
 Bun beacon does. The Bun beacon stays the primary
 implementation: this module follows it, never the other way round.
 
@@ -65,7 +65,8 @@ in that table is a load-time dependency that may not exist on Windows 7.
 | `internal/session` | `src/beacon/session.ts` |
 | `internal/transport` | `src/beacon/transport.adapter.ts`, plus TLS roots |
 | `internal/runner` | `src/beacon/runner.ts` (no pause) |
-| `internal/cli` | `src/beacon/main.ts` |
+| `internal/cli` | `src/beacon/main.ts`, plus the restart supervisor |
+| `internal/selfupdate` | `src/beacon/self-update.ts` and `self-update.adapter.ts` |
 | `internal/tray` | status words and link handling for the tray |
 | `internal/winsys` | the Windows half of `src/beacon/desktop/desktop-os.ts` |
 | `internal/utf8lossy` | Node's `Buffer#toString("utf8")` replacement rules |
@@ -100,6 +101,60 @@ A beacon refuses to write outside `writeRoots` (empty by default), and
 access. On Windows the destination must not be open in
 another program (Excel locks a workbook it has open): the rename then fails and
 the transfer reports that.
+
+## Updating
+
+The beacon updates itself to the version of the Kanna it connects to, and
+never to an older one. It updates on its own when it connects to a newer
+Kanna, and when someone presses **Update now** on its row in Kanna's
+Settings, Beacons. Kanna sends no URL and no version with that request: the
+beacon takes the version from the handshake and downloads only from
+`https://github.com/cuongtranba/kanna/releases/download/v<version>/`.
+
+- It fetches `SHA256SUMS-win7` from that release, downloads its own asset
+  (`kanna-beacon-win7-{x64,x86}.exe` or `kanna-beacon-tray-win7-{x64,x86}.exe`)
+  to `<exe>.kanna-update` while hashing it, and deletes the download if the
+  digest does not match.
+- It then runs `<new exe> version`, which must print exactly that version.
+  The tray answers this too: it has no console, but writes to the pipe the
+  updater gives it.
+- It waits until no request is running, renames the running exe to
+  `<exe>.old` (Windows allows renaming a running exe, not deleting it), moves
+  the new one into place, and restores the old one if that fails. Leftovers are
+  removed the next time the beacon starts.
+- Progress (`checking`, `downloading`, `installing`, `restarting`, `current`,
+  `failed`) is reported to Kanna only when the server speaks protocol 4; an
+  older server closes the connection on a frame it does not know.
+- A failed update is reported and the beacon stays online. An automatic retry
+  of the same version waits 30 minutes, since a release's Windows 7 assets can
+  be uploaded after Kanna itself is published; **Update now** retries at once.
+- Downloads follow GitHub's redirect from `github.com` to
+  `release-assets.githubusercontent.com`. Each hop's certificate is checked
+  under its own host name, against the Windows store first and then the
+  embedded bundle (see TLS below).
+
+Restarting:
+
+- **`kanna-beacon run`** exits with code 75 after an update. Started from a
+  terminal or a scheduled task, the first process becomes a supervisor: it
+  starts the new build with the same arguments and
+  `KANNA_BEACON_SUPERVISED=1`, starts it again whenever it exits with 75, and
+  otherwise exits with the child's code. Whatever started the beacon keeps
+  seeing one process. A process that already runs with
+  `KANNA_BEACON_SUPERVISED=1` just exits with 75.
+- **The tray** releases its single-instance mutex, starts the new build
+  detached, and quits.
+
+Settings on the machine, which Kanna cannot change:
+
+- `KANNA_BEACON_AUTO_UPDATE=disabled` turns the automatic update off. **Update
+  now** still works.
+- `KANNA_BEACON_RELEASE_BASE` replaces the download location, for testing
+  against a local copy of a release.
+
+An unstamped build (`0.0.0-dev`) never updates itself. Beacons released before
+protocol 4 (1.70.0 and older) cannot update themselves and need one last
+manual reinstall.
 
 ## Conformance fixtures
 

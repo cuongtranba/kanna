@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/pairing"
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/runner"
 )
 
@@ -122,7 +123,19 @@ func StatusLabel(status runner.Status, kannaURL string, now time.Time) string {
 	case runner.PhaseRevoked:
 		return "Removed from Kanna. Pair it again"
 	case runner.PhaseIncompatible:
+		if status.MinSupported <= protocol.BeaconProtocolVersion {
+			return "Update Kanna: this beacon is newer than your Kanna"
+		}
 		return "Update needed: this beacon is too old for your Kanna"
+	case runner.PhaseUpdating:
+		switch status.Step {
+		case protocol.UpdateRestarting:
+			return "Restarting into " + status.Version + "..."
+		case protocol.UpdateFailed:
+			return "Update to " + status.Version + " failed: " + status.Message
+		default:
+			return "Updating to " + status.Version + "..."
+		}
 	default:
 		return "Stopped"
 	}
@@ -137,4 +150,18 @@ func LinkArgument(args []string) string {
 		}
 	}
 	return ""
+}
+
+// RelaunchArgs are the arguments the tray restarts itself with after an
+// update: its own, less a pairing link, which was redeemed when it started
+// and would only fail as an expired code.
+func RelaunchArgs(args []string) []string {
+	link := LinkArgument(args)
+	kept := []string{}
+	for _, arg := range args {
+		if link == "" || arg != link {
+			kept = append(kept, arg)
+		}
+	}
+	return kept
 }

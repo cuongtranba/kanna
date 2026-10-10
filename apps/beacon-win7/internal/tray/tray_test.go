@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/protocol"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/runner"
 	"github.com/cuongtranba/kanna/apps/beacon-win7/internal/tray"
 )
@@ -21,7 +22,13 @@ func TestStatusLabel(t *testing.T) {
 		{runner.Status{Phase: runner.PhaseOffline, RetryAt: now.Add(1500 * time.Millisecond)}, "Offline, trying again in 2s"},
 		{runner.Status{Phase: runner.PhaseOffline, RetryAt: now.Add(-time.Second), Reason: runner.ReasonDisabled}, "Switched off in Kanna, trying again in 0s"},
 		{runner.Status{Phase: runner.PhaseRevoked}, "Removed from Kanna. Pair it again"},
-		{runner.Status{Phase: runner.PhaseIncompatible}, "Update needed: this beacon is too old for your Kanna"},
+		{runner.Status{Phase: runner.PhaseIncompatible, MinSupported: 5}, "Update needed: this beacon is too old for your Kanna"},
+		{runner.Status{Phase: runner.PhaseIncompatible, MinSupported: 1}, "Update Kanna: this beacon is newer than your Kanna"},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateChecking}, "Updating to 1.71.0..."},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateDownloading}, "Updating to 1.71.0..."},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateInstalling}, "Updating to 1.71.0..."},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateRestarting}, "Restarting into 1.71.0..."},
+		{runner.Status{Phase: runner.PhaseUpdating, Version: "1.71.0", Step: protocol.UpdateFailed, Message: "no asset"}, "Update to 1.71.0 failed: no asset"},
 		{runner.Status{Phase: runner.PhaseStopped}, "Stopped"},
 	}
 	for _, tc := range cases {
@@ -81,5 +88,22 @@ func TestDescribePairingFailureSaysWhatToDoNext(t *testing.T) {
 	}
 	if got := tray.DescribePairingFailure(kannaURL, "dial tcp: i/o timeout"); !strings.Contains(got, "dial tcp: i/o timeout") || !strings.Contains(got, kannaURL) {
 		t.Errorf("network: %q", got)
+	}
+}
+
+func TestRelaunchArgsDropThePairingLinkItAlreadyRedeemed(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"kanna-beacon://pair?url=x&code=y"}, ""},
+		{[]string{"--flag", "kanna-beacon://pair?url=x&code=y"}, "--flag"},
+		{[]string{"--flag"}, "--flag"},
+	}
+	for _, tc := range cases {
+		if got := strings.Join(tray.RelaunchArgs(tc.args), " "); got != tc.want {
+			t.Errorf("RelaunchArgs(%q) = %q, want %q", tc.args, got, tc.want)
+		}
 	}
 }

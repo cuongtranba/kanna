@@ -18,6 +18,8 @@ type greeting struct {
 	kind            string
 	reason          string
 	protocolVersion *float64
+	serverVersion   *string
+	scope           *protocol.Scope
 }
 
 var (
@@ -50,13 +52,17 @@ func (c *fakeConnection) Send(frame protocol.Frame) {
 			c.push(protocol.Refused{Reason: c.greeting.reason})
 		case "incompatible":
 			url := "https://dl.example"
-			c.push(protocol.Incompatible{MinSupported: 9, DownloadURL: &url})
+			c.push(protocol.Incompatible{MinSupported: 9, DownloadURL: &url, ServerVersion: c.greeting.serverVersion})
 		case "ready":
 			c.push(protocol.Challenge{Nonce: "n"})
 		}
 	case protocol.Auth:
 		if c.greeting.kind == "ready" {
-			c.push(protocol.Ready{Scope: granted, ProtocolVersion: c.greeting.protocolVersion})
+			scope := granted
+			if c.greeting.scope != nil {
+				scope = *c.greeting.scope
+			}
+			c.push(protocol.Ready{Scope: scope, ProtocolVersion: c.greeting.protocolVersion, ServerVersion: c.greeting.serverVersion})
 		}
 	}
 }
@@ -67,10 +73,17 @@ func (c *fakeConnection) OnFrame(listener func(protocol.Frame)) {
 	c.frameListeners = append(c.frameListeners, listener)
 }
 
+// OnClose fires a listener registered after the close at once, as the real
+// transport does.
 func (c *fakeConnection) OnClose(listener func()) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.closeListeners = append(c.closeListeners, listener)
+	if !c.closed {
+		c.closeListeners = append(c.closeListeners, listener)
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
+	listener()
 }
 
 func (c *fakeConnection) Close() {
@@ -157,7 +170,19 @@ func (c *clock) after(delay time.Duration) <-chan time.Time {
 	return timer
 }
 
+// fireAll fires every pending timer, first waiting for one to be armed: a
+// status can be published before the runner starts the timer that ends it.
 func (c *clock) fireAll() {
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		c.mu.Lock()
+		armed := len(c.pending) > 0
+		c.mu.Unlock()
+		if armed || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, timer := range c.pending {
@@ -173,16 +198,24 @@ type harness struct {
 	server  *fakeServer
 	clock   *clock
 	changed chan struct{}
+
+	mu       sync.Mutex
+	statuses []runner.Status
 }
 
 func newHarness(t *testing.T, greetings ...greeting) *harness {
+	t.Helper()
+	return newHarnessWith(t, nil, greetings...)
+}
+
+func newHarnessWith(t *testing.T, configure func(*runner.Deps), greetings ...greeting) *harness {
 	t.Helper()
 	keys, err := keystore.Open(filepath.Join(t.TempDir(), "key.der"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := &harness{server: &fakeServer{greetings: greetings}, clock: &clock{}, changed: make(chan struct{}, 1)}
-	h.runner = runner.New(runner.Deps{
+	deps := runner.Deps{
 		State:         state.State{KannaURL: "https://kanna.example", BeaconID: "b1"},
 		OS:            protocol.OSWindows,
 		BeaconVersion: "0.2.0",
@@ -190,8 +223,15 @@ func newHarness(t *testing.T, greetings ...greeting) *harness {
 		OpenTransport: h.server.open,
 		After:         h.clock.after,
 		Now:           func() time.Time { return epoch },
-	})
-	h.runner.Subscribe(func(runner.Snapshot) {
+	}
+	if configure != nil {
+		configure(&deps)
+	}
+	h.runner = runner.New(deps)
+	h.runner.Subscribe(func(snapshot runner.Snapshot) {
+		h.mu.Lock()
+		h.statuses = append(h.statuses, snapshot.Status)
+		h.mu.Unlock()
 		select {
 		case h.changed <- struct{}{}:
 		default:
@@ -210,6 +250,7 @@ func (h *harness) waitFor(t *testing.T, what string, done func(runner.Snapshot) 
 		}
 		select {
 		case <-h.changed:
+		case <-time.After(5 * time.Millisecond):
 		case <-deadline:
 			t.Fatalf("timed out waiting for %s; status %+v", what, snapshot.Status)
 		}
