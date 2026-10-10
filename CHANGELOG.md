@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.71.0](https://github.com/cuongtranba/kanna/compare/v1.70.1...v1.71.0) (2026-10-10)
+
+
+### Features
+
+* **beacon:** beacons update themselves from the GitHub release ([#1238](https://github.com/cuongtranba/kanna/issues/1238)) ([551dda3](https://github.com/cuongtranba/kanna/commit/551dda3a5a6d417c8a3b387f1d6f9f59a50c7ab1))
+
+
+### Bug Fixes
+
+* **beacon:** wait for the Win7 session test helper to exit ([#1240](https://github.com/cuongtranba/kanna/issues/1240)) ([cc689db](https://github.com/cuongtranba/kanna/commit/cc689dbfa21261db61b08c9174f11aa3bdafd069))
+
 ## [1.70.1](https://github.com/cuongtranba/kanna/compare/v1.70.0...v1.70.1) (2026-10-10)
 
 
