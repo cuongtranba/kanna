@@ -35,7 +35,6 @@ import { isGenUIEnabled } from "./genui/genui-config"
 
 const SELF_WAKE_PROVENANCE_PREFIX = "self-wake:"
 
-
 interface SpawnOAuthPool {
   pickActive(chatId: string): { id: string; token: string; label: string; baseUrl?: string } | null | undefined
   hasAnyToken(): boolean
