@@ -11,11 +11,32 @@ import (
 
 // Protocol versions, identical to the TypeScript constants.
 const (
-	BeaconProtocolVersion = 3
+	BeaconProtocolVersion = UpdateProtocol
 	MinBeaconProtocol     = 1
 	ScopeSyncProtocol     = 2
 	TransferProtocol      = 3
+	UpdateProtocol        = 4
 )
+
+// Self-update states a beacon reports in an update_status frame.
+const (
+	UpdateChecking    = "checking"
+	UpdateDownloading = "downloading"
+	UpdateInstalling  = "installing"
+	UpdateRestarting  = "restarting"
+	UpdateCurrent     = "current"
+	UpdateFailed      = "failed"
+)
+
+// IsUpdateState reports whether state is one of the self-update states.
+func IsUpdateState(state string) bool {
+	switch state {
+	case UpdateChecking, UpdateDownloading, UpdateInstalling, UpdateRestarting, UpdateCurrent, UpdateFailed:
+		return true
+	default:
+		return false
+	}
+}
 
 // Operating systems a beacon may announce.
 const (
@@ -49,6 +70,8 @@ const (
 	KindExit         = "exit"
 	KindResult       = "result"
 	KindError        = "error"
+	KindUpdate       = "update"
+	KindUpdateStatus = "update_status"
 )
 
 // Request operations.
@@ -188,10 +211,11 @@ type Hello struct {
 	OS              string  `json:"os"`
 }
 
-// Incompatible tells the beacon its protocol is too old.
+// Incompatible tells the beacon its protocol is outside the server's window.
 type Incompatible struct {
-	MinSupported float64 `json:"minSupported"`
-	DownloadURL  *string `json:"downloadUrl,omitempty"`
+	MinSupported  float64 `json:"minSupported"`
+	DownloadURL   *string `json:"downloadUrl,omitempty"`
+	ServerVersion *string `json:"serverVersion,omitempty"`
 }
 
 // Challenge carries the nonce the beacon must sign.
@@ -208,6 +232,7 @@ type Auth struct {
 type Ready struct {
 	Scope           Scope    `json:"scope"`
 	ProtocolVersion *float64 `json:"protocolVersion,omitempty"`
+	ServerVersion   *string  `json:"serverVersion,omitempty"`
 }
 
 // Refused ends the handshake with a reason.
@@ -271,6 +296,17 @@ type ErrorFrame struct {
 	Message string `json:"message"`
 }
 
+// Update asks the beacon to update itself to the server's version. It
+// carries no fields: the beacon takes the version from the handshake.
+type Update struct{}
+
+// UpdateStatus reports the progress of a self-update.
+type UpdateStatus struct {
+	State   string  `json:"state"`
+	Version string  `json:"version"`
+	Message *string `json:"message,omitempty"`
+}
+
 func (Hello) Kind() string        { return KindHello }
 func (Incompatible) Kind() string { return KindIncompatible }
 func (Challenge) Kind() string    { return KindChallenge }
@@ -288,6 +324,8 @@ func (Stderr) Kind() string       { return KindStderr }
 func (Exit) Kind() string         { return KindExit }
 func (Result) Kind() string       { return KindResult }
 func (ErrorFrame) Kind() string   { return KindError }
+func (Update) Kind() string       { return KindUpdate }
+func (UpdateStatus) Kind() string { return KindUpdateStatus }
 
 // Encode renders a frame as one compact JSON object whose first key is
 // "kind", the shape JSON.stringify gives the TypeScript frames.

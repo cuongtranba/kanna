@@ -9,6 +9,7 @@ import {
   type BeaconScopeChange,
 } from "../shared/beacon-protocol"
 import { applyScopeChange } from "../shared/beacon-scope"
+import { APP_VERSION } from "../shared/branding"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { onRejected } from "../shared/errors"
 import { log } from "../shared/log"
@@ -54,7 +55,7 @@ export function createBeaconConnection(deps: { registry: BeaconRegistry; appSett
       return
     }
     if (!isSupportedProtocol(frame.protocolVersion)) {
-      sendFrame(ws, { kind: "incompatible", minSupported: MIN_BEACON_PROTOCOL })
+      sendFrame(ws, { kind: "incompatible", minSupported: MIN_BEACON_PROTOCOL, serverVersion: APP_VERSION })
       ws.close()
       return
     }
@@ -90,7 +91,12 @@ export function createBeaconConnection(deps: { registry: BeaconRegistry; appSett
     }
     registry.connect({ beaconId, socket: ws, beaconVersion, protocolVersion, scope: config.scope })
     ws.data.beaconHandshake = { phase: "ready", beaconId, beaconVersion, protocolVersion }
-    sendFrame(ws, { kind: "ready", scope: config.scope, protocolVersion: BEACON_PROTOCOL_VERSION })
+    sendFrame(ws, {
+      kind: "ready",
+      scope: config.scope,
+      protocolVersion: BEACON_PROTOCOL_VERSION,
+      serverVersion: APP_VERSION,
+    })
   }
 
   async function handleSetScope(beaconId: string, change: BeaconScopeChange): Promise<void> {
@@ -138,6 +144,11 @@ export function createBeaconConnection(deps: { registry: BeaconRegistry; appSett
       case "pong":
         registry.heartbeat(beaconId)
         return
+      case "update_status": {
+        const { kind: _kind, ...status } = frame
+        registry.setUpdateStatus(beaconId, status)
+        return
+      }
       case "stdout":
       case "stderr":
       case "result":

@@ -100,6 +100,10 @@ func parseFrameValue(value any) (Frame, bool) {
 		id, idOK := readString(object, "id")
 		message, messageOK := readString(object, "message")
 		return ErrorFrame{ID: id, Message: message}, idOK && messageOK
+	case KindUpdate:
+		return Update{}, true
+	case KindUpdateStatus:
+		return parseUpdateStatus(object)
 	default:
 		return nil, false
 	}
@@ -213,19 +217,31 @@ func parseHello(object map[string]any) (Frame, bool) {
 func parseIncompatible(object map[string]any) (Frame, bool) {
 	minSupported, minOK := readNumber(object, "minSupported")
 	downloadURL, urlOK := optionalString(object, "downloadUrl")
-	if !minOK || !urlOK {
+	serverVersion, serverOK := optionalString(object, "serverVersion")
+	if !minOK || !urlOK || !serverOK {
 		return nil, false
 	}
-	return Incompatible{MinSupported: minSupported, DownloadURL: downloadURL}, true
+	return Incompatible{MinSupported: minSupported, DownloadURL: downloadURL, ServerVersion: serverVersion}, true
 }
 
 func parseReady(object map[string]any) (Frame, bool) {
 	scope, scopeOK := parseScope(object["scope"])
 	protocolVersion, versionOK := optionalNumber(object, "protocolVersion")
-	if !scopeOK || !versionOK {
+	serverVersion, serverOK := optionalString(object, "serverVersion")
+	if !scopeOK || !versionOK || !serverOK {
 		return nil, false
 	}
-	return Ready{Scope: scope, ProtocolVersion: protocolVersion}, true
+	return Ready{Scope: scope, ProtocolVersion: protocolVersion, ServerVersion: serverVersion}, true
+}
+
+func parseUpdateStatus(object map[string]any) (Frame, bool) {
+	state, stateOK := readString(object, "state")
+	version, versionOK := readString(object, "version")
+	message, messageOK := optionalString(object, "message")
+	if !stateOK || !IsUpdateState(state) || !versionOK || !messageOK {
+		return nil, false
+	}
+	return UpdateStatus{State: state, Version: version, Message: message}, true
 }
 
 func parseScope(value any) (Scope, bool) {

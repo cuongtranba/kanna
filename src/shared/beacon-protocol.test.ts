@@ -1,13 +1,16 @@
 import { expect, test } from "bun:test"
 import {
   BEACON_PROTOCOL_VERSION,
+  BEACON_UPDATE_STATES,
   MIN_BEACON_PROTOCOL,
   SCOPE_SYNC_PROTOCOL,
+  UPDATE_PROTOCOL,
   isSupportedProtocol,
   parseBeaconFrame,
   type BeaconFrame,
 } from "./beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "./beacon-scope"
+import { TRANSFER_PROTOCOL } from "./beacon-transfer"
 import type { JsonValue } from "./json"
 
 const FRAMES: readonly BeaconFrame[] = [
@@ -17,6 +20,11 @@ const FRAMES: readonly BeaconFrame[] = [
   { kind: "ready", scope: { ...DEFAULT_BEACON_SCOPE, exec: true, execAllowlist: ["git"], readRoots: ["/srv"] } },
   { kind: "request", id: "r1", request: { op: "exec", cmd: "git", args: ["status"], cwd: "/srv" } },
   { kind: "ready", scope: DEFAULT_BEACON_SCOPE, protocolVersion: BEACON_PROTOCOL_VERSION },
+  { kind: "ready", scope: DEFAULT_BEACON_SCOPE, protocolVersion: BEACON_PROTOCOL_VERSION, serverVersion: "1.71.0" },
+  { kind: "incompatible", minSupported: MIN_BEACON_PROTOCOL, serverVersion: "1.71.0" },
+  { kind: "update" },
+  { kind: "update_status", state: "downloading", version: "1.71.0" },
+  { kind: "update_status", state: "failed", version: "1.71.0", message: "checksum mismatch" },
   { kind: "scope", scope: { ...DEFAULT_BEACON_SCOPE, readRoots: ["C:\\Users\\me\\Documents"] } },
   { kind: "set-scope", change: { readRoots: ["/home/me/notes"], exec: true, autoRunScripts: false } },
   { kind: "set-scope", change: { exec: false } },
@@ -33,6 +41,22 @@ test("valid handshake and request frames round-trip through the parser", () => {
   for (const frame of FRAMES) {
     expect(parseBeaconFrame(asJson(frame))).toEqual(frame)
   }
+})
+
+test("every self-update state is a frame the parser accepts", () => {
+  for (const state of BEACON_UPDATE_STATES) {
+    expect(parseBeaconFrame({ kind: "update_status", state, version: "1.71.0" })).toEqual({
+      kind: "update_status",
+      state,
+      version: "1.71.0",
+    })
+  }
+})
+
+test("the update protocol is the version this build speaks and lies above file transfer", () => {
+  expect(BEACON_PROTOCOL_VERSION).toBe(UPDATE_PROTOCOL)
+  expect(UPDATE_PROTOCOL).toBeGreaterThan(TRANSFER_PROTOCOL)
+  expect(isSupportedProtocol(TRANSFER_PROTOCOL)).toBe(true)
 })
 
 test("a frame with an unknown kind is rejected", () => {

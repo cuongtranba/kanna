@@ -419,6 +419,8 @@ describe("PendingToolRequestMessage — beacon tools", () => {
     online: true,
     lastSeenAt: null,
     beaconVersion: "1.0.0",
+    canSelfUpdate: true,
+    update: null,
   }
 
   function beaconEntry(toolName: string, args: PendingToolRequestHydrated["arguments"]): PendingToolRequestHydrated {

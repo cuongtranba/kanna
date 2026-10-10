@@ -1,4 +1,4 @@
-import type { BeaconOs } from "./beacon-protocol"
+import type { BeaconOs, BeaconUpdateStatus } from "./beacon-protocol"
 import type { BeaconConfig } from "./beacon-config"
 
 export interface BeaconStatusRow {
@@ -9,6 +9,8 @@ export interface BeaconStatusRow {
   online: boolean
   lastSeenAt: number | null
   beaconVersion: string | null
+  canSelfUpdate: boolean
+  update: BeaconUpdateStatus | null
 }
 
 export interface BeaconsSnapshot {
@@ -20,6 +22,8 @@ export interface BeaconLiveState {
   online: boolean
   lastSeenAt: number
   beaconVersion: string
+  canSelfUpdate: boolean
+  updateStatus: BeaconUpdateStatus | null
 }
 
 export function buildBeaconStatusRows(
@@ -38,6 +42,8 @@ export function buildBeaconStatusRows(
       online: state?.online ?? false,
       lastSeenAt: state?.lastSeenAt ?? null,
       beaconVersion: state?.beaconVersion ?? null,
+      canSelfUpdate: state?.canSelfUpdate ?? false,
+      update: state?.updateStatus ?? null,
     }
   })
 }

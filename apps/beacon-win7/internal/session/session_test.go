@@ -256,7 +256,7 @@ func self(t *testing.T) string {
 
 func TestAnnouncesItselfWithAHelloOnStart(t *testing.T) {
 	h := start(t)
-	want := protocol.Hello{BeaconID: "b1", ProtocolVersion: 3, BeaconVersion: "0.1.0", OS: protocol.OSWindows}
+	want := protocol.Hello{BeaconID: "b1", ProtocolVersion: 4, BeaconVersion: "0.1.0", OS: protocol.OSWindows}
 	if frames := h.transport.frames(); len(frames) != 1 || frames[0] != want {
 		t.Fatalf("sent %#v, want only %#v", frames, want)
 	}

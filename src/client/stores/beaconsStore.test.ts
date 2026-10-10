@@ -10,6 +10,8 @@ const ROW: BeaconStatusRow = {
   online: true,
   lastSeenAt: 1_000,
   beaconVersion: "1.0.0",
+  canSelfUpdate: true,
+  update: null,
 }
 
 afterEach(() => {

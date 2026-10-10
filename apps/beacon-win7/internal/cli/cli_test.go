@@ -270,7 +270,7 @@ func TestRunCompletesTheHandshakeServesARequestAndStopsWhenRevoked(t *testing.T)
 			_, _, _ = conn.ReadMessage()
 			return
 		}
-		if hello != (protocol.Hello{BeaconID: "b-1", ProtocolVersion: 3, BeaconVersion: "0.1.0", OS: protocol.OSWindows}) {
+		if hello != (protocol.Hello{BeaconID: "b-1", ProtocolVersion: 4, BeaconVersion: "0.1.0", OS: protocol.OSWindows}) {
 			t.Errorf("hello = %#v", hello)
 		}
 		writeFrame(t, conn, protocol.Challenge{Nonce: "nonce-1"})
