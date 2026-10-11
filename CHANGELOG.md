@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.71.1](https://github.com/cuongtranba/kanna/compare/v1.71.0...v1.71.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **chat:** show a background subagent run in the footer and sidebar after the turn ends ([#1243](https://github.com/cuongtranba/kanna/issues/1243)) ([41b4032](https://github.com/cuongtranba/kanna/commit/41b4032b2f9ecc8fbbd000394fd57ca821e68e77))
+
 ## [1.71.0](https://github.com/cuongtranba/kanna/compare/v1.70.1...v1.71.0) (2026-10-10)
 
 
