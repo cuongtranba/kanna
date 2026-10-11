@@ -8,7 +8,7 @@ import { isErrnoException, toError } from "../shared/errors"
 import { log } from "../shared/log"
 import type { AppSettingsManager } from "./app-settings"
 import { createAuthManager, type AuthManager } from "./auth"
-import { OWNER_EMAIL, SESSION_COOKIE_NAME, type AuthBackend } from "./auth-backend"
+import { CLIENT_IP_HEADER, OWNER_EMAIL, SESSION_COOKIE_NAME, type AuthBackend } from "./auth-backend"
 
 const SECRET_FILE = "auth-secret"
 const DATABASE_FILE = "auth.db"
@@ -56,7 +56,7 @@ function authOptions(database: Database, secret: string, sessionMaxAgeDays: numb
       cookies: { session_token: { name: SESSION_COOKIE_NAME } },
       defaultCookieAttributes: { sameSite: "strict" },
       useSecureCookies: false,
-      ipAddress: { ipAddressHeaders: ["x-kanna-client-ip"] },
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },
     rateLimit: { enabled: true, storage: "database" },
     trustedOrigins: (request) => (request ? [new URL(request.url).origin] : []),

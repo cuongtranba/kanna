@@ -70,6 +70,11 @@ function shouldUseSecureCookie(req: Request, trustProxy: boolean) {
   return new URL(req.url).protocol === "https:"
 }
 
+function isLoopbackAddress(ip: string | null) {
+  if (!ip) return false
+  return ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.")
+}
+
 function buildCookie(name: string, value: string, maxAgeSeconds: number) {
   return [
     `${name}=${encodeURIComponent(value)}`,
@@ -160,7 +165,7 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
   }
 
   function resolveClientIp(req: Request, socketIp: string | null) {
-    if (!trustProxy) return socketIp
+    if (!trustProxy || !isLoopbackAddress(socketIp)) return socketIp
     const cloudflare = req.headers.get("cf-connecting-ip")?.trim()
     if (cloudflare) return cloudflare
     const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()

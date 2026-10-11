@@ -137,6 +137,8 @@ c3-202:
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
+  - src/server/auth-backend.ts
+  - src/server/better-auth.adapter.ts
 c3-204:
   - src/server/machine-name.adapter.ts
   - src/server/paths.ts

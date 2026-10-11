@@ -3,4 +3,6 @@ claim: "auth is implemented at src/server/auth.ts"
 code:
   - src/server/auth.test.ts
   - src/server/auth.ts
+  - src/server/auth-backend.ts
+  - src/server/better-auth.adapter.ts
   - src/client/app/PasswordScreen.store.ts
