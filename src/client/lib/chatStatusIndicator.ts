@@ -1,4 +1,5 @@
-import type { ClaudeSessionLifecycleStatus, KannaStatus } from "../../shared/types"
+import type { ChatActivity, ClaudeSessionLifecycleStatus, KannaStatus } from "../../shared/types"
+import { formatBackgroundWork } from "../../shared/stack-activity"
 import { statusLabel } from "./statusLabel"
 
 
@@ -7,6 +8,7 @@ export type ChatDotTone = "warning" | "info" | "success" | "destructive" | "mute
 export interface ChatIndicatorInput {
   status: KannaStatus
   unread: boolean
+  activity?: Pick<ChatActivity, "agents" | "backgroundTasks" | "workflow">
 }
 
 export interface ChatStatusIndicator {
@@ -24,6 +26,8 @@ export function chatStatusIndicator(input: ChatIndicatorInput): ChatStatusIndica
   if (input.status === "failed") {
     return { tone: "destructive", label: statusLabel(input.status) }
   }
+  const backgroundWork = input.activity ? formatBackgroundWork(input.activity) : null
+  if (backgroundWork) return { tone: "warning", label: backgroundWork }
   if (input.unread) return { tone: "success", label: "Unread" }
   return null
 }

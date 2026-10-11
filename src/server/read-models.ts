@@ -377,6 +377,31 @@ export function deriveTimings(
 
 const EMPTY_BACKGROUND_TASKS: ChatBackgroundTask[] = []
 
+export function subagentBackgroundTasks(state: StoreState, chatId: string): ChatBackgroundTask[] {
+  const runs = state.subagentRunsByChatId.get(chatId)
+  if (!runs) return []
+  return [...runs.values()]
+    .filter((run) => run.status === "running" && run.parentRunId === null)
+    .sort((a, b) => a.startedAt - b.startedAt || a.runId.localeCompare(b.runId))
+    .map((run) => ({
+      id: run.runId,
+      taskType: "subagent",
+      description: run.label ?? run.subagentName,
+      startedAt: run.startedAt,
+      hasOutput: false,
+    }))
+}
+
+function chatBackgroundTasks(
+  state: StoreState,
+  chatId: string,
+  sdkTasks: ChatBackgroundTask[] | undefined,
+): ChatBackgroundTask[] {
+  const subagentTasks = subagentBackgroundTasks(state, chatId)
+  if (subagentTasks.length === 0) return sdkTasks ?? EMPTY_BACKGROUND_TASKS
+  return [...(sdkTasks ?? []), ...subagentTasks]
+}
+
 export function deriveChatSnapshot(
   state: StoreState,
   activeStatuses: Map<string, KannaStatus>,
@@ -414,7 +439,7 @@ export function deriveChatSnapshot(
     ),
     policyOverride: chat.policyOverride ?? null,
     sessionState: claudeSessionStates.get(chat.id) ?? "cold",
-    backgroundTasks: backgroundTasksByChatId.get(chat.id) ?? EMPTY_BACKGROUND_TASKS,
+    backgroundTasks: chatBackgroundTasks(state, chat.id, backgroundTasksByChatId.get(chat.id)),
   }
 
   const transcript = getMessages(chat.id)

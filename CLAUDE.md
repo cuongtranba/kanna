@@ -2665,7 +2665,8 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   description via `session.recentToolDescriptions`). Per-chat task lists
   flow `getBackgroundTasksByChatId` → `deriveChatSnapshot` →
   `ChatRuntime.backgroundTasks` → `BackgroundTasksSection` (chat footer,
-  /tasks-style: type icon + description + id + live elapsed). Budget
+  /tasks-style: type icon + description + id + live elapsed).
+  `deriveChatSnapshot` also appends every running top-level Kanna subagent run (`subagentBackgroundTasks`, taskType `subagent`) so a `delegate_subagent({run_in_background: true})` run is visible in the footer after the turn ends; the sidebar row shows the agent count instead of the age via `formatBackgroundWork`. Neither touches `isChatBusy` or `getActiveStatuses` — a background Kanna run must not flip the composer to Stop. Budget
   eviction skips `selfWakeActive` sessions; the idle reaper still keys on
   `lastUsedAt`, so a wedged flag cannot pin a session forever.
 

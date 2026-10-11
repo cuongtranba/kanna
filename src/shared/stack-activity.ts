@@ -57,3 +57,13 @@ export function formatStackActivity(activity: StackActivity): string | null {
   if (parts.length === 0) return `${activity.activeChats} active`
   return parts.join(", ")
 }
+
+export function formatBackgroundWork(
+  activity: Pick<ChatActivity, "agents" | "backgroundTasks" | "workflow">,
+): string | null {
+  const parts: string[] = []
+  if (activity.agents > 0) parts.push(`${activity.agents} agent${activity.agents === 1 ? "" : "s"}`)
+  if (activity.workflow !== null) parts.push("workflow")
+  if (activity.backgroundTasks > 0) parts.push(`${activity.backgroundTasks} task${activity.backgroundTasks === 1 ? "" : "s"}`)
+  return parts.length === 0 ? null : parts.join(", ")
+}
