@@ -4,6 +4,7 @@ import { getServerFile, statFile, type ServerStats } from "./server-io.adapter"
 import { buildFileResponse } from "./http-file-response"
 import { deleteProjectUpload, inferAttachmentContentType, inferProjectFileContentType } from "./uploads"
 import { getProjectUploadDir } from "./paths"
+import { resolveProjectFilePath } from "./project-file-path"
 import { listProjectPaths } from "./project-paths"
 import { log } from "../shared/log"
 
@@ -83,22 +84,9 @@ export async function handleProjectFileContent(
   const project = store.getProject(match[1])
   if (!project) return Response.json({ error: "Project not found" }, { status: 404 })
 
-  const relativePath = path.posix.normalize(decodeURIComponent(match[2]).replaceAll("\\", "/"))
-  if (
-    !relativePath ||
-    relativePath === "." ||
-    relativePath.startsWith("../") ||
-    relativePath.includes("/../") ||
-    path.posix.isAbsolute(relativePath)
-  ) {
-    return Response.json({ error: "Invalid project file path" }, { status: 400 })
-  }
-
-  const filePath = path.resolve(project.localPath, relativePath)
-  const projectRoot = path.resolve(project.localPath)
-  if (filePath !== projectRoot && !filePath.startsWith(`${projectRoot}${path.sep}`)) {
-    return Response.json({ error: "Invalid project file path" }, { status: 400 })
-  }
+  const resolved = resolveProjectFilePath(project.localPath, decodeURIComponent(match[2]))
+  if (!resolved) return Response.json({ error: "Invalid project file path" }, { status: 400 })
+  const { relativePath, filePath } = resolved
 
   const file = getServerFile(filePath)
   let info: ServerStats

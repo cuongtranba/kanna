@@ -38,4 +38,15 @@ export function registerKannaResources(server: McpServer, host: RemoteMcpHost): 
       return { contents: [{ uri: uri.href, mimeType: JSON_MIME_TYPE, text: snapshotJson(envelope) }] }
     },
   )
+
+  server.registerResource(
+    "board",
+    new ResourceTemplate("kanna://boards/{boardId}", { list: undefined }),
+    { title: "Board", description: "A kanban board with its columns and cards.", mimeType: JSON_MIME_TYPE },
+    (uri, variables) => {
+      const boardId = firstVariable(variables.boardId)
+      const envelope = host.readSnapshot({ type: "board", boardId })
+      return { contents: [{ uri: uri.href, mimeType: JSON_MIME_TYPE, text: snapshotJson(envelope) }] }
+    },
+  )
 }
