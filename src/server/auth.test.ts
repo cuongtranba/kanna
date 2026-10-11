@@ -15,6 +15,7 @@ async function startPasswordServer(options: {
   trustProxy?: boolean
   port?: number
   dataDir?: string
+  password?: string
 } = {}) {
   const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-test-"))
   const dataDir = options.dataDir ?? await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
@@ -24,7 +25,7 @@ async function startPasswordServer(options: {
     dataDir,
     port: options.port ?? 4320,
     strictPort: false,
-    password: "secret",
+    password: options.password ?? "secret",
     trustProxy: options.trustProxy ?? false,
     discoverProjects: () => [],
   })
@@ -439,6 +440,66 @@ describe("password auth", () => {
       expect(healthResponse.status).toBe(200)
     } finally {
       await server.stop()
+    }
+  })
+
+  test("throttles repeated wrong passwords with 429", async () => {
+    const { server } = await startPasswordServer()
+
+    try {
+      const statuses: number[] = []
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const response = await fetch(`http://localhost:${server.port}/auth/login`, {
+          method: "POST",
+          body: JSON.stringify({ password: "wrong", next: "/" }),
+          headers: {
+            "Content-Type": "application/json",
+            Origin: `http://localhost:${server.port}`,
+          },
+        })
+        statuses.push(response.status)
+      }
+
+      expect(statuses[0]).toBe(401)
+      expect(statuses.at(-1)).toBe(429)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("changing --password across a restart signs out old sessions and accepts the new password", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "kanna-auth-data-"))
+    tempDirs.push(dataDir)
+    const login = (port: number, password: string) => fetch(`http://localhost:${port}/auth/login`, {
+      method: "POST",
+      body: JSON.stringify({ password, next: "/" }),
+      headers: {
+        "Content-Type": "application/json",
+        Origin: `http://localhost:${port}`,
+      },
+    })
+    const tusProbe = (port: number, cookie: string) => fetch(`http://localhost:${port}/api/projects/project-1/uploads/tus`, {
+      method: "POST",
+      headers: { Cookie: cookie, "Tus-Resumable": "1.0.0", "Upload-Length": "10" },
+      redirect: "manual",
+    })
+
+    const first = await startPasswordServer({ port: 54328, dataDir })
+    let oldCookie: string
+    try {
+      oldCookie = extractCookie(await login(first.server.port, "secret"))
+      expect((await tusProbe(first.server.port, oldCookie)).status).not.toBe(401)
+    } finally {
+      await first.server.stop()
+    }
+
+    const second = await startPasswordServer({ port: 54329, dataDir, password: "rotated" })
+    try {
+      expect((await tusProbe(second.server.port, oldCookie)).status).toBe(401)
+      expect((await login(second.server.port, "secret")).status).toBe(401)
+      expect((await login(second.server.port, "rotated")).status).toBe(200)
+    } finally {
+      await second.server.stop()
     }
   })
 })

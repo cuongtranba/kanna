@@ -111,7 +111,7 @@ export function createHttpDispatcher(
 
     if (url.pathname === "/auth/status") {
       return auth
-        ? auth.handleStatus(req)
+        ? await auth.handleStatus(req)
         : Response.json({ enabled: false, authenticated: true })
     }
 
@@ -119,7 +119,7 @@ export function createHttpDispatcher(
       if (req.method !== "POST") {
         return new Response(null, { status: 405, headers: { Allow: "POST" } })
       }
-      return auth ? auth.handleLogout(req) : Response.json({ ok: true })
+      return auth ? await auth.handleLogout(req) : Response.json({ ok: true })
     }
 
     if (url.pathname.startsWith("/api/share/")) {
@@ -129,14 +129,14 @@ export function createHttpDispatcher(
     if (auth) {
       if (url.pathname === "/auth/login") {
         if (req.method === "GET") return auth.redirectToApp(req)
-        if (req.method === "POST") return auth.handleLogin(req, "/")
+        if (req.method === "POST") return auth.handleLogin(req, "/", server.requestIP(req)?.address ?? null)
         return new Response(null, { status: 405, headers: { Allow: "GET, POST" } })
       }
 
       if (url.pathname === "/ws") {
         if (!auth.validateOrigin(req)) return new Response("Forbidden", { status: 403 })
-        if (!auth.isAuthenticated(req)) return new Response("Unauthorized", { status: 401 })
-      } else if (url.pathname.startsWith("/api/") && !auth.isAuthenticated(req)) {
+        if (!(await auth.isAuthenticated(req))) return new Response("Unauthorized", { status: 401 })
+      } else if (url.pathname.startsWith("/api/") && !(await auth.isAuthenticated(req))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 })
       }
     }

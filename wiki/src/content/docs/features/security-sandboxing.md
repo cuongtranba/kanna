@@ -21,10 +21,18 @@ Requests time out after 600 s as an explicit deny — never as an approval.
 
 ## Password gate
 
-`kanna --password <secret>` puts an HTTP/WS/API password gate in front of
-everything. Every browser session prompts on first connect; the password is
-held in `sessionStorage` and replayed on the WebSocket handshake and HTTP
-headers.
+`kanna --password <secret>` puts a password gate in front of the WebSocket and
+every `/api` route. A browser signs in once and receives a `kanna_session`
+cookie (`HttpOnly`, `SameSite=Strict`, `Secure` over https); the password itself
+is never stored in the browser. Sessions last `auth.sessionMaxAgeDays` (default
+30) and survive server restarts.
+
+Sessions and the password hash are managed by [Better Auth](https://www.better-auth.com)
+in `auth.db` under the data directory, signed with a generated `auth-secret`
+beside it; both files are readable only by your user. Repeated wrong passwords
+are throttled: after three sign-in attempts in ten seconds the login answers
+`429` until the window passes. Starting Kanna with a **different** `--password`
+signs every browser out.
 
 Use it for any instance reachable beyond localhost. Kanna does not terminate
 TLS — put it behind a reverse proxy or a Cloudflare tunnel
