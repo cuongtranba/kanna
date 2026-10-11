@@ -9,8 +9,8 @@ import {
   type AppSettingsSnapshot,
 } from "../shared/types"
 import type { ShareMode } from "../shared/share"
-import { createAuthManager } from "./auth"
-import { createAuthSessionStore } from "./auth-session-store.adapter"
+import type { AuthManager } from "./auth"
+import { createPasswordAuth } from "./better-auth.adapter"
 import { EventStore } from "./event-store"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
@@ -159,7 +159,7 @@ export interface StartKannaServerOptions {
 interface ApplicationServices {
   store: EventStore
   diffStore: DiffStore
-  auth: ReturnType<typeof createAuthManager> | null
+  auth: AuthManager | null
   analytics: KannaAnalyticsReporter
   terminals: TerminalManager
   updateManager: UpdateManager | null
@@ -274,12 +274,11 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const snapshotSweepHandle = startSnapshotSweep(sessionShareService, 24 * 60 * 60 * 1000)
   await keybindings.initialize()
   const auth = options.password
-    ? createAuthManager(options.password, {
+    ? await createPasswordAuth({
+        dataDir: store.dataDir,
+        password: options.password,
         trustProxy: options.trustProxy ?? false,
-        sessionStore: await createAuthSessionStore({
-          filePath: path.join(store.dataDir, "sessions.json"),
-        }),
-        getMaxAgeMs: () => appSettings.getSnapshot().auth.sessionMaxAgeDays * 86_400_000,
+        appSettings,
       })
     : null
   const analytics = new KannaAnalyticsReporter({

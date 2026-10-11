@@ -1,9 +1,11 @@
-import { randomBytes, timingSafeEqual } from "node:crypto"
-import type { AuthSessionStore } from "./auth-session-store.adapter"
 import { isJsonObject, type JsonValue } from "../shared/json"
-
-const SESSION_COOKIE_NAME = "kanna_session"
-const TOUCH_THROTTLE_MS = 60 * 1000
+import {
+  CLIENT_IP_HEADER,
+  OWNER_EMAIL,
+  SESSION_COOKIE_NAME,
+  SIGN_IN_PATH,
+  type AuthBackend,
+} from "./auth-backend"
 
 export interface AuthStatusPayload {
   enabled: boolean
@@ -11,12 +13,12 @@ export interface AuthStatusPayload {
 }
 
 export interface AuthManager {
-  isAuthenticated(req: Request): boolean
+  isAuthenticated(req: Request): Promise<boolean>
   validateOrigin(req: Request): boolean
   redirectToApp(req: Request): Response
-  handleLogin(req: Request, nextPath: string): Promise<Response>
-  handleLogout(req: Request): Response
-  handleStatus(req: Request): Response
+  handleLogin(req: Request, nextPath: string, clientIp: string | null): Promise<Response>
+  handleLogout(req: Request): Promise<Response>
+  handleStatus(req: Request): Promise<Response>
   dispose(): Promise<void>
 }
 
@@ -68,26 +70,14 @@ function shouldUseSecureCookie(req: Request, trustProxy: boolean) {
   return new URL(req.url).protocol === "https:"
 }
 
-function buildCookie(
-  name: string,
-  value: string,
-  req: Request,
-  trustProxy: boolean,
-  maxAgeSeconds: number,
-) {
-  const parts = [
+function buildCookie(name: string, value: string, maxAgeSeconds: number) {
+  return [
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Strict",
     `Max-Age=${maxAgeSeconds}`,
-  ]
-
-  if (shouldUseSecureCookie(req, trustProxy)) {
-    parts.push("Secure")
-  }
-
-  return parts.join("; ")
+  ].join("; ")
 }
 
 async function readLoginForm(req: Request) {
@@ -112,8 +102,6 @@ async function readLoginForm(req: Request) {
 
 export interface AuthManagerOptions {
   trustProxy?: boolean
-  sessionStore: AuthSessionStore
-  getMaxAgeMs: () => number
 }
 
 export function isPublicSharePath(url: string): boolean {
@@ -129,35 +117,38 @@ export function isPublicSharePath(url: string): boolean {
     || pathname.startsWith("/assets/share-view/")
 }
 
-export function createAuthManager(password: string, options: AuthManagerOptions): AuthManager {
-  const expectedPassword = Buffer.from(password)
+export function createAuthManager(backend: AuthBackend, options: AuthManagerOptions = {}): AuthManager {
   const trustProxy = options.trustProxy ?? false
-  const sessionStore = options.sessionStore
-  const getMaxAgeMs = options.getMaxAgeMs
-  const lastTouchedAt = new Map<string, number>()
 
-  function getSessionToken(req: Request) {
-    return parseCookies(req.headers.get("cookie")).get(SESSION_COOKIE_NAME) ?? null
+  function sessionHeaders(req: Request) {
+    const headers = new Headers()
+    const cookie = req.headers.get("cookie")
+    if (cookie) headers.set("cookie", cookie)
+    return headers
   }
 
-  function maybeTouchSession(token: string) {
-    const now = Date.now()
-    const last = lastTouchedAt.get(token)
-    if (last !== undefined && now - last < TOUCH_THROTTLE_MS) return
-    lastTouchedAt.set(token, now)
-    sessionStore.touch(token, getMaxAgeMs())
+  function hasSessionCookie(req: Request) {
+    return parseCookies(req.headers.get("cookie")).has(SESSION_COOKIE_NAME)
   }
 
-  function isAuthenticated(req: Request) {
-    const sessionToken = getSessionToken(req)
-    if (!sessionToken) return false
-    const session = sessionStore.validate(sessionToken)
-    if (!session) {
-      lastTouchedAt.delete(sessionToken)
-      return false
+  function withSecureAttribute(req: Request, setCookie: string) {
+    return shouldUseSecureCookie(req, trustProxy) ? `${setCookie}; Secure` : setCookie
+  }
+
+  function appendCookies(response: Response, req: Request, setCookies: string[]) {
+    for (const setCookie of setCookies) {
+      response.headers.append("Set-Cookie", withSecureAttribute(req, setCookie))
     }
-    maybeTouchSession(sessionToken)
-    return true
+    return response
+  }
+
+  async function readSession(req: Request) {
+    if (!hasSessionCookie(req)) return { authenticated: false, setCookies: [] }
+    return backend.getSession(sessionHeaders(req))
+  }
+
+  async function isAuthenticated(req: Request) {
+    return (await readSession(req)).authenticated
   }
 
   function validateOrigin(req: Request) {
@@ -168,35 +159,37 @@ export function createAuthManager(password: string, options: AuthManagerOptions)
     return origin === effectiveOrigin(req, trustProxy)
   }
 
-  function createSessionCookie(req: Request) {
-    const sessionToken = randomBytes(32).toString("base64url")
-    const maxAgeMs = getMaxAgeMs()
-    sessionStore.create(sessionToken, maxAgeMs)
-    return buildCookie(SESSION_COOKIE_NAME, sessionToken, req, trustProxy, Math.floor(maxAgeMs / 1000))
+  function resolveClientIp(req: Request, socketIp: string | null) {
+    if (!trustProxy) return socketIp
+    const cloudflare = req.headers.get("cf-connecting-ip")?.trim()
+    if (cloudflare) return cloudflare
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    return forwarded || socketIp
   }
 
-  function clearSessionCookie(req: Request) {
-    const sessionToken = getSessionToken(req)
-    if (sessionToken) {
-      sessionStore.revoke(sessionToken)
-      lastTouchedAt.delete(sessionToken)
-    }
-    return buildCookie(SESSION_COOKIE_NAME, "", req, trustProxy, 0)
+  function buildSignInRequest(req: Request, password: string, clientIp: string | null) {
+    const origin = effectiveOrigin(req, trustProxy)
+    const headers = new Headers({
+      "content-type": "application/json",
+      origin,
+    })
+    const userAgent = req.headers.get("user-agent")
+    if (userAgent) headers.set("user-agent", userAgent)
+    if (clientIp) headers.set(CLIENT_IP_HEADER, clientIp)
+    return new Request(`${origin}${SIGN_IN_PATH}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ email: OWNER_EMAIL, password, rememberMe: true }),
+    })
   }
 
-  function verifyPassword(candidate: string) {
-    const actual = Buffer.from(candidate)
-    if (actual.length !== expectedPassword.length) {
-      return false
-    }
-    return timingSafeEqual(actual, expectedPassword)
-  }
-
-  function handleStatus(req: Request) {
-    return Response.json({
+  async function handleStatus(req: Request) {
+    const session = await readSession(req)
+    const response = Response.json({
       enabled: true,
-      authenticated: isAuthenticated(req),
+      authenticated: session.authenticated,
     } satisfies AuthStatusPayload)
+    return appendCookies(response, req, session.setCookies)
   }
 
   function redirectToApp(req: Request) {
@@ -204,35 +197,40 @@ export function createAuthManager(password: string, options: AuthManagerOptions)
     return Response.redirect(new URL(sanitizeNextPath(currentUrl.searchParams.get("next")), effectiveOrigin(req, trustProxy)), 302)
   }
 
-  async function handleLogin(req: Request, fallbackNextPath: string) {
+  async function handleLogin(req: Request, fallbackNextPath: string, socketIp: string | null) {
     if (!validateOrigin(req)) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { password: candidate, nextPath } = await readLoginForm(req)
-    if (!verifyPassword(candidate)) {
+    const { password, nextPath } = await readLoginForm(req)
+    const upstream = await backend.signIn(buildSignInRequest(req, password, resolveClientIp(req, socketIp)))
+
+    if (upstream.status === 429) {
+      const limited = Response.json({ error: "Too many attempts" }, { status: 429 })
+      const retryAfter = upstream.headers.get("retry-after")
+      if (retryAfter) limited.headers.set("Retry-After", retryAfter)
+      return limited
+    }
+    if (!upstream.ok) {
       return Response.json({ error: "Invalid password" }, { status: 401 })
     }
 
     const response = Response.json({ ok: true, nextPath: sanitizeNextPath(nextPath || fallbackNextPath) })
-
-    response.headers.set("Set-Cookie", createSessionCookie(req))
-    return response
+    return appendCookies(response, req, upstream.headers.getSetCookie())
   }
 
-  function handleLogout(req: Request) {
+  async function handleLogout(req: Request) {
     if (!validateOrigin(req)) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const response = Response.json({ ok: true })
-    response.headers.set("Set-Cookie", clearSessionCookie(req))
-    return response
+    const issued = hasSessionCookie(req) ? await backend.signOut(sessionHeaders(req)) : []
+    const clearing = issued.length > 0 ? issued : [buildCookie(SESSION_COOKIE_NAME, "", 0)]
+    return appendCookies(Response.json({ ok: true }), req, clearing)
   }
 
   async function dispose() {
-    lastTouchedAt.clear()
-    await sessionStore.dispose()
+    await backend.dispose()
   }
 
   return {
