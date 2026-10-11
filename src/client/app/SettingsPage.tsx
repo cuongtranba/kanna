@@ -19,6 +19,7 @@ import {
   Moon,
   MessageSquareQuote,
   Plug,
+  Network,
   Radio,
   Settings2,
   Sun,
@@ -109,6 +110,7 @@ import { isFontScaleStep, resolveEffectiveScaleStep, type FontScaleStep } from "
 import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
 import { PluginsSection } from "../components/settings/PluginsSection"
+import { RemoteMcpSection } from "../components/settings/RemoteMcpSection"
 import {
   clearStoredPushDeviceId,
   detectPushSupport,
@@ -176,6 +178,12 @@ const sidebarItems = [
     subtitle: "Install custom MCP servers (stdio, http, sse, ws) and connect-test them.",
   },
   {
+    id: "remote-mcp",
+    label: "Remote MCP",
+    icon: Network,
+    subtitle: "Let Claude, Codex and ChatGPT drive Kanna over MCP, with setup snippets for each client.",
+  },
+  {
     id: "beacons",
     label: "Beacons",
     icon: Radio,
@@ -211,6 +219,7 @@ type SidebarPageId = SidebarItem["id"]
 
 const SETTINGS_SERVICE_BRANCHES: Partial<Record<SidebarPageId, ComponentType<{ state: KannaState }>>> = {
   "mcp-servers": McpServersSettingsBranch,
+  "remote-mcp": RemoteMcpSection,
   beacons: BeaconsSettingsBranch,
 }
 
@@ -2179,7 +2188,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                 {ServiceBranch && <ServiceBranch state={state} />}
                 {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
                 {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
-                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "beacons", "snippets", "instructions"].includes(selectedPage) && (
+                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "remote-mcp", "beacons", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}

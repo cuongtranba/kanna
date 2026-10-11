@@ -4,6 +4,7 @@ import type { BeaconConfig } from "../../shared/beacon-config"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
+import { REMOTE_MCP_SETTINGS_DEFAULTS, type RemoteMcpSettings } from "../../shared/settings/remote-mcp"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -157,6 +158,9 @@ export const selectPluginsEnabled = (state: AppSettingsStoreState): boolean =>
 
 export const selectInstalledPlugins = (state: AppSettingsStoreState): readonly InstalledPluginConfig[] =>
   state.settings?.installedPlugins ?? EMPTY_INSTALLED_PLUGINS
+
+export const selectRemoteMcpSettings = (state: AppSettingsStoreState): RemoteMcpSettings =>
+  state.settings?.remoteMcp ?? REMOTE_MCP_SETTINGS_DEFAULTS
 
 const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
