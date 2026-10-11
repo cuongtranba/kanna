@@ -12,6 +12,9 @@ and your files live on another computer.
 A beacon is **not remote control**. It does nothing until you pair it, it can
 touch nothing you have not granted, and you can revoke it at any time.
 
+This guide is the setup. For the tools a beacon gives the agent and how each
+call is checked, see the [Beacons feature page](/features/beacons/).
+
 ## Prerequisite: set a Kanna password
 
 Beacons work **only on a Kanna install that has a password set**. Without one,

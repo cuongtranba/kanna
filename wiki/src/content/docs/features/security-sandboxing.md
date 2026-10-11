@@ -37,6 +37,16 @@ A [read-only share link](/sharing/session-share/) is unauthenticated by design:
 the 256-bit token in the URL is the entire credential. Treat a share URL as a
 secret, and revoke it when you are done.
 
+## Beacons reach other machines
+
+A [beacon](/features/beacons/) lets the agent read, and optionally run
+commands, on another machine you paired. Pairing is refused, and Kanna rejects
+every beacon connection, until a password is set. Each machine's scope is
+default-deny, every call outside what you pre-approved raises an approval
+prompt, and the beacon re-checks its own folders and command switch before it
+acts. Revoke a machine under **Settings → Beacons** and the agent loses access
+at once.
+
 ## Isolation between agents
 
 Kanna does not sandbox the agent process — it runs with your user's
@@ -66,7 +76,8 @@ Back that file up as a secret, or exclude it from backups entirely.
 - **No code upload.** The agent runs locally as a `claude` / `codex` subprocess.
   Only the prompts and tool output you send reach a model.
 - **No remote control surface** beyond a Cloudflare tunnel you approve per
-  `expose_port` call, or `--share` / `--cloudflared` that you pass yourself.
+  `expose_port` call, `--share` / `--cloudflared` that you pass yourself, or a
+  beacon you install and pair on a machine of your own.
 - **No credential storage outside `~/.kanna`.**
 
 Telemetry is the one thing that leaves the machine by default: OpenTelemetry
