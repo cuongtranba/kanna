@@ -139,6 +139,7 @@ c3-203:
   - src/server/auth.ts
   - src/server/auth-backend.ts
   - src/server/better-auth.adapter.ts
+  - src/server/better-auth-oauth.adapter.ts
 c3-204:
   - src/server/machine-name.adapter.ts
   - src/server/paths.ts
@@ -536,3 +537,17 @@ c3-123:
   - src/client/components/lexical/markdown/kannaUiTransformers.ts
   - e2e/genui.pw.ts
   - e2e/genui-fixture.ts
+c3-242:
+  - src/server/remote-mcp/**/*.ts
+  - src/shared/remote-mcp/command-catalog.ts
+  - src/shared/remote-mcp/topics.ts
+  - src/shared/settings/remote-mcp.ts
+  - src/shared/settings/remote-mcp.test.ts
+  - src/server/better-auth-oauth.adapter.ts
+  - src/server/project-file-path.ts
+c3-124:
+  - src/client/components/settings/RemoteMcpSection.tsx
+  - src/client/components/settings/RemoteMcpSection.test.tsx
+  - src/client/stores/remoteMcpSectionStore.ts
+  - src/shared/remote-mcp/setup-snippets.ts
+  - src/shared/remote-mcp/setup-snippets.test.ts

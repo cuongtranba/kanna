@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:6fb4ae2f65f694ee5cc6546d0346cb252a13034d02a1ef0ad5af1d55334bb83e -->
+<!-- hash: sha256:837e6aab4c65eecf49d4dc006d6f97bf8efc516a99dcfbe4ad385fbac296257d -->
 
 ## c3-0 — Kanna (system)
 
@@ -95,6 +95,11 @@ container: c3-1 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
 files: e2e/genui-fixture.ts, e2e/genui.pw.ts, src/client/components/genui/**/*.ts, src/client/components/genui/**/*.tsx, src/client/components/lexical/markdown/kannaUiTransformers.ts, src/client/components/lexical/nodes/KannaUiNode.tsx
 
+## c3-124 — remote-mcp-ui (component)
+container: c3-1 | context: c3-0
+refs: ref-zustand-store, rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
+files: src/client/components/settings/RemoteMcpSection.test.tsx, src/client/components/settings/RemoteMcpSection.tsx, src/client/stores/remoteMcpSectionStore.ts, src/shared/remote-mcp/setup-snippets.test.ts, src/shared/remote-mcp/setup-snippets.ts
+
 ## c3-2 — Server (container)
 context: c3-0
 
@@ -111,7 +116,7 @@ files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/ser
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data
-files: src/client/app/PasswordScreen.store.ts, src/server/auth.test.ts, src/server/auth.ts
+files: src/client/app/PasswordScreen.store.ts, src/server/auth-backend.ts, src/server/auth.test.ts, src/server/auth.ts, src/server/better-auth-oauth.adapter.ts, src/server/better-auth.adapter.ts
 
 ## c3-204 — paths-config (component)
 container: c3-2 | context: c3-0
@@ -299,6 +304,11 @@ container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter
 files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-icons.ts, scripts/build-beacon-desktop.ts, scripts/build-beacon.ts, src/beacon/activity.test.ts, src/beacon/activity.ts, src/beacon/desktop/**/*.ts, src/beacon/desktop/**/*.tsx, src/beacon/desktop/view/beacon-desktop.css, src/beacon/entry.adapter.ts, src/beacon/fs.adapter.test.ts, src/beacon/fs.adapter.ts, src/beacon/host-os.ts, src/beacon/key-store.adapter.test.ts, src/beacon/key-store.adapter.ts, src/beacon/main.test.ts, src/beacon/main.ts, src/beacon/pair-client.adapter.ts, src/beacon/ports.ts, src/beacon/runner.test.ts, src/beacon/runner.ts, src/beacon/self-update.adapter.test.ts, src/beacon/self-update.adapter.ts, src/beacon/self-update.test.ts, src/beacon/self-update.ts, src/beacon/session.test.ts, src/beacon/session.ts, src/beacon/shell.adapter.test.ts, src/beacon/shell.adapter.ts, src/beacon/state-store.adapter.ts, src/beacon/supervisor.test.ts, src/beacon/supervisor.ts, src/beacon/transfer.adapter.ts, src/beacon/transport.adapter.ts, src/beacon/version.test.ts, src/beacon/version.ts
 
+## c3-242 — remote-mcp (component)
+container: c3-2 | context: c3-0
+refs: ref-side-effect-adapter, ref-strong-typing, ref-ws-subscription, rule-colocated-bun-test, rule-strong-typing
+files: src/server/better-auth-oauth.adapter.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/remote-mcp/command-catalog.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
+
 ## c3-3 — Shared (container)
 context: c3-0
 
@@ -388,40 +398,40 @@ reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 citers: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 
 ## ref-ws-subscription — WebSocket Subscription (ref)
-reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-302
-citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-302
+reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
+citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
 
 ## ref-zustand-store — Zustand Store Pattern (ref)
-reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
-citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-229
+reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-229
+citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
-reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
-citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
+reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-242, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
+citers: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-242, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
 
 ## rule-mcp-name-reserved — mcp-name-reserved (rule)
 reverse deps: c3-232
 citers: c3-232
 
 ## rule-strong-typing — strong-typing (rule)
-reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
-citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
-reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-229
-citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-229
+reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-229
+citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-229
 
 ## File Map
 src/client/app/KannaSocketProvider.tsx → c3-101
@@ -561,6 +571,11 @@ src/client/components/genui/**/*.ts → c3-123
 src/client/components/genui/**/*.tsx → c3-123
 src/client/components/lexical/markdown/kannaUiTransformers.ts → c3-123
 src/client/components/lexical/nodes/KannaUiNode.tsx → c3-123
+src/client/components/settings/RemoteMcpSection.test.tsx → c3-124
+src/client/components/settings/RemoteMcpSection.tsx → c3-124
+src/client/stores/remoteMcpSectionStore.ts → c3-124
+src/shared/remote-mcp/setup-snippets.test.ts → c3-124
+src/shared/remote-mcp/setup-snippets.ts → c3-124
 src/server/cli-bootstrap.adapter.ts → c3-201
 src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
@@ -591,8 +606,11 @@ src/server/http-dispatcher.ts → c3-202
 src/server/http-static.ts → c3-202
 src/server/server.ts → c3-202
 src/client/app/PasswordScreen.store.ts → c3-203
+src/server/auth-backend.ts → c3-203
 src/server/auth.test.ts → c3-203
 src/server/auth.ts → c3-203
+src/server/better-auth-oauth.adapter.ts → c3-203
+src/server/better-auth.adapter.ts → c3-203
 src/server/machine-name.adapter.ts → c3-204
 src/server/paths.ts → c3-204
 src/server/project-paths.test.ts → c3-204
@@ -849,6 +867,13 @@ src/beacon/transfer.adapter.ts → c3-241
 src/beacon/transport.adapter.ts → c3-241
 src/beacon/version.test.ts → c3-241
 src/beacon/version.ts → c3-241
+src/server/better-auth-oauth.adapter.ts → c3-242
+src/server/project-file-path.ts → c3-242
+src/server/remote-mcp/**/*.ts → c3-242
+src/shared/remote-mcp/command-catalog.ts → c3-242
+src/shared/remote-mcp/topics.ts → c3-242
+src/shared/settings/remote-mcp.test.ts → c3-242
+src/shared/settings/remote-mcp.ts → c3-242
 src/shared/analytics.ts → c3-301
 src/shared/dynamic-module.ts → c3-301
 src/shared/json.test.ts → c3-301

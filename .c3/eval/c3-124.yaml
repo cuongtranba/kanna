@@ -1,0 +1,8 @@
+fact: c3-124
+claim: "remote-mcp-ui is implemented at src/client/components/settings/RemoteMcpSection.tsx and src/shared/remote-mcp/setup-snippets.ts"
+code:
+  - src/client/components/settings/RemoteMcpSection.tsx
+  - src/client/components/settings/RemoteMcpSection.test.tsx
+  - src/client/stores/remoteMcpSectionStore.ts
+  - src/shared/remote-mcp/setup-snippets.ts
+  - src/shared/remote-mcp/setup-snippets.test.ts

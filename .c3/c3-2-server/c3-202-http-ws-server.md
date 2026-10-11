@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: ce3e3c461921b23e83db767c853bf21ce9c0f8a0a3e5b874b5c8bd8fbeb958ac
+c3-seal: f35a83736b9b361ab0d1f3b383d42d3cc8b1e8269aae7d48a9db59718b06175d
 title: http-ws-server
 type: component
 category: foundation
@@ -71,6 +71,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | /assets/share-view/* | OUT | Reserved static path for the share viewer bundle, also pre-auth | c3-228 | src/server/http.ts |
 | /beacon scope sync | IN/OUT | Persists a validated set-scope, deletes the beacon on unpair, refuses unknown or disabled beacons before the challenge, and pushes the stored scope to connected protocol-2 beacons on every settings change | c3-241 | src/server/beacon-connection.ts |
 | /beacon update | IN/OUT | Sends the server version in ready and incompatible, keeps each beacon's last update_status until it reconnects, and answers beacons.update with a field-less update frame, refusing a beacon that is offline or below protocol 4; it never sends a URL or a version | c3-241 | src/server/beacon-registry.ts |
+| /mcp | IN | Remote MCP Streamable HTTP endpoint, dispatched BEFORE the cookie gate because it authenticates with a bearer; answers 404 without --password or when remoteMcp.enabled is off | c3-242 | src/server/http-dispatcher.ts |
 
 ## Change Safety
 
