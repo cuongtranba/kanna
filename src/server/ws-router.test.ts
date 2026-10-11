@@ -4099,3 +4099,58 @@ describe("chat.ops delta broadcast", () => {
     expect(afterGap.type).toBe("event")
   })
 })
+
+describe("ws-router programmatic access", () => {
+  function createProgrammaticRouter(storeOverrides: object = {}) {
+    return createWsRouter({
+      store: { state: createEmptyState(), ...storeOverrides } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+  }
+
+  test("dispatchCommand resolves system.ping to an ack envelope", async () => {
+    const router = createProgrammaticRouter()
+
+    const envelope = await router.dispatchCommand({ type: "system.ping" })
+
+    expect(envelope.type).toBe("ack")
+    expect(envelope.v).toBe(PROTOCOL_VERSION)
+  })
+
+  test("dispatchCommand turns a throwing handler into an error envelope carrying its message", async () => {
+    const router = createProgrammaticRouter({
+      renameChat: async () => {
+        throw new Error("Chat not found")
+      },
+    })
+
+    const envelope = await router.dispatchCommand({ type: "chat.rename", chatId: "missing", title: "x" })
+
+    expect(envelope.type).toBe("error")
+    if (envelope.type !== "error") throw new Error("expected an error envelope")
+    expect(envelope.message).toBe("Chat not found")
+  })
+
+  test("readSnapshot returns the current snapshot for a topic without a connection", () => {
+    const router = createProgrammaticRouter()
+
+    const envelope = router.readSnapshot({ type: "sidebar" })
+
+    expect(envelope.type).toBe("snapshot")
+    if (envelope.type !== "snapshot") throw new Error("expected a snapshot envelope")
+    expect(envelope.snapshot.type).toBe("sidebar")
+  })
+})
