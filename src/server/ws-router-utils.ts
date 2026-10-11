@@ -162,7 +162,12 @@ export function isBenignStaleStateMessage(message: string): boolean {
 }
 
 
-export function send(ws: ServerWebSocket<ClientState>, message: ServerEnvelope): number {
+export interface CommandConnection {
+  data: ClientState
+  send(payload: string): number
+}
+
+export function send(ws: CommandConnection, message: ServerEnvelope): number {
   const payload = JSON.stringify(message)
   ws.send(payload)
   return payload.length

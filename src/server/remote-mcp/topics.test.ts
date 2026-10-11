@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { JsonObject } from "../json"
-import { parseSubscriptionTopic } from "./topics"
+import { safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
+import { parseSubscriptionTopic } from "../../shared/remote-mcp/topics"
 
-const PROTOCOL_PATH = join(import.meta.dir, "..", "protocol.ts")
+const PROTOCOL_PATH = join(import.meta.dir, "..", "..", "shared", "protocol.ts")
 
 function declaredTopicTypes(): string[] {
   const source = readFileSync(PROTOCOL_PATH, "utf8")
@@ -13,6 +13,10 @@ function declaredTopicTypes(): string[] {
   const end = rest.search(/\nexport (?:interface|const|function) /)
   const body = end < 0 ? rest : rest.slice(0, end)
   return [...body.matchAll(/\btype: "([a-z-]+)"/g)].map((match) => match[1]!)
+}
+
+function parsedAsJson(value: JsonValue): JsonValue | null {
+  return safeJsonParse(JSON.stringify(parseSubscriptionTopic(value)))
 }
 
 const MINIMAL_TOPICS: Readonly<Record<string, JsonObject>> = {
@@ -43,13 +47,14 @@ describe("subscription topic schema", () => {
     for (const type of declared) {
       const minimal = MINIMAL_TOPICS[type]
       expect(minimal, `fixture for ${type}`).toBeDefined()
-      expect(parseSubscriptionTopic({ type, ...minimal })).toEqual({ type, ...minimal })
+      const input: JsonObject = { type, ...minimal }
+      expect(parsedAsJson(input)).toEqual(input)
     }
   })
 
   test("optional fields are preserved", () => {
-    expect(parseSubscriptionTopic({ type: "chat", chatId: "c1", recentLimit: 5, since: 3 }))
-      .toEqual({ type: "chat", chatId: "c1", recentLimit: 5, since: 3 })
+    const input: JsonObject = { type: "chat", chatId: "c1", recentLimit: 5, since: 3 }
+    expect(parsedAsJson(input)).toEqual(input)
   })
 
   test("an unknown type or a missing required field returns null", () => {

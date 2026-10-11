@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { COMMAND_CATALOG, isCatalogedCommandType, listCommandCatalog } from "./command-catalog"
+import { COMMAND_CATALOG, isCatalogedCommandType, listCommandCatalog } from "../../shared/remote-mcp/command-catalog"
 
-const SHARED_DIR = join(import.meta.dir, "..")
+const SHARED_DIR = join(import.meta.dir, "..", "..", "shared")
 const VALID_RISKS = ["read", "write", "destructive", "local", "unavailable"]
 
 function unionBody(source: string, unionName: string): string {

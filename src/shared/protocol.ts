@@ -476,3 +476,8 @@ export function isClientEnvelope(value: JsonValue): value is JsonValue & ClientE
   if (!isJsonObject(value)) return false
   return value.v === 1 && typeof value.type === "string"
 }
+
+export function isServerEnvelope(value: JsonValue): value is JsonValue & ServerEnvelope {
+  if (!isJsonObject(value)) return false
+  return value.v === 1 && typeof value.type === "string"
+}
