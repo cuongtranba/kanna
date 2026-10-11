@@ -41,7 +41,7 @@ describe("RemoteMcpSection", () => {
 
     expect(rendered.html).not.toContain("Set --password")
     expect(rendered.html).toContain("https://kanna.example.dev/mcp")
-    for (const title of ["Claude Code", "Codex", "Claude Desktop and claude.ai", "ChatGPT"]) {
+    for (const title of ["Claude Code", "Codex", "Claude Desktop and claude.ai", "Claude Desktop, local bridge", "ChatGPT"]) {
       expect(rendered.html).toContain(title)
     }
     expect(rendered.html).toContain("claude mcp add --transport http kanna https://kanna.example.dev/mcp")
