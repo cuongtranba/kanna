@@ -2,13 +2,23 @@ import { Database } from "bun:sqlite"
 import { randomBytes } from "node:crypto"
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { mcp } from "@better-auth/mcp"
 import { betterAuth, type BetterAuthOptions } from "better-auth"
 import { getMigrations } from "better-auth/db/migration"
+import { jwt } from "better-auth/plugins/jwt"
 import { isErrnoException, toError } from "../shared/errors"
 import { log } from "../shared/log"
 import type { AppSettingsManager } from "./app-settings"
 import { createAuthManager, type AuthManager } from "./auth"
-import { CLIENT_IP_HEADER, OWNER_EMAIL, SESSION_COOKIE_NAME, type AuthBackend } from "./auth-backend"
+import {
+  CLIENT_IP_HEADER,
+  OWNER_EMAIL,
+  SESSION_COOKIE_NAME,
+  type AuthBackend,
+  type RemoteMcpAuthConfig,
+} from "./auth-backend"
+import { createOAuthPort } from "./better-auth-oauth.adapter"
+import { REMOTE_MCP_PATH } from "./remote-mcp/oauth-paths"
 
 const SECRET_FILE = "auth-secret"
 const DATABASE_FILE = "auth.db"
@@ -19,6 +29,10 @@ const AUTH_BASE_PATH = "/api/auth"
 const INTERNAL_BASE_URL = "http://localhost"
 const MAX_PASSWORD_LENGTH = 4096
 const SECRET_BYTES = 32
+const ACCESS_TOKEN_TTL_SECONDS = 3600
+const REFRESH_TOKEN_TTL_SECONDS = 30 * SECONDS_PER_DAY
+const MCP_SCOPE = "kanna"
+const OFFLINE_ACCESS_SCOPE = "offline_access"
 
 async function loadOrCreateSecret(filePath: string): Promise<string> {
   try {
@@ -36,11 +50,12 @@ async function removeLegacySessions(dataDir: string) {
   await rm(path.join(dataDir, LEGACY_SESSIONS_FILE), { force: true })
 }
 
-function authOptions(database: Database, secret: string, sessionMaxAgeDays: number) {
+function authOptions(database: Database, secret: string, sessionMaxAgeDays: number, publicOrigin: string | null) {
+  const origin = publicOrigin ?? INTERNAL_BASE_URL
   return {
     secret,
     database,
-    baseURL: INTERNAL_BASE_URL,
+    baseURL: origin,
     basePath: AUTH_BASE_PATH,
     emailAndPassword: {
       enabled: true,
@@ -58,6 +73,21 @@ function authOptions(database: Database, secret: string, sessionMaxAgeDays: numb
       useSecureCookies: false,
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },
+    plugins: [
+      jwt(),
+      mcp({
+        loginPage: "/oauth/login",
+        consentPage: "/oauth/consent",
+        resource: `${origin}${REMOTE_MCP_PATH}`,
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        allowPublicClientPrelogin: true,
+        scopes: [MCP_SCOPE, OFFLINE_ACCESS_SCOPE],
+        clientRegistrationDefaultScopes: [MCP_SCOPE, OFFLINE_ACCESS_SCOPE],
+        accessTokenExpiresIn: ACCESS_TOKEN_TTL_SECONDS,
+        refreshTokenExpiresIn: REFRESH_TOKEN_TTL_SECONDS,
+      }),
+    ],
     rateLimit: { enabled: true, storage: "database" },
     trustedOrigins: (request) => (request ? [new URL(request.url).origin] : []),
     logger: {
@@ -67,11 +97,11 @@ function authOptions(database: Database, secret: string, sessionMaxAgeDays: numb
   } satisfies BetterAuthOptions
 }
 
-function buildAuth(database: Database, secret: string, sessionMaxAgeDays: number) {
-  return betterAuth(authOptions(database, secret, sessionMaxAgeDays))
+function buildAuth(database: Database, secret: string, sessionMaxAgeDays: number, publicOrigin: string | null) {
+  return betterAuth(authOptions(database, secret, sessionMaxAgeDays, publicOrigin))
 }
 
-type KannaAuthInstance = ReturnType<typeof buildAuth>
+export type KannaAuthInstance = ReturnType<typeof buildAuth>
 
 async function ensureOwner(instance: KannaAuthInstance, password: string) {
   const context = await instance.$context
@@ -126,12 +156,13 @@ export async function createBetterAuthBackend(options: BetterAuthBackendOptions)
   const database = new Database(databasePath, { create: true })
   await chmod(databasePath, 0o600)
   let configuredDays = options.getSessionMaxAgeDays()
+  let configuredOrigin: string | null = null
   let current: KannaAuthInstance
 
   try {
-    const { runMigrations } = await getMigrations(authOptions(database, secret, configuredDays))
+    const { runMigrations } = await getMigrations(authOptions(database, secret, configuredDays, null))
     await runMigrations()
-    current = buildAuth(database, secret, configuredDays)
+    current = buildAuth(database, secret, configuredDays, null)
     await ensureOwner(current, options.password)
     await removeLegacySessions(options.dataDir)
   } catch (error) {
@@ -139,12 +170,27 @@ export async function createBetterAuthBackend(options: BetterAuthBackendOptions)
     throw toError(error)
   }
 
+  const oauthPort = createOAuthPort({ instance: () => current, origin: () => configuredOrigin })
+
   return {
+    ...oauthPort,
     refreshSessionLifetime() {
       const days = options.getSessionMaxAgeDays()
       if (days === configuredDays) return
       configuredDays = days
-      current = buildAuth(database, secret, days)
+      current = buildAuth(database, secret, days, configuredOrigin)
+    },
+    configureRemoteMcp({ publicOrigin }: RemoteMcpAuthConfig) {
+      if (publicOrigin === configuredOrigin) return
+      try {
+        current = buildAuth(database, secret, configuredDays, publicOrigin)
+        configuredOrigin = publicOrigin
+      } catch (error) {
+        log.warn("[auth] remote MCP origin rejected; keeping previous configuration", toError(error).message)
+      }
+    },
+    remoteMcpResource() {
+      return configuredOrigin ? `${configuredOrigin}${REMOTE_MCP_PATH}` : null
     },
     async signIn(request) {
       return current.handler(request)
