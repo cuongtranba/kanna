@@ -51,6 +51,7 @@ export default defineConfig({
             { label: 'Cron Jobs', slug: 'features/cron-jobs' },
             { label: 'Loops', slug: 'features/loops' },
             { label: 'Beacons', slug: 'features/beacons' },
+            { label: 'Remote MCP Server', slug: 'guides/user/remote-mcp' },
             { label: 'Kanna Plugins', slug: 'features/plugins' },
             { label: 'Package Auto-Update', slug: 'features/package-auto-update' },
             { label: 'Advanced', slug: 'features/advanced' },

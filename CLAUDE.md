@@ -1796,6 +1796,18 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `TransformStream` and `WritableStream` after happy-dom replaces them; the SDK
   client's SSE parser fails with "readable property must be a ReadableStream"
   under happy-dom's versions, and every SDK-client test hangs.
+- **Client setup lives in two places that must agree.** The Settings cards come
+  from `src/shared/remote-mcp/setup-snippets.ts` and the wiki guide
+  `guides/user/remote-mcp.md` repeats the same steps; change both in one PR.
+  The Claude connector must use **Register automatically**: Kanna does not run
+  the `cimd()` plugin, so Claude's published client identity cannot connect.
+- **A new `--password` does not revoke OAuth clients.** `ensureOwner` deletes
+  sessions on rotation, which ends password-bearer clients, but
+  `@better-auth/oauth-provider` deliberately keeps refresh tokens carrying
+  `offline_access` alive across session deletion, and Kanna requests that scope.
+  An OAuth client therefore keeps refreshing for up to 30 days; turning
+  `remoteMcp.enabled` off is the only kill switch until rotation revokes the
+  owner's `oauthRefreshToken` rows.
 - **Follow-up:** `handleProjectFileContent` still checks the path lexically, so
   a symlink inside a project that points outside it is served over HTTP, while
   `read_project_file` also compares real paths. Hardening the HTTP route may

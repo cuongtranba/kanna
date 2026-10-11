@@ -1,6 +1,6 @@
 ---
 id: c3-124
-c3-seal: 75fb61098d1af67d018fd72868e34cb0336077c90246baf5ec6ef6dff39b5448
+c3-seal: bd7add2ab4765cbbd636783bc52e091b40d6045f415c1cf3032885095d97a60e
 title: remote-mcp-ui
 type: component
 category: feature
@@ -63,7 +63,7 @@ Renders the Remote MCP page registered in the settings sidebar: a notice when Ka
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | RemoteMcpSection | OUT | Registered as the remote-mcp service branch of the settings page; takes handleWriteAppSettings and an optional DomPort | c3-116 | src/client/components/settings/RemoteMcpSection.tsx |
-| buildRemoteMcpSetupSnippets | OUT | Returns one snippet per client with the endpoint filled in and the placeholder text where the password goes | c3-242 | src/shared/remote-mcp/setup-snippets.ts |
+| buildRemoteMcpSetupSnippets | OUT | Returns one snippet per client setup (Claude Code, Codex, the Claude connector, the local mcp-remote bridge for Claude Desktop, ChatGPT) with the endpoint filled in and the placeholder text where the password goes; the wiki guide guides/user/remote-mcp repeats the same steps and changes with it | c3-242 | src/shared/remote-mcp/setup-snippets.ts |
 
 ## Change Safety
 

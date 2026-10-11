@@ -40,6 +40,15 @@ Both `--share` and `--cloudflared` need the `cloudflared` binary
 (`brew install cloudflared`, or see
 [Cloudflare's downloads](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)).
 
+## Remote MCP through a tunnel
+
+Claude Desktop, claude.ai and ChatGPT reach Kanna's [remote MCP server](/guides/user/remote-mcp/)
+from the cloud, so they need the tunnel's https hostname. Use a named tunnel,
+whose hostname stays fixed, then enter that hostname in **Settings → Remote MCP →
+Public URL**, for example `https://kanna.example.com`. OAuth tokens are issued for
+that address, so a quick tunnel's changing `trycloudflare.com` URL means signing
+the clients in again after every restart.
+
 ## A permanent install on macOS with pm2
 
 This runs a git checkout of Kanna under pm2 behind a named tunnel, and makes the

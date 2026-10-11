@@ -97,6 +97,7 @@ One Bun process owns everything. The browser sends commands over a WebSocket, th
 **Extend and connect**
 
 - **Your MCP servers** (`stdio`, `http`, `sse`, `ws`, with OAuth 2.1) are available in every chat. [Advanced](https://kanna-wiki.lowbit.link/features/advanced/)
+- **Kanna as an MCP server**: Claude Code, Codex, Claude Desktop and ChatGPT can drive Kanna over MCP at `/mcp` (projects, chats, git, boards, cron, settings), signing in with your password or OAuth. [Remote MCP](https://kanna-wiki.lowbit.link/guides/user/remote-mcp/)
 - **Kanna plugins** add sidebar pages, panels and `/` commands, with a server half running in its own process. [Plugins](https://kanna-wiki.lowbit.link/features/plugins/)
 - **Beacons** pair another machine you own, so the agent can read files or run commands there within limits you set. [Beacons](https://kanna-wiki.lowbit.link/guides/user/beacons/)
 - **Package updates** for installed skills, Claude Code plugins and Codex plugins, checked and applied from Settings. [Package auto-update](https://kanna-wiki.lowbit.link/features/package-auto-update/)
@@ -119,6 +120,15 @@ kanna --share                 # temporary public trycloudflare.com URL + termina
 kanna --cloudflared <token>   # run a named Cloudflare tunnel
 kanna plugin ls               # manage Kanna plugins
 ```
+
+To let another agent drive Kanna over MCP, start it with a password and add the endpoint to the client:
+
+```bash
+kanna --password <secret>
+claude mcp add --transport http kanna http://127.0.0.1:3210/mcp --header "Authorization: Bearer <secret>"
+```
+
+Codex, Claude Desktop and ChatGPT setup, including the public URL they need, is in the [Remote MCP guide](https://kanna-wiki.lowbit.link/guides/user/remote-mcp/).
 
 `kanna --help` lists every flag. State lives in `~/.kanna`; back it up to keep your chat history. Deployment recipes for [pm2](https://kanna-wiki.lowbit.link/guides/ops/pm2/), [systemd](https://kanna-wiki.lowbit.link/guides/ops/systemd/), [Docker](https://kanna-wiki.lowbit.link/guides/ops/docker/) and a [Cloudflare tunnel](https://kanna-wiki.lowbit.link/guides/ops/cloudflare-tunnel/) are in the wiki.
 
