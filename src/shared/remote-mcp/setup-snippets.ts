@@ -43,8 +43,11 @@ export function buildRemoteMcpSetupSnippets({ publicOrigin, passwordConfigured }
       id: "codex",
       client: "codex",
       title: "Codex",
-      instructions: `${prefix}Put the block in ~/.codex/config.toml and export your Kanna password as KANNA_PASSWORD, or sign in through OAuth instead.`,
+      instructions: `${prefix}Export your Kanna password as KANNA_PASSWORD, then run the command, or put the equivalent block in ~/.codex/config.toml. For OAuth, leave out the bearer variable and run codex mcp login kanna.`,
       snippet: [
+        `codex mcp add kanna --url ${endpoint} --bearer-token-env-var KANNA_PASSWORD`,
+        "",
+        "# or in ~/.codex/config.toml",
         "[mcp_servers.kanna]",
         `url = "${endpoint}"`,
         'bearer_token_env_var = "KANNA_PASSWORD"',
@@ -57,15 +60,38 @@ export function buildRemoteMcpSetupSnippets({ publicOrigin, passwordConfigured }
       id: "claude-desktop",
       client: "claude-desktop",
       title: "Claude Desktop and claude.ai",
-      instructions: `${prefix}Open Settings, Connectors, Add custom connector and enter the URL. Add the request header below, or leave it empty to sign in through OAuth. ${PUBLIC_HTTPS_NOTE}`,
-      snippet: [`URL: ${endpoint}`, `Header: Authorization: Bearer ${PASSWORD_PLACEHOLDER}`].join("\n"),
+      instructions: `${prefix}Open Customize, Connectors, Add custom connector and enter the URL. For OAuth, choose Register automatically as the OAuth client. If your account shows Request headers, you can instead choose No sign-in and add the header below. ${PUBLIC_HTTPS_NOTE}`,
+      snippet: [
+        `MCP server URL: ${endpoint}`,
+        "OAuth client: Register automatically",
+        `Request header (No sign-in only): authorization = Bearer ${PASSWORD_PLACEHOLDER}`,
+      ].join("\n"),
+    },
+    {
+      id: "claude-desktop-local",
+      client: "claude-desktop",
+      title: "Claude Desktop, local bridge",
+      instructions: `${prefix}Needs Node.js. In Claude Desktop open Settings, Developer, Edit Config, add the block to claude_desktop_config.json and restart Claude. The bridge runs on your computer, so a localhost URL works and no public URL is needed.`,
+      snippet: JSON.stringify(
+        {
+          mcpServers: {
+            kanna: {
+              command: "npx",
+              args: ["-y", "mcp-remote", endpoint, "--header", `Authorization:\${KANNA_AUTH}`],
+              env: { KANNA_AUTH: `Bearer ${PASSWORD_PLACEHOLDER}` },
+            },
+          },
+        },
+        null,
+        2,
+      ),
     },
     {
       id: "chatgpt",
       client: "chatgpt",
       title: "ChatGPT",
-      instructions: `${prefix}Turn on developer mode, open Settings, Apps and Connectors, Create, enter the URL and choose OAuth as the authentication. ${PUBLIC_HTTPS_NOTE}`,
-      snippet: [`URL: ${endpoint}`, "Authentication: OAuth"].join("\n"),
+      instructions: `${prefix}Turn on Settings, Apps, Advanced settings, Developer mode, then choose Create app. Enter the URL, choose OAuth and leave the client ID empty so ChatGPT registers itself. ${PUBLIC_HTTPS_NOTE}`,
+      snippet: [`MCP server URL: ${endpoint}`, "Authentication: OAuth (leave the client ID empty)"].join("\n"),
     },
   ]
 }
