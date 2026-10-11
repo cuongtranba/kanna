@@ -8,6 +8,7 @@ import { SessionMark } from "../../ui/session-mark"
 import { cn, normalizeChatId } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { statusLabel } from "../../../lib/statusLabel"
+import { formatBackgroundWork } from "../../../../shared/stack-activity"
 import {
   chatDotBgClass,
   chatDotTextClass,
@@ -56,16 +57,26 @@ function ChatRowImpl({
   onToggleSelect,
 }: Props) {
   const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
-  const stampLabel = isLiveState && chat.stateEnteredAt != null
-    ? `${statusLabel(chat.status)} ${formatLiveDuration(nowMs - chat.stateEnteredAt)}`
-    : formatCompactDuration(nowMs - (chat.lastMessageAt ?? chat._creationTime))
+  const indicator = chatStatusIndicator(chat)
+  const backgroundWork = formatBackgroundWork(chat.activity)
+  const backgroundLabel = !isLiveState && backgroundWork !== null && indicator?.label === backgroundWork
+    ? backgroundWork
+    : null
+  let stampLabel: string
+  if (isLiveState && chat.stateEnteredAt != null) {
+    stampLabel = `${statusLabel(chat.status)} ${formatLiveDuration(nowMs - chat.stateEnteredAt)}`
+  } else if (backgroundLabel) {
+    stampLabel = backgroundLabel
+  } else {
+    stampLabel = formatCompactDuration(nowMs - (chat.lastMessageAt ?? chat._creationTime))
+  }
 
   const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : stampLabel
   const showShortcutKeycap = showShortcutHint && Boolean(shortcutHint)
   const normalizedChatId = normalizeChatId(chat.chatId)
   const isActive = activeChatId === normalizedChatId
 
-  const tone = chatStatusIndicator(chat)?.tone ?? null
+  const tone = indicator?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
   const isSpawning = useNewSessionStore(selectIsSpawning(normalizedChatId))
   const rowPending = useChatRowPending(chat.chatId)
@@ -123,7 +134,7 @@ function ChatRowImpl({
         <span
           className={cn(
             "hidden md:flex items-center justify-end pr-1 text-xs tabular-nums transition-opacity duration-150 group-hover:opacity-0 whitespace-nowrap",
-            isLiveState ? chatDotTextClass(tone) : "text-muted-foreground"
+            isLiveState || backgroundLabel ? chatDotTextClass(tone) : "text-muted-foreground"
           )}
         >
           {trailingLabel}

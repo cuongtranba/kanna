@@ -34,7 +34,7 @@ function cronRow(cron: NonNullable<ChatActivity["cron"]>): WorkRow {
 
 function workRow(chat: CardChatFacts): WorkRow | null {
   const { activity } = chat
-  const session = chatStatusIndicator(chat)
+  const session = chatStatusIndicator({ status: chat.status, unread: chat.unread })
   const elapsed: WorkClock | null =
     chat.stateEnteredAt === undefined ? null : { kind: "elapsed", since: chat.stateEnteredAt }
 

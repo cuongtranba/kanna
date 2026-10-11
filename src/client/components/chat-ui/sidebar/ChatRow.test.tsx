@@ -112,6 +112,25 @@ describe("ChatRow", () => {
     expect(html).toContain("0:12")
   })
 
+  test("idle chat with a running background agent shows the agent count instead of the age", () => {
+    const html = renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, activity: { ...EMPTY_CHAT_ACTIVITY, agents: 1 } }}
+        activeChatId={null}
+        nowMs={60_000}
+        onSelectChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onDeleteChat={async () => undefined}
+      />
+    )
+    expect(html).toContain(">1 agent<")
+    expect(html).not.toContain(">1m<")
+    expect(html).toContain("bg-warning")
+  })
+
   test("silent + live state: status label is in-flow, not absolute-positioned over BellOff", () => {
     const html = renderToStaticMarkup(
       <ChatRow

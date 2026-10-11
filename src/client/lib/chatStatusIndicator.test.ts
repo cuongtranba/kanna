@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import {
   chatDotBgClass,
   chatDotTextClass,
@@ -25,6 +26,18 @@ describe("chatStatusIndicator", () => {
   test("live state outranks unread", () => {
     expect(chatStatusIndicator({ status: "running", unread: true })?.tone).toBe("warning")
     expect(chatStatusIndicator({ status: "failed", unread: true })?.tone).toBe("destructive")
+  })
+
+  test("an idle chat with a running background agent gets a warning indicator labelled with the agent count", () => {
+    const activity = { ...EMPTY_CHAT_ACTIVITY, agents: 1 }
+    expect(chatStatusIndicator({ status: "idle", unread: false, activity })).toEqual({ tone: "warning", label: "1 agent" })
+  })
+
+  test("background work beats unread, and a live status beats background work", () => {
+    const activity = { ...EMPTY_CHAT_ACTIVITY, agents: 2, backgroundTasks: 1 }
+    expect(chatStatusIndicator({ status: "idle", unread: true, activity })).toEqual({ tone: "warning", label: "2 agents, 1 task" })
+    expect(chatStatusIndicator({ status: "waiting_for_user", unread: false, activity })?.tone).toBe("info")
+    expect(chatStatusIndicator({ status: "failed", unread: false, activity })?.tone).toBe("destructive")
   })
 
   test("every indicator names its status", () => {

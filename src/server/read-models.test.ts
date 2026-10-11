@@ -190,6 +190,65 @@ describe("read models", () => {
     expect(chat?.runtime.backgroundTasks).toEqual(tasks)
   })
 
+  describe("background subagent runs", () => {
+    function stateWithRuns(runs: { runId: string; status: string; parentRunId: string | null; startedAt: number; label: string | null }[]) {
+      const state = createEmptyState()
+      state.projectsById.set("project-1", {
+        id: "project-1", localPath: "/tmp/project", title: "Project", createdAt: 1, updatedAt: 1,
+      })
+      state.chatsById.set("chat-1", {
+        id: "chat-1", projectId: "project-1", title: "Chat", createdAt: 1, updatedAt: 1,
+        unread: false, provider: "claude", planMode: false,
+        sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
+      })
+      state.subagentRunsByChatId.set("chat-1", new Map(runs.map((run) => [
+        run.runId,
+        {
+          runId: run.runId, chatId: "chat-1", subagentId: "s1", subagentName: "researcher", label: run.label,
+          provider: "claude", model: "m", status: run.status, parentUserMessageId: "u1", parentRunId: run.parentRunId,
+          depth: 0, startedAt: run.startedAt, finishedAt: null, finalText: null, error: null,
+          usage: null, entries: [], pendingTool: null,
+        },
+      ])) as never)
+      return state
+    }
+
+    function snapshotOf(state: ReturnType<typeof stateWithRuns>, sdkTasks: { id: string; taskType: string; description: string; startedAt: number; hasOutput: boolean }[]) {
+      return deriveChatSnapshot(
+        state,
+        new Map(),
+        new Set(),
+        "chat-1",
+        () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
+        () => [],
+        new Map(),
+        Date.now(),
+        new Map(),
+        [],
+        new Map([["chat-1", sdkTasks]]),
+      )
+    }
+
+    test("runtime.backgroundTasks lists a running top-level subagent run after the SDK tasks", () => {
+      const sdkTask = { id: "bsh42", taskType: "local_bash", description: "CI watch", startedAt: 100, hasOutput: false }
+      const state = stateWithRuns([
+        { runId: "run-1", status: "running", parentRunId: null, startedAt: 200, label: "Survey the repo" },
+      ])
+      expect(snapshotOf(state, [sdkTask])?.runtime.backgroundTasks).toEqual([
+        sdkTask,
+        { id: "run-1", taskType: "subagent", description: "Survey the repo", startedAt: 200, hasOutput: false },
+      ])
+    })
+
+    test("a settled run and a child run are not background tasks", () => {
+      const state = stateWithRuns([
+        { runId: "run-done", status: "completed", parentRunId: null, startedAt: 100, label: null },
+        { runId: "run-child", status: "running", parentRunId: "other", startedAt: 150, label: null },
+      ])
+      expect(snapshotOf(state, [])?.runtime.backgroundTasks).toEqual([])
+    })
+  })
+
   test("prefers saved project metadata over discovered entries for the same path", () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {
