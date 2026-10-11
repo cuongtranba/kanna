@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.71.2](https://github.com/cuongtranba/kanna/compare/v1.71.1...v1.71.2) (2026-10-11)
+
+
+### Bug Fixes
+
+* **brand:** one Kanna mark everywhere, and a Beacons feature page in the wiki ([#1244](https://github.com/cuongtranba/kanna/issues/1244)) ([c19e1ae](https://github.com/cuongtranba/kanna/commit/c19e1ae3aed368781e1f6761373b1167f38c644d))
+
 ## [1.71.1](https://github.com/cuongtranba/kanna/compare/v1.71.0...v1.71.1) (2026-10-11)
 
 
