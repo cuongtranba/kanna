@@ -22,6 +22,7 @@ import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
 import {
   normalizeAuthSettings,
+  normalizeRemoteMcpSettings,
   normalizeCloudflareTunnelSettings,
   normalizePushSettings,
   normalizeTelemetrySettings,
@@ -156,6 +157,7 @@ interface AppSettingsFile {
   packageUpdates?: JsonObject
   plugins?: JsonObject
   installedPlugins?: JsonArray
+  remoteMcp?: JsonObject
 }
 
 function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
@@ -911,6 +913,7 @@ function normalizeAppSettings<T>(
   const telemetry = normalizeTelemetrySettings(source?.telemetry, warnings)
   const auth = normalizeAuthSettings(source?.auth, warnings)
   const pluginState = normalizePluginState(source, warnings)
+  const remoteMcp = normalizeRemoteMcpSettings(source?.remoteMcp, warnings)
   const claudeAuth = normalizeClaudeAuth(source?.claudeAuth, warnings)
   const uploads = normalizeUploadSettings(source?.uploads, warnings)
   const { customModels, seededBuiltinModels } = normalizeModelCatalog(source, warnings)
@@ -974,6 +977,7 @@ function normalizeAppSettings<T>(
     subagentRuntime,
     packageUpdates,
     ...pluginState,
+    remoteMcp,
   }
 
   const filePayload = toFilePayload(state)
@@ -1609,6 +1613,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     customModels: nextCustomModels,
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),
+    remoteMcp: { ...state.remoteMcp, ...patch.remoteMcp },
     claudeDriver: {
       lifecycle: {
         ...state.claudeDriver.lifecycle,

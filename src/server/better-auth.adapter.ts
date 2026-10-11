@@ -224,7 +224,9 @@ export interface PasswordAuthOptions {
   appSettings: AppSettingsManager
 }
 
-export async function createPasswordAuth(options: PasswordAuthOptions): Promise<AuthManager> {
+export type PasswordAuth = AuthManager & { backend: BetterAuthBackend }
+
+export async function createPasswordAuth(options: PasswordAuthOptions): Promise<PasswordAuth> {
   const { appSettings } = options
   const backend = await createBetterAuthBackend({
     dataDir: options.dataDir,
@@ -235,6 +237,7 @@ export async function createPasswordAuth(options: PasswordAuthOptions): Promise<
   const manager = createAuthManager(backend, { trustProxy: options.trustProxy })
   return {
     ...manager,
+    backend,
     async dispose() {
       unsubscribe()
       await manager.dispose()

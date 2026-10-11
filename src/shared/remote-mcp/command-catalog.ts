@@ -1,3 +1,4 @@
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
 import type { ClientCommand } from "../protocol"
 
 export type CommandRisk = "read" | "write" | "destructive" | "local" | "unavailable"
@@ -175,4 +176,13 @@ export function listCommandCatalog(domain?: string): Array<{ type: string } & Co
     if (domain === undefined || catalogEntry.domain === domain) rows.push({ type, ...catalogEntry })
   }
   return rows
+}
+
+export function isClientCommandShape(value: JsonValue): value is JsonValue & ClientCommand {
+  return isJsonObject(value) && typeof value.type === "string" && isCatalogedCommandType(value.type)
+}
+
+export function toClientCommand(type: string, params: JsonObject): ClientCommand | null {
+  const candidate: JsonObject = { ...params, type }
+  return isClientCommandShape(candidate) ? candidate : null
 }

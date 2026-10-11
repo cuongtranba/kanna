@@ -95,6 +95,10 @@ export function mergeAppSettingsPatch(
       ...patch.plugins,
     },
     installedPlugins: settings.installedPlugins,
+    remoteMcp: {
+      ...settings.remoteMcp,
+      ...patch.remoteMcp,
+    },
     claudeDriver: {
       lifecycle: {
         ...settings.claudeDriver.lifecycle,

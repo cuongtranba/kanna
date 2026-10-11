@@ -7,6 +7,8 @@ import {
   type AuthBackend,
 } from "./auth-backend"
 
+const SYNTHETIC_SIGN_IN_ORIGIN = "http://localhost"
+
 export interface AuthStatusPayload {
   enabled: boolean
   authenticated: boolean
@@ -18,6 +20,8 @@ export interface AuthManager {
   redirectToApp(req: Request): Response
   handleLogin(req: Request, nextPath: string, clientIp: string | null): Promise<Response>
   signInForOAuth(req: Request, password: string, oauthQuery: string, clientIp: string | null): Promise<Response>
+  signInWithPassword(password: string, clientIp: string | null): Promise<Response>
+  clientIpFor(req: Request, socketIp: string | null): string | null
   handleLogout(req: Request): Promise<Response>
   handleStatus(req: Request): Promise<Response>
   dispose(): Promise<void>
@@ -248,6 +252,10 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     return appendCookies(relayed, req, upstream.headers.getSetCookie())
   }
 
+  async function signInWithPassword(password: string, clientIp: string | null) {
+    return backend.signIn(buildSignInRequest({ req: new Request(SYNTHETIC_SIGN_IN_ORIGIN), trustProxy, password, clientIp }))
+  }
+
   async function handleLogout(req: Request) {
     if (!validateOrigin(req)) {
       return Response.json({ error: "Forbidden" }, { status: 403 })
@@ -268,6 +276,8 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     redirectToApp,
     handleLogin,
     signInForOAuth,
+    signInWithPassword,
+    clientIpFor: resolveClientIp,
     handleLogout,
     handleStatus,
     dispose,
