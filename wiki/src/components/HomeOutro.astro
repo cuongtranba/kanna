@@ -2,6 +2,7 @@
 const sections: { label: string; href: string }[] = [
   { label: 'Install', href: '/getting-started/install/' },
   { label: 'OAuth pool setup', href: '/getting-started/oauth-pool-setup/' },
+  { label: 'Beacons', href: '/features/beacons/' },
   { label: 'Security and approvals', href: '/features/security-sandboxing/' },
   { label: 'Contribute', href: '/guides/contributing/overview/' },
 ]
@@ -10,8 +11,9 @@ const sections: { label: string; href: string }[] = [
 <section class="home-outro">
   <p>
     Kanna is a web UI for the Claude Code and Codex CLIs, with OAuth pool
-    rotation, kanban-driven worktrees, durable approvals, and subagent
-    orchestration. macOS and Linux. Self-hosted.
+    rotation, kanban-driven worktrees, durable approvals, subagent
+    orchestration, and beacons that let the agent work on your other machines.
+    macOS and Linux. Self-hosted.
   </p>
   <p class="outro-links">
     {sections.map((s, i) => (
