@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, GLOBAL_PROMPT_APPEND_MAX_CHARS, mergeCustomModels, PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS, PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, REMOTE_MCP_SETTINGS_DEFAULTS, PROVIDERS, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuiltins } from "./app-settings"
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
@@ -98,6 +98,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
+    remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
     installedPlugins: [],
     ...overrides,
   }
@@ -413,6 +414,36 @@ describe("uploads normalization", () => {
     try { await manager.setUploads({ maxFileSizeMb: 99999 }) } catch (error) { highError = error }
     expect((highError as Error)?.message).toMatch(/between/)
     manager.dispose()
+  })
+})
+
+describe("remoteMcp settings", () => {
+  test("defaults to enabled with no public url", async () => {
+    const filePath = await writeSettingsFile({ analyticsEnabled: true })
+    const snapshot = await readAppSettingsSnapshot(filePath)
+    expect(snapshot.remoteMcp).toEqual({ enabled: true, publicUrl: null })
+  })
+
+  test("a public url is reduced to its origin and a bad one is dropped with a warning", async () => {
+    const good = await readAppSettingsSnapshot(await writeSettingsFile({ remoteMcp: { publicUrl: "https://kanna.example.dev/some/path?x=1" } }))
+    expect(good.remoteMcp.publicUrl).toBe("https://kanna.example.dev")
+
+    const lan = await readAppSettingsSnapshot(await writeSettingsFile({ remoteMcp: { enabled: false, publicUrl: "http://192.168.1.5:3210" } }))
+    expect(lan.remoteMcp).toEqual({ enabled: false, publicUrl: null })
+    expect(lan.warning).toContain("remoteMcp.publicUrl")
+  })
+
+  test("a patch merges field by field and survives a reload", async () => {
+    const filePath = await writeSettingsFile({ remoteMcp: { enabled: true, publicUrl: "https://kanna.example.dev" } })
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+
+    const afterDisable = await manager.writePatch({ remoteMcp: { enabled: false } })
+    expect(afterDisable.remoteMcp).toEqual({ enabled: false, publicUrl: "https://kanna.example.dev" })
+
+    await manager.writePatch({ remoteMcp: { publicUrl: null } })
+    const reloaded = await readAppSettingsSnapshot(filePath)
+    expect(reloaded.remoteMcp).toEqual({ enabled: false, publicUrl: null })
   })
 })
 

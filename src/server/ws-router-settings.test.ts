@@ -12,6 +12,7 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PLUGIN_SETTINGS_DEFAULTS,
+  REMOTE_MCP_SETTINGS_DEFAULTS,
   PROTOCOL_VERSION,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
@@ -64,6 +65,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
+    remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
     installedPlugins: [],
   }
 }
