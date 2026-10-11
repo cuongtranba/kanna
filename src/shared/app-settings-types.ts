@@ -24,6 +24,8 @@ import type {
 import { CLOUDFLARE_TUNNEL_DEFAULTS } from "./settings/cloudflare-tunnel"
 import type { PushSettings } from "./settings/push"
 import { PUSH_DEFAULTS } from "./settings/push"
+import type { RemoteMcpSettings } from "./settings/remote-mcp"
+import { REMOTE_MCP_SETTINGS_DEFAULTS } from "./settings/remote-mcp"
 import type { TelemetrySettings } from "./settings/telemetry"
 import { TELEMETRY_DEFAULTS } from "./settings/telemetry"
 import type { TypographySettings } from "./settings/typography"
@@ -45,6 +47,7 @@ export type {
   InstalledPluginConfig,
   PluginSettings,
   PushSettings,
+  RemoteMcpSettings,
   TelemetrySettings,
   TypographySettings,
   UploadSettings,
@@ -56,6 +59,7 @@ export {
   CLOUDFLARE_TUNNEL_DEFAULTS,
   PLUGIN_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
+  REMOTE_MCP_SETTINGS_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
   UPLOAD_DEFAULTS,
@@ -306,6 +310,7 @@ export interface AppSettingsSnapshot {
   packageUpdates: PackageUpdateSettings
   plugins: PluginSettings
   installedPlugins: InstalledPluginConfig[]
+  remoteMcp: RemoteMcpSettings
 }
 
 export interface SubagentRuntimeSettings {
@@ -394,6 +399,7 @@ export interface AppSettingsPatch {
   subagentRuntime?: Partial<SubagentRuntimeSettings>
   packageUpdates?: Partial<PackageUpdateSettings>
   plugins?: Partial<PluginSettings>
+  remoteMcp?: Partial<RemoteMcpSettings>
   installedPlugins?: {
     create?: { sourceDir: string; id: string }
     update?: { id: string; patch: { enabled?: boolean } }

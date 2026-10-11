@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, PROTOCOL_VERSION, PUSH_DEFAULTS,
+import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, REMOTE_MCP_SETTINGS_DEFAULTS, PROTOCOL_VERSION, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
@@ -144,6 +144,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
   packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
   plugins: PLUGIN_SETTINGS_DEFAULTS,
+  remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
   installedPlugins: [],
 }
 
@@ -4097,5 +4098,60 @@ describe("chat.ops delta broadcast", () => {
     const afterGap = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(afterGap)) throw new Error("missing envelope after re-arm")
     expect(afterGap.type).toBe("event")
+  })
+})
+
+describe("ws-router programmatic access", () => {
+  function createProgrammaticRouter(storeOverrides: object = {}) {
+    return createWsRouter({
+      store: { state: createEmptyState(), ...storeOverrides } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
+      terminals: {
+        getSnapshot: () => null,
+        onEvent: () => () => {},
+      } as never,
+      keybindings: {
+        getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT,
+        onChange: () => () => {},
+      } as never,
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+  }
+
+  test("dispatchCommand resolves system.ping to an ack envelope", async () => {
+    const router = createProgrammaticRouter()
+
+    const envelope = await router.dispatchCommand({ type: "system.ping" })
+
+    expect(envelope.type).toBe("ack")
+    expect(envelope.v).toBe(PROTOCOL_VERSION)
+  })
+
+  test("dispatchCommand turns a throwing handler into an error envelope carrying its message", async () => {
+    const router = createProgrammaticRouter({
+      renameChat: async () => {
+        throw new Error("Chat not found")
+      },
+    })
+
+    const envelope = await router.dispatchCommand({ type: "chat.rename", chatId: "missing", title: "x" })
+
+    expect(envelope.type).toBe("error")
+    if (envelope.type !== "error") throw new Error("expected an error envelope")
+    expect(envelope.message).toBe("Chat not found")
+  })
+
+  test("readSnapshot returns the current snapshot for a topic without a connection", () => {
+    const router = createProgrammaticRouter()
+
+    const envelope = router.readSnapshot({ type: "sidebar" })
+
+    expect(envelope.type).toBe("snapshot")
+    if (envelope.type !== "snapshot") throw new Error("expected a snapshot envelope")
+    expect(envelope.snapshot.type).toBe("sidebar")
   })
 })

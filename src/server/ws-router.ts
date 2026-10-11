@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto"
 import { safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
-import type { ClientCommand, ClientEnvelope, ServerEnvelope } from "../shared/protocol"
-import { isClientEnvelope } from "../shared/protocol"
+import type { ClientCommand, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import { isClientEnvelope, isServerEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
@@ -63,7 +64,7 @@ import {
   send,
   unhandledCommandMessage,
 } from "./ws-router-utils"
-import type { ClientState } from "./ws-router-utils"
+import type { ClientState, CommandConnection } from "./ws-router-utils"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
 import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
@@ -214,7 +215,7 @@ export function createWsRouter({
     return { chat, project }
   }
 
-  function buildChatDeps(ws: ServerWebSocket<ClientState>): ChatCommandDeps {
+  function buildChatDeps(ws: CommandConnection): ChatCommandDeps {
     return {
       store,
       agent,
@@ -229,7 +230,7 @@ export function createWsRouter({
     }
   }
 
-  function buildAgentCtrlDeps(ws: ServerWebSocket<ClientState>): AgentCtrlCommandDeps {
+  function buildAgentCtrlDeps(ws: CommandConnection): AgentCtrlCommandDeps {
     return {
       agent,
       tunnelGateway,
@@ -238,7 +239,7 @@ export function createWsRouter({
     }
   }
 
-  function buildMiscDeps(ws: ServerWebSocket<ClientState>): MiscCommandDeps {
+  function buildMiscDeps(ws: CommandConnection): MiscCommandDeps {
     return {
       store,
       terminals,
@@ -255,7 +256,7 @@ export function createWsRouter({
   }
 
   function sendBackgroundTaskOutput(
-    ws: ServerWebSocket<ClientState>,
+    ws: CommandConnection,
     command: Extract<ClientCommand, { type: "backgroundTasks.getOutput" }>,
     id: string,
   ): boolean {
@@ -278,7 +279,7 @@ export function createWsRouter({
   }
 
   async function routeCommand(
-    ws: ServerWebSocket<ClientState>,
+    ws: CommandConnection,
     command: ClientCommand,
     id: string,
   ): Promise<boolean> {
@@ -381,7 +382,7 @@ export function createWsRouter({
   }
 
   function reportUnhandledCommand(
-    ws: ServerWebSocket<ClientState>,
+    ws: CommandConnection,
     command: ClientCommand,
     id: string,
   ) {
@@ -394,25 +395,58 @@ export function createWsRouter({
     })
   }
 
-  async function handleCommand(ws: ServerWebSocket<ClientState>, message: Extract<ClientEnvelope, { type: "command" }>) {
+  async function handleCommand(ws: CommandConnection, message: Extract<ClientEnvelope, { type: "command" }>) {
     const { command, id } = message
     try {
       if (await routeCommand(ws, command, id)) return
       await reportUnhandledCommand(ws, command, id)
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error)
-      const benign = isBenignStaleStateMessage(messageText)
-      const logFn = benign ? log.info : log.error
-      logFn("[ws-router] command failed", {
-        id,
-        type: command.type,
-        message: messageText,
-      })
-      send(ws, { v: PROTOCOL_VERSION, type: "error", id, message: messageText })
+      send(ws, describeCommandFailure(command, id, error instanceof Error ? error : String(error)))
     }
   }
 
+  function describeCommandFailure(command: ClientCommand, id: string, error: Error | string): ServerEnvelope {
+    const messageText = error instanceof Error ? error.message : String(error)
+    const benign = isBenignStaleStateMessage(messageText)
+    const logFn = benign ? log.info : log.error
+    logFn("[ws-router] command failed", {
+      id,
+      type: command.type,
+      message: messageText,
+    })
+    return { v: PROTOCOL_VERSION, type: "error", id, message: messageText }
+  }
+
+  async function dispatchCommand(command: ClientCommand): Promise<ServerEnvelope> {
+    const id = randomUUID()
+    const captured: ServerEnvelope[] = []
+    const connection: CommandConnection = {
+      data: { subscriptions: new Map(), snapshotSignatures: new Map(), originHost: "" },
+      send(payload) {
+        const parsed: JsonValue | null = safeJsonParse(payload)
+        if (parsed !== null && isServerEnvelope(parsed)) captured.push(parsed)
+        return payload.length
+      },
+    }
+    try {
+      if (!(await routeCommand(connection, command, id))) {
+        log.error("[ws-router] no handler claimed command", { id, type: command.type })
+        return { v: PROTOCOL_VERSION, type: "error", id, message: unhandledCommandMessage(command.type) }
+      }
+    } catch (error) {
+      return describeCommandFailure(command, id, error instanceof Error ? error : String(error))
+    }
+    const answer = captured.find((envelope) => envelope.id === id)
+    return answer ?? { v: PROTOCOL_VERSION, type: "ack", id }
+  }
+
+  function readSnapshot(topic: SubscriptionTopic): ServerEnvelope {
+    return envelopeBuilder.createEnvelope(randomUUID(), topic)
+  }
+
   return {
+    dispatchCommand,
+    readSnapshot,
     handleOpen(ws: ServerWebSocket<ClientState>) {
       broadcast.addSocket(ws)
     },

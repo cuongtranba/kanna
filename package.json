@@ -65,6 +65,7 @@
     "@atlaskit/pragmatic-drag-and-drop": "3.1.0",
     "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "3.2.1",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "3.0.0",
+    "@better-auth/mcp": "1.7.7",
     "@json-render/core": "0.21.0",
     "@json-render/react": "0.21.0",
     "@legendapp/list": "3.6.0",

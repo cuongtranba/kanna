@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises"
+import { realpath, stat } from "node:fs/promises"
 import type { Stats } from "node:fs"
 import type { JsonValue } from "../shared/json"
 import type { BunFile, Server } from "bun"
@@ -8,6 +8,10 @@ export type ServerStats = Stats
 
 export function getServerFile(p: string): ServerFile {
   return Bun.file(p)
+}
+
+export function realPathOrNull(p: string): Promise<string | null> {
+  return realpath(p).catch(() => null)
 }
 
 export function statFile(p: string): Promise<Stats> {

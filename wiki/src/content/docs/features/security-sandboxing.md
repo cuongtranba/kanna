@@ -34,6 +34,11 @@ are throttled: after three sign-in attempts in ten seconds the login answers
 `429` until the window passes. Starting Kanna with a **different** `--password`
 signs every browser out.
 
+The [remote MCP server](/guides/user/remote-mcp/) is served outside the cookie
+gate because its clients cannot hold a browser cookie: `/mcp` and the OAuth
+endpoints authenticate with a bearer token or the launch password instead, share
+the same rate limiter, and answer `404` when no `--password` is set.
+
 Use it for any instance reachable beyond localhost. Kanna does not terminate
 TLS — put it behind a reverse proxy or a Cloudflare tunnel
 ([Self-host basics](/guides/ops/self-host/#reverse-proxy)).

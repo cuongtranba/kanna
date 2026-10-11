@@ -1746,6 +1746,61 @@ with 15-minute tokens a respawn would otherwise kill a background task or
 workflow every quarter hour, and a stale MCP header is the smaller loss. Subagent
 sessions are per-run and are not re-checked.
 
+# Remote MCP server (`/mcp`, Better Auth OAuth, password bearer)
+
+Kanna serves its own commands to external MCP clients (Claude Code, Codex,
+Claude Desktop, ChatGPT) over Streamable HTTP at `/mcp`. Component `c3-242`,
+ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
+`guides/user/remote-mcp`.
+
+- **Better Auth is the authorization server.** `@better-auth/mcp`'s `mcp()` plus
+  the core `jwt()` plugin sit in the existing `authOptions()`; do not hand-roll
+  OAuth. `baseURL` is the public origin, so issuer, metadata and JWKS URLs are
+  right. `remoteMcp.publicUrl` must be https or loopback http because `mcp()`
+  validates the resource when it is constructed and throws otherwise; the
+  adapter therefore rebuilds the instance when the origin changes
+  (`configureRemoteMcp`) and, if `mcp()` refuses, logs and keeps the previous
+  instance. The origin comes from the bound port (`remoteMcp.start`), never
+  `actualPort`, which stays `0` under `port: 0`.
+- **`handleOAuth` is an ALLOWLIST and must stay one.** `isRemoteMcpOAuthPath`
+  (`remote-mcp/oauth-paths.ts`) names the authorize, token, register, revoke,
+  jwks and well-known paths; everything else returns `null`. Mounting the whole
+  Better Auth handler would expose sign-up, session and user routes.
+  `oauth-paths.test.ts` pins the rejected paths.
+- **`x-kanna-client-ip` is stripped.** Better Auth rate-limits on that header
+  (`CLIENT_IP_HEADER`), so a forwarded client value lets a caller rotate fake
+  addresses past the 5-per-minute register limit. `withTrustedClientIp` deletes
+  it and sets it from `server.requestIP` through `AuthManager.clientIpFor`; the
+  forged-header test in `remote-mcp-http-routes.test.ts` fails if the strip goes.
+- **The password is a bearer through one cached sign-in.** `remote-mcp-bearer.ts`
+  tries an OAuth JWT first, otherwise signs in once through Better Auth and
+  caches the session cookie by sha256 (32 entries, FIFO). Never compare the
+  password yourself: Better Auth's hash check and its 3-per-10-seconds limiter are
+  the only verifier, and a 429 is relayed with `Retry-After`.
+- **Fail closed.** Without `--password`, or with `remoteMcp.enabled` off, every
+  owned path answers 404 (never 403, which would advertise the surface). The
+  routes are dispatched after the share block and BEFORE the `/api/` cookie
+  gate, because the OAuth paths live under `/api/auth/`.
+- **Every tool runs through the ws-router seam.** `router.dispatchCommand` and
+  `router.readSnapshot` reuse the exact handlers, so WebSocket clients still
+  receive the broadcasts; a tool that reads the store instead skips them. The
+  only store-direct tools are `upload_attachment` and `read_project_file`.
+- **The command catalog is typed AND regex-checked.** `COMMAND_CATALOG` is a
+  record keyed by the `ClientCommand` union (a missing command is a type error)
+  and `command-catalog.test.ts` also scans the protocol source, because a union
+  member added through a constant such as `SHARE_CMD_*` is invisible to the type.
+- **Sessions are bounded.** The registry closes sessions idle for 60 minutes and
+  keeps at most 64, evicting the least recently used; an unknown
+  `Mcp-Session-Id` answers 404.
+- **Tests need native streams.** `scripts/test-preload.ts` restores the native
+  `TransformStream` and `WritableStream` after happy-dom replaces them; the SDK
+  client's SSE parser fails with "readable property must be a ReadableStream"
+  under happy-dom's versions, and every SDK-client test hangs.
+- **Follow-up:** `handleProjectFileContent` still checks the path lexically, so
+  a symlink inside a project that points outside it is served over HTTP, while
+  `read_project_file` also compares real paths. Hardening the HTTP route may
+  break projects that symlink out on purpose.
+
 # Configurable Model Catalog (customModels)
 
 Claude + Codex models are user-configurable from Settings → "Models" instead

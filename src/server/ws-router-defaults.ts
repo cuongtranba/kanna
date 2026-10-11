@@ -9,6 +9,7 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
   PLUGIN_SETTINGS_DEFAULTS,
+  REMOTE_MCP_SETTINGS_DEFAULTS,
   PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS,
   TYPOGRAPHY_DEFAULTS,
@@ -166,6 +167,10 @@ export function mergeAppSettingsPatch(
       ...patch.plugins,
     },
     installedPlugins: snapshot.installedPlugins,
+    remoteMcp: {
+      ...snapshot.remoteMcp,
+      ...patch.remoteMcp,
+    },
     claudeDriver: {
       lifecycle: {
         ...snapshot.claudeDriver.lifecycle,
@@ -249,6 +254,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
     installedPlugins: [],
+    remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
   }
 }
 

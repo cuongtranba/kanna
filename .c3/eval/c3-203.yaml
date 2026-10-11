@@ -5,4 +5,5 @@ code:
   - src/server/auth.ts
   - src/server/auth-backend.ts
   - src/server/better-auth.adapter.ts
+  - src/server/better-auth-oauth.adapter.ts
   - src/client/app/PasswordScreen.store.ts

@@ -3,6 +3,7 @@ import type { EventStore } from "./event-store"
 import type { AppSettingsManager } from "./app-settings"
 import type { AuthManager } from "./auth"
 import type { SessionShareService } from "./session-share"
+import type { RemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import type { ClientState } from "./ws-router"
 import {
@@ -37,6 +38,7 @@ export interface HttpDispatcherDeps {
   appSettings: AppSettingsManager
   auth: AuthManager | null
   sessionShare: SessionShareService
+  remoteMcp: RemoteMcpRuntime
   distDir: string
 }
 
@@ -95,7 +97,7 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<ClientState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, distDir } = deps
+  const { store, appSettings, auth, sessionShare, remoteMcp, distDir } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
 
@@ -125,6 +127,9 @@ export function createHttpDispatcher(
     if (url.pathname.startsWith("/api/share/")) {
       return handleShareApiRequest(req, sessionShare)
     }
+
+    const remoteMcpResponse = await remoteMcp.handle(req, url, server.requestIP(req)?.address ?? null)
+    if (remoteMcpResponse) return remoteMcpResponse
 
     if (auth) {
       if (url.pathname === "/auth/login") {

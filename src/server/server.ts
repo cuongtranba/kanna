@@ -9,8 +9,8 @@ import {
   type AppSettingsSnapshot,
 } from "../shared/types"
 import type { ShareMode } from "../shared/share"
-import type { AuthManager } from "./auth"
-import { createPasswordAuth } from "./better-auth.adapter"
+import { createPasswordAuth, type PasswordAuth } from "./better-auth.adapter"
+import { createRemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { EventStore } from "./event-store"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
@@ -159,7 +159,7 @@ export interface StartKannaServerOptions {
 interface ApplicationServices {
   store: EventStore
   diffStore: DiffStore
-  auth: AuthManager | null
+  auth: PasswordAuth | null
   analytics: KannaAnalyticsReporter
   terminals: TerminalManager
   updateManager: UpdateManager | null
@@ -646,8 +646,9 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const services = await createApplicationServices(options)
   const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, beacon, analytics } = services
 
+  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router })
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, distDir })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir })
 
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
@@ -679,6 +680,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   await services.tunnelGateway.reapOrphanedTunnels()
 
   const boundPort = server.port ?? actualPort
+  remoteMcp.start(boundPort)
 
   analytics.trackLaunch({ port: boundPort, host: hostname, openBrowser: options.openBrowser ?? true, share: options.share ?? false, password: options.password ?? null, strictPort })
 
@@ -691,6 +693,6 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     diffStore,
     updateManager,
     appSettings,
-    stop: () => shutdownServices(services, server),
+    stop: () => remoteMcp.stop().then(() => shutdownServices(services, server)),
   }
 }

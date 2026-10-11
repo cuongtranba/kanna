@@ -7,6 +7,8 @@ import {
   type AuthBackend,
 } from "./auth-backend"
 
+const SYNTHETIC_SIGN_IN_ORIGIN = "http://localhost"
+
 export interface AuthStatusPayload {
   enabled: boolean
   authenticated: boolean
@@ -17,6 +19,9 @@ export interface AuthManager {
   validateOrigin(req: Request): boolean
   redirectToApp(req: Request): Response
   handleLogin(req: Request, nextPath: string, clientIp: string | null): Promise<Response>
+  signInForOAuth(req: Request, password: string, oauthQuery: string, clientIp: string | null): Promise<Response>
+  signInWithPassword(password: string, clientIp: string | null): Promise<Response>
+  clientIpFor(req: Request, socketIp: string | null): string | null
   handleLogout(req: Request): Promise<Response>
   handleStatus(req: Request): Promise<Response>
   dispose(): Promise<void>
@@ -105,6 +110,33 @@ async function readLoginForm(req: Request) {
   }
 }
 
+export interface SignInRequestArgs {
+  req: Request
+  trustProxy: boolean
+  password: string
+  clientIp: string | null
+  oauthQuery?: string
+}
+
+export function buildSignInRequest({ req, trustProxy, password, clientIp, oauthQuery }: SignInRequestArgs): Request {
+  const origin = effectiveOrigin(req, trustProxy)
+  const headers = new Headers({
+    "content-type": "application/json",
+    origin,
+  })
+  const userAgent = req.headers.get("user-agent")
+  if (userAgent) headers.set("user-agent", userAgent)
+  if (clientIp) headers.set(CLIENT_IP_HEADER, clientIp)
+  const body = oauthQuery === undefined
+    ? { email: OWNER_EMAIL, password, rememberMe: true }
+    : { email: OWNER_EMAIL, password, rememberMe: true, oauth_query: oauthQuery }
+  return new Request(`${origin}${SIGN_IN_PATH}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  })
+}
+
 export interface AuthManagerOptions {
   trustProxy?: boolean
 }
@@ -172,22 +204,6 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     return forwarded || socketIp
   }
 
-  function buildSignInRequest(req: Request, password: string, clientIp: string | null) {
-    const origin = effectiveOrigin(req, trustProxy)
-    const headers = new Headers({
-      "content-type": "application/json",
-      origin,
-    })
-    const userAgent = req.headers.get("user-agent")
-    if (userAgent) headers.set("user-agent", userAgent)
-    if (clientIp) headers.set(CLIENT_IP_HEADER, clientIp)
-    return new Request(`${origin}${SIGN_IN_PATH}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ email: OWNER_EMAIL, password, rememberMe: true }),
-    })
-  }
-
   async function handleStatus(req: Request) {
     const session = await readSession(req)
     const response = Response.json({
@@ -208,7 +224,9 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     }
 
     const { password, nextPath } = await readLoginForm(req)
-    const upstream = await backend.signIn(buildSignInRequest(req, password, resolveClientIp(req, socketIp)))
+    const upstream = await backend.signIn(
+      buildSignInRequest({ req, trustProxy, password, clientIp: resolveClientIp(req, socketIp) }),
+    )
 
     if (upstream.status === 429) {
       const limited = Response.json({ error: "Too many attempts" }, { status: 429 })
@@ -222,6 +240,20 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
 
     const response = Response.json({ ok: true, nextPath: sanitizeNextPath(nextPath || fallbackNextPath) })
     return appendCookies(response, req, upstream.headers.getSetCookie())
+  }
+
+  async function signInForOAuth(req: Request, password: string, oauthQuery: string, socketIp: string | null) {
+    const upstream = await backend.signIn(
+      buildSignInRequest({ req, trustProxy, password, clientIp: resolveClientIp(req, socketIp), oauthQuery }),
+    )
+    const headers = new Headers(upstream.headers)
+    headers.delete("set-cookie")
+    const relayed = new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers })
+    return appendCookies(relayed, req, upstream.headers.getSetCookie())
+  }
+
+  async function signInWithPassword(password: string, clientIp: string | null) {
+    return backend.signIn(buildSignInRequest({ req: new Request(SYNTHETIC_SIGN_IN_ORIGIN), trustProxy, password, clientIp }))
   }
 
   async function handleLogout(req: Request) {
@@ -243,6 +275,9 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     validateOrigin,
     redirectToApp,
     handleLogin,
+    signInForOAuth,
+    signInWithPassword,
+    clientIpFor: resolveClientIp,
     handleLogout,
     handleStatus,
     dispose,

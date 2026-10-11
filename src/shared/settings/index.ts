@@ -20,6 +20,13 @@ export {
 export type { PushSettings } from "./push"
 export { PUSH_DEFAULTS, normalizePushSettings } from "./push"
 
+export type { RemoteMcpSettings } from "./remote-mcp"
+export {
+  REMOTE_MCP_SETTINGS_DEFAULTS,
+  normalizeRemoteMcpPublicUrl,
+  normalizeRemoteMcpSettings,
+} from "./remote-mcp"
+
 export type { TelemetrySettings } from "./telemetry"
 export { TELEMETRY_DEFAULTS, normalizeTelemetrySettings } from "./telemetry"
 
