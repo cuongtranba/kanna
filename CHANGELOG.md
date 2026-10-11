@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.72.0](https://github.com/cuongtranba/kanna/compare/v1.71.2...v1.72.0) (2026-10-11)
+
+
+### Features
+
+* **auth:** back --password with Better Auth ([#1247](https://github.com/cuongtranba/kanna/issues/1247)) ([955eac3](https://github.com/cuongtranba/kanna/commit/955eac320e91f3fc56f8bf1881194e3bbd5c01aa))
+
 ## [1.71.2](https://github.com/cuongtranba/kanna/compare/v1.71.1...v1.71.2) (2026-10-11)
 
 
