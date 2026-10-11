@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.73.0](https://github.com/cuongtranba/kanna/compare/v1.72.0...v1.73.0) (2026-10-11)
+
+
+### Features
+
+* **remote-mcp:** serve Kanna as a Streamable HTTP MCP server with Better Auth OAuth and password bearer ([#1249](https://github.com/cuongtranba/kanna/issues/1249)) ([996a89e](https://github.com/cuongtranba/kanna/commit/996a89e4be23ad64086fe0d3fc6f7ee703532d4d))
+
 ## [1.72.0](https://github.com/cuongtranba/kanna/compare/v1.71.2...v1.72.0) (2026-10-11)
 
 
