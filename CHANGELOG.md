@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.73.1](https://github.com/cuongtranba/kanna/compare/v1.73.0...v1.73.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **cron:** wait for background work instead of clearing an inline chat ([#1255](https://github.com/cuongtranba/kanna/issues/1255)) ([72ed636](https://github.com/cuongtranba/kanna/commit/72ed6366886ef9e25525ab9f041cbf3de1063096))
+* **remote-mcp:** let the OAuth sign-in form send its real Origin ([#1253](https://github.com/cuongtranba/kanna/issues/1253)) ([ed19bfe](https://github.com/cuongtranba/kanna/commit/ed19bfeb997dd682e02cc139e17135e70bf8edf6))
+
 ## [1.73.0](https://github.com/cuongtranba/kanna/compare/v1.72.0...v1.73.0) (2026-10-11)
 
 
