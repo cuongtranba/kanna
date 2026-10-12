@@ -10,7 +10,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { isEndpointProvider, normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
-import type { SdkEndpoint } from "./sdk-endpoint"
+import { endpointEnvOf, type SdkEndpoint, type SdkEndpointEnv } from "./sdk-endpoint"
 import {
   buildCodexDeveloperInstructions,
   renderInstructionSections,
@@ -43,7 +43,8 @@ export interface BuildSubagentProviderRunArgs {
     forkSession: boolean
     oauthToken: string | null
     oauthBaseUrl?: string | null
-    endpoint?: { baseUrl: string; apiKey: string } | null
+    endpoint?: SdkEndpointEnv | null
+    contextWindowOverride?: number
     additionalDirectories?: string[]
     chatId?: string
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
@@ -157,7 +158,8 @@ async function runClaudeSubagent(opts: {
     forkSession: false,
     oauthToken: oauth?.token ?? null,
     oauthBaseUrl: oauth?.baseUrl ?? null,
-    endpoint,
+    endpoint: endpointEnvOf(endpoint),
+    contextWindowOverride: endpoint?.contextWindow ?? undefined,
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
     systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, subagentPromptOptions(args)),

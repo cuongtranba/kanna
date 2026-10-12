@@ -283,7 +283,7 @@ describe("buildSubagentProviderRunForChat — authReady", () => {
 
   test("a custom subagent is ready only while its provider still holds an API key", async () => {
     const custom = (apiKey: string | null) => (id: string) =>
-      id === "glm" && apiKey !== null ? { label: "GLM", baseUrl: "https://api.z.ai/api/anthropic", apiKey } : null
+      id === "glm" && apiKey !== null ? { label: "GLM", baseUrl: "https://api.z.ai/api/anthropic", apiKey, contextWindow: null } : null
     const run = (getCustomProviderCredential: SubagentWiringDeps["getCustomProviderCredential"], model: string) =>
       buildSubagentProviderRunForChat(makeDeps({ getCustomProviderCredential }), {
         ...BASE_ARGS,
@@ -297,5 +297,56 @@ describe("buildSubagentProviderRunForChat — authReady", () => {
 
   test("non-claude, non-openrouter providers are always ready", async () => {
     expect(await authReadyFor(makeDeps({ oauthPool: poolWith(true, false) }), "codex")).toBe(true)
+  })
+})
+
+describe("buildSubagentProviderRunForChat — custom endpoint session", () => {
+  const OLLAMA_CREDENTIAL = {
+    label: "Ollama (local)",
+    baseUrl: "http://localhost:11434",
+    apiKey: "ollama",
+    contextWindow: 65536,
+  }
+
+  async function startedWith(credential: typeof OLLAMA_CREDENTIAL | null, provider: "custom" | "claude", model: string) {
+    const captured: Parameters<SubagentWiringDeps["startClaudeSessionFn"]>[0][] = []
+    const deps = makeDeps({
+      getCustomProviderCredential: () => credential,
+      startClaudeSessionFn: async (a) => {
+        captured.push(a)
+        return {
+          provider: "claude",
+          stream: (async function* () {})(),
+          interrupt: async () => {},
+          close: () => {},
+          closed: Promise.resolve(),
+        } as never
+      },
+    })
+    await buildSubagentProviderRunForChat(deps, {
+      ...BASE_ARGS,
+      subagent: { ...BASE_SUBAGENT, provider, model },
+    }).start(() => {}, () => {})
+    return captured[0]
+  }
+
+  test("a custom subagent starts on its endpoint with Claude model names mapped to its model and the endpoint's window", async () => {
+    const started = await startedWith(OLLAMA_CREDENTIAL, "custom", "ollama/qwen3.6:35b-a3b-coding")
+
+    expect(started?.model).toBe("qwen3.6:35b-a3b-coding")
+    expect(started?.endpoint).toEqual({
+      baseUrl: "http://localhost:11434",
+      apiKey: "ollama",
+      aliasModel: "qwen3.6:35b-a3b-coding",
+      contextWindow: 65536,
+    })
+    expect(started?.contextWindowOverride).toBe(65536)
+  })
+
+  test("a Claude subagent starts with no endpoint and no window override", async () => {
+    const started = await startedWith(null, "claude", "claude-opus-4-5")
+
+    expect(started?.endpoint).toBeNull()
+    expect(started?.contextWindowOverride).toBeUndefined()
   })
 })

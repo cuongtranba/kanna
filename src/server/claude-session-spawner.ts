@@ -32,7 +32,7 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import { isGenUIEnabled } from "./genui/genui-config"
-import { endpointKeyOf, resolveSdkEndpoint } from "./sdk-endpoint"
+import { endpointEnvOf, endpointKeyOf, endpointSpawnFingerprint, resolveSdkEndpoint } from "./sdk-endpoint"
 import type { CustomProviderCredential } from "../shared/custom-providers"
 
 const SELF_WAKE_PROVENANCE_PREFIX = "self-wake:"
@@ -113,11 +113,12 @@ export async function spawnClaudeTurn(
   const loopArmedNow = deps.isLoopArmed(args.chatId) !== null
   const endpoint = await resolveSdkEndpoint(args.provider, args.model, deps)
   const endpointKey = endpointKeyOf(endpoint)
+  const endpointFingerprint = endpointSpawnFingerprint(endpoint)
   const sdkModel = endpoint?.vendorModel ?? args.model
 
   if (
     !session ||
-    session.endpointKey !== endpointKey ||
+    session.endpointFingerprint !== endpointFingerprint ||
     session.localPath !== args.localPath ||
     session.effort !== args.effort ||
     args.forkSession ||
@@ -187,7 +188,7 @@ export async function spawnClaudeTurn(
         forkSession: args.forkSession,
         oauthToken: picked?.token ?? null,
         oauthBaseUrl: picked?.baseUrl ?? null,
-        endpoint: endpoint ? { baseUrl: endpoint.baseUrl, apiKey: endpoint.apiKey } : null,
+        endpoint: endpointEnvOf(endpoint),
         additionalDirectories: args.additionalDirectories,
         chatId: args.chatId,
         streamLiveBlocks: true,
@@ -226,7 +227,7 @@ export async function spawnClaudeTurn(
         oauthBearers,
         turnPrice: openrouterTurnPrice,
         costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
-        contextWindowOverride: openrouterContextWindow,
+        contextWindowOverride: endpoint?.contextWindow ?? openrouterContextWindow,
         onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
       })
     } catch (err) {
@@ -254,6 +255,7 @@ export async function spawnClaudeTurn(
       endpointModel: endpoint ? args.model : null,
       endpointLabel: endpoint?.label ?? null,
       endpointKey,
+      endpointFingerprint,
       lastUsedAt: Date.now(),
       backgroundTasks: new Map<string, SessionBackgroundTask>(),
       backgroundTaskDeadlineAt: 0,

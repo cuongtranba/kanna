@@ -67,6 +67,7 @@ export interface ClaudeSessionStateInit {
   endpointModel: string | null
   endpointLabel?: string | null
   endpointKey?: SessionEndpointKey
+  endpointFingerprint?: string
   lastUsedAt: number
   backgroundTasks: Map<string, SessionBackgroundTask>
   backgroundTaskDeadlineAt: number
@@ -105,6 +106,7 @@ export class ClaudeSessionState {
   endpointModel: string | null
   endpointLabel: string | null
   endpointKey: SessionEndpointKey
+  endpointFingerprint: string
   lastUsedAt: number
   backgroundTasks: Map<string, SessionBackgroundTask>
   backgroundTaskDeadlineAt: number
@@ -141,6 +143,7 @@ export class ClaudeSessionState {
     this.endpointModel = init.endpointModel
     this.endpointLabel = init.endpointLabel ?? null
     this.endpointKey = init.endpointKey ?? ANTHROPIC_ENDPOINT_KEY
+    this.endpointFingerprint = init.endpointFingerprint ?? ANTHROPIC_ENDPOINT_KEY
     this.lastUsedAt = init.lastUsedAt
     this.backgroundTasks = init.backgroundTasks
     this.backgroundTaskDeadlineAt = init.backgroundTaskDeadlineAt

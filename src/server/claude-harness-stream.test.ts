@@ -275,6 +275,57 @@ describe("createClaudeHarnessStream", () => {
     expect((resultEntries[0].costUsd as number)).toBeGreaterThan(0)
   })
 
+  test("an SDK cost guessed for an unpriced model is not reported as the turn's cost", async () => {
+    const events = await collect([
+      {
+        type: "result",
+        subtype: "success",
+        session_id: "sess-unpriced",
+        is_error: false,
+        duration_ms: 100,
+        total_cost_usd: 0.0472,
+        modelUsage: { "qwen3.6:35b-a3b-coding": { costUSD: 0.0472, costBasis: "unknown", contextWindow: 65536 } },
+        uuid: "r-unpriced",
+      },
+    ])
+    const resultEntries = events.flatMap((e) =>
+      e.type === "transcript" && e.entry?.kind === "result" ? [e.entry] : [],
+    )
+    expect(resultEntries).toHaveLength(1)
+    expect(resultEntries[0].costUsd).toBeUndefined()
+  })
+
+  test("an unpriced model falls back to the turn price resolver", async () => {
+    const price: ModelPrice = { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3 }
+    const events = await collect(
+      [
+        {
+          type: "assistant",
+          session_id: "sess-unpriced-or",
+          message: { id: "m-or", role: "assistant", content: [] },
+          usage: { input_tokens: 1000, output_tokens: 100 },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          session_id: "sess-unpriced-or",
+          is_error: false,
+          duration_ms: 100,
+          total_cost_usd: 9.99,
+          usage: { input_tokens: 1000, output_tokens: 100 },
+          modelUsage: { "moonshotai/kimi-k2.5": { costUSD: 9.99, costBasis: "unknown" } },
+          uuid: "r-unpriced-or",
+        },
+      ],
+      undefined,
+      () => price,
+    )
+    const resultEntries = events.flatMap((e) =>
+      e.type === "transcript" && e.entry?.kind === "result" ? [e.entry] : [],
+    )
+    expect(resultEntries[0].costUsd).toBeCloseTo(0.0045, 10)
+  })
+
   test("duplicate assistant usage id is not double-counted", async () => {
     const events = await collect([
       {

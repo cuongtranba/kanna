@@ -8,6 +8,7 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { projectProcessEnv } from "./project-process-env"
+import type { SdkEndpointEnv } from "./sdk-endpoint"
 
 export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
   "Edit",
@@ -144,10 +145,29 @@ export function withAdditionalDirectoryMemory(
   return { ...env, [ADDITIONAL_DIRECTORY_MEMORY_ENV]: "1" }
 }
 
+export const CLAUDE_MODEL_ALIAS_ENV_VARS: readonly string[] = [
+  "ANTHROPIC_DEFAULT_FABLE_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "ANTHROPIC_SMALL_FAST_MODEL",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+]
+
+export const CLAUDE_MAX_CONTEXT_TOKENS_ENV = "CLAUDE_CODE_MAX_CONTEXT_TOKENS"
+
+function endpointModelEnv({ aliasModel, contextWindow }: SdkEndpointEnv): NodeJS.ProcessEnv {
+  const aliases = aliasModel === null
+    ? {}
+    : Object.fromEntries(CLAUDE_MODEL_ALIAS_ENV_VARS.map((name) => [name, aliasModel]))
+  const window = contextWindow === null ? {} : { [CLAUDE_MAX_CONTEXT_TOKENS_ENV]: String(contextWindow) }
+  return { ...aliases, ...window }
+}
+
 export function buildClaudeEnv(
   baseEnv: NodeJS.ProcessEnv,
   oauthToken: string | null,
-  endpoint?: { baseUrl: string; apiKey: string } | null,
+  endpoint?: SdkEndpointEnv | null,
   anthropicBaseUrl?: string | null,
 ): NodeJS.ProcessEnv {
   const { CLAUDECODE: _unused, CLAUDE_CODE_OAUTH_TOKEN: _oauth, ...rest } = projectProcessEnv(baseEnv)
@@ -157,6 +177,7 @@ export function buildClaudeEnv(
       ANTHROPIC_BASE_URL: endpoint.baseUrl,
       ANTHROPIC_AUTH_TOKEN: endpoint.apiKey,
       ANTHROPIC_API_KEY: "",
+      ...endpointModelEnv(endpoint),
     }
   }
   const scoped = anthropicBaseUrl

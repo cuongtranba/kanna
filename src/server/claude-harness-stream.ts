@@ -12,6 +12,7 @@ import {
   normalizeClaudeUsageSnapshot,
   resolveFinalTurnUsage,
   maxClaudeContextWindowFromModelUsage,
+  modelUsageHasUnpricedModel,
 } from "./claude-usage-math"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { createLiveBlockAccumulator } from "./claude-live-block"
@@ -101,7 +102,7 @@ export async function* createClaudeHarnessStream(
           ? sdkMessage.total_cost_usd
           : undefined
 
-      let costUsd = pendingCumulativeCostUsd === undefined
+      let costUsd = pendingCumulativeCostUsd === undefined || modelUsageHasUnpricedModel(sdkMessage.modelUsage)
         ? undefined
         : turnCostFromRunningTotal(pendingCumulativeCostUsd, lastCumulativeCostUsd)
       if (costUsd === undefined && resolveTurnPrice && finalUsage) {

@@ -1,6 +1,6 @@
 ---
 id: adr-20261012-custom-anthropic-endpoints
-c3-seal: daab66e7399b89575a60b02acbbb68d7234f61e343db9980ec065d69b0fde915
+c3-seal: 744579bfe2d6da21a3743198264396a824a0a6bcbee2189f1c995b129144661a
 title: custom-anthropic-endpoints
 type: adr
 goal: 'Let a user register their own Anthropic-compatible endpoints (GLM on Z.AI, Qwen on Alibaba Model Studio, Kimi, DeepSeek, MiniMax, or any other) in Settings and chat with them through the Claude Agent SDK. A new fixed agent provider `custom` ("Custom endpoints") carries every registered endpoint; a custom model id is endpoint-qualified as `<providerId>/<vendorModel>`, and the endpoint''s API key is write-only: stored on the server, never sent to the browser.'
@@ -29,6 +29,8 @@ The endpoint is encoded in the model id (`glm/glm-5.3`), split on the first slas
 `resolveSdkEndpoint` (src/server/sdk-endpoint.ts) is the single owner of endpoint resolution for both `openrouter` and `custom`, used by the chat spawner and subagent runs. `buildClaudeEnv` takes a generic `{baseUrl, apiKey}` endpoint. The SDK receives the decoded vendor model on both `query` and `setModel`. `ClaudeSessionState.endpointKey` joins the respawn condition, so switching between endpoints starts a fresh process with `--resume` instead of `setModel` sending one vendor's model id to another vendor's endpoint. The first-entry watchdog (adr-20260620-openrouter-stream-first-entry-watchdog) keys on the endpoint and now also guards custom endpoints.
 
 The key is write-only. `toSnapshot` maps each entry to a public shape carrying only `apiKeyHint` (last four characters, none for short keys), the spawner reads the key through the server-only `getCustomProviderCredential`, writes are CRUD operations only, and an update without a key keeps the stored one. Existing secrets are unchanged by this ADR.
+
+Local and self-hosted endpoints such as Ollama exposed two further gaps, fixed in the same PR. First, the CLI makes background and subagent calls under Claude model names, which such an endpoint rejects as an unknown model; for a custom endpoint `buildClaudeEnv` points ANTHROPIC_DEFAULT_FABLE_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_SMALL_FAST_MODEL and CLAUDE_CODE_SUBAGENT_MODEL at the chosen vendor model (OpenRouter is left alone because it serves real Claude ids). Second, the CLI assumes a 200000-token window for any model id not starting with claude-; an optional per-endpoint context window becomes CLAUDE_CODE_MAX_CONTEXT_TOKENS so auto-compaction stays inside the real window, and it also drives Kanna's context meter. CLAUDE_CODE_AUTO_COMPACT_WINDOW was rejected because it clamps to a 100k minimum. Because all of this is fixed in the process env at spawn, the respawn condition compares a fingerprint of endpoint key, base URL, API key, alias model and context window, so a model switch within one endpoint or an endpoint edited in Settings restarts the session with --resume.
 
 ## Affected Topology
 
@@ -70,3 +72,5 @@ The key is write-only. `toSnapshot` maps each entry to a public shape carrying o
 | bun run test src/shared/custom-providers.test.ts src/server/app-settings.test.ts src/server/claude-session-spawner.test.ts src/server/claude-spawn-helpers.test.ts src/server/claude-send-command.test.ts | covers id round-trip, catalog removal when empty, key persisted but absent from every snapshot, blank-key update keeping the key, vendor model and endpoint env at spawn, respawn on endpoint switch |
 | bun run test src/client/app/CustomProvidersSection.test.tsx src/client/stores/chatPreferencesStore.test.ts | covers the preset create patch, no key value rendered, blank-key edit omitting apiKey, and a custom composer state not collapsing to Codex |
 | bun run check and bun run check:arch and bun run lint:limits | clean |
+| bun run test src/server/claude-spawn-helpers.test.ts src/server/claude-session-spawner.test.ts src/server/claude-subagent-wiring.test.ts | covers the six alias variables for custom only, CLAUDE_CODE_MAX_CONTEXT_TOKENS from the endpoint window, and respawn on a same-endpoint model switch or an edited endpoint |
+| curl to a local Ollama 0.40.3 at /v1/messages | a tool request returns a well-formed tool_use; a claude-haiku model name returns not_found_error, which the alias env prevents |

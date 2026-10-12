@@ -5687,7 +5687,7 @@ describe("buildClaudeEnv openrouter branch", () => {
     const env = buildClaudeEnv(
       { PATH: "/bin", CLAUDE_CODE_OAUTH_TOKEN: "should-be-stripped", ANTHROPIC_API_KEY: "leftover" } as NodeJS.ProcessEnv,
       "oauth-ignored",
-      { baseUrl: "https://openrouter.ai/api", apiKey: "sk-or-test" },
+      { baseUrl: "https://openrouter.ai/api", apiKey: "sk-or-test", aliasModel: null, contextWindow: null },
     )
     expect(env.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe("sk-or-test")

@@ -6,6 +6,8 @@ export interface CustomProviderPreset {
   baseUrl: string
   models: readonly CustomProviderModel[]
   hint?: string
+  contextWindow?: number
+  defaultApiKey?: string
 }
 
 export const CUSTOM_PROVIDER_PRESETS: readonly CustomProviderPreset[] = [
@@ -52,5 +54,14 @@ export const CUSTOM_PROVIDER_PRESETS: readonly CustomProviderPreset[] = [
     baseUrl: "https://api.minimax.io/anthropic",
     models: [{ id: "MiniMax-M3.1", label: "MiniMax M3.1" }],
     hint: "Mainland China: https://api.minimaxi.com/anthropic",
+  },
+  {
+    id: "ollama",
+    label: "Ollama (local)",
+    baseUrl: "http://localhost:11434",
+    models: [],
+    contextWindow: 65536,
+    defaultApiKey: "ollama",
+    hint: "Runs on this machine. Ollama ignores the API key, so any value works. Add the exact model names from `ollama list`, and set Context window to your OLLAMA_CONTEXT_LENGTH.",
   },
 ]

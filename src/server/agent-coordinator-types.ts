@@ -1,6 +1,7 @@
 
 import type { AnalyticsReporter } from "./analytics"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { SdkEndpointEnv } from "./sdk-endpoint"
 import type { GenerateChatTitleResult } from "./generate-title"
 import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
 import type {
@@ -65,7 +66,7 @@ export interface AgentCoordinatorArgs {
     tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
     systemPromptAppend?: string
-    endpoint?: { baseUrl: string; apiKey: string } | null
+    endpoint?: SdkEndpointEnv | null
     subagentOrchestrator?: SubagentOrchestrator
     delegationContext?: KannaMcpDelegationContext
     systemPromptOverride?: string

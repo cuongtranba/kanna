@@ -13,6 +13,16 @@ export interface SdkEndpoint {
   baseUrl: string
   apiKey: string
   vendorModel: string
+  aliasModel: string | null
+  contextWindow: number | null
+}
+
+export type SdkEndpointEnv = Pick<SdkEndpoint, "baseUrl" | "apiKey" | "aliasModel" | "contextWindow">
+
+export function endpointEnvOf(endpoint: SdkEndpoint | null): SdkEndpointEnv | null {
+  if (!endpoint) return null
+  const { baseUrl, apiKey, aliasModel, contextWindow } = endpoint
+  return { baseUrl, apiKey, aliasModel, contextWindow }
 }
 
 export interface SdkEndpointSource {
@@ -24,6 +34,11 @@ export function endpointKeyOf(endpoint: SdkEndpoint | null): SessionEndpointKey 
   return endpoint ? endpoint.key : ANTHROPIC_ENDPOINT_KEY
 }
 
+export function endpointSpawnFingerprint(endpoint: SdkEndpoint | null): string {
+  if (!endpoint) return ANTHROPIC_ENDPOINT_KEY
+  return JSON.stringify([endpoint.key, endpoint.baseUrl, endpoint.apiKey, endpoint.aliasModel, endpoint.contextWindow])
+}
+
 export async function resolveSdkEndpoint(
   provider: AgentProvider,
   model: string,
@@ -31,7 +46,7 @@ export async function resolveSdkEndpoint(
 ): Promise<SdkEndpoint | null> {
   if (provider === "openrouter") {
     const { apiKey } = await deps.readLlmProvider()
-    return { key: "openrouter", label: "OpenRouter", baseUrl: OPENROUTER_BASE_URL, apiKey, vendorModel: model }
+    return { key: "openrouter", label: "OpenRouter", baseUrl: OPENROUTER_BASE_URL, apiKey, vendorModel: model, aliasModel: null, contextWindow: null }
   }
   if (provider !== "custom") return null
   const parsed = parseCustomModelId(model)
@@ -51,5 +66,7 @@ export async function resolveSdkEndpoint(
     baseUrl: credential.baseUrl,
     apiKey: credential.apiKey,
     vendorModel: parsed.vendorModel,
+    aliasModel: parsed.vendorModel,
+    contextWindow: credential.contextWindow,
   }
 }

@@ -9,6 +9,8 @@ export const CUSTOM_PROVIDER_MAX_MODELS = 50
 export const CUSTOM_PROVIDER_API_KEY_MAX = 1024
 export const CUSTOM_PROVIDER_API_KEY_HINT_MIN_LENGTH = 8
 export const CUSTOM_PROVIDER_API_KEY_HINT_LENGTH = 4
+export const CUSTOM_PROVIDER_CONTEXT_WINDOW_MIN = 4096
+export const CUSTOM_PROVIDER_CONTEXT_WINDOW_MAX = 2_000_000
 
 const MODEL_ID_REGEX = /^\S+$/
 
@@ -23,6 +25,7 @@ export interface CustomProviderEntry {
   baseUrl: string
   apiKey: string
   models: CustomProviderModel[]
+  contextWindow?: number
   createdAt: number
   updatedAt: number
 }
@@ -33,6 +36,7 @@ export interface CustomProviderPublic {
   baseUrl: string
   apiKeyHint: string | null
   models: CustomProviderModel[]
+  contextWindow?: number
   createdAt: number
   updatedAt: number
 }
@@ -43,6 +47,7 @@ export interface CustomProviderInput {
   baseUrl: string
   apiKey: string
   models: CustomProviderModel[]
+  contextWindow?: number
 }
 
 export interface CustomProviderPatch {
@@ -50,12 +55,14 @@ export interface CustomProviderPatch {
   baseUrl?: string
   apiKey?: string
   models?: CustomProviderModel[]
+  contextWindow?: number | null
 }
 
 export interface CustomProviderCredential {
   label: string
   baseUrl: string
   apiKey: string
+  contextWindow: number | null
 }
 
 export type CustomProviderValidationCode =
@@ -66,6 +73,7 @@ export type CustomProviderValidationCode =
   | "NO_MODELS"
   | "INVALID_MODEL"
   | "DUPLICATE_MODEL"
+  | "INVALID_CONTEXT_WINDOW"
   | "DUPLICATE_ID"
   | "NOT_FOUND"
 
@@ -137,6 +145,14 @@ export function customProviderApiKeyHint(apiKey: string): string | null {
   return apiKey.slice(-CUSTOM_PROVIDER_API_KEY_HINT_LENGTH)
 }
 
+export function isValidCustomProviderContextWindow(value: number): boolean {
+  return (
+    Number.isInteger(value) &&
+    value >= CUSTOM_PROVIDER_CONTEXT_WINDOW_MIN &&
+    value <= CUSTOM_PROVIDER_CONTEXT_WINDOW_MAX
+  )
+}
+
 function validateModels(models: readonly CustomProviderModel[]): CustomProviderValidationError | null {
   if (models.length === 0) {
     return { code: "NO_MODELS", field: "models", message: "add at least one model" }
@@ -163,7 +179,7 @@ function validateModels(models: readonly CustomProviderModel[]): CustomProviderV
 }
 
 export function validateCustomProviderShape(
-  entry: Pick<CustomProviderEntry, "id" | "label" | "baseUrl" | "apiKey" | "models">,
+  entry: Pick<CustomProviderEntry, "id" | "label" | "baseUrl" | "apiKey" | "models" | "contextWindow">,
   otherIds: readonly string[],
 ): CustomProviderValidationError | null {
   if (!CUSTOM_PROVIDER_ID_REGEX.test(entry.id)) {
@@ -180,6 +196,13 @@ export function validateCustomProviderShape(
   }
   if (entry.apiKey.length === 0 || entry.apiKey.length > CUSTOM_PROVIDER_API_KEY_MAX) {
     return { code: "MISSING_API_KEY", field: "apiKey", message: `an API key of 1-${CUSTOM_PROVIDER_API_KEY_MAX} characters is required` }
+  }
+  if (entry.contextWindow !== undefined && !isValidCustomProviderContextWindow(entry.contextWindow)) {
+    return {
+      code: "INVALID_CONTEXT_WINDOW",
+      field: "contextWindow",
+      message: `context window must be a whole number of tokens between ${CUSTOM_PROVIDER_CONTEXT_WINDOW_MIN} and ${CUSTOM_PROVIDER_CONTEXT_WINDOW_MAX}`,
+    }
   }
   return validateModels(entry.models)
 }

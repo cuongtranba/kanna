@@ -107,6 +107,18 @@ describe("CustomProvidersSection list", () => {
     await view.cleanup()
   })
 
+  test("shows a configured context window on the endpoint row", async () => {
+    const { handlers } = recordingHandlers()
+    const view = await renderClientMarkup(
+      <CustomProvidersSection providers={[provider({ contextWindow: 65536 }), provider({ id: "kimi", label: "Kimi" })]} handlers={handlers} />,
+    )
+
+    const text = view.container.textContent ?? ""
+    expect(text.match(/context/g)?.length).toBe(1)
+    expect(text).toContain("64k context")
+    await view.cleanup()
+  })
+
   test("explains the empty state", async () => {
     const { handlers } = recordingHandlers()
     const view = await renderClientMarkup(<CustomProvidersSection providers={[]} handlers={handlers} />)
@@ -183,6 +195,75 @@ describe("CustomProvidersSettingsBranch create flow", () => {
     ])
     expect(view.container.querySelector('input[type="password"]')).toBeNull()
     expect(useCustomProvidersSectionStore.getState().editorForm.apiKey).toBe("")
+    await view.cleanup()
+  })
+
+  test("the Ollama preset pre-fills the URL, window and key, and writes a create patch once a model is added", async () => {
+    const patches: AppSettingsPatch[] = []
+    const view = await renderClientMarkup(
+      <CustomProvidersSettingsBranch
+        state={{ handleWriteAppSettings: async (patch) => { patches.push(patch) } }}
+      />,
+    )
+
+    await openPresetMenu()
+    await click(buttonByText(document.body, "Ollama (local)"))
+
+    expect(view.container.querySelector<HTMLInputElement>('input[placeholder="https://api.example.com/anthropic"]')?.value)
+      .toBe("http://localhost:11434")
+    expect(view.container.querySelector<HTMLInputElement>('input[placeholder="200000"]')?.value).toBe("65536")
+    expect(passwordInput(view.container).value).toBe("ollama")
+    expect(view.container.querySelectorAll('input[aria-label$=" id"]')).toHaveLength(1)
+
+    await act(async () => {
+      typeInto(view.container.querySelector<HTMLInputElement>('input[aria-label="Model 1 id"]') as HTMLInputElement, "hf.co/user/repo:Q4_K_M")
+    })
+    await click(buttonByText(view.container, "Add endpoint"))
+
+    expect(patches).toEqual([
+      {
+        customProviders: {
+          create: {
+            id: "ollama",
+            label: "Ollama (local)",
+            baseUrl: "http://localhost:11434",
+            apiKey: "ollama",
+            models: [{ id: "hf.co/user/repo:Q4_K_M", label: "" }],
+            contextWindow: 65536,
+          },
+        },
+      },
+    ])
+    await view.cleanup()
+  })
+
+  test("saving the Ollama preset without a model says a model is required and sends nothing", async () => {
+    const { handlers, recorded } = recordingHandlers()
+    const view = await renderClientMarkup(<CustomProvidersSection providers={[]} handlers={handlers} />)
+
+    await openPresetMenu()
+    await click(buttonByText(document.body, "Ollama (local)"))
+    await click(buttonByText(view.container, "Add endpoint"))
+
+    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain("at least one model")
+    expect(recorded.created).toEqual([])
+    await view.cleanup()
+  })
+
+  test("a context window outside the supported range is refused before anything is sent", async () => {
+    const { handlers, recorded } = recordingHandlers()
+    const view = await renderClientMarkup(<CustomProvidersSection providers={[]} handlers={handlers} />)
+
+    await openPresetMenu()
+    await click(buttonByText(document.body, "GLM (Z.AI)"))
+    await act(async () => {
+      typeInto(passwordInput(view.container), GLM_KEY)
+      typeInto(view.container.querySelector<HTMLInputElement>('input[placeholder="200000"]') as HTMLInputElement, "100")
+    })
+    await click(buttonByText(view.container, "Add endpoint"))
+
+    expect(view.container.querySelector('[role="alert"]')?.textContent).toContain("context window")
+    expect(recorded.created).toEqual([])
     await view.cleanup()
   })
 
@@ -279,10 +360,34 @@ describe("CustomProvidersSection edit flow", () => {
             { id: "glm-5.3", label: "GLM-5.3" },
             { id: "glm-5.3-flash", label: "" },
           ],
+          contextWindow: null,
         },
       },
     ])
     expect(recorded.updated[0] && "apiKey" in recorded.updated[0].patch).toBe(false)
+    await view.cleanup()
+  })
+
+  test("clearing the context window on edit sends null, and changing it sends the number", async () => {
+    const { handlers, recorded } = recordingHandlers()
+    const view = await renderClientMarkup(<CustomProvidersSection providers={[provider({ contextWindow: 65536 })]} handlers={handlers} />)
+    const windowInput = () => view.container.querySelector<HTMLInputElement>('input[placeholder="200000"]') as HTMLInputElement
+
+    await click(view.container.querySelector<HTMLButtonElement>('[aria-label="Edit GLM (Z.AI)"]') as HTMLButtonElement)
+    expect(windowInput().value).toBe("65536")
+
+    await act(async () => {
+      typeInto(windowInput(), "")
+    })
+    await click(buttonByText(view.container, "Save changes"))
+    expect(recorded.updated[0]?.patch.contextWindow).toBeNull()
+
+    await click(view.container.querySelector<HTMLButtonElement>('[aria-label="Edit GLM (Z.AI)"]') as HTMLButtonElement)
+    await act(async () => {
+      typeInto(windowInput(), "131072")
+    })
+    await click(buttonByText(view.container, "Save changes"))
+    expect(recorded.updated[1]?.patch.contextWindow).toBe(131072)
     await view.cleanup()
   })
 

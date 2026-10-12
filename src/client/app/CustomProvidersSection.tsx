@@ -17,6 +17,7 @@ import { useCustomProvidersSectionStore } from "../stores/customProvidersSection
 import {
   buildCreateInput,
   buildUpdatePatch,
+  contextWindowLabel,
   draftFromPreset,
   draftFromProvider,
   emptyCustomProviderDraft,
@@ -207,6 +208,9 @@ function ProviderRow({
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
         <span className="tabular-nums">{modelCountLabel(provider.models.length)}</span>
+        {provider.contextWindow !== undefined ? (
+          <span className="tabular-nums">{contextWindowLabel(provider.contextWindow)}</span>
+        ) : null}
         <span>{keyStatusLabel(provider.apiKeyHint)}</span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -326,6 +330,20 @@ function ProviderEditor({
           placeholder={keyPlaceholder(mode, existing?.apiKeyHint ?? null)}
           className="font-mono"
         />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Context window (tokens)</span>
+        <Input
+          inputMode="numeric"
+          value={form.contextWindow}
+          onChange={(event) => patchEditorForm({ contextWindow: event.target.value })}
+          placeholder="200000"
+          className="font-mono tabular-nums"
+        />
+        <span className="text-xs text-muted-foreground">
+          The model's real context window. The agent compacts the conversation before reaching it. Leave empty to assume 200,000. For Ollama use your OLLAMA_CONTEXT_LENGTH.
+        </span>
       </label>
 
       <div className="flex flex-col gap-2">

@@ -2012,6 +2012,7 @@ describe("customProviders", () => {
       label: "GLM (Z.AI)",
       baseUrl: "https://api.z.ai/api/anthropic",
       apiKey: GLM_KEY,
+      contextWindow: null,
     })
     expect(manager.getCustomProviderCredential("kimi")).toBeNull()
   })
@@ -2026,6 +2027,40 @@ describe("customProviders", () => {
 
     await manager.writePatch({ customProviders: { update: { id: "glm", patch: { apiKey: "rotated-key-0001" } } } })
     expect(manager.getCustomProviderCredential("glm")?.apiKey).toBe("rotated-key-0001")
+  })
+
+  test("a context window round-trips through create and update, reaches the credential, and null clears it", async () => {
+    const { manager, filePath } = await freshManager()
+
+    await manager.writePatch({ customProviders: { create: { ...glmInput, contextWindow: 65536 } } })
+    expect(manager.getSnapshot().customProviders[0]?.contextWindow).toBe(65536)
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBe(65536)
+    expect(JSON.stringify(await readAppSettingsSnapshot(filePath))).toContain("65536")
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { label: "GLM renamed" } } } })
+    expect(manager.getSnapshot().customProviders[0]?.contextWindow).toBe(65536)
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: 131072 } } } })
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBe(131072)
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: null } } } })
+    expect(manager.getSnapshot().customProviders[0]).not.toHaveProperty("contextWindow")
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBeNull()
+  })
+
+  test("rejects a context window outside 4096 to 2,000,000 or a fractional one, and stores nothing", async () => {
+    const { manager } = await freshManager()
+
+    for (const contextWindow of [4095, 2_000_001, 65536.5]) {
+      await expect(manager.writePatch({ customProviders: { create: { ...glmInput, contextWindow } } }))
+        .rejects.toMatchObject({ validationError: { code: "INVALID_CONTEXT_WINDOW" } })
+    }
+    expect(manager.getSnapshot().customProviders).toEqual([])
+
+    await manager.writePatch({ customProviders: { create: glmInput } })
+    await expect(manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: 10 } } } }))
+      .rejects.toMatchObject({ validationError: { code: "INVALID_CONTEXT_WINDOW" } })
+    expect(manager.getSnapshot().customProviders[0]).not.toHaveProperty("contextWindow")
   })
 
   test("rejects a base URL that is not http(s) and stores nothing", async () => {
@@ -2059,6 +2094,40 @@ describe("customProviders", () => {
 
     expect(snapshot.customProviders.map((p) => p.id)).toEqual(["glm"])
     expect(snapshot.warning).toContain("customProviders: dropped")
+  })
+})
+
+describe("customProviders contextWindow on load", () => {
+  test("an invalid stored context window is dropped with a warning while the entry is kept", async () => {
+    const filePath = await writeSettingsFile({
+      customProviders: [
+        {
+          id: "ollama",
+          label: "Ollama (local)",
+          baseUrl: "http://localhost:11434",
+          apiKey: "ollama",
+          models: [{ id: "qwen3", label: "" }],
+          contextWindow: 12,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "glm",
+          label: "GLM",
+          baseUrl: "https://api.z.ai/api/anthropic",
+          apiKey: "glm-key-1234",
+          models: [{ id: "glm-5.3", label: "" }],
+          contextWindow: 65536,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+
+    const snapshot = await readAppSettingsSnapshot(filePath)
+
+    expect(snapshot.customProviders.map((p) => [p.id, p.contextWindow])).toEqual([["ollama", undefined], ["glm", 65536]])
+    expect(snapshot.warning).toContain("contextWindow")
   })
 })
 
