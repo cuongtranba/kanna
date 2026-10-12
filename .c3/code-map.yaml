@@ -71,6 +71,10 @@ c3-116:
   - src/client/app/McpServerRow.tsx
   - src/client/app/PendingSegmentedControl.tsx
   - src/client/app/ModelsSection.tsx
+  - src/client/app/CustomProvidersSection.tsx
+  - src/client/app/useProviderCatalog.ts
+  - src/client/lib/customProviderDraft.ts
+  - src/client/stores/customProvidersSectionStore.ts
   - src/client/app/SettingsPage.tsx
   - src/client/app/SubagentsSection.tsx
   - src/client/app/SubagentFormRow.tsx
@@ -124,6 +128,7 @@ c3-202:
   - src/server/beacon-crypto.ts
   - src/server/beacon-crypto.test.ts
   - src/server/beacon-settings.ts
+  - src/server/custom-providers-settings.ts
   - src/server/beacon-settings.test.ts
   - src/server/beacon-pairing.ts
   - src/server/beacon-pairing.test.ts
@@ -220,6 +225,10 @@ c3-211:
 c3-212:
   - src/server/provider-catalog.test.ts
   - src/server/provider-catalog.ts
+  - src/server/sdk-endpoint.ts
+  - src/shared/custom-providers.ts
+  - src/shared/custom-providers.test.ts
+  - src/shared/custom-provider-presets.ts
 c3-213:
   - src/server/generate-commit-message.test.ts
   - src/server/generate-commit-message.ts

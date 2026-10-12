@@ -2,10 +2,12 @@ import { describe, test, expect, mock } from "bun:test"
 import {
   buildCanUseTool,
   buildClaudeEnv,
+  CLAUDE_MODEL_ALIAS_ENV_VARS,
   withAdditionalDirectoryMemory,
   ADDITIONAL_DIRECTORY_MEMORY_ENV,
   type BuildCanUseToolArgs,
 } from "./claude-spawn-helpers"
+import type { SdkEndpointEnv } from "./sdk-endpoint"
 import type { ToolCallbackService } from "./tool-callback"
 import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
@@ -140,13 +142,27 @@ describe("buildCanUseTool", () => {
 })
 
 
+const OPENROUTER_ENDPOINT_ENV: SdkEndpointEnv = {
+  baseUrl: "https://openrouter.ai/api",
+  apiKey: "or-key",
+  aliasModel: null,
+  contextWindow: null,
+}
+
+const OLLAMA_ENDPOINT_ENV: SdkEndpointEnv = {
+  baseUrl: "http://localhost:11434",
+  apiKey: "ollama",
+  aliasModel: "qwen3.6:35b-a3b-coding",
+  contextWindow: 65536,
+}
+
 describe("buildClaudeEnv", () => {
   test("never hands a session the NODE_ENV Kanna runs under, on any auth path", () => {
     const base: NodeJS.ProcessEnv = { PATH: "/usr/bin", NODE_ENV: "production" }
 
     expect(buildClaudeEnv(base, "token")).not.toHaveProperty("NODE_ENV")
     expect(buildClaudeEnv(base, null)).not.toHaveProperty("NODE_ENV")
-    expect(buildClaudeEnv(base, null, { apiKey: "or-key" })).not.toHaveProperty("NODE_ENV")
+    expect(buildClaudeEnv(base, null, OPENROUTER_ENDPOINT_ENV)).not.toHaveProperty("NODE_ENV")
     expect(buildClaudeEnv(base, "token", null, "https://proxy.example")).not.toHaveProperty("NODE_ENV")
   })
 
@@ -175,7 +191,7 @@ describe("buildClaudeEnv", () => {
       ANTHROPIC_API_KEY: "sk-ant-existing",
       CLAUDECODE: "1",
     }
-    const result = buildClaudeEnv(base, null, { apiKey: "sk-or-key" })
+    const result = buildClaudeEnv(base, null, { ...OPENROUTER_ENDPOINT_ENV, apiKey: "sk-or-key" })
     expect(result.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
     expect(result.ANTHROPIC_AUTH_TOKEN).toBe("sk-or-key")
     expect(result.ANTHROPIC_API_KEY).toBe("")
@@ -227,9 +243,61 @@ describe("buildClaudeEnv", () => {
 
   test("OpenRouter still owns its endpoint and ignores a token endpoint", () => {
     const result = buildClaudeEnv(
-      { PATH: "/bin" }, null, { apiKey: "sk-or-key" }, "https://proxy.example",
+      { PATH: "/bin" }, null, { ...OPENROUTER_ENDPOINT_ENV, apiKey: "sk-or-key" }, "https://proxy.example",
     )
     expect(result.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
+  })
+
+  test("a custom endpoint points the session at its own base URL with its own key and no OAuth token", () => {
+    const base: NodeJS.ProcessEnv = {
+      PATH: "/bin",
+      ANTHROPIC_API_KEY: "sk-ant-leftover",
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth-leftover",
+    }
+    const result = buildClaudeEnv(
+      base, "oauth-ignored", { baseUrl: "https://api.z.ai/api/anthropic", apiKey: "glm-key", aliasModel: null, contextWindow: null }, "https://proxy.example",
+    )
+    expect(result.ANTHROPIC_BASE_URL).toBe("https://api.z.ai/api/anthropic")
+    expect(result.ANTHROPIC_AUTH_TOKEN).toBe("glm-key")
+    expect(result.ANTHROPIC_API_KEY).toBe("")
+    expect(result).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN")
+  })
+
+  test("a custom endpoint maps every Claude model name the CLI falls back to onto its own model", () => {
+    const result = buildClaudeEnv({ PATH: "/bin" }, null, OLLAMA_ENDPOINT_ENV)
+
+    expect(CLAUDE_MODEL_ALIAS_ENV_VARS).toHaveLength(6)
+    for (const name of CLAUDE_MODEL_ALIAS_ENV_VARS) {
+      expect(result[name]).toBe("qwen3.6:35b-a3b-coding")
+    }
+  })
+
+  test("a custom endpoint with a context window tells the CLI the model's real window", () => {
+    expect(buildClaudeEnv({ PATH: "/bin" }, null, OLLAMA_ENDPOINT_ENV).CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("65536")
+  })
+
+  test("a custom endpoint without a context window leaves the CLI's own default alone", () => {
+    const result = buildClaudeEnv({ PATH: "/bin" }, null, { ...OLLAMA_ENDPOINT_ENV, contextWindow: null })
+
+    expect(result).not.toHaveProperty("CLAUDE_CODE_MAX_CONTEXT_TOKENS")
+    expect(result.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("qwen3.6:35b-a3b-coding")
+  })
+
+  test("an OpenRouter-shaped endpoint maps no model names and sets no context window", () => {
+    const result = buildClaudeEnv({ PATH: "/bin" }, null, OPENROUTER_ENDPOINT_ENV)
+
+    for (const name of CLAUDE_MODEL_ALIAS_ENV_VARS) {
+      expect(result).not.toHaveProperty(name)
+    }
+    expect(result).not.toHaveProperty("CLAUDE_CODE_MAX_CONTEXT_TOKENS")
+  })
+
+  test("a session on the Anthropic API maps no model names either", () => {
+    const result = buildClaudeEnv({ PATH: "/bin" }, "oauth-token")
+
+    for (const name of CLAUDE_MODEL_ALIAS_ENV_VARS) {
+      expect(result).not.toHaveProperty(name)
+    }
   })
 })
 

@@ -1,10 +1,11 @@
 import { useCallback, useMemo, type ComponentType, type SVGProps } from "react"
-import { Box, Brain, Gauge, ListTodo, Lock, LockOpen, Search, SquareMenu, SquareMinus } from "lucide-react"
+import { Box, Brain, Gauge, ListTodo, Lock, LockOpen, Search, Server, SquareMenu, SquareMinus } from "lucide-react"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
   CODEX_REASONING_OPTIONS,
   getClaudeModelEffortOptions,
+  isEndpointProvider,
   type AgentProvider,
   type ClaudeContextWindow,
   type ClaudeModelOptions,
@@ -22,6 +23,13 @@ import { InputPopoverStore } from "./InputPopover.store"
 import { SearchableModelPopoverStore } from "./SearchableModelPopover.store"
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
+
+const NO_MODELS: ProviderCatalogEntry["models"] = []
+
+const ENDPOINT_EMPTY_MESSAGE: Record<"openrouter" | "custom", string> = {
+  openrouter: "Loading models… verify OpenRouter API key in Settings.",
+  custom: "No models configured. Add an endpoint in Settings → Providers.",
+}
 
 function AnthropicIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
@@ -77,6 +85,7 @@ export const PROVIDER_ICONS: Record<AgentProvider, IconComponent> = {
   claude: AnthropicIcon,
   codex: OpenAIIcon,
   openrouter: OpenRouterIcon,
+  custom: Server,
 }
 
 export function PopoverMenuItem({
@@ -185,11 +194,13 @@ function SearchableModelPopover({
   selectedModel,
   onSelect,
   ModelIcon,
+  emptyMessage,
 }: {
   models: readonly { id: string; label: string }[]
   selectedModel: string
   onSelect: (id: string) => void
   ModelIcon: IconComponent
+  emptyMessage: string
 }) {
   return (
     <SearchableModelPopoverStore.Provider init={undefined}>
@@ -198,6 +209,7 @@ function SearchableModelPopover({
         selectedModel={selectedModel}
         onSelect={onSelect}
         ModelIcon={ModelIcon}
+        emptyMessage={emptyMessage}
       />
     </SearchableModelPopoverStore.Provider>
   )
@@ -208,11 +220,13 @@ function SearchableModelPopoverContent({
   selectedModel,
   onSelect,
   ModelIcon,
+  emptyMessage,
 }: {
   models: readonly { id: string; label: string }[]
   selectedModel: string
   onSelect: (id: string) => void
   ModelIcon: IconComponent
+  emptyMessage: string
 }) {
   const open = SearchableModelPopoverStore.useScopedStore((state) => state.open)
   const query = SearchableModelPopoverStore.useScopedStore((state) => state.query)
@@ -236,7 +250,7 @@ function SearchableModelPopoverContent({
   if (models.length === 0) {
     modelsContent = (
       <div className="px-2 py-3 text-xs text-muted-foreground text-center">
-        Loading models… verify OpenRouter API key in Settings.
+        {emptyMessage}
       </div>
     )
   } else if (filtered.length === 0) {
@@ -327,21 +341,24 @@ export function ChatPreferenceControls({
 }: ChatPreferenceControlsProps) {
   const customModels = useAppSettingsStore(selectCustomModels)
   const providerConfig = availableProviders.find((provider) => provider.id === selectedProvider) ?? availableProviders[0]
-  const ProviderIcon = PROVIDER_ICONS[selectedProvider]
+  const activeProvider = providerConfig?.id ?? selectedProvider
+  const ProviderIcon = PROVIDER_ICONS[activeProvider]
   const ModelIcon = Box
   const showPlanMode = includePlanMode && providerConfig?.supportsPlanMode && onPlanModeChange
-  const claudeModelOptions = selectedProvider === "claude" && "contextWindow" in modelOptions ? modelOptions : null
-  const codexModelOptions = selectedProvider === "codex" && "fastMode" in modelOptions ? modelOptions : null
-  const contextWindowOptions = providerConfig.models.find((candidate) => candidate.id === model)?.contextWindowOptions ?? []
+  const claudeModelOptions = activeProvider === "claude" && "contextWindow" in modelOptions ? modelOptions : null
+  const codexModelOptions = activeProvider === "codex" && "fastMode" in modelOptions ? modelOptions : null
+  const providerModels = providerConfig?.models ?? NO_MODELS
+  const contextWindowOptions = providerModels.find((candidate) => candidate.id === model)?.contextWindowOptions ?? []
   const selectedContextWindow = claudeModelOptions?.contextWindow ?? CLAUDE_CONTEXT_WINDOW_OPTIONS[0].id
   const ContextWindowIcon = selectedContextWindow === "1m" ? SquareMenu : SquareMinus
-  const modelLabel = providerConfig.models.find((candidate) => candidate.id === model)?.label ?? model
-  const unlockedModelPicker = selectedProvider === "openrouter" ? (
+  const modelLabel = providerModels.find((candidate) => candidate.id === model)?.label ?? model
+  const unlockedModelPicker = isEndpointProvider(activeProvider) ? (
     <SearchableModelPopover
-      models={providerConfig.models}
+      models={providerModels}
       selectedModel={model}
-      onSelect={(id) => onModelChange?.(selectedProvider, id)}
+      onSelect={(id) => onModelChange?.(activeProvider, id)}
       ModelIcon={ModelIcon}
+      emptyMessage={ENDPOINT_EMPTY_MESSAGE[activeProvider]}
     />
   ) : (
     <InputPopover
@@ -352,19 +369,19 @@ export function ChatPreferenceControls({
         </>
       )}
     >
-      {(close) => providerConfig.models.map((candidate) => {
+      {(close) => providerModels.map((candidate) => {
         const Icon = Box
         return (
           <PopoverMenuItem
             key={candidate.id}
             onClick={() => {
-              onModelChange?.(selectedProvider, candidate.id)
+              onModelChange?.(activeProvider, candidate.id)
               close()
             }}
             selected={model === candidate.id}
             icon={<Icon className="h-4 w-4 text-muted-foreground" />}
             label={
-              showCodexCliRequirementHints && selectedProvider === "codex" && candidate.id === "gpt-5.5"
+              showCodexCliRequirementHints && activeProvider === "codex" && candidate.id === "gpt-5.5"
                 ? (
                   <>
                     {candidate.label}{" "}
@@ -389,7 +406,7 @@ export function ChatPreferenceControls({
           trigger={(
             <>
               <ProviderIcon className="h-3.5 w-3.5" />
-              <span>{providerConfig?.label ?? selectedProvider}</span>
+              <span>{providerConfig?.label ?? activeProvider}</span>
             </>
           )}
         >
@@ -402,7 +419,7 @@ export function ChatPreferenceControls({
                   onProviderChange?.(provider.id)
                   close()
                 }}
-                selected={selectedProvider === provider.id}
+                selected={activeProvider === provider.id}
                 icon={<Icon className="h-4 w-4 text-muted-foreground" />}
                 label={provider.label}
               />
@@ -423,13 +440,13 @@ export function ChatPreferenceControls({
         </HoverHint>
       ) : unlockedModelPicker}
 
-      {selectedProvider !== "openrouter" ? (
+      {!isEndpointProvider(activeProvider) ? (
       <InputPopover
         trigger={(
           <>
             <Brain className="h-3.5 w-3.5" />
             <span>{
-              selectedProvider === "claude"
+              activeProvider === "claude"
                 ? CLAUDE_REASONING_OPTIONS.find((effort) => effort.id === modelOptions.reasoningEffort)?.label ?? modelOptions.reasoningEffort
                 : CODEX_REASONING_OPTIONS.find((effort) => effort.id === modelOptions.reasoningEffort)?.label ?? modelOptions.reasoningEffort
             }</span>
@@ -437,7 +454,7 @@ export function ChatPreferenceControls({
         )}
       >
         {(close) => (
-          selectedProvider === "claude"
+          activeProvider === "claude"
             ? getClaudeModelEffortOptions(model, customModels).map((effort) => (
               <PopoverMenuItem
                 key={effort.id}
@@ -466,7 +483,7 @@ export function ChatPreferenceControls({
       </InputPopover>
       ) : null}
 
-      {selectedProvider === "claude" && contextWindowOptions.length > 1 ? (
+      {activeProvider === "claude" && contextWindowOptions.length > 1 ? (
         <InputPopover
           trigger={(
             <>
@@ -493,7 +510,7 @@ export function ChatPreferenceControls({
         </InputPopover>
       ) : null}
 
-      {selectedProvider === "codex" ? (
+      {activeProvider === "codex" ? (
         <InputPopover
           trigger={(
             <>

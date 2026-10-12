@@ -74,6 +74,11 @@ const defaultProviderPrefs: ChatProviderPreferences = {
     modelOptions: {},
     planMode: false,
   },
+  custom: {
+    model: "",
+    modelOptions: {},
+    planMode: false,
+  },
 }
 
 const providerDefaults: ChatProviderPreferences = {
@@ -89,6 +94,11 @@ const providerDefaults: ChatProviderPreferences = {
   },
   openrouter: {
     model: DEFAULT_OPENROUTER_SDK_MODEL,
+    modelOptions: {},
+    planMode: false,
+  },
+  custom: {
+    model: "",
     modelOptions: {},
     planMode: false,
   },

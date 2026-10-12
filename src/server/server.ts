@@ -4,10 +4,7 @@ import { isErrnoException } from "../shared/errors"
 import { serveHttp } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
 import { getRuntimeProfile } from "../shared/branding"
-import {
-  CLOUDFLARE_TUNNEL_DEFAULTS,
-  type AppSettingsSnapshot,
-} from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS, type AppSettingsSnapshot } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createPasswordAuth, type PasswordAuth } from "./better-auth.adapter"
 import { createRemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
@@ -111,6 +108,7 @@ export interface AgentAppSettingsView {
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
   customModels: AppSettingsSnapshot["customModels"]
+  customProviders: AppSettingsSnapshot["customProviders"]
   providerDefaults: AppSettingsSnapshot["providerDefaults"]
   subagentRuntime: AppSettingsSnapshot["subagentRuntime"]
 }
@@ -121,6 +119,7 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     globalPromptAppend: snapshot.globalPromptAppend,
     customMcpServers: snapshot.customMcpServers,
     customModels: snapshot.customModels,
+    customProviders: snapshot.customProviders,
     providerDefaults: snapshot.providerDefaults,
     subagentRuntime: snapshot.subagentRuntime,
   }
@@ -401,6 +400,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
     persistOAuthState: (id, oauth) => void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } }),
     readLlmProvider: () => readLlmProviderSnapshot(),
+    getCustomProviderCredential: (id) => appSettings.getCustomProviderCredential(id),
     listOpenRouterModels: () => openrouterModelCache.list(),
     onStateChange: (chatId?: string, broadcastOptions?: { immediate?: boolean }) => {
       if (chatId) {

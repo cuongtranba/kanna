@@ -1,5 +1,5 @@
 import type { AgentProvider } from "../shared/types"
-import { isCodexReasoningEffort, providerUsesSdkSession } from "../shared/types"
+import { isCodexReasoningEffort, isEndpointProvider, providerUsesSdkSession } from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord } from "./events"
 import type { ActiveTurn, StartingTurn } from "./claude-session-state"
@@ -444,16 +444,16 @@ async function startTurnAfterTurnStarted(
     void turn.getAccountInfo()
       .then(async (accountInfo) => {
         const session = deps.claudeSessions.get(args.chatId)
-        if (args.provider === "openrouter") {
+        if (isEndpointProvider(args.provider)) {
           if (!session) return
           if (session.accountInfoLoaded) return
           session.accountInfoLoaded = true
           await deps.store.appendMessage(args.chatId, timestamped({
             kind: "account_info",
             accountInfo: {
-              tokenSource: "openrouter",
-              ...(session.openrouterKeyMasked ? { oauthKeyMasked: session.openrouterKeyMasked } : {}),
-              ...(session.openrouterModel ? { organization: session.openrouterModel } : {}),
+              tokenSource: args.provider,
+              ...(session.endpointKeyMasked ? { oauthKeyMasked: session.endpointKeyMasked } : {}),
+              ...(session.endpointModel ? { organization: session.endpointModel } : {}),
             },
           }))
           deps.emitStateChange(args.chatId)

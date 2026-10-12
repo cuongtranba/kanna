@@ -69,6 +69,7 @@ export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
   openrouter: OpenRouterModelOptions
+  custom: OpenRouterModelOptions
 }
 
 export interface ProviderPreference<TModelOptions> {
@@ -81,6 +82,7 @@ export type ChatProviderPreferences = {
   claude: ProviderPreference<ClaudeModelOptions>
   codex: ProviderPreference<CodexModelOptions>
   openrouter: ProviderPreference<OpenRouterModelOptions>
+  custom: ProviderPreference<OpenRouterModelOptions>
 }
 
 
@@ -208,6 +210,14 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     models: [],
     efforts: [],
   },
+  {
+    id: "custom",
+    label: "Custom endpoints",
+    defaultModel: "",
+    supportsPlanMode: true,
+    models: [],
+    efforts: [],
+  },
 ]
 
 export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntry {
@@ -297,12 +307,16 @@ export function mergeCustomModels(
 }
 
 
+export function isEndpointProvider(provider: AgentProvider): provider is "openrouter" | "custom" {
+  return provider === "openrouter" || provider === "custom"
+}
+
 export function providerUsesSdkSession(provider: AgentProvider): boolean {
-  return provider === "claude" || provider === "openrouter"
+  return provider === "claude" || isEndpointProvider(provider)
 }
 
 export function providerExpandsSlashCommands(provider: AgentProvider): boolean {
-  return provider === "claude" || provider === "openrouter"
+  return provider === "claude" || isEndpointProvider(provider)
 }
 
 function effectiveCatalogFor(

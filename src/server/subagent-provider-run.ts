@@ -9,7 +9,8 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import { normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
+import { isEndpointProvider, normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
+import { endpointEnvOf, type SdkEndpoint, type SdkEndpointEnv } from "./sdk-endpoint"
 import {
   buildCodexDeveloperInstructions,
   renderInstructionSections,
@@ -42,7 +43,8 @@ export interface BuildSubagentProviderRunArgs {
     forkSession: boolean
     oauthToken: string | null
     oauthBaseUrl?: string | null
-    openrouterApiKey?: string | null
+    endpoint?: SdkEndpointEnv | null
+    contextWindowOverride?: number
     additionalDirectories?: string[]
     chatId?: string
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
@@ -64,7 +66,7 @@ export interface BuildSubagentProviderRunArgs {
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
   pickOauthToken: () => { token: string; baseUrl?: string } | null
-  readOpenRouterKey?: () => Promise<string | null>
+  resolveEndpoint?: (provider: AgentProvider, model: string) => Promise<SdkEndpoint | null>
   projectId: string
   customModels?: readonly CustomModelEntry[]
   globalPromptAppend?: string
@@ -92,11 +94,9 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
     async start(onChunk, onEntry, opts) {
       const initialPrompt = composeInitialPrompt(args.subagent, args.primer, args.userInstruction)
       const keepAlive = Boolean(opts?.keepAlive) && args.subagent.provider === "claude"
-      if (args.subagent.provider === "claude" || args.subagent.provider === "openrouter") {
-        const openrouterApiKey = args.subagent.provider === "openrouter"
-          ? (await args.readOpenRouterKey?.() ?? null)
-          : null
-        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, openrouterApiKey })
+      if (args.subagent.provider === "claude" || isEndpointProvider(args.subagent.provider)) {
+        const endpoint = await args.resolveEndpoint?.(args.subagent.provider, args.subagent.model) ?? null
+        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, endpoint })
       }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
@@ -143,22 +143,23 @@ async function runClaudeSubagent(opts: {
   onChunk: (chunk: string) => void
   onEntry: (entry: TranscriptEntry) => void
   keepAlive: boolean
-  openrouterApiKey: string | null
+  endpoint: SdkEndpoint | null
 }): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
-  const { args, initialPrompt, onChunk, onEntry, keepAlive, openrouterApiKey } = opts
-  const oauth = openrouterApiKey ? null : args.pickOauthToken()
+  const { args, initialPrompt, onChunk, onEntry, keepAlive, endpoint } = opts
+  const oauth = endpoint ? null : args.pickOauthToken()
   const session = await args.startClaudeSession({
     projectId: args.projectId,
     localPath: args.cwd,
     additionalDirectories: args.additionalDirectories,
-    model: claudeSubagentModelId(args),
+    model: endpoint?.vendorModel ?? claudeSubagentModelId(args),
     effort: args.subagent.modelOptions?.reasoningEffort,
     planMode: false,
     sessionToken: null,
     forkSession: false,
     oauthToken: oauth?.token ?? null,
     oauthBaseUrl: oauth?.baseUrl ?? null,
-    openrouterApiKey,
+    endpoint: endpointEnvOf(endpoint),
+    contextWindowOverride: endpoint?.contextWindow ?? undefined,
     chatId: args.chatId,
     onToolRequest: args.onToolRequest,
     systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, subagentPromptOptions(args)),

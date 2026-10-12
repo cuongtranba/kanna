@@ -18,5 +18,7 @@ export function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProvide
     && codexModelOptionsEqual(a.codex.modelOptions, b.codex.modelOptions)
     && a.openrouter.model === b.openrouter.model
     && a.openrouter.planMode === b.openrouter.planMode
+    && a.custom.model === b.custom.model
+    && a.custom.planMode === b.custom.planMode
   )
 }

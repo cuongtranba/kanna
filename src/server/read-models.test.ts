@@ -184,7 +184,7 @@ describe("read models", () => {
       new Map(),
       Date.now(),
       new Map(),
-      [],
+      { customModels: [], customProviders: [] },
       new Map([["chat-1", tasks]]),
     )
     expect(chat?.runtime.backgroundTasks).toEqual(tasks)
@@ -224,7 +224,7 @@ describe("read models", () => {
         new Map(),
         Date.now(),
         new Map(),
-        [],
+        { customModels: [], customProviders: [] },
         new Map([["chat-1", sdkTasks]]),
       )
     }
@@ -696,7 +696,7 @@ describe("read models", () => {
       new Map(),
       Date.now(),
       new Map(),
-      custom,
+      { customModels: custom, customProviders: [] },
     )
     const claude = snap!.availableProviders.find((p) => p.id === "claude")!
     expect(claude.models.some((m) => m.id === "claude-plan-only")).toBe(true)

@@ -32,6 +32,8 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { startClaudeSession as StartClaudeSessionFn, CompactionEvent } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import { isGenUIEnabled } from "./genui/genui-config"
+import { endpointEnvOf, endpointKeyOf, endpointSpawnFingerprint, resolveSdkEndpoint } from "./sdk-endpoint"
+import type { CustomProviderCredential } from "../shared/custom-providers"
 
 const SELF_WAKE_PROVENANCE_PREFIX = "self-wake:"
 
@@ -82,6 +84,7 @@ export interface SpawnClaudeTurnDeps {
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
   readLlmProvider: () => Promise<LlmProviderSnapshot>
+  getCustomProviderCredential: (id: string) => CustomProviderCredential | null
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   listOpenRouterModelsFn: (() => Promise<OpenRouterModel[]>) | null
   getSubagents: () => Subagent[]
@@ -108,9 +111,14 @@ export async function spawnClaudeTurn(
   let session = deps.claudeSessions.get(args.chatId)
 
   const loopArmedNow = deps.isLoopArmed(args.chatId) !== null
+  const endpoint = await resolveSdkEndpoint(args.provider, args.model, deps)
+  const endpointKey = endpointKeyOf(endpoint)
+  const endpointFingerprint = endpointSpawnFingerprint(endpoint)
+  const sdkModel = endpoint?.vendorModel ?? args.model
 
   if (
     !session ||
+    session.endpointFingerprint !== endpointFingerprint ||
     session.localPath !== args.localPath ||
     session.effort !== args.effort ||
     args.forkSession ||
@@ -124,17 +132,15 @@ export async function spawnClaudeTurn(
     }
 
     deps.enforceClaudeSessionBudget(args.chatId)
-    const isOpenRouter = args.provider === "openrouter"
-    const openrouterApiKey = isOpenRouter ? (await deps.readLlmProvider()).apiKey : null
-    const picked = isOpenRouter ? null : (deps.oauthPool?.pickActive(args.chatId) ?? null)
-    if (!isOpenRouter && deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
+    const picked = endpoint ? null : (deps.oauthPool?.pickActive(args.chatId) ?? null)
+    if (!endpoint && deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
       throw new OAuthPoolUnavailableError(deps.buildPoolUnavailableMessage(args.chatId, ""))
     }
     if (picked) deps.oauthPool!.markUsed(picked.id)
 
     let openrouterTurnPrice: ModelPrice | null = null
     let openrouterContextWindow: number | undefined
-    if (isOpenRouter && deps.listOpenRouterModelsFn) {
+    if (endpoint?.key === "openrouter" && deps.listOpenRouterModelsFn) {
       try {
         const models = await deps.listOpenRouterModelsFn()
         const baseModelId = stripModelVariantSuffix(args.model)
@@ -175,14 +181,14 @@ export async function spawnClaudeTurn(
       started = await deps.startClaudeSessionFn({
         projectId: args.projectId,
         localPath: args.localPath,
-        model: args.model,
+        model: sdkModel,
         effort: args.effort,
         planMode: args.planMode,
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
         oauthToken: picked?.token ?? null,
         oauthBaseUrl: picked?.baseUrl ?? null,
-        openrouterApiKey,
+        endpoint: endpointEnvOf(endpoint),
         additionalDirectories: args.additionalDirectories,
         chatId: args.chatId,
         streamLiveBlocks: true,
@@ -221,7 +227,7 @@ export async function spawnClaudeTurn(
         oauthBearers,
         turnPrice: openrouterTurnPrice,
         costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
-        contextWindowOverride: openrouterContextWindow,
+        contextWindowOverride: endpoint?.contextWindow ?? openrouterContextWindow,
         onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
       })
     } catch (err) {
@@ -245,8 +251,11 @@ export async function spawnClaudeTurn(
       activeTokenId: picked?.id ?? null,
       oauthKeyMasked: picked ? maskOauthKey(picked.token) : null,
       oauthLabel: picked?.label ?? null,
-      openrouterKeyMasked: openrouterApiKey ? maskOauthKey(openrouterApiKey) : null,
-      openrouterModel: isOpenRouter ? args.model : null,
+      endpointKeyMasked: endpoint?.apiKey ? maskOauthKey(endpoint.apiKey) : null,
+      endpointModel: endpoint ? args.model : null,
+      endpointLabel: endpoint?.label ?? null,
+      endpointKey,
+      endpointFingerprint,
       lastUsedAt: Date.now(),
       backgroundTasks: new Map<string, SessionBackgroundTask>(),
       backgroundTaskDeadlineAt: 0,
@@ -267,7 +276,7 @@ export async function spawnClaudeTurn(
   } else {
     session.lastUsedAt = Date.now()
     if (session.model !== args.model) {
-      await session.session.setModel(args.model)
+      await session.session.setModel(sdkModel)
       session.model = args.model
     }
     if (session.planMode !== args.planMode) {

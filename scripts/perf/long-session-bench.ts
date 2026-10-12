@@ -81,7 +81,7 @@ async function main() {
         new Map(),
         Date.now(),
         new Map(),
-        [],
+        { customModels: [], customProviders: [] },
       )
       const d1 = performance.now()
       const sig = getStableChatSnapshotSignature({ type: "chat", data: snap })

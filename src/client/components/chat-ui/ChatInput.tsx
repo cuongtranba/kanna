@@ -659,10 +659,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   )
 
   const buildSubmitOptions = useCallback(() => {
-    let modelOptions: ModelOptions
+    let modelOptions: ModelOptions = {}
     if (providerPrefs.provider === "claude") {
       modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else {
+    } else if (providerPrefs.provider === "codex") {
       modelOptions = { codex: { ...providerPrefs.modelOptions } }
     }
     return {
@@ -978,9 +978,9 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               setClaudeContextWindow(change.contextWindow)
               break
             case "fastMode":
-              updateComposerState((state) => state.provider === "claude" || state.provider === "openrouter"
-                ? state
-                : { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } })
+              updateComposerState((state) => state.provider === "codex"
+                ? { ...state, modelOptions: { ...state.modelOptions, fastMode: change.fastMode } }
+                : state)
               break
           }
         }}

@@ -82,6 +82,12 @@ export function maxClaudeContextWindowFromModelUsage<T>(modelUsage: T): number |
   return maxContextWindow
 }
 
+export function modelUsageHasUnpricedModel<T>(modelUsage: T): boolean {
+  const record = asRecord(modelUsage)
+  if (!record) return false
+  return Object.values(record).some((value) => asRecord(value)?.costBasis === "unknown")
+}
+
 export function parseConfiguredContextWindowFromModelId(modelId: string): number | undefined {
   return modelId.endsWith("[1m]") ? 1_000_000 : undefined
 }

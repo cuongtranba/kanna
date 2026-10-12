@@ -19,6 +19,8 @@ import { resolveSubagentRoots } from "./paths"
 import { toJsonObject } from "./json-boundary"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
+import { resolveSdkEndpoint } from "./sdk-endpoint"
+import { parseCustomModelId, type CustomProviderCredential } from "../shared/custom-providers"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
@@ -65,6 +67,7 @@ export interface SubagentWiringDeps {
     customModels?: readonly CustomModelEntry[]
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
+  getCustomProviderCredential: (id: string) => CustomProviderCredential | null
   subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   chatTaskStore?: ChatTaskStorePort
@@ -200,6 +203,11 @@ export function buildSubagentProviderRunForChat(
       if (provider === "openrouter") {
         return openrouterAuthReady(await deps.readLlmProvider())
       }
+      if (provider === "custom") {
+        const parsed = parseCustomModelId(args.subagent.model)
+        const credential = parsed ? deps.getCustomProviderCredential(parsed.providerId) : null
+        return credential !== null && credential.apiKey.length > 0
+      }
       if (provider === "claude") {
         return claudeAuthReady(deps.oauthPool, args.chatId)
       }
@@ -216,9 +224,6 @@ export function buildSubagentProviderRunForChat(
       if (!picked) return null
       return { token: picked.token, baseUrl: picked.baseUrl }
     },
-    readOpenRouterKey: async () => {
-      const provider = await deps.readLlmProvider()
-      return provider.apiKey || null
-    },
+    resolveEndpoint: (provider, model) => resolveSdkEndpoint(provider, model, deps),
   })
 }

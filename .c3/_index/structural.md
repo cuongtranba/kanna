@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:837e6aab4c65eecf49d4dc006d6f97bf8efc516a99dcfbe4ad385fbac296257d -->
+<!-- hash: sha256:c75ae2ae79609a195998edf82dcee4047b4bcf658367877b67e99418bc0e3787 -->
 
 ## c3-0 — Kanna (system)
 
@@ -58,7 +58,7 @@ files: src/client/components/chat-ui/**/*.ts, src/client/components/chat-ui/**/*
 ## c3-116 — settings-page (component)
 container: c3-1 | context: c3-0
 refs: ref-local-first-data, ref-zustand-store, rule-zustand-store
-files: src/client/app/BeaconsSection.test.tsx, src/client/app/BeaconsSection.tsx, src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentFormRow.tsx, src/client/app/SubagentScopeFields.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/components/settings/SettingsList.tsx, src/client/stores/beaconsStore.test.ts, src/client/stores/beaconsStore.ts
+files: src/client/app/BeaconsSection.test.tsx, src/client/app/BeaconsSection.tsx, src/client/app/CustomProvidersSection.test.tsx, src/client/app/CustomProvidersSection.tsx, src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentFormRow.tsx, src/client/app/SubagentScopeFields.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/app/useProviderCatalog.ts, src/client/components/settings/SettingsList.tsx, src/client/lib/customProviderDraft.ts, src/client/stores/beaconsStore.test.ts, src/client/stores/beaconsStore.ts, src/client/stores/customProvidersSectionStore.ts
 
 ## c3-117 — local-projects-page (component)
 container: c3-1 | context: c3-0
@@ -111,7 +111,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-host.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
+files: src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-host.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -162,7 +162,7 @@ files: src/server/codex-app-server-protocol.ts, src/server/codex-app-server.test
 ## c3-212 — provider-catalog (component)
 container: c3-2 | context: c3-0
 refs: ref-provider-adapter
-files: src/server/provider-catalog.test.ts, src/server/provider-catalog.ts
+files: src/server/provider-catalog.test.ts, src/server/provider-catalog.ts, src/server/sdk-endpoint.ts, src/shared/custom-provider-presets.ts, src/shared/custom-providers.test.ts, src/shared/custom-providers.ts
 
 ## c3-213 — quick-response (component)
 container: c3-2 | context: c3-0
@@ -505,6 +505,8 @@ src/client/components/lexical/serialize/** → c3-115
 src/client/components/open-external-menu.tsx → c3-115
 src/client/app/BeaconsSection.test.tsx → c3-116
 src/client/app/BeaconsSection.tsx → c3-116
+src/client/app/CustomProvidersSection.test.tsx → c3-116
+src/client/app/CustomProvidersSection.tsx → c3-116
 src/client/app/McpServerRow.tsx → c3-116
 src/client/app/McpServersSection.test.tsx → c3-116
 src/client/app/McpServersSection.tsx → c3-116
@@ -521,9 +523,12 @@ src/client/app/TextSnippetsSection.tsx → c3-116
 src/client/app/appSettingsCrud.ts → c3-116
 src/client/app/llmProviderDraft.ts → c3-116
 src/client/app/settingsEditorForm.ts → c3-116
+src/client/app/useProviderCatalog.ts → c3-116
 src/client/components/settings/SettingsList.tsx → c3-116
+src/client/lib/customProviderDraft.ts → c3-116
 src/client/stores/beaconsStore.test.ts → c3-116
 src/client/stores/beaconsStore.ts → c3-116
+src/client/stores/customProvidersSectionStore.ts → c3-116
 src/client/app/LocalProjectsPage.tsx → c3-117
 src/client/components/NewProjectModal.tsx → c3-117
 src/client/app/ChatPage/TerminalWorkspaceShell.tsx → c3-118
@@ -601,6 +606,7 @@ src/server/beacon-transfer-host.ts → c3-202
 src/server/beacon-transfer-http.adapter.ts → c3-202
 src/server/beacon-transfer-http.test.ts → c3-202
 src/server/beacon-transfer-tickets.ts → c3-202
+src/server/custom-providers-settings.ts → c3-202
 src/server/http-api-routes.ts → c3-202
 src/server/http-dispatcher.ts → c3-202
 src/server/http-static.ts → c3-202
@@ -682,6 +688,10 @@ src/server/codex-app-server.test.ts → c3-211
 src/server/codex-app-server.ts → c3-211
 src/server/provider-catalog.test.ts → c3-212
 src/server/provider-catalog.ts → c3-212
+src/server/sdk-endpoint.ts → c3-212
+src/shared/custom-provider-presets.ts → c3-212
+src/shared/custom-providers.test.ts → c3-212
+src/shared/custom-providers.ts → c3-212
 src/server/generate-commit-message.test.ts → c3-213
 src/server/generate-commit-message.ts → c3-213
 src/server/generate-title.ts → c3-213

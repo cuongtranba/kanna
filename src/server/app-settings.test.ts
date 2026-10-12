@@ -78,6 +78,11 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
         modelOptions: {},
         planMode: false,
       },
+      custom: {
+        model: "",
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: filePath,
@@ -91,6 +96,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     customMcpServers: [],
     customBeacons: [],
     customModels: seedCustomModelsFromBuiltins(),
+    customProviders: [],
     textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
@@ -1962,5 +1968,196 @@ describe("customBeacons", () => {
       validationError: { code: "INVALID_LABEL" },
     })
     expect(manager.getSnapshot().customBeacons).toHaveLength(1)
+  })
+})
+
+describe("customProviders", () => {
+  const GLM_KEY = "glm-secret-key-9f3a"
+  const glmInput = {
+    id: "glm",
+    label: "GLM (Z.AI)",
+    baseUrl: "https://api.z.ai/api/anthropic/",
+    apiKey: GLM_KEY,
+    models: [{ id: "glm-5.3", label: "GLM-5.3" }],
+  }
+
+  async function freshManager() {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    return { manager, filePath }
+  }
+
+  test("persists a created provider's key to the settings file but never exposes it in a snapshot", async () => {
+    const { manager, filePath } = await freshManager()
+
+    const written = await manager.writePatch({ customProviders: { create: glmInput } })
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8")) as { customProviders: Array<{ apiKey: string; baseUrl: string }> }
+    expect(onDisk.customProviders[0]?.apiKey).toBe(GLM_KEY)
+    expect(onDisk.customProviders[0]?.baseUrl).toBe("https://api.z.ai/api/anthropic")
+    expect(JSON.stringify(written)).not.toContain(GLM_KEY)
+    expect(JSON.stringify(manager.getSnapshot())).not.toContain(GLM_KEY)
+    expect(JSON.stringify(await readAppSettingsSnapshot(filePath))).not.toContain(GLM_KEY)
+    expect(manager.getSnapshot().customProviders).toEqual([
+      expect.objectContaining({ id: "glm", label: "GLM (Z.AI)", apiKeyHint: GLM_KEY.slice(-4) }),
+    ])
+  })
+
+  test("hands the server the credential of a configured provider and nothing for an unknown one", async () => {
+    const { manager } = await freshManager()
+    await manager.writePatch({ customProviders: { create: glmInput } })
+
+    expect(manager.getCustomProviderCredential("glm")).toEqual({
+      label: "GLM (Z.AI)",
+      baseUrl: "https://api.z.ai/api/anthropic",
+      apiKey: GLM_KEY,
+      contextWindow: null,
+    })
+    expect(manager.getCustomProviderCredential("kimi")).toBeNull()
+  })
+
+  test("an update without an API key keeps the stored one, and one with a key replaces it", async () => {
+    const { manager } = await freshManager()
+    await manager.writePatch({ customProviders: { create: glmInput } })
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { label: "GLM renamed" } } } })
+    expect(manager.getCustomProviderCredential("glm")?.apiKey).toBe(GLM_KEY)
+    expect(manager.getSnapshot().customProviders[0]?.label).toBe("GLM renamed")
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { apiKey: "rotated-key-0001" } } } })
+    expect(manager.getCustomProviderCredential("glm")?.apiKey).toBe("rotated-key-0001")
+  })
+
+  test("a context window round-trips through create and update, reaches the credential, and null clears it", async () => {
+    const { manager, filePath } = await freshManager()
+
+    await manager.writePatch({ customProviders: { create: { ...glmInput, contextWindow: 65536 } } })
+    expect(manager.getSnapshot().customProviders[0]?.contextWindow).toBe(65536)
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBe(65536)
+    expect(JSON.stringify(await readAppSettingsSnapshot(filePath))).toContain("65536")
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { label: "GLM renamed" } } } })
+    expect(manager.getSnapshot().customProviders[0]?.contextWindow).toBe(65536)
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: 131072 } } } })
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBe(131072)
+
+    await manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: null } } } })
+    expect(manager.getSnapshot().customProviders[0]).not.toHaveProperty("contextWindow")
+    expect(manager.getCustomProviderCredential("glm")?.contextWindow).toBeNull()
+  })
+
+  test("rejects a context window outside 4096 to 2,000,000 or a fractional one, and stores nothing", async () => {
+    const { manager } = await freshManager()
+
+    for (const contextWindow of [4095, 2_000_001, 65536.5]) {
+      await expect(manager.writePatch({ customProviders: { create: { ...glmInput, contextWindow } } }))
+        .rejects.toMatchObject({ validationError: { code: "INVALID_CONTEXT_WINDOW" } })
+    }
+    expect(manager.getSnapshot().customProviders).toEqual([])
+
+    await manager.writePatch({ customProviders: { create: glmInput } })
+    await expect(manager.writePatch({ customProviders: { update: { id: "glm", patch: { contextWindow: 10 } } } }))
+      .rejects.toMatchObject({ validationError: { code: "INVALID_CONTEXT_WINDOW" } })
+    expect(manager.getSnapshot().customProviders[0]).not.toHaveProperty("contextWindow")
+  })
+
+  test("rejects a base URL that is not http(s) and stores nothing", async () => {
+    const { manager } = await freshManager()
+
+    await expect(manager.writePatch({ customProviders: { create: { ...glmInput, baseUrl: "ftp://nope" } } }))
+      .rejects.toMatchObject({ validationError: { code: "INVALID_BASE_URL" } })
+    expect(manager.getSnapshot().customProviders).toEqual([])
+  })
+
+  test("deleting a provider drops its credential", async () => {
+    const { manager } = await freshManager()
+    await manager.writePatch({ customProviders: { create: glmInput } })
+
+    await manager.writePatch({ customProviders: { delete: { id: "glm" } } })
+
+    expect(manager.getCustomProviderCredential("glm")).toBeNull()
+    expect(manager.getSnapshot().customProviders).toEqual([])
+  })
+
+  test("drops invalid stored entries on load with a warning and keeps the valid ones", async () => {
+    const filePath = await writeSettingsFile({
+      customProviders: [
+        { ...glmInput, createdAt: 1, updatedAt: 1 },
+        { id: "Bad Id", label: "x", baseUrl: "https://x.example", apiKey: "k", models: [{ id: "m", label: "" }] },
+        { id: "nomodels", label: "No models", baseUrl: "https://x.example", apiKey: "k", models: [] },
+      ],
+    })
+
+    const snapshot = await readAppSettingsSnapshot(filePath)
+
+    expect(snapshot.customProviders.map((p) => p.id)).toEqual(["glm"])
+    expect(snapshot.warning).toContain("customProviders: dropped")
+  })
+})
+
+describe("customProviders contextWindow on load", () => {
+  test("an invalid stored context window is dropped with a warning while the entry is kept", async () => {
+    const filePath = await writeSettingsFile({
+      customProviders: [
+        {
+          id: "ollama",
+          label: "Ollama (local)",
+          baseUrl: "http://localhost:11434",
+          apiKey: "ollama",
+          models: [{ id: "qwen3", label: "" }],
+          contextWindow: 12,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "glm",
+          label: "GLM",
+          baseUrl: "https://api.z.ai/api/anthropic",
+          apiKey: "glm-key-1234",
+          models: [{ id: "glm-5.3", label: "" }],
+          contextWindow: 65536,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+
+    const snapshot = await readAppSettingsSnapshot(filePath)
+
+    expect(snapshot.customProviders.map((p) => [p.id, p.contextWindow])).toEqual([["ollama", undefined], ["glm", 65536]])
+    expect(snapshot.warning).toContain("contextWindow")
+  })
+})
+
+describe("openrouter and custom providers in persisted settings", () => {
+  test("a default provider of openrouter or custom is kept instead of reset to last_used", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+
+    await manager.writePatch({ defaultProvider: "openrouter" })
+    expect(manager.getSnapshot().defaultProvider).toBe("openrouter")
+
+    await manager.writePatch({ defaultProvider: "custom" })
+    expect(manager.getSnapshot().defaultProvider).toBe("custom")
+  })
+
+  test("openrouter and custom subagents survive normalization with their model untouched", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    const base = { modelOptions: {}, systemPrompt: "Work.", contextScope: "previous-assistant-reply" as const }
+
+    await manager.createSubagent({ ...base, name: "router", provider: "openrouter", model: "moonshotai/kimi-k2.5:nitro" })
+    await manager.createSubagent({ ...base, name: "glm-worker", provider: "custom", model: "glm/glm-5.3" })
+
+    const reloaded = trackManager(new AppSettingsManager(filePath))
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().subagents.map((s) => [s.name, s.provider, s.model])).toEqual([
+      ["router", "openrouter", "moonshotai/kimi-k2.5:nitro"],
+      ["glm-worker", "custom", "glm/glm-5.3"],
+    ])
   })
 })

@@ -38,8 +38,6 @@ import {
   CLAUDE_MAX_CONCURRENT_MIN,
   CLOUDFLARE_TUNNEL_DEFAULTS,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
-  PROVIDERS,
-  mergeCustomModels,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
@@ -59,8 +57,10 @@ import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
 import { BeaconsSettingsBranch } from "./BeaconsSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
+import { useProviderCatalog } from "./useProviderCatalog"
+import { CustomProvidersSettingsBranch } from "./CustomProvidersSection"
 import { TextSnippetsSettingsBranch } from "./TextSnippetsSection"
-import { useAppSettingsStore, selectCustomModels, selectPluginsEnabled, selectScrollbackLines, selectMinColumnWidth, selectEditorPreset, selectEditorCommandTemplate, selectChatSoundPreference, selectChatSoundId } from "../stores/appSettingsStore"
+import { useAppSettingsStore, selectPluginsEnabled, selectScrollbackLines, selectMinColumnWidth, selectEditorPreset, selectEditorCommandTemplate, selectChatSoundPreference, selectChatSoundId } from "../stores/appSettingsStore"
 import {
   DEFAULT_TAB_MIN_WIDTH,
   MAX_TAB_WIDTH,
@@ -792,9 +792,8 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const setProviderDefaultModel = useChatPreferencesStore((store) => store.setProviderDefaultModel)
   const setProviderDefaultModelOptions = useChatPreferencesStore((store) => store.setProviderDefaultModelOptions)
   const setProviderDefaultPlanMode = useChatPreferencesStore((store) => store.setProviderDefaultPlanMode)
-  const customModels = useAppSettingsStore(selectCustomModels)
   const kannaPluginsEnabled = useAppSettingsStore(selectPluginsEnabled)
-  const mergedProviders = useMemo(() => mergeCustomModels([...PROVIDERS], customModels), [customModels])
+  const mergedProviders = useProviderCatalog()
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
   const keybindingsFilePathDisplay = resolvedKeybindings.filePathDisplay || getKeybindingsFilePathDisplay()
   const pushPermissionState = useSettingsPageStore((s) => s.pushPermissionState)
@@ -2048,7 +2047,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                             <SelectItem value="last_used">
                               Last Used
                             </SelectItem>
-                            {PROVIDERS.map((provider) => (
+                            {mergedProviders.map((provider) => (
                               <SelectItem key={provider.id} value={provider.id}>
                                 {provider.label}
                               </SelectItem>
@@ -2057,6 +2056,8 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
                         </SelectContent>
                       </Select>
                     </SettingsRow>
+
+                    <CustomProvidersSettingsBranch state={state} />
 
                     <SettingsRow
                       title="Claude Code Defaults"

@@ -1871,8 +1871,85 @@ effective catalog at read time.
   `mergeCustomModels([...PROVIDERS], customModels)`. Both `mergeAppSettingsPatch`
   copies (client store + `ws-router` fallback) pin `customModels` so the CRUD
   patch shape never leaks over the array.
-- **Scope.** OpenRouter untouched (already dynamic via API). Providers
-  themselves are not add/removable — models only.
+- **Scope.** OpenRouter untouched (already dynamic via API). Built-in
+  providers are not add/removable — models only. Anthropic-compatible
+  endpoints are added through **Custom endpoints** below.
+
+# Custom endpoints — the `custom` provider (customProviders)
+
+Users register Anthropic-compatible endpoints (GLM, Qwen, Kimi, DeepSeek,
+MiniMax, anything) in Settings → Providers. They run through the Claude SDK
+exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
+
+- **One fixed provider literal, not one id per endpoint.** `AGENT_PROVIDERS`
+  gained `"custom"`, and the endpoint rides the MODEL id:
+  `<providerId>/<vendorModel>` (`encodeCustomModelId` / `parseCustomModelId`,
+  `src/shared/custom-providers.ts`, split on the FIRST `/`). Per-endpoint
+  provider ids were rejected: ~60 sites branch on the closed union and most
+  fall back to Codex silently for an unknown value, so a missed branch is
+  invisible. Do not widen `AgentProvider` to a template-literal type.
+- **`withCustomProviders` fills the `custom` catalog entry and REMOVES it when
+  no endpoint is configured.** Apply it wherever a provider list is built
+  (`deriveChatSnapshot`, `useProviderCatalog`, Subagents), or an empty "Custom
+  endpoints" provider appears.
+- **`resolveSdkEndpoint` (`src/server/sdk-endpoint.ts`) is the single owner of
+  endpoint resolution for `openrouter` AND `custom`.** `buildClaudeEnv` takes a
+  generic `SdkEndpointEnv` (`{baseUrl, apiKey, aliasModel, contextWindow}`); never re-hardcode an endpoint there. The SDK gets
+  `vendorModel` on both `query` and `setModel`, while `session.model` keeps the
+  Kanna-level id.
+- **`endpointSpawnFingerprint` is part of the respawn condition**
+  (`spawnClaudeTurn`, `session.endpointFingerprint`). It covers everything baked
+  into the process env at spawn: endpoint key, base URL, API key, alias model and
+  context window. So a GLM→Qwen switch, a model switch WITHIN one custom endpoint
+  (the aliases must follow — two local Ollama models resident at once can exceed
+  GPU memory), and an endpoint edited in Settings all respawn with `--resume`,
+  keeping history. OpenRouter's alias model is `null`, so its model switches
+  still use in-place `setModel`. The fingerprint holds the key: compare it,
+  never log it — `endpointKey` is the loggable identity.
+- **The API key is WRITE-ONLY.** The file holds `CustomProviderEntry` (with
+  `apiKey`); `toSnapshot` maps to `CustomProviderPublic` (only `apiKeyHint`).
+  The spawner reads the key via `AppSettingsManager.getCustomProviderCredential`.
+  Writes are CRUD only (`AppSettingsPatch.customProviders` create/update/delete);
+  an update with a blank key keeps the stored one. Never accept a whole
+  `customProviders` array from the client — the redacted snapshot would
+  overwrite every key.
+- **The composer treats `custom` like `openrouter`** through
+  `isEndpointProvider` (`provider-model-types.ts`): empty `modelOptions`, the
+  searchable model picker, no effort / context-window / fast-mode controls.
+  Branch on the predicate, not on `=== "openrouter"`, so the two cannot drift.
+- **Claude model names are mapped onto the endpoint's model — custom ONLY.** The
+  CLI makes background and subagent calls under Claude ids, and a non-Claude
+  endpoint answers `not_found_error: model 'claude-haiku-4-5-20251001' not
+  found` (Ollama). `SdkEndpoint.aliasModel` is the vendor model for `custom` and
+  `null` for `openrouter`, which serves real Claude ids and must not change;
+  `buildClaudeEnv` sets all six variables the bundled CLI (2.1.291) reads —
+  `ANTHROPIC_DEFAULT_FABLE_MODEL`, `_OPUS_`, `_SONNET_`, `_HAIKU_MODEL`,
+  `ANTHROPIC_SMALL_FAST_MODEL` (checked first for the background model) and
+  `CLAUDE_CODE_SUBAGENT_MODEL` (`CLAUDE_MODEL_ALIAS_ENV_VARS`). Both spawn
+  paths go through `resolveSdkEndpoint` and hand `endpointEnvOf(endpoint)` to
+  `buildClaudeEnv`. Env is fixed at spawn, which is why a model switch on a
+  custom endpoint respawns rather than calling `setModel` (see the fingerprint).
+- **`contextWindow` (per endpoint, 4096..2,000,000 tokens, optional) becomes
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.** For an id not starting with `claude-` the
+  CLI assumes a 200000 window (`u6e`) unless that variable is set, and only then
+  does auto-compaction keep the session inside the real window. Do NOT use
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: it clamps to a 100k minimum, so a 64k Ollama
+  model would never compact in time. The same number is Kanna's own meter
+  (`contextWindowOverride`, on the main spawner and the subagent path), so the
+  composer shows 65k rather than 200k. Not secret, so it is in
+  `CustomProviderPublic`; a patch of `null` clears it, an invalid stored value is
+  dropped with a warning and the entry kept. Presets may carry `contextWindow` and
+  a non-secret `defaultApiKey` (only Ollama, which ignores the key).
+- **No pricing, and the CLI's guess is discarded.** The CLI still returns a
+  `total_cost_usd` for an unknown model, priced on a guess and marked
+  `modelUsage[model].costBasis: "unknown"` (values: `list`, `managed`,
+  `unknown`) — measured $0.047 for one small turn on a free local Ollama model.
+  `createClaudeHarnessStream` ignores the SDK cost whenever any model is
+  `unknown` (`modelUsageHasUnpricedModel`) and falls back to the turn price
+  resolver, else reports no cost. This also makes OpenRouter turns use
+  OpenRouter's real per-token price instead of the CLI's guess.
+- `normalizeSubagentEntry` and `normalizeDefaultProvider` now accept every
+  `AgentProvider`. Both used to drop `openrouter` silently.
 
 # Codex Failure Classification (`codexErrorInfo` + `willRetry`)
 

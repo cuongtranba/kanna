@@ -11,7 +11,7 @@ function sameSessionTokensByProvider(
   a: Partial<Record<AgentProvider, string | null>>,
   b: Partial<Record<AgentProvider, string | null>>,
 ): boolean {
-  const providers: AgentProvider[] = ["claude", "codex", "openrouter"]
+  const providers: AgentProvider[] = ["claude", "codex", "openrouter", "custom"]
   for (const key of providers) {
     if (a[key] !== b[key]) return false
   }

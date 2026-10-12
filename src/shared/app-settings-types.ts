@@ -80,6 +80,11 @@ import type {
   TextSnippetPatch,
 } from "./provider-model-types"
 import type {
+  CustomProviderInput,
+  CustomProviderPatch,
+  CustomProviderPublic,
+} from "./custom-providers"
+import type {
   McpServerConfig,
   McpServerInput,
   McpServerPatch,
@@ -302,6 +307,7 @@ export interface AppSettingsSnapshot {
   customMcpServers: McpServerConfig[]
   customBeacons: BeaconConfig[]
   customModels: CustomModelEntry[]
+  customProviders: CustomProviderPublic[]
   textSnippets: TextSnippet[]
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
@@ -353,6 +359,7 @@ export interface AppSettingsPatch {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
     openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
+    custom?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
   cloudflareTunnel?: Partial<CloudflareTunnelSettings>
   push?: Partial<PushSettings>
@@ -384,6 +391,11 @@ export interface AppSettingsPatch {
   customModels?: {
     create?: CustomModelInput
     update?: { id: string; patch: CustomModelPatch }
+    delete?: { id: string }
+  }
+  customProviders?: {
+    create?: CustomProviderInput
+    update?: { id: string; patch: CustomProviderPatch }
     delete?: { id: string }
   }
   textSnippets?: {

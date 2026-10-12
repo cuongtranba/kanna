@@ -54,7 +54,7 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
           store.state, activeStatuses, new Set(), chat.id,
           (chatId) => store.getRecentChatHistory(chatId, FULL_LIMIT),
           (chatId) => store.getTunnelEvents(chatId),
-          new Map(), FIXED_NOW, new Map(), [],
+          new Map(), FIXED_NOW, new Map(), { customModels: [], customProviders: [] },
         )
         if (!snapshot) throw new Error("expected snapshot")
         return snapshot
@@ -65,7 +65,7 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
           store.state, activeStatuses, new Set(), chat.id,
           (chatId) => store.getRecentChatHistory(chatId, 0),
           (chatId) => store.getTunnelEvents(chatId),
-          new Map(), FIXED_NOW, new Map(), [],
+          new Map(), FIXED_NOW, new Map(), { customModels: [], customProviders: [] },
         )
         if (!snapshot) throw new Error("expected meta snapshot")
         return snapshot

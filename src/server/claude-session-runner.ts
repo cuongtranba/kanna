@@ -81,11 +81,16 @@ export interface RunClaudeSessionDeps {
 }
 
 
+function firstEntryTimeoutMessage(session: ClaudeSessionState, timeoutMs: number): string {
+  const label = session.endpointLabel ?? "The endpoint"
+  return `${label} produced no response within ${timeoutMs}ms — the selected model may be invalid or the upstream stalled.`
+}
+
 export async function runClaudeSession(
   deps: RunClaudeSessionDeps,
   session: ClaudeSessionState,
 ): Promise<void> {
-  const isOpenRouterSession = session.openrouterModel !== null
+  const isEndpointSession = session.endpointModel !== null
   let turnAssistantText: string[] = []
   let firstEntrySeen = false
   let firstEntryWatchdog: ReturnType<typeof setTimeout> | null = null
@@ -104,16 +109,17 @@ export async function runClaudeSession(
     () => deps.claudeSessions.get(session.chatId) === session,
     deps.onLiveBlock,
   )
-  if (isOpenRouterSession) {
+  if (isEndpointSession) {
     firstEntryWatchdog = setTimeout(() => {
       if (firstEntrySeen) return
       if (deps.claudeSessions.get(session.chatId) !== session) return
       firstEntrySeen = true
-      const message = `OpenRouter produced no response within ${deps.openrouterFirstEntryTimeoutMs}ms — the selected model may be invalid or the upstream stalled.`
-      log.warn("[kanna/agent] openrouter stream produced no entry within watchdog window — failing turn", {
+      const message = firstEntryTimeoutMessage(session, deps.openrouterFirstEntryTimeoutMs)
+      log.warn("[kanna/agent] endpoint stream produced no entry within watchdog window — failing turn", {
         chatId: session.chatId,
         sessionId: session.id,
-        model: session.openrouterModel,
+        endpoint: session.endpointKey,
+        model: session.endpointModel,
         timeoutMs: deps.openrouterFirstEntryTimeoutMs,
       })
       void (async () => {

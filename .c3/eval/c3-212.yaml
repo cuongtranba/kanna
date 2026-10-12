@@ -3,3 +3,7 @@ claim: "provider catalog is at src/server/provider-catalog.ts"
 code:
   - src/server/provider-catalog.test.ts
   - src/server/provider-catalog.ts
+  - src/server/sdk-endpoint.ts
+  - src/shared/custom-providers.ts
+  - src/shared/custom-providers.test.ts
+  - src/shared/custom-provider-presets.ts

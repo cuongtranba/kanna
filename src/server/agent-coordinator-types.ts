@@ -1,6 +1,7 @@
 
 import type { AnalyticsReporter } from "./analytics"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { SdkEndpointEnv } from "./sdk-endpoint"
 import type { GenerateChatTitleResult } from "./generate-title"
 import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
 import type {
@@ -65,7 +66,7 @@ export interface AgentCoordinatorArgs {
     tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
     systemPromptAppend?: string
-    openrouterApiKey?: string | null
+    endpoint?: SdkEndpointEnv | null
     subagentOrchestrator?: SubagentOrchestrator
     delegationContext?: KannaMcpDelegationContext
     systemPromptOverride?: string
@@ -103,6 +104,7 @@ export interface AgentCoordinatorArgs {
   getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
+  getCustomProviderCredential?: (id: string) => import("../shared/custom-providers").CustomProviderCredential | null
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
   localCatalog?: import("./local-catalog").LocalCatalogService
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
