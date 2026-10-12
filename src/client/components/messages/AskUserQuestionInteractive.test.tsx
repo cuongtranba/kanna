@@ -247,6 +247,49 @@ describe("AskUserQuestionInteractive — multi-select", () => {
     expect(onSubmit.mock.calls[0]![0]["Pick many"]).not.toContain("Gamma")
     container.remove()
   })
+
+  test("multi-select ticks and submits an option whose label contains a comma", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const questions: AskUserQuestionItem[] = [{
+      question: "Pick many",
+      multiSelect: true,
+      options: [
+        { label: "Point to wiki", description: "" },
+        { label: "Measure, don't trust estimates", description: "" },
+        { label: "Memory budget guardrail", description: "" },
+      ],
+    }]
+
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(<AskUserQuestionInteractive questions={questions} onSubmit={onSubmit} />)
+    })
+
+    const getBtn = (label: string) =>
+      Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === label)
+
+    await act(async () => { getBtn("Measure, don't trust estimates")!.click() })
+    expect(getBtn("Measure, don't trust estimates")!.querySelector("svg")).not.toBeNull()
+    await act(async () => { getBtn("Measure, don't trust estimates")!.click() })
+    expect(getBtn("Measure, don't trust estimates")!.querySelector("svg")).toBeNull()
+
+    await act(async () => { getBtn("Point to wiki")!.click() })
+    await act(async () => { getBtn("Measure, don't trust estimates")!.click() })
+    await act(async () => { getBtn("Memory budget guardrail")!.click() })
+    expect(getBtn("Measure, don't trust estimates")!.querySelector("svg")).not.toBeNull()
+
+    await act(async () => { getBtn("Submit")!.click() })
+    expect(onSubmit.mock.calls[0]![0]["Pick many"]).toEqual([
+      "Point to wiki",
+      "Measure, don't trust estimates",
+      "Memory budget guardrail",
+    ])
+
+    await act(async () => { root.unmount() })
+    container.remove()
+  })
 })
 
 function setInputValue(input: HTMLInputElement, value: string): void {

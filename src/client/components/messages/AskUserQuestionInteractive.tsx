@@ -6,6 +6,7 @@ import { AskUserQuestionInteractiveStore } from "./AskUserQuestionInteractive.st
 import type { TimerPort } from "../../ports"
 import { timerAdapter } from "../../adapters"
 
+const EMPTY_SELECTION: readonly string[] = []
 
 function QuestionCard({
   question,
@@ -167,10 +168,12 @@ function AskUserQuestionInteractiveInner(
   const responding = submitPending || cancelPending
   const timer = ports.timer ?? timerAdapter
   const currentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.currentIndex)
-  const answers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.answers)
+  const selections = AskUserQuestionInteractiveStore.useScopedStore((s) => s.selections)
   const customInputs = AskUserQuestionInteractiveStore.useScopedStore((s) => s.customInputs)
   const setCurrentIndex = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setCurrentIndex)
-  const setAnswers = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setAnswers)
+  const toggleSelection = AskUserQuestionInteractiveStore.useScopedStore((s) => s.toggleSelection)
+  const selectOnly = AskUserQuestionInteractiveStore.useScopedStore((s) => s.selectOnly)
+  const clearSelection = AskUserQuestionInteractiveStore.useScopedStore((s) => s.clearSelection)
   const setCustomInputs = AskUserQuestionInteractiveStore.useScopedStore((s) => s.setCustomInputs)
 
   if (questions.length === 0) return null
@@ -179,30 +182,25 @@ function AskUserQuestionInteractiveInner(
 
   const getEffectiveAnswers = (questionKey: string, question?: AskUserQuestionItem) => {
     const custom = customInputs[questionKey]?.trim()
-    const selectedAnswer = answers[questionKey] || ""
+    const selected = selections[questionKey] ?? EMPTY_SELECTION
     const q = question || questions.find((c) => getQuestionKey(c) === questionKey)
     if (q?.multiSelect) {
-      return [selectedAnswer, custom]
-        .filter(Boolean)
-        .flatMap((value) => value.split(", ").filter(Boolean))
+      const customParts = custom ? custom.split(", ").filter(Boolean) : []
+      return [...selected, ...customParts]
     }
-    const value = custom || selectedAnswer
+    const value = custom || selected[0]
     return value ? [value] : []
   }
 
-  const getSelectedOptions = (question: AskUserQuestionItem) => {
-    const answer = answers[getQuestionKey(question)] || ""
-    return question.multiSelect ? answer.split(", ").filter(Boolean) : [answer]
-  }
+  const getSelectedOptions = (question: AskUserQuestionItem) =>
+    selections[getQuestionKey(question)] ?? EMPTY_SELECTION
 
   const handleOptionSelect = (question: AskUserQuestionItem, label: string) => {
     const key = getQuestionKey(question)
     if (question.multiSelect) {
-      const current = answers[key] ? answers[key]!.split(", ").filter(Boolean) : []
-      const newSelection = current.includes(label) ? current.filter((o) => o !== label) : [...current, label]
-      setAnswers({ ...answers, [key]: newSelection.join(", ") })
+      toggleSelection(key, label)
     } else {
-      setAnswers({ ...answers, [key]: label })
+      selectOnly(key, label)
       setCustomInputs({ ...customInputs, [key]: "" })
       if (currentIndex < questions.length - 1) {
         timer.setTimeout(() => setCurrentIndex(currentIndex + 1), 150)
@@ -214,7 +212,7 @@ function AskUserQuestionInteractiveInner(
     const key = getQuestionKey(question)
     setCustomInputs({ ...customInputs, [key]: value })
     if (value && !question.multiSelect) {
-      setAnswers({ ...answers, [key]: "" })
+      clearSelection(key)
     }
   }
 
