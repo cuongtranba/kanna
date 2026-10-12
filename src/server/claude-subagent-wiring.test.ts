@@ -64,6 +64,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     buildPoolUnavailableMessage: () => "no token available",
     getAppSettingsSnapshot: () => ({}),
     readLlmProvider: async () => ({ provider: "claude", apiKey: null } as never),
+    getCustomProviderCredential: () => null,
     subagentPendingKey: (chatId, runId, toolUseId) => `${chatId}::${runId}::${toolUseId}`,
     ...overrides,
   }
@@ -278,6 +279,20 @@ describe("buildSubagentProviderRunForChat — authReady", () => {
       readLlmProvider: async () => ({ provider: "openrouter", apiKey: "", enabled: true }) as never,
     })
     expect(await authReadyFor(deps, "openrouter")).toBe(false)
+  })
+
+  test("a custom subagent is ready only while its provider still holds an API key", async () => {
+    const custom = (apiKey: string | null) => (id: string) =>
+      id === "glm" && apiKey !== null ? { label: "GLM", baseUrl: "https://api.z.ai/api/anthropic", apiKey } : null
+    const run = (getCustomProviderCredential: SubagentWiringDeps["getCustomProviderCredential"], model: string) =>
+      buildSubagentProviderRunForChat(makeDeps({ getCustomProviderCredential }), {
+        ...BASE_ARGS,
+        subagent: { ...BASE_SUBAGENT, provider: "custom", model },
+      }).authReady()
+
+    expect(await run(custom("glm-key"), "glm/glm-5.3")).toBe(true)
+    expect(await run(custom(null), "glm/glm-5.3")).toBe(false)
+    expect(await run(custom("glm-key"), "glm-5.3")).toBe(false)
   })
 
   test("non-claude, non-openrouter providers are always ready", async () => {

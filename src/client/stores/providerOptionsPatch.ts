@@ -9,7 +9,7 @@ import {
 } from "../../shared/types"
 
 export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
-  if (value === "claude" || value === "codex" || value === "openrouter") return value
+  if (value === "claude" || value === "codex" || value === "openrouter" || value === "custom") return value
   return "last_used"
 }
 

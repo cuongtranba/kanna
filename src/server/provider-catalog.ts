@@ -16,6 +16,7 @@ import {
   normalizeProviderModelId,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
+  isEndpointProvider,
   mergeCustomModels,
 } from "../shared/types"
 import { log } from "../shared/log"
@@ -98,7 +99,7 @@ export function codexServiceTierFromModelOptions(modelOptions: CodexModelOptions
 }
 
 export function isClaudeSdkProvider(provider: AgentProvider): boolean {
-  return provider === "claude" || provider === "openrouter"
+  return provider === "claude" || isEndpointProvider(provider)
 }
 
 export function openrouterAuthReady(snapshot: LlmProviderSnapshot): boolean {

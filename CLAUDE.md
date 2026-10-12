@@ -1871,8 +1871,50 @@ effective catalog at read time.
   `mergeCustomModels([...PROVIDERS], customModels)`. Both `mergeAppSettingsPatch`
   copies (client store + `ws-router` fallback) pin `customModels` so the CRUD
   patch shape never leaks over the array.
-- **Scope.** OpenRouter untouched (already dynamic via API). Providers
-  themselves are not add/removable — models only.
+- **Scope.** OpenRouter untouched (already dynamic via API). Built-in
+  providers are not add/removable — models only. Anthropic-compatible
+  endpoints are added through **Custom endpoints** below.
+
+# Custom endpoints — the `custom` provider (customProviders)
+
+Users register Anthropic-compatible endpoints (GLM, Qwen, Kimi, DeepSeek,
+MiniMax, anything) in Settings → Providers. They run through the Claude SDK
+exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
+
+- **One fixed provider literal, not one id per endpoint.** `AGENT_PROVIDERS`
+  gained `"custom"`, and the endpoint rides the MODEL id:
+  `<providerId>/<vendorModel>` (`encodeCustomModelId` / `parseCustomModelId`,
+  `src/shared/custom-providers.ts`, split on the FIRST `/`). Per-endpoint
+  provider ids were rejected: ~60 sites branch on the closed union and most
+  fall back to Codex silently for an unknown value, so a missed branch is
+  invisible. Do not widen `AgentProvider` to a template-literal type.
+- **`withCustomProviders` fills the `custom` catalog entry and REMOVES it when
+  no endpoint is configured.** Apply it wherever a provider list is built
+  (`deriveChatSnapshot`, `useProviderCatalog`, Subagents), or an empty "Custom
+  endpoints" provider appears.
+- **`resolveSdkEndpoint` (`src/server/sdk-endpoint.ts`) is the single owner of
+  endpoint resolution for `openrouter` AND `custom`.** `buildClaudeEnv` takes a
+  generic `{baseUrl, apiKey}`; never re-hardcode an endpoint there. The SDK gets
+  `vendorModel` on both `query` and `setModel`, while `session.model` keeps the
+  Kanna-level id.
+- **`endpointKey` is part of the respawn condition** (`spawnClaudeTurn`).
+  Without it a GLM→Qwen switch would `setModel` a Qwen id on the GLM process.
+  A switch respawns with `--resume`, so history is kept.
+- **The API key is WRITE-ONLY.** The file holds `CustomProviderEntry` (with
+  `apiKey`); `toSnapshot` maps to `CustomProviderPublic` (only `apiKeyHint`).
+  The spawner reads the key via `AppSettingsManager.getCustomProviderCredential`.
+  Writes are CRUD only (`AppSettingsPatch.customProviders` create/update/delete);
+  an update with a blank key keeps the stored one. Never accept a whole
+  `customProviders` array from the client — the redacted snapshot would
+  overwrite every key.
+- **The composer treats `custom` like `openrouter`** through
+  `isEndpointProvider` (`provider-model-types.ts`): empty `modelOptions`, the
+  searchable model picker, no effort / context-window / fast-mode controls.
+  Branch on the predicate, not on `=== "openrouter"`, so the two cannot drift.
+- **No pricing.** `resolveModelPrice` knows none of these models, so
+  `kanna.turn.cost_usd` is not emitted for custom turns.
+- `normalizeSubagentEntry` and `normalizeDefaultProvider` now accept every
+  `AgentProvider`. Both used to drop `openrouter` silently.
 
 # Codex Failure Classification (`codexErrorInfo` + `willRetry`)
 

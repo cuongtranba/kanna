@@ -1,0 +1,94 @@
+import { create } from "zustand"
+import {
+  deriveDraftId,
+  emptyCustomProviderDraft,
+  type CustomProviderDraft,
+} from "../lib/customProviderDraft"
+
+export type CustomProvidersEditingState =
+  | { kind: "list" }
+  | { kind: "create" }
+  | { kind: "edit"; id: string }
+
+export interface CustomProviderEditorForm extends CustomProviderDraft {
+  submitting: boolean
+  error: string | null
+}
+
+export type ModelRowField = "id" | "label"
+
+function createEditorForm(draft: CustomProviderDraft): CustomProviderEditorForm {
+  return { ...draft, submitting: false, error: null }
+}
+
+interface CustomProvidersSectionState {
+  editing: CustomProvidersEditingState
+  menuOpen: boolean
+  listError: string | null
+  editorForm: CustomProviderEditorForm
+
+  setMenuOpen: (open: boolean) => void
+  setListError: (message: string | null) => void
+  startEditing: (editing: CustomProvidersEditingState, draft: CustomProviderDraft) => void
+  discardEditor: () => void
+  patchEditorForm: (patch: Partial<CustomProviderEditorForm>) => void
+  setLabel: (label: string, takenIds: readonly string[]) => void
+  setId: (id: string) => void
+  setModelField: (index: number, field: ModelRowField, value: string) => void
+  addModelRow: () => void
+  removeModelRow: (index: number) => void
+}
+
+export const useCustomProvidersSectionStore = create<CustomProvidersSectionState>()((set) => ({
+  editing: { kind: "list" },
+  menuOpen: false,
+  listError: null,
+  editorForm: createEditorForm(emptyCustomProviderDraft()),
+
+  setMenuOpen: (menuOpen) => set({ menuOpen }),
+  setListError: (listError) => set({ listError }),
+
+  startEditing: (editing, draft) =>
+    set({ editing, menuOpen: false, listError: null, editorForm: createEditorForm(draft) }),
+
+  discardEditor: () =>
+    set({ editing: { kind: "list" }, menuOpen: false, editorForm: createEditorForm(emptyCustomProviderDraft()) }),
+
+  patchEditorForm: (patch) =>
+    set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),
+
+  setLabel: (label, takenIds) =>
+    set((state) => ({
+      editorForm: {
+        ...state.editorForm,
+        label,
+        id: state.editorForm.idTouched ? state.editorForm.id : deriveDraftId(label, takenIds),
+      },
+    })),
+
+  setId: (id) =>
+    set((state) => ({ editorForm: { ...state.editorForm, id: id.toLowerCase(), idTouched: true } })),
+
+  setModelField: (index, field, value) =>
+    set((state) => ({
+      editorForm: {
+        ...state.editorForm,
+        models: state.editorForm.models.map((model, position) =>
+          position === index ? { ...model, [field]: value } : model,
+        ),
+      },
+    })),
+
+  addModelRow: () =>
+    set((state) => ({
+      editorForm: { ...state.editorForm, models: [...state.editorForm.models, { id: "", label: "" }] },
+    })),
+
+  removeModelRow: (index) =>
+    set((state) => ({
+      editorForm: {
+        ...state.editorForm,
+        models: state.editorForm.models.filter((_, position) => position !== index),
+      },
+    })),
+}))

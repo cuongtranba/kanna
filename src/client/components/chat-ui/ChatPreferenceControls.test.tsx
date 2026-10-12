@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PROVIDERS } from "../../../shared/types"
+import { withCustomProviders, type CustomProviderPublic } from "../../../shared/custom-providers"
 import { ChatPreferenceControls } from "./ChatPreferenceControls"
+
+const GLM: CustomProviderPublic = {
+  id: "glm",
+  label: "GLM",
+  baseUrl: "https://api.z.ai/api/anthropic",
+  apiKeyHint: "abcd",
+  models: [{ id: "glm-5.3", label: "GLM-5.3" }],
+  createdAt: 0,
+  updatedAt: 0,
+}
 
 describe("ChatPreferenceControls", () => {
   test("renders codex-specific controls and can omit plan mode", () => {
@@ -80,5 +91,39 @@ describe("ChatPreferenceControls", () => {
     expect(html).toContain("Opus 4.7")
     expect(html).toContain("aria-disabled")
     expect(html).toContain("lucide-lock")
+  })
+  test("custom endpoints use the model picker without reasoning, context or fast controls", () => {
+    const html = renderToStaticMarkup(
+      <ChatPreferenceControls
+        availableProviders={withCustomProviders([...PROVIDERS], [GLM])}
+        selectedProvider="custom"
+        model="glm/glm-5.3"
+        modelOptions={{}}
+        onProviderChange={() => {}}
+        onModelChange={() => {}}
+        onModelOptionChange={() => {}}
+      />
+    )
+
+    expect(html).toContain("Custom endpoints")
+    expect(html).toContain("GLM · GLM-5.3")
+    expect(html).not.toContain("Fast Mode")
+    expect(html).not.toContain("High")
+  })
+
+  test("renders instead of throwing when the selected provider is not offered", () => {
+    const html = renderToStaticMarkup(
+      <ChatPreferenceControls
+        availableProviders={PROVIDERS.filter((provider) => provider.id === "claude")}
+        selectedProvider="custom"
+        model="glm/glm-5.3"
+        modelOptions={{}}
+        onProviderChange={() => {}}
+        onModelChange={() => {}}
+        onModelOptionChange={() => {}}
+      />
+    )
+
+    expect(html).toContain("Claude")
   })
 })

@@ -7,6 +7,11 @@ code:
   - src/client/app/PendingSegmentedControl.tsx
   - src/client/app/ModelsSection.tsx
   - src/client/app/ModelsSection.test.tsx
+  - src/client/app/CustomProvidersSection.tsx
+  - src/client/app/CustomProvidersSection.test.tsx
+  - src/client/app/useProviderCatalog.ts
+  - src/client/lib/customProviderDraft.ts
+  - src/client/stores/customProvidersSectionStore.ts
   - src/client/app/SettingsPage.tsx
   - src/client/app/SubagentsSection.tsx
   - src/client/app/SubagentFormRow.tsx

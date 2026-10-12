@@ -31,6 +31,7 @@ import {
 } from "../shared/builtin-commands"
 import type { SlashCommandExpansion } from "../shared/slash-expansion"
 import { providerExpandsSlashCommands } from "../shared/types"
+import { firstCustomModelId, isConfiguredCustomModel, type CustomProviderPublic } from "../shared/custom-providers"
 import type { ChatProviderPreferences, ModelOptions } from "../shared/provider-model-types"
 import {
   providerDefaultSelection,
@@ -101,6 +102,7 @@ export interface SendCommandDeps {
 
   getAppSettingsSnapshot(): {
     customModels?: readonly CustomModelEntry[]
+    customProviders?: readonly CustomProviderPublic[]
     providerDefaults?: ChatProviderPreferences
   }
 
@@ -136,6 +138,7 @@ export function getProviderSettings(
   provider: AgentProvider,
   options: SendMessageOptions,
   customModels: readonly CustomModelEntry[],
+  customProviders: readonly CustomProviderPublic[] = [],
 ): ProviderSettings {
   const catalog = getServerProviderCatalog(provider)
 
@@ -153,6 +156,18 @@ export function getProviderSettings(
   if (provider === "openrouter") {
     return {
       model: options.model?.trim() || catalog.defaultModel,
+      effort: undefined,
+      serviceTier: undefined,
+      planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+    }
+  }
+
+  if (provider === "custom") {
+    const requested = options.model?.trim() ?? ""
+    const model = isConfiguredCustomModel(customProviders, requested) ? requested : firstCustomModelId(customProviders)
+    if (!model) throw new Error("No custom endpoint is configured — add one in Settings → Custom endpoints")
+    return {
+      model,
       effort: undefined,
       serviceTier: undefined,
       planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
@@ -186,6 +201,7 @@ export function resolveTurnProviderSettings(
     provider,
     { ...options, model: selection.model, modelOptions: selection.modelOptions },
     snapshot.customModels ?? [],
+    snapshot.customProviders ?? [],
   )
 }
 

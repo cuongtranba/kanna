@@ -18,6 +18,7 @@ import type {
   SubagentRunSnapshot,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
+import { withCustomProviders, type CustomProviderPublic } from "../shared/custom-providers"
 import { buildLoopProgress } from "../shared/loop-progress"
 import { deriveChatTasks, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import type { ChatRecord, ChatTimingState, StoreState } from "./events"
@@ -402,6 +403,19 @@ function chatBackgroundTasks(
   return [...(sdkTasks ?? []), ...subagentTasks]
 }
 
+export interface ProviderCatalogSources {
+  customModels: readonly CustomModelEntry[]
+  customProviders: readonly CustomProviderPublic[]
+}
+
+const EMPTY_CATALOG_SOURCES: ProviderCatalogSources = { customModels: [], customProviders: [] }
+
+export function catalogSourcesOf(
+  settings: { customModels?: readonly CustomModelEntry[]; customProviders?: readonly CustomProviderPublic[] },
+): ProviderCatalogSources {
+  return { customModels: settings.customModels ?? [], customProviders: settings.customProviders ?? [] }
+}
+
 export function deriveChatSnapshot(
   state: StoreState,
   activeStatuses: Map<string, KannaStatus>,
@@ -412,7 +426,7 @@ export function deriveChatSnapshot(
   waitStartedAtByChatId: Map<string, number> = new Map(),
   nowMs: number = Date.now(),
   claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
-  customModels: readonly CustomModelEntry[] = [],
+  catalogSources: ProviderCatalogSources = EMPTY_CATALOG_SOURCES,
   backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
 ): ChatSnapshot | null {
   const chat = state.chatsById.get(chatId)
@@ -493,7 +507,10 @@ export function deriveChatSnapshot(
     })),
     messages: transcript.messages,
     history: transcript.history,
-    availableProviders: mergeCustomModels([...SERVER_PROVIDERS], customModels),
+    availableProviders: withCustomProviders(
+      mergeCustomModels([...SERVER_PROVIDERS], catalogSources.customModels),
+      catalogSources.customProviders,
+    ),
     schedules,
     liveScheduleId,
     tunnels,

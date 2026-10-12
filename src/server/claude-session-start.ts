@@ -155,7 +155,7 @@ export async function startClaudeSession(args: {
   forkSession: boolean
   oauthToken: string | null
   oauthBaseUrl?: string | null
-  openrouterApiKey?: string | null
+  endpoint?: { baseUrl: string; apiKey: string } | null
   additionalDirectories?: string[]
   chatId?: string
   tunnelGateway?: TunnelGateway | null
@@ -266,7 +266,7 @@ export async function startClaudeSession(args: {
         _deps.buildClaudeEnv(
           process.env,
           args.oauthToken,
-          args.openrouterApiKey ? { apiKey: args.openrouterApiKey } : null,
+          args.endpoint ?? null,
           args.oauthBaseUrl,
         ),
         args.additionalDirectories,

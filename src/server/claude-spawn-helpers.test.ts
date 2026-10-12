@@ -146,7 +146,7 @@ describe("buildClaudeEnv", () => {
 
     expect(buildClaudeEnv(base, "token")).not.toHaveProperty("NODE_ENV")
     expect(buildClaudeEnv(base, null)).not.toHaveProperty("NODE_ENV")
-    expect(buildClaudeEnv(base, null, { apiKey: "or-key" })).not.toHaveProperty("NODE_ENV")
+    expect(buildClaudeEnv(base, null, { baseUrl: "https://openrouter.ai/api", apiKey: "or-key" })).not.toHaveProperty("NODE_ENV")
     expect(buildClaudeEnv(base, "token", null, "https://proxy.example")).not.toHaveProperty("NODE_ENV")
   })
 
@@ -175,7 +175,7 @@ describe("buildClaudeEnv", () => {
       ANTHROPIC_API_KEY: "sk-ant-existing",
       CLAUDECODE: "1",
     }
-    const result = buildClaudeEnv(base, null, { apiKey: "sk-or-key" })
+    const result = buildClaudeEnv(base, null, { baseUrl: "https://openrouter.ai/api", apiKey: "sk-or-key" })
     expect(result.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
     expect(result.ANTHROPIC_AUTH_TOKEN).toBe("sk-or-key")
     expect(result.ANTHROPIC_API_KEY).toBe("")
@@ -227,9 +227,24 @@ describe("buildClaudeEnv", () => {
 
   test("OpenRouter still owns its endpoint and ignores a token endpoint", () => {
     const result = buildClaudeEnv(
-      { PATH: "/bin" }, null, { apiKey: "sk-or-key" }, "https://proxy.example",
+      { PATH: "/bin" }, null, { baseUrl: "https://openrouter.ai/api", apiKey: "sk-or-key" }, "https://proxy.example",
     )
     expect(result.ANTHROPIC_BASE_URL).toBe("https://openrouter.ai/api")
+  })
+
+  test("a custom endpoint points the session at its own base URL with its own key and no OAuth token", () => {
+    const base: NodeJS.ProcessEnv = {
+      PATH: "/bin",
+      ANTHROPIC_API_KEY: "sk-ant-leftover",
+      CLAUDE_CODE_OAUTH_TOKEN: "oauth-leftover",
+    }
+    const result = buildClaudeEnv(
+      base, "oauth-ignored", { baseUrl: "https://api.z.ai/api/anthropic", apiKey: "glm-key" }, "https://proxy.example",
+    )
+    expect(result.ANTHROPIC_BASE_URL).toBe("https://api.z.ai/api/anthropic")
+    expect(result.ANTHROPIC_AUTH_TOKEN).toBe("glm-key")
+    expect(result.ANTHROPIC_API_KEY).toBe("")
+    expect(result).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN")
   })
 })
 

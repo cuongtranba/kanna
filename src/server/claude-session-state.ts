@@ -1,5 +1,6 @@
 import type { AgentProvider, KannaStatus, SlashCommand } from "../shared/types"
 import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
+import { ANTHROPIC_ENDPOINT_KEY, type SessionEndpointKey } from "./sdk-endpoint"
 
 export interface SessionBackgroundTask {
   taskType: string | null
@@ -62,8 +63,10 @@ export interface ClaudeSessionStateInit {
   activeTokenId: string | null
   oauthKeyMasked: string | null
   oauthLabel: string | null
-  openrouterKeyMasked: string | null
-  openrouterModel: string | null
+  endpointKeyMasked: string | null
+  endpointModel: string | null
+  endpointLabel?: string | null
+  endpointKey?: SessionEndpointKey
   lastUsedAt: number
   backgroundTasks: Map<string, SessionBackgroundTask>
   backgroundTaskDeadlineAt: number
@@ -98,8 +101,10 @@ export class ClaudeSessionState {
   activeTokenId: string | null
   oauthKeyMasked: string | null
   oauthLabel: string | null
-  openrouterKeyMasked: string | null
-  openrouterModel: string | null
+  endpointKeyMasked: string | null
+  endpointModel: string | null
+  endpointLabel: string | null
+  endpointKey: SessionEndpointKey
   lastUsedAt: number
   backgroundTasks: Map<string, SessionBackgroundTask>
   backgroundTaskDeadlineAt: number
@@ -132,8 +137,10 @@ export class ClaudeSessionState {
     this.activeTokenId = init.activeTokenId
     this.oauthKeyMasked = init.oauthKeyMasked
     this.oauthLabel = init.oauthLabel
-    this.openrouterKeyMasked = init.openrouterKeyMasked
-    this.openrouterModel = init.openrouterModel
+    this.endpointKeyMasked = init.endpointKeyMasked
+    this.endpointModel = init.endpointModel
+    this.endpointLabel = init.endpointLabel ?? null
+    this.endpointKey = init.endpointKey ?? ANTHROPIC_ENDPOINT_KEY
     this.lastUsedAt = init.lastUsedAt
     this.backgroundTasks = init.backgroundTasks
     this.backgroundTaskDeadlineAt = init.backgroundTaskDeadlineAt

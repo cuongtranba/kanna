@@ -43,6 +43,7 @@ import {
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
+  isAgentProvider,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
@@ -103,6 +104,8 @@ import {
   type UploadSettings,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
+import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput, CustomProviderPatch } from "../shared/custom-providers"
+import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
 import { isPlainObject } from "../shared/settings/plain-object"
 import type { JsonArray, JsonObject, JsonValue } from "../shared/json"
 
@@ -134,6 +137,7 @@ interface AppSettingsFile {
     claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: string }
     codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: string }
     openrouter?: Partial<ProviderPreference<Record<string, never>>>
+    custom?: Partial<ProviderPreference<Record<string, never>>>
   }
   cloudflareTunnel?: JsonObject
   push?: JsonObject
@@ -145,6 +149,7 @@ interface AppSettingsFile {
   customMcpServers?: JsonArray
   customBeacons?: JsonArray
   customModels?: JsonArray
+  customProviders?: JsonArray
   seededBuiltinModels?: JsonArray
   textSnippets?: JsonArray
   claudeDriver?: JsonObject
@@ -176,8 +181,9 @@ function isMcpTransport<T>(value: T): value is T & McpServerTransport {
   return value === "stdio" || value === "http" || value === "sse" || value === "ws"
 }
 
-interface AppSettingsState extends AppSettingsSnapshot {
+interface AppSettingsState extends Omit<AppSettingsSnapshot, "customProviders"> {
   analyticsUserId: string
+  customProviders: CustomProviderEntry[]
   seededBuiltinModels: string[]
 }
 
@@ -287,6 +293,7 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
       modelOptions: {},
       planMode: false,
     },
+    custom: { model: "", modelOptions: {}, planMode: false },
   }
 }
 
@@ -327,10 +334,7 @@ function normalizeChatSoundId<T>(value: T): ChatSoundId {
 }
 
 function normalizeDefaultProvider<T>(value: T): DefaultProviderPreference {
-  if (value === "claude") return "claude"
-  if (value === "codex") return "codex"
-  if (value === "last_used") return "last_used"
-  return "last_used"
+  return typeof value === "string" && isAgentProvider(value) ? value : "last_used"
 }
 
 function normalizeEditorPreset<T>(value: T): EditorPreset {
@@ -420,6 +424,7 @@ function normalizeProviderDefaults(
       modelOptions: {},
       planMode: Boolean(value?.openrouter?.planMode),
     },
+    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
   }
 }
 
@@ -504,18 +509,22 @@ function normalizeSubagentEntry<T>(
   if (!source) return null
   if (typeof source.id !== "string" || !source.id.trim()) return null
   if (typeof source.name !== "string") return null
-  const provider = source.provider === "claude" || source.provider === "codex" ? source.provider : null
+  const provider = typeof source.provider === "string" && isAgentProvider(source.provider) ? source.provider : null
   if (!provider) {
     warnings.push(`Subagent '${source.id}' has invalid provider; dropped`)
     return null
   }
   const rawModelOptions = isPlainObject(source.modelOptions) ? source.modelOptions : {}
-  const model = provider === "claude"
-    ? normalizeClaudeModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
-    : normalizeCodexModelId(typeof source.model === "string" ? source.model : undefined, undefined, customModels)
-  const modelOptions = provider === "claude"
-    ? normalizeClaudePreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
-    : normalizeCodexPreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
+  const rawModel = typeof source.model === "string" ? source.model : undefined
+  let model = rawModel ?? ""
+  let modelOptions: Subagent["modelOptions"] = {}
+  if (provider === "claude") {
+    model = normalizeClaudeModelId(rawModel, undefined, customModels)
+    modelOptions = normalizeClaudePreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
+  } else if (provider === "codex") {
+    model = normalizeCodexModelId(rawModel, undefined, customModels)
+    modelOptions = normalizeCodexPreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
+  }
   const contextScope: SubagentContextScope =
     source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
   const triggerMode: SubagentTriggerMode =
@@ -878,9 +887,10 @@ function toFilePayload({ warning: _warning, filePathDisplay: _filePathDisplay, .
 function toSnapshot({
   analyticsUserId: _analyticsUserId,
   seededBuiltinModels: _seededBuiltinModels,
+  customProviders,
   ...snapshot
 }: AppSettingsState): AppSettingsSnapshot {
-  return snapshot
+  return { ...snapshot, customProviders: customProviders.map(toPublicCustomProvider) }
 }
 
 function normalizeAppSettings<T>(
@@ -969,6 +979,7 @@ function normalizeAppSettings<T>(
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     customBeacons: normalizeBeacons(source?.customBeacons, warnings),
     customModels,
+    customProviders: normalizeCustomProviders(source?.customProviders, warnings),
     seededBuiltinModels,
     textSnippets,
     claudeDriver,
@@ -1488,6 +1499,8 @@ const CUSTOM_MODEL_CRUD: CollectionCrud<CustomModelEntry, CustomModelInput, Cust
   notFound: (id) => new CustomModelValidationException({ code: "NOT_FOUND", message: `custom model ${id} not found` }),
 }
 
+const CUSTOM_PROVIDER_CRUD: CollectionCrud<CustomProviderEntry, CustomProviderInput, CustomProviderPatch> = { create: createCustomProvider, update: updateCustomProvider, notFound: customProviderNotFound }
+
 const TEXT_SNIPPET_CRUD: CollectionCrud<TextSnippet, TextSnippetInput, TextSnippetPatch> = {
   create: (input, current) => validatedTextSnippet(buildTextSnippetFromInput(input), current),
   update: (existing, patch, current) => validatedTextSnippet(applyTextSnippetPatch(existing, patch), current),
@@ -1538,6 +1551,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     ?? (beaconPatch ? applyBeaconSetters(state.customBeacons, beaconPatch) : state.customBeacons)
   const nextCustomModels = applyCollectionPatch(state.customModels, patch.customModels, CUSTOM_MODEL_CRUD)
     ?? state.customModels
+  const nextCustomProviders = applyCollectionPatch(state.customProviders, patch.customProviders, CUSTOM_PROVIDER_CRUD) ?? state.customProviders
   const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD)
     ?? state.textSnippets
 
@@ -1582,6 +1596,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
         ...patch.providerDefaults?.openrouter,
         modelOptions: {},
       },
+      custom: { ...state.providerDefaults.custom, ...patch.providerDefaults?.custom, modelOptions: {} },
     },
     cloudflareTunnel: {
       ...state.cloudflareTunnel,
@@ -1611,6 +1626,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     customMcpServers: nextMcpServers,
     customBeacons: nextBeacons,
     customModels: nextCustomModels,
+    customProviders: nextCustomProviders,
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),
     remoteMcp: { ...state.remoteMcp, ...patch.remoteMcp },
@@ -1686,6 +1702,10 @@ export class AppSettingsManager {
 
   getState() {
     return this.state
+  }
+
+  getCustomProviderCredential(id: string): CustomProviderCredential | null {
+    return credentialOfCustomProvider(this.state.customProviders, id)
   }
 
   onChange(listener: (snapshot: AppSettingsSnapshot) => void) {

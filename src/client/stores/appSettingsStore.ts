@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig, TextSnippet } from "../../shared/types"
 import type { BeaconConfig } from "../../shared/beacon-config"
+import type { CustomProviderPublic } from "../../shared/custom-providers"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -61,6 +62,11 @@ export function mergeAppSettingsPatch(
         ...patch.providerDefaults?.openrouter,
         modelOptions: {},
       },
+      custom: {
+        ...settings.providerDefaults.custom,
+        ...patch.providerDefaults?.custom,
+        modelOptions: {},
+      },
     },
     cloudflareTunnel: {
       ...settings.cloudflareTunnel,
@@ -90,6 +96,7 @@ export function mergeAppSettingsPatch(
     customMcpServers: settings.customMcpServers,
     customBeacons: settings.customBeacons,
     customModels: settings.customModels,
+    customProviders: settings.customProviders,
     textSnippets: settings.textSnippets,
     plugins: {
       ...settings.plugins,
@@ -145,6 +152,11 @@ const EMPTY_CUSTOM_MODELS: readonly CustomModelEntry[] = []
 
 export const selectCustomModels = (state: AppSettingsStoreState): readonly CustomModelEntry[] =>
   state.settings?.customModels ?? EMPTY_CUSTOM_MODELS
+
+const EMPTY_CUSTOM_PROVIDERS: readonly CustomProviderPublic[] = []
+
+export const selectCustomProviders = (state: AppSettingsStoreState): readonly CustomProviderPublic[] =>
+  state.settings?.customProviders ?? EMPTY_CUSTOM_PROVIDERS
 
 const EMPTY_TEXT_SNIPPETS: readonly TextSnippet[] = []
 

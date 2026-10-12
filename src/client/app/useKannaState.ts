@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, type AgentProvider, type AppSettingsPatch, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type CloudflareTunnelSettings, type GitWorktree, type KeybindingsSnapshot, type LocalProjectsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type SidebarChatRow, type SidebarData, type StackSummary, type TranscriptEntry, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, isEndpointProvider, type AgentProvider, type AppSettingsPatch, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type CloudflareTunnelSettings, type GitWorktree, type KeybindingsSnapshot, type LocalProjectsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type SidebarChatRow, type SidebarData, type StackSummary, type TranscriptEntry, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { DEFAULT_EDITOR_PRESET, getEditorPresetLabel } from "../stores/terminalPreferencesStore"
-import { useAppSettingsStore } from "../stores/appSettingsStore"
+import { selectCustomProviders, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useChatInputStore } from "../stores/chatInputStore"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
 import type { ChatSnapshot, CloudflareTunnelRecord, ProjectCommandsSnapshot } from "../../shared/types"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
+import { withCustomProviders } from "../../shared/custom-providers"
 import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { processTranscriptMessages } from "../lib/parseTranscript"
@@ -454,6 +455,15 @@ function composerStateFromSendOptions(options?: {
     }
   }
 
+  if (options?.provider && isEndpointProvider(options.provider) && options.model) {
+    return {
+      provider: options.provider,
+      model: options.model,
+      modelOptions: {},
+      planMode: Boolean(options.planMode),
+    }
+  }
+
   return null
 }
 
@@ -696,7 +706,9 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     ? "starting"
     : null
   const effectiveRuntimeStatus = optimisticRuntimeStatus ?? runtime?.status ?? null
-  const baseAvailableProviders = activeChatSnapshot?.availableProviders ?? PROVIDERS
+  const customProviders = useAppSettingsStore(selectCustomProviders)
+  const fallbackProviders = useMemo(() => withCustomProviders([...PROVIDERS], customProviders), [customProviders])
+  const baseAvailableProviders = activeChatSnapshot?.availableProviders ?? fallbackProviders
   const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
   const availableProviders = useMemo(
     () => mergeOpenRouterModels(baseAvailableProviders, openrouterModels),

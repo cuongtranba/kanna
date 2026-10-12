@@ -14,6 +14,7 @@ code:
   - src/server/beacon-crypto.ts
   - src/server/beacon-crypto.test.ts
   - src/server/beacon-settings.ts
+  - src/server/custom-providers-settings.ts
   - src/server/beacon-settings.test.ts
   - src/server/beacon-pairing.ts
   - src/server/beacon-pairing.test.ts

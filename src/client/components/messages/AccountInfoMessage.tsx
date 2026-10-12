@@ -13,6 +13,7 @@ const TOKEN_SOURCE_LABEL: Record<string, string> = {
   "claude-pro": "Claude Pro",
   "claude-max": "Claude Max",
   openrouter: "OpenRouter",
+  custom: "Custom endpoint",
 }
 
 function describeSource(tokenSource?: string, apiKeySource?: string): string | null {

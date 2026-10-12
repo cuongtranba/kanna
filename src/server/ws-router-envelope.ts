@@ -4,7 +4,7 @@ import { PROTOCOL_VERSION } from "../shared/types"
 import type { ChatSnapshot } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
-import { deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { catalogSourcesOf, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
 import { deriveCronJobs } from "./cron/read-model"
 import type { CronJobsGlobalRow } from "../shared/cron/types"
 import { localCommandsForCwd } from "./claude-slash-commands"
@@ -187,7 +187,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getWaitStartedAtByChatId(),
       Date.now(),
       agent.getClaudeSessionStates?.() ?? new Map(),
-      resolvedAppSettings.getSnapshot().customModels ?? [],
+      catalogSourcesOf(resolvedAppSettings.getSnapshot()),
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
     )
   }
@@ -463,7 +463,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       agent.getWaitStartedAtByChatId(),
       Date.now(),
       agent.getClaudeSessionStates?.() ?? new Map(),
-      resolvedAppSettings.getSnapshot().customModels ?? [],
+      catalogSourcesOf(resolvedAppSettings.getSnapshot()),
       agent.getBackgroundTasksByChatId?.() ?? new Map(),
     )
     return {

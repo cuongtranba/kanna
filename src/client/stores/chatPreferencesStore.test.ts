@@ -85,6 +85,11 @@ describe("migrateChatPreferencesState", () => {
           modelOptions: {},
           planMode: false,
         },
+        custom: {
+          model: "",
+          modelOptions: {},
+          planMode: false,
+        },
       },
       chatStates: {},
       legacyComposerState: {
@@ -429,6 +434,7 @@ describe("chat preference store", () => {
       },
       codex: { ...INITIAL_STATE.providerDefaults.codex },
       openrouter: { ...INITIAL_STATE.providerDefaults.openrouter },
+      custom: { ...INITIAL_STATE.providerDefaults.custom },
     })
 
     expect(useChatPreferencesStore.getState().getComposerState(NEW_CHAT_COMPOSER_ID)).toEqual({
@@ -635,5 +641,50 @@ describe("initializeComposerForChat — provider sync (issue #65)", () => {
 
     store.initializeComposerForChat("chat-b", { providerHint: "codex" })
     expect(store.getComposerState("chat-b").provider).toBe("codex")
+  })
+  test("a custom endpoint composer keeps the chosen model instead of falling back to codex", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.initializeComposerForChat("chat-custom", { providerHint: "custom" })
+    store.setChatComposerModel("chat-custom", "glm/glm-5.3")
+    store.setChatComposerModelOptions("chat-custom", { reasoningEffort: "max" })
+    store.setChatComposerPlanMode("chat-custom", true)
+
+    expect(store.getComposerState("chat-custom")).toEqual({
+      provider: "custom",
+      model: "glm/glm-5.3",
+      modelOptions: {},
+      planMode: true,
+    })
+  })
+
+  test("a persisted custom composer survives migration with its provider and model", () => {
+    const migrated = migrateChatPreferencesState({
+      chatStates: { "chat-custom": { provider: "custom", model: "kimi/kimi-k3", planMode: false } },
+    })
+
+    expect(migrated.chatStates["chat-custom"]).toEqual({
+      provider: "custom",
+      model: "kimi/kimi-k3",
+      modelOptions: {},
+      planMode: false,
+    })
+  })
+
+  test("custom provider defaults are saved per provider and used by new custom composers", () => {
+    const store = useChatPreferencesStore.getState()
+
+    store.setProviderDefaultModel("custom", "qwen/qwen3.7-plus")
+    store.setChatComposerProvider("chat-new", "custom")
+
+    expect(useChatPreferencesStore.getState().getComposerState("chat-new")).toEqual({
+      provider: "custom",
+      model: "qwen/qwen3.7-plus",
+      modelOptions: {},
+      planMode: false,
+    })
+    expect(useChatPreferencesStore.getState().providerDefaults.codex.model).toBe(
+      INITIAL_STATE.providerDefaults.codex.model,
+    )
   })
 })

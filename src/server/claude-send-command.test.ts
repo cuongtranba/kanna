@@ -60,8 +60,8 @@ function makeTestSession(overrides: Partial<ConstructorParameters<typeof ClaudeS
     activeTokenId: null,
     oauthKeyMasked: null,
     oauthLabel: null,
-    openrouterKeyMasked: null,
-    openrouterModel: null,
+    endpointKeyMasked: null,
+    endpointModel: null,
     lastUsedAt: 0,
     backgroundTasks: new Map(),
     backgroundTaskDeadlineAt: 0,
@@ -246,6 +246,27 @@ describe("getProviderSettings", () => {
     const settings = getProviderSettings("openrouter", { model: "   " }, [])
     expect(typeof settings.model).toBe("string")
     expect(settings.model.length).toBeGreaterThan(0)
+  })
+
+  test("custom provider keeps a configured endpoint model and falls back to the first configured one otherwise", () => {
+    const providers = [{
+      id: "glm",
+      label: "GLM",
+      baseUrl: "https://api.z.ai/api/anthropic",
+      apiKeyHint: null,
+      models: [{ id: "glm-5.3", label: "" }, { id: "glm-5.3-flash", label: "" }],
+      createdAt: 0,
+      updatedAt: 0,
+    }]
+
+    expect(getProviderSettings("custom", { model: "glm/glm-5.3-flash" }, [], providers).model).toBe("glm/glm-5.3-flash")
+    expect(getProviderSettings("custom", { model: "kimi/kimi-k3" }, [], providers).model).toBe("glm/glm-5.3")
+    expect(getProviderSettings("custom", {}, [], providers).model).toBe("glm/glm-5.3")
+  })
+
+  test("custom provider refuses to start a turn when no endpoint is configured", () => {
+    expect(() => getProviderSettings("custom", { model: "glm/glm-5.3" }, [], []))
+      .toThrow("No custom endpoint is configured")
   })
 
   test("codex provider returns a model string", () => {
@@ -994,6 +1015,7 @@ describe("model resolution for server-originated turns", () => {
     claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
     codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
     openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
+    custom: { model: "", modelOptions: {}, planMode: false },
   }
 
   test("a cron turn runs the chat's model instead of the catalog default", async () => {

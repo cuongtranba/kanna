@@ -8,6 +8,7 @@ import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn } from "./claude-session-state"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type { LlmProviderSnapshot } from "../shared/types"
+import type { CustomProviderCredential } from "../shared/custom-providers"
 
 
 function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSessionHandle {
@@ -23,6 +24,11 @@ function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSes
     pushChannelPrompt: undefined,
     ...overrides,
   }
+}
+
+const CUSTOM_CREDENTIALS: Record<string, CustomProviderCredential> = {
+  glm: { label: "GLM (Z.AI)", baseUrl: "https://api.z.ai/api/anthropic", apiKey: "glm-key-1234" },
+  kimi: { label: "Kimi (Moonshot)", baseUrl: "https://api.moonshot.ai/anthropic", apiKey: "kimi-key-5678" },
 }
 
 function makeOpenRouterProvider(apiKey = "or-key"): LlmProviderSnapshot {
@@ -55,8 +61,8 @@ function makeSession(overrides: Partial<ConstructorParameters<typeof ClaudeSessi
     activeTokenId: null,
     oauthKeyMasked: null,
     oauthLabel: null,
-    openrouterKeyMasked: null,
-    openrouterModel: null,
+    endpointKeyMasked: null,
+    endpointModel: null,
     lastUsedAt: 0,
     backgroundTasks: new Map(),
     selfWakeActive: false,
@@ -109,6 +115,7 @@ function makeDeps(overrides: Partial<SpawnClaudeTurnDeps> = {}): SpawnClaudeTurn
     closeClaudeSession: () => {},
     enforceClaudeSessionBudget: () => {},
     readLlmProvider: async () => { throw new Error("readLlmProvider called unexpectedly") },
+    getCustomProviderCredential: (id) => CUSTOM_CREDENTIALS[id] ?? null,
     buildPoolUnavailableMessage: () => "pool unavailable",
     listOpenRouterModelsFn: null,
     getSubagents: () => [],
@@ -147,15 +154,67 @@ describe("spawnClaudeTurn", () => {
     })
 
     test("starts an openrouter session through the SDK with the stored API key", async () => {
-      let forwardedKey: string | null | undefined
+      let forwarded: { baseUrl: string; apiKey: string } | null | undefined
       const deps = makeDeps({
-        startClaudeSessionFn: async (a) => { forwardedKey = a.openrouterApiKey; return makeFakeHandle() },
+        startClaudeSessionFn: async (a) => { forwarded = a.endpoint; return makeFakeHandle() },
         readLlmProvider: async () => makeOpenRouterProvider("or-key"),
       })
 
-      await spawnClaudeTurn(deps, makeArgs({ provider: "openrouter" }))
+      await spawnClaudeTurn(deps, makeArgs({ provider: "openrouter", model: "moonshotai/kimi-k2.5" }))
 
-      expect(forwardedKey).toBe("or-key")
+      expect(forwarded).toEqual({ baseUrl: "https://openrouter.ai/api", apiKey: "or-key" })
+      expect(deps.claudeSessions.get("chat-1")?.endpointKey).toBe("openrouter")
+    })
+
+    test("starts a custom endpoint session on the SDK with the vendor model, the endpoint credentials and no OAuth token", async () => {
+      let started: { model: string; endpoint: { baseUrl: string; apiKey: string } | null | undefined; oauthToken: string | null } | undefined
+      let poolAsked = false
+      const deps = makeDeps({
+        oauthPool: {
+          pickActive: () => { poolAsked = true; return { id: "t1", token: "oauth", label: "pool" } },
+          hasAnyToken: () => true,
+          markUsed: () => {},
+          release: () => {},
+        },
+        startClaudeSessionFn: async (a) => {
+          started = { model: a.model, endpoint: a.endpoint, oauthToken: a.oauthToken }
+          return makeFakeHandle()
+        },
+      })
+
+      await spawnClaudeTurn(deps, makeArgs({ provider: "custom", model: "glm/glm-5.3" }))
+
+      expect(started).toEqual({
+        model: "glm-5.3",
+        endpoint: { baseUrl: "https://api.z.ai/api/anthropic", apiKey: "glm-key-1234" },
+        oauthToken: null,
+      })
+      expect(poolAsked).toBe(false)
+      const session = deps.claudeSessions.get("chat-1")
+      expect(session?.model).toBe("glm/glm-5.3")
+      expect(session?.endpointKey).toBe("custom:glm")
+      expect(session?.endpointLabel).toBe("GLM (Z.AI)")
+    })
+
+    test("a vendor model id containing a slash reaches the SDK intact", async () => {
+      let model: string | undefined
+      const deps = makeDeps({ startClaudeSessionFn: async (a) => { model = a.model; return makeFakeHandle() } })
+
+      await spawnClaudeTurn(deps, makeArgs({ provider: "custom", model: "glm/acme/glm-5.3:fast" }))
+
+      expect(model).toBe("acme/glm-5.3:fast")
+    })
+
+    test("refuses a custom model that is not qualified with its provider", async () => {
+      await expect(spawnClaudeTurn(makeDeps(), makeArgs({ provider: "custom", model: "glm-5.3" })))
+        .rejects.toThrow("is not a custom endpoint model")
+    })
+
+    test("refuses a custom model whose provider was removed, naming it", async () => {
+      const deps = makeDeps({ getCustomProviderCredential: () => null })
+
+      await expect(spawnClaudeTurn(deps, makeArgs({ provider: "custom", model: "glm/glm-5.3" })))
+        .rejects.toThrow("Custom provider 'glm' was removed — pick another model")
     })
 
     test("fires runClaudeSession in fire-and-forget manner", async () => {
@@ -211,6 +270,48 @@ describe("spawnClaudeTurn", () => {
 
       expect(modelSet).toBe("claude-sonnet-4")
       expect(existingSession.model).toBe("claude-sonnet-4")
+    })
+
+    test("switches model in place on the same custom endpoint, sending the vendor model", async () => {
+      let modelSet: string | undefined
+      const deps = makeDeps()
+      const existingSession = makeSession({
+        session: makeFakeHandle({ setModel: async (model) => { modelSet = model } }),
+        model: "glm/glm-5.3",
+        endpointKey: "custom:glm",
+      })
+      deps.claudeSessions.set("chat-1", existingSession)
+
+      await spawnClaudeTurn(deps, makeArgs({ provider: "custom", model: "glm/glm-5.3-flash" }))
+
+      expect(modelSet).toBe("glm-5.3-flash")
+      expect(existingSession.model).toBe("glm/glm-5.3-flash")
+    })
+
+    test("respawns instead of switching model when the new model belongs to another custom endpoint", async () => {
+      let closedSession: ClaudeSessionState | undefined
+      let modelSet = false
+      let started: { model: string; baseUrl: string | undefined } | undefined
+      const deps = makeDeps({
+        closeClaudeSession: (_, session) => { closedSession = session },
+        startClaudeSessionFn: async (a) => {
+          started = { model: a.model, baseUrl: a.endpoint?.baseUrl }
+          return makeFakeHandle()
+        },
+      })
+      const existingSession = makeSession({
+        session: makeFakeHandle({ setModel: async () => { modelSet = true } }),
+        model: "glm/glm-5.3",
+        endpointKey: "custom:glm",
+      })
+      deps.claudeSessions.set("chat-1", existingSession)
+
+      await spawnClaudeTurn(deps, makeArgs({ provider: "custom", model: "kimi/kimi-k3" }))
+
+      expect(closedSession).toBe(existingSession)
+      expect(modelSet).toBe(false)
+      expect(started).toEqual({ model: "kimi-k3", baseUrl: "https://api.moonshot.ai/anthropic" })
+      expect(deps.claudeSessions.get("chat-1")?.endpointKey).toBe("custom:kimi")
     })
 
     test("calls setPermissionMode on reuse when planMode changes", async () => {

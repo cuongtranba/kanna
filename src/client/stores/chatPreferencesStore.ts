@@ -18,6 +18,7 @@ import {
   type DefaultProviderPreference,
   type ProviderPreference,
   type ProviderModelOptionsByProvider,
+  isEndpointProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
 import { claudeOptionsPatch, codexOptionsPatch, normalizeDefaultProvider } from "./providerOptionsPatch"
@@ -44,7 +45,7 @@ export type ComposerState =
     planMode: boolean
   }
   | {
-    provider: "openrouter"
+    provider: "openrouter" | "custom"
     model: string
     modelOptions: Record<string, never>
     planMode: boolean
@@ -68,6 +69,11 @@ type LegacyPersistedChatPreferencesState = Partial<{
       planMode?: boolean
     }
     openrouter?: {
+      model?: string
+      modelOptions?: Record<string, never>
+      planMode?: boolean
+    }
+    custom?: {
       model?: string
       modelOptions?: Record<string, never>
       planMode?: boolean
@@ -112,7 +118,7 @@ type PersistedComposerState =
     planMode?: boolean
   }
   | {
-    provider: "openrouter"
+    provider: "openrouter" | "custom"
     model?: string
     modelOptions?: Record<string, never>
     planMode?: boolean
@@ -229,6 +235,7 @@ export function createDefaultProviderDefaults(): ChatProviderPreferences {
       modelOptions: {},
       planMode: false,
     },
+    custom: { model: "", modelOptions: {}, planMode: false },
   }
 }
 
@@ -250,6 +257,7 @@ export function normalizeProviderDefaults(value?: {
     modelOptions?: Record<string, never>
     planMode?: boolean
   }
+  custom?: { model?: string; modelOptions?: Record<string, never>; planMode?: boolean }
 }): ChatProviderPreferences {
   return {
     claude: normalizeClaudePreference(value?.claude),
@@ -259,6 +267,7 @@ export function normalizeProviderDefaults(value?: {
       modelOptions: {},
       planMode: Boolean(value?.openrouter?.planMode),
     },
+    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
   }
 }
 
@@ -285,12 +294,12 @@ function composerFromProviderDefaults(
     }
   }
 
-  if (provider === "openrouter") {
-    const preference = providerDefaults.openrouter
+  if (isEndpointProvider(provider)) {
+    const preference = providerDefaults[provider]
     return {
-      provider: "openrouter",
+      provider,
       model: preference.model,
-      modelOptions: { ...preference.modelOptions },
+      modelOptions: {},
       planMode: preference.planMode,
     }
   }
@@ -313,18 +322,18 @@ function cloneComposerState(state: ComposerState): ComposerState {
       planMode: state.planMode,
     }
   }
-  if (state.provider === "openrouter") {
+  if (state.provider === "codex") {
     return {
-      provider: "openrouter",
+      provider: "codex",
       model: state.model,
       modelOptions: { ...state.modelOptions },
       planMode: state.planMode,
     }
   }
   return {
-    provider: "codex",
+    provider: state.provider,
     model: state.model,
-    modelOptions: { ...state.modelOptions },
+    modelOptions: {},
     planMode: state.planMode,
   }
 }
@@ -355,10 +364,10 @@ function normalizeComposerState(
     }
   }
 
-  if (value?.provider === "openrouter") {
+  if (value && isEndpointProvider(value.provider)) {
     return {
-      provider: "openrouter",
-      model: value.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
+      provider: value.provider,
+      model: value.model ?? providerDefaults[value.provider].model,
       modelOptions: {},
       planMode: Boolean(value.planMode),
     }
@@ -559,11 +568,11 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               },
             }
           }
-          if (provider === "openrouter") {
+          if (isEndpointProvider(provider)) {
             return {
               providerDefaults: {
                 ...state.providerDefaults,
-                [provider]: { ...state.providerDefaults.openrouter, model },
+                [provider]: { ...state.providerDefaults[provider], model },
               },
             }
           }
@@ -592,11 +601,11 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               },
             }
           }
-          if (provider === "openrouter") {
+          if (isEndpointProvider(provider)) {
             return {
               providerDefaults: {
                 ...state.providerDefaults,
-                [provider]: { ...state.providerDefaults.openrouter, modelOptions: {} },
+                [provider]: { ...state.providerDefaults[provider], modelOptions: {} },
               },
             }
           }
@@ -702,21 +711,21 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               planMode: composerState.planMode,
             }
           }
-          if (composerState.provider === "openrouter") {
+          if (composerState.provider === "codex") {
             return {
-              provider: "openrouter",
+              provider: "codex",
               model,
-              modelOptions: {},
+              modelOptions: normalizeCodexPreference({
+                ...composerState,
+                model,
+              }, customModels).modelOptions,
               planMode: composerState.planMode,
             }
           }
           return {
-            provider: "codex",
+            provider: composerState.provider,
             model,
-            modelOptions: normalizeCodexPreference({
-              ...composerState,
-              model,
-            }, customModels).modelOptions,
+            modelOptions: {},
             planMode: composerState.planMode,
           }
         })),
@@ -738,25 +747,25 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               planMode: composerState.planMode,
             }
           }
-          if (composerState.provider === "openrouter") {
+          if (composerState.provider === "codex") {
+            const codexOptions = codexOptionsPatch(modelOptions)
             return {
-              provider: "openrouter",
+              provider: "codex",
               model: composerState.model,
-              modelOptions: {},
+              modelOptions: normalizeCodexPreference({
+                ...composerState,
+                modelOptions: {
+                  ...composerState.modelOptions,
+                  ...codexOptions,
+                },
+              }, customModels).modelOptions,
               planMode: composerState.planMode,
             }
           }
-          const codexOptions = codexOptionsPatch(modelOptions)
           return {
-            provider: "codex",
+            provider: composerState.provider,
             model: composerState.model,
-            modelOptions: normalizeCodexPreference({
-              ...composerState,
-              modelOptions: {
-                ...composerState.modelOptions,
-                ...codexOptions,
-              },
-            }, customModels).modelOptions,
+            modelOptions: {},
             planMode: composerState.planMode,
           }
         })),

@@ -21,6 +21,11 @@ export function providerDefaultSelection(
     if (!preference?.model) return {}
     return { model: preference.model, modelOptions: { codex: preference.modelOptions } }
   }
+  if (provider === "custom") {
+    const preference = preferences.custom
+    if (!preference?.model) return {}
+    return { model: preference.model, modelOptions: { custom: preference.modelOptions } }
+  }
   const preference = preferences.openrouter
   if (!preference?.model) return {}
   return { model: preference.model, modelOptions: { openrouter: preference.modelOptions } }

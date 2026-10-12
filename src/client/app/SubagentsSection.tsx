@@ -24,6 +24,7 @@ import {
   getProviderCatalog,
   isClaudeContextWindow,
   isClaudeReasoningEffort,
+  isEndpointProvider,
   isCodexReasoningEffort,
   isAgentProvider,
   isSubagentContextScope,
@@ -46,6 +47,7 @@ import {
   type SubagentValidationErrorCode,
 } from "../../shared/types"
 import { isRecord } from "../../shared/errors"
+import { withCustomProviders } from "../../shared/custom-providers"
 import type { SubagentCommandResult } from "../../shared/protocol"
 import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
@@ -235,6 +237,11 @@ const PROVIDER_OPTIONS = [
   { value: "openrouter" as const, label: "OpenRouter" },
 ]
 
+const PROVIDER_OPTIONS_WITH_CUSTOM = [
+  ...PROVIDER_OPTIONS,
+  { value: "custom" as const, label: "Custom endpoints" },
+]
+
 function mergeOpenRouterModelsIntoProviders(
   providers: ProviderCatalogEntry[],
   models: OpenRouterModel[],
@@ -273,6 +280,8 @@ function SubagentForm(props: SubagentFormProps) {
   }, [])
 
   const { draft, error, pending, confirmDelete } = form
+  const offersCustom = draft.provider === "custom" || props.availableProviders.some((entry) => entry.id === "custom")
+  const providerOptions = offersCustom ? PROVIDER_OPTIONS_WITH_CUSTOM : PROVIDER_OPTIONS
 
   const nameError = error?.field === "name" ? error.message : null
   const generalError = error?.field === "general" ? error.message : null
@@ -398,7 +407,7 @@ function SubagentForm(props: SubagentFormProps) {
         <SegmentedControl
           value={draft.provider}
           onValueChange={(value) => { if (isAgentProvider(value)) handleProviderChange(value) }}
-          options={PROVIDER_OPTIONS}
+          options={providerOptions}
           size="sm"
         />
       </FormRow>
@@ -542,7 +551,7 @@ function SubagentForm(props: SubagentFormProps) {
 }
 
 import type { KannaState } from "./useKannaState"
-import { useAppSettingsStore, selectCustomModels } from "../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomModels, selectCustomProviders } from "../stores/appSettingsStore"
 
 const EMPTY_SUBAGENTS: Subagent[] = []
 
@@ -562,6 +571,11 @@ const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
     modelOptions: {},
     planMode: false,
   },
+  custom: {
+    model: "",
+    modelOptions: {},
+    planMode: false,
+  },
 }
 
 export function SubagentsSettingsBranch(props: {
@@ -574,10 +588,14 @@ export function SubagentsSettingsBranch(props: {
     (store) => store.settings?.providerDefaults ?? FALLBACK_PROVIDER_PREFS,
   )
   const customModels = useAppSettingsStore(selectCustomModels)
+  const customProviders = useAppSettingsStore(selectCustomProviders)
   const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
   const availableProviders = useMemo(
-    () => mergeOpenRouterModelsIntoProviders(mergeCustomModels([...PROVIDERS], customModels), openrouterModels),
-    [customModels, openrouterModels],
+    () => mergeOpenRouterModelsIntoProviders(
+      withCustomProviders(mergeCustomModels([...PROVIDERS], customModels), customProviders),
+      openrouterModels,
+    ),
+    [customModels, customProviders, openrouterModels],
   )
 
   const editing = useSubagentsSectionStore((state) => state.editing)
@@ -780,12 +798,12 @@ export function createDefaultSubagentDraft(
       triggerMode: "auto",
     }
   }
-  if (provider === "openrouter") {
-    const preference = providerDefaults?.openrouter
+  if (isEndpointProvider(provider)) {
+    const preference = providerDefaults?.[provider]
     const model =
       preference?.model
-      ?? availableProviders?.find((entry) => entry.id === "openrouter")?.defaultModel
-      ?? getProviderCatalog("openrouter").defaultModel
+      || availableProviders?.find((entry) => entry.id === provider)?.defaultModel
+      || getProviderCatalog(provider).defaultModel
     return {
       name: "",
       provider,

@@ -276,6 +276,7 @@ export class AgentCoordinator {
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly skillAccess: LocalSkillAccess
   readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
+  readonly getCustomProviderCredential: (id: string) => import("../shared/custom-providers").CustomProviderCredential | null
   readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
   readonly persistOAuthStateFn: ((id: string, oauth: McpOAuthState) => void) | null
   readonly subagentPendingResolvers = new Map<
@@ -353,6 +354,7 @@ export class AgentCoordinator {
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
+    this.getCustomProviderCredential = args.getCustomProviderCredential ?? (() => null)
     this.listOpenRouterModelsFn = args.listOpenRouterModels ?? null
     this.persistOAuthStateFn = args.persistOAuthState ?? null
     this.subagentOrchestrator = new SubagentOrchestrator({
@@ -723,6 +725,7 @@ export class AgentCoordinator {
         this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       readLlmProvider: () => this.readLlmProvider(),
+      getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
       subagentPendingKey: (chatId, runId, toolUseId) =>
         this.subagentPendingKey(chatId, runId, toolUseId),
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
@@ -1008,6 +1011,7 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       enforceClaudeSessionBudget: (protectedChatId?) => this.enforceClaudeSessionBudget(protectedChatId),
       readLlmProvider: () => this.readLlmProvider(),
+      getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
       buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
         this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
       listOpenRouterModelsFn: this.listOpenRouterModelsFn,

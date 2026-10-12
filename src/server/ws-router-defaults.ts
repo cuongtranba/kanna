@@ -132,6 +132,11 @@ export function mergeAppSettingsPatch(
         ...patch.providerDefaults?.openrouter,
         modelOptions: {},
       },
+      custom: {
+        ...snapshot.providerDefaults.custom,
+        ...patch.providerDefaults?.custom,
+        modelOptions: {},
+      },
     },
     cloudflareTunnel: {
       ...snapshot.cloudflareTunnel,
@@ -161,6 +166,7 @@ export function mergeAppSettingsPatch(
     customMcpServers: snapshot.customMcpServers,
     customBeacons: snapshot.customBeacons,
     customModels: snapshot.customModels,
+    customProviders: snapshot.customProviders,
     textSnippets: snapshot.textSnippets,
     plugins: {
       ...snapshot.plugins,
@@ -233,6 +239,11 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
         modelOptions: {},
         planMode: false,
       },
+      custom: {
+        model: "",
+        modelOptions: {},
+        planMode: false,
+      },
     },
     warning: null,
     filePathDisplay: "~/.kanna/data/settings.json",
@@ -246,6 +257,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     customMcpServers: [],
     customBeacons: [],
     customModels: [],
+    customProviders: [],
     textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",

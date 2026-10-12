@@ -65,7 +65,7 @@ export interface AgentCoordinatorArgs {
     tunnelGateway?: TunnelGateway | null
     onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
     systemPromptAppend?: string
-    openrouterApiKey?: string | null
+    endpoint?: { baseUrl: string; apiKey: string } | null
     subagentOrchestrator?: SubagentOrchestrator
     delegationContext?: KannaMcpDelegationContext
     systemPromptOverride?: string
@@ -103,6 +103,7 @@ export interface AgentCoordinatorArgs {
   getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
+  getCustomProviderCredential?: (id: string) => import("../shared/custom-providers").CustomProviderCredential | null
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
   localCatalog?: import("./local-catalog").LocalCatalogService
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
