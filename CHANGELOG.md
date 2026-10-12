@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.75.0](https://github.com/cuongtranba/kanna/compare/v1.74.1...v1.75.0) (2026-10-12)
+
+
+### Features
+
+* **providers:** custom Anthropic-compatible endpoints — GLM, Qwen, Kimi, DeepSeek, MiniMax, local Ollama ([#1261](https://github.com/cuongtranba/kanna/issues/1261)) ([7559879](https://github.com/cuongtranba/kanna/commit/75598791855b4a79bbd38933e838e14a381be256))
+
 ## [1.74.1](https://github.com/cuongtranba/kanna/compare/v1.74.0...v1.74.1) (2026-10-12)
 
 
