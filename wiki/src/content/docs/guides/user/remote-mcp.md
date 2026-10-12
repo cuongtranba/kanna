@@ -68,10 +68,19 @@ OAuth. The URL must be https and reachable from the internet.
 
 ### ChatGPT
 
-Turn on developer mode, then **Settings → Apps / Connectors → Create**. Enter the
-URL `https://kanna.example.com/mcp` and choose **OAuth** as the authentication.
-ChatGPT supports OAuth only. The URL must be https and reachable from the
-internet.
+Open [ChatGPT Plugins](https://chatgpt.com/plugins), select the plus button, then
+**Add custom MCP server**. Choose **Server URL**, enter
+`https://kanna.example.com/mcp`, and choose **OAuth** as the authentication;
+the default **Advanced OAuth settings** work as they are. ChatGPT supports OAuth
+only. The URL must be https and reachable from the internet, and **Public URL**
+in Settings must be set to that same address. Custom MCP servers are limited by
+ChatGPT plan; see OpenAI's
+[Connect to ChatGPT](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+guide.
+
+ChatGPT speaks MCP protocol revision `2026-07-28`, which Kanna 1.74 and later
+serve. An older Kanna answers its first request with `400` and ChatGPT reports
+"Some app settings were rejected".
 
 ## How sign-in works
 
@@ -128,8 +137,9 @@ secret — API keys, tokens, passwords, environment and header values.
   address; a client-supplied address header is ignored.
 - **Fail closed.** No password, or the setting off, means `404` — never a
   half-open endpoint.
-- **Sessions.** MCP sessions are kept in memory, close after an hour of silence,
-  and at most 64 live at once. Restarting Kanna ends them; clients reconnect.
+- **No MCP sessions.** `/mcp` serves protocol revision `2026-07-28` and the
+  2025 revisions statelessly: every request is authorized on its own, Kanna keeps
+  no per-client MCP state, and restarting Kanna interrupts only requests in flight.
 - **To disable it**, switch **Remote MCP server** off in Settings, or start Kanna
   without `--password`.
 - See [Security & sandboxing](/features/security-sandboxing/) for how the password

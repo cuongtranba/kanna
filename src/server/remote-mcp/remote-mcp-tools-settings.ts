@@ -1,4 +1,5 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
+import { z } from "zod"
 import { jsonObjectSchema } from "../../shared/genui/json-schema"
 import { isJsonObject, type JsonValue } from "../../shared/json"
 import type { AppSettingsPatch } from "../../shared/app-settings-types"
@@ -30,7 +31,7 @@ export function registerSettingsTools(server: McpServer, host: RemoteMcpHost): v
     {
       title: "Patch app settings",
       description: "Apply a partial update to Kanna's application settings, for example {\"remoteMcp\":{\"enabled\":false}}. The server validates the patch; the updated settings are returned with secrets redacted.",
-      inputSchema: { patch: jsonObjectSchema.describe("A partial AppSettingsPatch object") },
+      inputSchema: z.object({ patch: jsonObjectSchema.describe("A partial AppSettingsPatch object") }),
     },
     async ({ patch }) => {
       if (!isSettingsPatchShape(patch)) return fail("The patch must be an object.")

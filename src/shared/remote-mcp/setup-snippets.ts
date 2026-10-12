@@ -64,7 +64,7 @@ export function buildRemoteMcpSetupSnippets({ publicOrigin, passwordConfigured }
       id: "chatgpt",
       client: "chatgpt",
       title: "ChatGPT",
-      instructions: `${prefix}Turn on developer mode, open Settings, Apps and Connectors, Create, enter the URL and choose OAuth as the authentication. ${PUBLIC_HTTPS_NOTE}`,
+      instructions: `${prefix}Open chatgpt.com/plugins, select the plus button, then Add custom MCP server; enter the URL and choose OAuth as the authentication. ${PUBLIC_HTTPS_NOTE}`,
       snippet: [`URL: ${endpoint}`, "Authentication: OAuth"].join("\n"),
     },
   ]

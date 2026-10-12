@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import type { RemoteMcpHost } from "./remote-mcp-server"
@@ -12,7 +12,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     {
       title: "Git status",
       description: "Refresh and read the git state of a chat's working directory: branch, ahead/behind counts and changed files.",
-      inputSchema: { chatId: chatIdField },
+      inputSchema: z.object({ chatId: chatIdField }),
       annotations: { readOnlyHint: true },
     },
     async ({ chatId }) => {
@@ -44,13 +44,13 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     {
       title: "Commit changes",
       description: "Commit the given changed files of a chat's repository. Mode commit_and_push also pushes the branch.",
-      inputSchema: {
+      inputSchema: z.object({
         chatId: chatIdField,
         paths: z.array(z.string()).min(1).describe("Repository-relative paths of the files to commit"),
         summary: z.string().describe("Commit subject line"),
         description: z.string().optional().describe("Commit body"),
         mode: z.enum(["commit_only", "commit_and_push"]).optional().describe("commit_only (default) or commit_and_push"),
-      },
+      }),
     },
     ({ chatId, paths, summary, description, mode }) =>
       commandResult(host, { type: "chat.commitDiffs", chatId, paths, summary, description, mode: mode ?? "commit_only" }),
@@ -61,7 +61,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     {
       title: "List branches",
       description: "List the local, remote and pull-request branches of a chat's repository and the current branch.",
-      inputSchema: { chatId: chatIdField },
+      inputSchema: z.object({ chatId: chatIdField }),
       annotations: { readOnlyHint: true },
     },
     ({ chatId }) => commandResult(host, { type: "chat.listBranches", chatId }),
@@ -72,11 +72,11 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     {
       title: "Check out a branch",
       description: "Switch a chat's repository to a local branch, optionally carrying uncommitted changes along.",
-      inputSchema: {
+      inputSchema: z.object({
         chatId: chatIdField,
         name: z.string().describe("Name of the local branch"),
         bringChanges: z.boolean().optional().describe("Carry uncommitted changes to the branch"),
-      },
+      }),
     },
     ({ chatId, name, bringChanges }) =>
       commandResult(host, { type: "chat.checkoutBranch", chatId, branch: { kind: "local", name }, bringChanges }),
@@ -87,10 +87,10 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     {
       title: "Sync a branch",
       description: "Fetch, pull, push or publish the current branch of a chat's repository.",
-      inputSchema: {
+      inputSchema: z.object({
         chatId: chatIdField,
         action: z.enum(["fetch", "pull", "push", "publish"]).describe("Which sync to perform"),
-      },
+      }),
     },
     ({ chatId, action }) => commandResult(host, { type: "chat.syncBranch", chatId, action }),
   )

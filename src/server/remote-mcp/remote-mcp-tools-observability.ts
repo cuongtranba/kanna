@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -12,7 +12,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     {
       title: "List workflow runs",
       description: "List the workflow runs of a chat with their status.",
-      inputSchema: { chatId: chatIdField },
+      inputSchema: z.object({ chatId: chatIdField }),
       annotations: { readOnlyHint: true },
     },
     ({ chatId }) => envelopeToToolResult(host.readSnapshot({ type: "workflows", chatId })),
@@ -23,7 +23,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     {
       title: "Read a workflow run",
       description: "Read the full detail of one workflow run, including its agents and phases.",
-      inputSchema: { chatId: chatIdField, runId: z.string().describe("Id of the workflow run") },
+      inputSchema: z.object({ chatId: chatIdField, runId: z.string().describe("Id of the workflow run") }),
       annotations: { readOnlyHint: true },
     },
     ({ chatId, runId }) => commandResult(host, { type: "workflows.getRun", chatId, runId }),
@@ -34,7 +34,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     {
       title: "Read a subagent run",
       description: "Read the transcript and result of one subagent run.",
-      inputSchema: { chatId: chatIdField, agentId: z.string().describe("Id of the subagent run") },
+      inputSchema: z.object({ chatId: chatIdField, agentId: z.string().describe("Id of the subagent run") }),
       annotations: { readOnlyHint: true },
     },
     ({ chatId, agentId }) => commandResult(host, { type: "subagents.getRun", chatId, agentId }),
@@ -45,7 +45,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     {
       title: "Read background task output",
       description: "Read the captured output of a background task started by a chat.",
-      inputSchema: { chatId: chatIdField, taskId: z.string().describe("Id of the background task") },
+      inputSchema: z.object({ chatId: chatIdField, taskId: z.string().describe("Id of the background task") }),
       annotations: { readOnlyHint: true },
     },
     ({ chatId, taskId }) => commandResult(host, { type: "backgroundTasks.getOutput", chatId, taskId }),

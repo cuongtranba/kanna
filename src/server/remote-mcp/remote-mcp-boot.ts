@@ -1,14 +1,15 @@
+import { createMcpHandler } from "@modelcontextprotocol/server"
 import type { AppSettingsManager } from "../app-settings"
 import type { PasswordAuth } from "../better-auth.adapter"
 import type { EventStore } from "../event-store"
 import { getMachineDisplayName } from "../machine-name.adapter"
+import { log } from "../../shared/log"
 import { REMOTE_MCP_PATH } from "./oauth-paths"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import type { RemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 import { createRemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 import { handleRemoteMcpRequest } from "./remote-mcp-http-routes"
 import { buildRemoteMcpServer } from "./remote-mcp-server"
-import { createRemoteMcpSessionRegistry } from "./remote-mcp-session-registry"
 
 export interface RemoteMcpRuntime {
   handle(req: Request, url: URL, socketIp: string | null): Promise<Response | null>
@@ -33,9 +34,10 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
     const resource = auth?.backend.remoteMcpResource() ?? null
     return resource === null ? null : resource.slice(0, resource.length - REMOTE_MCP_PATH.length)
   }
-  const registry = createRemoteMcpSessionRegistry({
-    buildServer: () => buildRemoteMcpServer({ ...commands, store, appSettings, machineName, publicOrigin }),
-  })
+  const mcp = createMcpHandler(
+    () => buildRemoteMcpServer({ ...commands, store, appSettings, machineName, publicOrigin }),
+    { onerror: (error) => log.warn("[remote-mcp] handler error", error.message) },
+  )
   const bearerVerifier = auth
     ? createRemoteMcpBearerVerifier({
       backend: auth.backend,
@@ -54,7 +56,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
       return handleRemoteMcpRequest(req, url, {
         auth,
         enabled: () => appSettings.getSnapshot().remoteMcp.enabled,
-        registry,
+        mcp,
         bearerVerifier,
         clientIp: auth ? auth.clientIpFor(req, socketIp) : socketIp,
         validateOrigin: (request) => auth?.validateOrigin(request) ?? false,
@@ -67,7 +69,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
     async stop() {
       unsubscribe?.()
       unsubscribe = null
-      await registry.dispose()
+      await mcp.close()
     },
   }
 }
