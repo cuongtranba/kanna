@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.74.0](https://github.com/cuongtranba/kanna/compare/v1.73.1...v1.74.0) (2026-10-12)
+
+
+### Features
+
+* **remote-mcp:** serve MCP 2026-07-28 so ChatGPT can connect ([#1258](https://github.com/cuongtranba/kanna/issues/1258)) ([f02fe79](https://github.com/cuongtranba/kanna/commit/f02fe79e056db666a316d6fddb78c06e7d095fe8))
+
 ## [1.73.1](https://github.com/cuongtranba/kanna/compare/v1.73.0...v1.73.1) (2026-10-12)
 
 
