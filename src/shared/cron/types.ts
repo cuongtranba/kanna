@@ -63,7 +63,7 @@ export type CronParseResult =
   | { ok: true; command: CronCommand }
   | { ok: false; error: CronParseError }
 
-export type CronSkipReason = "chat_busy" | "previous_run_active" | "server_offline"
+export type CronSkipReason = "chat_busy" | "previous_run_active" | "background_work_pending" | "server_offline"
 
 export type CronRunStatus = "running" | "completed" | "failed" | "skipped"
 

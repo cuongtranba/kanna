@@ -11,6 +11,7 @@ export interface CronFireDeps extends CronCommandDeps {
   skipCoalescer: CronSkipCoalescerPort
   getChatRecord(chatId: string): { projectId: string } | null
   isChatBusy(chatId: string): boolean
+  holdsBackgroundWork(chatId: string): boolean
   clearChatContext(chatId: string): Promise<void>
   createChat(projectId: string): Promise<{ id: string }>
   enqueueMessage(
@@ -57,6 +58,10 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
   if (job.mode === "inline") {
     if (deps.isChatBusy(chatId)) {
       await skip(deps, chatId, jobId, "chat_busy")
+      return
+    }
+    if (deps.holdsBackgroundWork(chatId)) {
+      await skip(deps, chatId, jobId, "background_work_pending")
       return
     }
     await flushSkipStreak(deps, chatId, jobId)

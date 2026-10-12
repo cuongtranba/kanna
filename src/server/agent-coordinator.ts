@@ -628,6 +628,12 @@ export class AgentCoordinator {
       skipCoalescer: this.cronSkipCoalescer,
       getChatRecord: (chatId) => this.store.getChat(chatId),
       isChatBusy: (chatId) => isChatBusy(this.sendCommandDeps(), chatId),
+      holdsBackgroundWork: (chatId) => {
+        const session = this.claudeSessions.get(chatId)
+        return Object.values(this.store.getSubagentRuns(chatId)).some((run) => run.status === "running")
+          || this.hasLiveWorkflow(chatId)
+          || (session !== undefined && this.hasPendingBackgroundTask(session, Date.now()))
+      },
       clearChatContext: (chatId) => this.clearChatContext(chatId),
       createChat: (projectId) => this.store.createChat(projectId),
       enqueueMessage: (chatId, content, attachments, options) =>

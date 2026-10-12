@@ -15,7 +15,7 @@ interface EnqueuedRecord {
   options?: SendMessageOptions
 }
 
-function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
+function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; now?: number } = {}) {
   const entries: Array<{ chatId: string; entry: TranscriptEntry }> = []
   const events: AutoContinueEvent[] = []
   const cleared: string[] = []
@@ -24,6 +24,7 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
   const createdChats: string[] = []
   const queuedByChatId = new Map<string, QueuedChatMessage[]>()
   const busy = new Set(opts.busyChatIds ?? [])
+  const background = new Set(opts.backgroundChatIds ?? [])
   const clock = { now: opts.now ?? 1_000_000 }
   const skipCoalescer = new CronSkipCoalescer()
   let chatSeq = 0
@@ -44,6 +45,7 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
     newJobId: () => "cron-abc",
     getChatRecord: (chatId) => (chatId === CHAT ? { projectId: "proj-1" } : null),
     isChatBusy: (chatId) => busy.has(chatId),
+    holdsBackgroundWork: (chatId) => background.has(chatId),
     clearChatContext: async (chatId) => {
       cleared.push(chatId)
     },
@@ -74,7 +76,7 @@ function makeDeps(opts: { busyChatIds?: string[]; now?: number } = {}) {
     },
     getQueuedMessages: (chatId) => queuedByChatId.get(chatId) ?? [],
   }
-  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, clock, queuedByChatId }
+  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, background, clock, queuedByChatId }
 }
 
 async function armJob(deps: CronFireDeps, line: string) {
@@ -111,6 +113,30 @@ describe("fireCronJob — inline", () => {
     const skipped = events.find((event) => event.kind === "cron_run_skipped")
     expect(skipped).toMatchObject({ reason: "chat_busy" })
     expect(entries.at(-1)?.entry).toMatchObject({ kind: "cron_run_skipped", reason: "chat_busy" })
+  })
+
+  test("an inline run waits while the chat still holds background work instead of clearing it", async () => {
+    const { deps, events, cleared, enqueued, drained, entries, background } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    background.add(CHAT)
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(cleared).toEqual([])
+    expect(enqueued).toEqual([])
+    expect(drained).toEqual([])
+    expect(events.some((event) => event.kind === "cron_run_started")).toBe(false)
+    expect(events.find((event) => event.kind === "cron_run_skipped")).toMatchObject({
+      reason: "background_work_pending",
+    })
+    expect(entries.at(-1)?.entry).toMatchObject({ kind: "cron_run_skipped", reason: "background_work_pending" })
+
+    background.delete(CHAT)
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(cleared).toEqual([CHAT])
+    expect(enqueued).toHaveLength(1)
+    expect(events.some((event) => event.kind === "cron_run_started")).toBe(true)
   })
 
   test("own previous run still live (busy chat) skips as previous_run_active", async () => {
