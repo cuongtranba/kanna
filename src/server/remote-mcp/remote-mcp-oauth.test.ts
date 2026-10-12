@@ -253,6 +253,20 @@ describe("remote MCP authorization flow", () => {
     expect(sessionCookieOf(right)).toContain(`${SESSION_COOKIE_NAME}=`)
   })
 
+  test("the login page lets the browser send its own Origin on submit (no-referrer made every sign-in 403)", async () => {
+    const services = servicesFor(freshIp())
+    const clientId = await registerClient()
+    const { challenge } = pkcePair()
+    const authorize = await requireHandled(get(authorizeUrl(clientId, challenge)))
+    const oauthQuery = new URL(locationOf(authorize), ORIGIN).search.slice(1)
+
+    const page = await pageResponse(get(`/oauth/login?${oauthQuery}`), services)
+    const html = await page.text()
+
+    expect(html).toContain('<meta name="referrer" content="same-origin">')
+    expect(html).not.toContain("no-referrer")
+  })
+
   test("the consent page needs a session, names the client, and Allow returns an authorization code to the client", async () => {
     const services = servicesFor(freshIp())
     const clientId = await registerClient()
