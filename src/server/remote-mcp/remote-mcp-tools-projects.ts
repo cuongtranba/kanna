@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { JsonObject } from "../../shared/json"
 import { fail } from "../kanna-mcp-tool"
@@ -66,7 +66,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Open a project",
       description: "Register an existing folder on the Kanna host as a project and return its projectId.",
-      inputSchema: { localPath: z.string().describe("Absolute path of the folder on the machine running Kanna") },
+      inputSchema: z.object({ localPath: z.string().describe("Absolute path of the folder on the machine running Kanna") }),
     },
     ({ localPath }) => commandResult(host, { type: "project.open", localPath }),
   )
@@ -76,10 +76,10 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Create a project",
       description: "Create a new project folder on the Kanna host and register it; returns its projectId.",
-      inputSchema: {
+      inputSchema: z.object({
         localPath: z.string().describe("Absolute path of the folder to create"),
         title: z.string().describe("Display title of the project"),
-      },
+      }),
     },
     ({ localPath, title }) => commandResult(host, { type: "project.create", localPath, title }),
   )
@@ -89,10 +89,10 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "List chats",
       description: "List chats with id, project, title, status, last activity and unread flag, optionally for one project.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().optional().describe("Only chats of this project"),
         includeArchived: z.boolean().optional().describe("Also list archived chats (default false)"),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     ({ projectId, includeArchived }) => {
@@ -107,7 +107,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Search chats and projects",
       description: "Case-insensitive search over chat titles and project titles or paths. Returns ids usable with fetch.",
-      inputSchema: { query: z.string().describe("Text to look for") },
+      inputSchema: z.object({ query: z.string().describe("Text to look for") }),
       annotations: { readOnlyHint: true },
     },
     ({ query }) => {
@@ -130,7 +130,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Fetch a chat or project",
       description: "Fetch the full text of a search result: a chat transcript (id chat:<chatId>) or a project summary (id project:<projectId>).",
-      inputSchema: { id: z.string().describe("An id returned by search") },
+      inputSchema: z.object({ id: z.string().describe("An id returned by search") }),
       annotations: { readOnlyHint: true },
     },
     ({ id }) => {

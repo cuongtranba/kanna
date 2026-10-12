@@ -1,4 +1,4 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server"
 import type { ServerEnvelope } from "../../shared/protocol"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 

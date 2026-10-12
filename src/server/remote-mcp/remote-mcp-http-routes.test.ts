@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { Client as ModernClient, StreamableHTTPClientTransport as ModernTransport } from "@modelcontextprotocol/client"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -233,7 +234,7 @@ describe("remote MCP over HTTP", () => {
   })
 
   test("the launch password works as a bearer and the generic tools run commands and reads", async () => {
-    const { client, transport } = await connectWithPassword(harness.origin)
+    const { client } = await connectWithPassword(harness.origin)
     try {
       const tools = (await client.listTools()).tools.map((tool) => tool.name)
       expect(tools).toEqual(expect.arrayContaining(["kanna_command", "kanna_commands", "kanna_read", "ping"]))
@@ -262,28 +263,30 @@ describe("remote MCP over HTTP", () => {
     } finally {
       await client.close()
     }
-    expect(transport.sessionId).toBeDefined()
   })
 
-  test("a terminated session id is rejected afterwards", async () => {
-    const { client, transport } = await connectWithPassword(harness.origin)
-    const sessionId = transport.sessionId
-    expect(sessionId).toBeDefined()
-    await transport.terminateSession()
-    await client.close()
+  test("a 2026-07-28 client discovers the server without an initialize handshake and calls tools", async () => {
+    const client = new ModernClient(
+      { name: "modern-client", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    )
+    await client.connect(
+      new ModernTransport(new URL(`${harness.origin}/mcp`), {
+        requestInit: { headers: { Authorization: `Bearer ${PASSWORD}` } },
+      }),
+    )
+    try {
+      expect(client.getProtocolEra()).toBe("modern")
+      expect(client.getNegotiatedProtocolVersion()).toBe("2026-07-28")
 
-    const reused = await fetch(`${harness.origin}/mcp`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${PASSWORD}`,
-        "mcp-session-id": sessionId ?? "",
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
-    })
+      const tools = (await client.listTools()).tools.map((tool) => tool.name)
+      expect(tools).toEqual(expect.arrayContaining(["kanna_command", "kanna_read", "ping"]))
 
-    expect(reused.status).toBe(404)
+      const sidebar = await client.callTool({ name: "kanna_read", arguments: { topic: { type: "sidebar" } } })
+      expect(sidebar.isError).toBeFalsy()
+    } finally {
+      await client.close()
+    }
   })
 
   test("an OAuth client authorizes through the login and consent pages and calls tools with a JWT", async () => {

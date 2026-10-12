@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -23,7 +23,7 @@ export function registerCronTools(server: McpServer, host: RemoteMcpHost): void 
     {
       title: "Pause a cron job",
       description: "Pause a cron job so it stops firing until resumed.",
-      inputSchema: { chatId: chatIdField, jobId: jobIdField },
+      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
     },
     ({ chatId, jobId }) => commandResult(host, { type: "cron.pause", chatId, jobId }),
   )
@@ -33,7 +33,7 @@ export function registerCronTools(server: McpServer, host: RemoteMcpHost): void 
     {
       title: "Resume a cron job",
       description: "Resume a paused cron job.",
-      inputSchema: { chatId: chatIdField, jobId: jobIdField },
+      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
     },
     ({ chatId, jobId }) => commandResult(host, { type: "cron.resume", chatId, jobId }),
   )
@@ -43,7 +43,7 @@ export function registerCronTools(server: McpServer, host: RemoteMcpHost): void 
     {
       title: "Remove a cron job",
       description: "Permanently remove a cron job and its schedule. Its past run records stay in the chat transcript.",
-      inputSchema: { chatId: chatIdField, jobId: jobIdField },
+      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
       annotations: { destructiveHint: true },
     },
     ({ chatId, jobId }) => commandResult(host, { type: "cron.remove", chatId, jobId }),

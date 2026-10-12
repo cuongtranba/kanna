@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { jsonObjectSchema } from "../../shared/genui/json-schema"
 import {
@@ -36,7 +36,7 @@ export function registerGenericTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "List Kanna commands",
       description: KANNA_COMMANDS_DESCRIPTION,
-      inputSchema: { domain: z.string().optional().describe("Only commands in this domain, such as chat or board") },
+      inputSchema: z.object({ domain: z.string().optional().describe("Only commands in this domain, such as chat or board") }),
       annotations: { readOnlyHint: true },
     },
     ({ domain }) => ok(JSON.stringify(listCommandCatalog(domain))),
@@ -47,10 +47,10 @@ export function registerGenericTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Run a Kanna command",
       description: KANNA_COMMAND_DESCRIPTION,
-      inputSchema: {
+      inputSchema: z.object({
         type: z.string().describe("Dotted command type, such as chat.rename"),
         params: jsonObjectSchema.optional().describe("The command's parameters as an object"),
-      },
+      }),
       annotations: { destructiveHint: true },
     },
     async ({ type, params }) => {
@@ -69,7 +69,7 @@ export function registerGenericTools(server: McpServer, host: RemoteMcpHost): vo
     {
       title: "Read a Kanna snapshot",
       description: KANNA_READ_DESCRIPTION,
-      inputSchema: { topic: jsonObjectSchema.describe("A subscription topic object with a type field") },
+      inputSchema: z.object({ topic: jsonObjectSchema.describe("A subscription topic object with a type field") }),
       annotations: { readOnlyHint: true },
     },
     ({ topic }) => {

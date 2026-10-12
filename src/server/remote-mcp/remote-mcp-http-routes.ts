@@ -1,10 +1,9 @@
-import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js"
+import type { AuthInfo, McpHttpHandler } from "@modelcontextprotocol/server"
 import { CLIENT_IP_HEADER, type RemoteMcpPrincipal } from "../auth-backend"
 import type { PasswordAuth } from "../better-auth.adapter"
 import { handleOAuthPageRequest } from "./oauth-page-routes"
 import { isRemoteMcpOAuthPath, REMOTE_MCP_PATH } from "./oauth-paths"
 import type { RemoteMcpBearerVerifier } from "./remote-mcp-bearer"
-import type { RemoteMcpSessionRegistry } from "./remote-mcp-session-registry"
 
 const OAUTH_PAGE_PATHS: ReadonlySet<string> = new Set(["/oauth/login", "/oauth/consent"])
 const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource"
@@ -13,7 +12,7 @@ const UNAUTHORIZED_CODE = -32000
 export interface RemoteMcpRouteServices {
   auth: PasswordAuth | null
   enabled: () => boolean
-  registry: RemoteMcpSessionRegistry
+  mcp: Pick<McpHttpHandler, "fetch">
   bearerVerifier: RemoteMcpBearerVerifier
   clientIp: string | null
   validateOrigin: (req: Request) => boolean
@@ -64,7 +63,7 @@ async function handleMcpRequest(req: Request, auth: PasswordAuth, services: Remo
     return Response.json({ error: "Forbidden" }, { status: 403 })
   }
   const verdict = await services.bearerVerifier.verifyBearer(req.headers.get("authorization"), services.clientIp)
-  if (verdict.ok) return services.registry.handle(req, toAuthInfo(verdict.principal))
+  if (verdict.ok) return services.mcp.fetch(req, { authInfo: toAuthInfo(verdict.principal) })
   if (verdict.status === 429) return tooManyAttempts(verdict.retryAfter)
   return unauthorized(auth.backend.remoteMcpResource())
 }

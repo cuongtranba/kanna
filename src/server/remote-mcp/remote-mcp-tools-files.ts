@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import { isWithinRoot, resolveProjectFilePath } from "../project-file-path"
@@ -22,12 +22,12 @@ export function registerFileTools(server: McpServer, host: RemoteMcpHost): void 
     {
       title: "Upload an attachment",
       description: "Store a file in a project's upload folder and return an attachment object to pass in send_message.attachments.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe("Id of the project that receives the file"),
         fileName: z.string().describe("File name, without a directory"),
         contentBase64: z.string().describe("File content, base64 encoded"),
         contentType: z.string().optional().describe("MIME type, used when it cannot be detected from the bytes"),
-      },
+      }),
     },
     async ({ projectId, fileName, contentBase64, contentType }) => {
       const project = host.store.getProject(projectId)
@@ -56,11 +56,11 @@ export function registerFileTools(server: McpServer, host: RemoteMcpHost): void 
     {
       title: "Read a project file",
       description: "Read a file inside a project folder. Text comes back as text; binary files come back base64 encoded. Paths outside the project are refused.",
-      inputSchema: {
+      inputSchema: z.object({
         projectId: z.string().describe("Id of the project"),
         path: z.string().describe("Path relative to the project folder"),
         maxBytes: z.number().int().min(1).max(MAX_READ_BYTES).optional().describe(`Most bytes to read (default ${DEFAULT_READ_BYTES}, max ${MAX_READ_BYTES})`),
-      },
+      }),
       annotations: { readOnlyHint: true },
     },
     async ({ projectId, path: requestedPath, maxBytes }) => {

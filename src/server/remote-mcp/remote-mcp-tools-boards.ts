@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { McpServer } from "@modelcontextprotocol/server"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -10,7 +10,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "List boards",
       description: "List the kanban boards of a project.",
-      inputSchema: { projectId: z.string().describe("Id of the project") },
+      inputSchema: z.object({ projectId: z.string().describe("Id of the project") }),
       annotations: { readOnlyHint: true },
     },
     ({ projectId }) => envelopeToToolResult(host.readSnapshot({ type: "boards", ownerKind: "project", ownerId: projectId })),
@@ -21,7 +21,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "Read a board",
       description: "Read a board with its columns and the first page of cards in each.",
-      inputSchema: { boardId: z.string().describe("Id of the board") },
+      inputSchema: z.object({ boardId: z.string().describe("Id of the board") }),
       annotations: { readOnlyHint: true },
     },
     ({ boardId }) => envelopeToToolResult(host.readSnapshot({ type: "board", boardId })),
@@ -32,11 +32,11 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "Create a card",
       description: "Add a card to the end of a board column.",
-      inputSchema: {
+      inputSchema: z.object({
         boardId: z.string().describe("Id of the board"),
         columnId: z.string().describe("Id of the column that receives the card"),
         title: z.string().describe("Card title"),
-      },
+      }),
     },
     ({ boardId, columnId, title }) => commandResult(host, { type: "board.card.create", boardId, columnId, title }),
   )
@@ -46,10 +46,10 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "Move a card",
       description: "Move a card to another column, placing it at the end.",
-      inputSchema: {
+      inputSchema: z.object({
         cardId: z.string().describe("Id of the card"),
         toColumnId: z.string().describe("Id of the destination column"),
-      },
+      }),
     },
     ({ cardId, toColumnId }) =>
       commandResult(host, { type: "board.card.move", cardId, toColumnId, aboveCardId: null, belowCardId: null }),
@@ -60,10 +60,10 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "Comment on a card",
       description: "Add a comment to a card.",
-      inputSchema: {
+      inputSchema: z.object({
         cardId: z.string().describe("Id of the card"),
         body: z.string().describe("Comment text"),
-      },
+      }),
     },
     ({ cardId, body }) => commandResult(host, { type: "board.card.comment", cardId, body }),
   )
@@ -73,7 +73,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     {
       title: "Start work on a card",
       description: "Create a git worktree and chat for a card and start the agent on it; moves the card to the active column.",
-      inputSchema: { cardId: z.string().describe("Id of the card") },
+      inputSchema: z.object({ cardId: z.string().describe("Id of the card") }),
     },
     ({ cardId }) => commandResult(host, { type: "board.card.startWork", cardId }),
   )
