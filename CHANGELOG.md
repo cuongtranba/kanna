@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.74.1](https://github.com/cuongtranba/kanna/compare/v1.74.0...v1.74.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **ask-user-question:** tick multi-select options whose label contains a comma ([#1262](https://github.com/cuongtranba/kanna/issues/1262)) ([a93af41](https://github.com/cuongtranba/kanna/commit/a93af4190095496049dc3e2a6ca55ae2b121104f))
+
 ## [1.74.0](https://github.com/cuongtranba/kanna/compare/v1.73.1...v1.74.0) (2026-10-12)
 
 
