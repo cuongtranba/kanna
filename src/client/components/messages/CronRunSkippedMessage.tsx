@@ -26,6 +26,8 @@ function describeSkip(reason: ProcessedCronRunSkippedMessage["reason"]): string 
       return "chat was busy"
     case "previous_run_active":
       return "previous run still running"
+    case "background_work_pending":
+      return "chat was waiting on background work"
     case "server_offline":
       return "missed while the server was offline"
   }
