@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.75.1](https://github.com/cuongtranba/kanna/compare/v1.75.0...v1.75.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **push:** show why enabling push failed, next to the button ([#1266](https://github.com/cuongtranba/kanna/issues/1266)) ([756c9e9](https://github.com/cuongtranba/kanna/commit/756c9e960650fe711801d9576e2402b4b157eec4))
+
 ## [1.75.0](https://github.com/cuongtranba/kanna/compare/v1.74.1...v1.75.0) (2026-10-12)
 
 
