@@ -1,7 +1,6 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
-import { ArrowUpCircle, Check, Copy, ExternalLink, Plus, Radio, Trash2, X } from "lucide-react"
+import { ArrowUpCircle, Check, ChevronDown, Copy, ExternalLink, Plus, Radio, Trash2 } from "lucide-react"
 import { Button, buttonVariants } from "../components/ui/button"
-import { Input } from "../components/ui/input"
 import { Spinner } from "../components/ui/spinner"
 import { StateMarkLabel } from "../components/ui/state-mark"
 import { HoverHint } from "../components/ui/truncated-text"
@@ -10,14 +9,15 @@ import { useNow } from "../hooks/useNow"
 import { formatCompactDuration, formatCountdown } from "../lib/formatDuration"
 import { beaconUpdateLabel, beaconUpdateTone, isBeaconUpdateInFlight } from "../lib/beaconUpdateStatus"
 import { useAppSettingsStore, selectCustomBeacons } from "../stores/appSettingsStore"
-import { beaconDraftKey, useBeaconsSectionStore } from "../stores/beaconsSectionStore"
+import { useBeaconsSectionStore } from "../stores/beaconsSectionStore"
 import { selectBeaconRows, useBeaconsStore } from "../stores/beaconsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import type { BeaconConfig, BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
+import { beaconDisplayName } from "../../shared/beacon-alias"
 import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
-import { buildBeaconStatusRows, isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
+import { isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
 import { STATUS_PILL_CLASS } from "../../shared/design/tone-pairings"
 import { SDK_CLIENT_APP } from "../../shared/branding"
 import { cn } from "../lib/utils"
@@ -27,6 +27,8 @@ import type { TimerPort } from "../ports/timerPort"
 import { clipboardAdapter } from "../adapters/clipboard.adapter"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import { BeaconAliasEditButton, BeaconAliasForm } from "./BeaconAliasEditor"
+import { BeaconScopeEditor } from "./BeaconScopeEditor"
 import type { KannaState } from "./useKannaState"
 
 const SERVER_VERSION = SDK_CLIENT_APP.split("/")[1]
@@ -37,6 +39,7 @@ export interface BeaconsSectionHandlers {
   onMint: () => Promise<BeaconMintResult>
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
   onSetScope: (id: string, scope: BeaconScope) => Promise<void>
+  onSetAlias: (id: string, alias: string | null) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onUpdate: (id: string) => Promise<BeaconUpdateResult>
 }
@@ -55,10 +58,22 @@ export function mergeBeaconRows(
   rows: readonly BeaconStatusRow[],
   configs: readonly BeaconConfig[],
 ): readonly BeaconStatusRow[] {
-  const known = new Set(rows.map((row) => row.id))
-  const missing = configs.filter((config) => !known.has(config.id))
-  if (missing.length === 0) return rows
-  return [...rows, ...buildBeaconStatusRows(missing, [])]
+  const liveById = new Map(rows.map((row) => [row.id, row]))
+  return configs.map((config) => {
+    const live = liveById.get(config.id)
+    return {
+      id: config.id,
+      label: config.label,
+      alias: config.alias ?? null,
+      os: config.os,
+      enabled: config.enabled,
+      online: live?.online ?? false,
+      lastSeenAt: live?.lastSeenAt ?? null,
+      beaconVersion: live?.beaconVersion ?? null,
+      canSelfUpdate: live?.canSelfUpdate ?? false,
+      update: live?.update ?? null,
+    }
+  })
 }
 
 export function BeaconsSection({
@@ -274,7 +289,7 @@ function BeaconUpdateControls({
     <>
       {row.update !== null && <StateMarkLabel tone={beaconUpdateTone(row.update)} label={beaconUpdateLabel(row.update)} />}
       {canUpdateNow && (
-        <Button variant="secondary" size="sm" onClick={onUpdate} pending={updatePending} aria-label={`Update ${row.label} now`}>
+        <Button variant="secondary" size="sm" onClick={onUpdate} pending={updatePending} aria-label={`Update ${beaconDisplayName(row)} now`}>
           <ArrowUpCircle className="mr-1 h-4 w-4" />
           Update now
         </Button>
@@ -310,6 +325,7 @@ function BeaconRow({
   const deleteKey = pendingActionKey("beacons.delete", row.id)
   const deletePending = usePendingAction(deleteKey)
 
+  const displayName = beaconDisplayName(row)
   const updateAvailable =
     row.beaconVersion !== null && serverVersion !== undefined && isBeaconBehind(row.beaconVersion, serverVersion)
 
@@ -319,10 +335,10 @@ function BeaconRow({
   }, [enabledKey, handlers, row.id])
 
   const onRevoke = useCallback(() => {
-    if (dom.confirmDialog(`Revoke "${row.label}"? The agent will lose access to this machine until you pair it again.`)) {
+    if (dom.confirmDialog(`Revoke "${displayName}"? The agent will lose access to this machine until you pair it again.`)) {
       runPendingAction(deleteKey, () => handlers.onDelete(row.id))
     }
-  }, [deleteKey, dom, handlers, row.id, row.label])
+  }, [deleteKey, displayName, dom, handlers, row.id])
 
   const onToggleScope = useCallback(() => {
     toggleExpanded(row.id)
@@ -332,7 +348,17 @@ function BeaconRow({
     <li className="flex flex-col" aria-busy={deletePending || undefined}>
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="truncate font-medium">{row.label}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="truncate font-medium">{displayName}</span>
+            <BeaconAliasEditButton beaconId={row.id} alias={row.alias} displayName={displayName} />
+          </span>
+          {row.alias !== null && (
+            <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+              <span className="font-mono">{row.label}</span>
+              <span className="font-mono">@beacon/{row.alias}</span>
+            </span>
+          )}
+          <BeaconAliasForm beaconId={row.id} alias={row.alias} displayName={displayName} onSetAlias={handlers.onSetAlias} />
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <StateMarkLabel tone={row.online ? "active" : "muted"} label={row.online ? "Online" : "Offline"} />
             <span className="tabular-nums">{lastSeenLabel(row, now)}</span>
@@ -351,13 +377,14 @@ function BeaconRow({
               disabled={enabledPending}
               aria-busy={enabledPending || undefined}
               onChange={onToggleEnabled}
-              aria-label={`Enable ${row.label}`}
+              aria-label={`Enable ${displayName}`}
             />
             <span>{row.enabled ? "Enabled" : "Disabled"}</span>
           </label>
           {scope !== null && (
             <Button variant="ghost" size="sm" onClick={onToggleScope} aria-expanded={expanded}>
               Scope
+              <ChevronDown className={cn("ml-1 h-4 w-4 transition-transform", expanded && "rotate-180")} />
             </Button>
           )}
           <HoverHint label="Revoke this machine">
@@ -366,203 +393,16 @@ function BeaconRow({
               size="icon"
               onClick={onRevoke}
               pending={deletePending}
-              aria-label={`Revoke ${row.label}`}
+              aria-label={`Revoke ${displayName}`}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </HoverHint>
         </div>
       </div>
-      {expanded && scope !== null && <ScopeEditor beaconId={row.id} scope={scope} handlers={handlers} />}
-    </li>
-  )
-}
-
-function ScopeEditor({
-  beaconId,
-  scope,
-  handlers,
-}: {
-  beaconId: string
-  scope: BeaconScope
-  handlers: BeaconsSectionHandlers
-}) {
-  const scopeKey = pendingActionKey("beacons.setScope", beaconId)
-  const pending = usePendingAction(scopeKey)
-
-  const commit = useCallback((next: BeaconScope) => {
-    runPendingAction(scopeKey, () => handlers.onSetScope(beaconId, next))
-  }, [beaconId, handlers, scopeKey])
-
-  const onExec = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    commit({ ...scope, exec: event.target.checked })
-  }, [commit, scope])
-
-  const onAutoRun = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    commit({ ...scope, autoRunScripts: event.target.checked })
-  }, [commit, scope])
-
-  const onReadRoots = useCallback((readRoots: readonly string[]) => {
-    commit({ ...scope, readRoots })
-  }, [commit, scope])
-
-  const onWriteRoots = useCallback((writeRoots: readonly string[]) => {
-    commit({ ...scope, writeRoots })
-  }, [commit, scope])
-
-  const onAllowlist = useCallback((execAllowlist: readonly string[]) => {
-    commit({ ...scope, execAllowlist })
-  }, [commit, scope])
-
-  return (
-    <div className="flex flex-col gap-4 border-t border-border bg-muted/40 px-4 py-4" aria-busy={pending || undefined}>
-      <ScopeToggle
-        checked={scope.exec}
-        disabled={pending}
-        onChange={onExec}
-        title="Allow running commands"
-        description="Without this, the agent can only read files inside the folders below."
-      />
-      <ScopeToggle
-        checked={scope.autoRunScripts}
-        disabled={pending}
-        onChange={onAutoRun}
-        title="Run commands and scripts from this chat without asking each time"
-        description="Reads inside your folders and commands you have enabled run immediately, with no approval prompt."
-      />
-      <ScopeList
-        label="Folders the agent may read"
-        placeholder="/Users/me/projects"
-        draftKey={beaconDraftKey(beaconId, "readRoots")}
-        items={scope.readRoots}
-        disabled={pending}
-        onChange={onReadRoots}
-      />
-      <ScopeList
-        label="Folders the agent may write to"
-        description="beacon_push can only put files inside these folders. Leave empty and the agent cannot write to this machine."
-        placeholder="/Users/me/inbox"
-        draftKey={beaconDraftKey(beaconId, "writeRoots")}
-        items={scope.writeRoots}
-        disabled={pending}
-        onChange={onWriteRoots}
-      />
-      <ScopeList
-        label="Commands that always run without asking"
-        placeholder="git"
-        draftKey={beaconDraftKey(beaconId, "execAllowlist")}
-        items={scope.execAllowlist}
-        disabled={pending}
-        onChange={onAllowlist}
-      />
-    </div>
-  )
-}
-
-function ScopeToggle({
-  checked,
-  disabled,
-  onChange,
-  title,
-  description,
-}: {
-  checked: boolean
-  disabled: boolean
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void
-  title: string
-  description: string
-}) {
-  return (
-    <label className="flex cursor-pointer items-start gap-3">
-      <input type="checkbox" className="mt-1" checked={checked} disabled={disabled} onChange={onChange} />
-      <span className="flex flex-col">
-        <span className="text-sm font-medium text-foreground">{title}</span>
-        <span className="text-13 text-muted-foreground">{description}</span>
-      </span>
-    </label>
-  )
-}
-
-function ScopeList({
-  label,
-  description,
-  placeholder,
-  draftKey,
-  items,
-  disabled,
-  onChange,
-}: {
-  label: string
-  description?: string
-  placeholder: string
-  draftKey: string
-  items: readonly string[]
-  disabled: boolean
-  onChange: (items: readonly string[]) => void
-}) {
-  const draft = useBeaconsSectionStore((s) => s.drafts[draftKey] ?? "")
-  const setDraft = useBeaconsSectionStore((s) => s.setDraft)
-  const clearDraft = useBeaconsSectionStore((s) => s.clearDraft)
-  const value = draft.trim()
-  const canAdd = value.length > 0 && !items.includes(value)
-
-  const onDraft = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setDraft(draftKey, event.target.value)
-  }, [draftKey, setDraft])
-
-  const onAdd = useCallback(() => {
-    onChange([...items, value])
-    clearDraft(draftKey)
-  }, [clearDraft, draftKey, items, onChange, value])
-
-  const onRemove = useCallback((item: string) => {
-    onChange(items.filter((entry) => entry !== item))
-  }, [items, onChange])
-
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      {description !== undefined && <span className="text-13 text-muted-foreground">{description}</span>}
-      {items.length === 0 ? (
-        <span className="text-13 text-muted-foreground">None</span>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {items.map((item) => (
-            <ScopeListItem key={item} item={item} disabled={disabled} onRemove={onRemove} />
-          ))}
-        </ul>
+      {expanded && scope !== null && (
+        <BeaconScopeEditor beaconId={row.id} scope={scope} onSetScope={handlers.onSetScope} />
       )}
-      <div className="flex items-center gap-2">
-        <Input value={draft} onChange={onDraft} placeholder={placeholder} disabled={disabled} aria-label={label} />
-        <Button variant="secondary" size="sm" onClick={onAdd} disabled={disabled || !canAdd}>
-          Add
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function ScopeListItem({
-  item,
-  disabled,
-  onRemove,
-}: {
-  item: string
-  disabled: boolean
-  onRemove: (item: string) => void
-}) {
-  const onClick = useCallback(() => {
-    onRemove(item)
-  }, [item, onRemove])
-
-  return (
-    <li className="flex items-center gap-2">
-      <code className="min-w-0 flex-1 break-all rounded-md border border-border bg-muted px-2 py-1 font-mono text-13">
-        {item}
-      </code>
-      <Button variant="ghost" size="icon-sm" onClick={onClick} disabled={disabled} aria-label={`Remove ${item}`}>
-        <X className="h-4 w-4" />
-      </Button>
     </li>
   )
 }
@@ -582,6 +422,9 @@ export function BeaconsSettingsBranch(props: {
       },
       onSetScope: async (id, scope) => {
         await handleWriteAppSettings({ customBeacons: { setScope: { id, scope } } })
+      },
+      onSetAlias: async (id, alias) => {
+        await handleWriteAppSettings({ customBeacons: { update: { id, patch: { alias } } } })
       },
       onDelete: async (id) => {
         await handleWriteAppSettings({ customBeacons: { delete: { id } } })

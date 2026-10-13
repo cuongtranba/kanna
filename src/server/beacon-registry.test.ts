@@ -14,6 +14,7 @@ function fakeSocket() {
       sent.push(String(payload))
       return sent.length
     },
+    close(): void {},
   }
 }
 

@@ -26,5 +26,7 @@ code:
   - src/client/components/settings/SettingsList.tsx
   - src/client/app/BeaconsSection.tsx
   - src/client/app/BeaconsSection.test.tsx
+  - src/client/app/BeaconScopeEditor.tsx
+  - src/client/app/BeaconAliasEditor.tsx
   - src/client/stores/beaconsStore.ts
   - src/client/stores/beaconsStore.test.ts

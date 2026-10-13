@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
-import { normalizeBeacons, validateBeaconLabel } from "./beacon-settings"
+import type { BeaconConfig } from "../shared/beacon-config"
+import {
+  BeaconValidationException,
+  normalizeBeacons,
+  updateBeacon,
+  validateBeaconLabel,
+} from "./beacon-settings"
 
 const valid = {
   id: "b1",
@@ -70,5 +76,72 @@ describe("validateBeaconLabel", () => {
 
   test("accepts a unique label", () => {
     expect(validateBeaconLabel("desktop", others)).toBeNull()
+  })
+})
+
+describe("beacon alias", () => {
+  const stamp = "2026-10-13T00:00:00.000Z"
+  const config = (id: string, label: string, alias?: string): BeaconConfig => ({
+    id,
+    label,
+    ...(alias === undefined ? {} : { alias }),
+    publicKey: "pk",
+    os: "linux",
+    scope: DEFAULT_BEACON_SCOPE,
+    enabled: true,
+    createdAt: stamp,
+    updatedAt: stamp,
+  })
+  const first = config("b1", "laptop", "office-mac")
+  const second = config("b2", "desktop")
+  const current = [first, second]
+
+  function rejectionCode(run: () => BeaconConfig): string | null {
+    try {
+      run()
+    } catch (error) {
+      if (!(error instanceof BeaconValidationException)) throw error
+      return error.validationError.code
+    }
+    return null
+  }
+
+  test("an alias another beacon owns is rejected as INVALID_ALIAS", () => {
+    expect(rejectionCode(() => updateBeacon(second, { alias: "office-mac" }, current))).toBe("INVALID_ALIAS")
+  })
+
+  test("an alias with uppercase or spaces is rejected as INVALID_ALIAS", () => {
+    expect(rejectionCode(() => updateBeacon(second, { alias: "Office Mac" }, current))).toBe("INVALID_ALIAS")
+  })
+
+  test("a beacon may keep its own alias while editing something else", () => {
+    expect(updateBeacon(first, { alias: "office-mac", enabled: false }, current)).toMatchObject({
+      alias: "office-mac",
+      enabled: false,
+    })
+  })
+
+  test("a null alias patch clears the alias", () => {
+    expect(updateBeacon(first, { alias: null }, current).alias).toBeUndefined()
+  })
+
+  test("an update that does not mention the alias leaves it alone", () => {
+    expect(updateBeacon(first, { enabled: false }, current).alias).toBe("office-mac")
+  })
+
+  test("loading drops an invalid alias with a warning but keeps the beacon", () => {
+    const warnings: string[] = []
+    const [kept] = normalizeBeacons([{ ...valid, alias: "Not Valid" }], warnings)
+    expect(kept?.id).toBe("b1")
+    expect(kept?.alias).toBeUndefined()
+    expect(warnings).toHaveLength(1)
+  })
+
+  test("loading keeps the first of two beacons claiming the same alias", () => {
+    const loaded = normalizeBeacons(
+      [{ ...valid, alias: "shared" }, { ...valid, id: "b2", label: "other", alias: "shared" }],
+      [],
+    )
+    expect(loaded.map((beacon) => [beacon.id, beacon.alias])).toEqual([["b1", "shared"], ["b2", undefined]])
   })
 })

@@ -8,6 +8,8 @@ import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-p
 import { domAdapter } from "../adapters/dom.adapter"
 import type { BeaconConfig } from "../../shared/beacon-config"
 import type { BeaconStatusRow } from "../../shared/beacon-status"
+import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
+import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useBeaconsSectionStore } from "../stores/beaconsSectionStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
 import { BeaconsSection, BeaconsSettingsBranch, type BeaconsSectionHandlers } from "./BeaconsSection"
@@ -15,6 +17,7 @@ import { BeaconsSection, BeaconsSettingsBranch, type BeaconsSectionHandlers } fr
 const ROW: BeaconStatusRow = {
   id: "b1",
   label: "Work laptop",
+  alias: null,
   os: "darwin",
   enabled: true,
   online: true,
@@ -39,17 +42,23 @@ const HANDLERS: BeaconsSectionHandlers = {
   onMint: async () => ({ ok: true, code: "123456", expiresAt: Date.now() + 600_000 }),
   onSetEnabled: async () => {},
   onSetScope: async () => {},
+  onSetAlias: async () => {},
   onDelete: async () => {},
   onUpdate: async () => ({ ok: true }),
 }
 
+const SECTION_INITIAL = useBeaconsSectionStore.getInitialState()
+const APP_SETTINGS_INITIAL = useAppSettingsStore.getInitialState()
+
 afterEach(() => {
   useBeaconsStore.getState().setRows([])
-  useBeaconsSectionStore.setState({ pairing: null, expandedId: null, updateErrors: {} })
+  useBeaconsSectionStore.setState(SECTION_INITIAL)
+  useAppSettingsStore.setState(APP_SETTINGS_INITIAL)
 })
 
 test("the settings branch renders live rows from the store without a render loop", async () => {
   useBeaconsStore.getState().setRows([ROW])
+  useAppSettingsStore.getState().setFromServer({ ...buildInitialAppSettingsSnapshot(), customBeacons: [CONFIG] })
   const result = await renderForLoopCheck(
     <BeaconsSettingsBranch
       state={{
@@ -224,5 +233,66 @@ test("a beacon too old to update itself links its update badge to the download p
   expect(updateNowButton()).toBeNull()
   const badge = Array.from(document.querySelectorAll("a")).find((anchor) => anchor.textContent === "Update available")
   expect(badge?.getAttribute("href")).toBe(BEACON_DOWNLOAD_PAGE)
+  await result.cleanup()
+})
+
+test("a beacon whose config was removed is not listed even though a live row still reports it", async () => {
+  const gone: BeaconStatusRow = { ...ROW, id: "gone", label: "Revoked box" }
+  const result = await renderForLoopCheck(<BeaconsSection rows={[ROW, gone]} configs={[CONFIG]} handlers={HANDLERS} />)
+  expect(document.body.textContent).toContain("Work laptop")
+  expect(document.body.textContent).not.toContain("Revoked box")
+  await result.cleanup()
+})
+
+test("an alias is the row title and the machine's hostname moves to secondary text", async () => {
+  const aliased: BeaconConfig = { ...CONFIG, alias: "office-mac" }
+  const result = await renderForLoopCheck(<BeaconsSection rows={[ROW]} configs={[aliased]} handlers={HANDLERS} />)
+  const title = document.querySelector("li span.font-medium")
+  expect(title?.textContent).toBe("office-mac")
+  expect(document.body.textContent).toContain("Work laptop")
+  expect(document.body.textContent).toContain("@beacon/office-mac")
+  await result.cleanup()
+})
+
+test("the info button next to a scope setting shows and hides its explanation", async () => {
+  useBeaconsSectionStore.setState({ expandedId: "b1" })
+  const result = await renderForLoopCheck(<BeaconsSection rows={[ROW]} configs={[CONFIG]} handlers={HANDLERS} />)
+  const toggle = () =>
+    Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.getAttribute("aria-label") === 'What does "Folders the agent may read" do?',
+    )
+  const panel = () => document.getElementById(toggle()?.getAttribute("aria-controls") ?? "")
+  expect(toggle()?.getAttribute("aria-expanded")).toBe("false")
+  expect(panel()?.hidden).toBe(true)
+
+  await act(async () => {
+    toggle()?.click()
+  })
+  expect(toggle()?.getAttribute("aria-expanded")).toBe("true")
+  expect(panel()?.hidden).toBe(false)
+  expect(panel()?.textContent).toContain("only inside these folders")
+
+  await act(async () => {
+    toggle()?.click()
+  })
+  expect(panel()?.hidden).toBe(true)
+  await result.cleanup()
+})
+
+test("a short name the server refuses is shown on the row and the editor stays open", async () => {
+  const handlers: BeaconsSectionHandlers = {
+    ...HANDLERS,
+    onSetAlias: async () => {
+      throw new Error('Short name "office-mac" is already in use')
+    },
+  }
+  useBeaconsSectionStore.getState().beginAliasEdit("b1", "office-mac")
+  const result = await renderForLoopCheck(<BeaconsSection rows={[ROW]} configs={[CONFIG]} handlers={handlers} />)
+  const save = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button) => button.textContent === "Save")
+  await act(async () => {
+    save?.click()
+  })
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe('Short name "office-mac" is already in use')
+  expect(document.querySelector('input[aria-label="Short name for Work laptop"]')).not.toBeNull()
   await result.cleanup()
 })

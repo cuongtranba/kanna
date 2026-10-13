@@ -110,7 +110,7 @@ export class BroadcastManager {
       for (const ws of this.sockets) {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
         for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "app-settings") continue
+          if (topic.type !== "app-settings" && topic.type !== "beacons") continue
           const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
           if (envelope.type !== "snapshot") continue
           const signature = JSON.stringify(envelope.snapshot)

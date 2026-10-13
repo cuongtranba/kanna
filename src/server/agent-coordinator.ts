@@ -939,6 +939,8 @@ export class AgentCoordinator {
       clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
       emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
       getSubagents: () => this.getSubagents(),
+      getBeacons: this.getBeacons,
+      isBeaconOnline: (beaconId) => this.beaconRegistry?.isOnline(beaconId) ?? false,
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       listSkills: (chatId) => this.skillAccess.listSkills(chatId),
       generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>

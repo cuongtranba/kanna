@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:c75ae2ae79609a195998edf82dcee4047b4bcf658367877b67e99418bc0e3787 -->
+<!-- hash: sha256:2a0eb4225730fbf0bc889127c8d68ff24ed11857c273eea72a4c195fa4de4e7f -->
 
 ## c3-0 — Kanna (system)
 
@@ -28,7 +28,7 @@ refs: ref-colocated-bun-test, ref-strong-typing, ref-zustand-store
 ## c3-110 — app-shell (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/forgetDeletedLocally.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/main.tsx
+files: src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/forgetDeletedLocally.ts, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/components/LocalDev.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useBeaconSuggestions.ts, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/client/lib/beaconMentionChips.ts, src/main.tsx
 
 ## c3-111 — sidebar (component)
 container: c3-1 | context: c3-0
@@ -38,7 +38,7 @@ files: src/client/app/KannaSidebar.tsx, src/client/app/sidebarNumberJump.test.ts
 ## c3-112 — chat-page (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts, src/client/components/messages/LoopDisarmedMessage.test.tsx, src/client/components/messages/LoopDisarmedMessage.tsx
+files: src/client/app/BackgroundTasksSection.test.tsx, src/client/app/BackgroundTasksSection.tsx, src/client/app/ChatPage.test.ts, src/client/app/ChatPage/**/*.ts, src/client/app/ChatPage/**/*.tsx, src/client/app/LoopProgressSection.test.tsx, src/client/app/LoopProgressSection.tsx, src/client/app/chatNavigator.ts, src/client/app/useRightSidebarToggleAnimation.ts, src/client/app/useStickyChatFocus.ts, src/client/app/useTerminalToggleAnimation.ts, src/client/components/messages/LoopDisarmedMessage.test.tsx, src/client/components/messages/LoopDisarmedMessage.tsx, src/client/components/panes/PageTabContent.tsx
 
 ## c3-113 — transcript (component)
 container: c3-1 | context: c3-0
@@ -58,7 +58,7 @@ files: src/client/components/chat-ui/**/*.ts, src/client/components/chat-ui/**/*
 ## c3-116 — settings-page (component)
 container: c3-1 | context: c3-0
 refs: ref-local-first-data, ref-zustand-store, rule-zustand-store
-files: src/client/app/BeaconsSection.test.tsx, src/client/app/BeaconsSection.tsx, src/client/app/CustomProvidersSection.test.tsx, src/client/app/CustomProvidersSection.tsx, src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentFormRow.tsx, src/client/app/SubagentScopeFields.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/app/useProviderCatalog.ts, src/client/components/settings/SettingsList.tsx, src/client/lib/customProviderDraft.ts, src/client/stores/beaconsStore.test.ts, src/client/stores/beaconsStore.ts, src/client/stores/customProvidersSectionStore.ts
+files: src/client/app/BeaconAliasEditor.tsx, src/client/app/BeaconScopeEditor.tsx, src/client/app/BeaconsSection.test.tsx, src/client/app/BeaconsSection.tsx, src/client/app/CustomProvidersSection.test.tsx, src/client/app/CustomProvidersSection.tsx, src/client/app/McpServerRow.tsx, src/client/app/McpServersSection.test.tsx, src/client/app/McpServersSection.tsx, src/client/app/ModelsSection.test.tsx, src/client/app/ModelsSection.tsx, src/client/app/PendingSegmentedControl.tsx, src/client/app/SettingsPage.tsx, src/client/app/SubagentFormRow.tsx, src/client/app/SubagentScopeFields.tsx, src/client/app/SubagentsSection.test.tsx, src/client/app/SubagentsSection.tsx, src/client/app/TextSnippetsSection.test.tsx, src/client/app/TextSnippetsSection.tsx, src/client/app/appSettingsCrud.ts, src/client/app/llmProviderDraft.ts, src/client/app/settingsEditorForm.ts, src/client/app/useProviderCatalog.ts, src/client/app/usePushDeviceActions.ts, src/client/components/settings/SettingsList.tsx, src/client/lib/customProviderDraft.ts, src/client/stores/beaconsStore.test.ts, src/client/stores/beaconsStore.ts, src/client/stores/customProvidersSectionStore.ts
 
 ## c3-117 — local-projects-page (component)
 container: c3-1 | context: c3-0
@@ -152,7 +152,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent.test.ts, src/server/agent.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/tracking-file-lock.test.ts, src/server/tracking-file-lock.ts
+files: src/server/agent.test.ts, src/server/agent.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/tracking-file-lock.test.ts, src/server/tracking-file-lock.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -320,7 +320,7 @@ files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.te
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
+files: src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -467,9 +467,11 @@ src/client/app/usePushFocus.ts → c3-110
 src/client/components/LocalDev.tsx → c3-110
 src/client/hooks/**/*.ts → c3-110
 src/client/hooks/**/*.tsx → c3-110
+src/client/hooks/useBeaconSuggestions.ts → c3-110
 src/client/hooks/useProjectSuggestions.test.ts → c3-110
 src/client/hooks/useProjectSuggestions.ts → c3-110
 src/client/lib/**/*.ts → c3-110
+src/client/lib/beaconMentionChips.ts → c3-110
 src/main.tsx → c3-110
 src/client/app/KannaSidebar.tsx → c3-111
 src/client/app/sidebarNumberJump.test.ts → c3-111
@@ -487,6 +489,7 @@ src/client/app/useStickyChatFocus.ts → c3-112
 src/client/app/useTerminalToggleAnimation.ts → c3-112
 src/client/components/messages/LoopDisarmedMessage.test.tsx → c3-112
 src/client/components/messages/LoopDisarmedMessage.tsx → c3-112
+src/client/components/panes/PageTabContent.tsx → c3-112
 src/client/app/KannaTranscript.test.tsx → c3-113
 src/client/app/KannaTranscript.tsx → c3-113
 src/client/app/subagent-run-placement.test.ts → c3-113
@@ -503,6 +506,8 @@ src/client/components/lexical/nodes/** → c3-115
 src/client/components/lexical/plugins/** → c3-115
 src/client/components/lexical/serialize/** → c3-115
 src/client/components/open-external-menu.tsx → c3-115
+src/client/app/BeaconAliasEditor.tsx → c3-116
+src/client/app/BeaconScopeEditor.tsx → c3-116
 src/client/app/BeaconsSection.test.tsx → c3-116
 src/client/app/BeaconsSection.tsx → c3-116
 src/client/app/CustomProvidersSection.test.tsx → c3-116
@@ -524,6 +529,7 @@ src/client/app/appSettingsCrud.ts → c3-116
 src/client/app/llmProviderDraft.ts → c3-116
 src/client/app/settingsEditorForm.ts → c3-116
 src/client/app/useProviderCatalog.ts → c3-116
+src/client/app/usePushDeviceActions.ts → c3-116
 src/client/components/settings/SettingsList.tsx → c3-116
 src/client/lib/customProviderDraft.ts → c3-116
 src/client/stores/beaconsStore.test.ts → c3-116
@@ -647,6 +653,8 @@ src/server/process-utils.adapter.ts → c3-209
 src/server/process-utils.test.ts → c3-209
 src/server/agent.test.ts → c3-210
 src/server/agent.ts → c3-210
+src/server/beacon-mention-prompt.test.ts → c3-210
+src/server/beacon-mention-prompt.ts → c3-210
 src/server/claude-context-commands.test.ts → c3-210
 src/server/claude-context-commands.ts → c3-210
 src/server/claude-live-block.ts → c3-210
@@ -904,6 +912,8 @@ src/shared/task-doc.ts → c3-301
 src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
+src/shared/beacon-alias.test.ts → c3-302
+src/shared/beacon-alias.ts → c3-302
 src/shared/beacon-config.ts → c3-302
 src/shared/beacon-pair-link.test.ts → c3-302
 src/shared/beacon-pair-link.ts → c3-302

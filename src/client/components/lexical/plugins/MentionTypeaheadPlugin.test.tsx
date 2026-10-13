@@ -11,6 +11,7 @@ import {
 import type { MentionOption } from "./MentionTypeaheadPlugin"
 import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
 import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
+import type { BeaconSuggestion } from "../../../hooks/useBeaconSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import type { Subagent } from "../../../../shared/types"
 
@@ -333,6 +334,16 @@ describe("composeMentionOptions", () => {
     }))
   }
 
+  function beacons(count: number): BeaconSuggestion[] {
+    return Array.from({ length: count }, (_, i) => ({
+      kind: "beacon" as const,
+      beaconId: `beacon-${i}`,
+      handle: `box-${i}`,
+      alias: null,
+      hostname: `Box ${i}`,
+    }))
+  }
+
   function paths(count: number): ProjectPath[] {
     return Array.from({ length: count }, (_, i) => ({
       path: `file-${i}.ts`,
@@ -345,6 +356,7 @@ describe("composeMentionOptions", () => {
       query: "",
       agents: agents(5),
       projects: projects(8),
+      beacons: [],
       paths: paths(4),
     })
     expect(options.map((option) => option.kind)).toEqual([
@@ -359,6 +371,7 @@ describe("composeMentionOptions", () => {
       query: "project/",
       agents: [],
       projects: projects(NAMESPACE_PREVIEW_LIMIT + 5),
+      beacons: [],
       paths: [],
     })
     expect(options).toHaveLength(NAMESPACE_PREVIEW_LIMIT + 5)
@@ -369,6 +382,7 @@ describe("composeMentionOptions", () => {
       query: "agent/",
       agents: agents(NAMESPACE_PREVIEW_LIMIT + 5),
       projects: [],
+      beacons: [],
       paths: [],
     })
     expect(options).toHaveLength(NAMESPACE_PREVIEW_LIMIT + 5)
@@ -379,8 +393,23 @@ describe("composeMentionOptions", () => {
       query: "repo",
       agents: [],
       projects: projects(5),
+      beacons: [],
       paths: paths(2),
     })
     expect(options.filter((option) => option.kind === "project")).toHaveLength(5)
+  })
+
+  it("previews beacons on a bare @ and lists them all under the beacon/ namespace", () => {
+    const preview = composeMentionOptions({ query: "", agents: [], projects: [], beacons: beacons(6), paths: [] })
+    expect(preview.filter((option) => option.kind === "beacon")).toHaveLength(NAMESPACE_PREVIEW_LIMIT)
+
+    const listed = composeMentionOptions({ query: "beacon/", agents: [], projects: [], beacons: beacons(6), paths: [] })
+    expect(listed.filter((option) => option.kind === "beacon")).toHaveLength(6)
+  })
+
+  it("inserts a beacon pick as an @beacon/<handle> mention", () => {
+    const [option] = composeMentionOptions({ query: "beacon/", agents: [], projects: [], beacons: beacons(1), paths: [] })
+    if (option === undefined) throw new Error("expected a beacon option")
+    expect(createMentionArgs(option)).toEqual({ mentionKind: "beacon", value: "box-0", label: "beacon/box-0" })
   })
 })

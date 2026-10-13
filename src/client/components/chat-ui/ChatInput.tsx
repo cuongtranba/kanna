@@ -21,7 +21,7 @@ import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext"
-import { ArrowUp, Bot, Paperclip, SlidersHorizontal } from "lucide-react"
+import { ArrowUp, Bot, Paperclip, Radio, SlidersHorizontal } from "lucide-react"
 
 import {
   type AgentProvider,
@@ -69,7 +69,7 @@ import {
   type SessionTotals,
 } from "../../lib/contextWindow"
 import { uploadFile, UploadAbortedError } from "../../lib/uploadFile.adapter"
-import { useAppSettingsStore, selectCustomModels, selectTextSnippets } from "../../stores/appSettingsStore"
+import { useAppSettingsStore, selectCustomBeacons, selectCustomModels, selectTextSnippets } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 
 import { buildKannaEditorConfig } from "../lexical/config"
@@ -89,6 +89,7 @@ import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
 import { log } from "../../../shared/log"
 import { deleteUploadedFile } from "../../api/files"
 import { runDetached } from "../../lib/runDetached"
+import { beaconMentionChips } from "../../lib/beaconMentionChips"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { DomPort } from "../../ports/domPort"
 import type { HttpPort } from "../../ports/httpPort"
@@ -182,8 +183,8 @@ type ComposerAttachment = StoreComposerAttachment
 
 
 type MentionChip =
-  | { kind: "ok"; label: string; id: string }
-  | { kind: "missing"; label: string }
+  | { kind: "ok"; family: "agent" | "beacon"; label: string; id: string }
+  | { kind: "missing"; family: "agent" | "beacon"; label: string }
 
 
 export interface ChatInputPorts {
@@ -473,6 +474,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const subagentsForChips = useAppSettingsStore(
     (state) => state.settings?.subagents ?? EMPTY_SUBAGENTS,
   )
+  const beaconsForChips = useAppSettingsStore(selectCustomBeacons)
   const mentionChips = useMemo<MentionChip[]>(() => {
     const byNameLower = new Map(
       subagentsForChips.map((subagent) => [subagent.name.toLowerCase(), subagent]),
@@ -485,12 +487,15 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       const hit = byNameLower.get(name.toLowerCase())
       chips.push(
         hit
-          ? { kind: "ok", label: hit.name, id: hit.id }
-          : { kind: "missing", label: name },
+          ? { kind: "ok", family: "agent", label: hit.name, id: hit.id }
+          : { kind: "missing", family: "agent", label: name },
       )
     }
+    for (const chip of beaconMentionChips(currentText, beaconsForChips)) {
+      chips.push({ ...chip, family: "beacon" })
+    }
     return chips
-  }, [currentText, subagentsForChips])
+  }, [currentText, subagentsForChips, beaconsForChips])
 
   const cleanupAttachmentPreview = useCallback((attachment: ComposerAttachment) => {
     if (attachment.previewUrl) {
@@ -1000,7 +1005,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
             <div className="flex flex-wrap gap-1 px-2 pt-2">
               {mentionChips.map((chip, i) => (
                 <span
-                  key={`${chip.kind}:${chip.label}:${i}`}
+                  key={`${chip.family}:${chip.kind}:${chip.label}:${i}`}
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
                     chip.kind === "ok"
@@ -1008,8 +1013,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                       : "bg-destructive/15 text-destructive",
                   )}
                 >
-                  <Bot className="h-3 w-3" />
-                  agent/{chip.label}
+                  {chip.family === "beacon" ? <Radio className="h-3 w-3" /> : <Bot className="h-3 w-3" />}
+                  {chip.family}/{chip.label}
                   {chip.kind === "missing" && (
                     <span className="ml-1 font-medium">unknown</span>
                   )}

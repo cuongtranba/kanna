@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import { validateBeaconAliasFormat } from "../shared/beacon-alias"
 import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
 import type { BeaconOs } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
@@ -25,6 +26,17 @@ export function validateBeaconLabel(
   }
   const taken = others.some((other) => other.id !== selfId && other.label === trimmed)
   return taken ? `Beacon label "${trimmed}" is already in use` : null
+}
+
+export function validateBeaconAlias(
+  alias: string,
+  others: readonly { id: string; alias?: string }[],
+  selfId?: string,
+): string | null {
+  const formatError = validateBeaconAliasFormat(alias)
+  if (formatError) return formatError
+  const taken = others.some((other) => other.id !== selfId && other.alias === alias)
+  return taken ? `Short name "${alias}" is already in use` : null
 }
 
 function readString(object: JsonObject, key: string): string | null {
@@ -78,7 +90,27 @@ export function normalizeScope(raw: JsonValue | undefined): BeaconScope {
   }
 }
 
-function normalizeBeaconEntry(entry: JsonValue, warnings: string[]): BeaconConfig | null {
+function readAlias(
+  entry: JsonObject,
+  id: string,
+  warnings: string[],
+  takenAliases: ReadonlySet<string>,
+): string | null {
+  const alias = readString(entry, "alias")
+  if (alias === null) return null
+  const error = validateBeaconAliasFormat(alias) ?? (takenAliases.has(alias) ? "alias is already in use" : null)
+  if (error) {
+    warnings.push(`Beacon '${id}' alias dropped: ${error}`)
+    return null
+  }
+  return alias
+}
+
+function normalizeBeaconEntry(
+  entry: JsonValue,
+  warnings: string[],
+  takenAliases: ReadonlySet<string>,
+): BeaconConfig | null {
   if (!isJsonObject(entry)) {
     warnings.push("customBeacons entry must be an object")
     return null
@@ -92,9 +124,11 @@ function normalizeBeaconEntry(entry: JsonValue, warnings: string[]): BeaconConfi
     return null
   }
   const createdAt = readString(entry, "createdAt") ?? new Date(0).toISOString()
+  const alias = readAlias(entry, id, warnings, takenAliases)
   return {
     id,
     label,
+    ...(alias === null ? {} : { alias }),
     publicKey,
     os,
     scope: normalizeScope(entry.scope),
@@ -113,8 +147,9 @@ export function normalizeBeacons(raw: JsonValue | undefined, warnings: string[])
   const out: BeaconConfig[] = []
   const seenIds = new Set<string>()
   const seenLabels = new Set<string>()
+  const seenAliases = new Set<string>()
   for (const entry of raw) {
-    const normalized = normalizeBeaconEntry(entry, warnings)
+    const normalized = normalizeBeaconEntry(entry, warnings, seenAliases)
     if (!normalized) continue
     if (seenIds.has(normalized.id) || seenLabels.has(normalized.label)) {
       warnings.push(`Beacon '${normalized.id}' rejected: duplicate id or label`)
@@ -122,6 +157,7 @@ export function normalizeBeacons(raw: JsonValue | undefined, warnings: string[])
     }
     seenIds.add(normalized.id)
     seenLabels.add(normalized.label)
+    if (normalized.alias !== undefined) seenAliases.add(normalized.alias)
     out.push(normalized)
   }
   return out
@@ -131,6 +167,18 @@ function checkedLabel(label: string, current: readonly BeaconConfig[], selfId?: 
   const error = validateBeaconLabel(label, current, selfId)
   if (error) throw new BeaconValidationException({ code: "INVALID_LABEL", message: error })
   return label.trim()
+}
+
+function checkedAlias(
+  alias: string | null | undefined,
+  existing: BeaconConfig,
+  current: readonly BeaconConfig[],
+): string | undefined {
+  if (alias === undefined) return existing.alias
+  if (alias === null) return undefined
+  const error = validateBeaconAlias(alias, current, existing.id)
+  if (error) throw new BeaconValidationException({ code: "INVALID_ALIAS", message: error })
+  return alias
 }
 
 export function createBeacon(input: BeaconInput, current: readonly BeaconConfig[]): BeaconConfig {
@@ -153,8 +201,11 @@ export function updateBeacon(
   current: readonly BeaconConfig[],
 ): BeaconConfig {
   const label = patch.label === undefined ? existing.label : checkedLabel(patch.label, current, existing.id)
+  const alias = checkedAlias(patch.alias, existing, current)
+  const { alias: _previousAlias, ...withoutAlias } = existing
   return {
-    ...existing,
+    ...withoutAlias,
+    ...(alias === undefined ? {} : { alias }),
     label,
     scope: patch.scope ?? existing.scope,
     enabled: patch.enabled ?? existing.enabled,
