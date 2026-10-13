@@ -395,6 +395,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     subagentTranscriptRegistry,
     localCatalog,
     genuiDatasets,
+    onTurnOutcome: (chatId, outcome) => pushManager.noteTurnOutcome(chatId, outcome),
     chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
     getSubagents: () => appSettings.getSnapshot().subagents,
     getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),

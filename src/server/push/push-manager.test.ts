@@ -111,6 +111,25 @@ describe("PushManager.observeStatuses", () => {
     expect(JSON.parse(sender.sent[0].payload).kind).toBe("completed")
   })
 
+  test("does not send done when the turn was cancelled", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await manager.observeStatuses([chat({ status: "running" })])
+    manager.noteTurnOutcome("c1", "cancelled")
+    await manager.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent).toHaveLength(0)
+  })
+
+  test("a later idle after a suppressed cancel still sends done", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await manager.observeStatuses([chat({ status: "running" })])
+    manager.noteTurnOutcome("c1", "cancelled")
+    await manager.observeStatuses([chat({ status: "idle" })])
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "idle" })])
+    expect(sender.sent).toHaveLength(1)
+    expect(JSON.parse(sender.sent[0].payload).kind).toBe("completed")
+  })
+
   test("still notifies waiting_for_user while background work is pending", async () => {
     await registerSub(manager, store, "d1", "https://push.example/x")
     await manager.observeStatuses([chat({ status: "running", hasPendingWork: true })])
