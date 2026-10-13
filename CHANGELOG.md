@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.76.4](https://github.com/cuongtranba/kanna/compare/v1.76.3...v1.76.4) (2026-10-13)
+
+
+### Bug Fixes
+
+* **tasks:** tell the model to create tasks one at a time in display order ([#1281](https://github.com/cuongtranba/kanna/issues/1281)) ([8c7a5d7](https://github.com/cuongtranba/kanna/commit/8c7a5d74dfd946d77653191f146e35a9a681b1ce))
+
 ## [1.76.3](https://github.com/cuongtranba/kanna/compare/v1.76.2...v1.76.3) (2026-10-13)
 
 
