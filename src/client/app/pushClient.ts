@@ -1,3 +1,4 @@
+import { errorMessage } from "../../shared/errors"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import { pushAdapter } from "../adapters/push.adapter"
 import { notificationAdapter } from "../adapters/notification.adapter"
@@ -93,6 +94,19 @@ function deriveLabel(userAgent: string): string {
   return ua || "Browser"
 }
 
+const PERMISSION_DENIED_MESSAGE =
+  "Notifications are blocked for Kanna. On iPhone, allow them in Settings → Notifications → Kanna, then try again."
+const PERMISSION_DISMISSED_MESSAGE =
+  "Notification permission was dismissed. Tap Enable again and choose Allow."
+
+async function withStep<T>(label: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    throw new Error(`${label}: ${errorMessage(error)}`, { cause: error })
+  }
+}
+
 export async function subscribePush(args: {
   vapidPublicKey: string
   sendToServer: (payload: PushSubscribeServerCall) => Promise<{ id: string }>
@@ -106,14 +120,20 @@ export async function subscribePush(args: {
   if (support.state === "denied") throw new Error("Notification permission previously denied")
 
   const result = await notification.requestPermission()
-  if (result !== "granted") throw new Error("Notification permission was not granted")
+  if (result === "denied") throw new Error(PERMISSION_DENIED_MESSAGE)
+  if (result !== "granted") throw new Error(PERMISSION_DISMISSED_MESSAGE)
 
-  const reg = await push.registerServiceWorker("/sw.js")
-  await push.getReadyServiceWorkerRegistration()
-  const subscription = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(args.vapidPublicKey),
+  const reg = await withStep("Could not register the service worker", async () => {
+    const registration = await push.registerServiceWorker("/sw.js")
+    await push.getReadyServiceWorkerRegistration()
+    return registration
   })
+  const subscription = await withStep("Could not subscribe with the browser push service", () =>
+    reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(args.vapidPublicKey),
+    }),
+  )
 
   const json = subscription.toJSON()
   const endpoint = json.endpoint ?? subscription.endpoint

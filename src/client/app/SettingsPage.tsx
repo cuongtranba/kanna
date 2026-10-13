@@ -111,13 +111,8 @@ import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
 import { PluginsSection } from "../components/settings/PluginsSection"
 import { RemoteMcpSection } from "../components/settings/RemoteMcpSection"
-import {
-  clearStoredPushDeviceId,
-  detectPushSupport,
-  setStoredPushDeviceId,
-  subscribePush,
-  unsubscribePush,
-} from "./pushClient"
+import { detectPushSupport } from "./pushClient"
+import { usePushDeviceActions } from "./usePushDeviceActions"
 import { createLlmProviderDraftForSelection } from "./llmProviderDraft"
 import { useSettingsPageStore, type GithubRelease, type ChangelogStatus } from "../stores/settingsPageStore"
 import { SkillsSection } from "./SkillsSection"
@@ -799,37 +794,7 @@ export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
   const pushPermissionState = useSettingsPageStore((s) => s.pushPermissionState)
   const setPushPermissionState = useSettingsPageStore((s) => s.setPushPermissionState)
   const pushDeviceId = useSettingsPageStore((s) => s.pushDeviceId)
-  const setPushDeviceId = useSettingsPageStore((s) => s.setPushDeviceId)
-
-  const handleEnablePush = useCallback(async () => {
-    if (!state.pushConfig) return
-    const id = await subscribePush({
-      vapidPublicKey: state.pushConfig.vapidPublicKey,
-      sendToServer: async (payload) => {
-        const result = await state.socket.command<{ id: string }>({
-          type: "push.subscribe",
-          subscription: payload.subscription,
-          label: payload.label,
-          userAgent: payload.userAgent,
-        })
-        setStoredPushDeviceId(result.id)
-        return { id: result.id }
-      },
-    })
-    setPushDeviceId(id)
-  }, [state.pushConfig, state.socket, setPushDeviceId])
-
-  const handleDisablePush = useCallback(async () => {
-    if (!pushDeviceId) return
-    await unsubscribePush({
-      pushDeviceId,
-      sendToServer: async (id) => {
-        await state.socket.command({ type: "push.unsubscribe", pushDeviceId: id })
-      },
-    })
-    clearStoredPushDeviceId()
-    setPushDeviceId(null)
-  }, [pushDeviceId, state.socket, setPushDeviceId])
+  const { handleEnablePush, handleDisablePush } = usePushDeviceActions(state)
   const scrollbackDraft = useSettingsPageStore((s) => s.scrollbackDraft)
   const setScrollbackDraft = useSettingsPageStore((s) => s.setScrollbackDraft)
   const minColumnWidthDraft = useSettingsPageStore((s) => s.minColumnWidthDraft)

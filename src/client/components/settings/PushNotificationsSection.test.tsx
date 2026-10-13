@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PushNotificationsSection } from "./PushNotificationsSection"
+import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
+import { useSettingsPageStore } from "../../stores/settingsPageStore"
 import type { PushConfigSnapshot, LocalProjectsSnapshot } from "../../../shared/types"
 
 const baseConfig: PushConfigSnapshot = {
@@ -150,5 +152,26 @@ describe("PushNotificationsSection", () => {
     )
     expect(html).not.toMatch(/p256dh/i)
     expect(html).not.toMatch(/applicationServerKey/i)
+  })
+
+  test("shows a push failure inline under the Enable button", async () => {
+    useSettingsPageStore.getState().setPushError("Could not register the service worker: boom")
+    const { container, cleanup } = await renderClientMarkup(
+      <PushNotificationsSection
+        permissionState="default"
+        config={baseConfig}
+        projects={baseProjects}
+        currentDeviceId={null}
+        {...noopHandlers}
+      />
+    )
+    try {
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Could not register the service worker: boom",
+      )
+    } finally {
+      await cleanup()
+      useSettingsPageStore.getState().setPushError(null)
+    }
   })
 })

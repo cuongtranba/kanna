@@ -48,6 +48,7 @@ interface SettingsPageState {
   changelogError: string | null
   pushPermissionState: PushPermissionState
   pushDeviceId: string | null
+  pushError: string | null
   scrollbackDraft: string
   minColumnWidthDraft: string
   tabMinWidthDraft: string
@@ -106,6 +107,7 @@ interface SettingsPageState {
   setChangelogError: (error: string | null) => void
   setPushPermissionState: (state: PushPermissionState) => void
   setPushDeviceId: (deviceId: string | null) => void
+  setPushError: (error: string | null) => void
   setScrollbackDraft: (draft: string) => void
   setMinColumnWidthDraft: (draft: string) => void
   setTabMinWidthDraft: (draft: string) => void
@@ -162,6 +164,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   changelogError: null,
   pushPermissionState: detectPushSupport().state,
   pushDeviceId: getStoredPushDeviceId(),
+  pushError: null,
   scrollbackDraft: "",
   minColumnWidthDraft: "",
   tabMinWidthDraft: "",
@@ -252,6 +255,7 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   setChangelogError: (error) => set({ changelogError: error }),
   setPushPermissionState: (state) => set({ pushPermissionState: state }),
   setPushDeviceId: (deviceId) => set({ pushDeviceId: deviceId }),
+  setPushError: (error) => set({ pushError: error }),
   setScrollbackDraft: (draft) => set({ scrollbackDraft: draft }),
   setMinColumnWidthDraft: (draft) => set({ minColumnWidthDraft: draft }),
   setTabMinWidthDraft: (draft) => set({ tabMinWidthDraft: draft }),

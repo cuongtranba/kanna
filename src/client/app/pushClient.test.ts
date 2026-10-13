@@ -104,6 +104,37 @@ describe("subscribePush", () => {
       }),
     ).rejects.toThrow(/permission/i)
   })
+
+  test("a blocked permission prompt rejects with iPhone Settings guidance", async () => {
+    const notification = {
+      ...makeFakeNotificationPort("default", true),
+      requestPermission: async (): Promise<NotificationPermission> => "denied",
+    }
+    await expect(
+      subscribePush({
+        vapidPublicKey: VAPID_KEY,
+        push: makeFakePushPort(),
+        notification,
+        sendToServer: async () => ({ id: "x" }),
+      }),
+    ).rejects.toThrow("Notifications are blocked for Kanna. On iPhone, allow them in Settings → Notifications → Kanna, then try again.")
+  })
+
+  test("a failing browser push subscription names the subscribe step and keeps the browser message", async () => {
+    const reg = makeReg({
+      subscribe: async () => {
+        throw new Error("push service unreachable")
+      },
+    })
+    await expect(
+      subscribePush({
+        vapidPublicKey: VAPID_KEY,
+        push: makeFakePushPort({ registration: reg }),
+        notification: makeFakeNotificationPort("default", true),
+        sendToServer: async () => ({ id: "x" }),
+      }),
+    ).rejects.toThrow("Could not subscribe with the browser push service: push service unreachable")
+  })
 })
 
 describe("unsubscribePush", () => {
