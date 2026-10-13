@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.76.2](https://github.com/cuongtranba/kanna/compare/v1.76.1...v1.76.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **plan:** show the plan when ExitPlanMode shares a message with its plan file ([#1274](https://github.com/cuongtranba/kanna/issues/1274)) ([c009482](https://github.com/cuongtranba/kanna/commit/c0094823778a9c1367a96bb9a58c059e6fd02a33))
+
 ## [1.76.1](https://github.com/cuongtranba/kanna/compare/v1.76.0...v1.76.1) (2026-10-13)
 
 
