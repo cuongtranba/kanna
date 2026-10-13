@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.76.1](https://github.com/cuongtranba/kanna/compare/v1.76.0...v1.76.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **push:** replace a subscription made with an old VAPID key ([#1270](https://github.com/cuongtranba/kanna/issues/1270)) ([f7250e7](https://github.com/cuongtranba/kanna/commit/f7250e7d197ac8556bd6335103b6f94ce796bc0d))
+
 ## [1.76.0](https://github.com/cuongtranba/kanna/compare/v1.75.1...v1.76.0) (2026-10-13)
 
 
