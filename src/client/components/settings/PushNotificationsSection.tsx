@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import type { LocalProjectsSnapshot, PushConfigSnapshot } from "../../../shared/types"
 import { isValidVapidSubject } from "../../../shared/vapid-subject"
 import { errorMessage } from "../../../shared/errors"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { useSettingsPageStore } from "../../stores/settingsPageStore"
 import { cn } from "../../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { PushPermissionState } from "../../app/pushClient"
@@ -42,14 +42,27 @@ const PUSH_CONTACT_KEY = "push.contactSubject"
 async function reportFailure(action: () => Promise<void>): Promise<void> {
   try {
     await action()
-    useKannaStateStore.getState().setCommandError(null)
+    useSettingsPageStore.getState().setPushError(null)
   } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
+    useSettingsPageStore.getState().setPushError(errorMessage(error))
   }
 }
 
 function runPushAction(key: string, action: () => Promise<void>): void {
   runPendingAction(key, () => reportFailure(action))
+}
+
+function PushErrorNotice() {
+  const pushError = useSettingsPageStore((s) => s.pushError)
+  if (!pushError) return null
+  return (
+    <p
+      role="alert"
+      className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive-text"
+    >
+      {pushError}
+    </p>
+  )
 }
 
 interface PendingButtonProps {
@@ -133,9 +146,12 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
 
   if (permissionState === "denied") {
     return (
-      <p className="text-sm text-muted-foreground">
-        You blocked notifications for this site. Re-enable them in your browser settings, then reload.
-      </p>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm text-muted-foreground">
+          You blocked notifications for this site. Re-enable them in your browser settings, then reload.
+        </p>
+        <PushErrorNotice />
+      </div>
     )
   }
 
@@ -145,9 +161,12 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
 
   if (!isSubscribed) {
     return (
-      <PendingButton pendingKey={PUSH_ENABLE_KEY} onRun={props.onEnable} className={primaryButton}>
-        Enable on this device
-      </PendingButton>
+      <div className="flex w-full min-w-0 flex-col items-start gap-2 md:w-[440px]">
+        <PendingButton pendingKey={PUSH_ENABLE_KEY} onRun={props.onEnable} className={primaryButton}>
+          Enable on this device
+        </PendingButton>
+        <PushErrorNotice />
+      </div>
     )
   }
 
@@ -174,6 +193,8 @@ export function PushNotificationsSection(props: PushNotificationsSectionProps) {
           Disable
         </PendingButton>
       </div>
+
+      <PushErrorNotice />
 
       <div className="flex flex-col gap-2">
         <div className={cn(sectionLabel, "flex items-center gap-1.5")}>

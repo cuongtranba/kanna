@@ -135,6 +135,12 @@ export class PushManager {
         const event: PushEvent = { kind: "subscription_added", ts, id: existing.id, record: updated }
         this.applyEvent(event)
         await this.store.appendPushEvent(event)
+        log.info("[kanna/push] subscribe: ok", {
+          id: existing.id,
+          endpoint: safeEndpointHost(existing.endpoint),
+          label: args.label,
+          renewed: true,
+        })
         return { id: existing.id }
       }
     }
@@ -151,6 +157,12 @@ export class PushManager {
     const event: PushEvent = { kind: "subscription_added", ts, id, record }
     this.applyEvent(event)
     await this.store.appendPushEvent(event)
+    log.info("[kanna/push] subscribe: ok", {
+      id,
+      endpoint: safeEndpointHost(record.endpoint),
+      label: args.label,
+      renewed: false,
+    })
     return { id }
   }
 

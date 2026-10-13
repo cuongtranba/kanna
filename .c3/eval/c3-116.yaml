@@ -13,6 +13,7 @@ code:
   - src/client/lib/customProviderDraft.ts
   - src/client/stores/customProvidersSectionStore.ts
   - src/client/app/SettingsPage.tsx
+  - src/client/app/usePushDeviceActions.ts
   - src/client/app/SubagentsSection.tsx
   - src/client/app/SubagentFormRow.tsx
   - src/client/app/SubagentScopeFields.tsx
