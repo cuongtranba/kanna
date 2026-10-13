@@ -5,6 +5,8 @@ export {
   isGroup,
   isPane,
   type NodeIdSource,
+  type PageKind,
+  type PageTabTarget,
   type PaneLayout,
   type PaneLeaf,
   type PaneGroup,
@@ -17,6 +19,8 @@ export {
 } from "./types"
 
 export { MIN_PANE_FRACTION, clampPairSizes, normalizeSizes, redistributeToMinimum } from "./sizes"
+
+export { fallbackPathAfterClose, pageTargetForPath, resolvePageRoute, type PageRoute } from "./pageTabs"
 
 export { buildTabId, isSingletonTabKind, normalizeTabTarget, tabTargetsEqual } from "./tabTarget"
 

@@ -1,12 +1,11 @@
 import { useCallback } from "react"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
 import { BoardsPage } from "../components/boards/BoardsPage"
 import type { KannaState } from "./useKannaState"
 
-export function StackBoardsRoutePage() {
+export function StackBoardsRoutePage({ stackId }: { stackId: string }) {
   const state = useOutletContext<KannaState>()
   const navigate = useNavigate()
-  const { stackId = "" } = useParams<{ stackId: string }>()
 
   const stack = state.sidebarData.stacks.find((candidate) => candidate.id === stackId)
   const stackName = stack ? stack.title : "Stack"

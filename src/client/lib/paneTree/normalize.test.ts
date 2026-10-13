@@ -185,4 +185,29 @@ describe("normalizeLayout", () => {
     expect(layout.root.kind).toBe("pane")
     expect(collectPanes(layout.root)).toHaveLength(1)
   })
+
+  test("keeps a persisted page tab and drops one whose path no longer resolves to its page", () => {
+    const pageTab = (page: string, path: string): JsonValue => ({
+      tabId: "ignored",
+      target: { kind: "page", page, path },
+      createdAt: 0,
+    })
+    const layout = normalizeLayout({
+      root: {
+        kind: "pane",
+        id: "main",
+        tabs: [
+          pageTab("settings", "/settings/models"),
+          pageTab("settings", "/cron"),
+          pageTab("boards", "/chat/c1"),
+        ],
+        focusedTabId: null,
+      },
+      focusedPaneId: "main",
+    })
+
+    expect(collectPanes(layout.root).flatMap((pane) => pane.tabs.map((tab) => tab.target))).toEqual([
+      { kind: "page", page: "settings", path: "/settings/models" },
+    ])
+  })
 })

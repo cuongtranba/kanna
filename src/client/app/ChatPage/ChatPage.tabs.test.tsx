@@ -73,6 +73,7 @@ describe("ChatPage session-tabs", () => {
         return null
       },
       board: () => null,
+      page: () => null,
       changes: () => null,
       terminal: () => null,
     }

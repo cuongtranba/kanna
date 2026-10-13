@@ -268,4 +268,18 @@ describe("paneLayoutStore keyboard commands", () => {
     s().splitFocusedPane("bottom")
     expect(collectPanes(s().getLayout().root).length).toBeGreaterThanOrEqual(1)
   })
+
+  test("reopening the Settings page with another section retargets the single settings tab", () => {
+    s().openTab({ kind: "page", page: "settings", path: "/settings/general" })
+    s().openTab({ kind: "chat", chatId: "c1" })
+    s().openTab({ kind: "page", page: "settings", path: "/settings/models" })
+
+    const layout = s().getLayout()
+    const settingsTabs = collectPanes(layout.root)
+      .flatMap((pane) => pane.tabs)
+      .filter((tab) => tab.target.kind === "page")
+    expect(settingsTabs).toHaveLength(1)
+    expect(settingsTabs[0]?.target).toEqual({ kind: "page", page: "settings", path: "/settings/models" })
+    expect(collectPanes(layout.root)[0]?.focusedTabId).toBe(settingsTabs[0]?.tabId)
+  })
 })

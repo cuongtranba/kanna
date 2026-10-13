@@ -14,3 +14,4 @@ code:
   - src/client/app/useTerminalToggleAnimation.ts
   - src/client/components/messages/LoopDisarmedMessage.test.tsx
   - src/client/components/messages/LoopDisarmedMessage.tsx
+  - src/client/components/panes/PageTabContent.tsx

@@ -1,4 +1,5 @@
 import { isJsonObject, type JsonValue } from "../../../shared/json"
+import { resolvePageRoute } from "./pageTabs"
 import type { PaneTabKind, PaneTabTarget } from "./types"
 
 const SINGLETON_KINDS: ReadonlySet<PaneTabKind> = new Set<PaneTabKind>(["changes"])
@@ -21,6 +22,8 @@ export function buildTabId(target: PaneTabTarget): string {
       return `terminal_${part(target.terminalId)}`
     case "board":
       return `board_${part(target.boardId)}`
+    case "page":
+      return `page_${target.page}`
   }
 }
 
@@ -48,6 +51,13 @@ export function normalizeTabTarget(value: JsonValue | undefined): PaneTabTarget 
       const boardId = nonEmptyString(value.boardId)
       return boardId ? { kind: "board", boardId } : null
     }
+    case "page": {
+      const path = typeof value.path === "string" ? value.path : null
+      const resolved = path ? resolvePageRoute(path) : null
+      return path && resolved && resolved.page === value.page
+        ? { kind: "page", page: resolved.page, path }
+        : null
+    }
     default:
       return null
   }
@@ -62,6 +72,8 @@ export function tabTargetsEqual(left: PaneTabTarget, right: PaneTabTarget): bool
       return right.kind === "terminal" && left.terminalId === right.terminalId
     case "board":
       return right.kind === "board" && left.boardId === right.boardId
+    case "page":
+      return right.kind === "page" && left.page === right.page && left.path === right.path
     case "changes":
       return true
   }

@@ -1,4 +1,14 @@
-import { GitCompare, MessageSquare, SquareKanban, SquareTerminal, type LucideIcon } from "lucide-react"
+import {
+  CalendarClock,
+  FolderOpen,
+  GitCompare,
+  MessageSquare,
+  Settings,
+  SquareKanban,
+  SquareTerminal,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react"
 import type { ClaudeSessionLifecycleStatus, KannaStatus } from "../../../shared/types"
 import {
   chatStatusIndicator,
@@ -6,7 +16,7 @@ import {
   type ChatStatusIndicator,
   type SessionStateBadge,
 } from "../../lib/chatStatusIndicator"
-import type { PaneTabTarget } from "../../lib/paneTree"
+import type { PageKind, PaneTabTarget } from "../../lib/paneTree"
 
 
 export interface ChatTabStatus {
@@ -32,6 +42,14 @@ export interface TabPresentation {
   sessionBadge: SessionStateBadge | null
 }
 
+const PAGE_PRESENTATION: Readonly<Record<PageKind, { label: string; icon: LucideIcon }>> = {
+  projects: { label: "Projects", icon: FolderOpen },
+  settings: { label: "Settings", icon: Settings },
+  cron: { label: "Cron jobs", icon: CalendarClock },
+  workflows: { label: "Workflows", icon: Workflow },
+  boards: { label: "Boards", icon: SquareKanban },
+}
+
 export function describeTab(
   target: PaneTabTarget,
   context: TabPresentationContext,
@@ -48,6 +66,15 @@ export function describeTab(
         sessionBadge: sessionStateBadge(chat?.sessionState),
       }
     }
+
+    case "page":
+      return {
+        ...PAGE_PRESENTATION[target.page],
+        pinned: false,
+        closable: true,
+        indicator: null,
+        sessionBadge: null,
+      }
 
     case "board":
       return {

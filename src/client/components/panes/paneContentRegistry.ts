@@ -28,5 +28,7 @@ export function renderPaneContent(
       return registry.terminal(target, pane, isFocused, isActiveTab)
     case "board":
       return registry.board(target, pane, isFocused, isActiveTab)
+    case "page":
+      return registry.page(target, pane, isFocused, isActiveTab)
   }
 }

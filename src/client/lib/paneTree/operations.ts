@@ -1,5 +1,5 @@
 import { clampPairSizes, normalizeSizes, redistributeToMinimum } from "./sizes"
-import { buildTabId } from "./tabTarget"
+import { buildTabId, tabTargetsEqual } from "./tabTarget"
 import {
   collectPanes,
   createGroup,
@@ -219,6 +219,21 @@ export function reorderPaneTabs(
 }
 
 
+function retargetTab(
+  layout: PaneLayout,
+  panePath: readonly number[],
+  tabId: string,
+  target: PaneTabTarget,
+): PaneLayout {
+  const pane = getNodeAtPath(layout.root, panePath)
+  if (!pane || !isPane(pane)) return layout
+  const tabs = pane.tabs.map((tab) => (tab.tabId === tabId ? { ...tab, target } : tab))
+  return {
+    ...layout,
+    root: replaceNodeAtPath(layout.root, panePath, createPane(pane.id, tabs, pane.focusedTabId)),
+  }
+}
+
 export interface OpenTabResult {
   layout: PaneLayout
   tabId: string
@@ -232,9 +247,15 @@ export function openTab(
   const tabId = buildTabId(target)
   const focus = options.focus ?? true
 
-  if (findPaneContainingTab(layout.root, tabId)) {
-    if (!focus) return { layout, tabId }
-    return { layout: focusTab(layout, tabId) ?? layout, tabId }
+  const existing = findPaneContainingTab(layout.root, tabId)
+  if (existing) {
+    const stored = existing.pane.tabs.find((tab) => tab.tabId === tabId)
+    const retargeted =
+      stored && !tabTargetsEqual(stored.target, target)
+        ? retargetTab(layout, existing.path, tabId, target)
+        : layout
+    if (!focus) return { layout: retargeted, tabId }
+    return { layout: focusTab(retargeted, tabId) ?? retargeted, tabId }
   }
 
   const paneId =

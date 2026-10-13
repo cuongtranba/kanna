@@ -62,7 +62,7 @@ async function mount(stacks: StackSummary[], entry = "/boards/stack/stack-1"): P
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/" element={<Outlet context={state} />}>
-            <Route path="boards/stack/:stackId" element={<StackBoardsRoutePage />} />
+            <Route path="boards/stack/:stackId" element={<StackBoardsRoutePage stackId="stack-1" />} />
           </Route>
         </Routes>
         <PathSpy onPath={(next) => { path = next }} />

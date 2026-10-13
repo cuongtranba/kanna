@@ -75,7 +75,7 @@ async function mount(chats: SidebarChatRow[], entry = "/boards/proj-1"): Promise
       <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route path="/" element={<Outlet context={state} />}>
-            <Route path="boards/:projectId" element={<BoardsRoutePage />} />
+            <Route path="boards/:projectId" element={<BoardsRoutePage projectId="proj-1" />} />
           </Route>
         </Routes>
         <PathSpy onPath={(next) => { path = next }} />
