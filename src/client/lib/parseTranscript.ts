@@ -27,7 +27,29 @@ function createBaseMessage(entry: TranscriptEntry) {
   }
 }
 
-function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>): HydratedToolCallBase<string, NormalizedToolCall["input"], HydratedToolCall["result"]> {
+const PLAN_FILE_DIRECTORY = "/.claude/plans/"
+
+function isPlanFilePath(filePath: string): boolean {
+  return filePath.includes(PLAN_FILE_DIRECTORY) && filePath.endsWith(".md")
+}
+
+function planWriteAfter(tool: NormalizedToolCall, planWrite: string | undefined): string | undefined {
+  if (tool.toolKind === "exit_plan_mode") return undefined
+  if (tool.toolKind === "write_file" && isPlanFilePath(tool.input.filePath)) return tool.input.content
+  return planWrite
+}
+
+function hydrateToolInput(tool: NormalizedToolCall, planWrite: string | undefined): NormalizedToolCall["input"] {
+  if (tool.toolKind === "exit_plan_mode" && !tool.input.plan && planWrite) {
+    return { ...tool.input, plan: planWrite }
+  }
+  return tool.input
+}
+
+function hydrateToolCall(
+  entry: Extract<TranscriptEntry, { kind: "tool_call" }>,
+  planWrite: string | undefined,
+): HydratedToolCallBase<string, NormalizedToolCall["input"], HydratedToolCall["result"]> {
   return {
     id: entry._id,
     messageId: entry.messageId,
@@ -36,7 +58,7 @@ function hydrateToolCall(entry: Extract<TranscriptEntry, { kind: "tool_call" }>)
     toolKind: entry.tool.toolKind,
     toolName: entry.tool.toolName,
     toolId: entry.tool.toolId,
-    input: entry.tool.input,
+    input: hydrateToolInput(entry.tool, planWrite),
     timestamp: createTimestamp(entry.createdAt),
   }
 }
@@ -109,6 +131,7 @@ function getSubagentTaskResultFromDebug(
 export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedTranscriptMessage[] {
   const pendingToolCalls = new Map<string, { hydrated: MutableToolCall; normalized: NormalizedToolCall }>()
   const messages: HydratedTranscriptMessage[] = []
+  let planWrite: string | undefined
 
   for (const entry of entries) {
     switch (entry.kind) {
@@ -177,7 +200,8 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
         })
         break
       case "tool_call": {
-        const toolCall = hydrateToolCall(entry)
+        const toolCall = hydrateToolCall(entry, planWrite)
+        planWrite = planWriteAfter(entry.tool, planWrite)
         pendingToolCalls.set(entry.tool.toolId, { hydrated: toolCall, normalized: entry.tool })
         if (isMutableToolCallMsg(toolCall)) messages.push(toolCall)
         break

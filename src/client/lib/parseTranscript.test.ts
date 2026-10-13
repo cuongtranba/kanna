@@ -361,4 +361,50 @@ describe("processTranscriptMessages — codex failure tag", () => {
     if (messages[0]?.kind !== "result") throw new Error("unexpected message")
     expect(messages[0].codexErrorInfo).toBeUndefined()
   })
+
+  describe("ExitPlanMode written in the same message as its plan file", () => {
+    const planPath = "/Users/cuong/.claude/plans/wild-snacking-waterfall.md"
+    const planWrite = (content: string) => entry({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "write_file",
+        toolName: "Write",
+        toolId: `write-${content}`,
+        input: { filePath: planPath, content },
+      },
+    })
+    const exitPlanMode = (toolId: string) => entry({
+      kind: "tool_call",
+      tool: {
+        kind: "tool",
+        toolKind: "exit_plan_mode",
+        toolName: "ExitPlanMode",
+        toolId,
+        input: {},
+        rawInput: {},
+      },
+    })
+    const exitPlanModeInputs = (messages: ReturnType<typeof processTranscriptMessages>) =>
+      messages.flatMap((message) => (message.kind === "tool" && message.toolKind === "exit_plan_mode" ? [message.input] : []))
+
+    test("fills the empty plan from the plan file written just before it", () => {
+      const messages = processTranscriptMessages([
+        planWrite("# Fix all ten\n"),
+        exitPlanMode("exit-1"),
+      ])
+
+      expect(exitPlanModeInputs(messages).map((input) => input.plan)).toEqual(["# Fix all ten\n"])
+    })
+
+    test("does not reuse an already presented plan for a later empty ExitPlanMode", () => {
+      const messages = processTranscriptMessages([
+        planWrite("# First plan\n"),
+        exitPlanMode("exit-1"),
+        exitPlanMode("exit-2"),
+      ])
+
+      expect(exitPlanModeInputs(messages).map((input) => input.plan)).toEqual(["# First plan\n", undefined])
+    })
+  })
 })
