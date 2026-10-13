@@ -21,7 +21,6 @@ import {
 import { selectMinColumnWidth, selectScrollbackLines, useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type { KannaState } from "../useKannaState"
-import { useAppGlobalContext } from "../AppGlobalProvider"
 import { TerminalWorkspaceShell } from "./TerminalWorkspaceShell"
 import { useChatPageSidebarActions, EMPTY_DIFF_SNAPSHOT } from "./useChatPageSidebarActions"
 import { collectPanes, type PaneLayout, type SplitPosition } from "../../lib/paneTree"
@@ -39,6 +38,8 @@ import { buildTabPresentationContext } from "./tabPresentationContext"
 import { buildBoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { useBoardsStore } from "../../stores/boardsStore"
 import { ChatTabRoot } from "./ChatTabRoot"
+import { useRouteTabSync } from "./useRouteTabSync"
+import { PageTabContent } from "../../components/panes/PageTabContent"
 import { BoardPane } from "../../components/boards/BoardPane"
 import { ChatTabContent } from "./ChatTabContent"
 import { gitInitializeKey, projectOpenExternalKey } from "./utils"
@@ -106,7 +107,6 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const { boardId: routeBoardId } = useParams<{ boardId?: string }>()
   const navigate = useNavigate()
   const sidebarData = state.sidebarData
-  const chatNavigator = useAppGlobalContext().chatNavigator
   const handleOpenExternal = state.handleOpenExternal
   const terminalProjects = useTerminalLayoutStore((store) => store.projects)
   const boardsByOwner = useBoardsStore((store) => store.boardsByOwner)
@@ -179,34 +179,25 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     }
 
     const changesTab = tabs.find((tab) => tab.target.kind === "changes")
-    if (showRightSidebar && !changesTab) openTab({ kind: "changes" })
-    if (!showRightSidebar && changesTab) closeTab(changesTab.tabId)
-
-    if (activeChatId) openTab({ kind: "chat", chatId: activeChatId })
-    if (routeBoardId) openTab({ kind: "board", boardId: routeBoardId })
+    if (projectId && showRightSidebar && !changesTab) openTab({ kind: "changes" })
+    if (projectId && !showRightSidebar && changesTab) closeTab(changesTab.tabId)
   }, [
     terminalLayout.terminals,
     terminalProjects,
+    projectId,
     showRightSidebar,
-    activeChatId,
-    routeBoardId,
     openTab,
     closeTab,
     getPaneLayout,
   ])
 
-  const syncUrlToFocusedChat = useCallback(() => {
-    const chatId = focusedChatId(getPaneLayout())
-    if (chatId && chatId !== activeChatId) {
-      chatNavigator.openChat(chatId)
-    }
-  }, [getPaneLayout, activeChatId, chatNavigator])
+  const { routePage, syncUrlToFocusedTab, closeRoutedTab } = useRouteTabSync({ activeChatId, routeBoardId })
 
   const switchToFocusedChat = useCallback(() => {
-    syncUrlToFocusedChat()
+    syncUrlToFocusedTab()
     const chatId = focusedChatId(getPaneLayout())
     if (chatId) requestComposerFocus(chatId)
-  }, [getPaneLayout, requestComposerFocus, syncUrlToFocusedChat])
+  }, [getPaneLayout, requestComposerFocus, syncUrlToFocusedTab])
 
   const handleSelectTab = useCallback(
     (tabId: string) => {
@@ -225,9 +216,9 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const handleFocusPane = useCallback(
     (paneId: string) => {
       focusPane(paneId)
-      syncUrlToFocusedChat()
+      syncUrlToFocusedTab()
     },
-    [focusPane, syncUrlToFocusedChat],
+    [focusPane, syncUrlToFocusedTab],
   )
   const handleResizeGroup = useCallback(
     (groupId: string, sizes: number[]) => { setGroupSizes(groupId, sizes) },
@@ -365,23 +356,8 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         return
       }
 
-      if (tab?.target.kind === "chat") {
-        const closingChatId = tab.target.chatId
-        const siblingChatId = collectPanes(getPaneLayout().root)
-          .flatMap((pane) => pane.tabs)
-          .find(
-            (candidate) =>
-              candidate.tabId !== tabId &&
-              candidate.target.kind === "chat" &&
-              candidate.target.chatId !== closingChatId,
-          )?.target
-
-        closeTab(tabId)
-
-        if (closingChatId === activeChatId) {
-          if (siblingChatId?.kind === "chat") chatNavigator.openChat(siblingChatId.chatId)
-          else chatNavigator.closeChat()
-        }
+      if (tab && (tab.target.kind === "chat" || tab.target.kind === "page")) {
+        closeRoutedTab(tabId, tab.target)
         return
       }
 
@@ -394,8 +370,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       getPaneLayout,
       handleRemoveTerminal,
       toggleRightSidebar,
-      activeChatId,
-      chatNavigator,
+      closeRoutedTab,
     ],
   )
   useEffect(() => {
@@ -562,6 +537,8 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       rightSidebarContentProps ? (
         <RightSidebar {...rightSidebarContentProps} />
       ) : null,
+    page: (target, _pane, _isFocused, isActiveTab) =>
+      isActiveTab ? <PageTabContent target={target} /> : null,
     terminal: (target, _pane, isFocused) => {
       const owner = findTerminalOwner(terminalProjects, target.terminalId)
       if (!owner) return null
@@ -588,6 +565,20 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
     },
   }
 
+
+  const emptyWorkspace = routePage ? (
+    <PageTabContent target={routePage} />
+  ) : (
+    <ChatTabRoot chatId={state.activeChatId} timer={timer} dom={dom}>
+      <ChatTabContent
+        timer={timer}
+        dom={dom}
+        onToggleEmbeddedTerminal={handleToggleEmbeddedTerminal}
+        onToggleRightSidebar={handleToggleRightSidebar}
+        isFocused
+      />
+    </ChatTabRoot>
+  )
 
   return (
     <div ref={layoutRootRef} className={CHAT_PAGE_LAYOUT_ROOT_CLASS}>
@@ -618,15 +609,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
           />
         </PaneDndProvider>
       ) : (
-        <ChatTabRoot chatId={state.activeChatId} timer={timer} dom={dom}>
-          <ChatTabContent
-            timer={timer}
-            dom={dom}
-            onToggleEmbeddedTerminal={handleToggleEmbeddedTerminal}
-            onToggleRightSidebar={handleToggleRightSidebar}
-            isFocused
-          />
-        </ChatTabRoot>
+        emptyWorkspace
       )}
     </div>
   )

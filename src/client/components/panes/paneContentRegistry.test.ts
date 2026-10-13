@@ -7,6 +7,7 @@ const pane = createPane("p1")
 const registry: PaneContentRegistry = {
   chat: (_t, _p, focused) => `chat-${String(focused)}`,
   board: () => null,
+  page: () => null,
   changes: (_t, _p, _focused) => "changes",
   terminal: (t, _p, _focused) => `terminal-${t.terminalId}`,
 }
@@ -35,6 +36,7 @@ describe("renderPaneContent", () => {
     const reg: PaneContentRegistry = {
       chat: (_t, p, _f) => { seenIds.push(p.id); return null },
       board: () => null,
+      page: () => null,
       changes: (_t, p, _f) => { seenIds.push(p.id); return null },
       terminal: (_t, p, _f) => { seenIds.push(p.id); return null },
     }
@@ -49,6 +51,7 @@ describe("renderPaneContent", () => {
     const reg: PaneContentRegistry = {
       chat: () => { called.push("chat"); return null },
       board: () => null,
+      page: () => null,
       changes: () => { called.push("changes"); return null },
       terminal: () => { called.push("terminal"); return null },
     }

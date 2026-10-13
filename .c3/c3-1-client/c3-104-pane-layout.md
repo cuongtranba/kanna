@@ -1,6 +1,6 @@
 ---
 id: c3-104
-c3-seal: ec8b197dd035ae819d66efd7f006d554c1cfba97bfac1d2974e17ca9c2fdfab8
+c3-seal: 034d677fa5af215e4a3b042fecc90351590ee9335c1524155aa8a79e7f7dd720
 title: pane-layout
 type: component
 category: foundation
@@ -48,7 +48,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | --- | --- | --- |
 | Outcome | The user arranges chat, changes, and terminals into a layout they control, and it survives reload | c3-1 |
 | Primary path | Split a pane → tree gains a group → renderer mounts the new pane without remounting its sibling | c3-112 |
-| Alternate — tab open | Tab ids derive from their target, so opening chat or changes twice is idempotent | c3-112 |
+| Alternate — tab open | Tab ids derive from their target, so opening chat or changes twice is idempotent; opening a page whose tab already exists retargets that tab to the new path instead of adding one, which is how a single Settings tab follows its section | c3-112 |
 | Alternate — close | Closing the last tab collapses the pane and its parent group cascades away | c3-112 |
 | Failure — corrupt persisted tree | Repair pass drops unknown nodes, renormalizes sizes, and falls back to the default layout | ref-local-first-data |
 
@@ -66,7 +66,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | --- | --- | --- | --- | --- |
 | Pure tree algebra | OUT | Split, close, move, focus, reorder, navigate and size a layout as pure functions; no DOM, no store | c3-112 | src/client/lib/paneTree |
 | Layout repair | OUT | Untrusted persisted state is normalized to a valid tree, deterministically — same input yields the same recovered ids | c3-112 | src/client/lib/paneTree/normalize.ts |
-| Tab identity | OUT | A tab id is derived from its target, making open idempotent and chat/changes singletons by construction | c3-112 | src/client/lib/paneTree/tabTarget.ts |
+| Tab identity | OUT | A tab id is derived from its target, making open idempotent and chat/changes singletons by construction; a page tab id is its page kind under a page prefix, so each page kind has exactly ONE tab and its target carries the last path visited there | c3-112 | src/client/lib/paneTree/tabTarget.ts |
 | SplitContainer | OUT | Renders the tree as nested resizable groups keyed by stable node id, so a split never remounts a sibling | c3-112 | src/client/components/panes/SplitContainer.tsx |
 | Content registry | IN | Host supplies one renderer per tab kind; panes hold no view-model of their own | c3-112 | src/client/components/panes/paneContentRegistry.ts |
 | Workspace layout store | OUT | Persists ONE tree for the whole app, seeded from the pre-rewrite layout keys on first read; chats from different projects accumulate as tabs in it, and a terminal tab resolves its owning project from its own id | c3-102 | src/client/stores/paneLayoutStore.ts |
@@ -80,6 +80,9 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | Resize boundary | OUT | Which divider a keyboard nudge moves is resolved purely: walk outward from the focused pane past wrong-axis ancestors to the nearest group on the pressed axis, taking the boundary after the branch or, for a last child, the one before it. The step is half MIN_PANE_FRACTION, so no single press can pin a pane, and a nudge at the floor returns null so held key-repeat causes no re-render | c3-112 | src/client/lib/paneTree/resize.ts |
 | Divider affordance | OUT | The grab strip is wider than the hairline it draws and cancels that padding with a negative margin, so a bigger target costs the panes no space; a coarse pointer gets a fingertip-sized strip, which is the whole of the touch resize story since the tree already renders above BREAKPOINT_MD. Lit from the library's data-separator attribute rather than :hover/:active, because a drag holds pointer capture and travels outside the strip | c3-112 | src/client/components/ui/resizable.tsx |
 | Tab width preference | IN | How narrow a tab may get before the strip scrolls is a server-backed setting (AppSettingsSnapshot.panes.tabMinWidth), read as a scalar so the selector is reference-stable. Its bounds and default live once in src/shared/pane-tab-width.ts, which app-settings clamps against and the strip floors against — a local copy is how the settings range and the layout floor would drift apart. The phone floor still wins over it, since a touch strip cannot rely on hover tooltips to tell icon-only tabs apart | c3-110 | src/shared/pane-tab-width.ts |
+| Page tabs | OUT | A top-level page (projects, settings, cron, workflows, boards) is a tab of kind page whose path is the last URL visited on it. pageTabs.ts holds the single URL-to-page route table (resolvePageRoute, pageTargetForPath), checking the stack-board route before the single-board route and treating chat and single-board routes as not pages. fallbackPathAfterClose names where to land when the tab owning the URL closes: the focused chat or page, then any chat, then any page, then the root | c3-112 | src/client/lib/paneTree/pageTabs.ts |
+| Tab retarget | OUT | openTab on an id that already exists replaces the stored target when the new one differs and keeps the tab where it is, instead of treating open as a no-op, so one tab can follow a changing path | c3-112 | src/client/lib/paneTree/operations.ts |
+| Page tab repair | OUT | A persisted page tab whose path no longer resolves to its page kind is dropped during normalization, so a renamed route cannot strand a dead tab in the saved workspace | c3-112 | src/client/lib/paneTree/tabTarget.ts |
 
 ## Change Safety
 
@@ -92,6 +95,7 @@ Owns the pane tree as a pure data structure and the components that render it: a
 | Middle-click stops closing tabs | Moving the close off onAuxClick, or letting dnd-kit's sensor claim button 1 | Silent — a wheel press does nothing, or arms an autoscroll instead | bun test --conditions production src/client/components/panes/PaneTabStrip.middleClick.test.tsx |
 | Tab status drifts from the sidebar | Copying the tone-to-token table into the tab strip instead of importing the shared module | The same chat reads "Running" in the sidebar and shows a plain icon on its tab | bun test --conditions production src/client/lib/chatStatusIndicator.test.ts src/client/components/panes/PaneTabStrip.test.tsx |
 | Keyboard resize travels against the key | Flipping the nudge's sign for a last child, to make "right" always grow the focused pane | The divider under the focused pane's left edge slides the wrong way; from the other pane the same boundary answers the same key differently | bun test --conditions production src/client/lib/paneTree/resize.test.ts src/client/stores/paneLayoutStore.test.ts |
+| Two Settings tabs, or Settings forgets its section | Deriving a page tab id from its path instead of its page kind, or making openTab a no-op for an existing id | A second Settings tab appears per section, or the tab reopens on the first section after reload | bun test --conditions production src/client/stores/paneLayoutStore.test.ts src/client/lib/paneTree/pageTabs.test.ts |
 
 ## Derived Materials
 

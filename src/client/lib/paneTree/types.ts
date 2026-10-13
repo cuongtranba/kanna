@@ -1,9 +1,14 @@
 
+export type PageKind = "projects" | "settings" | "cron" | "workflows" | "boards"
+
 export type PaneTabTarget =
   | { kind: "chat"; chatId: string }
   | { kind: "changes" }
   | { kind: "terminal"; terminalId: string }
   | { kind: "board"; boardId: string }
+  | { kind: "page"; page: PageKind; path: string }
+
+export type PageTabTarget = Extract<PaneTabTarget, { kind: "page" }>
 
 export type PaneTabKind = PaneTabTarget["kind"]
 

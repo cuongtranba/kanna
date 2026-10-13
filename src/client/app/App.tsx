@@ -56,12 +56,6 @@ const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
 const AUTH_LOGIN_KEY = pendingActionKey("auth.login")
 const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
-const LocalProjectsPage = lazy(() => import("./LocalProjectsPage").then((module) => ({ default: module.LocalProjectsPage })))
-const BoardsRoutePage = lazy(() => import("./BoardsRoutePage").then((module) => ({ default: module.BoardsRoutePage })))
-const StackBoardsRoutePage = lazy(() => import("./StackBoardsRoutePage").then((module) => ({ default: module.StackBoardsRoutePage })))
-const SettingsPage = lazy(() => import("./SettingsPage").then((module) => ({ default: module.SettingsPage })))
-const WorkflowsPage = lazy(() => import("./WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })))
-const CronJobsPage = lazy(() => import("./CronJobsPage").then((module) => ({ default: module.CronJobsPage })))
 
 function DeferredRoute({ children }: { children: ReactNode }) {
   return <Suspense fallback={<AppBootstrap label="Opening workspace" />}>{children}</Suspense>
@@ -586,15 +580,15 @@ function AuthedApp() {
     <KannaSocketProvider>
       <Routes>
         <Route element={<KannaLayout />}>
-          <Route path="/" element={<DeferredRoute><LocalProjectsPage /></DeferredRoute>} />
+          <Route path="/" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          <Route path="/settings/:sectionId" element={<DeferredRoute><SettingsPage /></DeferredRoute>} />
+          <Route path="/settings/:sectionId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/chat/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/workflows/:chatId" element={<DeferredRoute><WorkflowsPage /></DeferredRoute>} />
-          <Route path="/cron" element={<DeferredRoute><CronJobsPage /></DeferredRoute>} />
-          <Route path="/boards/:projectId" element={<DeferredRoute><BoardsRoutePage /></DeferredRoute>} />
+          <Route path="/workflows/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/cron" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/boards/:projectId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/boards/stack/:stackId" element={<DeferredRoute><StackBoardsRoutePage /></DeferredRoute>} />
+          <Route path="/boards/stack/:stackId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/stack/:stackId/:boardId" element={<WorkspacePage />} />
         </Route>
       </Routes>

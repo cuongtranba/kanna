@@ -27,7 +27,7 @@ import {
   LogOut,
   Type,
 } from "lucide-react"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
 import {
@@ -735,10 +735,9 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
   )
 }
 
-export function SettingsPage({ ports }: { ports?: { dom?: DomPort } } = {}) {
+export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; sectionId?: string } = {}) {
   const dom = ports?.dom ?? domAdapter
   const navigate = useNavigate()
-  const { sectionId } = useParams<{ sectionId: string }>()
   const state = useOutletContext<KannaState>()
   const { theme, setTheme } = useTheme()
   const changelogStatus = useSettingsPageStore((s) => s.changelogStatus)

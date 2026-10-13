@@ -1,14 +1,13 @@
 import { useCallback } from "react"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
 import { BoardsPage } from "../components/boards/BoardsPage"
 import { getPathBasename } from "../lib/formatters"
 import type { KannaState } from "./useKannaState"
 import type { SidebarProjectGroup } from "../../shared/types"
 
-export function BoardsRoutePage() {
+export function BoardsRoutePage({ projectId }: { projectId: string }) {
   const state = useOutletContext<KannaState>()
   const navigate = useNavigate()
-  const { projectId = "" } = useParams<{ projectId: string }>()
 
   const groups: SidebarProjectGroup[] = [
     ...state.sidebarData.starredProjectGroups,

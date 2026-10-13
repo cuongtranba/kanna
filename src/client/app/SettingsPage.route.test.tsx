@@ -55,7 +55,7 @@ async function mount(state: KannaState): Promise<Harness> {
         <MemoryRouter initialEntries={["/settings/general"]}>
           <Routes>
             <Route path="/" element={<Outlet context={state} />}>
-              <Route path="settings/:sectionId" element={<SettingsPage />} />
+              <Route path="settings/:sectionId" element={<SettingsPage sectionId="general" />} />
             </Route>
           </Routes>
         </MemoryRouter>

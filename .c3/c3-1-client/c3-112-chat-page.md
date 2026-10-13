@@ -1,7 +1,7 @@
 ---
 id: c3-112
 c3-version: 4
-c3-seal: f781fb1fdf54f447c6a89f842e1cda8c27f16a632a6eab114e1e8e9bcf024127
+c3-seal: 296949f690069e436036180b97ec186296f0049f193a8145bfc3deee7f98ab78
 title: chat-page
 type: component
 category: feature
@@ -63,11 +63,13 @@ Composes the workspace route: transcript viewport, input dock, embedded terminal
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| <WorkspacePage> route component | OUT | One page mounted at both /chat/:chatId and /boards/:projectId/:boardId; the route param opens its tab and the render gate is whether the workspace has tabs, so neither route is privileged and neither needs a chat to exist | c3-110 | src/client/app/ChatPage/index.tsx |
+| <WorkspacePage> route component | OUT | One page mounted at /chat/:chatId, /boards/:projectId/:boardId and every top-level page route (/, /settings/:sectionId, /cron, /workflows/:chatId, /boards/:projectId, /boards/stack/:stackId); the route opens its tab and the render gate is whether the workspace has tabs, so no route is privileged and none needs a chat to exist | c3-110 | src/client/app/ChatPage/index.tsx |
 | Pane arrangement | OUT | Arrangement is a user-editable pane tree, not a fixed slot order; the route composes the tree and supplies one renderer per tab kind | c3-104 | src/client/app/ChatPage/index.tsx |
 | Focus policy callback | IN | Hooks consumed for sticky scroll | c3-112 | src/client/app/useStickyChatFocus.ts |
 | Tab presentation context | OUT | Titles and statuses for every open tab are built as a pure function over EVERY project's snapshots, never the active project's alone, because one workspace is shared across projects; a board title is read from the open board view as well as the project's board list, so landing straight on a board address still titles its tab | c3-104 | src/client/app/ChatPage/tabPresentationContext.ts |
 | Tab switching keys | OUT | Alt+backtick opens a recent-tabs switcher over EVERY pane, ordered by recorded focus rather than position, and commits when the held modifier is released; the jump modifier plus a digit focuses that position in the focused pane, 9 meaning the last tab; both keys are claimed in the capture phase so a focused terminal never receives them | c3-104 | src/client/hooks/useTabSwitcherHotkeys.ts |
+| URL and tab sync | OUT | useRouteTabSync opens or refocuses the page tab for the current URL, keyed on location.key so re-clicking Settings refocuses its tab even at the same path; a page route opens its page tab and never a chat tab, even on /workflows/:chatId. In the other direction the focused tab writes its address to the URL: a chat to /chat/id and a page to its path, while board, terminal and changes tabs leave the URL alone. Closing the tab that owns the URL navigates to fallbackPathAfterClose | c3-104 | src/client/app/ChatPage/useRouteTabSync.ts |
+| Page tab renderer | OUT | WorkspacePage supplies the page renderer of the content registry through PageTabContent, which loads each page lazily and resolves its route params from the tab own path, passing them as props because a page tab can be visible in a split pane while the URL belongs to another tab. It renders only while it is the active tab of its pane | c3-104 | src/client/components/panes/PageTabContent.tsx |
 
 ## Change Safety
 
@@ -77,6 +79,7 @@ Composes the workspace route: transcript viewport, input dock, embedded terminal
 | Layout animation jank | Toggle animation timing edit | Visible flash on terminal toggle | bun run test src/client/app/useTerminalToggleAnimation.ts adjacent tests |
 | Tab falls back to its kind's label | Titling a tab from the active project's snapshots, or a board from the project's board list alone | A board opened by URL reads "Board"; a chat or terminal tab reads its fallback after the user changes project | bun test --conditions production src/client/app/ChatPage/tabPresentationContext.test.ts |
 | Switch key leaks into the terminal | Moving the tab-switch listener off the window capture phase | The shell receives ESC-backtick while the tab changes | bun test --conditions production src/client/components/panes/TabSwitcher.test.tsx |
+| Page tab shows another tab page | A page reading useParams, or a nested Routes with a location prop, instead of props resolved from the tab own path | A Settings or Workflows tab in a split pane renders the section or chat of whichever tab owns the URL | bun test --conditions production src/client/app/SettingsPage.route.test.tsx src/client/app/ChatPage/ChatPage.tabs.test.tsx |
 
 ## Derived Materials
 

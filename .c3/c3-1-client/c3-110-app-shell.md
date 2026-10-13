@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: 5c6f214e8e4a994171cb3841616c02057f812dcf214426be1edeaa36b37cea7d
+c3-seal: b87f5d07d74892804e932828f7f66669603a8eeaf6ce31c3d193d53a26244cc0
 title: app-shell
 type: component
 category: feature
@@ -67,7 +67,7 @@ Composes the React tree at boot: react-router, the central `useKannaState` hook,
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| Mounted <Routes> | OUT | Provides routes for chat-page, settings, projects | c3-112, c3-116, c3-117 | src/client/app/App.tsx |
+| Mounted <Routes> | OUT | Every workspace route mounts WorkspacePage: chat, board, and each top-level page (projects, settings, cron, workflows, boards), so opening a page adds or focuses a workspace tab instead of unmounting the workspace. Page params reach the page as props from its tab, never from the URL | c3-104, c3-112, c3-116, c3-117 | src/client/app/App.tsx |
 | useKannaState() hook | OUT | Returns snapshot-derived view models | c3-112, c3-115 | src/client/app/useKannaState.ts |
 | Global keybinding handlers | OUT | Dispatches commands like number-jump, toggle terminal | c3-111, c3-118 | src/client/hooks |
 | Viewport measurement | OUT | Mounts the single window-resize subscription and owns BREAKPOINT_MD, the one responsive pivot | c3-102, c3-111, c3-112 | src/client/lib/viewport.ts |

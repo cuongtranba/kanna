@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react"
 import { WorkflowsPageViewStore } from "./WorkflowsPage.store"
-import { useNavigate, useOutletContext, useParams } from "react-router-dom"
+import { useNavigate, useOutletContext } from "react-router-dom"
 import { ArrowLeft, Loader2, Workflow } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import type { KannaState } from "./useKannaState"
@@ -200,10 +200,9 @@ function WorkflowDetailPlaceholder({ text }: { text: string }) {
 }
 
 
-export function WorkflowsPage() {
+export function WorkflowsPage({ chatId }: { chatId?: string }) {
   const state = useOutletContext<KannaState>()
   const navigate = useNavigate()
-  const { chatId } = useParams<{ chatId: string }>()
   const runs = useWorkflowsStore(useShallow(selectRuns(chatId ?? "")))
 
   const getRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
