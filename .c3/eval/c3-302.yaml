@@ -9,6 +9,8 @@ code:
   - src/shared/beacon-scope.ts
   - src/shared/beacon-scope.test.ts
   - src/shared/beacon-config.ts
+  - src/shared/beacon-alias.ts
+  - src/shared/beacon-alias.test.ts
   - src/shared/beacon-status.ts
   - src/shared/beacon-status.test.ts
   - src/shared/beacon-tools.ts

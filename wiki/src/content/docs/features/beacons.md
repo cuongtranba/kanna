@@ -27,7 +27,7 @@ acts on, so one chat can work across several machines.
 
 | Tool | What it does |
 | --- | --- |
-| `beacon_list` | Lists your paired machines with their label, OS, and whether each is online and enabled. Reads metadata only. |
+| `beacon_list` | Lists your paired machines with their label, short name, `@beacon/` handle, OS, and whether each is online and enabled. Reads metadata only. |
 | `beacon_read` | Reads a window of a text file, so a large file can be paged through. |
 | `beacon_stat` | Returns a path's size, kind and modification time without reading it. |
 | `beacon_glob` | Lists the paths that match a glob pattern. |
@@ -41,6 +41,17 @@ acts on, so one chat can work across several machines.
 `beacon_pull` and `beacon_push` move the bytes over HTTP in 8 MiB pieces and
 verify a SHA-256 on both ends, so the file never passes through the model and a
 failed transfer never leaves a half-written file.
+
+### Naming a machine in a message
+
+Type `@beacon/` in the composer to pick a machine, for example
+`@beacon/office-mac run uname`. The agent then knows which machine you mean and
+skips the `beacon_list` lookup. The handle is the machine's **short name** (see
+[Naming a machine](/guides/user/beacons/#naming-a-machine)); a machine with no
+short name gets a handle made from its hostname. The mention only tells the agent
+which machine you mean: it grants nothing, and every call is still weighed
+against that machine's scope. Providers that have no Kanna tools, such as Codex,
+receive your text unchanged.
 
 The tools are offered to the **main chat only**. A subagent does not get them,
 so delegating work never widens who can reach your machines.

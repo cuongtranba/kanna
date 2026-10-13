@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: 7f2170c9e00449ed4ead42e1b7a0be3e084696f901c7c51bd265bc2630d33312
+c3-seal: 22f5d10a134829ab0b0fa26d0e1be5112f7cb61b5771f4cf72fba77e69472d8c
 title: protocol
 type: component
 category: foundation
@@ -67,6 +67,7 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | WsOutbound union | OUT | Server-to-client envelope kinds | c3-101 | src/shared/protocol.ts |
 | Beacon pairing link | OUT | kanna-beacon://pair with url and code; the parser also accepts the pasted CLI command and owns the pairing code alphabet | c3-241 | src/shared/beacon-pair-link.ts |
 | Beacon frames | IN/OUT | Protocol 2: ready carries the server's protocol version; refused, scope, set-scope and unpair frames; a beacon sends set-scope or unpair only to a server at SCOPE_SYNC_PROTOCOL or later. Protocol 3 adds file transfer. Protocol 4 adds the field-less update frame, the update_status frame and an optional serverVersion on ready and incompatible; a beacon sends update_status only to a server at UPDATE_PROTOCOL or later, because an older server closes the socket on a frame it cannot parse | c3-241 | src/shared/beacon-protocol.ts |
+| Beacon alias and mention handle | OUT | BeaconConfig.alias is an optional slug (lowercase letters, digits, hyphen and underscore, at most 40 characters) that is unique across beacons and is the display name; the hostname label stays the identity. buildBeaconMentionIndex maps handle to beacon id with aliases claiming first and a hostname slug for a beacon without one, suffixing a collision with a number in id order, so the composer and the server resolve the same handle | c3-241 | src/shared/beacon-alias.ts |
 
 ## Change Safety
 

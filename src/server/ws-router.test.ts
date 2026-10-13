@@ -26,6 +26,9 @@ import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
+import type { BeaconConfig } from "../shared/beacon-config"
+import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
+import { createBeaconRegistry } from "./beacon-registry"
 
 function withSidebarGroupDefaults(group: {
   groupKey: string
@@ -657,6 +660,71 @@ describe("ws-router", () => {
         },
       },
     ])
+  })
+
+  test("a beacon removed in settings disappears from an open beacons subscription", async () => {
+    const stamp = "2026-10-13T00:00:00.000Z"
+    const beacon = (id: string): BeaconConfig => ({
+      id,
+      label: `machine-${id}`,
+      publicKey: "pk",
+      os: "linux",
+      scope: DEFAULT_BEACON_SCOPE,
+      enabled: true,
+      createdAt: stamp,
+      updatedAt: stamp,
+    })
+    let snapshot: AppSettingsSnapshot = { ...DEFAULT_APP_SETTINGS_SNAPSHOT, customBeacons: [beacon("b1"), beacon("b2")] }
+    let listener: ((nextSnapshot: AppSettingsSnapshot) => void) | null = null
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      appSettings: {
+        getSnapshot: () => snapshot,
+        write: async () => snapshot,
+        writePatch: async (patch) => {
+          const removedId = patch.customBeacons?.delete?.id
+          snapshot = { ...snapshot, customBeacons: snapshot.customBeacons.filter((entry) => entry.id !== removedId) }
+          listener?.(snapshot)
+          return snapshot
+        },
+        onChange: (nextListener) => {
+          listener = nextListener
+          return () => {
+            listener = null
+          }
+        },
+      },
+      beaconRegistry: createBeaconRegistry(),
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "subscribe", id: "beacons-sub-1", topic: { type: "beacons" } })
+    )
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "beacon-delete-1",
+        command: { type: "settings.writeAppSettingsPatch", patch: { customBeacons: { delete: { id: "b2" } } } },
+      })
+    )
+
+    const beaconIdsPushed = ws.sent.flatMap((envelope) => {
+      const pushed = envelope as { id?: string; snapshot?: { type?: string; data?: { beacons?: Array<{ id: string }> } } }
+      return pushed.id === "beacons-sub-1" ? [pushed.snapshot?.data?.beacons?.map((row) => row.id) ?? []] : []
+    })
+    expect(beaconIdsPushed).toEqual([["b1", "b2"], ["b1"]])
   })
 
   test("tracks analytics preference transitions in the correct order", async () => {

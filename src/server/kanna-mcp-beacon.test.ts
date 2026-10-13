@@ -67,6 +67,7 @@ function connectedRegistry(responder: Responder): { registry: BeaconRegistry; se
     protocolVersion: 1,
     scope: DEFAULT_BEACON_SCOPE,
     socket: {
+      close(): void {},
       send(payload: SendPayload): number {
         const frame: BeaconFrame = JSON.parse(String(payload))
         sent.push(frame)
@@ -133,7 +134,9 @@ describe("beacon agent tools", () => {
     const tools = toolsFor(registry, beaconConfig({}))
     const result = await tools.get("beacon_list")!.handler({})
     expect(JSON.parse(textOf(result))).toEqual({
-      beacons: [{ id: BEACON_ID, label: LABEL, os: "linux", online: true, enabled: true }],
+      beacons: [
+        { id: BEACON_ID, label: LABEL, alias: null, mention: "@beacon/build-box", os: "linux", online: true, enabled: true },
+      ],
     })
     expect(sent).toEqual([])
   })

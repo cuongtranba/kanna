@@ -414,6 +414,7 @@ describe("PendingToolRequestMessage — beacon tools", () => {
   const BEACON_ROW: BeaconStatusRow = {
     id: "b1",
     label: "Work laptop",
+    alias: null,
     os: "darwin",
     enabled: true,
     online: true,

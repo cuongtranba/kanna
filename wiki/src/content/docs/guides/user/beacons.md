@@ -168,6 +168,24 @@ one. Pairing stores a private key on that machine. From then on the beacon
 proves who it is by signing a challenge from the server, so there is no shared
 password to leak.
 
+## Naming a machine
+
+A paired machine is listed under the hostname it reported when you paired it. To
+give it a name you will actually type, open **Settings → Beacons**, press the
+pencil next to the machine, and enter a **short name**. The hostname stays visible
+under the new name.
+
+- A short name uses lowercase letters, digits, `-` and `_`, starts with a letter
+  or digit, and is at most 40 characters. Each machine needs its own; Kanna
+  refuses a name another machine already uses.
+- The short name is also the machine's **handle**. Type `@beacon/office-mac` in a
+  message and the agent uses that machine without looking it up first. Typing
+  `@beacon/` in the composer lists your machines with their online state.
+- A machine with no short name can still be mentioned: its handle is its hostname
+  in lowercase with spaces and punctuation turned into `-`. If two hostnames give
+  the same handle, the second gets `-2`.
+- **Clear alias** in the same editor goes back to the hostname.
+
 ## Grant scope
 
 A freshly paired beacon can do **nothing**. Scope is default-deny, and you
@@ -183,6 +201,10 @@ beacon at once.
 | Allow running commands (`exec`) | Off by default. Until it is on, the agent cannot run commands or scripts on this machine. |
 | Commands that always run without asking (`execAllowlist`) | With exec on, a command whose name is listed here runs immediately. Any other command asks you first. Set this in Kanna. |
 | Run commands and scripts from this chat without asking each time (`autoRunScripts`) | Removes the per-call approval prompt: reads inside your folders and any command you have enabled run immediately. In the app this is the **Ask me in Kanna before each read or command** box, turned off. |
+
+In **Settings → Beacons → Scope**, each setting has an **ⓘ** button beside its
+title. Press it to read what the setting does; press it again to hide the text.
+The explanations start hidden.
 
 Everything that is allowed but not pre-approved raises an approval prompt in
 the chat, so you see what is about to run before it does.
@@ -299,8 +321,9 @@ with the installer.
 ## Revoke
 
 In **Settings → Beacons**, use **Revoke** on a machine. Kanna confirms, then the
-agent loses access immediately and the machine must be paired again to come
-back. The app shows **Removed from Kanna** and offers **Pair again**. To remove
+row disappears from every open Kanna window, the agent loses access immediately,
+Kanna closes that machine's live connection, and the machine must be paired again
+to come back. The app shows **Removed from Kanna** and offers **Pair again**. To remove
 the CLI daemon from the machine itself, delete the `kanna-beacon` binary and its
 stored state (`~/.kanna-beacon`).
 

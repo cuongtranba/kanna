@@ -4,6 +4,7 @@ import type { BeaconScope } from "./beacon-scope"
 export interface BeaconConfig {
   id: string
   label: string
+  alias?: string
   publicKey: string
   os: BeaconOs
   scope: BeaconScope
@@ -20,6 +21,7 @@ export interface BeaconInput {
 
 export interface BeaconPatch {
   label?: string
+  alias?: string | null
   scope?: BeaconScope
   enabled?: boolean
 }

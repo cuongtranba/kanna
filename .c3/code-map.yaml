@@ -23,6 +23,8 @@ c3-110:
   - src/client/app/appRuntime.ts
   - src/client/hooks/useProjectSuggestions.ts
   - src/client/hooks/useProjectSuggestions.test.ts
+  - src/client/hooks/useBeaconSuggestions.ts
+  - src/client/lib/beaconMentionChips.ts
   - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx
@@ -90,6 +92,8 @@ c3-116:
   - src/client/components/settings/PluginsSection.test.tsx
   - src/client/app/BeaconsSection.tsx
   - src/client/app/BeaconsSection.test.tsx
+  - src/client/app/BeaconScopeEditor.tsx
+  - src/client/app/BeaconAliasEditor.tsx
   - src/client/stores/beaconsStore.ts
   - src/client/stores/beaconsStore.test.ts
 c3-117:
@@ -198,6 +202,8 @@ c3-210:
   - src/server/claude-session-state-queries.ts
   - src/server/claude-session-state.ts
   - src/server/claude-turn-starter.ts
+  - src/server/beacon-mention-prompt.ts
+  - src/server/beacon-mention-prompt.test.ts
   - src/server/claude-turn-starter-types.ts
   - src/server/history-primer.test.ts
   - src/server/history-primer.ts
@@ -387,6 +393,8 @@ c3-302:
   - src/shared/beacon-scope.ts
   - src/shared/beacon-scope.test.ts
   - src/shared/beacon-config.ts
+  - src/shared/beacon-alias.ts
+  - src/shared/beacon-alias.test.ts
   - src/shared/beacon-status.ts
   - src/shared/beacon-status.test.ts
   - src/shared/beacon-tools.ts

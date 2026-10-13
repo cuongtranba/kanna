@@ -29,6 +29,7 @@ async function createFixture() {
     os: "windows",
   })
   const received: BeaconFrame[] = []
+  const socketState = { closed: false }
   services.registry.connect({
     beaconId: created.id,
     beaconVersion: "0.2.0",
@@ -39,9 +40,12 @@ async function createFixture() {
         received.push(JSON.parse(String(payload)))
         return 1
       },
+      close() {
+        socketState.closed = true
+      },
     },
   })
-  return { appSettings, beaconId: created.id, received }
+  return { appSettings, beaconId: created.id, received, services, socketState }
 }
 
 test("a scope edited in Kanna Settings is pushed to the connected beacon", async () => {
@@ -55,4 +59,10 @@ test("a settings change that leaves the beacon's scope alone pushes nothing", as
   const { appSettings, received } = await createFixture()
   await appSettings.writePatch({ analyticsEnabled: false })
   expect(received).toEqual([])
+})
+
+test("removing a beacon in Kanna Settings closes its live socket and forgets it", async () => {
+  const { appSettings, beaconId, services, socketState } = await createFixture()
+  await appSettings.writePatch({ customBeacons: { delete: { id: beaconId } } })
+  expect({ closed: socketState.closed, live: services.registry.live() }).toEqual({ closed: true, live: [] })
 })

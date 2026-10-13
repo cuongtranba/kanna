@@ -16,6 +16,8 @@ code:
   - src/client/app/appRuntime.ts
   - src/client/hooks/useProjectSuggestions.ts
   - src/client/hooks/useProjectSuggestions.test.ts
+  - src/client/hooks/useBeaconSuggestions.ts
+  - src/client/lib/beaconMentionChips.ts
   - src/client/app/useAppGlobalState.test.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx

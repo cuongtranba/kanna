@@ -28,6 +28,7 @@ describe("buildBeaconStatusRows", () => {
       {
         id: "a",
         label: "label-a",
+        alias: null,
         os: "linux",
         enabled: true,
         online: true,
@@ -39,6 +40,7 @@ describe("buildBeaconStatusRows", () => {
       {
         id: "b",
         label: "label-b",
+        alias: null,
         os: "windows",
         enabled: false,
         online: false,

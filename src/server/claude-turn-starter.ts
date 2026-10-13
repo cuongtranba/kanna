@@ -12,6 +12,7 @@ import type {
 } from "./claude-turn-starter-types"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import { buildPromptText } from "./claude-prompt-helpers"
+import { withBeaconMentions } from "./beacon-mention-prompt"
 import { buildHistoryPrimer, shouldInjectPrimer } from "./history-primer"
 import { fallbackTitleFromMessage } from "./generate-title"
 import { parseMentions, type ParsedMention } from "./mention-parser"
@@ -299,7 +300,10 @@ async function startTurnAfterTurnStarted(
     targetProvider,
     Boolean(args.userClearedContext),
   )
-  const userPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
+  const typedPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
+  const userPromptText = providerUsesSdkSession(args.provider)
+    ? withBeaconMentions(typedPromptText, args.content, deps.getBeacons(), deps.isBeaconOnline)
+    : typedPromptText
   const primer = shouldPrime
     ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
     : null

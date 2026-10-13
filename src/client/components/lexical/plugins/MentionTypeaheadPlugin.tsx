@@ -7,17 +7,22 @@ import {
   MenuOption,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
-import { AtSign, Bot, Folder, FileText, FolderGit2 } from "lucide-react"
+import { AtSign, Bot, Folder, FileText, FolderGit2, Radio } from "lucide-react"
 import { useMentionSuggestions } from "../../../hooks/useMentionSuggestions"
 import {
   AGENT_MENTION_PREFIX,
   useSubagentSuggestions,
 } from "../../../hooks/useSubagentSuggestions"
 import { useProjectSuggestions } from "../../../hooks/useProjectSuggestions"
+import { useBeaconSuggestions } from "../../../hooks/useBeaconSuggestions"
+import type { BeaconSuggestion } from "../../../hooks/useBeaconSuggestions"
 import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
 import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
 import { PROJECT_MENTION_PREFIX } from "../../../../shared/project-mention"
+import { BEACON_MENTION_PREFIX } from "../../../../shared/beacon-alias"
+import { StateMarkLabel } from "../../ui/state-mark"
+import { selectBeaconRows, useBeaconsStore } from "../../../stores/beaconsStore"
 import { $createMentionNode, type CreateMentionNodeArgs } from "../nodes/MentionNode"
 import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
@@ -43,11 +48,13 @@ function useMentionTrigger(): TriggerFn {
 export type MentionOption =
   | { kind: "agent"; subagent: SubagentSuggestion["subagent"] }
   | { kind: "project"; project: ProjectSuggestion }
+  | { kind: "beacon"; beacon: BeaconSuggestion }
   | { kind: "path"; path: ProjectPath }
 
 function mentionOptionKey(data: MentionOption): string {
   if (data.kind === "agent") return `agent:${data.subagent.id}`
   if (data.kind === "project") return `project:${data.project.projectId}`
+  if (data.kind === "beacon") return `beacon:${data.beacon.beaconId}`
   return `path:${data.path.kind}:${data.path.path}`
 }
 
@@ -60,6 +67,13 @@ export function createMentionArgs(data: MentionOption): CreateMentionNodeArgs {
       mentionKind: "project",
       value: data.project.slug,
       label: `project/${data.project.slug}`,
+    }
+  }
+  if (data.kind === "beacon") {
+    return {
+      mentionKind: "beacon",
+      value: data.beacon.handle,
+      label: `${BEACON_MENTION_PREFIX}${data.beacon.handle}`,
     }
   }
   return { mentionKind: "path", value: data.path.path, label: data.path.path }
@@ -93,14 +107,17 @@ export function composeMentionOptions(args: {
   query: string
   agents: readonly SubagentSuggestion[]
   projects: readonly ProjectSuggestion[]
+  beacons: readonly BeaconSuggestion[]
   paths: readonly ProjectPath[]
 }): MentionOption[] {
   const query = args.query.toLowerCase()
   const agents = namespacedGroup(args.agents, query, AGENT_MENTION_PREFIX)
   const projects = namespacedGroup(args.projects, query, PROJECT_MENTION_PREFIX)
+  const beacons = namespacedGroup(args.beacons, query, BEACON_MENTION_PREFIX)
   return [
     ...agents.map((agent): MentionOption => ({ kind: "agent", subagent: agent.subagent })),
     ...projects.map((project): MentionOption => ({ kind: "project", project })),
+    ...beacons.map((beacon): MentionOption => ({ kind: "beacon", beacon })),
     ...args.paths.map((path): MentionOption => ({ kind: "path", path })),
   ]
 }
@@ -136,15 +153,26 @@ export function MentionTypeaheadPlugin({
     excludeProjectId: projectId,
   })
 
+  const beaconState = useBeaconSuggestions({
+    query: query ?? "",
+    enabled,
+  })
+  const beaconRows = useBeaconsStore(selectBeaconRows)
+  const onlineBeaconIds = useMemo(
+    () => new Set(beaconRows.filter((row) => row.online).map((row) => row.id)),
+    [beaconRows],
+  )
+
   const options = useMemo<MentionMenuOption[]>(
     () =>
       composeMentionOptions({
         query: query ?? "",
         agents: subagentState.items,
         projects: projectState.items,
+        beacons: beaconState.items,
         paths: mentionState.items,
       }).map((data) => new MentionMenuOption(data)),
-    [query, subagentState.items, projectState.items, mentionState.items],
+    [query, subagentState.items, projectState.items, beaconState.items, mentionState.items],
   )
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
@@ -258,6 +286,26 @@ export function MentionTypeaheadPlugin({
                       </span>
                     </>
                   )
+                } else if (data.kind === "beacon") {
+                  mentionContent = (
+                    <>
+                      <Radio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="font-mono truncate">
+                        beacon/{data.beacon.handle}
+                      </span>
+                      {data.beacon.alias !== null ? (
+                        <span className="min-w-0 truncate text-xs font-mono text-muted-foreground">
+                          {data.beacon.hostname}
+                        </span>
+                      ) : null}
+                      <span className="ml-auto text-xs">
+                        <StateMarkLabel
+                          tone={onlineBeaconIds.has(data.beacon.beaconId) ? "active" : "muted"}
+                          label={onlineBeaconIds.has(data.beacon.beaconId) ? "Online" : "Offline"}
+                        />
+                      </span>
+                    </>
+                  )
                 } else if (path) {
                   mentionContent = (
                     <>
@@ -290,7 +338,7 @@ export function MentionTypeaheadPlugin({
         </ul>
       )
     },
-    [mentionState.loading, highlightOnPointerMove],
+    [mentionState.loading, highlightOnPointerMove, onlineBeaconIds],
   )
 
   return (

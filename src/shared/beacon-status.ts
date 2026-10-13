@@ -4,6 +4,7 @@ import type { BeaconConfig } from "./beacon-config"
 export interface BeaconStatusRow {
   id: string
   label: string
+  alias: string | null
   os: BeaconOs
   enabled: boolean
   online: boolean
@@ -37,6 +38,7 @@ export function buildBeaconStatusRows(
     return {
       id: config.id,
       label: config.label,
+      alias: config.alias ?? null,
       os: config.os,
       enabled: config.enabled,
       online: state?.online ?? false,

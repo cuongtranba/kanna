@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import type { BeaconConfig } from "../shared/beacon-config"
 import type { BeaconRequest } from "../shared/beacon-protocol"
+import { beaconDisplayName, buildBeaconMentionIndex, BEACON_MENTION_PREFIX } from "../shared/beacon-alias"
 import { buildBeaconStatusRows } from "../shared/beacon-status"
 import { buildBeaconRequest } from "../shared/beacon-tool-request"
 import type { BeaconToolOp } from "../shared/tool-call-types"
@@ -55,8 +56,8 @@ export interface BeaconToolContext {
 }
 
 const LIST_DESCRIPTION =
-  "List the user's paired machines (beacons) with their id, label, OS, online state and whether they are enabled. "
-  + "Metadata only: nothing is sent to any machine."
+  "List the user's paired machines (beacons) with their id, label, alias, @beacon mention handle, OS, online state and "
+  + "whether they are enabled. Metadata only: nothing is sent to any machine."
 
 const READ_DESCRIPTION =
   "Read a window of a text file on a beacon (a paired remote machine). Returns at most `limit` bytes starting at `offset` "
@@ -152,7 +153,7 @@ function toJsonObject(input: ToolArgs): JsonObject {
 }
 
 function describeBeacon(beacon: BeaconConfig): string {
-  return `${beacon.label} (${beacon.id})`
+  return `${beaconDisplayName(beacon)} (${beacon.id})`
 }
 
 function formatStream(name: string, text: string): string {
@@ -244,8 +245,18 @@ export function buildBeaconToolList<TTool, TExtra>(
   return [
     ...transferTools,
     tool("beacon_list", LIST_DESCRIPTION, {}, async () => {
-      const rows = buildBeaconStatusRows(deps.getBeacons(), registry.live())
-      const summary = rows.map((row) => ({ id: row.id, label: row.label, os: row.os, online: row.online, enabled: row.enabled }))
+      const beacons = deps.getBeacons()
+      const { handleByBeaconId } = buildBeaconMentionIndex(beacons)
+      const rows = buildBeaconStatusRows(beacons, registry.live())
+      const summary = rows.map((row) => ({
+        id: row.id,
+        label: row.label,
+        alias: row.alias,
+        mention: `@${BEACON_MENTION_PREFIX}${handleByBeaconId.get(row.id) ?? row.id}`,
+        os: row.os,
+        online: row.online,
+        enabled: row.enabled,
+      }))
       return ok(JSON.stringify({ beacons: summary }))
     }),
     tool(

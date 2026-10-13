@@ -29,6 +29,10 @@ export function createBeaconServices(deps: { appSettings: BeaconServicesSettings
   setBeaconTransferMaxBytes(() => deps.appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB)
   const transferSweepTimer = setInterval(() => getBeaconTransferTickets().sweep(), TRANSFER_SWEEP_INTERVAL_MS)
   const stopScopePush = deps.appSettings.onChange((snapshot) => {
+    const configuredIds = new Set(snapshot.customBeacons.map((beacon) => beacon.id))
+    for (const live of registry.live()) {
+      if (!configuredIds.has(live.beaconId)) registry.revoke(live.beaconId)
+    }
     for (const beacon of snapshot.customBeacons) registry.pushScope(beacon.id, beacon.scope)
   })
   return {

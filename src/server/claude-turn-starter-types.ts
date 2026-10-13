@@ -6,6 +6,7 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
+import type { BeaconConfig } from "../shared/beacon-config"
 import type { CronRunTag } from "../shared/cron/types"
 import type { JsonValue } from "../shared/json"
 import type { KannaSystemPromptOptions, SkillRosterEntry } from "../shared/kanna-system-prompt"
@@ -52,6 +53,8 @@ export interface StartTurnDeps {
   clearDrainingStream: (chatId: string) => void
   emitStateChange: (chatId: string, options?: { immediate?: boolean }) => void
   getSubagents: () => Subagent[]
+  getBeacons: () => readonly BeaconConfig[]
+  isBeaconOnline: (beaconId: string) => boolean
   getAppSettingsSnapshot: () => StartTurnAppSettings
   listSkills: (chatId: string) => SkillRosterEntry[]
   generateTitleInBackground: (chatId: string, content: string, localPath: string, optimisticTitle: string) => Promise<void>

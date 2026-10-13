@@ -17,7 +17,7 @@ import type { ClientState } from "./ws-router"
 export const PING_INTERVAL_MS = 15_000
 export const STALE_MS = 45_000
 
-export type BeaconSocket = Pick<ServerWebSocket<ClientState>, "send">
+export type BeaconSocket = Pick<ServerWebSocket<ClientState>, "send" | "close">
 
 export interface BeaconRequestSink {
   onStdout?(chunk: string): void
@@ -37,6 +37,7 @@ export interface BeaconRegistry {
   }): void
   disconnect(beaconId: string): void
   disconnectIfCurrent(beaconId: string, socket: BeaconSocket): void
+  revoke(beaconId: string): void
   heartbeat(beaconId: string): void
   isOnline(beaconId: string): boolean
   live(): BeaconLiveState[]
@@ -151,6 +152,13 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       notify()
     },
     disconnect,
+    revoke(beaconId) {
+      const socket = entries.get(beaconId)?.socket ?? null
+      entries.delete(beaconId)
+      failPending(beaconId, "beacon revoked")
+      socket?.close()
+      notify()
+    },
     disconnectIfCurrent(beaconId, socket) {
       if (entries.get(beaconId)?.socket !== socket) return
       disconnect(beaconId)

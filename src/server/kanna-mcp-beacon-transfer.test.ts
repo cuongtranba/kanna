@@ -97,6 +97,7 @@ function connectBeacon(handleRequest: (frame: Extract<BeaconFrame, { kind: "requ
     protocolVersion: TRANSFER_PROTOCOL,
     scope: DEFAULT_BEACON_SCOPE,
     socket: {
+      close(): void {},
       send(payload: SendPayload): number {
         const frame: BeaconFrame = JSON.parse(String(payload))
         sent.push(frame)

@@ -6,6 +6,8 @@ import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 import { renderGenUIPromptSection } from "../shared/genui"
+import type { BeaconConfig } from "../shared/beacon-config"
+import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 
 
 function makeFakeTurn(): HarnessTurn {
@@ -82,6 +84,8 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     clearDrainingStream: mock(() => {}),
     emitStateChange: mock(() => {}),
     getSubagents: mock(() => []),
+    getBeacons: () => [],
+    isBeaconOnline: () => false,
     getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
     listSkills: mock(() => []),
     generateTitleInBackground: mock(async () => {}),
@@ -639,5 +643,86 @@ describe("@project mentions", () => {
 
     expect(attachChatProjects).not.toHaveBeenCalled()
     expect(startClaudeTurn.mock.calls[0]![0].additionalDirectories).toEqual([])
+  })
+})
+
+describe("@beacon mentions", () => {
+  const beacon: BeaconConfig = {
+    id: "beacon-1",
+    label: "MacBook-Pro.local",
+    alias: "office-mac",
+    publicKey: "pk",
+    os: "darwin",
+    scope: DEFAULT_BEACON_SCOPE,
+    enabled: true,
+    createdAt: "2026-10-13T00:00:00.000Z",
+    updatedAt: "2026-10-13T00:00:00.000Z",
+  }
+
+  function makeBeaconDeps() {
+    const chat = makeFakeChatRecord({ provider: "claude", title: "Existing" })
+    const project = makeFakeProjectRecord()
+    const appended: Array<{ kind?: string; content?: string }> = []
+    const sentPrompts: string[] = []
+    const claudeSessions = new Map<string, ClaudeSessionState>()
+    const deps = makeDeps({
+      claudeSessions,
+      getBeacons: () => [beacon],
+      isBeaconOnline: () => true,
+      store: {
+        requireChat: () => chat,
+        getMessages: () => [],
+        getRecentRawEntries: () => [] as readonly TranscriptEntry[],
+        getProject: () => project,
+        appendMessage: async (_chatId: string, entry: { kind?: string; content?: string }) => {
+          appended.push(entry)
+        },
+        setChatProvider: async () => {},
+        setPlanMode: async () => {},
+        renameChat: async () => {},
+        recordTurnStarted: async () => {},
+        recordTurnFailed: async () => {},
+        setPendingForkSessionToken: async () => {},
+      } as unknown as StartTurnDeps["store"],
+      startClaudeTurn: async () => {
+        claudeSessions.set("chat-1", {
+          id: "session-1",
+          nextPromptSeq: 0,
+          pendingPromptSeqs: [],
+          cancelledResultPending: 0,
+          lastUsedAt: Date.now(),
+          session: { sendPrompt: async (prompt: string) => { sentPrompts.push(prompt) } },
+        } as unknown as ClaudeSessionState)
+        return makeFakeTurn()
+      },
+    })
+    return { deps, appended, sentPrompts }
+  }
+
+  test("a resolved mention gives the provider the beacon id while the stored prompt stays as typed", async () => {
+    const { deps, appended, sentPrompts } = makeBeaconDeps()
+    const typed = "run uname on @beacon/office-mac"
+
+    await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5", content: typed }))
+
+    expect(sentPrompts[0]).toContain("beaconId beacon-1")
+    expect(appended.find((entry) => entry.kind === "user_prompt")?.content).toBe(typed)
+  })
+
+  test("an unknown handle adds nothing to the provider prompt", async () => {
+    const { deps, sentPrompts } = makeBeaconDeps()
+
+    await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5", content: "ping @beacon/ghost" }))
+
+    expect(sentPrompts[0]).toBe("ping @beacon/ghost")
+  })
+
+  test("a provider without beacon tools never receives the beacon block", async () => {
+    const { deps } = makeBeaconDeps()
+    const startTurn = deps.codexManager.startTurn as ReturnType<typeof mock>
+
+    await startTurnForChat(deps, makeArgs({ provider: "codex", model: "gpt-4o", content: "run it on @beacon/office-mac" }))
+
+    expect(JSON.stringify(startTurn.mock.calls[0])).not.toContain("beaconId")
   })
 })

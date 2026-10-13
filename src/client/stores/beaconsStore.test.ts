@@ -5,6 +5,7 @@ import { useBeaconsStore } from "./beaconsStore"
 const ROW: BeaconStatusRow = {
   id: "b1",
   label: "Laptop",
+  alias: null,
   os: "darwin",
   enabled: true,
   online: true,
