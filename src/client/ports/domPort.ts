@@ -1,6 +1,7 @@
 
 export interface PushSubscriptionLike {
   endpoint: string
+  options?: { applicationServerKey?: ArrayBuffer | null }
   toJSON(): { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
   unsubscribe(): Promise<boolean>
 }

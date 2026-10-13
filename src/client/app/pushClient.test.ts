@@ -135,6 +135,64 @@ describe("subscribePush", () => {
       }),
     ).rejects.toThrow("Could not subscribe with the browser push service: push service unreachable")
   })
+
+  test("replaces a stale subscription made with a different VAPID key before subscribing", async () => {
+    const staleKey = new Uint8Array(urlBase64ToUint8Array(VAPID_KEY)).fill(7).buffer
+    const stale = { unsubscribed: false }
+    const existing = {
+      endpoint: "https://push.example/stale",
+      options: { applicationServerKey: staleKey },
+      toJSON: () => ({ endpoint: "https://push.example/stale", keys: { p256dh: "p", auth: "a" } }),
+      unsubscribe: async () => { stale.unsubscribed = true; return true },
+    }
+    const replacement = {
+      endpoint: "https://push.example/fresh",
+      toJSON: () => ({ endpoint: "https://push.example/fresh", keys: { p256dh: "p2", auth: "a2" } }),
+      unsubscribe: async () => true,
+    }
+    const reg = makeReg({
+      getSubscription: async () => (stale.unsubscribed ? null : existing),
+      subscribe: async () => {
+        if (!stale.unsubscribed) throw new Error("Provided applicationServerKey does not match the key in the existing subscription.")
+        return replacement
+      },
+    })
+
+    const calls: PushSubscribeServerCall[] = []
+    const id = await subscribePush({
+      vapidPublicKey: VAPID_KEY,
+      push: makeFakePushPort({ registration: reg }),
+      notification: makeFakeNotificationPort("default", true),
+      sendToServer: async (payload) => {
+        calls.push(payload)
+        return { id: "device-2" }
+      },
+    })
+
+    expect(stale.unsubscribed).toBe(true)
+    expect(id).toBe("device-2")
+    expect(calls[0].subscription.endpoint).toBe("https://push.example/fresh")
+  })
+
+  test("keeps an existing subscription whose key already matches the VAPID key", async () => {
+    const state = { unsubscribed: false }
+    const existing = {
+      endpoint: "https://push.example/current",
+      options: { applicationServerKey: new Uint8Array(urlBase64ToUint8Array(VAPID_KEY)).buffer },
+      toJSON: () => ({ endpoint: "https://push.example/current", keys: { p256dh: "p", auth: "a" } }),
+      unsubscribe: async () => { state.unsubscribed = true; return true },
+    }
+    const reg = makeReg({ getSubscription: async () => existing, subscribe: async () => existing })
+
+    await subscribePush({
+      vapidPublicKey: VAPID_KEY,
+      push: makeFakePushPort({ registration: reg }),
+      notification: makeFakeNotificationPort("default", true),
+      sendToServer: async () => ({ id: "device-3" }),
+    })
+
+    expect(state.unsubscribed).toBe(false)
+  })
 })
 
 describe("unsubscribePush", () => {

@@ -107,6 +107,12 @@ async function withStep<T>(label: string, run: () => Promise<T>): Promise<T> {
   }
 }
 
+function sameKeyBytes(existing: ArrayBuffer | null | undefined, wanted: Uint8Array): boolean {
+  if (!existing || existing.byteLength !== wanted.length) return false
+  const bytes = new Uint8Array(existing)
+  return wanted.every((byte, index) => bytes[index] === byte)
+}
+
 export async function subscribePush(args: {
   vapidPublicKey: string
   sendToServer: (payload: PushSubscribeServerCall) => Promise<{ id: string }>
@@ -128,11 +134,15 @@ export async function subscribePush(args: {
     await push.getReadyServiceWorkerRegistration()
     return registration
   })
+  const applicationServerKey = urlBase64ToUint8Array(args.vapidPublicKey)
+  await withStep("Could not replace the previous push subscription", async () => {
+    const existing = await reg.pushManager.getSubscription()
+    if (existing && !sameKeyBytes(existing.options?.applicationServerKey, applicationServerKey)) {
+      await existing.unsubscribe()
+    }
+  })
   const subscription = await withStep("Could not subscribe with the browser push service", () =>
-    reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(args.vapidPublicKey),
-    }),
+    reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey }),
   )
 
   const json = subscription.toJSON()
