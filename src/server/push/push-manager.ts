@@ -12,6 +12,8 @@ import type { VapidKeypair } from "./vapid.adapter"
 
 export type { PushPayload, PushTransitionKind } from "../../shared/types"
 
+export type TurnOutcome = "finished" | "failed" | "cancelled"
+
 export interface ObservedChat {
   chatId: string
   projectLocalPath: string
@@ -65,6 +67,7 @@ export class PushManager {
   private readonly mutedChats = new Set<string>()
   private readonly lastStatusByChat = new Map<string, KannaStatus>()
   private readonly heldCompletions = new Set<string>()
+  private readonly latestOutcomeByChat = new Map<string, TurnOutcome>()
   private seeded = false
   private readonly dedupKeyToTs = new Map<string, number>()
   private readonly focusedByDevice = new Map<string, string | null>()
@@ -279,6 +282,10 @@ export class PushManager {
     }
   }
 
+  noteTurnOutcome(chatId: string, outcome: TurnOutcome): void {
+    this.latestOutcomeByChat.set(chatId, outcome)
+  }
+
   async observeStatuses(snapshot: readonly ObservedChat[]): Promise<void> {
     if (!this.seeded) {
       for (const chat of snapshot) {
@@ -301,6 +308,19 @@ export class PushManager {
   }
 
   private resolveKind(chat: ObservedChat, prev: KannaStatus | undefined): PushTransitionKind | null {
+    const cancelled = this.latestOutcomeByChat.get(chat.chatId) === "cancelled"
+    const kind = this.resolveStatusKind(chat, prev)
+    if (chat.status !== "running" && chat.status !== "starting") {
+      this.latestOutcomeByChat.delete(chat.chatId)
+    }
+    if (cancelled && chat.status === "idle") {
+      this.heldCompletions.delete(chat.chatId)
+      return null
+    }
+    return kind
+  }
+
+  private resolveStatusKind(chat: ObservedChat, prev: KannaStatus | undefined): PushTransitionKind | null {
     const kind = this.detectTransition(prev, chat.status)
     if (chat.status === "waiting_for_user" || chat.status === "failed") {
       this.heldCompletions.delete(chat.chatId)

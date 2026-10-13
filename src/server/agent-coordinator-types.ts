@@ -111,4 +111,5 @@ export interface AgentCoordinatorArgs {
   backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
   liveBlocks?: import("./live-block-throttle").LiveBlockHub
   genuiDatasets?: import("./genui/dataset-service").GenUIDatasetService
+  onTurnOutcome?: (chatId: string, outcome: "finished" | "failed" | "cancelled") => void
 }

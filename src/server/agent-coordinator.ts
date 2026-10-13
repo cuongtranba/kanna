@@ -329,7 +329,9 @@ export class AgentCoordinator {
       }),
       createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
     )
+    const onTurnOutcome = args.onTurnOutcome
     this.store.onTurnTerminal = (chatId, outcome) => {
+      onTurnOutcome?.(chatId, outcome)
       const active = this.activeTurns.get(chatId)
       if (active) {
         recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
