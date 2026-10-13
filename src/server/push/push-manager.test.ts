@@ -41,6 +41,7 @@ function chat(overrides: Partial<ObservedChat> = {}): ObservedChat {
     projectTitle: "P",
     chatTitle: "Hello",
     status: "idle",
+    hasPendingWork: false,
     ...overrides,
   }
 }
@@ -97,6 +98,25 @@ describe("PushManager.observeStatuses", () => {
     await manager.observeStatuses([chat({ status: "idle" })])
     expect(sender.sent).toHaveLength(1)
     expect(JSON.parse(sender.sent[0].payload).kind).toBe("completed")
+  })
+
+  test("holds completed while background work is pending and sends it once the work ends", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await manager.observeStatuses([chat({ status: "running" })])
+    await manager.observeStatuses([chat({ status: "idle", hasPendingWork: true })])
+    expect(sender.sent).toHaveLength(0)
+    await manager.observeStatuses([chat({ status: "idle", hasPendingWork: false })])
+    await manager.observeStatuses([chat({ status: "idle", hasPendingWork: false })])
+    expect(sender.sent).toHaveLength(1)
+    expect(JSON.parse(sender.sent[0].payload).kind).toBe("completed")
+  })
+
+  test("still notifies waiting_for_user while background work is pending", async () => {
+    await registerSub(manager, store, "d1", "https://push.example/x")
+    await manager.observeStatuses([chat({ status: "running", hasPendingWork: true })])
+    await manager.observeStatuses([chat({ status: "waiting_for_user", hasPendingWork: true })])
+    expect(sender.sent).toHaveLength(1)
+    expect(JSON.parse(sender.sent[0].payload).kind).toBe("waiting_for_user")
   })
 
   test("fires for any -> failed", async () => {
