@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.76.0](https://github.com/cuongtranba/kanna/compare/v1.75.1...v1.76.0) (2026-10-13)
+
+
+### Features
+
+* **panes:** open Settings, Cron, Workflows, Projects and Boards as workspace tabs ([#1268](https://github.com/cuongtranba/kanna/issues/1268)) ([d238552](https://github.com/cuongtranba/kanna/commit/d238552954f954b4e6004c5551718a70720fec5e))
+
 ## [1.75.1](https://github.com/cuongtranba/kanna/compare/v1.75.0...v1.75.1) (2026-10-13)
 
 
