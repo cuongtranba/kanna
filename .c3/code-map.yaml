@@ -356,6 +356,7 @@ c3-232:
   - src/server/ws-router-boards.ts
 c3-301:
   - src/shared/analytics.ts
+  - src/shared/chat-activity.ts
   - src/shared/dynamic-module.ts
   - src/shared/json.ts
   - src/shared/json.test.ts

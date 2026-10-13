@@ -18,6 +18,7 @@ export interface ObservedChat {
   projectTitle: string
   chatTitle: string
   status: KannaStatus
+  hasPendingWork: boolean
 }
 
 export interface WebPushSendOptions {
@@ -63,6 +64,7 @@ export class PushManager {
   private readonly mutedProjects = new Set<string>()
   private readonly mutedChats = new Set<string>()
   private readonly lastStatusByChat = new Map<string, KannaStatus>()
+  private readonly heldCompletions = new Set<string>()
   private seeded = false
   private readonly dedupKeyToTs = new Map<string, number>()
   private readonly focusedByDevice = new Map<string, string | null>()
@@ -288,7 +290,7 @@ export class PushManager {
     for (const chat of snapshot) {
       const prev = this.lastStatusByChat.get(chat.chatId)
       this.lastStatusByChat.set(chat.chatId, chat.status)
-      const kind = this.detectTransition(prev, chat.status)
+      const kind = this.resolveKind(chat, prev)
       if (!kind) continue
       if (this.isDuplicate(chat.chatId, kind)) continue
       if (this.mutedProjects.has(chat.projectLocalPath)) continue
@@ -296,6 +298,28 @@ export class PushManager {
       const payload = this.buildPayload(chat, kind)
       await this.fanOut(payload)
     }
+  }
+
+  private resolveKind(chat: ObservedChat, prev: KannaStatus | undefined): PushTransitionKind | null {
+    const kind = this.detectTransition(prev, chat.status)
+    if (chat.status === "waiting_for_user" || chat.status === "failed") {
+      this.heldCompletions.delete(chat.chatId)
+      return kind
+    }
+    if (kind === "completed" && chat.hasPendingWork) {
+      this.heldCompletions.add(chat.chatId)
+      return null
+    }
+    const releasesHeldCompletion =
+      kind === null
+      && chat.status === "idle"
+      && !chat.hasPendingWork
+      && this.heldCompletions.has(chat.chatId)
+    if (kind === "completed" || releasesHeldCompletion) {
+      this.heldCompletions.delete(chat.chatId)
+      return "completed"
+    }
+    return kind
   }
 
   private detectTransition(

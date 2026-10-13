@@ -18,6 +18,7 @@ import type { BackgroundTaskOutputRegistry } from "./background-task-output-regi
 import type { BoardRegistry } from "./board-registry"
 import type { BeaconRegistry } from "./beacon-registry"
 import { buildBeaconStatusRows } from "../shared/beacon-status"
+import { chatHasPendingWork } from "../shared/chat-activity"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
@@ -108,6 +109,7 @@ function buildSidebarSnapshotCacheEntry(
       projectTitle: group.localPath.split("/").filter(Boolean).pop() ?? group.localPath,
       chatTitle: chat.title,
       status: chat.status,
+      hasPendingWork: chatHasPendingWork(chat.activity),
     }))
   )
   void pushManager.observeStatuses(observed).catch((error) => {
