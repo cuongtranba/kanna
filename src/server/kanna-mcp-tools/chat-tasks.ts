@@ -23,7 +23,7 @@ import {
 } from "../../shared/chat-tasks/types"
 
 export const TASK_CREATE_DESCRIPTION =
-  "Add a task to THIS chat's durable task list. Unlike the CLI's own TaskCreate, this survives /clear, compaction and a server restart, and a subagent's call lands on the parent chat — which is what makes it usable as an autonomous loop's plan. Pass needs to declare dependencies, and worktree/branch when the task will be worked in its own git worktree."
+  "Add a task to THIS chat's durable task list. Unlike the CLI's own TaskCreate, this survives /clear, compaction and a server restart, and a subagent's call lands on the parent chat — which is what makes it usable as an autonomous loop's plan. Pass needs to declare dependencies, and worktree/branch when the task will be worked in its own git worktree. The list shows tasks in the order they were created and offers no way to reorder them, and parallel task_create calls are recorded in arbitrary order, so create tasks one call at a time in the order they should be listed."
 
 export const TASK_UPDATE_DESCRIPTION =
   "Change a durable task: its status (pending / in_progress / completed), subject, description, dependencies or worktree. Replacing a task's status is how progress is recorded — there is no log to append to and no way for completed work to pile up and be redone."
