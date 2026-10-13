@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.76.3](https://github.com/cuongtranba/kanna/compare/v1.76.2...v1.76.3) (2026-10-13)
+
+
+### Bug Fixes
+
+* **push:** do not announce a stopped turn as done ([#1279](https://github.com/cuongtranba/kanna/issues/1279)) ([7ef8879](https://github.com/cuongtranba/kanna/commit/7ef887980e2b53e64a5dc42a4145a216f2d58c5f))
+* **push:** send "done" only when the chat has no background work left ([#1277](https://github.com/cuongtranba/kanna/issues/1277)) ([1281aba](https://github.com/cuongtranba/kanna/commit/1281aba8c18944c6b07952191a945efaa92cf325))
+
 ## [1.76.2](https://github.com/cuongtranba/kanna/compare/v1.76.1...v1.76.2) (2026-10-13)
 
 
