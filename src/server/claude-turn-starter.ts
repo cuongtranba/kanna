@@ -370,6 +370,7 @@ async function startTurnAfterTurnStarted(
         stackProjects,
         skills: deps.listSkills(args.chatId),
         genui: isGenUIEnabled(),
+        planProgress: true,
       }),
     })
     if (pendingForkToken && sessionToken) {

@@ -57,6 +57,12 @@ export function renderStackProjectsBlock(stackProjects: ResolvedStackBinding[]):
   ].join("\n")
 }
 
+export const CODEX_PLAN_PROGRESS_SECTION = [
+  "## Progress",
+  "",
+  "Kanna shows your plan to the user as a live Progress checklist; it is the only way they can see how far along a task is while you work. For any task with more than one step, call `update_plan` before you start, listing the steps you intend to take. Keep exactly one step `in_progress`, and call `update_plan` again each time a step finishes or the plan changes. Mark every step `completed` before your final answer. Skip it only for a single-step request, such as answering a question or making a one-line edit.",
+].join("\n")
+
 const CODEX_STACK_REACH_NOTE =
   "Your working directory is the primary project above. The other roots are outside it, so reach them by absolute path rather than by a relative path from your cwd."
 
@@ -75,6 +81,8 @@ export function buildCodexDeveloperInstructions(
       ? `${stackBlock}\n\n${CODEX_STACK_REACH_NOTE}`
       : stackBlock)
   }
+
+  if (args.planProgress) sections.push(CODEX_PLAN_PROGRESS_SECTION)
 
   const skillBlock = renderSkillRosterBlock(args.skills ?? [])
   if (skillBlock) sections.push(skillBlock)
@@ -122,6 +130,8 @@ export interface KannaSystemPromptOptions {
   skills?: readonly SkillRosterEntry[]
 
   genui?: boolean
+
+  planProgress?: boolean
 }
 
 export function buildKannaSystemPromptAppend(

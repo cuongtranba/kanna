@@ -6,6 +6,7 @@ import { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 import { renderGenUIPromptSection } from "../shared/genui"
+import { CODEX_PLAN_PROGRESS_SECTION } from "../shared/kanna-system-prompt"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 
@@ -228,11 +229,11 @@ describe("startTurnForChat", () => {
       expect(instructions).toContain("/work/fe")
     })
 
-    test("a solo chat gets the workspace block, the generative UI section, and no stack block", async () => {
+    test("a solo chat gets the workspace block, the plan progress section, the generative UI section, and no stack block", async () => {
       const deps = depsForBindings()
       deps.getAppSettingsSnapshot = mock(() => ({ globalPromptAppend: "Always TDD." })) as never
       await startTurnForChat(deps, makeArgs({ provider: "codex" }))
-      expect(instructionsOfSession(deps)).toBe(`## Workspace instructions\n\nAlways TDD.\n\n${renderGenUIPromptSection({ canValidate: false })}`)
+      expect(instructionsOfSession(deps)).toBe(`## Workspace instructions\n\nAlways TDD.\n\n${CODEX_PLAN_PROGRESS_SECTION}\n\n${renderGenUIPromptSection({ canValidate: false })}`)
     })
   })
 
