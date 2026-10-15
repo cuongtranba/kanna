@@ -22,3 +22,27 @@ code:
   - src/shared/turn-model-selection.ts
   - src/shared/types.test.ts
   - src/shared/types.ts
+  - src/shared/app-settings-types.ts
+  - src/shared/builtin-commands.ts
+  - src/shared/chat-tasks/**/*.ts
+  - src/shared/claude-api-error-classification.ts
+  - src/shared/claude-session-id.ts
+  - src/shared/codex-error-classification.ts
+  - src/shared/core-types.ts
+  - src/shared/design/**/*.ts
+  - src/shared/equality.ts
+  - src/shared/errors.ts
+  - src/shared/git-diff-types.ts
+  - src/shared/lazyModule.ts
+  - src/shared/log.ts
+  - src/shared/loop-progress.ts
+  - src/shared/mcp-types.ts
+  - src/shared/mermaid*.ts
+  - src/shared/pane-tab-width.ts
+  - src/shared/provider-model-types.ts
+  - src/shared/settings/**/*.ts
+  - src/shared/skill-agents.ts
+  - src/shared/subagent-types.ts
+  - src/shared/terminal-scrollback.ts
+  - src/shared/tool-call-types.ts
+  - src/shared/transcript-types.ts

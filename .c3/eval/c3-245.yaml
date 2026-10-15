@@ -1,0 +1,10 @@
+fact: c3-245
+claim: "the docs site and its GitHub Wiki export live under wiki/ and are published by .github/workflows/wiki-deploy.yml"
+code:
+  - wiki/astro.config.mjs
+  - wiki/package.json
+  - wiki/src/sidebar.mjs
+  - wiki/src/content.config.ts
+  - wiki/src/components/*.astro
+  - wiki/scripts/**/*.ts
+  - .github/workflows/wiki-deploy.yml

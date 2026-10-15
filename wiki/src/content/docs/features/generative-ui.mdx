@@ -26,10 +26,11 @@ actually happens**:
   results, file lists — never code, colours or chart-library options.
 - Kanna validates that description before anything renders. A view with an unknown
   component, a wrong setting, or an action Kanna does not offer is shown as *Unable to
-  show this view* and nothing from it runs. The agent checks its views with
-  `mcp__kanna__validate_ui` first, and if a broken one slips through, Kanna asks it
-  once to fix it at the end of the turn.
-- Views work the same on Claude and Codex, stay in the chat history, and render again
+  show this view* and nothing from it runs. On Claude the agent checks its views with
+  `mcp__kanna__validate_ui` before it answers; Codex is not given Kanna's tools, so it
+  cannot. On both providers, if a broken view slips through, Kanna asks the agent once
+  to fix it at the end of the turn.
+- Views render the same on Claude and Codex, stay in the chat history, and render again
   when you reopen the chat.
 
 ## Where the data comes from
@@ -39,8 +40,8 @@ Kanna fetches them:
 
 | Source | Use it for | What Kanna enforces |
 | --- | --- | --- |
-| **Inline** | a few rows you gave in the chat (at most 500) | size limits |
-| **File** | a CSV or JSON file in the chat's working directory — the agent writes computed data to a file first | the path must stay inside the working directory (symlinks included) and pass the chat's read-path rules |
+| **Inline** | the default for any data the agent already holds — a query result, numbers it computed, rows you gave it. Written as columns plus rows, or as one object per row | at most 500 rows and 64 KB |
+| **File** | a CSV or JSON file that already exists in the chat's working directory | the path must stay inside the working directory (symlinks included) and pass the chat's read-path rules |
 | **MCP** | a tool on one of your configured MCP servers, such as a BI query | the tool must declare itself read-only, or you click **Allow for this chat** first; the server's own credentials decide what data you can see |
 
 File views refresh on their own when the file changes, without asking the agent to
@@ -58,7 +59,7 @@ each row you can drill into is a button, so the whole report works from the keyb
 Ask the agent to "draw how a request flows", "map the modules this touches", or
 "show the pipeline with each step's status", and it can answer with a **FlowDiagram**:
 steps and the connections between them, optionally grouped, each step marked as a
-start, end, decision, store or external system and carrying a status such as
+start, end, process, decision, store or external system and carrying a status such as
 *passed* or *running*.
 
 - The agent never places anything. It names the steps and connections, and Kanna lays
@@ -88,8 +89,15 @@ appears as your question plus a small context chip.
 
 ## Shared links
 
-A shared chat shows views read-only. Inline data still renders; data from files and
-MCP servers is not included in a share, and agent actions are hidden.
+A shared chat shows views read-only, and agent actions are hidden. When you create the
+link, Kanna loads each file and MCP dataset a view uses, under the chat's own
+permissions, and freezes the rows into the snapshot. Period, comparison and drill-down
+still work on that frozen data, but it never refreshes. A dataset is left out, and its
+view says the data is unavailable, when:
+
+- its MCP tool is not read-only and you have not clicked **Allow for this chat**;
+- the file is outside the working directory or blocked by the chat's read-path rules;
+- the rows come to more than 8 MB.
 
 ## Turning it off
 

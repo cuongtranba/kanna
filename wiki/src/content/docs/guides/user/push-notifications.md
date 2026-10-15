@@ -16,6 +16,11 @@ Three transitions, and nothing else:
 | → **failed** | The turn errored |
 | running → **idle** | The turn finished |
 
+The **done** notification is held back while the chat still has work in flight — a
+background task, a running subagent or workflow, or an armed loop. It is sent once that
+work finishes and the chat is idle again, so you are not told "done" while Kanna is
+still working. It is also not sent after a turn you stopped yourself.
+
 A device that is **currently looking at** that chat is skipped — you can already
 see it. This is per device, so your phone still buzzes while your laptop has the
 chat open. Repeats of the same transition are suppressed too, so a flapping chat

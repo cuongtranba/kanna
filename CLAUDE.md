@@ -1789,9 +1789,8 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   record keyed by the `ClientCommand` union (a missing command is a type error)
   and `command-catalog.test.ts` also scans the protocol source, because a union
   member added through a constant such as `SHARE_CMD_*` is invisible to the type.
-- **Sessions are bounded.** The registry closes sessions idle for 60 minutes and
-  keeps at most 64, evicting the least recently used; an unknown
-  `Mcp-Session-Id` answers 404.
+- **The endpoint is stateless.** `createMcpHandler` builds the MCP server per
+  request (`remote-mcp-boot.ts`), so there is no session registry to bound or evict.
 - **Tests need native streams.** `scripts/test-preload.ts` restores the native
   `TransformStream` and `WritableStream` after happy-dom replaces them; the SDK
   client's SSE parser fails with "readable property must be a ReadableStream"
@@ -3227,6 +3226,19 @@ carry a big file. ADR `adr-20261008-tus-resumable-uploads`, component `c3-217`.
 Public docs site lives in `wiki/` (Astro Starlight) and is deployed to
 https://kanna-wiki.lowbit.link on every push to `main` that touches `wiki/**`.
 
+`wiki/src/content/docs` is the only place docs are written. Both published copies
+are generated from it by jobs in `.github/workflows/wiki-deploy.yml`: the Starlight
+site (`build` + `deploy`) and the GitHub Wiki mirror (`github-wiki`, which runs
+`bun run export:github-wiki` in `wiki/` and pushes to `cuongtranba/kanna.wiki`).
+Never edit the GitHub Wiki; the next sync overwrites it. The sidebar is defined once
+in `wiki/src/sidebar.mjs` and feeds both outputs. A new MDX component, or any
+construct the converter does not know, needs a rule in
+`wiki/scripts/github-wiki/convert.ts`, otherwise the export throws and
+`convert.test.ts` fails. The wiki repo has to be bootstrapped once by hand: GitHub
+creates `kanna.wiki.git` only when someone saves a first page at
+https://github.com/cuongtranba/kanna/wiki, and until then the `github-wiki` job
+fails with an error saying so.
+
 The Playwright harness this repo ships lives at `e2e/` (`*.pw.ts` specs,
 `e2e/playwright.config.ts`), boots the production single-process server
 against a seeded temp `KANNA_HOME`, drives real Chrome, and is run on
@@ -3318,7 +3330,7 @@ nothing on an ordinary check.
 
 **`CODEX_BINARY_PATH`** is the only env var for this feature. Defaults to
 `~/.local/bin/codex`. No other behavior is env-var gated — all configuration
-lives in Settings → Packages (`PackageUpdateSettings` in `settings.json`).
+lives in Settings → Plugins (`PackageUpdateSettings` in `settings.json`).
 
 # Plugin System (Paseo-parity)
 

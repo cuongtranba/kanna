@@ -41,3 +41,41 @@ code:
   - src/server/tracking-file-lock.ts
   - src/server/claude-live-block.ts
   - src/server/claude-live-publisher.ts
+  - src/server/agent-coordinator.ts
+  - src/server/agent-coordinator-types.ts
+  - src/server/agent-app-settings-view.ts
+  - src/server/claude-autocontinue-commands.ts
+  - src/server/claude-cancel-handler.ts
+  - src/server/claude-chat-management.ts
+  - src/server/claude-harness-stream.ts
+  - src/server/claude-loop-commands.ts
+  - src/server/claude-message-normalizer.ts
+  - src/server/claude-prompt-helpers.ts
+  - src/server/claude-sdk-queue.ts
+  - src/server/claude-session-config-helpers.ts
+  - src/server/claude-session-error-handler.ts
+  - src/server/claude-session-spawner.ts
+  - src/server/claude-session-start.ts
+  - src/server/claude-spawn-helpers.ts
+  - src/server/claude-steer-log.ts
+  - src/server/claude-subagent-tool-response.ts
+  - src/server/claude-subagent-wiring.ts
+  - src/server/claude-tool-respond.ts
+  - src/server/claude-turn-runner.ts
+  - src/server/claude-usage-math.ts
+  - src/server/pending-tool-slot.ts
+  - src/server/queued-message-recovery.ts
+  - src/server/model-escalation.ts
+  - src/server/mermaid-guard.ts
+  - src/server/mermaid-parse.adapter.ts
+  - src/server/loop-template.ts
+  - src/server/loop-template-io.adapter.ts
+  - src/server/loop-verify-cache.ts
+  - src/server/loop-verify-io.adapter.ts
+  - src/server/loop-wake-prompt.ts
+  - src/server/background-task-output-registry.ts
+  - src/server/background-task-output-io.adapter.ts
+  - src/server/subagent-entry-cap.adapter.ts
+  - src/server/subagent-transcript-registry.ts
+  - src/server/subagent-transcript-io.adapter.ts
+  - src/server/project-process-env.ts

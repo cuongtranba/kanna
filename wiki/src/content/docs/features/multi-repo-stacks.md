@@ -1,31 +1,89 @@
 ---
 title: Multi-repo stacks
-description: Group projects into a stack so one chat can read and edit across several repositories at once.
+description: Group projects into a stack so one chat can read and edit across several repositories at once — what each provider can reach, where instructions come from, and how a stack chat is created.
 ---
 
 A **stack** is a group of two or more projects. Its point is a chat that spans
 them: change an API in one repository and its consumer in another, in the same
-turn, without the agent losing track of which tree it is in.
+turn, without the agent losing track of which tree it is in. It is the answer to
+"this change touches the API and the web client, and I do not want two chats
+juggling it".
+
+## What a stack is
+
+A stack is a named set of projects. Creating one needs at least two — a stack of
+one is just a project — and it never owns any files itself: the projects keep
+their own checkouts, and the stack only records that they belong together.
 
 Stacks appear in the sidebar alongside projects, with their member chats nested
-underneath.
+underneath. To create one, use the sidebar, name it, and pick its members; the
+order you add them is the order they appear.
 
-## Create a stack
+Starting a chat from a stack row asks which worktree to use for each member
+project, then binds them to the chat. Each binding has a **role**:
 
-You need at least two projects — a stack of one is just a project. From the
-sidebar, create a stack, name it, and pick its members. Order is the order you
-add them, and that is the order they appear.
+| Role | Meaning |
+| --- | --- |
+| `primary` | The chat's working directory. Exactly one per chat. |
+| `additional` | A peer root the chat can also read and write. Any number. |
 
-## Start a stack chat
+The bindings live on the **chat**, not on the stack, so two chats started from
+the same stack can point at different worktrees.
 
-Starting a chat on a stack asks one question per member repository: **which
-worktree**. Pick the main checkout, or a worktree you cut for this piece of
-work. One member is the **primary** — the chat's working directory — and the
-rest are **additional** roots.
+## What each provider can reach
 
-The agent is told about every bound path explicitly, as separate project roots
-it may read and edit. It is not left to infer that a sibling directory is in
-scope.
+All three providers get the same `## Stack projects` block in their system
+prompt, naming every bound project's title, role and path. What differs is how
+the filesystem access is granted:
+
+| Provider | Reach |
+| --- | --- |
+| Claude | Every bound root, via the SDK's `additionalDirectories`. |
+| OpenRouter | Same as Claude — it runs the SDK path. |
+| Codex | The session declares one working directory (the primary), but runs with full filesystem access, so peer roots are reachable **by absolute path**. |
+
+### Member projects' `CLAUDE.md` is loaded
+
+Claude Code does not read a `--add-dir` root's memory files by default, which
+meant a stack chat could write project B while knowing none of B's conventions.
+Kanna sets `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` on any spawn that
+has additional roots, which loads each root's `CLAUDE.md`, `.claude/CLAUDE.md`,
+`.claude/rules/*.md` and `CLAUDE.local.md`.
+
+This costs context on every turn of a wide stack, so it is deliberately gated
+on there actually being additional roots — a single-project chat is unchanged.
+Set `KANNA_STACK_MEMORY=disabled` to turn it off.
+
+## Where instructions come from
+
+A turn's system prompt carries up to four layers, broadest first:
+
+1. **Workspace instructions** — one global setting, edited in Settings →
+   Global Instructions. Applies everywhere.
+2. **Stack instructions** — how this stack's projects relate. Edited in the
+   stack's create/edit panel. *(e.g. "api is upstream of web; regenerate the
+   client after a schema change")*
+3. **Project instructions** — one block per bound project, each headed with
+   that project's title. Edited from the project's sidebar menu →
+   **Edit instructions**. *(e.g. "never edit `generated/` by hand")*
+4. **Stack projects** — the title / role / path listing above.
+
+A project's instructions apply to any chat that can write it, which includes a
+**solo** chat in that project, not only stack chats. Subagents inherit all of
+it too, except when a subagent is path-restricted — one that cannot reach every
+root is not told every root's rules.
+
+Each block is capped at the same length as the global setting, and a blank
+value clears it.
+
+## Autonomous loops in a stack chat
+
+A loop armed from a chat runs in **that chat's** working directory. On a chat
+started from a board card that is the card's worktree, not the project's
+registered checkout — so the verify command runs against the tree the agent is
+editing, and parallel workers' branches merge back into it. Pass
+`workdir` to `setup_loop` only to point a loop at a *different* tree; it must
+still be the project's checkout or a worktree of it.
 
 ## Boards for a stack
 
@@ -33,24 +91,42 @@ A stack gets its own boards at `/boards/stack/<stack>`, for work that spans the
 member repositories rather than sitting in one of them. They behave exactly like
 [project boards](/features/boards/).
 
-## Provider support
-
-| Provider | Multi-root |
-| --- | --- |
-| Claude | Yes — every bound worktree is passed as an additional directory |
-| Codex | Partial — Codex takes a single working directory, so peer worktrees are reached through an explicit root grant rather than being handed over at session start |
-
-If you are working across several repositories in one turn, Claude is the
-smoother path.
-
 ## Choosing worktrees deliberately
 
 Binding the *main checkout* of three repositories means an agent can edit all
 three at once, which is exactly what you asked for and worth being sure about.
-Cutting a worktree per repository first — from a
-[board card](/features/boards/), or by hand — keeps a multi-repo change on its
-own branches and reviewable per repository.
+Cutting a worktree per repository first — from a [board card](/features/boards/),
+or by hand — keeps a multi-repo change on its own branches and reviewable per
+repository.
 
-A bound path that has since been deleted is shown as missing rather than
-silently dropped, so a stale binding is visible instead of quietly narrowing the
-chat's reach.
+## Sequencing work across projects
+
+A stack board holds cards from several repos, and a card can be told to wait on
+another: open a card, and under **Blocked by** pick the card it depends on.
+"Regenerate the client only after the API schema lands" becomes a property of
+the board rather than something you hold in your head.
+
+While a blocker is unfinished, **Start work** on the waiting card is disabled
+and says which card it is waiting on. A blocker stops holding the card as soon
+as it reaches the column marked `done`, or is archived. On a board that marks no
+`done` column nothing is ever blocked — as everywhere else on a board, behaviour
+comes from a column's semantic, never from what the column is called.
+
+Two rules are enforced when the edge is written, so neither can be discovered
+later as a board that no longer works:
+
+- **No cycles.** An edge that would make the work circular is refused, and the
+  refusal names the cards in the loop.
+- **Same board.** A card can only wait on another card on the same board.
+
+Dependencies are Kanna's own: they are never pushed to a connected tracker, and
+an agent cannot author them — ordering is yours to decide.
+
+## Known limitations
+
+- The `/` command and skill picker is scoped to the primary project, so skills
+  committed in an additional project do not appear in a stack chat.
+- A loop is still scoped to one repository, so a single loop cannot drive a
+  goal spanning several member projects.
+- The **Blocked by** picker offers the cards the board has loaded. On a column
+  with more cards than one page, scroll it into view first.

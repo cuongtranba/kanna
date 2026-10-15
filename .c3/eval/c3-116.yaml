@@ -30,3 +30,9 @@ code:
   - src/client/app/BeaconAliasEditor.tsx
   - src/client/stores/beaconsStore.ts
   - src/client/stores/beaconsStore.test.ts
+  - src/client/app/KeybindingsSection.tsx
+  - src/client/app/SkillsSection.tsx
+  - src/client/app/legacyProviderDefaults.ts
+  - src/client/components/settings/PluginsSection.tsx
+  - src/client/components/settings/SkillCard.tsx
+  - src/client/components/settings/PushNotificationsSection.tsx

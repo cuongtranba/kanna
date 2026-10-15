@@ -54,6 +54,11 @@ is not the one it resolved.
 - **No reasoning-effort selector.** Codex models carry no effort options in
   Kanna's catalog; the picker shows models only.
 
+- **Plan progress** — Kanna turns on Codex's `update_plan` tool and tells the model
+  to publish its plan through it. Each time Codex updates the plan, the steps and
+  their status (pending, in progress, completed) show up in the chat as a task
+  list, the same way Claude's task list does, so you can follow a long Codex turn.
+
 Codex also has no compaction request of its own, so `/compact` on a Codex chat
 is [summarised by Kanna itself](/features/slash-commands/#compact).
 

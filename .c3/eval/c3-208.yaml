@@ -9,3 +9,15 @@ code:
   - src/server/ws-router.ts
   - src/server/live-block-throttle.ts
   - src/server/live-block-throttle.test.ts
+  - src/server/ws-router-agent-ctrl.ts
+  - src/server/ws-router-broadcast.ts
+  - src/server/ws-router-chat.ts
+  - src/server/ws-router-defaults.ts
+  - src/server/ws-router-diff.ts
+  - src/server/ws-router-envelope.ts
+  - src/server/ws-router-io.adapter.ts
+  - src/server/ws-router-misc.ts
+  - src/server/ws-router-project.ts
+  - src/server/ws-router-settings.ts
+  - src/server/ws-router-skills.ts
+  - src/server/ws-router-utils.ts

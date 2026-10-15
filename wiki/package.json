@@ -9,7 +9,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "capture": "bun run scripts/capture-all.sh"
+    "export:github-wiki": "bun run scripts/export-github-wiki.ts"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.42.6",

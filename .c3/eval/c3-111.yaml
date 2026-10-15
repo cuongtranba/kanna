@@ -4,3 +4,4 @@ code:
   - src/client/app/KannaSidebar.tsx
   - src/client/app/sidebarNumberJump.test.ts
   - src/client/app/sidebarNumberJump.ts
+  - src/client/app/SidebarUtilityNav.tsx

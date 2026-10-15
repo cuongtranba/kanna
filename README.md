@@ -33,7 +33,7 @@
 
 ## What Kanna is
 
-Kanna runs on your machine and puts a browser UI in front of the coding agents you already use: the Claude Agent SDK, the Codex app-server, and OpenRouter models. Every chat belongs to a project, every event is saved to disk, and the UI works on a desktop, a phone, or through a tunnel.
+Kanna runs on your machine and puts a browser UI in front of the coding agents you already use: the Claude Agent SDK, the Codex app-server, OpenRouter models, and any Anthropic-compatible endpoint you register. Every chat belongs to a project, every event is saved to disk, and the UI works on a desktop, a phone, or through a tunnel.
 
 ## Quickstart
 
@@ -61,9 +61,10 @@ One Bun process owns everything. The browser sends commands over a WebSocket, th
 **Chat with any agent**
 
 - **Claude, Codex and OpenRouter** in one composer, with per-chat model, reasoning effort and context-window controls. [Providers & models](https://kanna-wiki.lowbit.link/features/providers-models/)
+- **Custom endpoints**: register any Anthropic-compatible API (GLM, Qwen, Kimi, DeepSeek, MiniMax, a local Ollama) in Settings and pick its models in the composer. [Custom endpoints](https://kanna-wiki.lowbit.link/guides/user/custom-endpoints/)
 - **OAuth token pool**: register several Claude tokens and Kanna rotates between them, failing over when one hits a rate limit. [OAuth pool](https://kanna-wiki.lowbit.link/getting-started/oauth-pool-setup/)
-- **Live output**: on Claude chats, thinking, text and tool input stream in as the model writes them.
-- **Rich transcript**: grouped tool calls, inline diffs, plan-mode approval, mermaid diagrams checked before you see them, and interactive charts and reports the agent composes ([generative UI](https://kanna-wiki.lowbit.link/features/generative-ui/)).
+- **Live output**: on chats that run on the Claude Agent SDK, thinking, text and tool input stream in as the model writes them, with the reply typed out behind a caret. Codex chats publish their plan as a live task list.
+- **Rich transcript**: grouped tool calls, inline diffs, plan-mode approval, mermaid diagrams checked before you see them, and interactive charts, reports and flow diagrams the agent composes ([generative UI](https://kanna-wiki.lowbit.link/features/generative-ui/)).
 - **Slash commands everywhere**: `/clear`, `/compact`, `/cron`, plus your local Claude Code skills, on every provider. [Slash commands](https://kanna-wiki.lowbit.link/features/slash-commands/)
 
 **Let it work while you're away**
@@ -90,13 +91,15 @@ One Bun process owns everything. The browser sends commands over a WebSocket, th
   </picture>
 </p>
 
-- **Projects and session tabs**: chats grouped by project with live status, a split-pane workspace, a project quick switcher, and one-click import of existing Claude Code sessions. [Projects & sessions](https://kanna-wiki.lowbit.link/features/projects-sessions/)
+- **Projects and session tabs**: chats grouped by project with live status, a split-pane workspace where Settings, Cron, Workflows, Boards and Webhooks open as tabs beside your chats, a project quick switcher, and one-click import of existing Claude Code sessions. [Projects & sessions](https://kanna-wiki.lowbit.link/features/projects-sessions/)
 - **Kanban boards**: *Start work* on a card creates a branch, a git worktree and a chat, so several agents can work at once without touching each other's files. Boards sync with GitHub issues. [Boards](https://kanna-wiki.lowbit.link/features/boards/)
 - **Multi-repo stacks**: group several repositories so one chat can read and edit across all of them. [Stacks](https://kanna-wiki.lowbit.link/features/multi-repo-stacks/)
 
 **Extend and connect**
 
 - **Your MCP servers** (`stdio`, `http`, `sse`, `ws`, with OAuth 2.1) are available in every chat. [Advanced](https://kanna-wiki.lowbit.link/features/advanced/)
+- **Kanna as an MCP server**: Claude Code, Codex, Claude Desktop and ChatGPT can drive Kanna itself over MCP. [Remote MCP](https://kanna-wiki.lowbit.link/guides/user/remote-mcp/)
+- **Inbound webhooks**: CI, GitHub or a `curl` call can post a card into a chat, queue a prompt, or start a new chat. [Webhooks](https://kanna-wiki.lowbit.link/guides/user/webhooks/)
 - **Kanna plugins** add sidebar pages, panels and `/` commands, with a server half running in its own process. [Plugins](https://kanna-wiki.lowbit.link/features/plugins/)
 - **Beacons** pair another machine you own, so the agent can read files or run commands there within limits you set. [Beacons](https://kanna-wiki.lowbit.link/guides/user/beacons/)
 - **Package updates** for installed skills, Claude Code plugins and Codex plugins, checked and applied from Settings. [Package auto-update](https://kanna-wiki.lowbit.link/features/package-auto-update/)
@@ -147,6 +150,8 @@ bun run build         # the same build CI deploys
 ```
 
 Pages live in `wiki/src/content/docs/`. Change a page in the same PR as the behavior it describes.
+
+The [GitHub Wiki](https://github.com/cuongtranba/kanna/wiki) is a generated mirror of the same pages, rewritten from `wiki/` on every push to `main` that touches it. Edit `wiki/`, never the GitHub Wiki: changes made there are overwritten on the next sync. To preview the mirror, run `bun run export:github-wiki <dir>` in `wiki/`.
 
 ## Star History
 

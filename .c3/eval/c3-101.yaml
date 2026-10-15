@@ -8,3 +8,5 @@ code:
   - src/client/app/SocketBridge.tsx
   - src/client/app/pushClient.ts
   - src/client/app/pushClient.test.ts
+  - src/client/api/**/*.ts
+  - src/client/query/**/*.ts

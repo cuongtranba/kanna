@@ -26,3 +26,9 @@ code:
   - src/server/beacon-transfer-http.adapter.ts
   - src/server/beacon-transfer-http.test.ts
   - src/server/beacon-services.test.ts
+  - src/server/app-settings-io.adapter.ts
+  - src/server/server-io.adapter.ts
+  - src/server/input-validation.ts
+  - src/server/json-boundary.ts
+  - src/server/fs-stat.adapter.ts
+  - src/server/analytics.ts

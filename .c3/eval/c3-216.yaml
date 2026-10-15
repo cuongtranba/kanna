@@ -4,3 +4,5 @@ code:
   - src/server/terminal-manager.test.ts
   - src/server/terminal-manager.ts
   - src/server/terminal-pid-registry.test.ts
+  - src/server/terminal-manager-io.adapter.ts
+  - src/server/terminal-pid-registry.adapter.ts

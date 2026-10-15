@@ -11,3 +11,7 @@ code:
   - src/server/event-store.ts
   - src/server/event-store-write-ops.ts
   - src/server/event-store-write-ops.test.ts
+  - src/server/event-store-*.ts
+  - src/server/storage/backend.ts
+  - src/server/storage/fs-storage.adapter.ts
+  - src/server/storage/in-memory-storage.ts

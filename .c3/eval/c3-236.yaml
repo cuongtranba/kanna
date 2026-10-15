@@ -4,3 +4,5 @@ code:
   - src/ops/architecture/budget.ts
   - src/ops/architecture/budget-scan.adapter.ts
   - scripts/check-complexity-limits.ts
+  - src/ops/architecture/cjs-interop.ts
+  - src/ops/architecture/cjs-interop-scan.adapter.ts

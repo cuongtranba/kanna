@@ -3,3 +3,4 @@ claim: "external link opener is at src/server/external-open.ts"
 code:
   - src/server/external-open.test.ts
   - src/server/external-open.ts
+  - src/server/wsl.adapter.ts

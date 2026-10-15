@@ -1,10 +1,10 @@
 ---
 id: adr-20261012-custom-anthropic-endpoints
-c3-seal: 744579bfe2d6da21a3743198264396a824a0a6bcbee2189f1c995b129144661a
+c3-seal: be9fd1e05ae89377eb54b3890c41f4ef1deb5c16da331abd86de02c20c30f44a
 title: custom-anthropic-endpoints
 type: adr
 goal: 'Let a user register their own Anthropic-compatible endpoints (GLM on Z.AI, Qwen on Alibaba Model Studio, Kimi, DeepSeek, MiniMax, or any other) in Settings and chat with them through the Claude Agent SDK. A new fixed agent provider `custom` ("Custom endpoints") carries every registered endpoint; a custom model id is endpoint-qualified as `<providerId>/<vendorModel>`, and the endpoint''s API key is write-only: stored on the server, never sent to the browser.'
-status: proposed
+status: done
 date: "2026-10-12"
 ---
 

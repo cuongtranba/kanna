@@ -6,3 +6,4 @@ code:
   - src/server/cli-runtime.ts
   - src/server/cli-supervisor.adapter.ts
   - src/server/cli.ts
+  - src/types/bun-process-signals.d.ts
