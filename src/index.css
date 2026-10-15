@@ -1011,6 +1011,19 @@
     animation: kanna-cursor-fade-out 0.24s ease-out forwards;
   }
 
+  .kanna-live-caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-right: -2px;
+    vertical-align: text-bottom;
+    background-color: var(--foreground);
+  }
+
+  .kanna-live-caret[data-caret="idle"] {
+    animation: kanna-cursor-blink 0.9s step-end infinite;
+  }
+
 }
 
 @theme inline {

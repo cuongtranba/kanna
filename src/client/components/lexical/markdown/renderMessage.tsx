@@ -1,5 +1,5 @@
 
-import { useMemo, type ReactNode } from "react"
+import { Fragment, useMemo, type ReactNode } from "react"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $convertFromMarkdownString } from "@lexical/markdown"
 import {
@@ -71,6 +71,17 @@ function nextKey(): string {
 
 let renderEditor: LexicalEditor | null = null
 let renderConfig: EditorConfig | null = null
+
+export interface CaretOptions {
+  ghostLength: number
+  renderTail: (ghost: string) => ReactNode
+}
+
+interface CaretTarget extends CaretOptions {
+  key: string
+}
+
+let caretTarget: CaretTarget | null = null
 
 export const HEADING_CLASS_MAP: Record<string, string> = {
   h1: "text-20 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
@@ -272,6 +283,19 @@ function walkNode(node: LexicalNode): ReactNode {
   return fallbackText ? <span key={nextKey()}>{fallbackText}</span> : null
 }
 
+function withCaretTail(node: TextNode, text: string): ReactNode {
+  const target = caretTarget
+  if (target === null || target.key !== node.getKey()) return text
+  const ghostLength = Math.min(target.ghostLength, text.length)
+  const splitAt = text.length - ghostLength
+  return (
+    <Fragment key={nextKey()}>
+      {text.slice(0, splitAt)}
+      {target.renderTail(text.slice(splitAt))}
+    </Fragment>
+  )
+}
+
 function renderTextNode(node: TextNode): ReactNode {
   const fmt = node.getFormat()
   const text = node.getTextContent()
@@ -281,20 +305,20 @@ function renderTextNode(node: TextNode): ReactNode {
   const isStrike     = (fmt & IS_STRIKETHROUGH) !== 0
   const isInlineCode = (fmt & IS_CODE) !== 0
 
+  let content: ReactNode = withCaretTail(node, text)
+
   if (isInlineCode) {
     return (
       <code key={nextKey()} className="break-all px-1 bg-border/60 py-0.5 rounded text-sm">
-        {text}
+        {content}
       </code>
     )
   }
 
-  let content: ReactNode = text
   if (isStrike)  content = <del key={nextKey()} className="line-through">{content}</del>
   if (isItalic)  content = <em key={nextKey()} className="italic">{content}</em>
   if (isBold)    content = <strong key={nextKey()} className="font-semibold">{content}</strong>
 
-  if (!isBold && !isItalic && !isStrike) return text
   return content
 }
 
@@ -303,7 +327,14 @@ function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }): Reac
 }
 
 
-function renderMarkdownSegment(markdown: string): ReactNode {
+function resolveCaretTarget(caret: CaretOptions | undefined): CaretTarget | null {
+  if (caret === undefined) return null
+  const last = $getRoot().getLastDescendant()
+  if (!$isTextNode(last) || $isCodeHighlightNode(last)) return null
+  return { ...caret, key: last.getKey() }
+}
+
+function convertMarkdown(markdown: string, caret: CaretOptions | undefined): ReactNode[] {
   const processed = linkifyTextRefs(markdown)
   const editorConfig = buildKannaEditorConfig({
     namespace: "kanna-message-renderer",
@@ -320,18 +351,29 @@ function renderMarkdownSegment(markdown: string): ReactNode {
     keyCounter = 0
     renderEditor = editor
     renderConfig = editorConfig
-    const root = $getRoot()
-    const children = root.getChildren<LexicalNode>()
-    const result = <>{children.map(walkNode)}</>
+    caretTarget = resolveCaretTarget(caret)
+    const children = $getRoot().getChildren<LexicalNode>().map(walkNode)
     renderEditor = null
     renderConfig = null
-    return result
+    caretTarget = null
+    return children
   })
+}
+
+export function renderMarkdownBlocks(markdown: string): ReactNode {
+  return <>{convertMarkdown(markdown, undefined)}</>
+}
+
+export function renderMarkdownWithCaret(markdown: string, caret: CaretOptions): ReactNode {
+  if (markdown.trim() === "") {
+    return <p className="break-words mt-5 mb-3 first:mt-0 last:mb-0">{caret.renderTail("")}</p>
+  }
+  return <>{convertMarkdown(markdown, caret)}</>
 }
 
 
 export function renderMarkdownDocument(markdown: string): ReactNode {
-  return renderMarkdownSegment(markdown)
+  return renderMarkdownBlocks(markdown)
 }
 
 export function renderMessageMarkdown(text: string): ReactNode {
@@ -341,7 +383,7 @@ export function renderMessageMarkdown(text: string): ReactNode {
     if (seg.kind === "thinking") {
       return <ThinkingBlock key={`think-${i}`} content={seg.content} />
     }
-    const rendered = renderMarkdownSegment(seg.content)
+    const rendered = renderMarkdownBlocks(seg.content)
     return <span key={`text-${i}`}>{rendered}</span>
   })
 
