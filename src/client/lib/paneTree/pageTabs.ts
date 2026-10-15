@@ -19,6 +19,7 @@ const PAGE_ROUTE_PATTERNS: ReadonlyArray<{ page: PageKind; pattern: string }> = 
   { page: "settings", pattern: "/settings/:sectionId" },
   { page: "settings", pattern: "/settings" },
   { page: "cron", pattern: "/cron" },
+  { page: "webhooks", pattern: "/webhooks" },
   { page: "workflows", pattern: "/workflows/:chatId" },
   { page: "boards", pattern: "/boards/stack/:stackId" },
   { page: "boards", pattern: "/boards/:projectId" },

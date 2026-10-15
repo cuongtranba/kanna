@@ -5,6 +5,8 @@ import type { AuthManager } from "./auth"
 import type { SessionShareService } from "./session-share"
 import type { RemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { handleShareApiRequest } from "./session-share/http-routes"
+import { handleWebhookRequest } from "./webhooks/webhook-http-routes"
+import type { WebhookService } from "./webhooks/webhook-service"
 import type { ClientState } from "./ws-router"
 import {
   handleAttachmentContent,
@@ -39,6 +41,7 @@ export interface HttpDispatcherDeps {
   auth: AuthManager | null
   sessionShare: SessionShareService
   remoteMcp: RemoteMcpRuntime
+  webhooks: WebhookService
   distDir: string
 }
 
@@ -97,7 +100,7 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<ClientState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, remoteMcp, distDir } = deps
+  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, distDir } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
 
@@ -127,6 +130,9 @@ export function createHttpDispatcher(
     if (url.pathname.startsWith("/api/share/")) {
       return handleShareApiRequest(req, sessionShare)
     }
+
+    const webhookResponse = await handleWebhookRequest(req, url, webhooks)
+    if (webhookResponse) return webhookResponse
 
     const remoteMcpResponse = await remoteMcp.handle(req, url, server.requestIP(req)?.address ?? null)
     if (remoteMcpResponse) return remoteMcpResponse

@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: 53f430c5d5ceda2953aa8e4d8646d1e86577b793e1a53269d600395dda2fd646
+c3-seal: 9580254bec6c9fc32b67f633bc1e57b3dd9eea8f160b6030e593d0dae8c07f43
 title: Client
 type: container
 boundary: app
@@ -46,3 +46,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-122 | stacks-ui | feature | active | Render stacks in the sidebar: create one, edit its projects and instructions, start a chat on it, and read what is running across it. |
 | c3-123 | genui-ui | feature | active | Render kanna-ui fences in the transcript as validated interactive views, run their local and Kanna actions, and hand agent actions back after the user confirms. |
 | c3-124 | remote-mcp-ui | feature | active | Show the Remote MCP settings page where the owner turns the server on or off, sets its public URL and copies per-client setup snippets. |
+| c3-125 | webhooks-ui | feature | active | Render the inbound webhook feature in the client: a Webhooks page opened as a workspace pane tab, the one-time secret dialog, and the transcript card for each delivery. |

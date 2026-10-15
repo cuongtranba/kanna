@@ -20,6 +20,7 @@ import type { BeaconRegistry } from "./beacon-registry"
 import { buildBeaconStatusRows } from "../shared/beacon-status"
 import { chatHasPendingWork } from "../shared/chat-activity"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
+import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
 import type { PushManager } from "./push/push-manager"
@@ -72,6 +73,7 @@ export interface EnvelopeDeps {
   boardRegistry?: BoardRegistry
   beaconRegistry?: BeaconRegistry
   followedSessionRegistry?: FollowedSessionRegistry
+  webhooks?: WebhookRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
   packageUpdateManager?: PackageUpdateManager
@@ -166,6 +168,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     boardRegistry,
     beaconRegistry,
     followedSessionRegistry,
+    webhooks,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -413,6 +416,15 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
           type: "cron-jobs",
           data: { rows: buildCronJobsGlobalRows(store) },
         },
+      }
+    }
+
+    if (topic.type === "webhooks") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: { type: "webhooks", data: webhooks?.snapshot() ?? { hooks: [] } },
       }
     }
 

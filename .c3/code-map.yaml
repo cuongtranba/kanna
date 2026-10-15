@@ -571,3 +571,37 @@ c3-124:
   - src/client/stores/remoteMcpSectionStore.ts
   - src/shared/remote-mcp/setup-snippets.ts
   - src/shared/remote-mcp/setup-snippets.test.ts
+c3-243:
+  - src/server/webhooks/webhook-auth.ts
+  - src/server/webhooks/webhook-boot.ts
+  - src/server/webhooks/webhook-delivery.ts
+  - src/server/webhooks/webhook-delivery.test.ts
+  - src/server/webhooks/webhook-http-routes.ts
+  - src/server/webhooks/webhook-http-routes.test.ts
+  - src/server/webhooks/webhook-rate-limit.ts
+  - src/server/webhooks/webhook-registry.ts
+  - src/server/webhooks/webhook-service.ts
+  - src/server/webhooks/webhook-store.adapter.ts
+  - src/server/webhooks/webhook-store.adapter.test.ts
+  - src/server/test-helpers/webhook-harness.ts
+  - src/server/ws-router-webhooks.ts
+  - src/shared/webhooks/types.ts
+  - src/shared/webhooks/template.ts
+  - src/shared/webhooks/template.test.ts
+  - src/shared/webhooks/validate.ts
+  - src/shared/webhooks/validate.test.ts
+c3-125:
+  - src/client/app/WebhooksPage.tsx
+  - src/client/app/WebhookRow.tsx
+  - src/client/app/WebhookCreateDialog.tsx
+  - src/client/app/WebhookCreateDialog.store.ts
+  - src/client/app/WebhookSecretDialog.tsx
+  - src/client/app/WebhookTargetSelect.tsx
+  - src/client/app/WebhookCopyButton.tsx
+  - src/client/app/webhookCommands.ts
+  - src/client/stores/webhooksStore.ts
+  - src/client/lib/webhookPresentation.ts
+  - src/client/lib/webhookPresentation.test.ts
+  - src/client/lib/webhookTargets.ts
+  - src/client/lib/webhookTargets.test.ts
+  - src/client/components/messages/WebhookDeliveryMessage.tsx

@@ -38,4 +38,5 @@ export const envVars: EnvVar[] = [
   { name: 'KANNA_SUBAGENT_MAX_LIVE', default: "5", description: "Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED." },
   { name: 'KANNA_SUBAGENT_RUN_TIMEOUT_MS', default: "(orchestrator default)", description: "Stall watchdog for a single subagent run. The Settings value wins over this; this wins over the built-in default. Read once at server start." },
   { name: 'KANNA_UPDATE_COMMAND', default: "(auto-detected)", description: "Overrides the command Kanna runs to install a self-update. Set it when npm, bun, pnpm and yarn are all absent or the wrong one is picked." },
+  { name: 'KANNA_WEBHOOKS', default: "enabled", description: "Set to \"disabled\" to turn off inbound webhooks. Every /hooks/<id> request then answers 404, as if the hook did not exist. Hooks you created are kept and work again when you remove the variable." },
 ]

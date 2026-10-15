@@ -5,6 +5,7 @@ import type { ToolRequestStatus, ToolRequestDecision } from "./permission-policy
 import type { NormalizedToolCall, HydratedToolCall } from "./tool-call-types"
 import type { CodexErrorInfoTag } from "./codex-error-classification"
 import type { CronMode, CronSkipReason } from "./cron/types"
+import type { WebhookMode } from "./webhooks/types"
 
 
 export interface McpServerInfo {
@@ -260,6 +261,15 @@ export interface CronJobChangeEntry extends TranscriptEntryBase {
   change: "removed" | "paused" | "resumed" | "updated"
 }
 
+export interface WebhookDeliveryEntry extends TranscriptEntryBase {
+  kind: "webhook_delivery"
+  hookId: string
+  hookName: string
+  mode: WebhookMode
+  deliveryId: string
+  message?: string
+}
+
 export type TranscriptEntry =
   | UserPromptEntry
   | SystemInitEntry
@@ -288,6 +298,7 @@ export type TranscriptEntry =
   | CronRunSkippedEntry
   | CronListEntry
   | CronJobChangeEntry
+  | WebhookDeliveryEntry
 
 
 export type HydratedTranscriptMessage =
@@ -316,4 +327,5 @@ export type HydratedTranscriptMessage =
   | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed" | "updated"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "webhook_delivery"; hookId: string; hookName: string; mode: WebhookMode; deliveryId: string; message?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)

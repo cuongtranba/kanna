@@ -1,0 +1,21 @@
+fact: c3-243
+claim: "inbound webhooks are implemented at src/server/webhooks/ with the template and validation in src/shared/webhooks/"
+code:
+  - src/server/webhooks/webhook-auth.ts
+  - src/server/webhooks/webhook-boot.ts
+  - src/server/webhooks/webhook-delivery.ts
+  - src/server/webhooks/webhook-delivery.test.ts
+  - src/server/webhooks/webhook-http-routes.ts
+  - src/server/webhooks/webhook-http-routes.test.ts
+  - src/server/webhooks/webhook-rate-limit.ts
+  - src/server/webhooks/webhook-registry.ts
+  - src/server/webhooks/webhook-service.ts
+  - src/server/webhooks/webhook-store.adapter.ts
+  - src/server/webhooks/webhook-store.adapter.test.ts
+  - src/server/test-helpers/webhook-harness.ts
+  - src/server/ws-router-webhooks.ts
+  - src/shared/webhooks/types.ts
+  - src/shared/webhooks/template.ts
+  - src/shared/webhooks/template.test.ts
+  - src/shared/webhooks/validate.ts
+  - src/shared/webhooks/validate.test.ts

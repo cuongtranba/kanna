@@ -15,6 +15,7 @@ function render(items: readonly PluginSidebarItem[] = NO_ITEMS, activeChatId: st
         onClose={() => {}}
         workflowsButtonClass=""
         isCronJobsActive={false}
+        isWebhooksActive={false}
         isSettingsActive={false}
         statusDotClass=""
         statusLabel="Connected"

@@ -38,6 +38,7 @@ const MINIMAL_TOPICS: Readonly<Record<string, JsonObject>> = {
   beacons: {},
   "background-task-output": { chatId: "c1", taskId: "k1" },
   "package-updates": {},
+  webhooks: {},
 }
 
 describe("subscription topic schema", () => {

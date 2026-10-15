@@ -40,6 +40,7 @@ import type {
 } from "./boards/types"
 import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
+import type { WebhookInput, WebhookPatch, WebhooksSnapshot } from "./webhooks/types"
 
 export type { EditorPreset }
 
@@ -67,6 +68,7 @@ export type SubscriptionTopic =
   | { type: "beacons" }
   | { type: "background-task-output"; chatId: string; taskId: string }
   | { type: "package-updates" }
+  | { type: "webhooks" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -423,6 +425,10 @@ export type ClientCommand =
   | { type: "push.setProjectMute"; localPath: string; muted: boolean }
   | { type: "push.setChatMute"; chatId: string; muted: boolean }
   | { type: "push.setFocusedChat"; chatId: string | null }
+  | { type: "webhooks.create"; input: WebhookInput }
+  | { type: "webhooks.update"; id: string; patch: WebhookPatch }
+  | { type: "webhooks.delete"; id: string }
+  | { type: "webhooks.rotateSecret"; id: string }
   | ShareClientCommand
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
@@ -452,6 +458,7 @@ export type ServerSnapshot =
   | { type: "beacons"; data: BeaconsSnapshot }
   | { type: "background-task-output"; data: BackgroundTaskOutputSnapshot }
   | { type: "package-updates"; data: import("./packages/types").PackageUpdateSnapshot }
+  | { type: "webhooks"; data: WebhooksSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind

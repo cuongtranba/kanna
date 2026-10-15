@@ -15,12 +15,14 @@ import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction 
 import { readProjectDeleteResult } from "../../shared/protocol"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
+import type { WebhooksSnapshot } from "../../shared/webhooks/types"
 import type { BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconsSnapshot } from "../../shared/beacon-status"
 import type { PackageUpdateSnapshot } from "../../shared/packages/types"
 import type { ChatPermissionPolicyOverride } from "../../shared/permission-policy"
 import { useFollowedSessionsStore } from "../stores/followedSessionsStore"
 import { useCronJobsStore } from "../stores/cronJobsStore"
+import { useWebhooksStore } from "../stores/webhooksStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
 import { parseBeaconMintResult } from "../lib/parseBeaconMintResult"
 import { parseBeaconUpdateResult } from "../lib/parseBeaconUpdateResult"
@@ -524,6 +526,12 @@ export function useAppGlobalState(
   useEffect(() => {
     return socket.subscribe<CronJobsGlobalSnapshot>({ type: "cron-jobs" }, (snapshot) => {
       useCronJobsStore.getState().setRows(snapshot.rows)
+    })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<WebhooksSnapshot>({ type: "webhooks" }, (snapshot) => {
+      useWebhooksStore.getState().setHooks(snapshot.hooks)
     })
   }, [socket])
 

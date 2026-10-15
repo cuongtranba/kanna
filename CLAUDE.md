@@ -3035,6 +3035,52 @@ When a file is **renamed to `.adapter.ts`** (IO seal enforcement): update both
 When a file is **deleted**: remove its entry from both files — stale anchors
 surface as warnings on `c3x repair`/`c3x check`; keep those clean.
 
+# Inbound Webhooks (KANNA_WEBHOOKS)
+
+An external system POSTs to `/hooks/<id>`; the hook's mode (`notify` card only,
+`inline` card plus a queued prompt, `spawn` new chat plus card plus prompt)
+decides what Kanna does. Code: `src/server/webhooks/`, `src/shared/webhooks/`;
+facts `c3-243` and `c3-125`; decision `adr-20261015-inbound-webhooks`. User
+doc: `wiki/src/content/docs/guides/user/webhooks.md`.
+
+**Four invariants, each of which fails silently if broken:**
+
+- **Raw secrets live in `<dataDir>/webhooks.json` at mode 0600, and nowhere
+  else.** HMAC needs the raw secret, so it cannot be hashed, and `settings.json`
+  is written with no file mode. `writeFile`'s `mode` applies only when the file
+  is CREATED, so the store writes a temp file at 0600, `chmod`s it, and renames
+  it over the target. `WebhookSummary` carries a 4-character `secretHint` and
+  never the secret; `create` and `rotateSecret` return it once, in the ack.
+- **The route is dispatched BEFORE the session auth gate**
+  (`http-dispatcher.ts`, next to `/api/share/`). The hook secret is the
+  credential; a session cookie means nothing here. Moving the route below the
+  gate makes every real caller get 401 while every unit test stays green.
+- **Unknown, disabled and `KANNA_WEBHOOKS=disabled` all answer the same 404**,
+  so a caller cannot probe which ids exist. Auth failures are 401 only for a
+  hook that exists and is enabled.
+- **A webhook card is private.** `webhook_delivery` is deliberately absent from
+  `shareableEntries`, and the four `webhooks.*` commands are `unavailable` in
+  the remote-MCP command catalog so a remote client cannot mint or read a
+  credential. A new transcript kind stays out of shares until someone adds it.
+
+**Delivery** goes through narrow `Pick<EventStore, ...>` and
+`Pick<AgentCoordinator, ...>` params (no new `*Deps` bundle; `deps-bundles` is an
+exact ratchet). `inline` and `spawn` enqueue with
+`autoContinue.scheduleId = webhook-<hookId>-<deliveryId>`, which is what makes
+queue replay idempotent through `isPromptAlreadyAppended`. The body is capped at
+256 KiB (the global 128 MiB cap is far too large for an unauthenticated route),
+a delivery id from `X-GitHub-Delivery` / `Idempotency-Key` / `X-Request-Id`
+dedupes retries (a failed delivery releases its id so a retry can succeed), and
+each hook has a 20-per-minute token bucket so a looping caller cannot spawn
+unbounded chats. The JSON body reaches the model fenced, capped at 16000
+characters, under a line stating it is untrusted external data; the fence is
+lengthened past any backtick run inside the body.
+
+**Hook urls are reachable wherever Kanna is.** Localhost by default;
+`--remote`, `--share` and tunnels make them public, and then the secret is the
+only barrier. The client reads `webhooks` through the global subscription and
+never persists a revealed secret.
+
 # Tests
 
 `bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)

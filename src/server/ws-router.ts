@@ -52,6 +52,8 @@ import { handleMiscCommand } from "./ws-router-misc"
 import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { handleGenUICommand } from "./ws-router-genui"
+import { handleWebhooksCommand } from "./ws-router-webhooks"
+import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { GenUIDatasetService } from "./genui/dataset-service"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
 import type { ChatCommandDeps } from "./ws-router-chat"
@@ -125,6 +127,7 @@ interface CreateWsRouterArgs {
   sessionShare?: SessionShareService
   packageUpdateManager?: PackageUpdateManager
   genuiDatasets?: GenUIDatasetService
+  webhooks?: WebhookRegistry
   authEnabled?: boolean
 }
 
@@ -160,6 +163,7 @@ export function createWsRouter({
   sessionShare,
   packageUpdateManager,
   genuiDatasets,
+  webhooks,
   authEnabled,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
@@ -178,6 +182,7 @@ export function createWsRouter({
     beaconRegistry,
     backgroundTaskOutputRegistry,
     followedSessionRegistry,
+    webhooks,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -374,6 +379,7 @@ export function createWsRouter({
       ),
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
       () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
+      () => handleWebhooksCommand(webhooks, sendToClient, command, id),
     ]
     for (const runHandler of handlers) {
       if (await runHandler()) return true
@@ -466,6 +472,7 @@ export function createWsRouter({
     pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
     pushFollowedSessions: () => broadcast.pushFollowedSessions(),
     pushCronJobs: () => broadcast.pushCronJobs(),
+    pushWebhooks: () => broadcast.pushWebhooks(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       const parsed: JsonValue | null = safeJsonParse(String(raw))
       if (parsed === null) {

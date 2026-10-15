@@ -6,6 +6,7 @@ import {
   Settings,
   SquareKanban,
   SquareTerminal,
+  Webhook,
   Workflow,
   type LucideIcon,
 } from "lucide-react"
@@ -46,6 +47,7 @@ const PAGE_PRESENTATION: Readonly<Record<PageKind, { label: string; icon: Lucide
   projects: { label: "Projects", icon: FolderOpen },
   settings: { label: "Settings", icon: Settings },
   cron: { label: "Cron jobs", icon: CalendarClock },
+  webhooks: { label: "Webhooks", icon: Webhook },
   workflows: { label: "Workflows", icon: Workflow },
   boards: { label: "Boards", icon: SquareKanban },
 }

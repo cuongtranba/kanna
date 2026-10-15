@@ -33,6 +33,7 @@ export const subscriptionTopicSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("beacons") }),
   z.object({ type: z.literal("background-task-output"), chatId: z.string(), taskId: z.string() }),
   z.object({ type: z.literal("package-updates") }),
+  z.object({ type: z.literal("webhooks") }),
 ])
 
 function toTopic(parsed: z.infer<typeof subscriptionTopicSchema>): SubscriptionTopic {

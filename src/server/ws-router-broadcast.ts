@@ -589,10 +589,18 @@ export class BroadcastManager {
   }
 
   pushCronJobs(): void {
+    this.pushTopic("cron-jobs")
+  }
+
+  pushWebhooks(): void {
+    this.pushTopic("webhooks")
+  }
+
+  private pushTopic(topicType: "cron-jobs" | "webhooks"): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "cron-jobs") continue
+        if (topic.type !== topicType) continue
         const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)

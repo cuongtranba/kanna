@@ -361,6 +361,17 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           change: entry.change,
         })
         break
+      case "webhook_delivery":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "webhook_delivery",
+          hookId: entry.hookId,
+          hookName: entry.hookName,
+          mode: entry.mode,
+          deliveryId: entry.deliveryId,
+          ...(entry.message !== undefined ? { message: entry.message } : {}),
+        })
+        break
       case "loop_disarmed":
         messages.push({
           ...createBaseMessage(entry),

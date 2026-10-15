@@ -41,6 +41,8 @@ export const TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND: Record<
   cron_list: "card",
   cron_run_skipped: "chrome",
   cron_job_change: "chrome",
+
+  webhook_delivery: "card",
 }
 
 export function transcriptRowTone(row: ResolvedTranscriptRow): TranscriptRowTone {

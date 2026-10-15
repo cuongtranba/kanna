@@ -7,6 +7,7 @@ const BoardsRoutePage = lazy(() => import("../../app/BoardsRoutePage").then((mod
 const StackBoardsRoutePage = lazy(() => import("../../app/StackBoardsRoutePage").then((module) => ({ default: module.StackBoardsRoutePage })))
 const SettingsPage = lazy(() => import("../../app/SettingsPage").then((module) => ({ default: module.SettingsPage })))
 const WorkflowsPage = lazy(() => import("../../app/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })))
+const WebhooksPage = lazy(() => import("../../app/WebhooksPage").then((module) => ({ default: module.WebhooksPage })))
 const CronJobsPage = lazy(() => import("../../app/CronJobsPage").then((module) => ({ default: module.CronJobsPage })))
 
 function PageTabFallback() {
@@ -26,6 +27,8 @@ function PageBody({ target }: { target: PageTabTarget }) {
       return <SettingsPage sectionId={params.sectionId} />
     case "cron":
       return <CronJobsPage />
+    case "webhooks":
+      return <WebhooksPage />
     case "workflows":
       return <WorkflowsPage chatId={params.chatId} />
     case "boards":

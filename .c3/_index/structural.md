@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:2a0eb4225730fbf0bc889127c8d68ff24ed11857c273eea72a4c195fa4de4e7f -->
+<!-- hash: sha256:e56589eacff90c8f81e06b19c8bf8909ba2859a364de015aeb0a88f62532f767 -->
 
 ## c3-0 — Kanna (system)
 
@@ -99,6 +99,11 @@ files: e2e/genui-fixture.ts, e2e/genui.pw.ts, src/client/components/genui/**/*.t
 container: c3-1 | context: c3-0
 refs: ref-zustand-store, rule-colocated-bun-test, rule-strong-typing, rule-zustand-store
 files: src/client/components/settings/RemoteMcpSection.test.tsx, src/client/components/settings/RemoteMcpSection.tsx, src/client/stores/remoteMcpSectionStore.ts, src/shared/remote-mcp/setup-snippets.test.ts, src/shared/remote-mcp/setup-snippets.ts
+
+## c3-125 — webhooks-ui (component)
+container: c3-1 | context: c3-0
+refs: ref-ws-subscription, ref-zustand-store, rule-zustand-store
+files: src/client/app/WebhookCopyButton.tsx, src/client/app/WebhookCreateDialog.store.ts, src/client/app/WebhookCreateDialog.tsx, src/client/app/WebhookRow.tsx, src/client/app/WebhookSecretDialog.tsx, src/client/app/WebhookTargetSelect.tsx, src/client/app/WebhooksPage.tsx, src/client/app/webhookCommands.ts, src/client/components/messages/WebhookDeliveryMessage.tsx, src/client/lib/webhookPresentation.test.ts, src/client/lib/webhookPresentation.ts, src/client/lib/webhookTargets.test.ts, src/client/lib/webhookTargets.ts, src/client/stores/webhooksStore.ts
 
 ## c3-2 — Server (container)
 context: c3-0
@@ -309,13 +314,18 @@ container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, ref-ws-subscription, rule-colocated-bun-test, rule-strong-typing
 files: src/server/better-auth-oauth.adapter.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/remote-mcp/command-catalog.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
 
+## c3-243 — webhooks (component)
+container: c3-2 | context: c3-0
+refs: ref-local-first-data, ref-side-effect-adapter, ref-strong-typing
+files: src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/template.test.ts, src/shared/webhooks/template.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
+
 ## c3-3 — Shared (container)
 context: c3-0
 
 ## c3-301 — types (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, rule-strong-typing
-files: src/shared/analytics.ts, src/shared/dynamic-module.ts, src/shared/json.test.ts, src/shared/json.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/project-mention.test.ts, src/shared/project-mention.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/task-doc.test.ts, src/shared/task-doc.ts, src/shared/turn-model-selection.ts, src/shared/types.test.ts, src/shared/types.ts
+files: src/shared/analytics.ts, src/shared/chat-activity.ts, src/shared/dynamic-module.ts, src/shared/json.test.ts, src/shared/json.ts, src/shared/kanna-system-prompt.test.ts, src/shared/kanna-system-prompt.ts, src/shared/mask-oauth-key.test.ts, src/shared/mask-oauth-key.ts, src/shared/mention-pattern.ts, src/shared/permission-policy.test.ts, src/shared/permission-policy.ts, src/shared/project-mention.test.ts, src/shared/project-mention.ts, src/shared/projectFileUrl.test.ts, src/shared/projectFileUrl.ts, src/shared/task-doc.test.ts, src/shared/task-doc.ts, src/shared/turn-model-selection.ts, src/shared/types.test.ts, src/shared/types.ts
 
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
@@ -390,32 +400,32 @@ reverse deps: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238
 citers: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238
 
 ## ref-local-first-data — Local-First Data (ref)
-reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-305
-citers: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-305
+reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-243, c3-305
+citers: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-243, c3-305
 
 ## ref-provider-adapter — Provider Adapter (ref)
 reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 citers: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 
 ## ref-ws-subscription — WebSocket Subscription (ref)
-reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
-citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
+reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
+citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
 
 ## ref-zustand-store — Zustand Store Pattern (ref)
-reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-229
-citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-229
+reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-229
+citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
 reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-242, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
@@ -430,8 +440,8 @@ reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3
 citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
-reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-229
-citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-229
+reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-229
+citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-229
 
 ## File Map
 src/client/app/KannaSocketProvider.tsx → c3-101
@@ -587,6 +597,20 @@ src/client/components/settings/RemoteMcpSection.tsx → c3-124
 src/client/stores/remoteMcpSectionStore.ts → c3-124
 src/shared/remote-mcp/setup-snippets.test.ts → c3-124
 src/shared/remote-mcp/setup-snippets.ts → c3-124
+src/client/app/WebhookCopyButton.tsx → c3-125
+src/client/app/WebhookCreateDialog.store.ts → c3-125
+src/client/app/WebhookCreateDialog.tsx → c3-125
+src/client/app/WebhookRow.tsx → c3-125
+src/client/app/WebhookSecretDialog.tsx → c3-125
+src/client/app/WebhookTargetSelect.tsx → c3-125
+src/client/app/WebhooksPage.tsx → c3-125
+src/client/app/webhookCommands.ts → c3-125
+src/client/components/messages/WebhookDeliveryMessage.tsx → c3-125
+src/client/lib/webhookPresentation.test.ts → c3-125
+src/client/lib/webhookPresentation.ts → c3-125
+src/client/lib/webhookTargets.test.ts → c3-125
+src/client/lib/webhookTargets.ts → c3-125
+src/client/stores/webhooksStore.ts → c3-125
 src/server/cli-bootstrap.adapter.ts → c3-201
 src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
@@ -892,7 +916,26 @@ src/shared/remote-mcp/command-catalog.ts → c3-242
 src/shared/remote-mcp/topics.ts → c3-242
 src/shared/settings/remote-mcp.test.ts → c3-242
 src/shared/settings/remote-mcp.ts → c3-242
+src/server/test-helpers/webhook-harness.ts → c3-243
+src/server/webhooks/webhook-auth.ts → c3-243
+src/server/webhooks/webhook-boot.ts → c3-243
+src/server/webhooks/webhook-delivery.test.ts → c3-243
+src/server/webhooks/webhook-delivery.ts → c3-243
+src/server/webhooks/webhook-http-routes.test.ts → c3-243
+src/server/webhooks/webhook-http-routes.ts → c3-243
+src/server/webhooks/webhook-rate-limit.ts → c3-243
+src/server/webhooks/webhook-registry.ts → c3-243
+src/server/webhooks/webhook-service.ts → c3-243
+src/server/webhooks/webhook-store.adapter.test.ts → c3-243
+src/server/webhooks/webhook-store.adapter.ts → c3-243
+src/server/ws-router-webhooks.ts → c3-243
+src/shared/webhooks/template.test.ts → c3-243
+src/shared/webhooks/template.ts → c3-243
+src/shared/webhooks/types.ts → c3-243
+src/shared/webhooks/validate.test.ts → c3-243
+src/shared/webhooks/validate.ts → c3-243
 src/shared/analytics.ts → c3-301
+src/shared/chat-activity.ts → c3-301
 src/shared/dynamic-module.ts → c3-301
 src/shared/json.test.ts → c3-301
 src/shared/json.ts → c3-301
