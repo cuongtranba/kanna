@@ -7,3 +7,4 @@ code:
   - src/client/app/subagent-run-placement.ts
   - src/client/app/transcriptSpacing.test.ts
   - src/client/app/transcriptSpacing.ts
+  - src/client/app/transcriptActionsContext.tsx

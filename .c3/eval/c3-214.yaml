@@ -12,3 +12,7 @@ code:
   - src/server/claude-session-types.ts
   - src/server/discovery.adapter.ts
   - src/server/discovery.test.ts
+  - src/server/codex-session-scanner.adapter.ts
+  - src/server/followed-session-registry.ts
+  - src/server/followed-session-io.adapter.ts
+  - src/server/imported-subagents-dir.ts

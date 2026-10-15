@@ -8,11 +8,19 @@ import Diagram from '../../../components/Diagram.astro'
 
 ## Live output
 
-On Claude chats you watch the model work instead of a spinner. Its thinking, the
-reply it is writing, and a tool call being prepared (with the file it targets and
-the size of its input so far) stream into the transcript as they are generated.
-When a block finishes, the live preview is replaced by the finished entry in the
+On chats that run on the Claude Agent SDK (Claude, OpenRouter and custom endpoints) you
+watch the model work instead of a spinner. Its thinking, the reply it is writing, and a
+tool call being prepared (with the file it targets and the size of its input so far)
+stream into the transcript as they are generated. Codex chats show finished entries
+only. When a block finishes, the live preview is replaced by the finished entry in the
 same frame.
+
+The reply is typed out with a small caret rather than appearing in jumps. The text on
+screen is always a prefix of what the model has actually written; the pace speeds up
+when the model gets ahead of the caret so it never lags far behind. A word is laid out
+whole before it is typed, so lines do not re-wrap mid-word, and code blocks appear a
+block at a time rather than character by character. With your system's reduce-motion
+setting on, each update is shown in full and the caret stays still.
 
 The preview is never saved: only finished entries reach the transcript on disk.
 
@@ -59,6 +67,12 @@ Two ways to rearrange:
   of that pane's edges to split it and place the tab in the new half.
 - **Use the keyboard.** Focus a pane in any direction, split it, cycle its tabs,
   or close the active one — see [Keybindings](/reference/keybindings/).
+
+The app's own pages open as tabs too: **Projects**, **Settings**, **Cron**,
+**Workflows**, **Boards** and **Webhooks**. That lets you keep, say, a board or the
+cron list in one pane while a chat runs in the next. Each page tab keeps its own
+address, so a particular board or settings section is still showing when you switch
+back to it.
 
 Switching tabs does not tear down the one you left: terminals keep their
 scrollback and running process, and the transcript keeps its scroll position.

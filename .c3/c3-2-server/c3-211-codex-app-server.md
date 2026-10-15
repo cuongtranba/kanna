@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 5111854ff1400030ff64327fc4613cfea3679cee1fd90effd2caab50f428af0a
+c3-seal: 8a6dc0dc945c347d387572ff20a55e1a1b875f2730e2233e306fe78380ebc5ff
 title: codex-app-server
 type: component
 category: feature
@@ -68,6 +68,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | --- | --- | --- | --- | --- |
 | runTurn(spec) | OUT | Streams adapter-shaped events | c3-210 | src/server/codex-app-server.ts |
 | cancel(turnId) | OUT | Aborts running turn | c3-210 | src/server/codex-app-server.ts |
+| update_plan tool | IN | Every thread starts with tools.update_plan enabled; an item/tool/call for update_plan and each turn/plan/updated notification become one plan entry of steps and an explanation | The plan is display only; Kanna answers the tool call itself and never forwards it to another tool | src/server/codex-app-server.ts |
 
 ## Change Safety
 

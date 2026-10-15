@@ -13,3 +13,9 @@ code:
   - src/server/tool-callback.test.ts
   - src/server/permission-gate.ts
   - src/server/permission-gate.test.ts
+  - src/server/kanna-mcp-tool.ts
+  - src/server/kanna-mcp-tools/**/*.ts
+  - src/server/oauth-errors.ts
+  - src/server/canonical-args.ts
+  - src/server/structured-doc-io.adapter.ts
+  - src/shared/structured-doc/**/*.ts

@@ -8,3 +8,5 @@ code:
   - src/client/components/lexical/plugins/**
   - src/client/components/lexical/serialize/**
   - src/client/components/open-external-menu.tsx
+  - src/client/components/share/**/*.ts
+  - src/client/components/share/**/*.tsx

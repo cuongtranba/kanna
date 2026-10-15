@@ -6,3 +6,6 @@ code:
   - src/server/kanna-mcp-boards.ts
   - src/server/ws-router-boards.test.ts
   - src/server/ws-router-boards.ts
+  - src/server/github-cli.adapter.ts
+  - src/server/worktree-store.adapter.ts
+  - src/server/github-issues.adapter.ts

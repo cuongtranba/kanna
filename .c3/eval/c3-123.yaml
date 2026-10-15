@@ -7,3 +7,4 @@ code:
   - src/client/components/lexical/markdown/kannaUiTransformers.ts
   - e2e/genui.pw.ts
   - e2e/genui-fixture.ts
+  - src/client/components/genui/**/*.css

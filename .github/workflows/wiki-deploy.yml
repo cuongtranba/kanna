@@ -11,13 +11,12 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -33,9 +32,49 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  github-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: github-wiki
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - id: mirror
+        uses: actions/checkout@v7
+        continue-on-error: true
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki-mirror
+      - if: steps.mirror.outcome == 'failure'
+        run: |
+          echo "::error::GitHub Wiki not initialised — create any page once at https://github.com/${{ github.repository }}/wiki, then re-run this workflow"
+          exit 1
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+        working-directory: wiki
+      - run: bun run export:github-wiki ../wiki-mirror
+        working-directory: wiki
+      - name: Push changes
+        working-directory: wiki-mirror
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "GitHub Wiki already up to date"
+            exit 0
+          fi
+          git commit -m "docs: sync from ${GITHUB_SHA}"
+          git push

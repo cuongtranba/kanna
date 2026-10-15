@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 012eba6b8e9fdd1d5d7704c094cd16055bdcec7be61e20f9a75aaa7dcbc1bcde
+c3-seal: a8dcb2e855470e394651c808fde4511f461e58f51728fc2fd56f9f67b811b7d2
 title: Server
 type: container
 boundary: service
@@ -70,3 +70,5 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-241 | beacon-daemon | feature | active | Run a user-authorized companion daemon on the user's own machine that dials out to Kanna and executes scoped file and shell requests. |
 | c3-242 | remote-mcp | feature | active | Serve Kanna to external MCP clients (Claude Code, Codex, Claude Desktop, ChatGPT) over an authenticated Streamable HTTP endpoint at /mcp, with Better Auth acting as the OAuth 2.1 authorization server. |
 | c3-243 | webhooks | feature | active | Accept inbound webhooks from external systems and turn each authenticated delivery into a card, a queued prompt, or a new chat, without widening the session-cookie boundary or leaking the hook secrets. |
+| c3-244 | push-notifications | feature | active | Tell a user's subscribed browsers when a chat needs them, failed, or finished, without notifying for a chat they are already looking at or for work that is still running in the background. |
+| c3-245 | docs-site | feature | active | Keep wiki/src/content/docs as the single place Kanna's user and operator docs are written, and publish it to two generated outputs, the Starlight site and the repository's GitHub Wiki, so neither output can drift from the source. |

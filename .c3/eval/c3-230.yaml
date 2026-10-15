@@ -1,0 +1,5 @@
+fact: c3-230
+claim: "the OpenRouter model catalog is fetched, parsed and cached in src/server/openrouter-models.ts"
+code:
+  - src/server/openrouter-models.ts
+  - src/server/openrouter-models-io.adapter.ts

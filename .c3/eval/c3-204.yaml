@@ -5,3 +5,7 @@ code:
   - src/server/paths.ts
   - src/server/project-paths.test.ts
   - src/server/project-paths.ts
+  - src/server/paths-fs.adapter.ts
+  - src/server/project-paths-io.adapter.ts
+  - src/server/project-directory.adapter.ts
+  - src/server/projectFileRelocation.adapter.ts

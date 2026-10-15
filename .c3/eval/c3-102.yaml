@@ -2,3 +2,4 @@ fact: c3-102
 claim: "preference stores are under src/client/stores/"
 code:
   - src/client/stores/**/*.ts
+  - src/client/lib/createScopedStore.tsx

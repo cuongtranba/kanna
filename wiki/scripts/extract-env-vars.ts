@@ -11,6 +11,12 @@
 // existence. That is deliberate — KANNA_HOME / KANNA_PORT / KANNA_PASSWORD sat
 // here for months describing an env-var surface Kanna never had. Those are CLI
 // flags (`--port`, `--password`); the data dir follows `HOME`.
+//
+// A var read through a named constant (`env[RUNTIME_PROFILE_ENV_VAR]`) has no
+// `env.KANNA_*` to scan for, so INDIRECT_READS names it with the file that holds
+// the literal; it is published only while that file still contains the name. A
+// generic constant resolver was rejected: it would also publish the CLI
+// supervisor's internal KANNA_CLI_* plumbing.
 
 import { Glob } from 'bun'
 import path from 'node:path'
@@ -28,7 +34,6 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_CRON_CONFIRM: { default: 'enabled', description: 'Set to "disabled" to stop the host from escalating a typed /cron arm to a model review turn. When enabled, the model presents the full job config and asks the user to confirm, change, or disarm. Only fires on the typed path — arm_cron already confirms in-turn.' },
   KANNA_STACK_MEMORY: { default: 'enabled', description: 'Set to "disabled" to stop a multi-root (stack) spawn from loading each additional project\'s CLAUDE.md / .claude/rules. Enabled, Kanna sets CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD on any spawn that has additional roots, so a chat that can WRITE a bound project also reads its conventions — at the cost of those memory files in every turn\'s context. A single-project chat is unaffected either way.' },
   KANNA_UPDATE_COMMAND: { default: '(auto-detected)', description: 'Overrides the command Kanna runs to install a self-update. Set it when npm, bun, pnpm and yarn are all absent or the wrong one is picked.' },
-  KANNA_SYSTEM_PROMPT_APPEND: { default: '(unset)', description: 'Appended to the system prompt for every agent spawn.' },
   KANNA_SUBAGENT_MAX_LIVE: { default: '5', description: 'Max concurrent keep-alive (warm) subagent processes per chat. Over cap, delegate_subagent({keep_alive:true}) fails CAP_EXCEEDED.' },
   KANNA_SUBAGENT_IDLE_TIMEOUT_MS: { default: '300000', description: 'Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn.' },
   KANNA_SUBAGENT_RUN_TIMEOUT_MS: { default: '(orchestrator default)', description: 'Stall watchdog for a single subagent run. The Settings value wins over this; this wins over the built-in default. Read once at server start.' },
@@ -62,6 +67,10 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_BEACON_RELEASE_BASE: { default: 'https://github.com/cuongtranba/kanna/releases/download', description: 'Read by the command-line and Windows 7 beacons, not by the Kanna server or the desktop app. Replaces the location a beacon downloads its update from, for testing against a local copy of a release. Kanna cannot set it.' },
 }
 
+const INDIRECT_READS: Record<string, string> = {
+  KANNA_RUNTIME_PROFILE: 'shared/branding.ts',
+}
+
 const seen = new Set<string>()
 const glob = new Glob('**/*.ts')
 
@@ -72,6 +81,11 @@ for await (const file of glob.scan({ cwd: SRC })) {
   // (the side-effect seal's preferred shape) is still a var the user sets.
   const matches = content.matchAll(/\benv\.(KANNA_[A-Z0-9_]+)/g)
   for (const m of matches) seen.add(m[1])
+}
+
+for (const [name, file] of Object.entries(INDIRECT_READS)) {
+  const content = await Bun.file(path.join(SRC, file)).text()
+  if (content.includes(`"${name}"`)) seen.add(name)
 }
 
 const sorted = Array.from(seen).sort()

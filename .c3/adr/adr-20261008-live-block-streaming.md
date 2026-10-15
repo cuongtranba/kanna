@@ -1,10 +1,10 @@
 ---
 id: adr-20261008-live-block-streaming
-c3-seal: ba81d7c37038deecf6df97c532346453c94145ce477a2e616e38b9c17e0e243b
+c3-seal: a871ca77242d48b7b8f7c002d4fa6cec77cebbdd41bde978341b7848832874a9
 title: live-block-streaming
 type: adr
 goal: 'Show the model''s output while it is being generated instead of only after each content block completes. The Claude SDK session for a main chat now runs with `includePartialMessages: true` and `--thinking-display summarized`; the harness folds the SDK''s `stream_event` frames into one `LiveBlock` (text, thinking, or a tool call with its target and input size), and the server pushes it to the chat''s subscribers as an ephemeral `chat.live` event that the client renders in place of the generic Running indicator. Nothing about a live block is persisted.'
-status: proposed
+status: done
 date: "2026-10-08"
 ---
 

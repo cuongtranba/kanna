@@ -4,3 +4,9 @@ code:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/codex-app-server-decode.ts
+  - src/server/codex-rollout-to-thread-item.ts
+  - src/server/codex-session-types.ts
+  - src/server/codex-spawn.adapter.ts
+  - src/server/codex-tool-payloads.ts
+  - src/server/codex-transcript-translator.ts

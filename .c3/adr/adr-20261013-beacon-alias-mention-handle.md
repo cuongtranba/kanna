@@ -1,10 +1,10 @@
 ---
 id: adr-20261013-beacon-alias-mention-handle
-c3-seal: 1633760b4e0a1eca9cdac57253f86529640160eaaea071b50a49255ddcec6339
+c3-seal: 6f830eadf9c17e585a044c4db89aa795cecfddf4554456a2ecca8f189510e818
 title: beacon-alias-mention-handle
 type: adr
 goal: Record how a paired beacon gets a short, typeable name and how a chat message names a beacon. A beacon gains an optional alias that is a slug handle kept separate from its hostname label, the display name becomes the alias when one is set, a message can name a beacon with an at-beacon mention that resolves through one shared index, and the resolved beacon id reaches only the provider prompt, never the stored user prompt.
-status: proposed
+status: done
 date: "2026-10-13"
 ---
 

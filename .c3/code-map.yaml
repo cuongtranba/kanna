@@ -1,12 +1,18 @@
 c3-101:
   - src/client/app/socket.test.ts
   - src/client/app/socket.ts
+  - src/client/api/**/*.ts
+  - src/client/query/**/*.ts
 c3-102:
   - src/client/stores/**/*.ts
+  - src/client/lib/createScopedStore.tsx
 c3-103:
   - _exclude:src/client/lib/testing/**
   - src/client/components/editor-icons.tsx
   - src/client/components/ui/**/*.tsx
+  - src/client/components/CopyButton.store.ts
+  - src/client/components/OpenExternalSelect.store.ts
+  - src/index.css
 c3-110:
   - src/client/app/App.test.tsx
   - src/client/app/App.tsx
@@ -35,10 +41,18 @@ c3-110:
   - src/client/hooks/**/*.tsx
   - src/client/lib/**/*.ts
   - src/main.tsx
+  - src/client/adapters/*.ts
+  - src/client/ports/**/*.ts
+  - src/client/components/quick-switcher/**/*.tsx
+  - src/client/app/share-view/**/*.ts
+  - src/client/app/share-view/**/*.tsx
+  - src/client/app/drawerVisual.ts
+  - src/vite-env.d.ts
 c3-111:
   - src/client/app/KannaSidebar.tsx
   - src/client/app/sidebarNumberJump.test.ts
   - src/client/app/sidebarNumberJump.ts
+  - src/client/app/SidebarUtilityNav.tsx
 c3-112:
   - src/client/app/ChatPage.test.ts
   - src/client/app/ChatPage/**/*.ts
@@ -49,6 +63,7 @@ c3-112:
   - src/client/components/messages/LoopDisarmedMessage.test.tsx
   - src/client/components/messages/LoopDisarmedMessage.tsx
   - src/client/components/panes/PageTabContent.tsx
+  - src/client/app/BackgroundTasksSection.store.ts
 c3-113:
   - src/client/app/KannaTranscript.test.tsx
   - src/client/app/KannaTranscript.tsx
@@ -56,6 +71,7 @@ c3-113:
   - src/client/app/subagent-run-placement.ts
   - src/client/app/transcriptSpacing.test.ts
   - src/client/app/transcriptSpacing.ts
+  - src/client/app/transcriptActionsContext.tsx
 c3-114:
   - src/client/components/lexical/markdown/**
   - src/client/components/messages/**/*.ts
@@ -68,6 +84,8 @@ c3-115:
   - src/client/components/lexical/plugins/**
   - src/client/components/lexical/serialize/**
   - src/client/components/open-external-menu.tsx
+  - src/client/components/share/**/*.ts
+  - src/client/components/share/**/*.tsx
 c3-116:
   - src/client/app/McpServersSection.test.tsx
   - src/client/app/McpServersSection.tsx
@@ -96,9 +114,15 @@ c3-116:
   - src/client/app/BeaconAliasEditor.tsx
   - src/client/stores/beaconsStore.ts
   - src/client/stores/beaconsStore.test.ts
+  - src/client/app/KeybindingsSection.tsx
+  - src/client/app/SkillsSection.tsx
+  - src/client/app/legacyProviderDefaults.ts
+  - src/client/components/settings/SkillCard.tsx
+  - src/client/components/settings/PushNotificationsSection.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
+  - src/client/components/ImportSessionsDialog.tsx
 c3-118:
   - src/client/app/ChatPage/TerminalWorkspaceShell.tsx
   - src/client/app/terminalLayoutResize.test.ts
@@ -119,6 +143,7 @@ c3-201:
   - src/server/cli-runtime.ts
   - src/server/cli-supervisor.adapter.ts
   - src/server/cli.ts
+  - src/types/bun-process-signals.d.ts
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
@@ -145,6 +170,12 @@ c3-202:
   - src/server/beacon-transfer-files.adapter.ts
   - src/server/beacon-transfer-http.adapter.ts
   - src/server/beacon-transfer-http.test.ts
+  - src/server/app-settings-io.adapter.ts
+  - src/server/server-io.adapter.ts
+  - src/server/input-validation.ts
+  - src/server/json-boundary.ts
+  - src/server/fs-stat.adapter.ts
+  - src/server/analytics.ts
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
@@ -156,6 +187,10 @@ c3-204:
   - src/server/paths.ts
   - src/server/project-paths.test.ts
   - src/server/project-paths.ts
+  - src/server/paths-fs.adapter.ts
+  - src/server/project-paths-io.adapter.ts
+  - src/server/project-directory.adapter.ts
+  - src/server/projectFileRelocation.adapter.ts
 c3-205:
   - src/server/events.ts
   - src/server/harness-types.ts
@@ -170,6 +205,10 @@ c3-206:
   - src/server/event-store.project-delete.test.ts
   - src/server/event-store.test.ts
   - src/server/event-store.ts
+  - src/server/event-store-*.ts
+  - src/server/storage/backend.ts
+  - src/server/storage/fs-storage.adapter.ts
+  - src/server/storage/in-memory-storage.ts
 c3-207:
   - src/server/read-models.test.ts
   - src/server/read-models.ts
@@ -182,6 +221,18 @@ c3-208:
   - src/server/ws-router.ts
   - src/server/live-block-throttle.ts
   - src/server/live-block-throttle.test.ts
+  - src/server/ws-router-agent-ctrl.ts
+  - src/server/ws-router-broadcast.ts
+  - src/server/ws-router-chat.ts
+  - src/server/ws-router-defaults.ts
+  - src/server/ws-router-diff.ts
+  - src/server/ws-router-envelope.ts
+  - src/server/ws-router-io.adapter.ts
+  - src/server/ws-router-misc.ts
+  - src/server/ws-router-project.ts
+  - src/server/ws-router-settings.ts
+  - src/server/ws-router-skills.ts
+  - src/server/ws-router-utils.ts
 c3-209:
   - src/server/process-utils.adapter.ts
   - src/server/process-utils.test.ts
@@ -226,10 +277,54 @@ c3-210:
   - src/server/subagent-provider-run.ts
   - src/server/claude-live-block.ts
   - src/server/claude-live-publisher.ts
+  - src/server/agent-coordinator.ts
+  - src/server/agent-coordinator-types.ts
+  - src/server/agent-app-settings-view.ts
+  - src/server/claude-autocontinue-commands.ts
+  - src/server/claude-cancel-handler.ts
+  - src/server/claude-chat-management.ts
+  - src/server/claude-harness-stream.ts
+  - src/server/claude-loop-commands.ts
+  - src/server/claude-message-normalizer.ts
+  - src/server/claude-prompt-helpers.ts
+  - src/server/claude-sdk-queue.ts
+  - src/server/claude-session-config-helpers.ts
+  - src/server/claude-session-error-handler.ts
+  - src/server/claude-session-spawner.ts
+  - src/server/claude-session-start.ts
+  - src/server/claude-spawn-helpers.ts
+  - src/server/claude-steer-log.ts
+  - src/server/claude-subagent-tool-response.ts
+  - src/server/claude-subagent-wiring.ts
+  - src/server/claude-tool-respond.ts
+  - src/server/claude-turn-runner.ts
+  - src/server/claude-usage-math.ts
+  - src/server/pending-tool-slot.ts
+  - src/server/queued-message-recovery.ts
+  - src/server/model-escalation.ts
+  - src/server/mermaid-guard.ts
+  - src/server/mermaid-parse.adapter.ts
+  - src/server/loop-template.ts
+  - src/server/loop-template-io.adapter.ts
+  - src/server/loop-verify-cache.ts
+  - src/server/loop-verify-io.adapter.ts
+  - src/server/loop-wake-prompt.ts
+  - src/server/background-task-output-registry.ts
+  - src/server/background-task-output-io.adapter.ts
+  - src/server/subagent-entry-cap.adapter.ts
+  - src/server/subagent-transcript-registry.ts
+  - src/server/subagent-transcript-io.adapter.ts
+  - src/server/project-process-env.ts
 c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/codex-app-server-decode.ts
+  - src/server/codex-rollout-to-thread-item.ts
+  - src/server/codex-session-types.ts
+  - src/server/codex-spawn.adapter.ts
+  - src/server/codex-tool-payloads.ts
+  - src/server/codex-transcript-translator.ts
 c3-212:
   - src/server/provider-catalog.test.ts
   - src/server/provider-catalog.ts
@@ -237,6 +332,7 @@ c3-212:
   - src/shared/custom-providers.ts
   - src/shared/custom-providers.test.ts
   - src/shared/custom-provider-presets.ts
+  - src/server/llm-provider-store.adapter.ts
 c3-213:
   - src/server/generate-commit-message.test.ts
   - src/server/generate-commit-message.ts
@@ -258,13 +354,20 @@ c3-214:
   - src/server/claude-session-types.ts
   - src/server/discovery.adapter.ts
   - src/server/discovery.test.ts
+  - src/server/codex-session-scanner.adapter.ts
+  - src/server/followed-session-registry.ts
+  - src/server/followed-session-io.adapter.ts
+  - src/server/imported-subagents-dir.ts
 c3-215:
   - src/server/diff-store.test.ts
   - src/server/diff-store.ts
+  - src/server/diff-store-*.ts
 c3-216:
   - src/server/terminal-manager.test.ts
   - src/server/terminal-manager.ts
   - src/server/terminal-pid-registry.test.ts
+  - src/server/terminal-manager-io.adapter.ts
+  - src/server/terminal-pid-registry.adapter.ts
 c3-217:
   - src/server/uploads.test.ts
   - src/server/uploads.ts
@@ -287,9 +390,11 @@ c3-220:
 c3-221:
   - src/server/external-open.test.ts
   - src/server/external-open.ts
+  - src/server/wsl.adapter.ts
 c3-222:
   - src/server/keybindings.test.ts
   - src/server/keybindings.ts
+  - src/server/keybindings-store.adapter.ts
 c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
 c3-224:
@@ -307,10 +412,17 @@ c3-226:
   - src/server/tool-callback.test.ts
   - src/server/permission-gate.ts
   - src/server/permission-gate.test.ts
+  - src/server/kanna-mcp-tool.ts
+  - src/server/kanna-mcp-tools/**/*.ts
+  - src/server/oauth-errors.ts
+  - src/server/canonical-args.ts
+  - src/server/structured-doc-io.adapter.ts
+  - src/shared/structured-doc/**/*.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-228:
   - src/server/session-share/**/*.ts
+  - src/server/share-defaults.adapter.ts
 c3-229:
   - src/server/agent-transcript-parse.test.ts
   - src/server/agent-transcript-parse.ts
@@ -360,6 +472,9 @@ c3-232:
   - src/server/kanna-mcp-boards.ts
   - src/server/ws-router-boards.test.ts
   - src/server/ws-router-boards.ts
+  - src/server/github-cli.adapter.ts
+  - src/server/worktree-store.adapter.ts
+  - src/server/github-issues.adapter.ts
 c3-301:
   - src/shared/analytics.ts
   - src/shared/chat-activity.ts
@@ -382,6 +497,30 @@ c3-301:
   - src/shared/turn-model-selection.ts
   - src/shared/types.test.ts
   - src/shared/types.ts
+  - src/shared/app-settings-types.ts
+  - src/shared/builtin-commands.ts
+  - src/shared/chat-tasks/**/*.ts
+  - src/shared/claude-api-error-classification.ts
+  - src/shared/claude-session-id.ts
+  - src/shared/codex-error-classification.ts
+  - src/shared/core-types.ts
+  - src/shared/design/**/*.ts
+  - src/shared/equality.ts
+  - src/shared/errors.ts
+  - src/shared/git-diff-types.ts
+  - src/shared/lazyModule.ts
+  - src/shared/log.ts
+  - src/shared/loop-progress.ts
+  - src/shared/mcp-types.ts
+  - src/shared/mermaid*.ts
+  - src/shared/pane-tab-width.ts
+  - src/shared/provider-model-types.ts
+  - src/shared/settings/**/*.ts
+  - src/shared/skill-agents.ts
+  - src/shared/subagent-types.ts
+  - src/shared/terminal-scrollback.ts
+  - src/shared/tool-call-types.ts
+  - src/shared/transcript-types.ts
 c3-302:
   - src/shared/chat-ops.test.ts
   - src/shared/chat-ops.ts
@@ -468,6 +607,8 @@ c3-236:
   - src/ops/architecture/budget.ts
   - src/ops/architecture/budget-scan.adapter.ts
   - scripts/check-complexity-limits.ts
+  - src/ops/architecture/cjs-interop.ts
+  - src/ops/architecture/cjs-interop-scan.adapter.ts
 c3-311:
   - src/shared/cron/**/*.ts
 c3-312:
@@ -485,6 +626,8 @@ c3-237:
   - src/server/claude-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-applier.adapter.ts
+  - src/server/app-settings-package-updates.ts
+  - src/server/claude-plugin-update-applier.adapter.ts
 c3-121:
   - src/client/app/KannaPluginsSettingsBranch.tsx
   - src/client/app/PluginSidebarItems.tsx
@@ -557,6 +700,7 @@ c3-123:
   - src/client/components/lexical/markdown/kannaUiTransformers.ts
   - e2e/genui.pw.ts
   - e2e/genui-fixture.ts
+  - src/client/components/genui/**/*.css
 c3-242:
   - src/server/remote-mcp/**/*.ts
   - src/shared/remote-mcp/command-catalog.ts
@@ -605,3 +749,22 @@ c3-125:
   - src/client/lib/webhookTargets.ts
   - src/client/lib/webhookTargets.test.ts
   - src/client/components/messages/WebhookDeliveryMessage.tsx
+c3-230:
+  - src/server/openrouter-models.ts
+  - src/server/openrouter-models-io.adapter.ts
+c3-244:
+  - src/server/push/**/*.ts
+  - src/server/ws-router-push.ts
+  - src/shared/vapid-subject.ts
+  - src/shared/settings/push.ts
+c3-104:
+  - src/client/components/panes/**/*.ts
+  - src/client/components/panes/**/*.tsx
+c3-245:
+  - wiki/astro.config.mjs
+  - wiki/package.json
+  - wiki/src/sidebar.mjs
+  - wiki/src/content.config.ts
+  - wiki/src/components/*.astro
+  - wiki/scripts/**/*.ts
+  - .github/workflows/wiki-deploy.yml

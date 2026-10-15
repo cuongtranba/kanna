@@ -30,3 +30,10 @@ code:
   - src/client/hooks/**/*.tsx
   - src/client/lib/**/*.ts
   - src/main.tsx
+  - src/client/adapters/*.ts
+  - src/client/ports/**/*.ts
+  - src/client/components/quick-switcher/**/*.tsx
+  - src/client/app/share-view/**/*.ts
+  - src/client/app/share-view/**/*.tsx
+  - src/client/app/drawerVisual.ts
+  - src/vite-env.d.ts

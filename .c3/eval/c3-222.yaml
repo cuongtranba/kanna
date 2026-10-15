@@ -3,3 +3,4 @@ claim: "keybindings are at src/server/keybindings.ts"
 code:
   - src/server/keybindings.test.ts
   - src/server/keybindings.ts
+  - src/server/keybindings-store.adapter.ts

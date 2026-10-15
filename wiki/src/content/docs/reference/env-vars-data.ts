@@ -32,6 +32,7 @@ export const envVars: EnvVar[] = [
   { name: 'KANNA_PTY_BACKGROUND_TASK_MAX_MS', default: "(unset)", description: "Former name of KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS. Still read, but only when the new name is unset." },
   { name: 'KANNA_RELOADER', default: "supervisor", description: "Self-update reload strategy: \"supervisor\" (default, end-user) or \"pm2\" (self-host, requires KANNA_REPO_DIR)." },
   { name: 'KANNA_REPO_DIR', default: "(unset)", description: "Repo checkout the pm2 reloader pulls/rebuilds. Required when KANNA_RELOADER=pm2." },
+  { name: 'KANNA_RUNTIME_PROFILE', default: "prod", description: "Set to \"dev\" to use a separate data root (~/.kanna-dev instead of ~/.kanna), so a development run cannot touch real chats. `bun run dev` sets this for you." },
   { name: 'KANNA_SERVER_SECRET', default: "(random per process)", description: "Stabilises HMAC tool-request ids across process restarts." },
   { name: 'KANNA_STACK_MEMORY', default: "enabled", description: "Set to \"disabled\" to stop a multi-root (stack) spawn from loading each additional project's CLAUDE.md / .claude/rules. Enabled, Kanna sets CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD on any spawn that has additional roots, so a chat that can WRITE a bound project also reads its conventions — at the cost of those memory files in every turn's context. A single-project chat is unaffected either way." },
   { name: 'KANNA_SUBAGENT_IDLE_TIMEOUT_MS', default: "300000", description: "Idle window after which a keep-alive subagent session is auto-closed. Reset on each turn." },

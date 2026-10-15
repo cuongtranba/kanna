@@ -13,3 +13,5 @@ code:
   - src/server/claude-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-checker.adapter.ts
   - src/server/codex-plugin-update-applier.adapter.ts
+  - src/server/app-settings-package-updates.ts
+  - src/server/claude-plugin-update-applier.adapter.ts

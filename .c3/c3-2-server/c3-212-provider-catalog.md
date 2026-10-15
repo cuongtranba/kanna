@@ -1,7 +1,7 @@
 ---
 id: c3-212
 c3-version: 4
-c3-seal: d03adc55365c80a728f70050664d85ab40701eceb874119fdadd8981b4f87cb8
+c3-seal: bb475dfeea61ab5b2c22edf30ec45a22417751ca9af36a1f316aaa7fbccc6373
 title: provider-catalog
 type: component
 category: feature
@@ -61,6 +61,7 @@ Holds the typed catalog of providers, models, reasoning effort levels, and provi
 | --- | --- | --- | --- | --- |
 | catalog export | OUT | Typed list of providers + models | c3-210 | src/server/provider-catalog.ts |
 | Catalog types | OUT | Re-exported to client picker | c3-301 | src/server/provider-catalog.ts |
+| Custom Anthropic-compatible endpoints | IN/OUT | A model id provider-id/vendor-model resolves to an SdkEndpoint carrying its own base URL, API key, alias model and context window, and the session is respawned when that fingerprint changes | Credentials come from the settings custom providers list; a snapshot carries only a short API key hint, never the key | src/server/sdk-endpoint.ts |
 
 ## Change Safety
 
