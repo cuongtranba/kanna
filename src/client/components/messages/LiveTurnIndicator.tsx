@@ -1,28 +1,69 @@
-import { useMemo } from "react"
+import { memo, useMemo } from "react"
 import { Brain } from "lucide-react"
 import type { LiveBlock } from "../../../shared/live-block"
 import { selectLiveBlock, useLiveBlockStore } from "../../stores/liveBlockStore"
 import { formatByteSize } from "../../lib/formatByteSize"
-import { renderMessageMarkdown } from "../lexical/markdown/renderMessage"
+import { renderMarkdownBlocks, renderMarkdownWithCaret } from "../lexical/markdown/renderMessage"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
 import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
+import { timerAdapter, domAdapter } from "../../adapters"
+import type { DomPort, TimerPort } from "../../ports"
+import { closeOpenMarkup, splitParagraphs } from "./live-typewriter"
 import { ProcessingMessage } from "./ProcessingMessage"
+import { useLiveTypewriter, type LiveTypewriter } from "./useLiveTypewriter"
 import { LucideIconWrapper, MetaContent, MetaLabel, MetaRow, getToolIcon } from "./shared"
 
 type LiveTextBlock = Extract<LiveBlock, { kind: "text" }>
 type LiveThinkingBlock = Extract<LiveBlock, { kind: "thinking" }>
 type LiveToolUseBlock = Extract<LiveBlock, { kind: "tool_use" }>
 
-function LiveText({ block }: { block: LiveTextBlock }) {
-  const rendered = useMemo(() => renderMessageMarkdown(block.text), [block.text])
+export interface LiveTurnPorts {
+  timer?: TimerPort
+  dom?: DomPort
+}
+
+type CaretState = "revealing" | "idle" | "still"
+
+function caretStateOf(typewriter: LiveTypewriter): CaretState {
+  if (typewriter.reducedMotion) return "still"
+  return typewriter.revealing ? "revealing" : "idle"
+}
+
+function LiveParagraphView({ source }: { source: string }) {
+  return renderMarkdownBlocks(source)
+}
+
+const LiveParagraph = memo(LiveParagraphView)
+
+function LiveText({ block, ports }: { block: LiveTextBlock; ports: LiveTurnPorts }) {
+  const typewriter = useLiveTypewriter(block.text, ports.timer ?? timerAdapter, ports.dom ?? domAdapter)
+  const caretState = caretStateOf(typewriter)
+  const paragraphs = splitParagraphs(typewriter.revealed)
+  const trailing = paragraphs[paragraphs.length - 1] ?? ""
+  const trailingSource = closeOpenMarkup(trailing + typewriter.ghost).trimEnd()
   return (
     <div
       data-testid="live-block-text"
       className="text-pretty prose prose-sm dark:prose-invert px-0.5 w-full max-w-[70ch] space-y-4"
     >
-      {rendered}
+      {paragraphs.slice(0, -1).map((source, index) => (
+        <LiveParagraph key={index} source={source} />
+      ))}
+      {renderMarkdownWithCaret(trailingSource, {
+        ghostLength: typewriter.ghost.length,
+        renderTail: (ghost) => (
+          <>
+            <span aria-hidden="true" data-testid="live-caret" data-caret={caretState} className="kanna-live-caret" />
+            {ghost.length > 0 ? (
+              <span aria-hidden="true" data-testid="live-ghost" className="select-none text-transparent">
+                {ghost}
+              </span>
+            ) : null}
+          </>
+        ),
+      })}
     </div>
   )
 }
@@ -74,12 +115,13 @@ function LiveToolUse({ block }: { block: LiveToolUseBlock }) {
 interface LiveTurnIndicatorProps {
   chatId: string | null
   status?: string
+  ports?: LiveTurnPorts
 }
 
-export function LiveTurnIndicator({ chatId, status }: LiveTurnIndicatorProps) {
+export function LiveTurnIndicator({ chatId, status, ports = {} }: LiveTurnIndicatorProps) {
   const block = useLiveBlockStore(selectLiveBlock(chatId))
   if (block === null) return <ProcessingMessage status={status} />
-  if (block.kind === "text") return <LiveText block={block} />
+  if (block.kind === "text") return <LiveText block={block} ports={ports} />
   if (block.kind === "thinking") return <LiveThinking block={block} />
   return <LiveToolUse block={block} />
 }

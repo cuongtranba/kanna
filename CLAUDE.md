@@ -2575,6 +2575,41 @@ place of `ProcessingMessage`. ADR `adr-20261008-live-block-streaming`.
 - **Subagent sessions do not request partial messages** (`streamLiveBlocks` is
   set only by `spawnClaudeTurn`), and frames with a non-null
   `parent_tool_use_id` are ignored.
+- **The text block is revealed client-side as a typewriter; the snapshot stays
+  the only source of truth** (`live-typewriter.ts`, `useLiveTypewriter.ts`,
+  `LiveText` in `LiveTurnIndicator.tsx`). The server still sends cumulative
+  text every 100 ms; the client shows a prefix of the latest snapshot, advanced
+  by `TimerPort.requestAnimationFrame` at `max(45 graphemes/s, backlog / 220 ms)`
+  with a 50 ms per-frame cap and a fractional carry, and schedules no frame once
+  caught up. The prefix is counted in `Intl.Segmenter` graphemes, re-segmented
+  from the whole snapshot on every update, so a Vietnamese diacritic or a ZWJ
+  emoji is never half drawn; a trailing grapheme that ends in a ZWJ or a high
+  surrogate is withheld until the next snapshot completes it. A snapshot that
+  does not extend the previous one restarts at 0, except a `boundLiveText` tail
+  slice (leading `…`), which jumps to the end. The rest of the word being typed
+  is rendered after the caret as `aria-hidden` transparent text so the browser
+  wraps the whole word before it is typed. The revealed source is split into
+  paragraphs on blank lines (fence-aware). Blank lines stay attached to the
+  preceding paragraph rather than being dropped, because the settled renderer
+  (`$convertFromMarkdownString` with `shouldPreserveNewLines`) turns each blank
+  line into an empty margin-bearing paragraph, and dropping them made the overlay
+  shorter than the entry it snaps to; the line still being typed is never
+  attached. Finished paragraphs are `React.memo`
+  children keyed by index with the source as the only prop, so only the trailing
+  paragraph re-renders per frame, after its odd backtick and `**` are closed. The
+  caret is injected by `renderMarkdownWithCaret` (`renderMessage.tsx`) at the last
+  Lexical `TextNode` of the parsed document, never as a sentinel character in the
+  markdown source: a private-use character beside `_` or a backtick breaks
+  Lexical's delimiter parsing and leaks into code. Fenced code is not typed: when
+  the reveal enters a fence it jumps to the fence's end in the current snapshot
+  (past the closing line if present, else the snapshot end), so a code block
+  updates at snapshot cadence. `HighlightedCode` restarts Shiki on every `source`
+  change, and per-frame changes would keep highlighting from ever landing. A
+  fence shows no caret. Under `prefers-reduced-motion` each
+  snapshot is shown in full with a steady caret. The hand-off above is untouched:
+  the completed entry replaces the overlay in one pass and snaps to the final
+  text, with no finishing animation. `.kanna-live-caret` is separate from
+  `.kanna-typewriter-cursor`, which belongs to the empty state.
 
 # Compaction is the Claude Code CLI's job (KANNA_PROACTIVE_COMPACT)
 

@@ -151,13 +151,14 @@ export interface FakeTimerPort extends TimerPort {
   callbacks: FakeTimerCallback[]
   flushTimeouts(): void
   flushIntervals(): void
+  flushAnimationFrames(timestamp: number): number
 }
 
 export function makeFakeTimerPort(): FakeTimerPort {
   let nextId = 1
   const callbacks: FakeTimerCallback[] = []
 
-  const raf: Array<{ id: number; callback: (ts: number) => void; cancelled: boolean }> = []
+  const raf: Array<{ id: number; callback: (ts: number) => void; cancelled: boolean; ran: boolean }> = []
   let rafId = 1000
 
   return {
@@ -187,7 +188,7 @@ export function makeFakeTimerPort(): FakeTimerPort {
 
     requestAnimationFrame(callback: (timestamp: number) => void): number {
       const id = rafId++
-      raf.push({ id, callback, cancelled: false })
+      raf.push({ id, callback, cancelled: false, ran: false })
       return id
     },
 
@@ -211,6 +212,18 @@ export function makeFakeTimerPort(): FakeTimerPort {
           entry.callback()
         }
       }
+    },
+
+    flushAnimationFrames(timestamp: number): number {
+      const queued = raf.filter((entry) => !entry.cancelled && !entry.ran)
+      let ran = 0
+      for (const entry of queued) {
+        if (entry.cancelled) continue
+        entry.ran = true
+        entry.callback(timestamp)
+        ran += 1
+      }
+      return ran
     },
   }
 }
@@ -273,6 +286,7 @@ export function makeFakeDomPort(overrides: Partial<{
   baseURI: string
   origin: string
   iosStandalone: boolean
+  reducedMotion: boolean
 }> = {}): FakeDomPort {
   let title = overrides.title ?? ""
   let reloaded = false
@@ -453,7 +467,9 @@ export function makeFakeDomPort(overrides: Partial<{
 
     toggleDocumentElementClass(_className: string, _force: boolean): void { },
 
-    matchesMediaQuery(_query: string): boolean { return false },
+    matchesMediaQuery(query: string): boolean {
+      return overrides.reducedMotion === true && query.includes("prefers-reduced-motion")
+    },
 
     addMediaQueryListener(_query: string, _handler: (matches: boolean) => void): () => void {
       return () => { }
