@@ -76,6 +76,8 @@ export interface CodexAppServerProcess {
 
 export type SpawnCodexAppServer = (cwd: string) => CodexAppServerProcess
 
+const CODEX_THREAD_CONFIG: JsonObject = { "tools.update_plan": { enabled: true } }
+
 interface PendingRequest<TResult> {
   method: string
   resolve: (value: TResult) => void
@@ -280,6 +282,7 @@ export class CodexAppServerManager {
       experimentalRawEvents: false,
       persistExtendedHistory: false,
       developerInstructions: args.developerInstructions?.trim() || null,
+      config: CODEX_THREAD_CONFIG,
     } satisfies ThreadStartParams
 
     let threadId: string
@@ -292,6 +295,7 @@ export class CodexAppServerManager {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         persistExtendedHistory: false,
+        config: CODEX_THREAD_CONFIG,
       } satisfies ThreadForkParams))
     } else if (args.sessionToken) {
       try {
@@ -303,6 +307,7 @@ export class CodexAppServerManager {
           approvalPolicy: "never",
           sandbox: "danger-full-access",
           persistExtendedHistory: false,
+          config: CODEX_THREAD_CONFIG,
         } satisfies ThreadResumeParams))
       } catch (error) {
         if (!isRecoverableResumeError(toError(error))) {

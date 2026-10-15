@@ -156,6 +156,50 @@ describe("CodexAppServerManager", () => {
     ])
   })
 
+  test("enables the update_plan tool on thread/start so Codex publishes its plan", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-1" } } })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+    await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-terra",
+      sessionToken: null,
+    })
+
+    const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+    expect(threadStart.params.config).toEqual({ "tools.update_plan": { enabled: true } })
+  })
+
+  test("enables the update_plan tool when resuming a chat created before it was enabled", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/resume") {
+        child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-old" } } })
+      }
+    })
+
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+
+    await manager.startSession({
+      chatId: "chat-1",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-terra",
+      sessionToken: "thread-old",
+    })
+
+    const threadResume = process.messages.find((message: any) => message.method === "thread/resume") as any
+    expect(threadResume.params.config).toEqual({ "tools.update_plan": { enabled: true } })
+  })
+
   test("maps fast mode and reasoning into app-server params", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

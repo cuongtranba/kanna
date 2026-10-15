@@ -34,6 +34,7 @@ export interface ThreadStartParams {
   experimentalRawEvents: boolean
   persistExtendedHistory: boolean
   developerInstructions?: string | null
+  config?: JsonObject | null
 }
 
 export interface ThreadResumeParams {
@@ -44,6 +45,7 @@ export interface ThreadResumeParams {
   approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
   sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
   persistExtendedHistory: boolean
+  config?: JsonObject | null
 }
 
 export interface ThreadForkParams {
@@ -55,6 +57,7 @@ export interface ThreadForkParams {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
   ephemeral?: boolean
   persistExtendedHistory: boolean
+  config?: JsonObject | null
 }
 
 export interface TextUserInput {
