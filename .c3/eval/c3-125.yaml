@@ -1,0 +1,17 @@
+fact: c3-125
+claim: "webhooks-ui is implemented at src/client/app/WebhooksPage.tsx with its store, dialogs and delivery card"
+code:
+  - src/client/app/WebhooksPage.tsx
+  - src/client/app/WebhookRow.tsx
+  - src/client/app/WebhookCreateDialog.tsx
+  - src/client/app/WebhookCreateDialog.store.ts
+  - src/client/app/WebhookSecretDialog.tsx
+  - src/client/app/WebhookTargetSelect.tsx
+  - src/client/app/WebhookCopyButton.tsx
+  - src/client/app/webhookCommands.ts
+  - src/client/stores/webhooksStore.ts
+  - src/client/lib/webhookPresentation.ts
+  - src/client/lib/webhookPresentation.test.ts
+  - src/client/lib/webhookTargets.ts
+  - src/client/lib/webhookTargets.test.ts
+  - src/client/components/messages/WebhookDeliveryMessage.tsx

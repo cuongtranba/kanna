@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: f38a3514a9daa31ef922770789a43db5f27cdc2e46d9867be676bcef37721abd
+c3-seal: 012eba6b8e9fdd1d5d7704c094cd16055bdcec7be61e20f9a75aaa7dcbc1bcde
 title: Server
 type: container
 boundary: service
@@ -69,3 +69,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-240 | genui | feature | active | Resolve generative UI datasets from workspace files and MCP tools under the chat's authorization, and ask the model once to fix an invalid view. |
 | c3-241 | beacon-daemon | feature | active | Run a user-authorized companion daemon on the user's own machine that dials out to Kanna and executes scoped file and shell requests. |
 | c3-242 | remote-mcp | feature | active | Serve Kanna to external MCP clients (Claude Code, Codex, Claude Desktop, ChatGPT) over an authenticated Streamable HTTP endpoint at /mcp, with Better Auth acting as the OAuth 2.1 authorization server. |
+| c3-243 | webhooks | feature | active | Accept inbound webhooks from external systems and turn each authenticated delivery into a card, a queued prompt, or a new chat, without widening the session-cookie boundary or leaking the hook secrets. |
