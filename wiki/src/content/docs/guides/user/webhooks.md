@@ -32,6 +32,14 @@ For `inline` and `spawn`, the prompt is your template followed by the JSON body
 in a fenced block, cut off at 16,000 characters. The block is introduced as
 external data that the agent must treat as data and not as instructions.
 
+:::caution
+A `{{placeholder}}` puts the caller's text **into your instruction**, outside that
+fenced block. If the field can be written by someone you do not trust, such as a
+pull request title, an issue body, or a commit message, that person can steer the
+agent. Use placeholders only for fields the sender controls, like a build number
+or a status, and let the agent read untrusted text from the fenced body instead.
+:::
+
 ## Send a delivery
 
 The url is `<your Kanna URL>/hooks/<id>`. Send a `POST` with either credential.
