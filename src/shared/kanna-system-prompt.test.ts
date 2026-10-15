@@ -6,6 +6,7 @@ import {
   REPLACE_TRACKING_SECTION_TOOL_NAME,
 } from "./tools"
 import {
+  CODEX_PLAN_PROGRESS_SECTION,
   KANNA_SKILL_ROSTER_LIMIT,
   KANNA_SUBAGENT_ROSTER_LIMIT,
   KANNA_SYSTEM_PROMPT_APPEND,
@@ -388,6 +389,19 @@ describe("buildCodexDeveloperInstructions", () => {
     const out = buildCodexDeveloperInstructions({ stackProjects: [fakeBinding()] }) ?? ""
     expect(out).toContain("## Stack projects")
     expect(out).not.toContain("absolute path")
+  })
+
+  test("tells a main-chat Codex to publish its plan through update_plan, before the skill roster", () => {
+    const out = buildCodexDeveloperInstructions({
+      globalPromptAppend: "Always TDD.",
+      planProgress: true,
+      skills: [
+        { name: "kanna-test", description: "Run the gates.", filePath: "/repo/.claude/skills/kanna-test/SKILL.md" },
+      ],
+    }) ?? ""
+    expect(out).toContain(CODEX_PLAN_PROGRESS_SECTION)
+    expect(out.indexOf("## Workspace instructions")).toBeLessThan(out.indexOf("## Progress"))
+    expect(out.indexOf("## Progress")).toBeLessThan(out.indexOf("## Skills"))
   })
 })
 
