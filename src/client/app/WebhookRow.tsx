@@ -11,7 +11,7 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import { WebhookCopyButton } from "./WebhookCopyButton"
-import { sendWebhookCommand } from "./webhookCommands"
+import { readRevealedSecret, sendWebhookCommand } from "./webhookCommands"
 
 interface Props {
   hook: WebhookSummary
@@ -45,8 +45,8 @@ export function WebhookRow({ hook, targets, origin, divider }: Props) {
         confirmLabel: "Rotate",
       })
       if (!confirmed) return
-      const result = await sendWebhookCommand<{ secret: string }>(socket, { type: "webhooks.rotateSecret", id: hook.id })
-      useWebhooksStore.getState().revealSecret({ hookId: hook.id, hookName: hook.name, secret: result.secret })
+      const result = await sendWebhookCommand(socket, { type: "webhooks.rotateSecret", id: hook.id })
+      useWebhooksStore.getState().revealSecret(readRevealedSecret(result, hook.id, hook.name))
     })
   }, [dialog, hook.id, hook.name, rotateKey, socket])
 
