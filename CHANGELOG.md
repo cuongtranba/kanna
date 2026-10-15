@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.77.0](https://github.com/cuongtranba/kanna/compare/v1.76.4...v1.77.0) (2026-10-15)
+
+
+### Features
+
+* **chat:** type out the live reply with a caret instead of jumping in 100 ms chunks ([#1287](https://github.com/cuongtranba/kanna/issues/1287)) ([90ce461](https://github.com/cuongtranba/kanna/commit/90ce461fab578c55d8116dc475d4b23176d76755))
+
 ## [1.76.4](https://github.com/cuongtranba/kanna/compare/v1.76.3...v1.76.4) (2026-10-13)
 
 
