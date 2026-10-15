@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.79.1](https://github.com/cuongtranba/kanna/compare/v1.79.0...v1.79.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **codex:** enable the update_plan tool so Codex can publish its plan ([#1293](https://github.com/cuongtranba/kanna/issues/1293)) ([1ad05c0](https://github.com/cuongtranba/kanna/commit/1ad05c0194fd27e77e8818c89e4c8959b45c8be5))
+
 ## [1.79.0](https://github.com/cuongtranba/kanna/compare/v1.78.0...v1.79.0) (2026-10-15)
 
 
