@@ -1,5 +1,5 @@
 
-export type PageKind = "projects" | "settings" | "cron" | "workflows" | "boards"
+export type PageKind = "projects" | "settings" | "cron" | "workflows" | "boards" | "webhooks"
 
 export type PaneTabTarget =
   | { kind: "chat"; chatId: string }

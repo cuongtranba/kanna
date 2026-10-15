@@ -1,4 +1,4 @@
-import { CalendarClock, Settings, Workflow } from "lucide-react"
+import { CalendarClock, Settings, Webhook, Workflow } from "lucide-react"
 import type { NavigateFunction } from "react-router-dom"
 import { cn } from "../lib/utils"
 import { HoverHint } from "../components/ui/truncated-text"
@@ -11,6 +11,7 @@ export interface SidebarUtilityNavProps {
   readonly onClose: () => void
   readonly workflowsButtonClass: string
   readonly isCronJobsActive: boolean
+  readonly isWebhooksActive: boolean
   readonly isSettingsActive: boolean
   readonly statusDotClass: string
   readonly statusLabel: string
@@ -24,6 +25,7 @@ export function SidebarUtilityNav({
   onClose,
   workflowsButtonClass,
   isCronJobsActive,
+  isWebhooksActive,
   isSettingsActive,
   statusDotClass,
   statusLabel,
@@ -64,6 +66,20 @@ export function SidebarUtilityNav({
     >
       <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="text-sm flex-1">Cron jobs</span>
+    </button>
+    <button
+      type="button"
+      onClick={() => {
+        navigate("/webhooks")
+        onClose()
+      }}
+      className={cn(
+        "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
+        isWebhooksActive ? "bg-muted" : "hover:bg-muted/50"
+      )}
+    >
+      <Webhook className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="text-sm flex-1">Webhooks</span>
     </button>
     <button
       type="button"

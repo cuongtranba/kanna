@@ -586,6 +586,7 @@ function AuthedApp() {
           <Route path="/chat/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/workflows/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/cron" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/webhooks" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/:projectId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/stack/:stackId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
