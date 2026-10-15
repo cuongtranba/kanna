@@ -101,6 +101,11 @@ export type ProcessedCronJobChangeMessage = Extract<
   { kind: "cron_job_change" }
 >
 
+export type ProcessedWebhookDeliveryMessage = Extract<
+  import("../../../shared/types").HydratedTranscriptMessage,
+  { kind: "webhook_delivery" }
+>
+
 export type ProcessedLoopDisarmedMessage = Extract<
   import("../../../shared/types").HydratedTranscriptMessage,
   { kind: "loop_disarmed" }

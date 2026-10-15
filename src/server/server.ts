@@ -4,7 +4,7 @@ import { isErrnoException } from "../shared/errors"
 import { serveHttp } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
 import { getRuntimeProfile } from "../shared/branding"
-import { CLOUDFLARE_TUNNEL_DEFAULTS, type AppSettingsSnapshot } from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createPasswordAuth, type PasswordAuth } from "./better-auth.adapter"
 import { createRemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
@@ -91,6 +91,11 @@ import { log } from "../shared/log"
 import { createHttpDispatcher } from "./http-dispatcher"
 import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } from "./beacon-services"
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
+import { buildAgentAppSettingsView } from "./agent-app-settings-view"
+import { createWebhookService } from "./webhooks/webhook-boot"
+import type { WebhookService } from "./webhooks/webhook-service"
+
+export { buildAgentAppSettingsView }
 
 function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback
@@ -101,28 +106,6 @@ function parsePositiveIntEnv(raw: string | undefined, fallback: number): number 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) return settingsPath
   return cloudflaredBin
-}
-
-export interface AgentAppSettingsView {
-  claudeDriver: AppSettingsSnapshot["claudeDriver"]
-  globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
-  customMcpServers: AppSettingsSnapshot["customMcpServers"]
-  customModels: AppSettingsSnapshot["customModels"]
-  customProviders: AppSettingsSnapshot["customProviders"]
-  providerDefaults: AppSettingsSnapshot["providerDefaults"]
-  subagentRuntime: AppSettingsSnapshot["subagentRuntime"]
-}
-
-export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
-  return {
-    claudeDriver: snapshot.claudeDriver,
-    globalPromptAppend: snapshot.globalPromptAppend,
-    customMcpServers: snapshot.customMcpServers,
-    customModels: snapshot.customModels,
-    customProviders: snapshot.customProviders,
-    providerDefaults: snapshot.providerDefaults,
-    subagentRuntime: snapshot.subagentRuntime,
-  }
 }
 
 const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
@@ -171,6 +154,7 @@ interface ApplicationServices {
   tunnelGateway: TunnelGateway
   pushManager: PushManager
   sessionShareService: SessionShareService
+  webhooks: WebhookService
   observability: ReturnType<typeof initObservability>
   scheduleManager: ScheduleManager
   cronScheduler: CronScheduler
@@ -416,6 +400,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     },
   })
 
+  const webhooks = await createWebhookService(store.dataDir, store, agent, process.env.KANNA_WEBHOOKS !== "disabled")
+
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -542,8 +528,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     sessionShare: sessionShareService,
     packageUpdateManager,
     genuiDatasets,
+    webhooks: webhooks.registry,
   })
 
+  webhooks.registry.subscribe(() => { router.pushWebhooks() })
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }
@@ -573,6 +561,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     tunnelGateway,
     pushManager,
     sessionShareService,
+    webhooks,
     observability,
     scheduleManager,
     cronScheduler,
@@ -649,7 +638,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router })
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks })
 
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
