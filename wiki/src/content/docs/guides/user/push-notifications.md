@@ -26,6 +26,17 @@ see it. This is per device, so your phone still buzzes while your laptop has the
 chat open. Repeats of the same transition are suppressed too, so a flapping chat
 cannot spam you.
 
+## Inside Kanna, without push
+
+A chat waiting for you is also marked in two places that need no setup:
+
+- **The browser tab title.** With one chat waiting it reads
+  `[N] Needs input: <chat title> · Kanna`; with several, `[N] 3 chats need input · Kanna`.
+  `N` counts every chat that needs attention, unread ones included.
+- **The workspace tab strip.** When a chat starts waiting and has no tab, Kanna opens
+  one in the background without taking focus from what you are reading. A tab you close
+  while the chat is still waiting stays closed.
+
 ## Enable it
 
 **Settings → General → Push notifications**, then **Enable on this device**. Your

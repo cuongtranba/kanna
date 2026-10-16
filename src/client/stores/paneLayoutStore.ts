@@ -32,7 +32,7 @@ interface PaneLayoutState {
   recentTabIds: readonly string[]
 
   getLayout: () => PaneLayout
-  openTab: (target: PaneTabTarget) => void
+  openTab: (target: PaneTabTarget, options?: { focus?: boolean }) => void
   closeTab: (tabId: string) => void
   closeTabsFor: (targets: { chatIds: readonly string[]; boardIds: readonly string[] }) => void
   focusTab: (tabId: string) => void
@@ -60,7 +60,7 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
       function apply(operation: (layout: PaneLayout) => PaneLayout | null): void {
         set((state) => {
           const next = operation(state.layout)
-          if (!next) return state
+          if (!next || next === state.layout) return state
           return { ...state, layout: next, recentTabIds: recordRecentTab(state.recentTabIds, next) }
         })
       }
@@ -78,8 +78,9 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
 
         getLayout: () => get().layout,
 
-        openTab: (target) =>
-          apply((layout) => openTabInLayout(layout, target, { createdAt: 0 })?.layout ?? null),
+        openTab: (target, options) =>
+          apply((layout) =>
+            openTabInLayout(layout, target, { createdAt: 0, focus: options?.focus })?.layout ?? null),
 
         closeTab: (tabId) => apply((layout) => closeTabInLayout(layout, tabId)),
 

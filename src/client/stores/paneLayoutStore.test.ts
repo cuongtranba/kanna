@@ -31,6 +31,25 @@ describe("paneLayoutStore", () => {
     expect(tabs.filter((tab) => tab.target.kind === "chat")).toHaveLength(1)
   })
 
+  test("opening a chat in the background adds its tab without moving focus", () => {
+    s().openTab({ kind: "chat", chatId: "current" })
+    s().openTab({ kind: "chat", chatId: "waiting" }, { focus: false })
+
+    const pane = collectPanes(s().getLayout().root)[0]!
+    expect(pane.tabs.map((tab) => tab.tabId)).toEqual([buildTabId({ kind: "chat", chatId: "current" }), buildTabId({ kind: "chat", chatId: "waiting" })])
+    expect(pane.focusedTabId).toBe(buildTabId({ kind: "chat", chatId: "current" }))
+  })
+
+  test("opening an already-open chat in the background leaves the store state untouched", () => {
+    s().openTab({ kind: "chat", chatId: "current" })
+    s().openTab({ kind: "chat", chatId: "other" })
+    const before = s()
+
+    s().openTab({ kind: "chat", chatId: "current" }, { focus: false })
+
+    expect(s()).toBe(before)
+  })
+
   test("chats from different projects accumulate in one workspace", () => {
     s().openTab({ kind: "chat", chatId: "chat-in-project-a" })
     s().openTab({ kind: "chat", chatId: "chat-in-project-b" })
