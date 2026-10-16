@@ -459,7 +459,7 @@ const TranscriptSingleRow = memo(({
   let rendered: React.ReactNode = null
 
   if (message.kind === "user_prompt") {
-    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} autoContinue={message.autoContinue} expandedCommand={message.expandedCommand} />
+    rendered = <UserMessage key={message.id} content={message.content} attachments={message.attachments} steered={message.steered} autoContinue={message.autoContinue} expandedCommand={message.expandedCommand} origin={message.origin} />
   } else {
     switch (message.kind) {
       case "auto_continue_prompt": {

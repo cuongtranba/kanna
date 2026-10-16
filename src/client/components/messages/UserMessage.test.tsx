@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
+import type { CommandOrigin } from "../../../shared/command-origin"
 import { ThemeProvider } from "../../hooks/useTheme"
 import { UserMessage } from "./UserMessage"
 import { UserMessageStore } from "./UserMessage.store"
@@ -117,5 +118,32 @@ describe("UserMessage expanded command", () => {
       </ThemeProvider>,
     )
     expect(html).not.toContain("ran the")
+  })
+})
+
+describe("UserMessage origin", () => {
+  function renderOrigin(origin?: CommandOrigin) {
+    return renderToStaticMarkup(
+      <ThemeProvider>
+        <UserMessageStore.Provider init={undefined}>
+          <UserMessage content="start the build" origin={origin} />
+        </UserMessageStore.Provider>
+      </ThemeProvider>,
+    )
+  }
+
+  test("labels a message that arrived over MCP with the client that sent it", () => {
+    const html = renderOrigin({ kind: "remote_mcp", clientId: "client-1", clientName: "ChatGPT", via: "oauth", tool: "send_message", callId: "call-1" })
+    expect(html).toContain("via MCP · ChatGPT")
+    expect(html).toContain("text-muted-foreground")
+  })
+
+  test("falls back to the client id when the client sent no name", () => {
+    const html = renderOrigin({ kind: "remote_mcp", clientId: "password", via: "password", tool: "send_message", callId: "call-1" })
+    expect(html).toContain("via MCP · password")
+  })
+
+  test("says nothing about the source of a message typed in the app", () => {
+    expect(renderOrigin()).not.toContain("via MCP")
   })
 })

@@ -146,6 +146,29 @@ describe("startTurnForChat", () => {
     expect(deps.store.appendMessage as ReturnType<typeof mock>).toHaveBeenCalled()
   })
 
+  test("a prompt started on behalf of an MCP client is stored with that origin", async () => {
+    const deps = makeDeps()
+    const origin = { kind: "remote_mcp", clientId: "client-1", via: "oauth", tool: "send_message", callId: "call-1" } as const
+
+    await startTurnForChat(deps, makeArgs({ origin }))
+
+    const stored = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+      .map((call: unknown[]) => call[1] as { kind?: string; origin?: unknown })
+      .find((entry) => entry.kind === "user_prompt")
+    expect(stored?.origin).toEqual(origin)
+  })
+
+  test("a prompt typed in the app is stored without an origin", async () => {
+    const deps = makeDeps()
+
+    await startTurnForChat(deps, makeArgs())
+
+    const stored = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+      .map((call: unknown[]) => call[1] as { kind?: string; origin?: unknown })
+      .find((entry) => entry.kind === "user_prompt")
+    expect(stored && "origin" in stored).toBe(false)
+  })
+
   test("5. does NOT append user_prompt entry when appendUserPrompt is false", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ appendUserPrompt: false }))

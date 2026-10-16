@@ -7,6 +7,7 @@ import path from "node:path"
 import { AUTH_DEFAULTS, CLAUDE_AUTH_DEFAULTS, CLAUDE_DRIVER_DEFAULTS, CLAUDE_LIFECYCLE_DEFAULTS, CLOUDFLARE_TUNNEL_DEFAULTS, DEFAULT_OPENROUTER_SDK_MODEL, EMPTY_CHAT_ACTIVITY, PACKAGE_UPDATE_SETTINGS_DEFAULTS, PLUGIN_SETTINGS_DEFAULTS, REMOTE_MCP_SETTINGS_DEFAULTS, PROTOCOL_VERSION, PUSH_DEFAULTS,
   TELEMETRY_DEFAULTS, TYPOGRAPHY_DEFAULTS, UPLOAD_DEFAULTS } from "../shared/types"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
+import type { ClientCommand } from "../shared/protocol"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import {
@@ -4217,6 +4218,83 @@ describe("ws-router programmatic access", () => {
     expect(envelope.type).toBe("error")
     if (envelope.type !== "error") throw new Error("expected an error envelope")
     expect(envelope.message).toBe("Chat not found")
+  })
+
+  describe("command origin", () => {
+    const MCP_ORIGIN = { kind: "remote_mcp", clientId: "client-1", clientName: "ChatGPT", via: "oauth", tool: "send_message", callId: "call-1" } as const
+    const FORGED_ORIGIN = { kind: "remote_mcp", clientId: "forged", via: "oauth", tool: "send_message", callId: "forged-call" } as const
+
+    function routerRecordingSends() {
+      const sent: ClientCommand[] = []
+      const router = createWsRouter({
+        store: { state: createEmptyState() } as never,
+        agent: {
+          getActiveStatuses: () => new Map(),
+          getDrainingChatIds: () => new Set(),
+          getWaitStartedAtByChatId: () => new Map(),
+          send: async (command: ClientCommand) => {
+            sent.push(command)
+            return { chatId: "chat-1" }
+          },
+          enqueue: async (command: ClientCommand) => {
+            sent.push(command)
+            return { queuedMessageId: "queued-1" }
+          },
+        } as never,
+        terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+        keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+        refreshDiscovery: async () => [],
+        getDiscoveredProjects: () => [],
+        machineDisplayName: "Local Machine",
+        updateManager: null,
+        pushManager: NOOP_PUSH_MANAGER,
+      })
+      return { router, sent }
+    }
+
+    test("a chat.send dispatched with an origin reaches the agent labelled with it", async () => {
+      const { router, sent } = routerRecordingSends()
+
+      await router.dispatchCommand({ type: "chat.send", chatId: "chat-1", content: "hi" }, MCP_ORIGIN)
+
+      expect(sent).toEqual([{ type: "chat.send", chatId: "chat-1", content: "hi", origin: MCP_ORIGIN }])
+    })
+
+    test("a message.enqueue dispatched with an origin reaches the agent labelled with it", async () => {
+      const { router, sent } = routerRecordingSends()
+
+      await router.dispatchCommand({ type: "message.enqueue", chatId: "chat-1", content: "later" }, MCP_ORIGIN)
+
+      expect(sent).toEqual([{ type: "message.enqueue", chatId: "chat-1", content: "later", origin: MCP_ORIGIN }])
+    })
+
+    test("an origin written into the command by the caller is replaced by the dispatch origin", async () => {
+      const { router, sent } = routerRecordingSends()
+
+      await router.dispatchCommand({ type: "chat.send", chatId: "chat-1", content: "hi", origin: FORGED_ORIGIN }, MCP_ORIGIN)
+
+      expect(sent).toEqual([{ type: "chat.send", chatId: "chat-1", content: "hi", origin: MCP_ORIGIN }])
+    })
+
+    test("a browser socket cannot label its own message as coming from MCP", async () => {
+      const { router, sent } = routerRecordingSends()
+      const ws = new FakeWebSocket()
+      router.handleOpen(ws as never)
+
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({ v: 1, type: "command", id: "send-1", command: { type: "chat.send", chatId: "chat-1", content: "hi", origin: FORGED_ORIGIN } }),
+      )
+      await router.handleMessage(
+        ws as never,
+        JSON.stringify({ v: 1, type: "command", id: "enqueue-1", command: { type: "message.enqueue", chatId: "chat-1", content: "later", origin: FORGED_ORIGIN } }),
+      )
+
+      expect(sent).toEqual([
+        { type: "chat.send", chatId: "chat-1", content: "hi" },
+        { type: "message.enqueue", chatId: "chat-1", content: "later" },
+      ])
+    })
   })
 
   test("readSnapshot returns the current snapshot for a topic without a connection", () => {

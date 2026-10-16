@@ -9,6 +9,8 @@ export function authorLabel(kind: CardActor["kind"]): string {
       return "Agent"
     case "sync":
       return "Sync"
+    case "remote_mcp":
+      return "MCP client"
     case "user":
       return "You"
   }

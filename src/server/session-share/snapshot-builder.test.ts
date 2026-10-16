@@ -32,6 +32,7 @@ const TRANSCRIPT: TranscriptEntry[] = [
     _id: "e2",
     createdAt: 2,
     content: "show the report",
+    origin: { kind: "remote_mcp", clientId: "mcp-client-id-1", via: "oauth", tool: "send_message", callId: "call-id-1" },
     attachments: [{ id: "a1", kind: "file", displayName: "secret.pdf", absolutePath: "/Users/owner/secret.pdf", relativePath: "./secret.pdf", contentUrl: "/api/x", mimeType: "application/pdf", size: 1 }],
   },
   { kind: "tool_call", _id: "e3", createdAt: 3, tool: { kind: "tool", toolKind: "read_file", toolName: "Read", toolId: "toolu_1", input: { filePath: "/repo/a.ts" } } },
@@ -65,6 +66,7 @@ describe("buildChatSnapshot", () => {
     expect(published).not.toContain("owner@example.com")
     expect(published).not.toContain("/Users/owner/secret.pdf")
     expect(published).not.toContain("Bearer secret")
+    expect(published).not.toContain("mcp-client-id-1")
     expect(published).not.toContain("provider payload")
     expect(published).not.toContain("copy of file body")
     const answer = snap.entries.find((entry) => entry._id === "q2")

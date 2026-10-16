@@ -1,3 +1,4 @@
+import type { CommandOrigin } from "../shared/command-origin"
 import type { JsonObject } from "../shared/json"
 import type { ServerWebSocket } from "bun"
 import { log } from "../shared/log"
@@ -20,6 +21,7 @@ export interface ClientState {
   protectedDraftChatIds?: Set<string>
   pushDeviceId?: string | null
   originHost?: string
+  commandOrigin?: CommandOrigin
   kind?: "beacon"
   beaconHandshake?: {
     phase: "awaiting-hello" | "awaiting-auth" | "ready"

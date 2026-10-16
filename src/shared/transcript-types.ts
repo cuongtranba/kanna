@@ -1,3 +1,4 @@
+import type { CommandOrigin } from "./command-origin"
 import { type JsonObject, type JsonArray } from "./json"
 
 import type { AgentProvider, ChatAttachment, ProviderUsage, SlashCommandKind } from "./types"
@@ -75,6 +76,7 @@ export interface UserPromptEntry extends TranscriptEntryBase {
   subagentMentions?: Array<{ subagentId: string; raw: string }>
   unknownSubagentMentions?: Array<{ name: string; raw: string }>
   expandedCommand?: { name: string; kind: SlashCommandKind }
+  origin?: CommandOrigin
 }
 
 export interface SystemInitEntry extends TranscriptEntryBase {
@@ -302,7 +304,7 @@ export type TranscriptEntry =
 
 
 export type HydratedTranscriptMessage =
-  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; expandedCommand?: { name: string; kind: SlashCommandKind }; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; expandedCommand?: { name: string; kind: SlashCommandKind }; origin?: CommandOrigin; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
   | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })

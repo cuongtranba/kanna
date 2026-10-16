@@ -220,6 +220,34 @@ describe("pull", () => {
     expect(store.dueOutbox(binding.id, clock, 10)).toHaveLength(1)
   })
 
+  test("a remote MCP client's edit is HELD like an agent's when the binding forbids agent pushes", async () => {
+    fake.serve([issue()])
+    await sync.pull(boardId)
+    const card = cardsIn("Open")[0]!
+
+    clock = T0 + 2 * MINUTE
+    registry.updateCard(card.id, { title: "MCP client wrote this" }, { kind: "remote_mcp", clientId: "client-1" })
+    await sync.pull(boardId)
+
+    const binding = store.listBindings(boardId)[0]!
+    expect(store.dueOutbox(binding.id, clock, 10)).toHaveLength(0)
+    expect((await sync.drain(boardId)).pushed).toBe(0)
+  })
+
+  test("a remote MCP client's edit IS queued once the binding opts in", async () => {
+    setup(true)
+    fake.serve([issue()])
+    await sync.pull(boardId)
+    const card = cardsIn("Open")[0]!
+
+    clock = T0 + 2 * MINUTE
+    registry.updateCard(card.id, { title: "MCP client wrote this" }, { kind: "remote_mcp", clientId: "client-1" })
+    await sync.pull(boardId)
+
+    const binding = store.listBindings(boardId)[0]!
+    expect(store.dueOutbox(binding.id, clock, 10)).toHaveLength(1)
+  })
+
   test("both sides edited: the newer wins and the loss is recorded", async () => {
     fake.serve([issue()])
     await sync.pull(boardId)

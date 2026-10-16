@@ -242,6 +242,7 @@ export async function enqueueMessage(
     planMode: options?.planMode,
     autoContinue: options?.autoContinue,
     cronRun: options?.cronRun,
+    origin: options?.origin,
   })
   deps.emitStateChange(chatId)
   return queued
@@ -361,6 +362,7 @@ export async function dequeueAndStartQueuedMessage(
     steered: options?.steered,
     autoContinue: queuedMessage.autoContinue,
     cronRun: queuedMessage.cronRun,
+    origin: queuedMessage.origin,
     onTurnRecorded: release,
   })
 }
@@ -427,6 +429,7 @@ export async function sendCommand(
       modelOptions: command.modelOptions,
       effort: command.effort,
       planMode: command.planMode,
+      origin: command.origin,
     })
     return { chatId, queuedMessageId: queuedMessage.id, queued: true as const }
   }
@@ -452,6 +455,7 @@ export async function sendCommand(
       modelOptions: command.modelOptions,
       effort: command.effort,
       planMode: command.planMode,
+      origin: command.origin,
     })
     await deps.startTurnForChat({
       chatId,
@@ -491,6 +495,7 @@ export async function sendCommand(
     serviceTier: settings.serviceTier,
     planMode: settings.planMode,
     appendUserPrompt: true,
+    origin: command.origin,
     profile,
   })
 
