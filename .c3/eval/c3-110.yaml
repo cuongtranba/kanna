@@ -10,6 +10,7 @@ code:
   - src/client/app/chatFocusPolicy.ts
   - src/client/app/forgetDeletedLocally.ts
   - src/client/app/chatNotifications.ts
+  - src/client/app/useWaitingChatTabs.ts
   - src/client/app/derived.ts
   - src/client/app/sidebarSwipeGesture.ts
   - src/client/app/appRuntime.test.ts

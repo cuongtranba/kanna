@@ -18,7 +18,8 @@ import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { selectChatSoundId, selectChatSoundPreference, useAppSettingsStore } from "../stores/appSettingsStore"
 import { usePluginContributions } from "../plugins/usePluginContributions"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
-import { getChatSoundBurstCount, getNotificationTitleCount } from "./chatNotifications"
+import { useWaitingChatTabs } from "./useWaitingChatTabs"
+import { getChatSoundBurstCount, getNotificationTitle } from "./chatNotifications"
 import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { selectIsAnySpawning, useNewSessionStore } from "../stores/newSessionStore"
@@ -477,9 +478,16 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     dom.setTitle(APP_NAME)
   }, [dom, location.key])
 
+  const notificationTitle = getNotificationTitle(state.sidebarData)
+  const notificationTitleRef = useRef(notificationTitle)
+
+  useEffect(() => {
+    notificationTitleRef.current = notificationTitle
+  }, [notificationTitle])
+
   useEffect(() => {
     function handlePageShow() {
-      dom.setTitle(APP_NAME)
+      dom.setTitle(notificationTitleRef.current)
     }
 
     function handlePageHide() {
@@ -495,9 +503,10 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   }, [dom])
 
   useEffect(() => {
-    const notificationCount = getNotificationTitleCount(state.sidebarData)
-    dom.setTitle(notificationCount > 0 ? `[${notificationCount}] ${APP_NAME}` : APP_NAME)
-  }, [dom, state.sidebarData])
+    dom.setTitle(notificationTitle)
+  }, [dom, location.key, notificationTitle])
+
+  useWaitingChatTabs(state.sidebarData, state.sidebarReady)
 
   useEffect(() => {
     const burstCount = getChatSoundBurstCount(previousSidebarDataRef.current, state.sidebarData)

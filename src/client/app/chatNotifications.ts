@@ -1,4 +1,7 @@
+import { APP_NAME } from "../../shared/branding"
 import type { SidebarData } from "../../shared/types"
+
+const WAITING_TITLE_MAX_LENGTH = 40
 
 export function getNotificationTitleCount(sidebarData: SidebarData) {
   return sidebarData.projectGroups.reduce((count, group) => (
@@ -29,19 +32,39 @@ export function getChatNotificationSnapshot(sidebarData: SidebarData): ChatNotif
   return { unreadCount, waitingChatIds }
 }
 
+export function getChatsNewlyWaiting(previous: SidebarData | null, next: SidebarData): string[] {
+  if (!previous) return []
+
+  const previousWaiting = getChatNotificationSnapshot(previous).waitingChatIds
+  return [...getChatNotificationSnapshot(next).waitingChatIds].filter((chatId) => !previousWaiting.has(chatId))
+}
+
 export function getChatSoundBurstCount(previous: SidebarData | null, next: SidebarData): number {
   if (!previous) return 0
 
-  const previousSnapshot = getChatNotificationSnapshot(previous)
-  const nextSnapshot = getChatNotificationSnapshot(next)
+  const unreadIncrease = Math.max(
+    0,
+    getChatNotificationSnapshot(next).unreadCount - getChatNotificationSnapshot(previous).unreadCount,
+  )
+  return unreadIncrease + getChatsNewlyWaiting(previous, next).length
+}
 
-  const unreadIncrease = Math.max(0, nextSnapshot.unreadCount - previousSnapshot.unreadCount)
-  let newWaitingChats = 0
-  for (const chatId of nextSnapshot.waitingChatIds) {
-    if (!previousSnapshot.waitingChatIds.has(chatId)) {
-      newWaitingChats += 1
-    }
+function truncateTitle(title: string): string {
+  return title.length > WAITING_TITLE_MAX_LENGTH ? `${title.slice(0, WAITING_TITLE_MAX_LENGTH)}…` : title
+}
+
+export function getNotificationTitle(sidebarData: SidebarData): string {
+  const count = getNotificationTitleCount(sidebarData)
+  if (count === 0) return APP_NAME
+
+  const waitingTitles = sidebarData.projectGroups.flatMap((group) =>
+    group.chats.filter((chat) => chat.status === "waiting_for_user").map((chat) => chat.title))
+
+  if (waitingTitles.length === 1) {
+    return `[${count}] Needs input: ${truncateTitle(waitingTitles[0])} · ${APP_NAME}`
   }
-
-  return unreadIncrease + newWaitingChats
+  if (waitingTitles.length > 1) {
+    return `[${count}] ${waitingTitles.length} chats need input · ${APP_NAME}`
+  }
+  return `[${count}] ${APP_NAME}`
 }
