@@ -67,6 +67,16 @@ describe("guardedDispatch", () => {
     expect(world.dispatched).toEqual(["chat-1"])
   })
 
+  test("a retry that drops the idempotency key is still suppressed while the keyed original runs", async () => {
+    const world = setup("running")
+
+    await guardedDispatch(world.host, TARGET, "request-42", world.dispatch())
+    const retry = await guardedDispatch(world.host, TARGET, undefined, world.dispatch({ chatId: "chat-2", baseline: 0 }))
+
+    expect(retry).toEqual({ ok: true, record: RECORD, duplicateVia: "fingerprint" })
+    expect(world.dispatched).toEqual(["chat-1"])
+  })
+
   test("a different idempotency key is a different request", async () => {
     const world = setup("idle")
 

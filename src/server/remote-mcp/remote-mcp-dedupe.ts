@@ -83,7 +83,7 @@ export function createDedupeStore(options: { now: () => number; ttlMs?: number; 
     },
     reserve(ids, record) {
       if (ids.idempotency) store(ids.idempotency, "idempotencyKey", record)
-      else store(ids.fingerprint, "fingerprint", record)
+      store(ids.fingerprint, "fingerprint", record)
     },
   }
 }
