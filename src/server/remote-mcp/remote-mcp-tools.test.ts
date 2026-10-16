@@ -2,9 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { Client as ModernClient, StreamableHTTPClientTransport as ModernTransport } from "@modelcontextprotocol/client"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
+import type { TranscriptEntry } from "../../shared/transcript-types"
 import { startKannaServer } from "../server"
 
 const PASSWORD = "secret"
@@ -61,6 +63,7 @@ const EXPECTED_TOOLS = [
   "sync_branch",
   "unarchive_chat",
   "upload_attachment",
+  "wait_for_chat",
 ]
 
 let dataDir = ""
@@ -129,6 +132,20 @@ function arrayField(value: JsonValue | null, key: string): readonly JsonValue[] 
   return found
 }
 
+async function readAuditRecords(): Promise<JsonValue[]> {
+  const text = await readFile(path.join(dataDir, "remote-mcp-calls.jsonl"), "utf8").catch(() => "")
+  return text.split("\n").filter((line) => line.length > 0).map((line) => safeJsonParse(line) ?? null)
+}
+
+async function auditRecordFor(callId: string): Promise<JsonValue | undefined> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const found = (await readAuditRecords()).find((entry) => field(entry, "callId") === callId)
+    if (found || Date.now() > deadline) return found
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}
+
 async function newChat(): Promise<string> {
   return stringField((await call("create_chat", { projectId })).json, "chatId")
 }
@@ -191,12 +208,116 @@ describe("remote MCP typed tools", () => {
     const prompts = arrayField(chat.json, "entries").filter((entry) => field(entry, "kind") === "user_prompt")
     expect(prompts.map((entry) => field(entry, "text"))).toContain("first prompt")
 
-    const waited = await call("send_message", { chatId, content: "second prompt", timeoutSeconds: 20 })
+    expect(field((await call("wait_for_chat", { chatId, timeoutSeconds: 40 })).json, "done")).toBe(true)
+
+    const waited = await call("send_message", { chatId, content: "second prompt", timeoutSeconds: 40 })
     expect(field(waited.json, "status")).toBe("failed")
+    expect(field(waited.json, "done")).toBe(true)
     expect(field(waited.json, "timedOut")).toBe(false)
     expect(field(waited.json, "pendingToolRequests")).toEqual([])
 
     expect((await call("send_message", { content: "no target" })).isError).toBe(true)
+  }, 60_000)
+
+  test("send_message reports whether the turn is done and where to follow it, and wait_for_chat returns only what is newer than the cursor", async () => {
+    const chatId = await newChat()
+
+    const reply = await call("send_message", { chatId, content: "first request", timeoutSeconds: 25 })
+
+    expect(field(reply.json, "done")).toBe(true)
+    expect(field(reply.json, "status")).toBe("failed")
+    expect(field(reply.json, "busy")).toBe(false)
+    expect(arrayField(reply.json, "activity").length).toBeGreaterThan(0)
+    expect(stringField(reply.json, "next").length).toBeGreaterThan(0)
+    const cursor = field(reply.json, "cursor")
+    if (typeof cursor !== "number") throw new Error("expected a numeric cursor")
+    const latest = await call("wait_for_chat", { chatId, timeoutSeconds: 25 })
+    const nothingNew = await call("wait_for_chat", { chatId, cursor, timeoutSeconds: 25 })
+    expect(JSON.stringify(field(latest.json, "activity"))).toContain("first request")
+    expect(field(nothingNew.json, "activity")).toEqual([])
+    expect(field(nothingNew.json, "done")).toBe(true)
+    expect((await call("wait_for_chat", { chatId: "missing" })).isError).toBe(true)
+  }, 60_000)
+
+  test("a client that asks for progress receives notifications while the turn runs", async () => {
+    const sent = await call("send_message", { projectId, content: "progress please", wait: false })
+    const chatId = stringField(sent.json, "chatId")
+    const messages: string[] = []
+
+    const result = await client.callTool(
+      { name: "wait_for_chat", arguments: { chatId, timeoutSeconds: 25 } },
+      undefined,
+      { onprogress: (progress) => messages.push(progress.message ?? "") },
+    )
+
+    expect(result.isError).toBeFalsy()
+    expect(messages.length).toBeGreaterThan(0)
+  }, 60_000)
+
+  test("a 2026-07-28 client that asks for progress also receives notifications while the turn runs", async () => {
+    const modern = new ModernClient({ name: "modern-tools-test", version: "1.0.0" }, { versionNegotiation: { mode: "auto" } })
+    await modern.connect(
+      new ModernTransport(new URL(`http://127.0.0.1:${server.port}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${PASSWORD}` } } }),
+    )
+    try {
+      expect(modern.getProtocolEra()).toBe("modern")
+      const sent = await call("send_message", { projectId, content: "progress for the modern era", wait: false })
+      const chatId = stringField(sent.json, "chatId")
+      const messages: string[] = []
+
+      const result = await modern.callTool(
+        { name: "wait_for_chat", arguments: { chatId, timeoutSeconds: 25 } },
+        { onprogress: (progress) => messages.push(progress.message ?? "") },
+      )
+
+      expect(result.isError).toBeFalsy()
+      expect(messages.length).toBeGreaterThan(0)
+    } finally {
+      await modern.close()
+    }
+  }, 60_000)
+
+  test("a repeated send_message with the same idempotencyKey returns the original chat and starts no new one", async () => {
+    const before = arrayField((await call("list_chats", { projectId })).json, "chats").length
+
+    const first = await call("send_message", { projectId, content: "only once", idempotencyKey: "request-1", wait: false })
+    const second = await call("send_message", { projectId, content: "only once", idempotencyKey: "request-1", wait: false })
+
+    expect(stringField(second.json, "chatId")).toBe(stringField(first.json, "chatId"))
+    expect(field(second.json, "duplicate")).toBe(true)
+    expect(field(first.json, "duplicate")).toBeUndefined()
+    expect(arrayField((await call("list_chats", { projectId })).json, "chats")).toHaveLength(before + 1)
+  })
+
+  test("a message sent over MCP is stored with its origin, and the audit log records the call under the same id", async () => {
+    const sent = await call("send_message", { projectId, content: "who sent this", wait: false })
+    const chatId = stringField(sent.json, "chatId")
+
+    const prompt = server.store.getMessages(chatId).find((entry: TranscriptEntry) => entry.kind === "user_prompt")
+    if (prompt?.kind !== "user_prompt" || !prompt.origin) throw new Error("expected the prompt to carry an origin")
+    expect(prompt.origin).toMatchObject({ kind: "remote_mcp", clientId: "password", via: "password", tool: "send_message" })
+    const record = await auditRecordFor(prompt.origin.callId)
+    expect(record).toMatchObject({ tool: "send_message", clientId: "password", via: "password", outcome: "ok", chatId })
+  })
+
+  test("an origin forged inside a kanna_command chat.send is replaced by the real caller", async () => {
+    const chatId = await newChat()
+    const forged = { kind: "remote_mcp", clientId: "forged-client", via: "oauth", tool: "send_message", callId: "forged-call" }
+
+    await call("kanna_command", { type: "chat.send", params: { chatId, content: "forged label", origin: forged } })
+
+    const prompt = server.store.getMessages(chatId).find((entry: TranscriptEntry) => entry.kind === "user_prompt")
+    expect(prompt?.kind === "user_prompt" ? prompt.origin : undefined).toMatchObject({ clientId: "password", tool: "kanna_command" })
+  })
+
+  test("the audit log never holds a secret passed in a tool call and records a failed call as an error", async () => {
+    const reply = await call("kanna_command", { type: "chat.rename", params: { chatId: "missing", title: "x", apiKey: "sk-live-leak" } })
+    expect(reply.isError).toBe(true)
+
+    const records = await readAuditRecords()
+    const record = records.find((entry) => field(entry, "tool") === "kanna_command" && JSON.stringify(entry).includes("[redacted]"))
+    expect(record && field(record, "outcome")).toBe("error")
+    expect(JSON.stringify(records)).not.toContain("sk-live-leak")
   })
 
   test("a message to a new chat in a project reports the created chat id", async () => {

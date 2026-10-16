@@ -1,26 +1,30 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { AGENT_PROVIDERS } from "../../shared/core-types"
 import { jsonValueSchema } from "../../shared/genui/json-schema"
 import { isJsonObject } from "../../shared/json"
 import { fail } from "../kanna-mcp-tool"
+import { acceptedReport, followReply, guardedChatSend, guardedEnqueue } from "./remote-mcp-follow"
+import { DEFAULT_WAIT_SECONDS, MAX_WAIT_SECONDS } from "./remote-mcp-follow-view"
 import type { RemoteMcpHost } from "./remote-mcp-server"
-import { sendAndWait } from "./send-and-wait"
+import { latestTurnBaseline, type SendCommand } from "./send-and-wait"
 import {
+  clipText,
   commandResult,
   flattenEntries,
   jsonResult,
   latestModel,
+  newestEntryTime,
   pendingToolRequests,
   readChat,
   runCommand,
+  toJson,
 } from "./remote-mcp-views"
 
 const DEFAULT_ENTRY_LIMIT = 50
 const MAX_ENTRY_LIMIT = 500
-const DEFAULT_TIMEOUT_SECONDS = 120
-const MAX_TIMEOUT_SECONDS = 600
-const MS_PER_SECOND = 1000
+const QUEUED_PREVIEW_CHARS = 200
+const BUSY_STATUSES: ReadonlySet<string> = new Set(["starting", "running"])
 
 const chatIdField = z.string().describe("Id of the chat")
 
@@ -41,22 +45,27 @@ const decisionSchema = z.object({
   reason: z.string().optional().describe("Optional explanation recorded with the decision"),
 })
 
-export function registerChatTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerChatTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "create_chat",
     {
       title: "Create a chat",
-      description: "Create an empty chat in a project and return its chatId.",
+      description:
+        "Create an empty chat in a project and return its chatId. Rarely needed: send_message with projectId opens a new chat and sends the first prompt in one call, "
+        + "so only use this when no prompt is ready. Check list_chats first to avoid creating a duplicate chat.",
       inputSchema: z.object({ projectId: z.string().describe("Id of the project") }),
     },
     ({ projectId }) => commandResult(host, { type: "chat.create", projectId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "get_chat",
     {
       title: "Read a chat",
-      description: "Read a chat's status and its most recent transcript entries, flattened to role, text and tool name.",
+      description:
+        "Read a chat's status and its most recent transcript entries, flattened to role, text and tool name. "
+        + "busy tells whether a turn is running, cursor is the value to pass to wait_for_chat, and queuedMessages lists messages waiting for the chat to become idle. "
+        + "Use it to check what already happened before sending anything new.",
       inputSchema: z.object({
         chatId: chatIdField,
         limit: z.number().int().min(1).max(MAX_ENTRY_LIMIT).optional().describe(`How many recent entries to read (default ${DEFAULT_ENTRY_LIMIT}, max ${MAX_ENTRY_LIMIT})`),
@@ -66,76 +75,117 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId, limit }) => {
       const snapshot = readChat(host, chatId, Math.min(limit ?? DEFAULT_ENTRY_LIMIT, MAX_ENTRY_LIMIT))
       if (!snapshot) return fail(`Chat ${chatId} was not found.`)
+      const queued = snapshot.queuedMessages.length > 0
       return jsonResult({
         chatId,
         title: snapshot.runtime.title,
         status: snapshot.runtime.status,
+        busy: BUSY_STATUSES.has(snapshot.runtime.status) || queued,
         provider: snapshot.runtime.provider,
         model: latestModel(snapshot.messages),
         hasOlder: snapshot.history.hasOlder,
+        cursor: newestEntryTime(snapshot.messages),
+        queuedMessages: snapshot.queuedMessages.map((message) => ({
+          id: message.id,
+          content: clipText(message.content, QUEUED_PREVIEW_CHARS),
+          createdAt: message.createdAt,
+          origin: message.origin ? toJson(message.origin) : null,
+        })),
         entries: flattenEntries(snapshot.messages),
       })
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "send_message",
     {
       title: "Send a message",
       description:
-        "Send a prompt to a chat, or start a new chat in a project, and run a turn. By default waits for the turn to finish and returns the assistant text and any pending tool requests; "
-        + "a status of waiting_for_user means a tool request needs answer_tool_request or respond_tool.",
+        "Send a prompt to a chat, or start a new chat in a project with projectId, and run a turn. Send ONCE per user request and pass an idempotencyKey: repeating the same request never starts duplicate work. "
+        + `Waits up to timeoutSeconds (default ${DEFAULT_WAIT_SECONDS}) for the turn and returns done, assistantText, activity, a cursor and a \`next\` instruction. `
+        + "If done is false the turn is still running: do NOT send again, call wait_for_chat with the chatId and cursor. "
+        + "A status of waiting_for_user means a tool request needs answer_tool_request or respond_tool. If the chat is busy the message is queued behind the running turn (queued: true).",
       inputSchema: z.object({
-        chatId: z.string().optional().describe("Existing chat to send to"),
+        chatId: z.string().optional().describe("Existing chat to send to. Prefer this when continuing a conversation"),
         projectId: z.string().optional().describe("Project in which to start a new chat when chatId is omitted"),
         content: z.string().describe("The prompt text"),
+        idempotencyKey: z.string().min(1).max(200).optional().describe("A stable string for this user request. Repeating the call with the same key returns the original chat without starting new work"),
         provider: z.enum(AGENT_PROVIDERS).optional().describe("Agent provider for a new chat"),
         model: z.string().optional().describe("Model id"),
         planMode: z.boolean().optional().describe("Run in plan mode"),
         attachments: z.array(attachmentSchema).optional().describe("Attachments returned by upload_attachment"),
-        wait: z.boolean().optional().describe("Wait for the turn to finish (default true)"),
-        timeoutSeconds: z.number().int().min(1).max(MAX_TIMEOUT_SECONDS).optional().describe(`Longest wait in seconds (default ${DEFAULT_TIMEOUT_SECONDS}, max ${MAX_TIMEOUT_SECONDS})`),
+        wait: z.boolean().optional().describe("Wait for the turn to finish (default true). False returns right after the message is accepted"),
+        timeoutSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).optional().describe(`Longest wait in seconds (default ${DEFAULT_WAIT_SECONDS}, max ${MAX_WAIT_SECONDS}; shorter on connections that cannot stream progress)`),
       }),
     },
-    async ({ chatId, projectId, content, provider, model, planMode, attachments, wait, timeoutSeconds }) => {
+    async ({ chatId, projectId, content, idempotencyKey, provider, model, planMode, attachments, wait, timeoutSeconds }, ctx) => {
       if (!chatId && !projectId) return fail("Give either chatId or projectId.")
-      const outcome = await sendAndWait(host, {
-        command: { type: "chat.send", chatId, projectId, content, provider, model, planMode, attachments },
+      const command: SendCommand = { type: "chat.send", chatId, projectId, content, provider, model, planMode, attachments }
+      const guarded = await guardedChatSend(host, command, idempotencyKey)
+      if (!guarded.ok) return fail(guarded.message)
+      return followReply(host, ctx, {
+        chatId: guarded.record.chatId,
+        baseline: guarded.record.baseline,
+        queuedMessageId: guarded.record.queuedMessageId,
+        queuedContent: content,
         wait: wait ?? true,
-        timeoutMs: Math.min(timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS) * MS_PER_SECOND,
-      })
-      if (!outcome.ok) return fail(outcome.message)
-      return jsonResult({
-        chatId: outcome.chatId,
-        status: outcome.status,
-        assistantText: outcome.assistantText,
-        pendingToolRequests: outcome.pendingToolRequests,
-        timedOut: outcome.timedOut,
+        timeoutSeconds,
+        duplicateVia: guarded.duplicateVia,
       })
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
+    "wait_for_chat",
+    {
+      title: "Wait for a chat",
+      description:
+        "Follow a running turn without sending anything. Waits until the chat stops working (or the time runs out) and returns the same shape as send_message: done, assistantText and activity since cursor, pendingToolRequests, a new cursor and `next`. "
+        + "Call it repeatedly with the returned cursor until done is true. Use this, not send_message, after a timeout.",
+      inputSchema: z.object({
+        chatId: chatIdField,
+        cursor: z.number().optional().describe("The cursor returned by send_message, wait_for_chat or get_chat. Omit to follow the latest turn"),
+        timeoutSeconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).optional().describe(`Longest wait in seconds (default ${DEFAULT_WAIT_SECONDS}, max ${MAX_WAIT_SECONDS}; shorter on connections that cannot stream progress)`),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    ({ chatId, cursor, timeoutSeconds }, ctx) => {
+      if (!readChat(host, chatId, 1)) return fail(`Chat ${chatId} was not found.`)
+      return followReply(host, ctx, {
+        chatId,
+        baseline: cursor ?? latestTurnBaseline(host, chatId),
+        wait: true,
+        timeoutSeconds,
+      })
+    },
+  )
+
+  tools.registerTool(
     "enqueue_message",
     {
       title: "Queue a message",
-      description: "Queue a message to run when the chat becomes idle, instead of interrupting the running turn.",
+      description:
+        "Queue a message to run when the chat becomes idle, instead of interrupting the running turn. Identical content already queued in the chat is not queued twice. "
+        + "Follow it with wait_for_chat; do not send it again.",
       inputSchema: z.object({ chatId: chatIdField, content: z.string().describe("The prompt text") }),
     },
-    ({ chatId, content }) => commandResult(host, { type: "message.enqueue", chatId, content }),
+    async ({ chatId, content }) => {
+      const guarded = await guardedEnqueue(host, chatId, content)
+      return guarded.ok ? acceptedReport(guarded.record, guarded.duplicateVia) : fail(guarded.message)
+    },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "cancel_chat",
     {
       title: "Cancel the running turn",
-      description: "Stop the turn currently running in a chat.",
+      description: "Stop the turn currently running in a chat. Use it when the user asks to stop; waiting with wait_for_chat never cancels work.",
       inputSchema: z.object({ chatId: chatIdField }),
     },
     ({ chatId }) => commandResult(host, { type: "chat.cancel", chatId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "rename_chat",
     {
       title: "Rename a chat",
@@ -145,7 +195,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId, title }) => commandResult(host, { type: "chat.rename", chatId, title }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "archive_chat",
     {
       title: "Archive a chat",
@@ -155,7 +205,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId }) => commandResult(host, { type: "chat.archive", chatId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "unarchive_chat",
     {
       title: "Unarchive a chat",
@@ -165,7 +215,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId }) => commandResult(host, { type: "chat.unarchive", chatId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "fork_chat",
     {
       title: "Fork a chat",
@@ -180,7 +230,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "delete_chat",
     {
       title: "Delete a chat",
@@ -191,7 +241,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId }) => commandResult(host, { type: "chat.delete", chatId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "list_pending_tool_requests",
     {
       title: "List pending tool requests",
@@ -206,7 +256,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "answer_tool_request",
     {
       title: "Answer a tool request",
@@ -220,7 +270,7 @@ export function registerChatTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId, toolRequestId, decision }) => commandResult(host, { type: "chat.toolRequestAnswer", chatId, toolRequestId, decision }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "respond_tool",
     {
       title: "Respond to an interactive tool",

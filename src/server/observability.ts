@@ -48,6 +48,8 @@ export const COMPACTION_PRE_TOKENS = "kanna.compaction.pre_tokens"
 
 export const COMPACTION_POST_TOKENS = "kanna.compaction.post_tokens"
 
+export const REMOTE_MCP_TOOL_CALL = "kanna.remote_mcp.tool_call"
+
 export const GENUI_SPEC_CHECKED = "kanna.genui.spec.checked"
 
 export const GENUI_DATASET_QUERY = "kanna.genui.dataset.query"

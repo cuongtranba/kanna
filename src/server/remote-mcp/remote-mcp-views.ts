@@ -1,4 +1,4 @@
-import { safeJsonParse, type JsonPrimitive, type JsonValue } from "../../shared/json"
+import { isJsonObject, safeJsonParse, type JsonPrimitive, type JsonValue } from "../../shared/json"
 import type { ClientCommand } from "../../shared/protocol"
 import type { ChatSnapshot, SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../shared/types"
 import type { TranscriptEntry } from "../../shared/transcript-types"
@@ -44,6 +44,12 @@ export interface PendingRequestView {
   toolUseId?: string
   tool: string
   input: JsonValue
+}
+
+export function stringFieldOf(value: JsonValue, key: string): string | undefined {
+  if (!isJsonObject(value)) return undefined
+  const found = value[key]
+  return typeof found === "string" ? found : undefined
 }
 
 export function toJson(value: JsonPrimitive | object): JsonValue {
@@ -127,9 +133,13 @@ export function chatRows(data: SidebarData, filter: { projectId?: string; includ
   return rows
 }
 
-function clip(text: string): string {
+export function clipText(text: string, maxChars: number): string {
   const oneLine = text.replace(/\s+/g, " ").trim()
-  return oneLine.length > MAX_SUMMARY_CHARS ? `${oneLine.slice(0, MAX_SUMMARY_CHARS)}...` : oneLine
+  return oneLine.length > maxChars ? `${oneLine.slice(0, maxChars)}...` : oneLine
+}
+
+function clip(text: string): string {
+  return clipText(text, MAX_SUMMARY_CHARS)
 }
 
 function summarizeToolInput(input: object): string {

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { Client as ModernClient, StreamableHTTPClientTransport as ModernTransport } from "@modelcontextprotocol/client"
@@ -11,9 +11,11 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { isJsonObject, safeJsonParse } from "../../shared/json"
+import { isJsonObject, safeJsonParse, type JsonObject } from "../../shared/json"
 import { CLIENT_IP_HEADER } from "../auth-backend"
 import { startKannaServer } from "../server"
+import type { BearerVerdict } from "./remote-mcp-bearer"
+import { handleRemoteMcpRequest, type RemoteMcpRouteServices } from "./remote-mcp-http-routes"
 
 const PASSWORD = "secret"
 const FORM = "application/x-www-form-urlencoded"
@@ -58,6 +60,20 @@ async function connectWithPassword(origin: string) {
   const transport = bearerTransport(origin, PASSWORD)
   await client.connect(transport)
   return { client, transport }
+}
+
+async function auditRecordWhere(harness: Harness, matches: (record: JsonObject) => boolean): Promise<JsonObject | undefined> {
+  const file = path.join(harness.server.store.dataDir, "remote-mcp-calls.jsonl")
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const text = await readFile(file, "utf8").catch(() => "")
+    for (const line of text.split("\n")) {
+      const parsed = safeJsonParse(line)
+      if (parsed !== null && isJsonObject(parsed) && matches(parsed)) return parsed
+    }
+    if (Date.now() > deadline) return undefined
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
 }
 
 function textOf(result: Awaited<ReturnType<Client["callTool"]>>): string {
@@ -240,6 +256,8 @@ describe("remote MCP over HTTP", () => {
       expect(tools).toEqual(expect.arrayContaining(["kanna_command", "kanna_commands", "kanna_read", "ping"]))
 
       expect(textOf(await client.callTool({ name: "ping", arguments: {} }))).toBe("pong")
+      const legacyRecord = await auditRecordWhere(harness, (record) => record.tool === "ping" && record.era === "legacy")
+      expect(legacyRecord).toMatchObject({ clientId: "password", via: "password", outcome: "ok" })
 
       const ack = await client.callTool({ name: "kanna_command", arguments: { type: "system.ping" } })
       expect(ack.isError).toBeFalsy()
@@ -284,6 +302,8 @@ describe("remote MCP over HTTP", () => {
 
       const sidebar = await client.callTool({ name: "kanna_read", arguments: { topic: { type: "sidebar" } } })
       expect(sidebar.isError).toBeFalsy()
+      const modernRecord = await auditRecordWhere(harness, (record) => record.tool === "kanna_read" && record.era === "modern")
+      expect(modernRecord).toMatchObject({ clientName: "modern-client", via: "password" })
     } finally {
       await client.close()
     }
@@ -310,6 +330,8 @@ describe("remote MCP over HTTP", () => {
     await second.connect(new StreamableHTTPClientTransport(new URL(`${harness.origin}/mcp`), { authProvider: provider }))
     try {
       expect(textOf(await second.callTool({ name: "ping", arguments: {} }))).toBe("pong")
+      const oauthRecord = await auditRecordWhere(harness, (record) => record.tool === "ping" && record.via === "oauth")
+      expect(oauthRecord?.clientId).not.toBe("password")
       const sidebar = await second.callTool({ name: "kanna_read", arguments: { topic: { type: "sidebar" } } })
       expect(sidebar.isError).toBeFalsy()
     } finally {
@@ -377,5 +399,42 @@ describe("remote MCP credential throttling", () => {
     } finally {
       await harness.stop()
     }
+  })
+})
+
+describe("remote MCP idle timeout", () => {
+  function services(verdict: BearerVerdict, held: string[]): RemoteMcpRouteServices {
+    return {
+      auth: { backend: { remoteMcpResource: () => null } } as never,
+      enabled: () => true,
+      mcp: { fetch: async () => new Response("handled") },
+      bearerVerifier: { verifyBearer: async () => verdict },
+      clientIp: null,
+      validateOrigin: () => true,
+      holdConnectionOpen: () => {
+        held.push("held")
+      },
+    }
+  }
+
+  const MCP_URL = new URL("http://127.0.0.1/mcp")
+
+  test("an authenticated call keeps its connection open past the server's default idle timeout", async () => {
+    const held: string[] = []
+    const principal = { clientId: "password", scopes: ["kanna"], expiresAt: null, via: "password" as const }
+
+    const response = await handleRemoteMcpRequest(new Request(MCP_URL, { method: "POST" }), MCP_URL, services({ ok: true, principal }, held))
+
+    expect(await response?.text()).toBe("handled")
+    expect(held).toEqual(["held"])
+  })
+
+  test("a request that fails authentication does not get a longer connection", async () => {
+    const held: string[] = []
+
+    const response = await handleRemoteMcpRequest(new Request(MCP_URL, { method: "POST" }), MCP_URL, services({ ok: false, status: 401 }, held))
+
+    expect(response?.status).toBe(401)
+    expect(held).toEqual([])
   })
 })

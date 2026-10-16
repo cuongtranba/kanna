@@ -4,6 +4,7 @@ import {
   COMPACTION_POST_TOKENS,
   COMPACTION_PRE_TOKENS,
   COMPACTION_STARTED,
+  REMOTE_MCP_TOOL_CALL,
   HOST_MEMORY_TOTAL_BYTES,
   PACKAGE_APPLY_DURATION_MS,
   PACKAGE_APPLY_FINISHED,
@@ -62,6 +63,7 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   ]),
   `${promMetricName(COMPACTION_STARTED)}_total`,
   `${promMetricName(COMPACTION_FINISHED)}_total`,
+  `${promMetricName(REMOTE_MCP_TOOL_CALL)}_total`,
   ...[promMetricName(COMPACTION_PRE_TOKENS), promMetricName(COMPACTION_POST_TOKENS)].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,

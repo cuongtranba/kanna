@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import { isWithinRoot, resolveProjectFilePath } from "../project-file-path"
@@ -16,8 +16,8 @@ function hasNullByte(bytes: Uint8Array): boolean {
   return bytes.includes(0)
 }
 
-export function registerFileTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerFileTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "upload_attachment",
     {
       title: "Upload an attachment",
@@ -51,7 +51,7 @@ export function registerFileTools(server: McpServer, host: RemoteMcpHost): void 
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "read_project_file",
     {
       title: "Read a project file",

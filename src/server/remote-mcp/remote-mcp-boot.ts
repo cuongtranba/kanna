@@ -5,14 +5,20 @@ import type { EventStore } from "../event-store"
 import { getMachineDisplayName } from "../machine-name.adapter"
 import { log } from "../../shared/log"
 import { REMOTE_MCP_PATH } from "./oauth-paths"
-import type { RemoteMcpHost } from "./remote-mcp-server"
+import type { CommandOrigin } from "../../shared/command-origin"
+import type { ClientCommand, ServerEnvelope, SubscriptionTopic } from "../../shared/protocol"
+import { FsStorageBackend } from "../storage/fs-storage.adapter"
+import type { StorageBackend } from "../storage/backend"
+import { createRemoteMcpAuditLog } from "./remote-mcp-audit-log"
+import { currentRemoteMcpOrigin } from "./remote-mcp-call-scope"
+import { createDedupeStore } from "./remote-mcp-dedupe"
 import type { RemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 import { createRemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 import { handleRemoteMcpRequest } from "./remote-mcp-http-routes"
 import { buildRemoteMcpServer } from "./remote-mcp-server"
 
 export interface RemoteMcpRuntime {
-  handle(req: Request, url: URL, socketIp: string | null): Promise<Response | null>
+  handle(req: Request, url: URL, socketIp: string | null, extendIdleTimeout?: (seconds: number) => void): Promise<Response | null>
   start(boundPort: number): void
   stop(): Promise<void>
 }
@@ -21,21 +27,41 @@ export interface RemoteMcpRuntimeSources {
   auth: PasswordAuth | null
   appSettings: AppSettingsManager
   store: EventStore
-  commands: Pick<RemoteMcpHost, "dispatchCommand" | "readSnapshot">
+  commands: {
+    dispatchCommand: (command: ClientCommand, origin?: CommandOrigin) => Promise<ServerEnvelope>
+    readSnapshot: (topic: SubscriptionTopic) => ServerEnvelope
+  }
+  storage?: StorageBackend
 }
+
+const REMOTE_MCP_IDLE_TIMEOUT_SECONDS = 130
 
 const REJECTING_VERIFIER: RemoteMcpBearerVerifier = {
   verifyBearer: async () => ({ ok: false, status: 401 }),
 }
 
-export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
+export function createRemoteMcpRuntime({ auth, appSettings, store, commands, storage }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
   const machineName = getMachineDisplayName()
+  const audit = createRemoteMcpAuditLog({ storage: storage ?? new FsStorageBackend(), dataDir: store.dataDir })
+  const dedupe = createDedupeStore({ now: Date.now })
+  const dispatchCommand = (command: ClientCommand) => commands.dispatchCommand(command, currentRemoteMcpOrigin())
   const publicOrigin = () => {
     const resource = auth?.backend.remoteMcpResource() ?? null
     return resource === null ? null : resource.slice(0, resource.length - REMOTE_MCP_PATH.length)
   }
   const mcp = createMcpHandler(
-    () => buildRemoteMcpServer({ ...commands, store, appSettings, machineName, publicOrigin }),
+    (request) => buildRemoteMcpServer({
+      dispatchCommand,
+      readSnapshot: commands.readSnapshot,
+      store,
+      appSettings,
+      machineName,
+      publicOrigin,
+      era: request.era,
+      authInfo: request.authInfo,
+      audit,
+      dedupe,
+    }),
     { onerror: (error) => log.warn("[remote-mcp] handler error", error.message) },
   )
   const bearerVerifier = auth
@@ -52,7 +78,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
   }
 
   return {
-    handle(req, url, socketIp) {
+    handle(req, url, socketIp, extendIdleTimeout) {
       return handleRemoteMcpRequest(req, url, {
         auth,
         enabled: () => appSettings.getSnapshot().remoteMcp.enabled,
@@ -60,6 +86,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
         bearerVerifier,
         clientIp: auth ? auth.clientIpFor(req, socketIp) : socketIp,
         validateOrigin: (request) => auth?.validateOrigin(request) ?? false,
+        holdConnectionOpen: () => extendIdleTimeout?.(REMOTE_MCP_IDLE_TIMEOUT_SECONDS),
       })
     },
     start(boundPort) {
@@ -70,6 +97,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands }: R
       unsubscribe?.()
       unsubscribe = null
       await mcp.close()
+      await audit.flush()
     },
   }
 }
