@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { jsonObjectSchema } from "../../shared/genui/json-schema"
 import {
@@ -10,28 +10,32 @@ import {
 import { parseSubscriptionTopic } from "../../shared/remote-mcp/topics"
 import { fail, ok } from "../kanna-mcp-tool"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
+import { acceptedReport, guardedChatSend, guardedEnqueue } from "./remote-mcp-follow"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 
 const KANNA_COMMANDS_DESCRIPTION =
   "List every Kanna command kanna_command can run, with its parameters and risk."
 const KANNA_COMMAND_DESCRIPTION =
-  "Run one Kanna command (the same operations the web UI performs) by its dotted type, for example chat.send or board.card.move. "
-  + "Call kanna_commands first to see each command's parameters and risk; destructive commands delete or discard data, local commands act on the host machine."
+  "Run one Kanna command (the same operations the web UI performs) by its dotted type, for example chat.rename or board.card.move. "
+  + "Call kanna_commands first to see each command's parameters and risk; destructive commands delete or discard data, local commands act on the host machine. "
+  + "Prefer send_message over chat.send: kanna_command returns as soon as the message is accepted and does not wait, and an identical chat.send or message.enqueue "
+  + "to a chat that is already working on it is suppressed as a duplicate. Follow a chat with wait_for_chat."
 const KANNA_READ_DESCRIPTION =
   "Read the current snapshot of one subscription topic, for example {\"type\":\"sidebar\"} or {\"type\":\"chat\",\"chatId\":\"...\"}."
 
-export function registerGenericTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerGenericTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "ping",
     {
       title: "Ping",
+      inputSchema: z.object({}),
       description: "Liveness check; answers pong.",
       annotations: { readOnlyHint: true },
     },
     () => ok("pong"),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "kanna_commands",
     {
       title: "List Kanna commands",
@@ -42,7 +46,7 @@ export function registerGenericTools(server: McpServer, host: RemoteMcpHost): vo
     ({ domain }) => ok(JSON.stringify(listCommandCatalog(domain))),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "kanna_command",
     {
       title: "Run a Kanna command",
@@ -60,11 +64,19 @@ export function registerGenericTools(server: McpServer, host: RemoteMcpHost): vo
       }
       const command = toClientCommand(type, params ?? {})
       if (!command) return fail(`Command "${type}" could not be built from the given params.`)
+      if (command.type === "chat.send") {
+        const guarded = await guardedChatSend(host, command)
+        return guarded.ok ? acceptedReport(guarded.record, guarded.duplicateVia) : fail(guarded.message)
+      }
+      if (command.type === "message.enqueue") {
+        const guarded = await guardedEnqueue(host, command.chatId, command.content)
+        return guarded.ok ? acceptedReport(guarded.record, guarded.duplicateVia) : fail(guarded.message)
+      }
       return envelopeToToolResult(await host.dispatchCommand(command))
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "kanna_read",
     {
       title: "Read a Kanna snapshot",

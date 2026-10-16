@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
+import { PASSWORD_CLIENT_ID } from "../../shared/command-origin"
 import { SESSION_COOKIE_NAME, type AuthBackend, type RemoteMcpPrincipal } from "../auth-backend"
 
 const MAX_CACHED_PASSWORDS = 32
-const PASSWORD_CLIENT_ID = "password"
 const PASSWORD_SCOPES = ["kanna"]
 const BEARER_PATTERN = /^Bearer\s+(\S+)\s*$/i
 

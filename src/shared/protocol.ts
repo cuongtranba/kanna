@@ -1,3 +1,4 @@
+import type { CommandOrigin } from "./command-origin"
 import type { CronJobPatch } from "./cron/types"
 import type { ShareClientCommand } from "./session-share/protocol"
 import type { BeaconsSnapshot } from "./beacon-status"
@@ -244,6 +245,7 @@ export type ClientCommand =
       effort?: string
       planMode?: boolean
       autoResumeOnRateLimit?: boolean
+      origin?: CommandOrigin
     }
   | { type: "chat.refreshDiffs"; chatId: string }
   | { type: "chat.initGit"; chatId: string }
@@ -393,6 +395,7 @@ export type ClientCommand =
       modelOptions?: ModelOptions
       planMode?: boolean
       autoResumeOnRateLimit?: boolean
+      origin?: CommandOrigin
     }
   | {
       type: "message.steer"

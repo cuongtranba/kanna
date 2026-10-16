@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 3ed605cbece1a85957fad22d49d240b56b84d3e428be9a712e171aa79e788a5a
+c3-seal: 90692e3704defa4aa74a94760785fa4047f7e93316d9b9afbff3724b346d7a50
 title: ws-router
 type: component
 category: foundation
@@ -71,6 +71,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | Envelope dispatch | IN | Decodes ClientEnvelope → handler | c3-101 | src/server/ws-router.ts |
 | Snapshot push | OUT | Pushes typed ServerEnvelope to subscribers | c3-101 | src/server/ws-router.ts |
 | Command result | OUT | Correlates result envelope to client command | c3-101 | src/server/ws-router.ts |
+| Command origin stamp | IN | routeCommand is the only place a chat.send or message.enqueue origin is set: it copies the connection's commandOrigin onto the command and deletes any origin the sender wrote, so a browser socket can never claim an MCP origin | c3-242 | src/server/ws-router.ts, src/server/command-origin-stamp.ts |
 
 ## Change Safety
 

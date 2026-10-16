@@ -1,3 +1,4 @@
+import type { CommandOrigin } from "./command-origin"
 import type { JsonValue } from "./json"
 import type { ChatPermissionPolicyOverride } from "./permission-policy"
 
@@ -109,6 +110,7 @@ export interface QueuedChatMessage {
   planMode?: boolean
   autoContinue?: { scheduleId: string }
   cronRun?: import("./cron/types").CronRunTag
+  origin?: CommandOrigin
 }
 
 export interface InternalUserAttachmentsData {

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import type { RemoteMcpHost } from "./remote-mcp-server"
@@ -6,8 +6,8 @@ import { commandResult, jsonResult, readChat, runCommand } from "./remote-mcp-vi
 
 const chatIdField = z.string().describe("Id of the chat whose working directory is the repository")
 
-export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerGitTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "get_git_status",
     {
       title: "Git status",
@@ -39,7 +39,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "commit_changes",
     {
       title: "Commit changes",
@@ -56,7 +56,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
       commandResult(host, { type: "chat.commitDiffs", chatId, paths, summary, description, mode: mode ?? "commit_only" }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "list_branches",
     {
       title: "List branches",
@@ -67,7 +67,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
     ({ chatId }) => commandResult(host, { type: "chat.listBranches", chatId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "checkout_branch",
     {
       title: "Check out a branch",
@@ -82,7 +82,7 @@ export function registerGitTools(server: McpServer, host: RemoteMcpHost): void {
       commandResult(host, { type: "chat.checkoutBranch", chatId, branch: { kind: "local", name }, bringChanges }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "sync_branch",
     {
       title: "Sync a branch",

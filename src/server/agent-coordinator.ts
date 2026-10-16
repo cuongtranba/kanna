@@ -1075,6 +1075,7 @@ export class AgentCoordinator {
       model: command.model,
       modelOptions: command.modelOptions,
       planMode: command.planMode,
+      origin: command.origin,
     })
     return { queuedMessageId: queuedMessage.id }
   }

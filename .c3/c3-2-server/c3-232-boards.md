@@ -1,6 +1,6 @@
 ---
 id: c3-232
-c3-seal: 58f5efe5cfbe6712f5cc8b14932789d0b9bb7005ce1e46dff8bbd0ab702b7c13
+c3-seal: 5c298b80b260e180036e6bbd0a7f02f8831d457f48a7ae3009ebde3bcfbbad48
 title: boards
 type: component
 category: feature
@@ -93,6 +93,6 @@ Owns board persistence (`board-store.ts` port + `board-store.adapter.ts` over `b
 | --- | --- | --- | --- |
 | Migration break | A migration is edited in place rather than appended | A newer user_version than the build understands throws at open | bun test --conditions production src/server/board-store.adapter.test.ts |
 | Cross-project reach | A board tool stops resolving an id against the chat's project | An agent moves a card on another project's board | bun test --conditions production src/server/kanna-mcp-boards.test.ts |
-| Silent tracker close | Agent attribution dropped from a write path | A card an agent moved closes a real issue | bun test --conditions production src/server/board-sync.test.ts |
+| Silent tracker close | Agent or remote_mcp attribution dropped from a write path | A card an agent or an MCP client moved closes a real issue | bun test --conditions production src/server/board-sync.test.ts |
 | Worktree loss | Cleanup performs instead of asking, or discard stops checking dirtiness | Uncommitted work disappears on a column drag | bun test --conditions production src/server/board-worktree-cleanup.test.ts |
 | Orphaned chain | Start work creates a chat before linking the worktree | A crash leaves a card pointing at nothing | bun test --conditions production src/server/board-start-work.test.ts |

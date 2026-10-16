@@ -239,7 +239,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
       }
 
       if (decision.keep.length > 0) {
-        const held = card.updatedBy.kind === "agent" && !binding.allowAgentPush
+        const held = (card.updatedBy.kind === "agent" || card.updatedBy.kind === "remote_mcp") && !binding.allowAgentPush
         store.enqueueOutbox({
           cardId: card.id,
           bindingId: binding.id,

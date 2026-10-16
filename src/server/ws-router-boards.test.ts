@@ -403,3 +403,37 @@ describe("board.card.block / board.card.unblock", () => {
     expect(message).toContain("Regenerate the client")
   })
 })
+
+describe("board writes from a remote MCP origin", () => {
+  function cardOnBoard() {
+    const { deps, registry } = setup()
+    const board = registry.createBoard({
+      owner: { kind: "project", id: "proj-1" },
+      title: "Board",
+      definition: { columns: [{ title: "Todo", semantic: null, colorToken: null, wipLimit: null }], cardFields: [], mappingDefaults: [] },
+    })
+    const column = registry.listColumns(board.id)[0]
+    if (!column) throw new Error("no column")
+    const card = registry.createCard({ boardId: board.id, columnId: column.id, title: "A card", actor: { kind: "user" } })
+    return { deps, registry, card }
+  }
+
+  test("a comment is attributed to the MCP client rather than to the user", async () => {
+    const { deps, registry, card } = cardOnBoard()
+    const origin = { kind: "remote_mcp" as const, clientId: "client-1", clientName: "ChatGPT", via: "oauth" as const, tool: "comment_card", callId: "call-1" }
+
+    await handleBoardCommand({ ...deps, origin }, { type: "board.card.comment", cardId: card.id, body: "from MCP" }, "req-1")
+
+    expect(registry.cardDetail(card.id)?.comments.map((comment) => comment.author)).toEqual([
+      { kind: "remote_mcp", clientId: "client-1", clientName: "ChatGPT" },
+    ])
+  })
+
+  test("a comment typed in the app is still attributed to the user", async () => {
+    const { deps, registry, card } = cardOnBoard()
+
+    await handleBoardCommand(deps, { type: "board.card.comment", cardId: card.id, body: "typed" }, "req-1")
+
+    expect(registry.cardDetail(card.id)?.comments.map((comment) => comment.author)).toEqual([{ kind: "user" }])
+  })
+})
