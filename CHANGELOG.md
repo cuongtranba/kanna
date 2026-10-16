@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.80.0](https://github.com/cuongtranba/kanna/compare/v1.79.1...v1.80.0) (2026-10-16)
+
+
+### Features
+
+* **client:** surface chats waiting for input in the tab title and tab strip ([#1300](https://github.com/cuongtranba/kanna/issues/1300)) ([125173c](https://github.com/cuongtranba/kanna/commit/125173cee350d4b7dae02a3b9aba163a5f3aad4e))
+
 ## [1.79.1](https://github.com/cuongtranba/kanna/compare/v1.79.0...v1.79.1) (2026-10-15)
 
 
