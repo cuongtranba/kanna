@@ -81,6 +81,21 @@ Pair `tool_call.tool.toolId` with `tool_result.toolId` to match a call to its re
 - **"My queued message vanished"** → a queued message is released when its turn is recorded, not when it is dequeued. A restart in that window is recovered at boot; a message that is simply gone with the chat idle is the case worth reporting.
 - **"It cleared context by itself"** → `context_cleared` entries are expected on background-subagent deliveries to an armed loop and on `/clear`; an un-armed chat's delivery appends none. Several in a row with no delivery between them is not.
 
+## A chat driven over remote MCP (ChatGPT, Claude Desktop, Codex)
+
+A message sent through `/mcp` is stamped by the server with an `origin` and every tool call is logged, so "who sent this, and did the client retry?" is answerable from two files:
+
+- `user_prompt.origin` in the transcript: `{kind: "remote_mcp", clientId, clientName?, via: "oauth" | "password", tool, callId}`. A prompt typed in the app has no `origin`. The same field sits on a queued message in `queued-messages.jsonl`.
+- `<dataDir>/remote-mcp-calls.jsonl` (rotated to `.1` at 10 MiB), one JSON object per tool call: `at`, `callId`, `tool`, `clientId`, `clientName?`, `via`, `era` (`modern` is 2026-07-28, `legacy` is 2025), `durationMs`, `outcome` (`ok`, `error`, `duplicate`), `error?`, `chatId?`, `projectId?`, `args` (secrets redacted, strings cut to 500 characters).
+
+```bash
+LOG="$HOME/.kanna/data/remote-mcp-calls.jsonl"
+jq -c 'select(.chatId=="<chatId>") | [.at,.tool,.outcome,.durationMs,.clientId,.callId]' "$LOG" "$LOG.1" 2>/dev/null
+jq -c 'select(.tool=="send_message") | [.at,.clientId,.chatId,.outcome,(.args.content|.[0:40])]' "$LOG" | tail -20
+```
+
+Correlate with `callId`: the id on the transcript's `user_prompt.origin` is the audit record of the call that created it. Duplicates look like the same `clientId` calling `send_message` with the same `args.content` seconds apart. `outcome: "duplicate"` means the guard recognised the repeat and dispatched nothing; two `ok` records with different `chatId`s mean it did not. Long waits show as a large `durationMs`; a call that ended in `error` right after a wait usually means the client's connection was closed first (Bun closes a silent response after 10 seconds unless the route held it open, a tunnel after 125).
+
 ## Step 3 — connect to the server-side event log if needed
 
 The transcript is the model-facing view. Server-side events (chat lifecycle, tool-request decisions, push notifications) live in sibling files:

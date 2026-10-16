@@ -106,7 +106,7 @@ are refused. The typed tools below cover the common flows.
 | --- | --- |
 | Generic | `ping`, `kanna_commands`, `kanna_command`, `kanna_read` |
 | Projects | `list_projects`, `open_project`, `create_project`, `list_chats`, `search`, `fetch` |
-| Chats | `create_chat`, `get_chat`, `send_message`, `enqueue_message`, `cancel_chat`, `rename_chat`, `archive_chat`, `unarchive_chat`, `fork_chat`, `delete_chat` |
+| Chats | `create_chat`, `get_chat`, `send_message`, `wait_for_chat`, `enqueue_message`, `cancel_chat`, `rename_chat`, `archive_chat`, `unarchive_chat`, `fork_chat`, `delete_chat` |
 | Tool requests | `list_pending_tool_requests`, `answer_tool_request`, `respond_tool` |
 | Git | `get_git_status`, `commit_changes`, `list_branches`, `checkout_branch`, `sync_branch` |
 | Boards | `list_boards`, `get_board`, `create_card`, `move_card`, `comment_card`, `start_work_on_card` |
@@ -116,14 +116,74 @@ are refused. The typed tools below cover the common flows.
 | Files | `upload_attachment`, `read_project_file` |
 | System | `get_update_status`, `server_info` |
 
-`send_message` waits for the turn to finish by default and returns the assistant
-text. If the chat stops at `waiting_for_user`, the reply lists the pending tool
-requests; answer them with `answer_tool_request` or `respond_tool`. The server
-also publishes the resources `kanna://projects`, `kanna://chats/{chatId}` and
-`kanna://boards/{boardId}`.
+`send_message` starts a turn and waits for it. If the chat stops at
+`waiting_for_user`, the reply lists the pending tool requests; answer them with
+`answer_tool_request` or `respond_tool`. The server also publishes the resources
+`kanna://projects`, `kanna://chats/{chatId}` and `kanna://boards/{boardId}`, and
+sends the client written instructions on how to use the chat tools.
 
 `read_app_settings` and `patch_app_settings` redact anything that looks like a
 secret — API keys, tokens, passwords, environment and header values.
+
+## Long turns, progress and waiting
+
+A turn can run for many minutes, so `send_message` does not hold the connection
+open for the whole turn. It waits up to `timeoutSeconds` (default 45) and then
+answers with what it has:
+
+| Field | Meaning |
+| --- | --- |
+| `done` | `true` when the turn has finished. `false` means it is still running, queued or waiting for you |
+| `assistantText`, `activity` | The reply so far and up to 20 recent entries (tool calls, text) |
+| `cursor` | A position in the chat. Pass it to `wait_for_chat` to get only what is newer |
+| `queued`, `queuedMessageId` | The chat was busy, so the message waits behind the running turn |
+| `next` | A plain instruction for the client, such as "call `wait_for_chat`, do not send again" |
+
+`wait_for_chat` follows a chat without sending anything and returns the same
+shape; call it repeatedly until `done` is `true`. A client that sends a progress
+token also receives `notifications/progress` while Kanna waits, which keeps the
+connection alive. Without progress, one call waits at most 100 seconds, which is
+below the idle limits of Bun (10 seconds by default, raised to 130 seconds for
+`/mcp`) and of a Cloudflare tunnel (125 seconds); a shorter wait is reported in
+`timeoutClamp`. Clients on the 2025 protocol revisions keep the connection open
+with SSE pings and may wait up to 600 seconds.
+
+## Duplicate protection
+
+Retrying `send_message` never starts the same work twice:
+
+- **`idempotencyKey`.** Pass a stable string per user request. A repeat with the
+  same key within 30 minutes returns the original chat with `duplicate: true`.
+- **Identical requests in flight.** Without a key, a message with the same
+  client, destination (chat or project) and text is not dispatched again while
+  the first one is still running, waiting for you, or queued. Kanna follows the
+  original instead and says so in `next`. Once the first turn has finished, the
+  same words are a new request.
+- `enqueue_message` and `kanna_command` with `chat.send` or `message.enqueue`
+  follow the same rule.
+
+A message sent to a busy chat is queued. If the running turn fails, Kanna does
+not start the queued message by itself; the result says so and names
+`message.dequeue` to clear it.
+
+## Where a message came from
+
+A message sent over MCP is marked in the transcript as "via MCP · client name",
+with the client id, tool and call id in the tooltip. Kanna sets the mark itself
+from the authenticated connection; a browser cannot claim it. Board cards, comments
+and moves made through MCP are attributed to an "MCP client" and, like agent
+writes, are not pushed to a connected tracker unless the binding allows agent
+pushes.
+
+Every tool call is also appended to `remote-mcp-calls.jsonl` in the Kanna data
+directory (`~/.kanna/data/` by default), one JSON object per line, rotated to
+`remote-mcp-calls.jsonl.1` at 10 MiB. A record holds the time, `callId`, tool,
+`clientId`, `clientName`, `via` (`oauth` or `password`), protocol era, duration,
+`outcome` (`ok`, `error` or `duplicate`), the chat and project ids and the
+arguments with secrets removed and long text cut to 500 characters. The
+`callId` matches the call id on the transcript mark, so a chat can be traced back
+to the exact tool call and a retry loop shows up as repeated records from one
+client.
 
 ## Security notes
 

@@ -1795,6 +1795,38 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `TransformStream` and `WritableStream` after happy-dom replaces them; the SDK
   client's SSE parser fails with "readable property must be a ReadableStream"
   under happy-dom's versions, and every SDK-client test hangs.
+- **Origin is stamped by the router, never claimed by a client.** Each tool call
+  runs through `createToolRegistrar` (`remote-mcp-tool-registrar.ts`), which builds
+  a `RemoteMcpOrigin` (client id, envelope client name, `oauth` or `password`,
+  tool, call id) and holds it in an `AsyncLocalStorage` scope; the runtime wraps
+  `dispatchCommand` to pass it to `router.dispatchCommand`. `routeCommand` is the
+  one place that sets `origin` on `chat.send` and `message.enqueue`, and it
+  deletes any origin a sender wrote, so a browser socket or a forged
+  `kanna_command` parameter cannot label itself MCP. The origin flows through
+  `QueuedChatMessage` into `UserPromptEntry`, is withheld from share snapshots,
+  and becomes a `remote_mcp` board `CardActor` that `board-sync` holds like an
+  agent write unless the binding sets `allowAgentPush`. Every new `register*`
+  tool takes the `ToolRegistrar` and an object `inputSchema` (`z.object({})` when
+  it has no parameters), not the raw `McpServer`.
+- **The audit sink is `remote-mcp-calls.jsonl` in the data dir.** One redacted
+  record per tool call through the `StorageBackend` port, rotated to `.1` at
+  10 MiB; a failed write is logged and never reaches the tool. The counter
+  `kanna.remote_mcp.tool_call` carries tool, outcome and via only, never the
+  client id (unbounded). Resources are not audited.
+- **Dedupe lives in the runtime, not in the per-request server.**
+  `createMcpHandler` builds a fresh `McpServer` per request, so
+  `createDedupeStore` is created once in `createRemoteMcpRuntime`. A repeat of an
+  in-flight request follows the original (`guardedDispatch` reserves the slot
+  before the dispatch resolves) instead of dispatching again. Route
+  `chat.send` and `message.enqueue` from any tool through `guardedChatSend` and
+  `guardedEnqueue`.
+- **A silent wait is clamped.** `Bun.serve` runs without `idleTimeout`, so its
+  default closes a silent response after 10 seconds, and a Cloudflare tunnel does
+  after 125. After bearer verification the route calls `server.timeout(req, 130)`,
+  and `resolveWaitLimit` caps a wait at 100 seconds unless the request is legacy
+  era (SSE pings) or carries a progress token (`notifications/progress` keeps the
+  bytes flowing). `send_message` and `wait_for_chat` share `followChat`; a result
+  is `done` or it carries a `next` that forbids resending.
 - **Follow-up:** `handleProjectFileContent` still checks the path lexically, so
   a symlink inside a project that points outside it is served over HTTP, while
   `read_project_file` also compares real paths. Hardening the HTTP route may

@@ -1,0 +1,6 @@
+---
+target: c3-242
+scope: block
+base: c3-242#n13599@v1:sha256:a1b36977c4bbfa3f983b6802d5310fe3fdee8292feef39091ae7d1bb011efb22
+---
+Owns the remote MCP surface: the /mcp endpoint, a stateless createMcpHandler that serves MCP 2026-07-28 and 2025-era clients from one per-request server factory, the bearer verifier that accepts an OAuth access token or the launch password, the allowlisted mount of Better Auth's OAuth endpoints with client-IP header stripping, the server-rendered login and consent pages, the generic parity tools (kanna_commands, kanna_command, kanna_read) backed by a typed command catalog, the typed intent tools, the resources, and the remoteMcp settings. It also owns what makes a remote caller accountable and followable: the tool registrar that labels each call with a server-built origin and writes an audit record, the follow loop behind send_message and wait_for_chat, and the dedupe store that stops a retried request from starting duplicate work. Every tool runs through router.dispatchCommand or router.readSnapshot so WebSocket clients still see the broadcasts. Non-goals: password verification and rate limiting (c3-203 and Better Auth own them), the in-process MCP server Claude sessions attach to (c3-226), per-user accounts, MCP sessions, server-initiated requests such as sampling or elicitation, and any route outside the allowlist.
