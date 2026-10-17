@@ -1,22 +1,30 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
 import type { SidebarData } from "../../shared/types"
-import type { WebhookInput, WebhookMode } from "../../shared/webhooks/types"
-import { validateWebhookInput } from "../../shared/webhooks/validate"
+import type { WebhookInput, WebhookMode, WebhookPatch, WebhookSummary } from "../../shared/webhooks/types"
+import { validateWebhookInput, validateWebhookModel } from "../../shared/webhooks/validate"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
+import { SearchableSelect } from "../components/ui/searchable-select"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
 import { webhookModeConsequence, webhookModeLabel } from "../lib/webhookPresentation"
-import { listWebhookTargets } from "../lib/webhookTargets"
+import { decodeWebhookModel, listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
+import { useOptionalKannaSocket } from "./KannaSocketProvider"
+import { useProviderCatalog } from "./useProviderCatalog"
+import { sendWebhookCommand } from "./webhookCommands"
 import { WebhookCreateStore } from "./WebhookCreateDialog.store"
 import { WebhookTargetSelect } from "./WebhookTargetSelect"
 
 interface Props {
   sidebarData: SidebarData
   onCreate: (input: WebhookInput) => Promise<void>
+}
+
+interface FormProps extends Props {
+  editing: WebhookSummary | undefined
 }
 
 const CREATE_KEY = pendingActionKey("webhooks.create")
@@ -26,47 +34,78 @@ const MODE_OPTIONS: SegmentedOption<WebhookMode>[] = (["notify", "inline", "spaw
   label: webhookModeLabel(mode),
 }))
 
-function CreateForm({ sidebarData, onCreate }: Props) {
-  const pending = usePendingAction(CREATE_KEY)
-  const setOpen = useWebhooksStore((state) => state.setCreateOpen)
+function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
+  const socket = useOptionalKannaSocket()
+  const catalog = useProviderCatalog()
+  const submitKey = editing ? pendingActionKey("webhooks.update", editing.id) : CREATE_KEY
+  const pending = usePendingAction(submitKey)
+  const closeEditor = useWebhooksStore((state) => state.closeEditor)
   const name = WebhookCreateStore.useScopedStore((state) => state.name)
   const mode = WebhookCreateStore.useScopedStore((state) => state.mode)
   const chatId = WebhookCreateStore.useScopedStore((state) => state.chatId)
   const projectId = WebhookCreateStore.useScopedStore((state) => state.projectId)
+  const modelValue = WebhookCreateStore.useScopedStore((state) => state.modelValue)
   const template = WebhookCreateStore.useScopedStore((state) => state.template)
   const setName = WebhookCreateStore.useScopedStore((state) => state.setName)
   const setMode = WebhookCreateStore.useScopedStore((state) => state.setMode)
   const setChatId = WebhookCreateStore.useScopedStore((state) => state.setChatId)
   const setProjectId = WebhookCreateStore.useScopedStore((state) => state.setProjectId)
+  const setModelValue = WebhookCreateStore.useScopedStore((state) => state.setModelValue)
   const setTemplate = WebhookCreateStore.useScopedStore((state) => state.setTemplate)
   const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const modelOptions = useMemo(() => listWebhookModelOptions(catalog), [catalog])
+  const startsTurn = mode !== "notify"
 
-  const input = useMemo<WebhookInput>(
-    () => ({ name, mode, template, ...(mode === "spawn" ? { projectId } : { chatId }) }),
-    [chatId, mode, name, projectId, template],
+  const input = useMemo<WebhookInput>(() => {
+    const choice = startsTurn ? decodeWebhookModel(modelValue) : null
+    return {
+      name,
+      mode,
+      template,
+      ...(mode === "spawn" ? { projectId } : { chatId }),
+      ...(choice ? { provider: choice.provider, model: choice.model } : {}),
+    }
+  }, [chatId, mode, modelValue, name, projectId, startsTurn, template])
+  const errors = useMemo(
+    () => [...validateWebhookInput(input), ...validateWebhookModel(input, catalog)],
+    [catalog, input],
   )
-  const errors = useMemo(() => validateWebhookInput(input), [input])
 
-  const handleOpenChange = useCallback((open: boolean) => setOpen(open), [setOpen])
-  const handleCancel = useCallback(() => setOpen(false), [setOpen])
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (!open) closeEditor()
+  }, [closeEditor])
+  const handleCancel = useCallback(() => closeEditor(), [closeEditor])
   const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => setName(event.target.value), [setName])
   const handleTemplateChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => setTemplate(event.target.value),
     [setTemplate],
   )
-  const handleCreate = useCallback(() => {
+  const handleSubmit = useCallback(() => {
     if (errors.length > 0) return
-    runPendingAction(CREATE_KEY, async () => {
-      await onCreate(input)
-      setOpen(false)
+    runPendingAction(submitKey, async () => {
+      if (editing) {
+        const patch: WebhookPatch = {
+          name: input.name,
+          mode: input.mode,
+          template: input.template,
+          chatId: input.chatId ?? null,
+          projectId: input.projectId ?? null,
+          provider: input.provider ?? null,
+          model: input.model ?? null,
+        }
+        await sendWebhookCommand(socket, { type: "webhooks.update", id: editing.id, patch })
+      } else {
+        await onCreate(input)
+      }
+      closeEditor()
     })
-  }, [errors.length, input, onCreate, setOpen])
+  }, [closeEditor, editing, errors.length, input, onCreate, socket, submitKey])
 
   return (
     <Dialog open onOpenChange={handleOpenChange}>
       <DialogContent size="lg">
         <DialogBody className="space-y-4">
-          <DialogTitle>New webhook</DialogTitle>
+          <DialogTitle>{editing ? "Edit webhook" : "New webhook"}</DialogTitle>
           <DialogDescription>An outside system POSTs to the webhook url and Kanna reacts.</DialogDescription>
 
           <div className="space-y-1.5">
@@ -85,11 +124,26 @@ function CreateForm({ sidebarData, onCreate }: Props) {
               {mode === "spawn" ? "Project" : "Chat"}
             </label>
             {mode === "spawn" ? (
-              <WebhookTargetSelect id="webhook-target" value={projectId} options={targets.projects} placeholder="Choose a project" onValueChange={setProjectId} />
+              <WebhookTargetSelect id="webhook-target" value={projectId} options={targets.projects} placeholder="Choose a project" searchPlaceholder="Search projects..." onValueChange={setProjectId} />
             ) : (
-              <WebhookTargetSelect id="webhook-target" value={chatId} options={targets.chats} placeholder="Choose a chat" onValueChange={setChatId} />
+              <WebhookTargetSelect id="webhook-target" value={chatId} options={targets.chats} placeholder="Choose a chat" searchPlaceholder="Search chats..." onValueChange={setChatId} />
             )}
           </div>
+
+          {startsTurn ? (
+            <div className="space-y-1.5">
+              <label htmlFor="webhook-model" className="text-sm font-medium text-foreground">Model</label>
+              <SearchableSelect
+                id="webhook-model"
+                value={modelValue}
+                options={modelOptions}
+                placeholder="Choose a model"
+                searchPlaceholder="Search models..."
+                onValueChange={setModelValue}
+              />
+              <p className="text-xs text-muted-foreground">The model the turn started by this webhook runs with.</p>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <label htmlFor="webhook-template" className="text-sm font-medium text-foreground">Instruction template</label>
@@ -104,7 +158,7 @@ function CreateForm({ sidebarData, onCreate }: Props) {
         </DialogBody>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={handleCancel}>Cancel</Button>
-          <Button size="sm" onClick={handleCreate} disabled={errors.length > 0} pending={pending}>Create</Button>
+          <Button size="sm" onClick={handleSubmit} disabled={errors.length > 0} pending={pending}>{editing ? "Save" : "Create"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -112,11 +166,14 @@ function CreateForm({ sidebarData, onCreate }: Props) {
 }
 
 export function WebhookCreateDialog(props: Props) {
-  const open = useWebhooksStore((state) => state.createOpen)
-  if (!open) return null
+  const editor = useWebhooksStore((state) => state.editor)
+  const hooks = useWebhooksStore((state) => state.hooks)
+  if (!editor) return null
+  const editing = editor.mode === "edit" ? hooks.find((hook) => hook.id === editor.hookId) : undefined
+  if (editor.mode === "edit" && !editing) return null
   return (
-    <WebhookCreateStore.Provider init={undefined}>
-      <CreateForm {...props} />
+    <WebhookCreateStore.Provider init={editing}>
+      <WebhookEditorForm {...props} editing={editing} />
     </WebhookCreateStore.Provider>
   )
 }

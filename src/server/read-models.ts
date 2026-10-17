@@ -18,6 +18,7 @@ import type {
   SubagentRunSnapshot,
 } from "../shared/types"
 import { mergeCustomModels } from "../shared/types"
+import type { ProviderCatalogEntry } from "../shared/provider-model-types"
 import { withCustomProviders, type CustomProviderPublic } from "../shared/custom-providers"
 import { buildLoopProgress } from "../shared/loop-progress"
 import { deriveChatTasks, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
@@ -416,6 +417,13 @@ export function catalogSourcesOf(
   return { customModels: settings.customModels ?? [], customProviders: settings.customProviders ?? [] }
 }
 
+export function providerCatalogOf(sources: ProviderCatalogSources): ProviderCatalogEntry[] {
+  return withCustomProviders(
+    mergeCustomModels([...SERVER_PROVIDERS], sources.customModels),
+    sources.customProviders,
+  )
+}
+
 export function deriveChatSnapshot(
   state: StoreState,
   activeStatuses: Map<string, KannaStatus>,
@@ -507,10 +515,7 @@ export function deriveChatSnapshot(
     })),
     messages: transcript.messages,
     history: transcript.history,
-    availableProviders: withCustomProviders(
-      mergeCustomModels([...SERVER_PROVIDERS], catalogSources.customModels),
-      catalogSources.customProviders,
-    ),
+    availableProviders: providerCatalogOf(catalogSources),
     schedules,
     liveScheduleId,
     tunnels,

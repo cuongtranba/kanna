@@ -42,6 +42,7 @@ async function queuePrompt(
 ): Promise<void> {
   await agent.enqueueMessage(chatId, renderWebhookPrompt(hook.template, body), [], {
     autoContinue: { scheduleId: webhookScheduleId(hook.id, deliveryId) },
+    ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
   })
   await agent.maybeStartNextQueuedMessage(chatId)
 }

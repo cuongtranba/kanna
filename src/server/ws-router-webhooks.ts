@@ -1,11 +1,16 @@
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
+import type { ProviderCatalogEntry } from "../shared/provider-model-types"
+import { isAgentProvider, PROTOCOL_VERSION } from "../shared/types"
 import type { WebhookInput, WebhookPatch } from "../shared/webhooks/types"
-import { isWebhookMode } from "../shared/webhooks/validate"
+import { isWebhookMode, mergeWebhookModel, validateWebhookModel } from "../shared/webhooks/validate"
 import type { WebhookMutation, WebhookRegistry } from "./webhooks/webhook-registry"
 
 function text(value: string | null | undefined): string | undefined {
   return typeof value === "string" ? value : undefined
+}
+
+function provider(value: string | null | undefined) {
+  return typeof value === "string" && isAgentProvider(value) ? value : undefined
 }
 
 function sanitizeInput(input: WebhookInput): WebhookInput {
@@ -15,6 +20,8 @@ function sanitizeInput(input: WebhookInput): WebhookInput {
     template: text(input.template) ?? "",
     chatId: text(input.chatId),
     projectId: text(input.projectId),
+    provider: provider(input.provider),
+    model: text(input.model)?.trim() || undefined,
   }
 }
 
@@ -26,6 +33,8 @@ function sanitizePatch(patch: WebhookPatch): WebhookPatch {
     mode: patch.mode !== undefined && isWebhookMode(String(patch.mode)) ? patch.mode : undefined,
     chatId: patch.chatId === null ? null : text(patch.chatId),
     projectId: patch.projectId === null ? null : text(patch.projectId),
+    provider: patch.provider === null ? null : provider(patch.provider),
+    model: patch.model === null ? null : text(patch.model)?.trim() || undefined,
   }
 }
 
@@ -34,12 +43,27 @@ function unwrap<T>(outcome: WebhookMutation<T>): T {
   return outcome.value
 }
 
-async function run(registry: WebhookRegistry, command: ClientCommand) {
+function requireValidModel(errors: string[]) {
+  if (errors.length > 0) throw new Error(errors.join("; "))
+}
+
+async function run(
+  registry: WebhookRegistry,
+  command: ClientCommand,
+  providerCatalog: () => readonly ProviderCatalogEntry[],
+) {
   switch (command.type) {
-    case "webhooks.create":
-      return unwrap(await registry.create(sanitizeInput(command.input)))
-    case "webhooks.update":
-      return { hook: unwrap(await registry.update(command.id, sanitizePatch(command.patch))) }
+    case "webhooks.create": {
+      const input = sanitizeInput(command.input)
+      requireValidModel(validateWebhookModel(input, providerCatalog()))
+      return unwrap(await registry.create(input))
+    }
+    case "webhooks.update": {
+      const patch = sanitizePatch(command.patch)
+      const existing = registry.resolve(command.id)
+      if (existing) requireValidModel(validateWebhookModel(mergeWebhookModel(existing, patch), providerCatalog()))
+      return { hook: unwrap(await registry.update(command.id, patch)) }
+    }
     case "webhooks.rotateSecret":
       return unwrap(await registry.rotateSecret(command.id))
     case "webhooks.delete":
@@ -54,10 +78,11 @@ export async function handleWebhooksCommand(
   send: (envelope: ServerEnvelope) => void,
   command: ClientCommand,
   id: string,
+  providerCatalog: () => readonly ProviderCatalogEntry[],
 ): Promise<boolean> {
   if (!command.type.startsWith("webhooks.")) return false
   if (!registry) throw new Error("Webhooks are not available on this server")
-  const result = await run(registry, command)
+  const result = await run(registry, command, providerCatalog)
   if (result === null) return false
   send({ v: PROTOCOL_VERSION, type: "ack", id, result })
   return true

@@ -21,16 +21,32 @@ what arrived and when. The card is private: it is never included in a share link
 ## Create a hook
 
 1. Open **Webhooks** and choose **New webhook**.
-2. Give it a name, pick a mode, and pick the chat or project it acts on.
-3. Write the **instruction template**. `{{path.to.field}}` inserts a value from
+2. Give it a name, pick a mode, and pick the chat or project it acts on. The
+   picker is searchable: type part of a project name or its folder path, or part
+   of a chat title.
+3. For **Run in chat** and **New chat**, optionally pick a **Model**. Leave it on
+   **Default model** to use the chat's own model, or the provider default for a
+   new chat.
+4. Write the **instruction template**. `{{path.to.field}}` inserts a value from
    the JSON body, for example `{{repository.full_name}}` or `{{runs.0.status}}`.
    A missing field renders empty and an object or list renders as compact JSON.
-4. Choose **Create**. Kanna shows the secret **once**, with ready-made commands.
+5. Choose **Create**. Kanna shows the secret **once**, with ready-made commands.
    Copy it now. If you lose it, rotate the secret to get a new one.
 
 For `inline` and `spawn`, the prompt is your template followed by the JSON body
 in a fenced block, cut off at 16,000 characters. The block is introduced as
 external data that the agent must treat as data and not as instructions.
+
+A model chosen on the hook applies only to the turn that hook starts. In **Run in
+chat** mode it does not change the model you picked for that chat, so your next
+message runs on your own choice again. Only models offered in **Settings →
+Models** and **Custom endpoints** can be chosen; Kanna refuses a model it does
+not offer rather than silently running a different one.
+
+## Edit a hook
+
+Choose the pencil button on a hook to change its name, mode, target, model or
+template. The url and the secret stay the same.
 
 :::caution
 A `{{placeholder}}` puts the caller's text **into your instruction**, outside that

@@ -1,4 +1,4 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
+import { SearchableSelect } from "../components/ui/searchable-select"
 import type { WebhookTargetOption } from "../lib/webhookTargets"
 
 interface Props {
@@ -6,22 +6,20 @@ interface Props {
   value: string
   options: readonly WebhookTargetOption[]
   placeholder: string
+  searchPlaceholder: string
   onValueChange: (value: string) => void
 }
 
-export function WebhookTargetSelect({ id, value, options, placeholder, onValueChange }: Props) {
+export function WebhookTargetSelect({ id, value, options, placeholder, searchPlaceholder, onValueChange }: Props) {
   return (
-    <Select value={value || undefined} onValueChange={onValueChange}>
-      <SelectTrigger id={id}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <SearchableSelect
+      id={id}
+      value={value}
+      options={options}
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      emptyMessage="Nothing to choose from yet"
+      onValueChange={onValueChange}
+    />
   )
 }

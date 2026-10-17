@@ -5,4 +5,6 @@ code:
   - src/client/components/ui/**/*.tsx
   - src/client/components/CopyButton.store.ts
   - src/client/components/OpenExternalSelect.store.ts
+  - src/client/components/ui/searchable-select.store.ts
+  - src/client/components/ui/searchable-select.test.ts
   - src/index.css

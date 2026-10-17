@@ -1,3 +1,5 @@
+import type { AgentProvider } from "../core-types"
+
 export type WebhookMode = "notify" | "inline" | "spawn"
 
 export const WEBHOOK_MODES: readonly WebhookMode[] = ["notify", "inline", "spawn"]
@@ -9,6 +11,8 @@ export interface WebhookConfig {
   mode: WebhookMode
   chatId?: string
   projectId?: string
+  provider?: AgentProvider
+  model?: string
   template: string
   createdAt: number
   updatedAt: number
@@ -35,6 +39,8 @@ export interface WebhookInput {
   mode: WebhookMode
   chatId?: string
   projectId?: string
+  provider?: AgentProvider
+  model?: string
   template: string
 }
 
@@ -44,10 +50,13 @@ export interface WebhookPatch {
   mode?: WebhookMode
   chatId?: string | null
   projectId?: string | null
+  provider?: AgentProvider | null
+  model?: string | null
   template?: string
 }
 
 export const WEBHOOK_NAME_MAX_CHARS = 80
+export const WEBHOOK_MODEL_MAX_CHARS = 200
 export const WEBHOOK_TEMPLATE_MAX_CHARS = 8000
 export const WEBHOOK_PROMPT_BODY_MAX_CHARS = 16000
 export const WEBHOOK_BODY_MAX_BYTES = 256 * 1024

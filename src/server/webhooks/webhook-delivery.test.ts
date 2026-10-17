@@ -38,6 +38,28 @@ test("inline queues the rendered prompt on the target chat under a per-delivery 
   expect(startedChats).toEqual([chat.id])
 })
 
+test("a hook with a provider and model queues its prompt under that provider and model", async () => {
+  const { store, agent, project } = await createWebhookHarness()
+  const result = await deliverWebhook(
+    store,
+    agent,
+    hook({ mode: "spawn", projectId: project.id, provider: "codex", model: "gpt-5.4" }),
+    "d6",
+    BODY,
+    10,
+  )
+  if (!result.ok) throw new Error(result.detail)
+  expect(store.getQueuedMessages(result.chatId)).toMatchObject([{ provider: "codex", model: "gpt-5.4" }])
+})
+
+test("a hook without a model queues a prompt that names no provider or model", async () => {
+  const { store, agent, chat } = await createWebhookHarness()
+  await deliverWebhook(store, agent, hook({ mode: "inline", chatId: chat.id }), "d7", BODY, 10)
+  const [queued] = store.getQueuedMessages(chat.id)
+  expect(queued.provider).toBeUndefined()
+  expect(queued.model).toBeUndefined()
+})
+
 test("spawn creates a new chat in the project holding the card and the queued prompt", async () => {
   const { store, agent, project } = await createWebhookHarness()
   const before = store.listChatsByProject(project.id).length

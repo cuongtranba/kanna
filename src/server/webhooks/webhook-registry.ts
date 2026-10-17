@@ -9,7 +9,7 @@ import {
   type WebhooksSnapshot,
   type WebhookSummary,
 } from "../../shared/webhooks/types"
-import { validateWebhookInput } from "../../shared/webhooks/validate"
+import { mergeWebhookModel, validateWebhookInput } from "../../shared/webhooks/validate"
 import { WebhookRateLimiter, type RateDecision } from "./webhook-rate-limit"
 
 export interface StoredWebhook extends WebhookConfig {
@@ -50,6 +50,7 @@ function configOf(hook: StoredWebhook): WebhookConfig {
     updatedAt: hook.updatedAt,
     ...(hook.chatId ? { chatId: hook.chatId } : {}),
     ...(hook.projectId ? { projectId: hook.projectId } : {}),
+    ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
   }
 }
 
@@ -105,6 +106,7 @@ export class WebhookRegistry {
       secret: generateWebhookSecret(),
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
+      ...(input.provider && input.model ? { provider: input.provider, model: input.model.trim() } : {}),
     }
     this.hooks.set(stored.id, stored)
     await this.persist()
@@ -173,6 +175,15 @@ export class WebhookRegistry {
     if (patch.template !== undefined) next.template = patch.template.trim()
     if (patch.chatId !== undefined) setOrClear(next, "chatId", patch.chatId)
     if (patch.projectId !== undefined) setOrClear(next, "projectId", patch.projectId)
+    if (patch.provider !== undefined || patch.model !== undefined) {
+      const { provider, model } = mergeWebhookModel(existing, patch)
+      delete next.provider
+      delete next.model
+      if (provider && model) {
+        next.provider = provider
+        next.model = model.trim()
+      }
+    }
     return next
   }
 
