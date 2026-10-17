@@ -3075,6 +3075,15 @@ unbounded chats. The JSON body reaches the model fenced, capped at 16000
 characters, under a line stating it is untrusted external data; the fence is
 lengthened past any backtick run inside the body.
 
+**A hook's optional `provider` + `model` ride the queued message, never the
+chat.** They are a pair (set or cleared together), validated on create and
+update against `providerCatalogOf` — the same catalog the chat snapshot serves —
+so an unknown model is refused instead of `normalizeServerModel` silently
+running the default. Delivery must not call `setChatModel`: an `inline` hook
+would otherwise permanently change the model the user picked for that chat.
+`parseStoredWebhook` and the WS sanitizers whitelist fields, so a new hook field
+is dropped on reload or on the wire until it is added to both.
+
 **Hook urls are reachable wherever Kanna is.** Localhost by default;
 `--remote`, `--share` and tunnels make them public, and then the secret is the
 only barrier. The client reads `webhooks` through the global subscription and

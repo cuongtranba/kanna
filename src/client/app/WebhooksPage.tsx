@@ -8,6 +8,7 @@ import { listWebhookTargets } from "../lib/webhookTargets"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
+import { useProviderCatalog } from "./useProviderCatalog"
 import { WebhookCreateDialog } from "./WebhookCreateDialog"
 import { WebhookRow } from "./WebhookRow"
 import { WebhookSecretDialog } from "./WebhookSecretDialog"
@@ -16,12 +17,12 @@ import { readCreatedWebhook, sendWebhookCommand } from "./webhookCommands"
 export function WebhooksPage() {
   const socket = useOptionalKannaSocket()
   const hooks = useWebhooksStore((state) => state.hooks)
-  const setCreateOpen = useWebhooksStore((state) => state.setCreateOpen)
+  const openCreate = useWebhooksStore((state) => state.openCreate)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
   const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const catalog = useProviderCatalog()
   const origin = domAdapter.getOrigin()
 
-  const handleOpenCreate = useCallback(() => setCreateOpen(true), [setCreateOpen])
   const handleCreate = useCallback(
     async (input: WebhookInput) => {
       const created = await sendWebhookCommand(socket, { type: "webhooks.create", input })
@@ -39,7 +40,7 @@ export function WebhooksPage() {
             Webhooks
             <span className="text-sm font-normal text-muted-foreground tabular-nums">{hooks.length}</span>
           </h1>
-          <Button size="sm" onClick={handleOpenCreate}>
+          <Button size="sm" onClick={openCreate}>
             <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
             New webhook
           </Button>
@@ -53,7 +54,7 @@ export function WebhooksPage() {
         ) : (
           <div className="mt-6 overflow-hidden rounded-2xl border border-border">
             {hooks.map((hook, index) => (
-              <WebhookRow key={hook.id} hook={hook} targets={targets} origin={origin} divider={index < hooks.length - 1} />
+              <WebhookRow key={hook.id} hook={hook} targets={targets} catalog={catalog} origin={origin} divider={index < hooks.length - 1} />
             ))}
           </div>
         )}

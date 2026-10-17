@@ -32,6 +32,7 @@ import type { SessionShareService } from "./session-share"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { BackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { LiveBlockHub } from "./live-block-throttle"
+import { catalogSourcesOf, providerCatalogOf } from "./read-models"
 import { handleBoardCommand } from "./ws-router-boards"
 import type { StartWorkResult, StartWorkView } from "../shared/boards/start-work"
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
@@ -379,7 +380,13 @@ export function createWsRouter({
       ),
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
       () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
-      () => handleWebhooksCommand(webhooks, sendToClient, command, id),
+      () => handleWebhooksCommand(
+        webhooks,
+        sendToClient,
+        command,
+        id,
+        () => providerCatalogOf(catalogSourcesOf(resolvedAppSettings.getSnapshot())),
+      ),
     ]
     for (const runHandler of handlers) {
       if (await runHandler()) return true

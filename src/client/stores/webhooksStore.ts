@@ -3,6 +3,8 @@ import type { WebhookSummary } from "../../shared/webhooks/types"
 
 const EMPTY: readonly WebhookSummary[] = []
 
+export type WebhookEditor = { mode: "create" } | { mode: "edit"; hookId: string }
+
 export interface WebhookSecretReveal {
   hookId: string
   hookName: string
@@ -12,23 +14,27 @@ export interface WebhookSecretReveal {
 interface WebhooksState {
   hooks: readonly WebhookSummary[]
   secretReveal: WebhookSecretReveal | null
-  createOpen: boolean
+  editor: WebhookEditor | null
   copiedId: string | null
   setHooks(hooks: readonly WebhookSummary[]): void
   revealSecret(reveal: WebhookSecretReveal): void
   dismissSecret(): void
-  setCreateOpen(open: boolean): void
+  openCreate(): void
+  openEdit(hookId: string): void
+  closeEditor(): void
   markCopied(copyId: string): void
 }
 
 export const useWebhooksStore = create<WebhooksState>()((set) => ({
   hooks: EMPTY,
   secretReveal: null,
-  createOpen: false,
+  editor: null,
   copiedId: null,
   setHooks: (hooks) => set({ hooks: hooks.length > 0 ? hooks : EMPTY }),
   revealSecret: (secretReveal) => set({ secretReveal }),
   dismissSecret: () => set({ secretReveal: null }),
-  setCreateOpen: (createOpen) => set({ createOpen }),
+  openCreate: () => set({ editor: { mode: "create" } }),
+  openEdit: (hookId) => set({ editor: { mode: "edit", hookId } }),
+  closeEditor: () => set({ editor: null }),
   markCopied: (copiedId) => set({ copiedId }),
 }))

@@ -1,6 +1,6 @@
 ---
 id: c3-243
-c3-seal: 53d83968bcece09477a1305f8c233df962f4efa67d386a78b86096ac0136cded
+c3-seal: 61c8471e61df6464c8701ac16fedaa969e0a487d0061fd5f304ac57c388faab1
 title: webhooks
 type: component
 category: feature
@@ -46,6 +46,7 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 | webhooks topic and commands | OUT | WebhooksSnapshot carries summaries with a four-character secretHint; create and rotateSecret return the secret once in the ack | The four webhooks commands are classified unavailable in the remote MCP command catalog so a remote client cannot mint or read a credential. | src/server/ws-router-webhooks.ts |
 | webhook_delivery transcript entry | OUT | One card per delivery with hook id, hook name, mode, delivery id and, for notify, the rendered message | Excluded from shareableEntries, so it stays private by default. | src/shared/transcript-types.ts |
 | Queued prompt | OUT | inline and spawn enqueue the rendered prompt with autoContinue scheduleId webhook-hookId-deliveryId | The body is appended in a fenced block capped at 16000 characters under a line that marks it as untrusted external data. | src/shared/webhooks/template.ts |
+| Hook model | IN/OUT | An optional provider and model pair, set or cleared together, rides the queued message so it applies to that one turn | Validated on create and update against the same provider catalog the chat snapshot serves; an unknown model is refused, never silently replaced. Delivery never calls setChatModel, so an inline hook does not change the chat's own model. | src/shared/webhooks/validate.ts |
 
 ## Derived Materials
 

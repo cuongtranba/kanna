@@ -29,6 +29,8 @@ export async function createWebhookHarness(options: { enabled?: boolean; now?: (
         content,
         attachments,
         autoContinue: sendOptions?.autoContinue,
+        provider: sendOptions?.provider,
+        model: sendOptions?.model,
       }),
     maybeStartNextQueuedMessage: async (chatId) => {
       startedChats.push(chatId)

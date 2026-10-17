@@ -1,4 +1,7 @@
+import type { AgentProvider } from "../core-types"
+import type { ProviderCatalogEntry } from "../provider-model-types"
 import {
+  WEBHOOK_MODEL_MAX_CHARS,
   WEBHOOK_MODES,
   WEBHOOK_NAME_MAX_CHARS,
   WEBHOOK_TEMPLATE_MAX_CHARS,
@@ -10,6 +13,11 @@ export interface WebhookTargetFields {
   mode: WebhookMode
   chatId?: string | null
   projectId?: string | null
+}
+
+export interface WebhookModelFields {
+  provider?: AgentProvider | null
+  model?: string | null
 }
 
 export function isWebhookMode(value: string): value is WebhookMode {
@@ -35,4 +43,31 @@ export function validateWebhookInput(input: WebhookInput): string[] {
     errors.push(`Template must be at most ${WEBHOOK_TEMPLATE_MAX_CHARS} characters`)
   }
   return errors
+}
+
+export function mergeWebhookModel(existing: WebhookModelFields, patch: WebhookModelFields): WebhookModelFields {
+  if (patch.provider === null || patch.model === null) return {}
+  return {
+    provider: patch.provider ?? existing.provider,
+    model: patch.model ?? existing.model,
+  }
+}
+
+export function validateWebhookModel(
+  fields: WebhookModelFields,
+  catalog: readonly ProviderCatalogEntry[],
+): string[] {
+  const provider = fields.provider ?? undefined
+  const model = fields.model?.trim() || undefined
+  if (provider === undefined && model === undefined) return []
+  if (provider === undefined || model === undefined) return ["Provider and model must be set together"]
+  const entry = catalog.find((candidate) => candidate.id === provider)
+  if (!entry) return [`Provider ${provider} is not available`]
+  if (provider === "openrouter") {
+    return model.length > WEBHOOK_MODEL_MAX_CHARS
+      ? [`Model must be at most ${WEBHOOK_MODEL_MAX_CHARS} characters`]
+      : []
+  }
+  if (!entry.models.some((option) => option.id === model)) return [`Model ${model} is not available for ${provider}`]
+  return []
 }

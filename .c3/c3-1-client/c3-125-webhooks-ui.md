@@ -1,6 +1,6 @@
 ---
 id: c3-125
-c3-seal: e829ca542bcb8749840e22a5587fc0b8287c4c2dabbdd4cf3ef43463ff5e5cd5
+c3-seal: 19e0df4ca5e245ccb9e0909983c6233095769f0023d600f07920dd702f0ac4be
 title: webhooks-ui
 type: component
 category: feature
@@ -27,13 +27,13 @@ Render the inbound webhook feature in the client: a Webhooks page opened as a wo
 
 ## Purpose
 
-Lets the user create hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. It also renders the webhook_delivery card with the hook name, mode and delivery id. Non-goals: it never stores a secret after the dialog closes and does not compute signatures.
+Lets the user create and edit hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data through a searchable picker that also matches the project path, choose an optional model for inline and spawn hooks, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. It also renders the webhook_delivery card with the hook name, mode and delivery id. Non-goals: it never stores a secret after the dialog closes and does not compute signatures.
 
 ## Governance
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
-| ref-zustand-store | ref | webhooksStore holds hooks, the one-time secret reveal and the create dialog flag; selectors return the module-level EMPTY list | Mandatory | The form draft lives in a scoped store, not in useState. |
+| ref-zustand-store | ref | webhooksStore holds hooks, the one-time secret reveal and the editor state; selectors return the module-level EMPTY list | Mandatory | The form draft lives in a scoped store, not in useState. |
 | rule-zustand-store | rule | State transitions are named store actions; JSX attributes call stable callbacks | Mandatory | The ast-grep rules fail an inline state updater in a JSX attribute. |
 | ref-ws-subscription | ref | The webhooks topic is subscribed once in useAppGlobalState next to cron-jobs | Mandatory | The snapshot never contains a secret. |
 | adr-20261013-pages-as-workspace-tabs | adr | The page is a PageKind webhooks tab resolved by pageTabs.ts and rendered by PageTabContent | Mandatory | No standalone route; App.tsx mounts WorkspacePage for /webhooks. |
@@ -59,7 +59,7 @@ Lets the user create hooks in notify, inline or spawn mode, pick a target chat o
 | --- | --- | --- |
 | Precondition | The socket is connected and the webhooks topic has delivered a snapshot | N.A - no governing entity |
 | Input | User actions on the page and the webhooks snapshot | N.A - no governing entity |
-| State | hooks, secretReveal, createOpen and copiedId in webhooksStore; the create form draft in WebhookCreateStore | N.A - no governing entity |
+| State | hooks, secretReveal, editor (create, or edit with a hook id) and copiedId in webhooksStore; the create or edit form draft in WebhookCreateStore | N.A - no governing entity |
 | Shared dependency | sidebarData from kannaStateStore supplies the chat and project pickers | N.A - no governing entity |
 
 ## Business Flow

@@ -1,11 +1,12 @@
 import { useCallback } from "react"
-import { RefreshCw, Trash2 } from "lucide-react"
+import { Pencil, RefreshCw, Trash2 } from "lucide-react"
+import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
 import type { WebhookSummary } from "../../shared/webhooks/types"
 import { useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
 import { describeLastDelivery, webhookModeLabel, webhookUrl } from "../lib/webhookPresentation"
-import { describeWebhookTarget, type WebhookTargets } from "../lib/webhookTargets"
+import { describeWebhookModel, describeWebhookTarget, type WebhookTargets } from "../lib/webhookTargets"
 import { cn } from "../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
@@ -16,11 +17,12 @@ import { readRevealedSecret, sendWebhookCommand } from "./webhookCommands"
 interface Props {
   hook: WebhookSummary
   targets: WebhookTargets
+  catalog: readonly ProviderCatalogEntry[]
   origin: string
   divider: boolean
 }
 
-export function WebhookRow({ hook, targets, origin, divider }: Props) {
+export function WebhookRow({ hook, targets, catalog, origin, divider }: Props) {
   const socket = useOptionalKannaSocket()
   const dialog = useAppDialog()
   const url = webhookUrl(origin, hook.id)
@@ -30,6 +32,11 @@ export function WebhookRow({ hook, targets, origin, divider }: Props) {
   const togglePending = usePendingAction(toggleKey)
   const rotatePending = usePendingAction(rotateKey)
   const deletePending = usePendingAction(deleteKey)
+
+  const openEdit = useWebhooksStore((state) => state.openEdit)
+  const handleEdit = useCallback(() => openEdit(hook.id), [hook.id, openEdit])
+  const modelLabel = describeWebhookModel(hook, catalog)
+  const targetLine = modelLabel ? `${describeWebhookTarget(hook, targets)} · ${modelLabel}` : describeWebhookTarget(hook, targets)
 
   const handleToggle = useCallback(() => {
     runPendingAction(toggleKey, async () => {
@@ -71,7 +78,7 @@ export function WebhookRow({ hook, targets, origin, divider }: Props) {
           <span className="text-xs text-muted-foreground">{webhookModeLabel(hook.mode)}</span>
           {hook.enabled ? null : <span className="text-xs font-medium text-muted-foreground">Disabled</span>}
         </div>
-        <div className="truncate text-xs text-muted-foreground">{describeWebhookTarget(hook, targets)}</div>
+        <div className="truncate text-xs text-muted-foreground">{targetLine}</div>
         <div className="flex items-center gap-1">
           <code className="min-w-0 truncate font-mono text-xs text-foreground">{url}</code>
           <WebhookCopyButton copyId={hook.id} text={url} label="Copy webhook url" />
@@ -84,6 +91,11 @@ export function WebhookRow({ hook, targets, origin, divider }: Props) {
         <Button variant="secondary" size="sm" pending={togglePending} onClick={handleToggle}>
           {hook.enabled ? "Disable" : "Enable"}
         </Button>
+        <HoverHint label="Edit webhook" side="top">
+          <Button variant="ghost" size="icon-sm" aria-label={`Edit ${hook.name}`} onClick={handleEdit}>
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
+        </HoverHint>
         <HoverHint label="Rotate secret" side="top">
           <Button variant="ghost" size="icon-sm" aria-label={`Rotate secret for ${hook.name}`} pending={rotatePending} onClick={handleRotate}>
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />

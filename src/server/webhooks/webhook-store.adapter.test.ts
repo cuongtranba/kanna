@@ -35,6 +35,13 @@ test("hooks and their secrets survive a reload", async () => {
   expect(await createFileWebhookStore(dir).load()).toEqual([HOOK])
 })
 
+test("a hook's provider and model survive a reload", async () => {
+  const dir = await tempDir()
+  const withModel: StoredWebhook = { ...HOOK, mode: "inline", provider: "codex", model: "gpt-5.4" }
+  await createFileWebhookStore(dir).save([withModel])
+  expect(await createFileWebhookStore(dir).load()).toEqual([withModel])
+})
+
 test("a missing or corrupt file loads as no hooks", async () => {
   const dir = await tempDir()
   expect(await createFileWebhookStore(dir).load()).toEqual([])

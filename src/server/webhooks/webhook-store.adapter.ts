@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
+import { isAgentProvider } from "../../shared/types"
 import { isWebhookMode } from "../../shared/webhooks/validate"
 import type { StoredWebhook, WebhookStorePort } from "./webhook-registry"
 
@@ -19,6 +20,8 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   if (typeof enabled !== "boolean" || typeof createdAt !== "number" || typeof updatedAt !== "number") return null
   const chatId = optionalString(value.chatId)
   const projectId = optionalString(value.projectId)
+  const provider = typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined
+  const model = optionalString(value.model)
   return {
     id,
     name,
@@ -30,6 +33,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     updatedAt,
     ...(chatId ? { chatId } : {}),
     ...(projectId ? { projectId } : {}),
+    ...(provider && model ? { provider, model } : {}),
   }
 }
 
