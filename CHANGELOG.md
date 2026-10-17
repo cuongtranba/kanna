@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.81.0](https://github.com/cuongtranba/kanna/compare/v1.80.0...v1.81.0) (2026-10-17)
+
+
+### Features
+
+* **webhooks:** searchable project and chat picker, and a per-hook model ([#1304](https://github.com/cuongtranba/kanna/issues/1304)) ([ec6b933](https://github.com/cuongtranba/kanna/commit/ec6b933fcaa2f8dc144856ae6d881e1bcb6a640b))
+
 ## [1.80.0](https://github.com/cuongtranba/kanna/compare/v1.79.1...v1.80.0) (2026-10-16)
 
 
