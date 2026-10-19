@@ -162,6 +162,11 @@ export interface GenerateStructuredArgs {
   serviceTier?: ServiceTier
 }
 
+function notificationThreadId(notification: ServerNotification): string | null {
+  if (notification.method === "thread/started") return notification.params.thread.id
+  return notification.params.threadId ?? null
+}
+
 function isRecoverableResumeError(error: Error): boolean {
   const message = sharedErrorMessage(error).toLowerCase()
   if (!message.includes("thread/resume")) return false
@@ -706,6 +711,9 @@ export class CodexAppServerManager {
   }
 
   private async handleNotification(context: SessionContext, notification: ServerNotification) {
+    const threadId = notificationThreadId(notification)
+    if (context.sessionToken && threadId && threadId !== context.sessionToken) return
+
     if (notification.method === "thread/started") {
       context.sessionToken = notification.params.thread.id
       if (context.pendingTurn) {
