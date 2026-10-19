@@ -204,6 +204,29 @@ describe("startTurnForChat", () => {
     expect(deps.startClaudeTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
   })
 
+  test("names a chat whose only prior entry is a webhook delivery card", async () => {
+    const deliveryCard: TranscriptEntry = {
+      _id: "entry-1",
+      createdAt: 1,
+      kind: "webhook_delivery",
+      hookId: "hook-1",
+      hookName: "Issue assigned",
+      mode: "spawn",
+      deliveryId: "delivery-1",
+    }
+    const deps = makeDeps()
+    const freshChat = deps.store.requireChat("chat-1")
+    deps.store.requireChat = () => ({ ...freshChat, hasMessages: true })
+    deps.store.getRecentRawEntries = () => [deliveryCard]
+
+    await startTurnForChat(deps, makeArgs({ content: "fix the assigned bug" }))
+
+    const renameCalls = (deps.store.renameChat as ReturnType<typeof mock>).mock.calls
+    expect(renameCalls).toHaveLength(1)
+    expect(renameCalls[0][0]).toBe("chat-1")
+    expect(renameCalls[0][1]).not.toBe("New Chat")
+  })
+
   describe("9b. Codex developer_instructions carry the stack", () => {
     function depsForBindings(stackBindings?: unknown) {
       const deps = makeDeps()
