@@ -2866,3 +2866,134 @@ describe("CodexAppServerManager retryable error notifications", () => {
     expect(results[0].entry.isError).toBe(true)
   })
 })
+
+describe("CodexAppServerManager child thread notifications", () => {
+  const MAIN_THREAD = "thread-main"
+  const CHILD_THREAD = "thread-2"
+
+  function buildProcess(onTurnStart: (message: any, child: FakeCodexProcess, turnNumber: number) => void) {
+    let turnNumber = 0
+    return new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: MAIN_THREAD }, model: "gpt-5.6-sol", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        turnNumber += 1
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: `turn-${turnNumber}`, status: "inProgress", error: null } },
+        })
+        onTurnStart(message, child, turnNumber)
+      }
+    })
+  }
+
+  async function startManager(process: FakeCodexProcess) {
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({
+      chatId: "chat-child",
+      cwd: "/tmp/project",
+      model: "gpt-5.6-sol",
+      sessionToken: null,
+    })
+    return manager
+  }
+
+  function startTurn(manager: CodexAppServerManager) {
+    return manager.startTurn({
+      chatId: "chat-child",
+      model: "gpt-5.6-sol",
+      content: "Hello",
+      planMode: false,
+      onToolRequest: async () => ({}),
+    })
+  }
+
+  function agentMessage(threadId: string, id: string, text: string) {
+    return {
+      method: "item/completed",
+      params: {
+        threadId,
+        turnId: "turn-1",
+        item: { type: "agentMessage", id, text, phase: "final_answer" },
+      },
+    }
+  }
+
+  function turnCompleted(threadId: string) {
+    return {
+      method: "turn/completed",
+      params: { threadId, turn: { id: "turn-1", status: "completed", error: null } },
+    }
+  }
+
+  test("a sub-agent thread's final answer and turn/completed do not end the main turn or enter its transcript", async () => {
+    const process = buildProcess((_message, child) => {
+      child.writeServerMessage(agentMessage(CHILD_THREAD, "child-msg", "child answer"))
+      child.writeServerMessage(turnCompleted(CHILD_THREAD))
+      child.writeServerMessage(agentMessage(MAIN_THREAD, "main-msg", "main answer"))
+      child.writeServerMessage(turnCompleted(MAIN_THREAD))
+    })
+    const manager = await startManager(process)
+
+    const events = await collectStream((await startTurn(manager)).stream)
+    const entries = events.filter((event: any) => event.type === "transcript").map((event: any) => event.entry)
+    const texts = entries.filter((entry: any) => entry.kind === "assistant_text").map((entry: any) => entry.text)
+    const results = entries.filter((entry: any) => entry.kind === "result")
+
+    expect(texts).toEqual(["main answer"])
+    expect(results).toHaveLength(1)
+    expect(results[0].subtype).toBe("success")
+  })
+
+  test("a sub-agent thread's error does not fail the main turn", async () => {
+    const process = buildProcess((_message, child) => {
+      child.writeServerMessage({
+        method: "error",
+        params: {
+          error: { message: "child failed", codexErrorInfo: "internalServerError" },
+          willRetry: false,
+          threadId: CHILD_THREAD,
+          turnId: "turn-child",
+        },
+      })
+      child.writeServerMessage(agentMessage(MAIN_THREAD, "main-msg", "main answer"))
+      child.writeServerMessage(turnCompleted(MAIN_THREAD))
+    })
+    const manager = await startManager(process)
+
+    const events = await collectStream((await startTurn(manager)).stream)
+    const results = events
+      .filter((event: any) => event.type === "transcript" && event.entry.kind === "result")
+      .map((event: any) => event.entry)
+
+    expect(results).toHaveLength(1)
+    expect(results[0].subtype).toBe("success")
+    expect(results[0].isError).toBe(false)
+  })
+
+  test("a sub-agent thread/started does not redirect the next turn/start away from the main thread", async () => {
+    const process = buildProcess((_message, child, turnNumber) => {
+      if (turnNumber === 1) {
+        child.writeServerMessage({
+          method: "thread/started",
+          params: { thread: { id: CHILD_THREAD } },
+        })
+      }
+      child.writeServerMessage(turnCompleted(MAIN_THREAD))
+    })
+    const manager = await startManager(process)
+
+    await collectStream((await startTurn(manager)).stream)
+    await collectStream((await startTurn(manager)).stream)
+
+    const turnStartThreadIds = process.messages
+      .filter((message: any) => message.method === "turn/start")
+      .map((message: any) => message.params.threadId)
+    expect(turnStartThreadIds).toEqual([MAIN_THREAD, MAIN_THREAD])
+  })
+})
