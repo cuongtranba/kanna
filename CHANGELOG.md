@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.81.1](https://github.com/cuongtranba/kanna/compare/v1.81.0...v1.81.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **codex:** ignore sub-agent thread notifications on the main turn ([#1309](https://github.com/cuongtranba/kanna/issues/1309)) ([95938ba](https://github.com/cuongtranba/kanna/commit/95938ba1193ce6771e494de7d27ea9d362859899)), closes [#1308](https://github.com/cuongtranba/kanna/issues/1308)
+
 ## [1.81.0](https://github.com/cuongtranba/kanna/compare/v1.80.0...v1.81.0) (2026-10-17)
 
 
