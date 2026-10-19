@@ -1,6 +1,8 @@
 
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import { cardActorOfOrigin } from "../shared/boards/actor"
+import type { CommandOrigin } from "../shared/command-origin"
 import type { BoardColumn, CardActor } from "../shared/boards/types"
 import { columnForRemoteState } from "../shared/boards/types"
 import { decodeContentForFields, decodeFieldDefsForWrite } from "../shared/boards/decode"
@@ -14,8 +16,6 @@ import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/work
 import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import { errorMessage } from "../shared/errors"
 
-const USER: CardActor = { kind: "user" }
-
 export interface BoardCommandDeps {
   boardRegistry: BoardRegistry | undefined
   boardSync: BoardSync | undefined
@@ -25,6 +25,7 @@ export interface BoardCommandDeps {
   resolveCleanup: ((cardId: string, decision: CleanupDecision) => Promise<WorktreeCleanupOutcome>) | undefined
   suggestSyncRepos: ((boardId: string) => Promise<readonly RepoSuggestion[]>) | undefined
   send: (envelope: ServerEnvelope) => void
+  origin?: CommandOrigin
 }
 
 const BOARD_COMMAND_TYPES = [
@@ -76,8 +77,10 @@ export async function handleBoardCommand(
     resolveCleanup,
     suggestSyncRepos,
     send,
+    origin,
   } = deps
   if (!isBoardCommand(command)) return false
+  const actor = cardActorOfOrigin(origin)
 
   if (!boardRegistry) {
     send({ v: PROTOCOL_VERSION, type: "error", id, message: "Boards are not available on this server." })
@@ -121,7 +124,7 @@ export async function handleBoardCommand(
     if (command.type.startsWith("board.sync.")) {
       return await dispatchSync(boardRegistry, boardSync, suggestSyncRepos, send, command, id)
     }
-    return dispatch(boardRegistry, send, command, id)
+    return dispatch(boardRegistry, send, actor, command, id)
   } catch (error) {
     if (error instanceof BoardStoreError) {
       send({ v: PROTOCOL_VERSION, type: "error", id, message: error.message })
@@ -198,6 +201,7 @@ async function dispatchSync(
 function dispatch(
   registry: BoardRegistry,
   send: (envelope: ServerEnvelope) => void,
+  actor: CardActor,
   command: ClientCommand,
   id: string,
 ): boolean {
@@ -300,7 +304,7 @@ function dispatch(
         title: command.title,
         projectId: command.projectId ?? null,
         afterCardId: command.afterCardId ?? null,
-        actor: USER,
+        actor,
       })
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
       return true
@@ -312,14 +316,14 @@ function dispatch(
         toColumnId: command.toColumnId,
         aboveCardId: command.aboveCardId,
         belowCardId: command.belowCardId,
-        actor: USER,
+        actor,
       })
       send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
       return true
     }
 
     case "board.card.archive": {
-      registry.archiveCard(command.cardId, USER)
+      registry.archiveCard(command.cardId, actor)
       send({ v: PROTOCOL_VERSION, type: "ack", id })
       return true
     }
@@ -329,7 +333,7 @@ function dispatch(
         v: PROTOCOL_VERSION,
         type: "ack",
         id,
-        result: registry.addComment(command.cardId, USER, command.body),
+        result: registry.addComment(command.cardId, actor, command.body),
       })
       return true
     }
@@ -369,7 +373,7 @@ function dispatch(
         patch.content = content
       }
 
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateCard(command.cardId, patch, USER) })
+      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateCard(command.cardId, patch, actor) })
       return true
     }
 

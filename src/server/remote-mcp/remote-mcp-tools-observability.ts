@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -6,8 +6,8 @@ import { commandResult } from "./remote-mcp-views"
 
 const chatIdField = z.string().describe("Id of the chat")
 
-export function registerObservabilityTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerObservabilityTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "list_workflows",
     {
       title: "List workflow runs",
@@ -18,7 +18,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     ({ chatId }) => envelopeToToolResult(host.readSnapshot({ type: "workflows", chatId })),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "get_workflow_run",
     {
       title: "Read a workflow run",
@@ -29,7 +29,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     ({ chatId, runId }) => commandResult(host, { type: "workflows.getRun", chatId, runId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "get_subagent_run",
     {
       title: "Read a subagent run",
@@ -40,7 +40,7 @@ export function registerObservabilityTools(server: McpServer, host: RemoteMcpHos
     ({ chatId, agentId }) => commandResult(host, { type: "subagents.getRun", chatId, agentId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "get_background_task_output",
     {
       title: "Read background task output",

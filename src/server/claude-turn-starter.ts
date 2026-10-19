@@ -177,6 +177,7 @@ async function startTurnForChatInner(
         attachments: args.attachments,
         steered: args.steered,
         autoContinue: args.autoContinue,
+        ...(args.origin ? { origin: args.origin } : {}),
         ...(subagentMentions.length > 0 ? { subagentMentions } : {}),
         ...(unknownSubagentMentions.length > 0 ? { unknownSubagentMentions } : {}),
         ...(args.expandedCommand ? { expandedCommand: args.expandedCommand } : {}),

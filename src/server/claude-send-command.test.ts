@@ -11,6 +11,7 @@ import {
   sendCommand,
   type SendCommandDeps,
 } from "./claude-send-command"
+import type { CommandOrigin } from "../shared/command-origin"
 import type { QueuedChatMessage, ChatAttachment, CustomModelEntry, TranscriptEntry } from "../shared/types"
 import type { ChatProviderPreferences, ModelOptions } from "../shared/provider-model-types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
@@ -93,7 +94,7 @@ type DepsOptions = {
   stopLoopCalled?: string[]
   emitStateCalled?: string[]
   startTurnCalled?: StartTurnForChatArgs[]
-  enqueuedMessages?: Array<{ chatId: string; content: string }>
+  enqueuedMessages?: Array<{ chatId: string; content: string; origin?: CommandOrigin }>
   removedMessages?: Array<{ chatId: string; id: string }>
   createdChats?: string[]
   analyticsEvents?: string[]
@@ -152,8 +153,9 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
           modelOptions: msg.modelOptions,
           planMode: msg.planMode,
           autoContinue: msg.autoContinue,
+          origin: msg.origin,
         }
-        enqueuedMessages.push({ chatId, content: msg.content })
+        enqueuedMessages.push({ chatId, content: msg.content, origin: msg.origin })
         return queued
       },
       removeQueuedMessage: async (chatId: string, id: string) => {
@@ -590,6 +592,31 @@ describe("sendCommand", () => {
     } as Parameters<typeof sendCommand>[1])
     expect(result.queued).toBe(true)
     expect(d.startTurnCalled.length).toBe(0)
+  })
+
+  describe("origin", () => {
+    const ORIGIN: CommandOrigin = { kind: "remote_mcp", clientId: "client-1", clientName: "ChatGPT", via: "oauth", tool: "send_message", callId: "call-1" }
+
+    test("a message sent to an idle chat starts its turn labelled with where it came from", async () => {
+      await sendCommand(deps, { type: "chat.send", content: "start now", chatId: "chat-1", origin: ORIGIN })
+      expect(deps.startTurnCalled[0]?.origin).toEqual(ORIGIN)
+    })
+
+    test("a message sent to a busy chat is queued with its origin, and the origin survives the dequeue", async () => {
+      const enqueuedMessages: Array<{ chatId: string; content: string; origin?: CommandOrigin }> = []
+      const busy = makeDeps({ activeChatIds: ["chat-1"], chatProvider: "claude", enqueuedMessages })
+      await sendCommand(busy, { type: "chat.send", content: "later", chatId: "chat-1", origin: ORIGIN })
+      expect(enqueuedMessages[0]?.origin).toEqual(ORIGIN)
+
+      const idle = makeDeps({ chatProvider: "claude" })
+      await dequeueAndStartQueuedMessage(idle, "chat-1", makeQueuedMessage({ content: "later", origin: ORIGIN }))
+      expect(idle.startTurnCalled[0]?.origin).toEqual(ORIGIN)
+    })
+
+    test("a message typed in the app carries no origin", async () => {
+      await sendCommand(deps, { type: "chat.send", content: "start now", chatId: "chat-1" })
+      expect(deps.startTurnCalled[0]?.origin).toBeUndefined()
+    })
   })
 
   test("starts a turn directly when idle", async () => {

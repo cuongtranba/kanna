@@ -243,6 +243,13 @@ export function decodeActor(value: JsonValue): CardActor {
   if (value.kind === "sync" && typeof value.providerId === "string") {
     return { kind: "sync", providerId: value.providerId }
   }
+  if (value.kind === "remote_mcp" && typeof value.clientId === "string") {
+    return {
+      kind: "remote_mcp",
+      clientId: value.clientId,
+      ...(typeof value.clientName === "string" ? { clientName: value.clientName } : {}),
+    }
+  }
   return { kind: "user" }
 }
 

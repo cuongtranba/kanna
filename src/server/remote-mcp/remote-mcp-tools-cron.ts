@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -7,18 +7,19 @@ import { commandResult } from "./remote-mcp-views"
 const chatIdField = z.string().describe("Id of the chat that owns the cron job")
 const jobIdField = z.string().describe("Id of the cron job")
 
-export function registerCronTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerCronTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "list_cron_jobs",
     {
       title: "List cron jobs",
+      inputSchema: z.object({}),
       description: "List every cron job across all projects with its schedule, state and next fire time.",
       annotations: { readOnlyHint: true },
     },
     () => envelopeToToolResult(host.readSnapshot({ type: "cron-jobs" })),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "pause_cron_job",
     {
       title: "Pause a cron job",
@@ -28,7 +29,7 @@ export function registerCronTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId, jobId }) => commandResult(host, { type: "cron.pause", chatId, jobId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "resume_cron_job",
     {
       title: "Resume a cron job",
@@ -38,7 +39,7 @@ export function registerCronTools(server: McpServer, host: RemoteMcpHost): void 
     ({ chatId, jobId }) => commandResult(host, { type: "cron.resume", chatId, jobId }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "remove_cron_job",
     {
       title: "Remove a cron job",

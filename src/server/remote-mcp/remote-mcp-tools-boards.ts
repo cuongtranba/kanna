@@ -1,11 +1,11 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
 import { commandResult } from "./remote-mcp-views"
 
-export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerBoardTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "list_boards",
     {
       title: "List boards",
@@ -16,7 +16,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     ({ projectId }) => envelopeToToolResult(host.readSnapshot({ type: "boards", ownerKind: "project", ownerId: projectId })),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "get_board",
     {
       title: "Read a board",
@@ -27,7 +27,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     ({ boardId }) => envelopeToToolResult(host.readSnapshot({ type: "board", boardId })),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "create_card",
     {
       title: "Create a card",
@@ -41,7 +41,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     ({ boardId, columnId, title }) => commandResult(host, { type: "board.card.create", boardId, columnId, title }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "move_card",
     {
       title: "Move a card",
@@ -55,7 +55,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
       commandResult(host, { type: "board.card.move", cardId, toColumnId, aboveCardId: null, belowCardId: null }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "comment_card",
     {
       title: "Comment on a card",
@@ -68,7 +68,7 @@ export function registerBoardTools(server: McpServer, host: RemoteMcpHost): void
     ({ cardId, body }) => commandResult(host, { type: "board.card.comment", cardId, body }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "start_work_on_card",
     {
       title: "Start work on a card",

@@ -79,6 +79,7 @@ export type CardActor =
   | { kind: "user" }
   | { kind: "agent"; chatId: string }
   | { kind: "sync"; providerId: string }
+  | { kind: "remote_mcp"; clientId: string; clientName?: string }
 
 export interface Card {
   id: string

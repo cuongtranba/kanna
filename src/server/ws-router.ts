@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import type { CommandOrigin } from "../shared/command-origin"
 import { safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
@@ -10,6 +11,7 @@ import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import type { AppSettingsManager } from "./app-settings"
 import type { DiscoveredProject } from "./discovery.adapter"
+import { stampCommandOrigin } from "./command-origin-stamp"
 import { DiffStore } from "./diff-store"
 import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
@@ -286,9 +288,10 @@ export function createWsRouter({
 
   async function routeCommand(
     ws: CommandConnection,
-    command: ClientCommand,
+    received: ClientCommand,
     id: string,
   ): Promise<boolean> {
+    const command = stampCommandOrigin(received, ws.data.commandOrigin)
     const sendToClient = (envelope: ServerEnvelope) => send(ws, envelope)
     const handlers: readonly (() => Promise<boolean> | boolean)[] = [
       () => handleChatCommand(buildChatDeps(ws), command, id),
@@ -329,6 +332,7 @@ export function createWsRouter({
           resolveCleanup,
           suggestSyncRepos,
           send: sendToClient,
+          origin: ws.data.commandOrigin,
         },
         command,
         id,
@@ -430,11 +434,11 @@ export function createWsRouter({
     return { v: PROTOCOL_VERSION, type: "error", id, message: messageText }
   }
 
-  async function dispatchCommand(command: ClientCommand): Promise<ServerEnvelope> {
+  async function dispatchCommand(command: ClientCommand, origin?: CommandOrigin): Promise<ServerEnvelope> {
     const id = randomUUID()
     const captured: ServerEnvelope[] = []
     const connection: CommandConnection = {
-      data: { subscriptions: new Map(), snapshotSignatures: new Map(), originHost: "" },
+      data: { subscriptions: new Map(), snapshotSignatures: new Map(), originHost: "", commandOrigin: origin },
       send(payload) {
         const parsed: JsonValue | null = safeJsonParse(payload)
         if (parsed !== null && isServerEnvelope(parsed)) captured.push(parsed)

@@ -712,6 +712,8 @@ c3-242:
   - src/shared/settings/remote-mcp.test.ts
   - src/server/better-auth-oauth.adapter.ts
   - src/server/project-file-path.ts
+  - src/shared/command-origin.ts
+  - src/server/command-origin-stamp.ts
 c3-124:
   - src/client/components/settings/RemoteMcpSection.tsx
   - src/client/components/settings/RemoteMcpSection.test.tsx

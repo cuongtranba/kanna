@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react"
+import { originDetail, originLabel, type CommandOrigin } from "../../../shared/command-origin"
 import type { ChatAttachment, SlashCommandKind } from "../../../shared/types"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { classifyAttachmentPreview } from "./attachmentPreview"
@@ -6,6 +7,7 @@ import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment, type PreviewSource } from "./file-preview/types"
 import { Zap } from "lucide-react"
+import { HoverHint } from "../ui/truncated-text"
 import { useTranscriptRenderOptions } from "./render-context"
 import { UserMessageStore } from "./UserMessage.store"
 import type { DomPort } from "../../ports/domPort"
@@ -21,6 +23,7 @@ interface Props {
   steered?: boolean
   autoContinue?: { scheduleId: string }
   expandedCommand?: { name: string; kind: SlashCommandKind }
+  origin?: CommandOrigin
   ports?: UserMessagePorts
 }
 
@@ -36,7 +39,7 @@ function parseSystemMessage(content: string) {
   }
 }
 
-function UserMessageInner({ content, attachments = [], steered = false, autoContinue, expandedCommand, ports }: Props) {
+function UserMessageInner({ content, attachments = [], steered = false, autoContinue, expandedCommand, origin, ports }: Props) {
   const dom = ports?.dom ?? domAdapter
   const selectedAttachmentId = UserMessageStore.useScopedStore((s) => s.selectedAttachmentId)
   const setSelectedAttachmentId = UserMessageStore.useScopedStore((s) => s.setSelectedAttachmentId)
@@ -111,6 +114,11 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
             ran the <span className="font-mono">{expandedCommand.name}</span> {expandedCommand.kind}
           </span>
         ) : null}
+        {origin ? (
+          <HoverHint label={originDetail(origin)}>
+            <span className="text-xs text-muted-foreground opacity-70">via {originLabel(origin)}</span>
+          </HoverHint>
+        ) : null}
         {autoContinue ? (
           <span className="text-xs text-muted-foreground opacity-70">auto-sent</span>
         ) : null}
@@ -124,7 +132,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
   )
 }
 
-export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, expandedCommand, ports }: Props) => {
+export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, expandedCommand, origin, ports }: Props) => {
   return (
     <UserMessageStore.Provider init={undefined}>
       <UserMessageInner
@@ -133,6 +141,7 @@ export const UserMessage = memo(({ content, attachments = [], steered = false, a
         steered={steered}
         autoContinue={autoContinue}
         expandedCommand={expandedCommand}
+        origin={origin}
         ports={ports}
       />
     </UserMessageStore.Provider>

@@ -7,6 +7,7 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import type { BeaconConfig } from "../shared/beacon-config"
+import type { CommandOrigin } from "../shared/command-origin"
 import type { CronRunTag } from "../shared/cron/types"
 import type { JsonValue } from "../shared/json"
 import type { KannaSystemPromptOptions, SkillRosterEntry } from "../shared/kanna-system-prompt"
@@ -77,6 +78,7 @@ export interface StartTurnForChatArgs {
   steered?: boolean
   autoContinue?: { scheduleId: string }
   cronRun?: CronRunTag
+  origin?: CommandOrigin
   userClearedContext?: boolean
   profile?: SendToStartingProfile | null
   promptOverride?: string

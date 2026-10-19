@@ -134,7 +134,7 @@ export function createHttpDispatcher(
     const webhookResponse = await handleWebhookRequest(req, url, webhooks)
     if (webhookResponse) return webhookResponse
 
-    const remoteMcpResponse = await remoteMcp.handle(req, url, server.requestIP(req)?.address ?? null)
+    const remoteMcpResponse = await remoteMcp.handle(req, url, server.requestIP(req)?.address ?? null, (seconds) => server.timeout(req, seconds))
     if (remoteMcpResponse) return remoteMcpResponse
 
     if (auth) {

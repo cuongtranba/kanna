@@ -8,3 +8,5 @@ code:
   - src/shared/settings/remote-mcp.test.ts
   - src/server/better-auth-oauth.adapter.ts
   - src/server/project-file-path.ts
+  - src/shared/command-origin.ts
+  - src/server/command-origin-stamp.ts

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import type { JsonObject } from "../../shared/json"
 import { fail } from "../kanna-mcp-tool"
@@ -46,11 +46,12 @@ function chatHit(chat: ChatRow, projectTitle: string): SearchHit {
   }
 }
 
-export function registerProjectTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerProjectTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "list_projects",
     {
       title: "List projects",
+      inputSchema: z.object({}),
       description: "List the projects in the Kanna sidebar with their ids, paths and chat counts, plus any stacks.",
       annotations: { readOnlyHint: true },
     },
@@ -61,7 +62,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "open_project",
     {
       title: "Open a project",
@@ -71,7 +72,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     ({ localPath }) => commandResult(host, { type: "project.open", localPath }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "create_project",
     {
       title: "Create a project",
@@ -84,7 +85,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     ({ localPath, title }) => commandResult(host, { type: "project.create", localPath, title }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "list_chats",
     {
       title: "List chats",
@@ -102,7 +103,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "search",
     {
       title: "Search chats and projects",
@@ -125,7 +126,7 @@ export function registerProjectTools(server: McpServer, host: RemoteMcpHost): vo
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "fetch",
     {
       title: "Fetch a chat or project",

@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/server"
+import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { jsonObjectSchema } from "../../shared/genui/json-schema"
 import { isJsonObject, type JsonValue } from "../../shared/json"
@@ -12,11 +12,12 @@ function isSettingsPatchShape(value: JsonValue): value is JsonValue & AppSetting
   return isJsonObject(value)
 }
 
-export function registerSettingsTools(server: McpServer, host: RemoteMcpHost): void {
-  server.registerTool(
+export function registerSettingsTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
+  tools.registerTool(
     "read_app_settings",
     {
       title: "Read app settings",
+      inputSchema: z.object({}),
       description: "Read Kanna's application settings. Values that look like secrets (API keys, tokens, passwords, env and headers) are redacted.",
       annotations: { readOnlyHint: true },
     },
@@ -26,7 +27,7 @@ export function registerSettingsTools(server: McpServer, host: RemoteMcpHost): v
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "patch_app_settings",
     {
       title: "Patch app settings",
@@ -40,10 +41,11 @@ export function registerSettingsTools(server: McpServer, host: RemoteMcpHost): v
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "list_subagents",
     {
       title: "List subagents",
+      inputSchema: z.object({}),
       description: "List the configured subagents with their id, name, description, provider and model.",
       annotations: { readOnlyHint: true },
     },
@@ -62,20 +64,22 @@ export function registerSettingsTools(server: McpServer, host: RemoteMcpHost): v
     },
   )
 
-  server.registerTool(
+  tools.registerTool(
     "list_installed_packages",
     {
       title: "List installed packages",
+      inputSchema: z.object({}),
       description: "List installed skills and plugins with their update availability.",
       annotations: { readOnlyHint: true },
     },
     () => commandResult(host, { type: "packages.listInstalled" }),
   )
 
-  server.registerTool(
+  tools.registerTool(
     "check_package_updates",
     {
       title: "Check package updates",
+      inputSchema: z.object({}),
       description: "Check installed skills and plugins for available updates.",
       annotations: { readOnlyHint: true },
     },

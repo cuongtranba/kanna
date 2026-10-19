@@ -16,6 +16,7 @@ export interface RemoteMcpRouteServices {
   bearerVerifier: RemoteMcpBearerVerifier
   clientIp: string | null
   validateOrigin: (req: Request) => boolean
+  holdConnectionOpen?: () => void
 }
 
 function ownsPath(pathname: string): boolean {
@@ -63,7 +64,10 @@ async function handleMcpRequest(req: Request, auth: PasswordAuth, services: Remo
     return Response.json({ error: "Forbidden" }, { status: 403 })
   }
   const verdict = await services.bearerVerifier.verifyBearer(req.headers.get("authorization"), services.clientIp)
-  if (verdict.ok) return services.mcp.fetch(req, { authInfo: toAuthInfo(verdict.principal) })
+  if (verdict.ok) {
+    services.holdConnectionOpen?.()
+    return services.mcp.fetch(req, { authInfo: toAuthInfo(verdict.principal) })
+  }
   if (verdict.status === 429) return tooManyAttempts(verdict.retryAfter)
   return unauthorized(auth.backend.remoteMcpResource())
 }

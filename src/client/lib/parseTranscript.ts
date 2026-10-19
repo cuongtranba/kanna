@@ -144,6 +144,7 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           steered: entry.steered,
           autoContinue: entry.autoContinue,
           expandedCommand: entry.expandedCommand,
+          origin: entry.origin,
         })
         break
       case "system_init":
