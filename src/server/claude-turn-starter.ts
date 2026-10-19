@@ -139,8 +139,7 @@ async function startTurnForChatInner(
   const loadExistingMessages = () => deps.store.getRecentRawEntries(args.chatId, PRIMER_TAIL_LIMIT)
   const shouldGenerateTitle = args.appendUserPrompt
     && chat.title === "New Chat"
-    && !chat.hasMessages
-    && loadExistingMessages().length === 0
+    && !loadExistingMessages().some((entry) => entry.kind === "user_prompt")
   const optimisticTitle = shouldGenerateTitle ? fallbackTitleFromMessage(args.content) : null
 
   if (optimisticTitle) {
