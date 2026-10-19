@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.81.2](https://github.com/cuongtranba/kanna/compare/v1.81.1...v1.81.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **webhooks:** generate a title for chats spawned by a webhook ([#1314](https://github.com/cuongtranba/kanna/issues/1314)) ([9e2b97a](https://github.com/cuongtranba/kanna/commit/9e2b97ab2107a335fbc2de7ded487c3713c50be8))
+
 ## [1.81.1](https://github.com/cuongtranba/kanna/compare/v1.81.0...v1.81.1) (2026-10-19)
 
 
