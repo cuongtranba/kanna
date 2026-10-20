@@ -50,6 +50,10 @@ export const COMPACTION_POST_TOKENS = "kanna.compaction.post_tokens"
 
 export const REMOTE_MCP_TOOL_CALL = "kanna.remote_mcp.tool_call"
 
+export const BUS_PUBLISHED_TOTAL = "kanna.bus.published"
+
+export const BUS_HANDLER_ERRORS_TOTAL = "kanna.bus.handler_errors"
+
 export const GENUI_SPEC_CHECKED = "kanna.genui.spec.checked"
 
 export const GENUI_DATASET_QUERY = "kanna.genui.dataset.query"

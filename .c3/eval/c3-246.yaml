@@ -1,0 +1,12 @@
+fact: c3-246
+claim: "the in-process service bus is implemented at src/server/service-bus/ with the envelope contract in src/shared/service-bus/"
+code:
+  - src/shared/service-bus/envelope.ts
+  - src/shared/service-bus/envelope.test.ts
+  - src/server/service-bus/service-bus.ts
+  - src/server/service-bus/in-memory-service-bus.ts
+  - src/server/service-bus/in-memory-service-bus.test.ts
+  - src/server/service-bus/store-event-subjects.ts
+  - src/server/service-bus/store-event-subjects.test.ts
+  - src/server/service-bus/event-store-tap.ts
+  - src/server/service-bus/event-store-tap.test.ts
