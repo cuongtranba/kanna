@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto"
 import type { CommandOrigin } from "../shared/command-origin"
-import { safeJsonParse, type JsonValue } from "../shared/json"
+import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
+import { parseClientCommand } from "../shared/commands"
 import type { ClientCommand, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import { isClientEnvelope, isServerEnvelope } from "../shared/protocol"
 import type { AgentCoordinator } from "./agent"
@@ -443,6 +444,11 @@ export function createWsRouter({
     }
   }
 
+  function rejectInvalidCommand(ws: CommandConnection, id: string, error: string) {
+    log.warn("[ws-router] invalid command rejected", { id, message: error })
+    send(ws, { v: PROTOCOL_VERSION, type: "error", id, message: error })
+  }
+
   function describeCommandFailure(command: ClientCommand, id: string, error: Error | string): ServerEnvelope {
     const messageText = error instanceof Error ? error.message : String(error)
     const benign = isBenignStaleStateMessage(messageText)
@@ -514,6 +520,7 @@ export function createWsRouter({
         return
       }
 
+      const rawEnvelope: JsonValue = parsed
       if (!isClientEnvelope(parsed)) {
         send(ws, { v: PROTOCOL_VERSION, type: "error", message: "Invalid envelope" })
         return
@@ -557,7 +564,12 @@ export function createWsRouter({
         return
       }
 
-      await handleCommand(ws, parsed)
+      const validated = parseClientCommand(isJsonObject(rawEnvelope) ? rawEnvelope.command : null)
+      if (!validated.ok) {
+        rejectInvalidCommand(ws, parsed.id, validated.error)
+        return
+      }
+      await handleCommand(ws, { v: PROTOCOL_VERSION, type: "command", id: parsed.id, command: validated.command })
     },
     async dispose() {
       broadcast.dispose()

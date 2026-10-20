@@ -1,57 +1,35 @@
-import type { CommandOrigin } from "./command-origin"
-import type { CronJobPatch } from "./cron/types"
-import type { ShareClientCommand } from "./session-share/protocol"
+import type { z } from "zod"
+import type { ClientCommand } from "./commands"
+import type { editorOpenSettingsSchema } from "./core-types.schema"
 import type { BeaconsSnapshot } from "./beacon-status"
-import { isJsonArray, isJsonObject, type JsonObject, type JsonPrimitive, type JsonValue } from "./json"
+import { isJsonArray, isJsonObject, type JsonPrimitive, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
-  AppSettingsPatch,
-  AgentProvider,
-  ChatAttachment,
   ChatDiffSnapshot,
   ChatSnapshot,
-  ClaudeAuthSettings,
-  CloudflareTunnelSettings,
-  DiffCommitMode,
   KeybindingsSnapshot,
   LlmProviderSnapshot,
   LocalProjectsSnapshot,
-  ModelOptions,
   ProjectCommandsSnapshot,
   PushConfigSnapshot,
-  PushSubscribeRequestPayload,
   SidebarData,
   Subagent,
-  SubagentInput,
-  SubagentPatch,
   SubagentValidationError,
   UpdateSnapshot,
   EditorPreset,
 } from "./types"
 import type { ChatOpsEvent } from "./chat-ops"
 import type { LiveBlock } from "./live-block"
-import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "./permission-policy"
-import type {
-  BoardOwnerKind,
-  BoardSummary,
-  BoardViewSnapshot,
-  ColumnColorToken,
-  ColumnSemantic,
-  SyncDirection,
-} from "./boards/types"
-import type { CleanupDecision } from "./boards/worktree-cleanup"
+import type { BoardOwnerKind, BoardSummary, BoardViewSnapshot } from "./boards/types"
 import type { WorkflowRunSummary } from "./workflow-types"
-import type { InboxFilter, InboxSnapshot } from "./inbox/types"
+import type { InboxSnapshot } from "./inbox/types"
 import type { McpSourcesSnapshot } from "./mcp-sources/types"
-import type { WebhookInput, WebhookPatch, WebhooksSnapshot } from "./webhooks/types"
+import type { WebhooksSnapshot } from "./webhooks/types"
 import type { ServiceBusStatus } from "./service-bus/jetstream-config"
 
 export type { EditorPreset }
 
-export interface EditorOpenSettings {
-  preset: EditorPreset
-  commandTemplate: string
-}
+export type EditorOpenSettings = z.output<typeof editorOpenSettingsSchema>
 
 export type SubscriptionTopic =
   | { type: "sidebar" }
@@ -153,299 +131,7 @@ export interface ChatLiveEvent {
 
 export type WsEvent = TerminalEvent | ChatOpsEvent | ChatLiveEvent
 
-export type ClientCommand =
-  | { type: "project.open"; localPath: string }
-  | { type: "project.create"; localPath: string; title: string }
-  | { type: "sessions.importClaude" }
-  | { type: "sessions.importClaudeSession"; sessionIds: string[] }
-  | { type: "project.remove"; projectId: string }
-  | { type: "project.delete"; projectId: string }
-  | { type: "project.setStar"; projectId: string; starred: boolean }
-  | { type: "project.setInstructions"; projectId: string; instructions: string }
-  | { type: "sidebar.reorderProjectGroups"; projectIds: string[] }
-  | { type: "project.readDiffPatch"; projectId: string; path: string; chatId?: string }
-  | { type: "stack.create"; title: string; projectIds: string[]; instructions?: string }
-  | { type: "stack.rename"; stackId: string; title: string }
-  | { type: "stack.setInstructions"; stackId: string; instructions: string }
-  | { type: "stack.remove"; stackId: string }
-  | { type: "stack.addProject"; stackId: string; projectId: string }
-  | { type: "stack.removeProject"; stackId: string; projectId: string }
-  | { type: "stack.listWorktrees"; projectId: string }
-  | { type: "system.ping" }
-  | { type: "update.check"; force?: boolean }
-  | { type: "update.install"; version?: string }
-  | { type: "update.reload" }
-  | { type: "settings.readKeybindings" }
-  | { type: "settings.writeKeybindings"; bindings: KeybindingsSnapshot["bindings"] }
-  | { type: "settings.readAppSettings" }
-  | { type: "settings.writeAppSettings"; analyticsEnabled: boolean }
-  | { type: "appSettings.setCloudflareTunnel"; patch: Partial<CloudflareTunnelSettings> }
-  | { type: "appSettings.setClaudeAuth"; patch: Partial<ClaudeAuthSettings> }
-  | { type: "appSettings.testOAuthToken"; token: string; baseUrl?: string }
-  | { type: "settings.writeAppSettingsPatch"; patch: AppSettingsPatch }
-  | { type: "subagent.create"; input: SubagentInput }
-  | { type: "subagent.update"; id: string; patch: SubagentPatch }
-  | { type: "subagent.delete"; id: string }
-  | { type: "settings.testMcpServer"; id: string }
-  | { type: "beacons.mintPairingCode" }
-  | { type: "beacons.update"; beaconId: string }
-  | { type: "settings.startMcpOAuth"; id: string }
-  | { type: "settings.completeMcpOAuth"; id: string; callbackUrl: string }
-  | { type: "settings.readLlmProvider" }
-  | { type: "settings.listOpenRouterModels" }
-  | { type: "settings.getChangelog" }
-  | { type: "skills.search"; query: string; limit?: number }
-  | { type: "skills.install"; source: string; skillId: string }
-  | { type: "skills.uninstall"; skillId: string }
-  | { type: "skills.listInstalled" }
-  | { type: "packages.listInstalled" }
-  | { type: "packages.checkUpdates" }
-  | { type: "packages.update"; id: string }
-  | { type: "packages.updateAll"; ids: string[] }
-  | {
-      type: "settings.writeLlmProvider"
-      provider: LlmProviderSnapshot["provider"]
-      apiKey: string
-      model: string
-      baseUrl: string
-    }
-  | {
-      type: "settings.validateLlmProvider"
-      provider: LlmProviderSnapshot["provider"]
-      apiKey: string
-      model: string
-      baseUrl: string
-    }
-  | {
-      type: "system.openExternal"
-      localPath: string
-      action: "open_finder" | "open_terminal" | "open_editor" | "open_preview" | "open_default"
-      line?: number
-      column?: number
-      editor?: EditorOpenSettings
-    }
-  | {
-      type: "chat.create"
-      projectId: string
-      stackId?: string
-      stackBindings?: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>
-    }
-  | { type: "chat.fork"; chatId: string }
-  | { type: "chat.rename"; chatId: string; title: string }
-  | { type: "chat.archive"; chatId: string }
-  | { type: "chat.unarchive"; chatId: string }
-  | { type: "chat.delete"; chatId: string }
-  | { type: "chat.setDraftProtection"; chatIds: string[] }
-  | { type: "chat.markRead"; chatId: string }
-  | { type: "chat.setPolicyOverride"; chatId: string; policyOverride: ChatPermissionPolicyOverride | null }
-  | {
-      type: "chat.send"
-      chatId?: string
-      projectId?: string
-      clientTraceId?: string
-      provider?: AgentProvider
-      content: string
-      attachments?: ChatAttachment[]
-      model?: string
-      modelOptions?: ModelOptions
-      effort?: string
-      planMode?: boolean
-      autoResumeOnRateLimit?: boolean
-      origin?: CommandOrigin
-    }
-  | { type: "chat.refreshDiffs"; chatId: string }
-  | { type: "chat.initGit"; chatId: string }
-  | { type: "chat.getGitHubPublishInfo"; chatId: string }
-  | { type: "chat.checkGitHubRepoAvailability"; chatId: string; owner: string; name: string }
-  | {
-      type: "chat.publishToGitHub"
-      chatId: string
-      owner: string
-      name: string
-      visibility: "public" | "private"
-      description?: string
-    }
-  | { type: "chat.listBranches"; chatId: string }
-  | {
-      type: "chat.previewMergeBranch"
-      chatId: string
-      branch:
-      | { kind: "local"; name: string }
-      | { kind: "remote"; name: string; remoteRef: string }
-      | {
-          kind: "pull_request"
-          name: string
-          prNumber: number
-          headRefName: string
-          headRepoCloneUrl?: string
-          isCrossRepository?: boolean
-          remoteRef?: string
-        }
-    }
-  | {
-      type: "chat.mergeBranch"
-      chatId: string
-      branch:
-      | { kind: "local"; name: string }
-      | { kind: "remote"; name: string; remoteRef: string }
-      | {
-          kind: "pull_request"
-          name: string
-          prNumber: number
-          headRefName: string
-          headRepoCloneUrl?: string
-          isCrossRepository?: boolean
-          remoteRef?: string
-        }
-    }
-  | { type: "chat.syncBranch"; chatId: string; action: "fetch" | "pull" | "push" | "publish" }
-  | {
-      type: "chat.checkoutBranch"
-      chatId: string
-      branch:
-      | { kind: "local"; name: string }
-      | { kind: "remote"; name: string; remoteRef: string }
-      | {
-          kind: "pull_request"
-          name: string
-          prNumber: number
-          headRefName: string
-          headRepoCloneUrl?: string
-          isCrossRepository?: boolean
-          remoteRef?: string
-        }
-      bringChanges?: boolean
-    }
-  | { type: "chat.createBranch"; chatId: string; name: string; baseBranchName?: string }
-  | { type: "chat.generateCommitMessage"; chatId: string; paths: string[] }
-  | { type: "chat.commitDiffs"; chatId: string; paths: string[]; summary: string; description?: string; mode: DiffCommitMode }
-  | { type: "chat.discardDiffFile"; chatId: string; path: string }
-  | { type: "chat.ignoreDiffFile"; chatId: string; path: string }
-  | { type: "chat.cancel"; chatId: string }
-  | { type: "chat.stopDraining"; chatId: string }
-  | { type: "chat.loadHistory"; chatId: string; beforeCursor: string; limit: number }
-  | { type: "chat.respondTool"; chatId: string; toolUseId: string; result: JsonValue }
-  | {
-      type: "chat.toolRequestAnswer"
-      chatId: string
-      toolRequestId: string
-      decision: ToolRequestDecision
-    }
-  | { type: "chat.respondSubagentTool"; chatId: string; runId: string; toolUseId: string; result: JsonObject }
-  | {
-      type: "chat.cancelSubagentRun"
-      chatId: string
-      runId: string
-    }
-  | { type: "board.create"; ownerKind: BoardOwnerKind; ownerId: string; title: string; templateId?: string | null }
-  | { type: "board.archive"; boardId: string }
-  | { type: "board.update"; boardId: string; title?: string; description?: string | null; cardFields?: JsonValue }
-  | { type: "board.duplicate"; boardId: string; title: string }
-  | { type: "board.saveAsTemplate"; boardId: string; name: string }
-  | {
-      type: "board.sync.bind"
-      boardId: string
-      owner: string
-      repo: string
-      direction: SyncDirection
-      allowAgentPush: boolean
-      projectId?: string | null
-      detachFromBoardId?: string | null
-    }
-  | { type: "board.sync.unbind"; boardId: string; bindingId: string }
-  | { type: "board.sync.pull"; boardId: string }
-  | { type: "board.sync.push"; boardId: string }
-  | { type: "board.sync.status"; boardId: string }
-  | { type: "board.column.create"; boardId: string; title: string; afterColumnId?: string | null }
-  | {
-      type: "board.column.update"
-      columnId: string
-      title?: string
-      semantic?: ColumnSemantic | null
-      colorToken?: ColumnColorToken | null
-      wipLimit?: number | null
-    }
-  | { type: "board.column.move"; columnId: string; afterColumnId: string | null }
-  | { type: "board.column.delete"; columnId: string }
-  | { type: "board.card.create"; boardId: string; columnId: string; title: string; projectId?: string | null; afterCardId?: string | null }
-  | {
-      type: "board.card.move"
-      cardId: string
-      toColumnId: string
-      aboveCardId: string | null
-      belowCardId: string | null
-    }
-  | { type: "board.card.archive"; cardId: string }
-  | { type: "board.card.detail"; cardId: string }
-  | { type: "board.card.comment"; cardId: string; body: string }
-  | { type: "board.card.block"; cardId: string; blockedByCardId: string }
-  | { type: "board.card.unblock"; cardId: string; blockedByCardId: string }
-  | { type: "board.card.update"; cardId: string; title?: string; content?: JsonValue }
-  | { type: "board.card.startWork"; cardId: string }
-  | { type: "board.card.resolveWorktree"; cardId: string; decision: CleanupDecision }
-  | { type: "board.cards.page"; columnId: string; limit: number; afterRank?: string | null }
-  | { type: "board.templates.list" }
-  | { type: "workflows.getRun"; chatId: string; runId: string }
-  | { type: "workflows.getAgentTranscript"; chatId: string; runId: string; agentId: string }
-  | { type: "subagents.getRun"; chatId: string; agentId: string }
-  | { type: "backgroundTasks.getOutput"; chatId: string; taskId: string }
-  | { type: "genui.dataset.query"; chatId: string; dataset: JsonObject; query: JsonObject; refresh?: boolean }
-  | { type: "genui.dataset.approve"; chatId: string; server: string; tool: string }
-  | {
-      type: "message.enqueue"
-      chatId: string
-      content: string
-      attachments?: ChatAttachment[]
-      provider?: AgentProvider
-      model?: string
-      modelOptions?: ModelOptions
-      planMode?: boolean
-      autoResumeOnRateLimit?: boolean
-      origin?: CommandOrigin
-    }
-  | {
-      type: "message.steer"
-      chatId: string
-      queuedMessageId: string
-    }
-  | {
-      type: "message.dequeue"
-      chatId: string
-      queuedMessageId: string
-    }
-  | { type: "autoContinue.accept"; chatId: string; scheduleId: string; scheduledAt: number }
-  | { type: "autoContinue.reschedule"; chatId: string; scheduleId: string; scheduledAt: number }
-  | { type: "autoContinue.cancel"; chatId: string; scheduleId: string }
-  | { type: "cron.remove"; chatId: string; jobId: string }
-  | { type: "cron.pause"; chatId: string; jobId: string }
-  | { type: "cron.resume"; chatId: string; jobId: string }
-  | { type: "cron.update"; chatId: string; jobId: string; patch: CronJobPatch }
-  | { type: "tunnel.accept"; chatId: string; tunnelId: string }
-  | { type: "tunnel.stop"; chatId: string; tunnelId: string }
-  | { type: "tunnel.retry"; chatId: string; tunnelId: string }
-  | { type: "terminal.create"; projectId: string; terminalId: string; cols: number; rows: number; scrollback: number }
-  | { type: "terminal.input"; terminalId: string; data: string }
-  | { type: "terminal.resize"; terminalId: string; cols: number; rows: number }
-  | { type: "terminal.close"; terminalId: string }
-  | { type: "push.identifyDevice"; pushDeviceId: string | null }
-  | { type: "push.subscribe"; subscription: PushSubscribeRequestPayload; label: string; userAgent: string }
-  | { type: "push.unsubscribe"; pushDeviceId: string }
-  | { type: "push.test" }
-  | { type: "push.setProjectMute"; localPath: string; muted: boolean }
-  | { type: "push.setChatMute"; chatId: string; muted: boolean }
-  | { type: "push.setFocusedChat"; chatId: string | null }
-  | { type: "webhooks.create"; input: WebhookInput }
-  | { type: "webhooks.update"; id: string; patch: WebhookPatch }
-  | { type: "webhooks.delete"; id: string }
-  | { type: "webhooks.rotateSecret"; id: string }
-  | { type: "inbox.markRead"; ids: string[] }
-  | { type: "inbox.markAllRead"; beforeTs?: number }
-  | { type: "inbox.archive"; threadId: string }
-  | { type: "inbox.page"; beforeTs: number; limit: number; filter?: InboxFilter }
-  | { type: "inbox.reply"; threadId: string; text: string }
-  | { type: "inbox.instruct"; threadId: string; text: string }
-  | { type: "serviceBus.resetStore" }
-  | ShareClientCommand
+export type { ClientCommand }
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
 

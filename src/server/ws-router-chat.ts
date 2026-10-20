@@ -1,7 +1,6 @@
 import type { JsonObject } from "../shared/json"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ChatHistoryPage, StackBinding } from "../shared/types"
-import { isRecord } from "../shared/errors"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../shared/permission-policy"
 
@@ -212,13 +211,6 @@ export async function handleChatCommand(
     case "chat.toolRequestAnswer": {
       const toolCallbackSvc = agent.toolCallbackService
       if (!toolCallbackSvc) throw new Error("tool callback service unavailable")
-      const validKinds = new Set(["allow", "deny", "answer"])
-      if (
-        !isRecord(command.decision) ||
-        !validKinds.has(typeof command.decision.kind === "string" ? command.decision.kind : "")
-      ) {
-        throw new Error("Invalid tool request decision kind")
-      }
       const existing = store.getToolRequest(command.toolRequestId)
       if (!existing || existing.chatId !== command.chatId) {
         throw new Error("Tool request does not belong to this chat")

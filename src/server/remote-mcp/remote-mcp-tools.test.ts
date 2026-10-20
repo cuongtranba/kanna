@@ -126,6 +126,11 @@ function stringField(value: JsonValue | null, key: string): string {
   return found
 }
 
+function commandRow(listing: ToolReply, type: string): JsonValue | null {
+  const rows = listing.json !== null && isJsonArray(listing.json) ? listing.json : []
+  return rows.find((row) => field(row, "type") === type) ?? null
+}
+
 function arrayField(value: JsonValue | null, key: string): readonly JsonValue[] {
   const found = field(value, key)
   if (found === undefined || !isJsonArray(found)) throw new Error(`expected array field ${key}`)
@@ -312,6 +317,32 @@ describe("remote MCP typed tools", () => {
 
     const prompt = server.store.getMessages(chatId).find((entry: TranscriptEntry) => entry.kind === "user_prompt")
     expect(prompt?.kind === "user_prompt" ? prompt.origin : undefined).toMatchObject({ clientId: "password", tool: "kanna_command" })
+  })
+
+  test("kanna_command rejects a param of the wrong type and names the command and the failing path", async () => {
+    const reply = await call("kanna_command", { type: "chat.rename", params: { chatId: "chat-1", title: 42 } })
+
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toContain("chat.rename")
+    expect(reply.text).toContain("title")
+  })
+
+  test("kanna_command refuses a remote-excluded command and quotes the reason the registry gives", async () => {
+    const listing = await call("kanna_commands", { domain: "webhooks" })
+    const reason = stringField(field(commandRow(listing, "webhooks.delete"), "remote") ?? null, "reason")
+
+    const reply = await call("kanna_command", { type: "webhooks.delete", params: { id: "hook-1" } })
+
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toContain(reason)
+  })
+
+  test("kanna_commands describes a command's params as a JSON Schema", async () => {
+    const listing = await call("kanna_commands", { domain: "chat" })
+
+    const schema = field(commandRow(listing, "chat.rename"), "paramsSchema") ?? null
+    expect(field(field(schema, "properties") ?? null, "title")).toMatchObject({ type: "string" })
+    expect(arrayField(schema, "required")).toEqual(expect.arrayContaining(["chatId", "title"]))
   })
 
   test("the audit log never holds a secret passed in a tool call and records a failed call as an error", async () => {
