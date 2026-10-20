@@ -5,6 +5,7 @@ import type { AppSettingsManager } from "../app-settings"
 import type { EventStore } from "../event-store"
 import type { RemoteMcpAuditSink } from "./remote-mcp-audit"
 import type { DedupeStore } from "./remote-mcp-dedupe"
+import { withEgressRedaction } from "./remote-mcp-egress-redaction"
 import { REMOTE_MCP_INSTRUCTIONS } from "./remote-mcp-instructions"
 import { registerGenericTools } from "./remote-mcp-tools-generic"
 import { registerKannaResources } from "./remote-mcp-resources"
@@ -33,7 +34,8 @@ export interface RemoteMcpHost {
   pollIntervalMs?: number
 }
 
-export function buildRemoteMcpServer(host: RemoteMcpHost): McpServer {
+export function buildRemoteMcpServer(rawHost: RemoteMcpHost): McpServer {
+  const host = withEgressRedaction(rawHost)
   const server = new McpServer({ name: "kanna", version: APP_VERSION }, { instructions: REMOTE_MCP_INSTRUCTIONS })
   const tools = createToolRegistrar(server, { era: host.era, authInfo: host.authInfo, audit: host.audit })
   registerGenericTools(tools, host)

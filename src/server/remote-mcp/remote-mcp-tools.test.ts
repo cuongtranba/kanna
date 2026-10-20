@@ -391,6 +391,45 @@ describe("remote MCP typed tools", () => {
     expect((await call("list_installed_packages")).isError).toBe(false)
   })
 
+  test("kanna_read app-settings does not return a raw Claude OAuth token or MCP server secret", async () => {
+    await server.appSettings.writePatch({ claudeAuth: { tokens: [{
+      id: "t-egress",
+      label: "egress-token",
+      token: "sk-ant-oat-egress-leak",
+      status: "active",
+      limitedUntil: null,
+      lastUsedAt: null,
+      lastErrorAt: null,
+      lastErrorMessage: null,
+      addedAt: 0,
+    }] } })
+    await server.appSettings.writePatch({ customMcpServers: { create: {
+      name: "egress-http",
+      transport: "http",
+      url: "https://mcp.example.com/mcp",
+      headers: { Authorization: "Bearer header-egress-leak" },
+    } } })
+    await server.appSettings.writePatch({ customMcpServers: { create: {
+      name: "egress-stdio",
+      transport: "stdio",
+      command: "echo",
+      args: [],
+      env: { API_TOKEN: "env-egress-leak" },
+    } } })
+
+    const read = await call("kanna_read", { topic: { type: "app-settings" } })
+    const viaCommand = await call("kanna_command", { type: "settings.readAppSettings" })
+
+    for (const reply of [read, viaCommand]) {
+      expect(reply.isError).toBe(false)
+      expect(reply.text).not.toContain("sk-ant-oat-egress-leak")
+      expect(reply.text).not.toContain("header-egress-leak")
+      expect(reply.text).not.toContain("env-egress-leak")
+      expect(reply.text).toContain("egress-token")
+      expect(reply.text).toContain("egress-http")
+    }
+  })
+
   test("files can be uploaded and read, and the project root is enforced", async () => {
     const uploaded = await call("upload_attachment", {
       projectId,
