@@ -1,6 +1,7 @@
 import type { InboundHandler } from "../../shared/inbound/handler"
 import { instructInboxThread, replyToInboxThread, type InboundHandlerResolver, type InboxReplyAgent, type InboxReplyStore } from "../inbound/inbox-reply"
 import type { ServiceBus } from "../service-bus/service-bus"
+import type { PushManager } from "../push/push-manager"
 import { webhookHandler } from "../webhooks/webhook-delivery"
 import type { WebhookRegistry } from "../webhooks/webhook-registry"
 import type { InboxReplyAction } from "../ws-router-inbox"
@@ -31,4 +32,11 @@ export function createInboxReplyActions(
     inboxReply: (threadId, text) => replyToInboxThread(store, agent, inbox, resolveHandler, threadId, text),
     inboxInstruct: (threadId, text) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text),
   }
+}
+
+export function wireInboxPush(inbox: InboxRegistry, pushManager: Pick<PushManager, "notifyInbox">, resolveHandler: InboundHandlerResolver): () => void {
+  return inbox.onNeedsYou((thread) => {
+    if (resolveHandler(thread)?.pushEnabled === false) return
+    void pushManager.notifyInbox(thread)
+  })
 }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test"
+import type { InboxThread } from "../../shared/inbox/types"
 import type { PushPayload } from "../../shared/types"
 import type { PushEvent, PushEventStore } from "./events"
 import {
@@ -599,5 +600,63 @@ describe("PushManager chat mute", () => {
     await manager.setChatMute("c1", true)
     const snap = manager.getConfigSnapshot(null)
     expect(snap.preferences.mutedChatIds).toContain("c1")
+  })
+})
+
+describe("PushManager.notifyInbox", () => {
+  let store: FakeStore
+  let sender: FakeSender
+  let manager: PushManager
+
+  const thread: InboxThread = {
+    id: "t1",
+    sourceKind: "webhook",
+    sourceId: "h1",
+    sourceName: "CI",
+    threadKey: "k1",
+    sender: "ada",
+    messages: [],
+    chatId: "c9",
+    state: "needs_you",
+    unread: true,
+    lastMessageAt: 500,
+    replyCount: 0,
+  }
+
+  beforeEach(async () => {
+    store = new FakeStore()
+    sender = new FakeSender()
+    manager = new PushManager({ store, sender, vapid: VAPID, now: () => 1000 })
+    await registerSub(manager, store, "d1", "https://push.example/x")
+  })
+
+  test("sends an inbox payload that links to the thread at normal urgency", async () => {
+    await manager.notifyInbox(thread)
+    expect(sender.sent).toHaveLength(1)
+    expect(sender.sent[0].urgency).toBe("normal")
+    expect(JSON.parse(sender.sent[0].payload)).toEqual({
+      v: 1,
+      kind: "inbox",
+      projectLocalPath: "",
+      projectTitle: "CI",
+      chatId: "c9",
+      chatTitle: "ada",
+      chatUrl: "/inbox/t1",
+      threadId: "t1",
+      ts: 1000,
+    })
+  })
+
+  test("delivers even when the device is focused on the handler chat", async () => {
+    manager.setFocusedChat("d1", "c9")
+    await manager.notifyInbox(thread)
+    expect(sender.sent).toHaveLength(1)
+  })
+
+  test("sends once for the same thread message and again for a newer one", async () => {
+    await manager.notifyInbox(thread)
+    await manager.notifyInbox(thread)
+    await manager.notifyInbox({ ...thread, lastMessageAt: 600 })
+    expect(sender.sent).toHaveLength(2)
   })
 })
