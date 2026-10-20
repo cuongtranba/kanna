@@ -188,21 +188,12 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
 
   test("every plugin route is 404 while plugins are globally disabled", async () => {
     expect((await call("GET", "/api/plugins/hello/client.js", { enabled: false }))?.status).toBe(404)
-    expect((await call("GET", "/api/plugins", { enabled: false }))?.status).toBe(404)
   })
 
   test("an invalid plugin id is rejected before any path join", async () => {
     const res = await call("GET", "/api/plugins/..%2F..%2Fetc/client.js")
     expect(res?.status).toBeGreaterThanOrEqual(400)
     expect(res?.status).toBeLessThan(500)
-  })
-
-  test("GET /api/plugins lists what the service reports", async () => {
-    const res = await call("GET", "/api/plugins")
-    expect(res?.status).toBe(200)
-    expect(await res?.json()).toEqual({
-      plugins: [{ id: "hello", sourceDir: "/src/hello", enabled: true, state: "running" }],
-    })
   })
 
   test("GET :id/client.js serves the compiled bundle uncached", async () => {
@@ -215,7 +206,6 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
   test("an installed-shaped id that is not installed is 404, not 500", async () => {
     expect((await call("GET", "/api/plugins/ghost/client.js"))?.status).toBe(404)
     expect((await call("GET", "/api/plugins/ghost/logs"))?.status).toBe(404)
-    expect((await call("POST", "/api/plugins/ghost/reload"))?.status).toBe(404)
   })
 
   test("GET :id/logs honours tail", async () => {
@@ -245,16 +235,10 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
     expect(recorded).toEqual(["render failed"])
   })
 
-  test("POST :id/reload drives the service and answers 204", async () => {
-    const reloaded: string[] = []
-    const svc = fakeService({ reload: async (id) => { reloaded.push(id) } })
-    expect((await call("POST", "/api/plugins/hello/reload", { service: svc }))?.status).toBe(204)
-    expect(reloaded).toEqual(["hello"])
-  })
-
   test("an unknown sub-path is 404", async () => {
     expect((await call("GET", "/api/plugins/hello/nope"))?.status).toBe(404)
-    expect((await call("POST", "/api/plugins"))?.status).toBe(404)
+    expect((await call("GET", "/api/plugins"))?.status).toBe(404)
+    expect((await call("POST", "/api/plugins/hello/reload"))?.status).toBe(404)
   })
 })
 
@@ -431,19 +415,15 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
 })
 
 describe("P9a — Settings → Plugins page", () => {
-  test("lists installed plugins and its actions hit the documented plugin-http-routes.ts endpoints", async () => {
+  test("lists installed plugins and its reload action sends the plugins.reload command", async () => {
     const { PluginsSection, buildPluginsSectionHandlers } = await import("../client/app/PluginsSection")
     const { renderToStaticMarkup } = await import("react-dom/server")
+    const { makeFakeCommandPort } = await import("../client/adapters/testing/makeFakePorts")
 
-    const calls: Array<{ url: string; method: string }> = []
-    const fakePostJsonBody = async (url: string, _body: unknown) => {
-      calls.push({ url, method: "POST" })
-      return { ok: true }
-    }
-
-    const handlers = buildPluginsSectionHandlers(fakePostJsonBody)
+    const commands = makeFakeCommandPort(() => ({ ok: true }))
+    const handlers = buildPluginsSectionHandlers(commands)
     await handlers.onReload("hello")
-    expect(calls).toEqual([{ url: "/api/plugins/hello/reload", method: "POST" }])
+    expect(commands.calls).toEqual([{ type: "plugins.reload", pluginId: "hello" }])
 
     const plugin = { id: "hello", sourceDir: HELLO, enabled: false }
     const html = renderToStaticMarkup(<PluginsSection plugins={[plugin]} handlers={handlers} />)

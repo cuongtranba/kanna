@@ -4,10 +4,11 @@ import { useWebSocket } from "../lib/useWebSocket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
 import { useSocketStore } from "../stores/socketStore"
+import { HTTP_ROUTES } from "../../shared/http-routes"
 
 function getWsUrl(dom: DomPort): string {
   const origin = dom.getOrigin()
-  return `${origin.replace(/^https:/, "wss:").replace(/^http:/, "ws:")}/ws`
+  return `${origin.replace(/^https:/, "wss:").replace(/^http:/, "ws:")}${HTTP_ROUTES.websocket.path}`
 }
 
 export interface SocketBridgePorts {

@@ -12,8 +12,6 @@ import {
   handleAttachmentContent,
   handleLocalFileContent,
   handleProjectFileContent,
-  handleProjectPaths,
-  handleProjectUploadDelete,
 } from "./http-api-routes"
 import { serveStatic } from "./http-static"
 import { createTusUploads } from "./tus-uploads.adapter"
@@ -201,9 +199,6 @@ export function createHttpDispatcher(
     const tusMatch = TUS_UPLOAD_ROUTE.exec(url.pathname)
     if (isTusRequest(tusMatch, req.method)) return tusUploads.handle(req, tusMatch[1])
 
-    const deleteUploadResponse = await handleProjectUploadDelete(req, url, store)
-    if (deleteUploadResponse) return deleteUploadResponse
-
     const attachmentContentResponse = await handleAttachmentContent(req, url, store)
     if (attachmentContentResponse) return attachmentContentResponse
 
@@ -212,9 +207,6 @@ export function createHttpDispatcher(
 
     const localFileResponse = await handleLocalFileContent(req, url)
     if (localFileResponse) return localFileResponse
-
-    const projectPathsResponse = await handleProjectPaths(req, url, store)
-    if (projectPathsResponse) return projectPathsResponse
 
     return serveStatic(distDir, url.pathname)
   }

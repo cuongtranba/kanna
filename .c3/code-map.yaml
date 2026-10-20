@@ -179,6 +179,8 @@ c3-202:
   - src/server/json-boundary.ts
   - src/server/fs-stat.adapter.ts
   - src/server/analytics.ts
+  - src/server/http-route-inventory.test.ts
+  - src/server/server-data-dir.test.ts
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
@@ -236,6 +238,11 @@ c3-208:
   - src/server/ws-router-settings.ts
   - src/server/ws-router-skills.ts
   - src/server/ws-router-utils.ts
+  - src/server/ws-router-plugins.ts
+  - src/server/ws-router-plugins.test.ts
+  - src/server/ws-router-project-files.ts
+  - src/server/ws-router-project-files.test.ts
+  - src/server/ws-router-coverage.test.ts
 c3-209:
   - src/server/process-utils.adapter.ts
   - src/server/process-utils.test.ts
@@ -566,6 +573,9 @@ c3-302:
   - src/shared/session-share/types.schema.ts
   - src/shared/settings/settings.schema.ts
   - src/shared/webhooks/types.schema.ts
+  - src/shared/http-routes.ts
+  - src/shared/http-routes.test.ts
+  - src/ops/parity/http-route-inventory.test.ts
 c3-303:
   - src/shared/tools.test.ts
   - src/shared/tools.ts
@@ -736,6 +746,7 @@ c3-242:
   - src/server/project-file-path.ts
   - src/shared/command-origin.ts
   - src/server/command-origin-stamp.ts
+  - src/ops/parity/remote-mcp-docs.test.ts
 c3-124:
   - src/client/components/settings/RemoteMcpSection.tsx
   - src/client/components/settings/RemoteMcpSection.test.tsx

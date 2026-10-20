@@ -96,11 +96,34 @@ serve. An older Kanna answers its first request with `400` and ChatGPT reports
 
 ## What the client can do
 
-Two generic tools reach every command the web UI has: `kanna_commands` lists
-them with their parameters and a risk level (`read`, `write`, `destructive`,
-`local` or `unavailable`), and `kanna_command` runs one. `kanna_read` reads any
-subscription snapshot. Commands bound to a browser, such as push notifications,
-are refused. The typed tools below cover the common flows.
+Two generic tools reach the web UI's commands: `kanna_commands` lists every
+command with its parameters as a JSON Schema and a risk level (`read`, `write`,
+`destructive` or `local`), and `kanna_command` runs one. `kanna_read` reads any
+subscription snapshot. The typed tools below cover the common flows.
+
+Every capability of the web UI is reachable except the few listed here, and each
+of them has a stated reason in code. A CI gate keeps this page, the command
+registry and the HTTP route inventory in step.
+
+| Left out of `kanna_command` | Why |
+| --- | --- |
+| `push.*` (`subscribe`, `unsubscribe`, `identifyDevice`, `test`, `setProjectMute`, `setChatMute`, `setFocusedChat`) | Web push state belongs to one browser: it keys on the service-worker device identity and the socket that is viewing a chat, and a remote client has neither |
+| `chat.setDraftProtection` | Draft protection is state of one browser socket, so the command would protect nothing for a remote client |
+| `webhooks.*` (`create`, `update`, `delete`, `rotateSecret`) | A webhook secret is a credential that a hook accepts, so managing webhooks stays in the browser UI |
+
+The browser also makes a few plain HTTP requests. They are not commands, and
+their MCP counterpart is:
+
+| Browser request | Remote client |
+| --- | --- |
+| Resumable upload at `/api/projects/:projectId/uploads/tus` | `upload_attachment` |
+| File bytes at `/api/projects/:projectId/files/*/content` and `/api/projects/:projectId/uploads/:storedName/content` | `read_project_file`; a stored upload is the project file `.kanna/uploads/<name>` |
+| Path autocomplete, deleting an unsent upload, listing and reloading plugins | The `project.listPaths`, `upload.delete`, `plugins.list` and `plugins.reload` commands, through `kanna_command` |
+| `/auth/status`, `/auth/login`, `/auth/logout` | None: the MCP endpoint has its own bearer token or OAuth sign-in |
+| `/api/share/:token` | None: it is the public read-only page of a shared chat; read chats with `get_chat` or `kanna_read` |
+| `/api/local-file` | None: it serves any absolute path on the host, which stays out of scope for a remote client; `read_project_file` reads files inside a project |
+| `/api/plugins/:pluginId/client.js` | None: it is code a browser runs; manage plugins with `plugins.list` and `plugins.reload` |
+| `/ws` | None: it is the transport that carries the commands, which `kanna_command` runs directly |
 
 | Area | Tools |
 | --- | --- |

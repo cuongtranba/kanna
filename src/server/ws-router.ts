@@ -55,6 +55,10 @@ import { handlePushCommand } from "./ws-router-push"
 import { handleMiscCommand } from "./ws-router-misc"
 import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
+import { handleProjectPathsCommand, handleUploadDeleteCommand } from "./ws-router-project-files"
+import { handlePluginsCommand, type PluginsHostDep } from "./ws-router-plugins"
+import { listProjectPaths } from "./project-paths"
+import { deleteProjectUpload } from "./uploads"
 import { handleGenUICommand } from "./ws-router-genui"
 import { handleInboxCommand, type InboxReplyAction } from "./ws-router-inbox"
 import { handleWebhooksCommand } from "./ws-router-webhooks"
@@ -73,6 +77,7 @@ import {
   isBenignStaleStateMessage,
   logSendToStartingProfile,
   send,
+  silentCommandMessage,
   unhandledCommandMessage,
 } from "./ws-router-utils"
 import type { ClientState, CommandConnection } from "./ws-router-utils"
@@ -98,6 +103,8 @@ export { resolveMcpTestBearer } from "./ws-router-settings"
 
 export type { ClientState } from "./ws-router-utils"
 export { isBenignStaleStateMessage } from "./ws-router-utils"
+
+type RouteOutcome = "unclaimed" | "answered" | "silent"
 
 interface CreateWsRouterArgs {
   store: EventStore
@@ -143,6 +150,7 @@ interface CreateWsRouterArgs {
   inboxInstruct?: InboxReplyAction
   serviceBus?: Pick<ServiceBusController, "status" | "resetStore">
   authEnabled?: boolean
+  plugins?: PluginsHostDep
 }
 
 export function createWsRouter({
@@ -184,6 +192,7 @@ export function createWsRouter({
   inboxInstruct,
   serviceBus,
   authEnabled,
+  plugins,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -307,10 +316,19 @@ export function createWsRouter({
   }
 
   async function routeCommand(
-    ws: CommandConnection,
+    connection: CommandConnection,
     received: ClientCommand,
     id: string,
-  ): Promise<boolean> {
+  ): Promise<RouteOutcome> {
+    let answered = false
+    const ws: CommandConnection = {
+      data: connection.data,
+      send: (payload) => connection.send(payload),
+      onSent: (envelope) => {
+        if (envelope.id === id) answered = true
+        connection.onSent?.(envelope)
+      },
+    }
     const command = stampCommandOrigin(received, ws.data.commandOrigin)
     const sendToClient = (envelope: ServerEnvelope) => send(ws, envelope)
     const handlers: readonly (() => Promise<boolean> | boolean)[] = [
@@ -386,6 +404,9 @@ export function createWsRouter({
         command,
         id,
       ),
+      () => handleProjectPathsCommand(store, listProjectPaths, sendToClient, command, id),
+      () => handleUploadDeleteCommand(store, deleteProjectUpload, sendToClient, command, id),
+      () => handlePluginsCommand(plugins, sendToClient, command, id),
       () => handlePushCommand(
         {
           pushManager,
@@ -415,30 +436,25 @@ export function createWsRouter({
       ),
     ]
     for (const runHandler of handlers) {
-      if (await runHandler()) return true
+      if (await runHandler()) return answered ? "answered" : "silent"
     }
-    return false
+    return "unclaimed"
   }
 
-  function reportUnhandledCommand(
-    ws: CommandConnection,
-    command: ClientCommand,
-    id: string,
-  ) {
-    log.error("[ws-router] no handler claimed command", { id, type: command.type })
-    send(ws, {
-      v: PROTOCOL_VERSION,
-      type: "error",
-      id,
-      message: unhandledCommandMessage(command.type),
-    })
+  function routingFailure(outcome: "unclaimed" | "silent", command: ClientCommand, id: string): ServerEnvelope {
+    log.error(
+      outcome === "unclaimed" ? "[ws-router] no handler claimed command" : "[ws-router] handler claimed command but sent no reply",
+      { id, type: command.type },
+    )
+    const message = outcome === "unclaimed" ? unhandledCommandMessage(command.type) : silentCommandMessage(command.type)
+    return { v: PROTOCOL_VERSION, type: "error", id, message }
   }
 
   async function handleCommand(ws: CommandConnection, message: Extract<ClientEnvelope, { type: "command" }>) {
     const { command, id } = message
     try {
-      if (await routeCommand(ws, command, id)) return
-      await reportUnhandledCommand(ws, command, id)
+      const outcome = await routeCommand(ws, command, id)
+      if (outcome !== "answered") send(ws, routingFailure(outcome, command, id))
     } catch (error) {
       send(ws, describeCommandFailure(command, id, error instanceof Error ? error : String(error)))
     }
@@ -479,15 +495,13 @@ export function createWsRouter({
       },
     }
     try {
-      if (!(await routeCommand(connection, command, id))) {
-        log.error("[ws-router] no handler claimed command", { id, type: command.type })
-        return { v: PROTOCOL_VERSION, type: "error", id, message: unhandledCommandMessage(command.type) }
-      }
+      const outcome = await routeCommand(connection, command, id)
+      if (outcome !== "answered") return routingFailure(outcome, command, id)
     } catch (error) {
       return describeCommandFailure(command, id, error instanceof Error ? error : String(error))
     }
     const answer = captured.find((envelope) => envelope.id === id)
-    return answer ?? { v: PROTOCOL_VERSION, type: "ack", id }
+    return answer ?? routingFailure("silent", command, id)
   }
 
   function readSnapshot(topic: SubscriptionTopic): ServerEnvelope {

@@ -21,3 +21,8 @@ code:
   - src/server/ws-router-settings.ts
   - src/server/ws-router-skills.ts
   - src/server/ws-router-utils.ts
+  - src/server/ws-router-plugins.ts
+  - src/server/ws-router-plugins.test.ts
+  - src/server/ws-router-project-files.ts
+  - src/server/ws-router-project-files.test.ts
+  - src/server/ws-router-coverage.test.ts

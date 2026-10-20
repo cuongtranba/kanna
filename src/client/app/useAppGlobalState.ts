@@ -53,6 +53,7 @@ import type { KannaSocket, SocketStatus } from "./socket"
 import { useStackCommands, type StackCommands } from "./useStackCommands"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
+import { HTTP_ROUTES } from "../../shared/http-routes"
 
 
 export const LLM_PROVIDER_READ_KEY = "settings.readLlmProvider"
@@ -245,7 +246,7 @@ export function shouldHandleUiUpdateReloadRequest(
 }
 
 export function getUiUpdateReadinessPath() {
-  return "/auth/status"
+  return HTTP_ROUTES.authStatus.path
 }
 
 export interface ProjectRequest {

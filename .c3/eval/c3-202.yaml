@@ -32,3 +32,5 @@ code:
   - src/server/json-boundary.ts
   - src/server/fs-stat.adapter.ts
   - src/server/analytics.ts
+  - src/server/http-route-inventory.test.ts
+  - src/server/server-data-dir.test.ts

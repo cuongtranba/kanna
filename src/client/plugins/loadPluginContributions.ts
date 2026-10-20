@@ -1,5 +1,7 @@
 import { toError } from "../../shared/errors"
-import { httpAdapter } from "../adapters/http.adapter"
+import { isJsonArray, isJsonObject, type JsonValue } from "../../shared/json"
+import { HTTP_ROUTES, buildRoutePath } from "../../shared/http-routes"
+import type { CommandPort } from "../ports/commandPort"
 import type { PluginFooterPanel } from "../app/PluginsFooterSection"
 import {
   createPluginContext,
@@ -73,25 +75,36 @@ export async function loadPluginContributions(
   }
 }
 
-interface PluginListResponse {
-  readonly plugins?: readonly PluginListEntry[]
+function readPluginListEntry(value: JsonValue): PluginListEntry | null {
+  if (!isJsonObject(value)) return null
+  const { id, enabled } = value
+  return typeof id === "string" && typeof enabled === "boolean" ? { id, enabled } : null
 }
 
-async function listPluginsFromServer(): Promise<readonly PluginListEntry[]> {
-  const response = await httpAdapter.getJson<PluginListResponse>("/api/plugins")
-  if (!response.ok) return []
-  return response.data?.plugins ?? []
+export function readPluginList(result: JsonValue): readonly PluginListEntry[] {
+  if (!isJsonObject(result) || !isJsonArray(result.plugins)) return []
+  return result.plugins.flatMap((entry) => {
+    const parsed = readPluginListEntry(entry)
+    return parsed ? [parsed] : []
+  })
+}
+
+function listPluginsFromServer(commands: CommandPort | null): ListPluginsFn {
+  return async () => (commands ? readPluginList(await commands.command({ type: "plugins.list" })) : [])
 }
 
 function importPluginModuleFromServer(cacheKey: string): ImportPluginModuleFn {
   return (pluginId) =>
     evaluatePluginModuleFromUrl({
-      url: `/api/plugins/${encodeURIComponent(pluginId)}/client.js?v=${cacheKey}`,
+      url: `${buildRoutePath(HTTP_ROUTES.pluginClientBundle.path, { pluginId })}?v=${cacheKey}`,
       registry: createPluginHostRegistry(),
       pluginId,
     })
 }
 
-export function loadPluginContributionsFromServer(cacheKey: string): Promise<LoadedPluginContributions> {
-  return loadPluginContributions(listPluginsFromServer, importPluginModuleFromServer(cacheKey))
+export function loadPluginContributionsFromServer(
+  cacheKey: string,
+  commands: CommandPort | null,
+): Promise<LoadedPluginContributions> {
+  return loadPluginContributions(listPluginsFromServer(commands), importPluginModuleFromServer(cacheKey))
 }

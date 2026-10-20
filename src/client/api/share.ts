@@ -3,6 +3,7 @@ import type { QueryFunctionContext } from "@tanstack/react-query"
 import type { ChatSnapshot, ShareError } from "../../shared/session-share/types"
 import type { HttpPort } from "../ports/httpPort"
 import { httpAdapter } from "../adapters/http.adapter"
+import { buildRoutePath, HTTP_ROUTES } from "../../shared/http-routes"
 
 export interface ShareApiOk {
   ok: true
@@ -27,7 +28,7 @@ export async function fetchShareSnapshot(
 ): Promise<ShareApiResponse> {
   const http = options.http ?? httpAdapter
   const result = await http.getJson<ShareApiResponse>(
-    `/api/share/${encodeURIComponent(token)}`,
+    buildRoutePath(HTTP_ROUTES.shareSnapshot.path, { token }),
     { signal: options.signal },
   )
   return result.data

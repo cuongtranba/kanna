@@ -55,6 +55,7 @@ import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter, type ClientState } from "./ws-router"
+import { createPluginsHost } from "./plugins/plugin-service-host"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
@@ -534,6 +535,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     inbox,
     mcpSources,
     serviceBus: bus,
+    plugins: createPluginsHost(appSettings),
     ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
   })
 

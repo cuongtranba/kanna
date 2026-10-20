@@ -1,6 +1,7 @@
 
 import type { HttpPort } from "../ports/httpPort"
 import { httpAdapter } from "../adapters/http.adapter"
+import { HTTP_ROUTES } from "../../shared/http-routes"
 
 export interface AuthStatusResponse {
   enabled: boolean
@@ -20,7 +21,7 @@ export async function fetchAuthStatus(
   signal?: AbortSignal,
   http: HttpPort = httpAdapter,
 ): Promise<Partial<AuthStatusResponse>> {
-  const result = await http.getJson<Partial<AuthStatusResponse>>("/auth/status", {
+  const result = await http.getJson<Partial<AuthStatusResponse>>(HTTP_ROUTES.authStatus.path, {
     cache: "no-store",
     signal,
   })
@@ -34,10 +35,10 @@ export async function postAuthLogin(
 ): Promise<boolean> {
   const body: Record<string, string> = { password: args.password }
   if (args.next) body.next = args.next
-  const result = await http.postJson<AuthLoginResponse>("/auth/login", body)
+  const result = await http.postJson<AuthLoginResponse>(HTTP_ROUTES.authLogin.path, body)
   return result.ok
 }
 
 export async function postAuthLogout(http: HttpPort = httpAdapter): Promise<void> {
-  await http.postJson<null>("/auth/logout", {})
+  await http.postJson<null>(HTTP_ROUTES.authLogout.path, {})
 }

@@ -41,3 +41,6 @@ code:
   - src/shared/session-share/types.schema.ts
   - src/shared/settings/settings.schema.ts
   - src/shared/webhooks/types.schema.ts
+  - src/shared/http-routes.ts
+  - src/shared/http-routes.test.ts
+  - src/ops/parity/http-route-inventory.test.ts

@@ -4,22 +4,20 @@ import { Button } from "../components/ui/button"
 import { StatusPill } from "../components/ui/status-pill"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
 import { errorMessage } from "../../shared/errors"
-import type { JsonValue } from "../../shared/json"
+import type { CommandPort } from "../ports/commandPort"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
-
-export type PostJsonBodyFn = (url: string, body: JsonValue) => Promise<{ readonly ok: boolean }>
 
 export interface PluginsSectionHandlers {
   readonly onReload: (id: string) => Promise<void>
 }
 
-export function buildPluginsSectionHandlers(postJsonBody: PostJsonBodyFn): PluginsSectionHandlers {
+export function buildPluginsSectionHandlers(commands: CommandPort | null): PluginsSectionHandlers {
   return {
     async onReload(id) {
-      const response = await postJsonBody(`/api/plugins/${id}/reload`, {})
-      if (!response.ok) throw new Error(`Failed to reload plugin ${id}`)
+      if (!commands) throw new Error("Not connected to the server")
+      await commands.command({ type: "plugins.reload", pluginId: id })
     },
   }
 }

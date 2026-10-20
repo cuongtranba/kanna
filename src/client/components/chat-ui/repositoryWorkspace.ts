@@ -6,6 +6,7 @@ import type {
   ChatDiffSnapshot,
   DiffCommitMode,
 } from "../../../shared/types"
+import { buildProjectFileContentUrl } from "../../../shared/projectFileUrl"
 
 export type RepositorySyncAction = "fetch" | "pull" | "publish"
 
@@ -223,7 +224,7 @@ export function getDiffPreviewAttachment(
     displayName: file.path.split("/").pop() ?? file.path,
     absolutePath: file.path,
     relativePath: file.path,
-    contentUrl: `/api/projects/${projectId}/files/${encodeURIComponent(file.path)}/content`,
+    contentUrl: buildProjectFileContentUrl(projectId, file.path) ?? "",
     mimeType: file.mimeType,
     size: file.size,
   }

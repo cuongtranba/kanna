@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 4c8cea9db1b0ab8477e38828d13f3434b909ee35b8c5fa3656ec84232760f557
+c3-seal: da17780ae676bba6e85268cdc22f39b8b458ec98db3f82c6009a50cfddf98b93
 title: ws-router
 type: component
 category: foundation
@@ -71,6 +71,9 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | Envelope dispatch | IN | Decodes ClientEnvelope, validates the command with parseClientCommand before origin stamping and answers an error envelope for the same id when it fails, then routes to a handler | c3-101 | src/server/ws-router.ts |
 | Snapshot push | OUT | Pushes typed ServerEnvelope to subscribers | c3-101 | src/server/ws-router.ts |
 | Command result | OUT | Correlates result envelope to client command | c3-101 | src/server/ws-router.ts |
+| Reply guarantee | OUT | routeCommand reports unclaimed, answered or silent by watching the envelopes a handler sends through the send utility for the command id; a command no handler claims, and a command a handler claims without replying, are both answered with an error envelope on the browser socket and from dispatchCommand, so a handler bug cannot hang the browser promise or become a fabricated ack for a remote client | c3-242 | src/server/ws-router.ts, src/server/ws-router-utils.ts |
+| Command coverage gate | IN | Every registry command is named by a ws-router handler literal and every command literal or prefix a handler claims is a registry command, checked from the syntax tree rather than from text | c3-302 | src/server/ws-router-coverage.test.ts |
+| Project files and plugins | IN | project.listPaths and upload.delete answer the path autocomplete and abandoned-upload cleanup that used to be HTTP routes; plugins.list and plugins.reload drive the plugin service and answer an empty list or an error while plugins are switched off | c3-238 | src/server/ws-router-project-files.ts, src/server/ws-router-plugins.ts |
 | Command origin stamp | IN | routeCommand is the only place a chat.send or message.enqueue origin is set: it copies the connection's commandOrigin onto the command and deletes any origin the sender wrote, so a browser socket can never claim an MCP origin | c3-242 | src/server/ws-router.ts, src/server/command-origin-stamp.ts |
 
 ## Change Safety
@@ -78,6 +81,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Envelope drift | Protocol bump without router update | Decode errors at runtime | bun run test src/server/ws-router.test.ts |
+| Command without a reply | A handler returns true without sending an ack, snapshot or error for the command id, or a registry command has no handler | The caller receives an error envelope naming the command; the coverage test fails for an unnamed registry command | bun run test src/server/ws-router-coverage.test.ts src/server/ws-router.test.ts |
 | Subscription leak | Listener not pruned on disconnect | Memory growth across long sessions | Long-session smoke + listener count assertion in src/server/ws-router.test.ts |
 
 ## Derived Materials

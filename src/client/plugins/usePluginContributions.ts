@@ -3,12 +3,14 @@ import { loadPluginContributionsFromServer } from "./loadPluginContributions"
 import { usePluginContributionsStore } from "../stores/pluginContributionsStore"
 import { selectPluginsEnabled, useAppSettingsStore } from "../stores/appSettingsStore"
 import { log } from "../../shared/log"
+import { useOptionalKannaSocket } from "../app/KannaSocketProvider"
 
 export function usePluginContributions(
   reloadToken: string = "",
   load: typeof loadPluginContributionsFromServer = loadPluginContributionsFromServer,
 ): void {
   const enabled = useAppSettingsStore(selectPluginsEnabled)
+  const commands = useOptionalKannaSocket()
 
   useEffect(() => {
     const { setContributions, clearContributions } = usePluginContributionsStore.getState()
@@ -19,7 +21,7 @@ export function usePluginContributions(
     }
 
     let cancelled = false
-    void load(reloadToken)
+    void load(reloadToken, commands)
       .then((loaded) => {
         if (cancelled) return
         setContributions(loaded)
@@ -35,5 +37,5 @@ export function usePluginContributions(
     return () => {
       cancelled = true
     }
-  }, [enabled, reloadToken, load])
+  }, [enabled, reloadToken, load, commands])
 }

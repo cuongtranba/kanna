@@ -1,16 +1,11 @@
-import type { JsonValue } from "../../shared/json"
-import { httpAdapter } from "../adapters/http.adapter"
+import { useMemo } from "react"
 import { selectInstalledPlugins, useAppSettingsStore } from "../stores/appSettingsStore"
+import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import { buildPluginsSectionHandlers, PluginsSection } from "./PluginsSection"
-
-async function postPluginJson(url: string, body: JsonValue): Promise<{ readonly ok: boolean }> {
-  const response = await httpAdapter.postJsonBody<null>(url, body)
-  return { ok: response.ok }
-}
-
-const PLUGIN_HANDLERS = buildPluginsSectionHandlers(postPluginJson)
 
 export function KannaPluginsSettingsBranch() {
   const plugins = useAppSettingsStore(selectInstalledPlugins)
-  return <PluginsSection plugins={plugins} handlers={PLUGIN_HANDLERS} />
+  const socket = useOptionalKannaSocket()
+  const handlers = useMemo(() => buildPluginsSectionHandlers(socket), [socket])
+  return <PluginsSection plugins={plugins} handlers={handlers} />
 }

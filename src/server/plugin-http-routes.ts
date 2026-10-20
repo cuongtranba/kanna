@@ -1,6 +1,5 @@
 import { isValidPluginId } from "../shared/plugins/manifest"
 import type { PluginService } from "./plugins/plugin-service"
-import { errorMessage } from "../shared/errors"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 
 const PLUGIN_PATH_PATTERN = /^\/api\/plugins(?:\/([^/]+)((?:\/[^/]+)*))?\/?$/
@@ -53,16 +52,6 @@ async function handleRpc(service: PluginService, id: string, request: Request): 
   return Response.json(result)
 }
 
-async function handleReload(service: PluginService, id: string): Promise<Response> {
-  if (!service.status(id)) return notInstalled()
-  try {
-    await service.reload(id)
-  } catch (error) {
-    return jsonError(500, errorMessage(error))
-  }
-  return new Response(null, { status: 204 })
-}
-
 async function handleClientError(service: PluginService, id: string, request: Request): Promise<Response> {
   if (!service.status(id)) return notInstalled()
   const body = await readJsonBody(request)
@@ -82,7 +71,6 @@ async function routeForPluginPath(
   if (request.method === "GET" && rest === "/client.js") return handleClientBundle(service, id)
   if (request.method === "GET" && rest === "/logs") return handleLogs(service, id, url)
   if (request.method === "POST" && rest === "/rpc") return handleRpc(service, id, request)
-  if (request.method === "POST" && rest === "/reload") return handleReload(service, id)
   if (request.method === "POST" && rest === "/client-error") return handleClientError(service, id, request)
   return jsonError(404, "Not found")
 }
@@ -100,10 +88,7 @@ export async function handlePluginRequest(
   if (!match) return jsonError(404, "Not found")
 
   const [, id, rest] = match
-  if (id === undefined) {
-    if (request.method !== "GET") return jsonError(404, "Not found")
-    return Response.json({ plugins: opts.service.list() })
-  }
+  if (id === undefined) return jsonError(404, "Not found")
 
   if (!isValidPluginId(id)) return jsonError(400, "Invalid plugin id")
 

@@ -1,7 +1,7 @@
 
 import { describe, expect, test } from "bun:test"
 import { probeFileUrl, deleteUploadedFile, fetchFileTextPreview } from "./files"
-import { makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
+import { makeFakeCommandPort, makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
 
 describe("probeFileUrl", () => {
   test("returns ready with mimeType and size on 200", async () => {
@@ -68,35 +68,31 @@ describe("probeFileUrl", () => {
 })
 
 describe("deleteUploadedFile", () => {
-  test("strips /content suffix and calls DELETE", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({
-      method: "DELETE",
-      url: "/api/uploads/1",
-      response: { ok: true, status: 204, body: null },
-    })
-    await deleteUploadedFile("/api/uploads/1/content", { http })
-    expect(http.calls[0]).toEqual({ method: "DELETE", url: "/api/uploads/1" })
-  })
+  test("asks the server to delete the upload the content URL points at", async () => {
+    const commands = makeFakeCommandPort(() => ({ deleted: true }))
 
-  test("treats an already-deleted upload as done", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({
-      method: "DELETE",
-      url: "/api/uploads/missing",
-      response: { ok: false, status: 404, body: null },
-    })
-    await expect(deleteUploadedFile("/api/uploads/missing/content", { http })).resolves.toBeUndefined()
+    await deleteUploadedFile("/api/projects/p%201/uploads/my%20file.txt/content", commands)
+
+    expect(commands.calls).toEqual([{ type: "upload.delete", projectId: "p 1", storedName: "my file.txt" }])
   })
 
   test("surfaces a failed delete to the caller", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({
-      method: "DELETE",
-      url: "/api/uploads/broken",
-      response: { ok: false, status: 500, body: null },
+    const commands = makeFakeCommandPort(() => {
+      throw new Error("Project not found")
     })
-    await expect(deleteUploadedFile("/api/uploads/broken/content", { http })).rejects.toThrow("status 500")
+
+    await expect(deleteUploadedFile("/api/projects/p1/uploads/a.txt/content", commands)).rejects.toThrow("Project not found")
+  })
+
+  test("refuses a URL that is not an upload content URL instead of guessing a target", async () => {
+    const commands = makeFakeCommandPort(() => ({ deleted: true }))
+
+    await expect(deleteUploadedFile("/api/projects/p1/files/a.txt/content", commands)).rejects.toThrow("Not an upload content URL")
+    expect(commands.calls).toEqual([])
+  })
+
+  test("reports a missing connection rather than dropping the delete silently", async () => {
+    await expect(deleteUploadedFile("/api/projects/p1/uploads/a.txt/content", null)).rejects.toThrow("Not connected")
   })
 })
 

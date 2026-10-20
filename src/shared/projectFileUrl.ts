@@ -1,17 +1,15 @@
+import { buildRoutePath, HTTP_ROUTES } from "./http-routes"
+
 export function buildProjectFileContentUrl(
   projectId: string | null | undefined,
   relativePath: string | null | undefined,
 ): string | null {
   if (!projectId || !relativePath) return null
-  const encodedPath = relativePath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
-  return `/api/projects/${encodeURIComponent(projectId)}/files/${encodedPath}/content`
+  return buildRoutePath(HTTP_ROUTES.projectFileContent.path, { projectId, filePath: relativePath })
 }
 
 export function buildLocalFileContentUrl(absolutePath: string): string {
-  return `/api/local-file?path=${encodeURIComponent(absolutePath)}`
+  return `${HTTP_ROUTES.localFile.path}?path=${encodeURIComponent(absolutePath)}`
 }
 
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/

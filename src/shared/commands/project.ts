@@ -45,6 +45,18 @@ export const projectCommands = defineCommands(
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("project.listPaths", {
+    params: z.object({ ...projectIdShape, query: z.string().optional(), limit: z.number().optional() }),
+    summary: "List files and folders of a project for path autocomplete, best matches first; an empty query lists the top level.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("upload.delete", {
+    params: z.object({ ...projectIdShape, storedName: z.string() }),
+    summary: "Delete one stored upload of a project, such as an attachment that was never sent.",
+    risk: "destructive",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("sessions.importClaude", {
     params: noParams,
     summary: "Import all Claude Code sessions found on this machine as chats.",

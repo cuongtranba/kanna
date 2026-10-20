@@ -5,6 +5,7 @@ import type { FileHandle } from "node:fs/promises"
 import path from "node:path"
 import { fileTypeFromBuffer } from "file-type"
 import { isErrnoException } from "../shared/errors"
+import { buildRoutePath, HTTP_ROUTES } from "../shared/http-routes"
 import type { UploadedAttachment } from "../shared/types"
 import { getProjectUploadDir } from "./paths"
 
@@ -104,7 +105,7 @@ function buildUploadedAttachment(args: {
     displayName: args.fileName,
     absolutePath: args.stored.absolutePath,
     relativePath: `./.kanna/uploads/${args.stored.storedName}`,
-    contentUrl: `/api/projects/${args.projectId}/uploads/${encodeURIComponent(args.stored.storedName)}/content`,
+    contentUrl: buildRoutePath(HTTP_ROUTES.uploadContent.path, { projectId: args.projectId, storedName: args.stored.storedName }),
     mimeType: args.mimeType,
     size: args.size,
     ...(args.stored.reused ? { reused: true } : {}),

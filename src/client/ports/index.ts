@@ -1,5 +1,6 @@
 
 export type { HttpPort, HttpRequestOptions, HttpResponse } from "./httpPort"
+export type { CommandPort } from "./commandPort"
 export type { StoragePort } from "./storagePort"
 export type { TimerPort } from "./timerPort"
 export type { DomPort } from "./domPort"

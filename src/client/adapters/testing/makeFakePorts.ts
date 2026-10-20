@@ -1,6 +1,8 @@
 
 import type { JsonValue } from "../../../shared/json"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../../ports/httpPort"
+import type { ClientCommand } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
 import type { ComputedStyleLike, DomPort, ServiceWorkerRegistrationLike } from "../../ports/domPort"
@@ -110,6 +112,22 @@ export function makeFakeHttpPort(): FakeHttpPort {
         },
       })
       return { body, ok: route.response.ok, status: route.response.status }
+    },
+  }
+}
+
+
+export interface FakeCommandPort extends CommandPort {
+  calls: ClientCommand[]
+}
+
+export function makeFakeCommandPort(reply: (command: ClientCommand) => JsonValue | Promise<JsonValue>): FakeCommandPort {
+  const calls: ClientCommand[] = []
+  return {
+    calls,
+    async command(command: ClientCommand): Promise<JsonValue> {
+      calls.push(command)
+      return await reply(command)
     },
   }
 }

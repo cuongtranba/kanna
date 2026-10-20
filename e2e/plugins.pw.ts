@@ -105,7 +105,6 @@ test.describe("plugin system — disabled (the default)", () => {
     expect((await page.request.get(`${boot.baseUrl}/health`)).status()).toBe(200)
 
     for (const path of [
-      "/api/plugins",
       `/api/plugins/${PLUGIN_ID}/client.js`,
       `/api/plugins/${PLUGIN_ID}/logs`,
     ]) {
@@ -113,7 +112,7 @@ test.describe("plugin system — disabled (the default)", () => {
       expect(response.status(), `GET ${path}`).toBe(404)
     }
 
-    for (const path of [`/api/plugins/${PLUGIN_ID}/rpc`, `/api/plugins/${PLUGIN_ID}/reload`]) {
+    for (const path of [`/api/plugins/${PLUGIN_ID}/rpc`]) {
       const response = await page.request.post(`${boot.baseUrl}${path}`, {
         data: { method: "greeting.create", params: { name: "e2e" } },
       })
@@ -137,19 +136,9 @@ test.describe("plugin system — enabled with the hello plugin installed", () =>
     await boot?.stop()
   })
 
-  test("GET /api/plugins lists it and client.js serves the real bundle, uncacheable", async ({ page }) => {
+  test("client.js serves the real bundle, uncacheable", async ({ page }) => {
     test.setTimeout(TEST_TIMEOUT_MS)
     if (!boot) throw new Error("boot was not initialized — beforeAll must have failed")
-
-    const listResponse = await page.request.get(`${boot.baseUrl}/api/plugins`)
-    expect(listResponse.status()).toBe(200)
-    const listed: { plugins?: { id: string; enabled: boolean; sourceDir: string }[] } = await listResponse.json()
-    expect(listed.plugins).toHaveLength(1)
-    expect(listed.plugins?.[0]).toMatchObject({
-      id: PLUGIN_ID,
-      enabled: true,
-      sourceDir: FIXTURE_PLUGIN_DIR,
-    })
 
     const bundleResponse = await page.request.get(`${boot.baseUrl}/api/plugins/${PLUGIN_ID}/client.js`)
     expect(bundleResponse.status()).toBe(200)
@@ -165,9 +154,6 @@ test.describe("plugin system — enabled with the hello plugin installed", () =>
   test("a typed RPC round-trips through the plugin subprocess", async ({ page }) => {
     test.setTimeout(TEST_TIMEOUT_MS)
     if (!boot) throw new Error("boot was not initialized — beforeAll must have failed")
-
-    const reloadResponse = await page.request.post(`${boot.baseUrl}/api/plugins/${PLUGIN_ID}/reload`)
-    expect(reloadResponse.status()).toBe(204)
 
     const rpcResponse = await page.request.post(`${boot.baseUrl}/api/plugins/${PLUGIN_ID}/rpc`, {
       data: { method: "greeting.create", params: { name: "e2e" } },

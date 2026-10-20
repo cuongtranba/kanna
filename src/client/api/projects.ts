@@ -1,14 +1,9 @@
-
-import type { HttpPort } from "../ports/httpPort"
-import { httpAdapter } from "../adapters/http.adapter"
+import type { CommandPort } from "../ports/commandPort"
+import { isJsonArray, isJsonObject, type JsonValue } from "../../shared/json"
 
 export interface ProjectPath {
   path: string
   kind: "file" | "dir"
-}
-
-interface ProjectPathsApiResponse {
-  paths?: ProjectPath[]
 }
 
 export const projectQueryKeys = {
@@ -16,21 +11,27 @@ export const projectQueryKeys = {
   paths: (projectId: string, query: string) => ["projects", projectId, "paths", query] as const,
 }
 
+function readProjectPath(value: JsonValue): ProjectPath | null {
+  if (!isJsonObject(value)) return null
+  const { path, kind } = value
+  if (typeof path !== "string") return null
+  if (kind !== "file" && kind !== "dir") return null
+  return { path, kind }
+}
+
+export function readProjectPaths(result: JsonValue): ProjectPath[] {
+  if (!isJsonObject(result) || !isJsonArray(result.paths)) return []
+  return result.paths.flatMap((entry) => {
+    const parsed = readProjectPath(entry)
+    return parsed ? [parsed] : []
+  })
+}
+
 export async function fetchProjectPaths(
+  commands: CommandPort | null,
   projectId: string,
   query: string,
-  options: { signal?: AbortSignal; http?: HttpPort } = {},
 ): Promise<ProjectPath[]> {
-  const http = options.http ?? httpAdapter
-  const params = new URLSearchParams({ query })
-  try {
-    const result = await http.getJson<ProjectPathsApiResponse>(
-      `/api/projects/${encodeURIComponent(projectId)}/paths?${params.toString()}`,
-      { signal: options.signal },
-    )
-    if (!result.ok) return []
-    return result.data.paths ?? []
-  } catch {
-    return []
-  }
+  if (!commands) return []
+  return readProjectPaths(await commands.command({ type: "project.listPaths", projectId, query }))
 }

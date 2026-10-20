@@ -172,10 +172,18 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `router.readSnapshot` reuse the exact handlers, so WebSocket clients still
   receive the broadcasts; a tool that reads the store instead skips them. The
   only store-direct tools are `upload_attachment` and `read_project_file`.
-- **The command catalog is typed AND regex-checked.** `COMMAND_CATALOG` is a
-  record keyed by the `ClientCommand` union (a missing command is a type error)
-  and `command-catalog.test.ts` also scans the protocol source, because a union
-  member added through a constant such as `SHARE_CMD_*` is invisible to the type.
+- **The command registry is the catalog.** `src/shared/commands` derives
+  `ClientCommand`; each entry carries `remote: allowed` or `excluded` with a
+  reason. `src/server/ws-router-coverage.test.ts` reads the ws-router handlers
+  from the syntax tree and fails when a registry command has no handler literal
+  or a handler claims a literal the registry lacks.
+- **A web capability needs an MCP path or a stated reason.** The web client's
+  plain HTTP calls are listed in `src/shared/http-routes.ts` (`HTTP_ROUTES`), each
+  naming its MCP tool, its registry command or an exclusion with a reason; the
+  client builds those paths from it, and `src/ops/parity` plus
+  `remote-mcp-parity.test.ts` fail on a stray `/api/` literal, an unused entry,
+  a tool the server does not register or an exclusion the wiki page omits.
+  Actions and small reads belong in the registry, not in a new HTTP route.
 - **The endpoint is stateless.** `createMcpHandler` builds the MCP server per
   request (`remote-mcp-boot.ts`), so there is no session registry to bound or evict.
 - **Tests need native streams.** `scripts/test-preload.ts` restores the native

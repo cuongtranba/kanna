@@ -92,9 +92,9 @@ import { runDetached } from "../../lib/runDetached"
 import { beaconMentionChips } from "../../lib/beaconMentionChips"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { DomPort } from "../../ports/domPort"
-import type { HttpPort } from "../../ports/httpPort"
+import type { CommandPort } from "../../ports/commandPort"
 import { domAdapter } from "../../adapters/dom.adapter"
-import { httpAdapter } from "../../adapters/http.adapter"
+import { useOptionalKannaSocket } from "../../app/KannaSocketProvider"
 
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
@@ -189,7 +189,7 @@ type MentionChip =
 
 export interface ChatInputPorts {
   dom?: DomPort
-  http?: HttpPort
+  commands?: CommandPort
 }
 
 interface Props {
@@ -248,9 +248,9 @@ function hydrateComposerAttachments(attachments: UploadedAttachment[]): Composer
   }))
 }
 
-export async function deleteUploadedAttachment(attachment: UploadedAttachment, http?: HttpPort): Promise<void> {
+export async function deleteUploadedAttachment(attachment: UploadedAttachment, commands: CommandPort | null): Promise<void> {
   if (!attachment.contentUrl || attachment.reused) return
-  await deleteUploadedFile(attachment.contentUrl, { http })
+  await deleteUploadedFile(attachment.contentUrl, commands)
 }
 
 
@@ -384,7 +384,8 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   forwardedRef,
 ) => {
   const dom = ports?.dom ?? domAdapter
-  const http = ports?.http ?? httpAdapter
+  const socket = useOptionalKannaSocket()
+  const commands = ports?.commands ?? socket
   const {
     getDraft,
     setDraft,
@@ -575,7 +576,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           if (!result) throw new Error("Upload failed")
 
           if (generation !== uploadGenerationRef.current) {
-            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, http))
+            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, commands))
             if (previewUrl) URL.revokeObjectURL(previewUrl)
             return
           }
@@ -583,7 +584,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           if (removedAttachmentIdsRef.current.has(tempId)) {
             removedAttachmentIdsRef.current.delete(tempId)
             if (previewUrl) URL.revokeObjectURL(previewUrl)
-            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, http))
+            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, commands))
             return
           }
 
@@ -627,7 +628,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
         }
       })())
     }
-  }, [http, projectId, setAttachments, setUploadError])
+  }, [commands, projectId, setAttachments, setUploadError])
   useEffect(() => {
     processUploadQueueRef.current = processUploadQueue
   }, [processUploadQueue])
@@ -912,7 +913,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     }
     if (attachment.status === "uploaded") {
       removedAttachmentIdsRef.current.delete(attachment.id)
-      runDetached("removed upload cleanup", deleteUploadedAttachment(attachment, http))
+      runDetached("removed upload cleanup", deleteUploadedAttachment(attachment, commands))
     }
   }
 

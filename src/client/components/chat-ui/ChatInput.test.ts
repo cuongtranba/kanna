@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import "../../lib/testing/setupHappyDom"
 import { PROVIDERS, type UploadedAttachment } from "../../../shared/types"
-import { makeFakeHttpPort } from "../../adapters/testing/makeFakePorts"
+import { makeFakeCommandPort } from "../../adapters/testing/makeFakePorts"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useChatPreferencesStore } from "../../stores/chatPreferencesStore"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
@@ -50,21 +50,19 @@ function uploadedAttachment(storedName: string, reused?: boolean): UploadedAttac
 
 describe("deleteUploadedAttachment", () => {
   test("deletes a freshly stored upload the composer drops", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({ method: "DELETE", url: "/api/projects/p1/uploads/", response: { ok: true, status: 200, body: { ok: true } } })
+    const commands = makeFakeCommandPort(() => ({ deleted: true }))
 
-    await deleteUploadedAttachment(uploadedAttachment("fresh.txt"), http)
+    await deleteUploadedAttachment(uploadedAttachment("fresh.txt"), commands)
 
-    expect(http.calls).toEqual([{ method: "DELETE", url: "/api/projects/p1/uploads/fresh.txt" }])
+    expect(commands.calls).toEqual([{ type: "upload.delete", projectId: "p1", storedName: "fresh.txt" }])
   })
 
   test("never deletes a reused upload, which an earlier message may still reference", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({ method: "DELETE", url: "/api/projects/p1/uploads/", response: { ok: true, status: 200, body: { ok: true } } })
+    const commands = makeFakeCommandPort(() => ({ deleted: true }))
 
-    await deleteUploadedAttachment(uploadedAttachment("shared.txt", true), http)
+    await deleteUploadedAttachment(uploadedAttachment("shared.txt", true), commands)
 
-    expect(http.calls).toEqual([])
+    expect(commands.calls).toEqual([])
   })
 })
 
