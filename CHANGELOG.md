@@ -8,6 +8,16 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.82.0](https://github.com/cuongtranba/kanna/compare/v1.81.2...v1.82.0) (2026-10-20)
+
+
+### Features
+
+* **inbox:** inbound threads with a draft-only handler agent, inbox registry and reply path ([#1320](https://github.com/cuongtranba/kanna/issues/1320)) ([38fd8bc](https://github.com/cuongtranba/kanna/commit/38fd8bc7132549098c09dec1081ae679af9469f6))
+* **inbox:** inbox page with Inbox/Activity tabs, needs-you toasts, badge and push ([#1322](https://github.com/cuongtranba/kanna/issues/1322)) ([c3709a1](https://github.com/cuongtranba/kanna/commit/c3709a1e138ce48877f6cb90631bc38e78c2c43d))
+* **remote-mcp:** record who sent each MCP call, report progress, and stop duplicate work ([#1302](https://github.com/cuongtranba/kanna/issues/1302)) ([bb7d63e](https://github.com/cuongtranba/kanna/commit/bb7d63e913c97538ed3ad7aa2a0c496ab519e698))
+* **service-bus:** add ServiceBus port, envelope and EventStore tap ([#1319](https://github.com/cuongtranba/kanna/issues/1319)) ([5bacc06](https://github.com/cuongtranba/kanna/commit/5bacc06811b0a2c20b64831fb749432577d83d56))
+
 ## [1.81.2](https://github.com/cuongtranba/kanna/compare/v1.81.1...v1.81.2) (2026-10-19)
 
 
