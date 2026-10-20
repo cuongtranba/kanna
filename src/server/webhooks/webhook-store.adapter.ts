@@ -22,6 +22,10 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   const projectId = optionalString(value.projectId)
   const provider = typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined
   const model = optionalString(value.model)
+  const threadKeyPath = optionalString(value.threadKeyPath)
+  const senderPath = optionalString(value.senderPath)
+  const replyHint = optionalString(value.replyHint)
+  const filter = optionalString(value.filter)
   return {
     id,
     name,
@@ -34,6 +38,10 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     ...(chatId ? { chatId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(provider && model ? { provider, model } : {}),
+    ...(threadKeyPath ? { threadKeyPath } : {}),
+    ...(senderPath ? { senderPath } : {}),
+    ...(replyHint ? { replyHint } : {}),
+    ...(filter ? { filter } : {}),
   }
 }
 

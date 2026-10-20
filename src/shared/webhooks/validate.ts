@@ -2,6 +2,7 @@ import type { AgentProvider } from "../core-types"
 import type { ProviderCatalogEntry } from "../provider-model-types"
 import { isInboundHandlerMode, validateInboundTarget } from "../inbound/handler"
 import {
+  WEBHOOK_FILTER_MAX_CHARS,
   WEBHOOK_MODEL_MAX_CHARS,
   WEBHOOK_PATH_MAX_CHARS,
   WEBHOOK_REPLY_HINT_MAX_CHARS,
@@ -47,6 +48,9 @@ export function validateWebhookInput(input: WebhookInput): string[] {
   }
   if ((input.replyHint?.length ?? 0) > WEBHOOK_REPLY_HINT_MAX_CHARS) {
     errors.push(`Reply hint must be at most ${WEBHOOK_REPLY_HINT_MAX_CHARS} characters`)
+  }
+  if ((input.filter?.length ?? 0) > WEBHOOK_FILTER_MAX_CHARS) {
+    errors.push(`Filter must be at most ${WEBHOOK_FILTER_MAX_CHARS} characters`)
   }
   return errors
 }

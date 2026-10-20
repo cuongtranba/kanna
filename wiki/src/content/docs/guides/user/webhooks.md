@@ -45,8 +45,57 @@ not offer rather than silently running a different one.
 
 ## Edit a hook
 
-Choose the pencil button on a hook to change its name, mode, target, model or
-template. The url and the secret stay the same.
+Choose the pencil button on a hook to change its name, mode, target, model,
+template, filter, thread key path, sender path or reply hint. The url and the
+secret stay the same. Clearing a field removes it.
+
+## Filter deliveries
+
+A sender often posts far more than you want to act on. A GitHub webhook
+subscribed to **Issues** posts every opened, labeled, assigned, edited and closed
+event, and GitHub cannot narrow that down. A **filter** on the hook does: Kanna
+checks each authenticated delivery against it, and one that does not match is
+answered `200` and dropped. No card, no prompt, no chat.
+
+The filter is YAML in the shape of a GitHub Actions trigger, with an optional
+[CEL](https://cel.dev) condition:
+
+```yaml
+on:
+  issues:
+    types: [assigned]
+if: >-
+  body.assignee.login == "octocat"
+  && body.issue.labels.exists(l, l.name == "bug")
+```
+
+- **`on`** names the events to accept. The event is the `X-GitHub-Event` header.
+  It can be one event (`on: issues`), a list (`on: [issues, pull_request]`), or a
+  map where an event may list **`types`**, matched against the body's `action`.
+  A delivery with no `X-GitHub-Event` header never matches an `on`.
+- **`if`** is a CEL expression that must be `true`. It can read `body` (the JSON
+  body), `event` (the `X-GitHub-Event` header, or empty) and `headers` (lowercase
+  names; `authorization`, `cookie` and the signature headers are left out).
+- Both are optional. A filter with only `if` works for any sender, for example
+  `if: body.status == "failed"`.
+
+A condition that reads a field the body does not have is an error, and an error
+counts as no match, so `body.assignee.login` simply filters out events that have
+no assignee. Write `has(body.assignee) && …` when you want to say so outright.
+Quote an `if` that is a bare `true` or `false`, because YAML reads those as
+booleans: `if: "false"`.
+
+Kanna checks the filter when you save, and refuses a filter that is not valid
+YAML, has a key other than `on` and `if`, uses YAML anchors, aliases or tags,
+names an empty event list, or has a CEL syntax error or a variable other than
+`body`, `event` and `headers`.
+
+The hook row shows the last delivery, so a filtered one reads **Filtered** with
+the reason, such as `action "labeled" not in types` or `if: false`.
+
+To keep every event about one issue in one conversation, set **Thread key path**
+to `issue.number`: in **New chat** mode, later deliveries for the same issue go to
+the chat the first one created.
 
 :::caution
 A `{{placeholder}}` puts the caller's text **into your instruction**, outside that
@@ -89,12 +138,16 @@ In the repository, open **Settings → Webhooks → Add webhook**. Set the paylo
 url to the hook url, the content type to `application/json`, and the secret to
 the hook's secret. GitHub signs every delivery with `X-Hub-Signature-256`.
 
+GitHub only lets you pick which events to send, not which actions or whose, so
+add a [filter](#filter-deliveries) for the rest. GitHub's **Recent deliveries**
+list then shows `200` with `"filtered": true` for each event Kanna ignored.
+
 ## Responses
 
 | Status | Meaning |
 | --- | --- |
 | `202` | Delivered. The body has the `deliveryId` and the `chatId` it landed in. |
-| `200` | The same delivery id was already delivered. Nothing happened. |
+| `200` | `{"filtered": true}`: the delivery did not match the hook's filter. Nothing happened. Otherwise `{"duplicate": true}`: the same delivery id was already delivered. Nothing happened. |
 | `401` | The secret or the signature is wrong. |
 | `404` | No such hook, the hook is disabled, or webhooks are turned off. All three look the same. |
 | `405` | The method is not `POST`. |
@@ -103,7 +156,10 @@ the hook's secret. GitHub signs every delivery with `X-Hub-Signature-256`.
 | `429` | More than 20 deliveries in a minute for this hook. Honour `Retry-After`. |
 
 A repeated delivery is recognised by its `X-GitHub-Delivery`, `Idempotency-Key`
-or `X-Request-Id` header, in that order, so a retry is safe.
+or `X-Request-Id` header, in that order, so a retry is safe. The filter runs
+first, so a filtered delivery does not use up its id and does not count toward
+the 20-per-minute limit: after you fix a filter, GitHub's **Redeliver** goes
+through.
 
 ## Who can reach a hook
 

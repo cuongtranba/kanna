@@ -42,6 +42,19 @@ test("a hook's provider and model survive a reload", async () => {
   expect(await createFileWebhookStore(dir).load()).toEqual([withModel])
 })
 
+test("a hook's filter, thread key, sender path and reply hint survive a reload", async () => {
+  const dir = await tempDir()
+  const withFilter: StoredWebhook = {
+    ...HOOK,
+    filter: "on: issues",
+    threadKeyPath: "issue.number",
+    senderPath: "sender.login",
+    replyHint: "Reply with gh issue comment",
+  }
+  await createFileWebhookStore(dir).save([withFilter])
+  expect(await createFileWebhookStore(dir).load()).toEqual([withFilter])
+})
+
 test("a missing or corrupt file loads as no hooks", async () => {
   const dir = await tempDir()
   expect(await createFileWebhookStore(dir).load()).toEqual([])

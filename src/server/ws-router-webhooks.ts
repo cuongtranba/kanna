@@ -22,7 +22,15 @@ function sanitizeInput(input: WebhookInput): WebhookInput {
     projectId: text(input.projectId),
     provider: provider(input.provider),
     model: text(input.model)?.trim() || undefined,
+    threadKeyPath: text(input.threadKeyPath),
+    senderPath: text(input.senderPath),
+    replyHint: text(input.replyHint),
+    filter: text(input.filter),
   }
+}
+
+function clearableText(value: string | null | undefined): string | null | undefined {
+  return value === null ? null : text(value)
 }
 
 function sanitizePatch(patch: WebhookPatch): WebhookPatch {
@@ -35,6 +43,10 @@ function sanitizePatch(patch: WebhookPatch): WebhookPatch {
     projectId: patch.projectId === null ? null : text(patch.projectId),
     provider: patch.provider === null ? null : provider(patch.provider),
     model: patch.model === null ? null : text(patch.model)?.trim() || undefined,
+    threadKeyPath: clearableText(patch.threadKeyPath),
+    senderPath: clearableText(patch.senderPath),
+    replyHint: clearableText(patch.replyHint),
+    filter: clearableText(patch.filter),
   }
 }
 

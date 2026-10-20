@@ -93,6 +93,19 @@ export async function handleWebhookRequest(
   if (raw === null) return reject(413, "payload too large")
   if (verifyWebhookRequest(hook.secret, req.headers, raw) !== "ok") return reject(401, "unauthorized")
 
+  const body = parseBody(new TextDecoder().decode(raw))
+  const verdict = service.registry.matchFilter(hook.id, { body, headers: req.headers })
+  if (!verdict.matched) {
+    service.registry.recordDelivery(hook.id, {
+      at: service.clock(),
+      ok: true,
+      status: 200,
+      filtered: true,
+      detail: `filtered: ${verdict.reason}`,
+    })
+    return Response.json({ ok: true, filtered: true })
+  }
+
   const deliveryId = pickDeliveryId(req.headers)
   if (!service.registry.claimDelivery(hook.id, deliveryId)) return Response.json({ ok: true, duplicate: true })
 
@@ -101,5 +114,5 @@ export async function handleWebhookRequest(
     service.registry.releaseDelivery(hook.id, deliveryId)
     return reject(429, "rate limited", { "Retry-After": String(decision.retryAfterSeconds) })
   }
-  return deliver(service, hook, deliveryId, parseBody(new TextDecoder().decode(raw)))
+  return deliver(service, hook, deliveryId, body)
 }

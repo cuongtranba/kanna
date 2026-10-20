@@ -1,6 +1,6 @@
 ---
 id: c3-243
-c3-seal: 6799a27df0e647a9407d404d9ce1604e6c44d4c36ec3e3df4ad6f0f8d38a26dc
+c3-seal: 425bdc389a9cd6cf916fa3c7c583aad38261adbc4f45f8123b93b7fe04db5119
 title: webhooks
 type: component
 category: feature
@@ -41,20 +41,21 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| POST /hooks/id | IN | Bearer secret or X-Hub-Signature-256 HMAC over the raw body; answers 202 with the delivery id, 200 duplicate, 401, 404, 405, 409, 413, 429 | Unknown, disabled and globally disabled hooks all answer 404 so the response does not reveal which hooks exist. The body cap is 256 KiB. | src/server/webhooks/webhook-http-routes.ts |
+| POST /hooks/id | IN | Bearer secret or X-Hub-Signature-256 HMAC over the raw body; answers 202 with the delivery id, 200 filtered, 200 duplicate, 401, 404, 405, 409, 413, 429 | Unknown, disabled and globally disabled hooks all answer 404 so the response does not reveal which hooks exist. The body cap is 256 KiB. | src/server/webhooks/webhook-http-routes.ts |
 | webhooks.json | IN/OUT | Hook configs with their raw secrets, written to a temp file with mode 0600, chmod, then renamed over the target | writeFile mode applies only at creation, so the chmod on every write is load-bearing. Secrets never appear in a snapshot, a log line or a transcript. | src/server/webhooks/webhook-store.adapter.ts |
 | webhooks topic and commands | OUT | WebhooksSnapshot carries summaries with a four-character secretHint; create and rotateSecret return the secret once in the ack | The four webhooks commands are classified unavailable in the remote MCP command catalog so a remote client cannot mint or read a credential. | src/server/ws-router-webhooks.ts |
 | webhook_delivery transcript entry | OUT | One card per delivery with hook id, hook name, mode, delivery id and, for notify, the rendered message | Excluded from shareableEntries, so it stays private by default. | src/shared/transcript-types.ts |
 | Queued prompt | OUT | inline and spawn enqueue the rendered prompt with autoContinue scheduleId webhook-hookId-deliveryId | The body is appended in a fenced block capped at 16000 characters under a line that marks it as untrusted external data. | src/shared/webhooks/template.ts |
 | Hook model | IN/OUT | An optional provider and model pair, set or cleared together, rides the queued message so it applies to that one turn | Validated on create and update against the same provider catalog the chat snapshot serves; an unknown model is refused, never silently replaced. Delivery never calls setChatModel, so an inline hook does not change the chat's own model. | src/shared/webhooks/validate.ts |
-| Delivery path | OUT | deliverWebhook maps a hook to an InboundDelivery and calls deliverInbound (c3-247), which publishes the inbound envelope, upserts the inbox thread keyed by threadKeyPath or the delivery id, and appends the handler instruction to the queued prompt | The webhook_delivery card and the webhook-hookId-deliveryId schedule id are unchanged; threadKeyPath, senderPath and replyHint are optional hook fields | src/server/webhooks/webhook-delivery.ts |
+| Delivery path | OUT | deliverWebhook maps a hook to an InboundDelivery and calls deliverInbound (c3-247), which publishes the inbound envelope, upserts the inbox thread keyed by threadKeyPath or the delivery id, and appends the handler instruction to the queued prompt | The webhook_delivery card and the webhook-hookId-deliveryId schedule id are unchanged; threadKeyPath, senderPath, replyHint and filter are stored hook fields carried by parseStoredWebhook, the registry and the WS sanitizers, and a null patch clears each | src/server/webhooks/webhook-delivery.ts |
+| Payload filter | IN | An optional YAML filter: on names events from X-GitHub-Event with optional types matched against body.action, and if is a CEL condition over body, event and headers that must be true; a non-match answers 200 filtered and records the reason as the last delivery | Checked after authentication and before the delivery-id claim and the rate-limit token. A CEL error is a non-match, and a stored filter that no longer compiles filters every delivery. yaml and @bufbuild/cel are server-only. | src/server/webhooks/webhook-filter.ts |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
 | wiki/src/content/docs/guides/user/webhooks.md | c3-243 Contract | Wording and examples are free; the auth schemes, the status codes and the exposure warning must survive | wiki/src/content/docs/guides/user/webhooks.md |
-| CLAUDE.md Inbound Webhooks section | c3-243 Contract | Wording is free; the invariants on secret storage, route position and the private card kind must survive | CLAUDE.md |
+| .claude/skills/kanna-inbox/SKILL.md Inbound Webhooks section | c3-243 Contract | Wording is free; the invariants on secret storage, route position, the private card kind, the four field whitelists and the filter check order must survive | .claude/skills/kanna-inbox/SKILL.md |
 
 ## Foundational Flow
 
@@ -70,8 +71,8 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | An external event becomes a visible card and, where the hook asks for it, a prompt that runs when the chat is idle | N.A - no governing entity |
-| Primary path | Authenticate, claim the delivery id, take a rate-limit token, deliver in the hook mode, record the outcome and answer 202 | N.A - no governing entity |
-| Alternate path | A repeated delivery id answers 200 duplicate without delivering again; a busy chat simply queues the prompt | N.A - no governing entity |
+| Primary path | Authenticate, check the payload filter, claim the delivery id, take a rate-limit token, deliver in the hook mode, record the outcome and answer 202 | N.A - no governing entity |
+| Alternate path | A delivery that does not match the hook filter answers 200 filtered without claiming its id or taking a token; a repeated delivery id answers 200 duplicate without delivering again; a busy chat simply queues the prompt | N.A - no governing entity |
 | Failure behavior | A missing target chat or project answers 409 and releases the delivery id so a retry can succeed; a rate-limited caller gets 429 with Retry-After | N.A - no governing entity |
 
 ## Change Safety
@@ -82,3 +83,4 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 | Secrets reach a snapshot, log or transcript | Adding a field to WebhookSummary or logging a request | Review of the summarize function; the snapshot type has only secretHint | bun test --conditions production src/server/webhooks/webhook-store.adapter.test.ts |
 | webhooks.json is created world-readable | Replacing the temp-file and chmod write with a plain writeFile | The mode assertion after a rewrite over a looser file | bun test --conditions production src/server/webhooks/webhook-store.adapter.test.ts |
 | A looping caller spawns unbounded chats | Raising or removing the per-hook token bucket | The twenty-first delivery inside a minute stops answering 429 | bun test --conditions production src/server/webhooks/webhook-http-routes.test.ts |
+| A filtered delivery burns its delivery id or a rate-limit token, so Redeliver after a filter fix answers duplicate and noise starves matching events | Moving the filter check after claimDelivery or takeToken in handleWebhookRequest | The redelivery-after-filter-change and the filtered-noise rate-limit route tests fail | bun test --conditions production src/server/webhooks/webhook-http-routes.test.ts |

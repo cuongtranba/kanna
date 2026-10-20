@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:b2e8a93ab131a41035c3d71254216a32fe20d878f925b5bc7e50f63674a1ef73 -->
+<!-- hash: sha256:d763e273d728da22c6d881591dac2b8b495c71db194057463f35496e224976bd -->
 
 ## c3-0 — Kanna (system)
 
@@ -105,6 +105,11 @@ files: src/client/components/settings/RemoteMcpSection.test.tsx, src/client/comp
 container: c3-1 | context: c3-0
 refs: ref-ws-subscription, ref-zustand-store, rule-zustand-store
 files: src/client/app/WebhookCopyButton.tsx, src/client/app/WebhookCreateDialog.store.ts, src/client/app/WebhookCreateDialog.tsx, src/client/app/WebhookRow.tsx, src/client/app/WebhookSecretDialog.tsx, src/client/app/WebhookTargetSelect.tsx, src/client/app/WebhooksPage.tsx, src/client/app/webhookCommands.ts, src/client/components/messages/WebhookDeliveryMessage.tsx, src/client/lib/webhookPresentation.test.ts, src/client/lib/webhookPresentation.ts, src/client/lib/webhookTargets.test.ts, src/client/lib/webhookTargets.ts, src/client/stores/webhooksStore.ts
+
+## c3-126 — inbox-ui (component)
+container: c3-1 | context: c3-0
+refs: ref-strong-typing, ref-ws-subscription, ref-zustand-store, rule-zustand-store
+files: src/client/app/InboxActivityRow.tsx, src/client/app/InboxFilterBar.tsx, src/client/app/InboxPage.test.tsx, src/client/app/InboxPage.tsx, src/client/app/InboxReplyComposer.test.tsx, src/client/app/InboxReplyComposer.tsx, src/client/app/InboxThreadDetail.tsx, src/client/app/InboxThreadRow.tsx, src/client/app/useInboxToasts.test.tsx, src/client/app/useInboxToasts.ts, src/client/lib/inboxCommands.ts, src/client/lib/inboxFilter.test.ts, src/client/lib/inboxFilter.ts, src/client/lib/inboxPresentation.test.ts, src/client/lib/inboxPresentation.ts, src/client/stores/inboxStore.test.ts, src/client/stores/inboxStore.ts
 
 ## c3-2 — Server (container)
 context: c3-0
@@ -233,7 +238,7 @@ files: src/server/oauth-pool/**/*.ts
 ## c3-226 — kanna-mcp-host (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, ref-tool-hydration, rule-colocated-bun-test, rule-strong-typing
-files: src/server/canonical-args.ts, src/server/kanna-mcp-beacon-transfer.test.ts, src/server/kanna-mcp-beacon-transfer.ts, src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp-tool.ts, src/server/kanna-mcp-tools/**/*.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts, src/server/oauth-errors.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/structured-doc-io.adapter.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts, src/shared/structured-doc/**/*.ts
+files: src/server/canonical-args.ts, src/server/kanna-mcp-beacon-transfer.test.ts, src/server/kanna-mcp-beacon-transfer.ts, src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp-tool.ts, src/server/kanna-mcp-tools/**/*.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-bearer.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-validator.ts, src/server/oauth-errors.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/structured-doc-io.adapter.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts, src/shared/structured-doc/**/*.ts
 
 ## c3-227 — auto-continue (component)
 container: c3-2 | context: c3-0
@@ -314,12 +319,12 @@ files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-i
 ## c3-242 — remote-mcp (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, ref-ws-subscription, rule-colocated-bun-test, rule-strong-typing
-files: src/server/better-auth-oauth.adapter.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/remote-mcp/command-catalog.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
+files: src/server/better-auth-oauth.adapter.ts, src/server/command-origin-stamp.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/command-origin.ts, src/shared/remote-mcp/command-catalog.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
 
 ## c3-243 — webhooks (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-side-effect-adapter, ref-strong-typing
-files: src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/template.test.ts, src/shared/webhooks/template.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
+files: src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-filter.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.test.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/template.test.ts, src/shared/webhooks/template.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
 
 ## c3-244 — push-notifications (component)
 container: c3-2 | context: c3-0
@@ -329,6 +334,21 @@ files: src/server/push/**/*.ts, src/server/ws-router-push.ts, src/shared/setting
 ## c3-245 — docs-site (component)
 container: c3-2 | context: c3-0
 files: .github/workflows/wiki-deploy.yml, wiki/astro.config.mjs, wiki/package.json, wiki/scripts/**/*.ts, wiki/src/components/*.astro, wiki/src/content.config.ts, wiki/src/sidebar.mjs
+
+## c3-246 — service-bus (component)
+container: c3-2 | context: c3-0
+refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing
+files: src/client/app/ServiceBusConsumersGroup.tsx, src/client/app/ServiceBusEmbeddedGroup.tsx, src/client/app/ServiceBusFields.tsx, src/client/app/ServiceBusSection.test.tsx, src/client/app/ServiceBusSection.tsx, src/client/app/ServiceBusStreamGroup.tsx, src/server/service-bus-settings.ts, src/server/service-bus/event-store-tap.test.ts, src/server/service-bus/event-store-tap.ts, src/server/service-bus/in-memory-service-bus.test.ts, src/server/service-bus/in-memory-service-bus.ts, src/server/service-bus/jetstream-reconcile.test.ts, src/server/service-bus/jetstream-reconcile.ts, src/server/service-bus/nats-mirror-queue.test.ts, src/server/service-bus/nats-mirror-queue.ts, src/server/service-bus/nats-mirror.test.ts, src/server/service-bus/nats-mirror.ts, src/server/service-bus/nats-server-install.adapter.test.ts, src/server/service-bus/nats-server-install.adapter.ts, src/server/service-bus/nats-server-process.adapter.test.ts, src/server/service-bus/nats-server-process.adapter.ts, src/server/service-bus/nats-server-release.ts, src/server/service-bus/nats-service-bus.adapter.integration.test.ts, src/server/service-bus/nats-service-bus.adapter.ts, src/server/service-bus/service-bus-boot.test.ts, src/server/service-bus/service-bus-boot.ts, src/server/service-bus/service-bus.ts, src/server/service-bus/store-event-subjects.test.ts, src/server/service-bus/store-event-subjects.ts, src/server/ws-router-service-bus.ts, src/shared/release-sums.ts, src/shared/service-bus/envelope.test.ts, src/shared/service-bus/envelope.ts, src/shared/service-bus/jetstream-config.test.ts, src/shared/service-bus/jetstream-config.ts
+
+## c3-247 — inbox (component)
+container: c3-2 | context: c3-0
+refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing
+files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/types.ts
+
+## c3-248 — mcp-sources (component)
+container: c3-2 | context: c3-0
+refs: ref-provider-adapter, ref-side-effect-adapter, ref-strong-typing
+files: src/client/app/McpSourceForm.tsx, src/client/app/McpSourcesSection.test.tsx, src/client/app/McpSourcesSection.tsx, src/client/lib/mcpSourceDraft.test.ts, src/client/lib/mcpSourceDraft.ts, src/client/lib/mcpSourcePresentation.test.ts, src/client/lib/mcpSourcePresentation.ts, src/client/stores/mcpSourcesSectionStore.ts, src/client/stores/mcpSourcesStore.ts, src/server/mcp-sources-settings.test.ts, src/server/mcp-sources-settings.ts, src/server/mcp-sources/mcp-source-client.adapter.test.ts, src/server/mcp-sources/mcp-source-client.adapter.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.ts, src/server/mcp-sources/mcp-source-runner.test.ts, src/server/mcp-sources/mcp-source-runner.ts, src/server/mcp-sources/mcp-sources-boot.ts, src/shared/mcp-sources/presets.ts, src/shared/mcp-sources/types.ts, src/shared/mcp-sources/validate.test.ts, src/shared/mcp-sources/validate.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -407,36 +427,36 @@ reverse deps: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3
 citers: c3-110, c3-111, c3-112, c3-207, c3-208, c3-219, c3-223, c3-227, c3-228, c3-229, c3-230, c3-232, c3-233
 
 ## ref-event-sourcing — Event Sourcing (ref)
-reverse deps: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238, c3-244
-citers: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238, c3-244
+reverse deps: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238, c3-244, c3-246, c3-247
+citers: c3-205, c3-206, c3-210, c3-227, c3-228, c3-229, c3-233, c3-238, c3-244, c3-246, c3-247
 
 ## ref-local-first-data — Local-First Data (ref)
 reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-243, c3-244, c3-305
 citers: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-243, c3-244, c3-305
 
 ## ref-provider-adapter — Provider Adapter (ref)
-reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
-citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229
+reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
+citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 citers: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
 
 ## ref-ws-subscription — WebSocket Subscription (ref)
-reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
-citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
+reverse deps: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-126, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
+citers: c3-101, c3-110, c3-112, c3-117, c3-118, c3-119, c3-125, c3-126, c3-202, c3-208, c3-216, c3-220, c3-223, c3-229, c3-242, c3-302
 
 ## ref-zustand-store — Zustand Store Pattern (ref)
-reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-229
-citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-229
+reverse deps: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-126, c3-229
+citers: c3-102, c3-104, c3-111, c3-115, c3-116, c3-118, c3-119, c3-124, c3-125, c3-126, c3-229
 
 ## rule-colocated-bun-test — colocated-bun-test (rule)
 reverse deps: c3-102, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-206, c3-208, c3-210, c3-224, c3-226, c3-227, c3-229, c3-230, c3-232, c3-233, c3-234, c3-236, c3-238, c3-239, c3-240, c3-242, c3-303, c3-310, c3-311, c3-312, c3-313, c3-314, c3-315
@@ -451,8 +471,8 @@ reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3
 citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
-reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-229
-citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-229
+reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-126, c3-229
+citers: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-126, c3-229
 
 ## File Map
 src/client/api/**/*.ts → c3-101
@@ -653,6 +673,23 @@ src/client/lib/webhookPresentation.ts → c3-125
 src/client/lib/webhookTargets.test.ts → c3-125
 src/client/lib/webhookTargets.ts → c3-125
 src/client/stores/webhooksStore.ts → c3-125
+src/client/app/InboxActivityRow.tsx → c3-126
+src/client/app/InboxFilterBar.tsx → c3-126
+src/client/app/InboxPage.test.tsx → c3-126
+src/client/app/InboxPage.tsx → c3-126
+src/client/app/InboxReplyComposer.test.tsx → c3-126
+src/client/app/InboxReplyComposer.tsx → c3-126
+src/client/app/InboxThreadDetail.tsx → c3-126
+src/client/app/InboxThreadRow.tsx → c3-126
+src/client/app/useInboxToasts.test.tsx → c3-126
+src/client/app/useInboxToasts.ts → c3-126
+src/client/lib/inboxCommands.ts → c3-126
+src/client/lib/inboxFilter.test.ts → c3-126
+src/client/lib/inboxFilter.ts → c3-126
+src/client/lib/inboxPresentation.test.ts → c3-126
+src/client/lib/inboxPresentation.ts → c3-126
+src/client/stores/inboxStore.test.ts → c3-126
+src/client/stores/inboxStore.ts → c3-126
 src/server/cli-bootstrap.adapter.ts → c3-201
 src/server/cli-runtime.test.ts → c3-201
 src/server/cli-runtime.ts → c3-201
@@ -901,6 +938,7 @@ src/server/kanna-mcp-tool.ts → c3-226
 src/server/kanna-mcp-tools/**/*.ts → c3-226
 src/server/kanna-mcp.test.ts → c3-226
 src/server/kanna-mcp.ts → c3-226
+src/server/mcp-bearer.ts → c3-226
 src/server/mcp-oauth.adapter.ts → c3-226
 src/server/mcp-validator.ts → c3-226
 src/server/oauth-errors.ts → c3-226
@@ -1049,8 +1087,10 @@ src/beacon/transport.adapter.ts → c3-241
 src/beacon/version.test.ts → c3-241
 src/beacon/version.ts → c3-241
 src/server/better-auth-oauth.adapter.ts → c3-242
+src/server/command-origin-stamp.ts → c3-242
 src/server/project-file-path.ts → c3-242
 src/server/remote-mcp/**/*.ts → c3-242
+src/shared/command-origin.ts → c3-242
 src/shared/remote-mcp/command-catalog.ts → c3-242
 src/shared/remote-mcp/topics.ts → c3-242
 src/shared/settings/remote-mcp.test.ts → c3-242
@@ -1060,9 +1100,11 @@ src/server/webhooks/webhook-auth.ts → c3-243
 src/server/webhooks/webhook-boot.ts → c3-243
 src/server/webhooks/webhook-delivery.test.ts → c3-243
 src/server/webhooks/webhook-delivery.ts → c3-243
+src/server/webhooks/webhook-filter.ts → c3-243
 src/server/webhooks/webhook-http-routes.test.ts → c3-243
 src/server/webhooks/webhook-http-routes.ts → c3-243
 src/server/webhooks/webhook-rate-limit.ts → c3-243
+src/server/webhooks/webhook-registry.test.ts → c3-243
 src/server/webhooks/webhook-registry.ts → c3-243
 src/server/webhooks/webhook-service.ts → c3-243
 src/server/webhooks/webhook-store.adapter.test.ts → c3-243
@@ -1084,6 +1126,87 @@ wiki/scripts/**/*.ts → c3-245
 wiki/src/components/*.astro → c3-245
 wiki/src/content.config.ts → c3-245
 wiki/src/sidebar.mjs → c3-245
+src/client/app/ServiceBusConsumersGroup.tsx → c3-246
+src/client/app/ServiceBusEmbeddedGroup.tsx → c3-246
+src/client/app/ServiceBusFields.tsx → c3-246
+src/client/app/ServiceBusSection.test.tsx → c3-246
+src/client/app/ServiceBusSection.tsx → c3-246
+src/client/app/ServiceBusStreamGroup.tsx → c3-246
+src/server/service-bus-settings.ts → c3-246
+src/server/service-bus/event-store-tap.test.ts → c3-246
+src/server/service-bus/event-store-tap.ts → c3-246
+src/server/service-bus/in-memory-service-bus.test.ts → c3-246
+src/server/service-bus/in-memory-service-bus.ts → c3-246
+src/server/service-bus/jetstream-reconcile.test.ts → c3-246
+src/server/service-bus/jetstream-reconcile.ts → c3-246
+src/server/service-bus/nats-mirror-queue.test.ts → c3-246
+src/server/service-bus/nats-mirror-queue.ts → c3-246
+src/server/service-bus/nats-mirror.test.ts → c3-246
+src/server/service-bus/nats-mirror.ts → c3-246
+src/server/service-bus/nats-server-install.adapter.test.ts → c3-246
+src/server/service-bus/nats-server-install.adapter.ts → c3-246
+src/server/service-bus/nats-server-process.adapter.test.ts → c3-246
+src/server/service-bus/nats-server-process.adapter.ts → c3-246
+src/server/service-bus/nats-server-release.ts → c3-246
+src/server/service-bus/nats-service-bus.adapter.integration.test.ts → c3-246
+src/server/service-bus/nats-service-bus.adapter.ts → c3-246
+src/server/service-bus/service-bus-boot.test.ts → c3-246
+src/server/service-bus/service-bus-boot.ts → c3-246
+src/server/service-bus/service-bus.ts → c3-246
+src/server/service-bus/store-event-subjects.test.ts → c3-246
+src/server/service-bus/store-event-subjects.ts → c3-246
+src/server/ws-router-service-bus.ts → c3-246
+src/shared/release-sums.ts → c3-246
+src/shared/service-bus/envelope.test.ts → c3-246
+src/shared/service-bus/envelope.ts → c3-246
+src/shared/service-bus/jetstream-config.test.ts → c3-246
+src/shared/service-bus/jetstream-config.ts → c3-246
+src/server/inbound/deliver-inbound.test.ts → c3-247
+src/server/inbound/deliver-inbound.ts → c3-247
+src/server/inbound/inbox-reply.test.ts → c3-247
+src/server/inbound/inbox-reply.ts → c3-247
+src/server/inbox/inbox-boot.ts → c3-247
+src/server/inbox/inbox-log.adapter.test.ts → c3-247
+src/server/inbox/inbox-log.adapter.ts → c3-247
+src/server/inbox/inbox-projection.ts → c3-247
+src/server/inbox/inbox-registry.test.ts → c3-247
+src/server/inbox/inbox-registry.ts → c3-247
+src/server/kanna-mcp-inbox.test.ts → c3-247
+src/server/kanna-mcp-inbox.ts → c3-247
+src/server/ws-router-inbox.ts → c3-247
+src/shared/inbound/handler.ts → c3-247
+src/shared/inbound/reply-prompt.test.ts → c3-247
+src/shared/inbound/reply-prompt.ts → c3-247
+src/shared/inbound/template.test.ts → c3-247
+src/shared/inbound/template.ts → c3-247
+src/shared/inbox/describe.test.ts → c3-247
+src/shared/inbox/describe.ts → c3-247
+src/shared/inbox/events.ts → c3-247
+src/shared/inbox/policy.test.ts → c3-247
+src/shared/inbox/policy.ts → c3-247
+src/shared/inbox/types.ts → c3-247
+src/client/app/McpSourceForm.tsx → c3-248
+src/client/app/McpSourcesSection.test.tsx → c3-248
+src/client/app/McpSourcesSection.tsx → c3-248
+src/client/lib/mcpSourceDraft.test.ts → c3-248
+src/client/lib/mcpSourceDraft.ts → c3-248
+src/client/lib/mcpSourcePresentation.test.ts → c3-248
+src/client/lib/mcpSourcePresentation.ts → c3-248
+src/client/stores/mcpSourcesSectionStore.ts → c3-248
+src/client/stores/mcpSourcesStore.ts → c3-248
+src/server/mcp-sources-settings.test.ts → c3-248
+src/server/mcp-sources-settings.ts → c3-248
+src/server/mcp-sources/mcp-source-client.adapter.test.ts → c3-248
+src/server/mcp-sources/mcp-source-client.adapter.ts → c3-248
+src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts → c3-248
+src/server/mcp-sources/mcp-source-cursor-store.adapter.ts → c3-248
+src/server/mcp-sources/mcp-source-runner.test.ts → c3-248
+src/server/mcp-sources/mcp-source-runner.ts → c3-248
+src/server/mcp-sources/mcp-sources-boot.ts → c3-248
+src/shared/mcp-sources/presets.ts → c3-248
+src/shared/mcp-sources/types.ts → c3-248
+src/shared/mcp-sources/validate.test.ts → c3-248
+src/shared/mcp-sources/validate.ts → c3-248
 src/shared/analytics.ts → c3-301
 src/shared/app-settings-types.ts → c3-301
 src/shared/builtin-commands.ts → c3-301
