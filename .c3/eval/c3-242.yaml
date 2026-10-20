@@ -2,7 +2,6 @@ fact: c3-242
 claim: "remote-mcp is implemented under src/server/remote-mcp and src/shared/remote-mcp"
 code:
   - src/server/remote-mcp/**/*.ts
-  - src/shared/remote-mcp/command-catalog.ts
   - src/shared/remote-mcp/topics.ts
   - src/shared/settings/remote-mcp.ts
   - src/shared/settings/remote-mcp.test.ts

@@ -348,22 +348,6 @@ describe("handleChatCommand", () => {
     ).rejects.toThrow("tool callback service unavailable")
   })
 
-  test("chat.toolRequestAnswer — invalid decision kind — throws", async () => {
-    const deps = makeDeps()
-    await expect(
-      handleChatCommand(
-        deps,
-        {
-          type: "chat.toolRequestAnswer",
-          chatId: "chat-1",
-          toolRequestId: "req-1",
-          decision: { kind: "INVALID" },
-        } as unknown as ClientCommand,
-        "r14",
-      ),
-    ).rejects.toThrow("Invalid tool request decision kind")
-  })
-
   test("chat.toolRequestAnswer — tool request belongs to different chat — throws", async () => {
     const deps = makeDeps({
       storeOverrides: {

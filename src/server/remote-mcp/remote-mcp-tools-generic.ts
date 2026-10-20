@@ -1,12 +1,7 @@
 import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { jsonObjectSchema } from "../../shared/genui/json-schema"
-import {
-  COMMAND_CATALOG,
-  isCatalogedCommandType,
-  listCommandCatalog,
-  toClientCommand,
-} from "../../shared/remote-mcp/command-catalog"
+import { isCommandType, listCommandDescriptors, parseClientCommand, remotePolicyOf } from "../../shared/commands"
 import { parseSubscriptionTopic } from "../../shared/remote-mcp/topics"
 import { fail, ok } from "../kanna-mcp-tool"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
@@ -14,10 +9,10 @@ import { acceptedReport, guardedChatSend, guardedEnqueue } from "./remote-mcp-fo
 import type { RemoteMcpHost } from "./remote-mcp-server"
 
 const KANNA_COMMANDS_DESCRIPTION =
-  "List every Kanna command kanna_command can run, with its parameters and risk."
+  "List every Kanna command with its domain, summary, risk, whether it can run remotely (with the reason when it cannot) and a JSON Schema of its params."
 const KANNA_COMMAND_DESCRIPTION =
   "Run one Kanna command (the same operations the web UI performs) by its dotted type, for example chat.rename or board.card.move. "
-  + "Call kanna_commands first to see each command's parameters and risk; destructive commands delete or discard data, local commands act on the host machine. "
+  + "Call kanna_commands first to see each command's params (JSON Schema) and risk; destructive commands delete or discard data, local commands act on the host machine. "
   + "Prefer send_message over chat.send: kanna_command returns as soon as the message is accepted and does not wait, and an identical chat.send or message.enqueue "
   + "to a chat that is already working on it is suppressed as a duplicate. Follow a chat with wait_for_chat."
 const KANNA_READ_DESCRIPTION =
@@ -43,7 +38,7 @@ export function registerGenericTools(tools: ToolRegistrar, host: RemoteMcpHost):
       inputSchema: z.object({ domain: z.string().optional().describe("Only commands in this domain, such as chat or board") }),
       annotations: { readOnlyHint: true },
     },
-    ({ domain }) => ok(JSON.stringify(listCommandCatalog(domain))),
+    ({ domain }) => ok(JSON.stringify(listCommandDescriptors(domain))),
   )
 
   tools.registerTool(
@@ -58,12 +53,12 @@ export function registerGenericTools(tools: ToolRegistrar, host: RemoteMcpHost):
       annotations: { destructiveHint: true },
     },
     async ({ type, params }) => {
-      if (!isCatalogedCommandType(type)) return fail(`Unknown command "${type}". Call kanna_commands to list them.`)
-      if (COMMAND_CATALOG[type].risk === "unavailable") {
-        return fail(`Command "${type}" is bound to a browser or socket and cannot run remotely.`)
-      }
-      const command = toClientCommand(type, params ?? {})
-      if (!command) return fail(`Command "${type}" could not be built from the given params.`)
+      if (!isCommandType(type)) return fail(`Unknown command "${type}". Call kanna_commands to list them.`)
+      const policy = remotePolicyOf(type)
+      if (policy.kind === "excluded") return fail(`Command "${type}" cannot run remotely: ${policy.reason}`)
+      const parsed = parseClientCommand({ ...(params ?? {}), type })
+      if (!parsed.ok) return fail(parsed.error)
+      const command = parsed.command
       if (command.type === "chat.send") {
         const guarded = await guardedChatSend(host, command)
         return guarded.ok ? acceptedReport(guarded.record, guarded.duplicateVia) : fail(guarded.message)

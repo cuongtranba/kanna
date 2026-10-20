@@ -1,0 +1,112 @@
+import { z } from "zod"
+import { defineCommand, defineCommands, REMOTE_ALLOWED } from "./define"
+import { chatIdParams, chatIdShape } from "./fragments"
+import { chatBranchRefSchema, diffCommitModeSchema, gitSyncActionSchema } from "../git-diff-types.schema"
+
+const chatAndPathParams = z.object({ ...chatIdShape, path: z.string() })
+const chatAndBranchParams = z.object({ ...chatIdShape, branch: chatBranchRefSchema })
+
+export const gitCommands = defineCommands(
+  defineCommand("chat.refreshDiffs", {
+    params: chatIdParams,
+    summary: "Recompute the git diff snapshot of a chat.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.initGit", {
+    params: chatIdParams,
+    summary: "Run git init in the chat's working directory.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.getGitHubPublishInfo", {
+    params: chatIdParams,
+    summary: "Read whether and how the chat's repository can be published to GitHub.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.checkGitHubRepoAvailability", {
+    params: z.object({ ...chatIdShape, owner: z.string(), name: z.string() }),
+    summary: "Check whether a GitHub repository name is free.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.publishToGitHub", {
+    params: z.object({
+      ...chatIdShape,
+      owner: z.string(),
+      name: z.string(),
+      visibility: z.enum(["public", "private"]),
+      description: z.string().optional(),
+    }),
+    summary: "Create a GitHub repository and push the chat's repository to it.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.listBranches", {
+    params: chatIdParams,
+    summary: "List local, remote and pull-request branches of the chat's repository.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.previewMergeBranch", {
+    params: chatAndBranchParams,
+    summary: "Preview the result of merging a branch.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.mergeBranch", {
+    params: chatAndBranchParams,
+    summary: "Merge a branch into the current branch.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.syncBranch", {
+    params: z.object({ ...chatIdShape, action: gitSyncActionSchema }),
+    summary: "Fetch, pull, push or publish the current branch.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.checkoutBranch", {
+    params: z.object({ ...chatIdShape, branch: chatBranchRefSchema, bringChanges: z.boolean().optional() }),
+    summary: "Check out a branch, optionally carrying uncommitted changes.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.createBranch", {
+    params: z.object({ ...chatIdShape, name: z.string(), baseBranchName: z.string().optional() }),
+    summary: "Create and check out a new branch.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.generateCommitMessage", {
+    params: z.object({ ...chatIdShape, paths: z.array(z.string()) }),
+    summary: "Generate a commit message for the given changed files.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.commitDiffs", {
+    params: z.object({
+      ...chatIdShape,
+      paths: z.array(z.string()),
+      summary: z.string(),
+      description: z.string().optional(),
+      mode: diffCommitModeSchema,
+    }),
+    summary: "Commit the given changed files.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.discardDiffFile", {
+    params: chatAndPathParams,
+    summary: "Discard the uncommitted changes of one file.",
+    risk: "destructive",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.ignoreDiffFile", {
+    params: chatAndPathParams,
+    summary: "Add one file to the repository's ignore list.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+)

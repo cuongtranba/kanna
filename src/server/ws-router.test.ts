@@ -3324,7 +3324,7 @@ test("ws-router: chat.toolRequestAnswer throws on invalid decision.kind", async 
 
     expect(ws.sent[0]).toMatchObject({ type: "error", id: "tool-answer-bad-kind" })
     const errMsg = (ws.sent[0] as { message: string }).message
-    expect(errMsg).toContain("Invalid tool request decision kind")
+    expect(errMsg).toContain("decision.kind")
 
     await toolCallbackSvc.cancel(toolRequestId, "test_done")
     await pendingPromise
@@ -4224,8 +4224,9 @@ describe("chat.ops delta broadcast", () => {
 })
 
 describe("ws-router programmatic access", () => {
-  function createProgrammaticRouter(storeOverrides: object = {}) {
+  function createProgrammaticRouter(storeOverrides: object = {}, routerOptions: object = {}) {
     return createWsRouter({
+      ...routerOptions,
       store: { state: createEmptyState(), ...storeOverrides } as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
@@ -4251,6 +4252,44 @@ describe("ws-router programmatic access", () => {
 
     expect(envelope.type).toBe("ack")
     expect(envelope.v).toBe(PROTOCOL_VERSION)
+  })
+
+  test("handleMessage rejects a command whose params break the schema and never runs its handler", async () => {
+    const renamed: string[] = []
+    const router = createProgrammaticRouter({
+      renameChat: async (_chatId: string, title: string) => {
+        renamed.push(title)
+      },
+    })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({
+        v: 1,
+        type: "command",
+        id: "bad-rename",
+        command: { type: "chat.rename", chatId: "chat-1", title: 42 },
+      }),
+    )
+
+    expect(ws.sent).toHaveLength(1)
+    expect(ws.sent[0]).toMatchObject({ type: "error", id: "bad-rename", message: expect.stringContaining("title") })
+    expect(renamed).toEqual([])
+  })
+
+  test("a serviceBus command other than resetStore is rejected and leaves the store alone", async () => {
+    let resets = 0
+    const router = createProgrammaticRouter({}, { serviceBus: { resetStore: async () => { resets += 1 } } })
+    const ws = new FakeWebSocket()
+
+    await router.handleMessage(
+      ws as never,
+      JSON.stringify({ v: 1, type: "command", id: "bus-other", command: { type: "serviceBus.wipeEverything" } }),
+    )
+
+    expect(ws.sent[0]).toMatchObject({ type: "error", id: "bus-other" })
+    expect(resets).toBe(0)
   })
 
   test("dispatchCommand turns a throwing handler into an error envelope carrying its message", async () => {
