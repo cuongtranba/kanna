@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.83.1](https://github.com/cuongtranba/kanna/compare/v1.83.0...v1.83.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **c3:** re-aim c3-126 eval anchor at useInboxToasts.test.tsx ([7472a70](https://github.com/cuongtranba/kanna/commit/7472a70d6c8c3953865f534fd2339d2eab5b0c0b))
+
 ## [1.83.0](https://github.com/cuongtranba/kanna/compare/v1.82.0...v1.83.0) (2026-10-20)
 
 
