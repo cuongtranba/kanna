@@ -57,6 +57,7 @@ import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { handleProjectPathsCommand, handleUploadDeleteCommand } from "./ws-router-project-files"
 import { handlePluginsCommand, type PluginsHostDep } from "./ws-router-plugins"
+import { createPluginsHost } from "./plugins/plugin-service-host"
 import { listProjectPaths } from "./project-paths"
 import { deleteProjectUpload } from "./uploads"
 import { handleGenUICommand } from "./ws-router-genui"
@@ -197,6 +198,7 @@ export function createWsRouter({
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
   const resolvedAppSettings = buildResolvedAppSettings(appSettings)
+  const resolvedPlugins = plugins ?? createPluginsHost(resolvedAppSettings)
   const resolvedAnalytics = analytics ?? NoopAnalyticsReporter
 
   const envelopeBuilder = createEnvelopeBuilder({
@@ -406,7 +408,7 @@ export function createWsRouter({
       ),
       () => handleProjectPathsCommand(store, listProjectPaths, sendToClient, command, id),
       () => handleUploadDeleteCommand(store, deleteProjectUpload, sendToClient, command, id),
-      () => handlePluginsCommand(plugins, sendToClient, command, id),
+      () => handlePluginsCommand(resolvedPlugins, sendToClient, command, id),
       () => handlePushCommand(
         {
           pushManager,
