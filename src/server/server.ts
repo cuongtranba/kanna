@@ -93,7 +93,8 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
-import { createInbox, createInboxReplyActions, webhookHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, inboxHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
+import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
 import { createBusTap } from "./service-bus/event-store-tap"
 import { createInMemoryServiceBus } from "./service-bus/in-memory-service-bus"
 import type { ServiceBus } from "./service-bus/service-bus"
@@ -198,7 +199,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     return discoveredProjects
   }
   await refreshDiscovery()
-
   const terminalPidRegistry = new TerminalPidRegistry(path.join(store.dataDir, "terminals.json"))
   const reapedTerminals = await terminalPidRegistry.reapStale()
   if (reapedTerminals.length > 0) {
@@ -409,6 +409,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   const webhooks = await createWebhookService(store.dataDir, store, agent, bus, inbox, process.env.KANNA_WEBHOOKS !== "disabled")
+  const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox)
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -537,12 +538,13 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     genuiDatasets,
     webhooks: webhooks.registry,
     inbox,
-    ...createInboxReplyActions(store, agent, inbox, webhookHandlerResolver(webhooks.registry)),
+    mcpSources,
+    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
   })
 
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
   inbox.subscribe(() => { router.pushInbox() })
-  wireInboxPush(inbox, pushManager, webhookHandlerResolver(webhooks.registry))
+  wireInboxPush(inbox, pushManager, inboxHandlerResolver(webhooks.registry, mcpSources))
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }
@@ -585,11 +587,9 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 
 function rehydrateScheduledWork(services: ApplicationServices): void {
   const { store, agent, scheduleManager, cronScheduler } = services
-
   scheduleManager.rehydrate(
     store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
   )
-
   const cronChatIds = store.listAutoContinueChats()
   const missedCronFires = cronScheduler.rehydrate(
     cronChatIds.flatMap((chatId) => store.getAutoContinueEvents(chatId)),
@@ -634,7 +634,7 @@ async function shutdownServices(services: ApplicationServices, server: Server<Cl
   await agent.drainCronOutcomes()
   await cronDrain
   await agent.dispose()
-  router.dispose()
+  await router.dispose()
   await auth?.dispose()
   terminals.closeAll()
   await store.flush()

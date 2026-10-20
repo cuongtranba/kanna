@@ -166,6 +166,7 @@ export function mergeAppSettingsPatch(
     customMcpServers: snapshot.customMcpServers,
     customBeacons: snapshot.customBeacons,
     customModels: snapshot.customModels,
+    mcpSources: snapshot.mcpSources,
     customProviders: snapshot.customProviders,
     textSnippets: snapshot.textSnippets,
     plugins: {
@@ -257,6 +258,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     customMcpServers: [],
     customBeacons: [],
     customModels: [],
+    mcpSources: [],
     customProviders: [],
     textSnippets: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },

@@ -58,6 +58,7 @@ import { handleGenUICommand } from "./ws-router-genui"
 import { handleInboxCommand, type InboxReplyAction } from "./ws-router-inbox"
 import { handleWebhooksCommand } from "./ws-router-webhooks"
 import type { InboxRegistry } from "./inbox/inbox-registry"
+import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { GenUIDatasetService } from "./genui/dataset-service"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
@@ -134,6 +135,7 @@ interface CreateWsRouterArgs {
   genuiDatasets?: GenUIDatasetService
   webhooks?: WebhookRegistry
   inbox?: InboxRegistry
+  mcpSources?: McpSourcesTopic
   inboxReply?: InboxReplyAction
   inboxInstruct?: InboxReplyAction
   authEnabled?: boolean
@@ -173,6 +175,7 @@ export function createWsRouter({
   genuiDatasets,
   webhooks,
   inbox,
+  mcpSources,
   inboxReply,
   inboxInstruct,
   authEnabled,
@@ -195,6 +198,7 @@ export function createWsRouter({
     followedSessionRegistry,
     webhooks,
     inbox,
+    mcpSources,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -218,6 +222,7 @@ export function createWsRouter({
     liveBlocks,
     envelopeBuilder,
   })
+  const unsubscribeMcpSources = mcpSources?.onStatus(() => { broadcast.pushMcpSources() })
 
   function resolveChatRepoPath(chatId: string): string {
     const { chat, project } = resolveChatProject(chatId)
@@ -547,8 +552,10 @@ export function createWsRouter({
 
       await handleCommand(ws, parsed)
     },
-    dispose() {
+    async dispose() {
       broadcast.dispose()
+      unsubscribeMcpSources?.()
+      await mcpSources?.stop()
     },
   }
 }

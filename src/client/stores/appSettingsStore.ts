@@ -2,6 +2,7 @@ import { create } from "zustand"
 import type { AppSettingsPatch, AppSettingsSnapshot, CustomModelEntry, McpServerConfig, TextSnippet } from "../../shared/types"
 import type { BeaconConfig } from "../../shared/beacon-config"
 import type { CustomProviderPublic } from "../../shared/custom-providers"
+import type { McpSource } from "../../shared/mcp-sources/types"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -96,6 +97,7 @@ export function mergeAppSettingsPatch(
     customMcpServers: settings.customMcpServers,
     customBeacons: settings.customBeacons,
     customModels: settings.customModels,
+    mcpSources: settings.mcpSources,
     customProviders: settings.customProviders,
     textSnippets: settings.textSnippets,
     plugins: {
@@ -152,6 +154,11 @@ const EMPTY_CUSTOM_MODELS: readonly CustomModelEntry[] = []
 
 export const selectCustomModels = (state: AppSettingsStoreState): readonly CustomModelEntry[] =>
   state.settings?.customModels ?? EMPTY_CUSTOM_MODELS
+
+const EMPTY_MCP_SOURCES: readonly McpSource[] = []
+
+export const selectMcpSources = (state: AppSettingsStoreState): readonly McpSource[] =>
+  state.settings?.mcpSources ?? EMPTY_MCP_SOURCES
 
 const EMPTY_CUSTOM_PROVIDERS: readonly CustomProviderPublic[] = []
 

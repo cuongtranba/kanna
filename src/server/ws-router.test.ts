@@ -28,6 +28,7 @@ import { createBoardStore } from "./board-store.adapter"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import type { BeaconConfig } from "../shared/beacon-config"
+import type { McpSourceStatus } from "../shared/mcp-sources/types"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry } from "./beacon-registry"
 
@@ -148,6 +149,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   customModels: [],
   customProviders: [],
   textSnippets: [],
+  mcpSources: [],
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
   globalPromptAppend: "",
   shareDefaultTtlHours: 24,
@@ -726,6 +728,49 @@ describe("ws-router", () => {
       return pushed.id === "beacons-sub-1" ? [pushed.snapshot?.data?.beacons?.map((row) => row.id) ?? []] : []
     })
     expect(beaconIdsPushed).toEqual([["b1", "b2"], ["b1"]])
+  })
+
+  test("pushes MCP source status changes to subscribers and stops the runner on dispose", async () => {
+    const statuses: McpSourceStatus[] = [{ id: "s1", state: "connecting", lastError: null, lastItemAt: null, itemCount: 0 }]
+    let notify: () => void = () => {}
+    let stopped = false
+    const router = createWsRouter({
+      store: { state: createEmptyState() } as never,
+      agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
+      terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+      keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
+      appSettings: { getSnapshot: () => DEFAULT_APP_SETTINGS_SNAPSHOT, write: async () => DEFAULT_APP_SETTINGS_SNAPSHOT, writePatch: async () => DEFAULT_APP_SETTINGS_SNAPSHOT, onChange: () => () => {} },
+      mcpSources: {
+        snapshot: () => ({ sources: statuses }),
+        onStatus: (listener) => {
+          notify = listener
+          return () => {
+            notify = () => {}
+          }
+        },
+        stop: async () => {
+          stopped = true
+        },
+      },
+      refreshDiscovery: async () => [],
+      getDiscoveredProjects: () => [],
+      machineDisplayName: "Local Machine",
+      updateManager: null,
+      pushManager: NOOP_PUSH_MANAGER,
+    })
+    const ws = new FakeWebSocket()
+    router.handleOpen(ws as never)
+    await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "subscribe", id: "src-1", topic: { type: "mcp-sources" } }))
+    statuses[0] = { ...statuses[0]!, state: "listening" }
+    notify()
+    await router.dispose()
+
+    const states = ws.sent.flatMap((envelope) => {
+      const pushed = envelope as { id?: string; snapshot?: { data?: { sources?: Array<{ state: string }> } } }
+      return pushed.id === "src-1" ? [pushed.snapshot?.data?.sources?.map((row) => row.state) ?? []] : []
+    })
+    expect(states).toEqual([["connecting"], ["listening"]])
+    expect(stopped).toBe(true)
   })
 
   test("tracks analytics preference transitions in the correct order", async () => {

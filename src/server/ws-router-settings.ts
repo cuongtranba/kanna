@@ -4,7 +4,6 @@ import type {
   AppSettingsSnapshot,
   LlmProviderSnapshot,
   LlmProviderValidationResult,
-  McpServerConfig,
   OpenRouterModel,
   Subagent,
   SubagentInput,
@@ -18,7 +17,8 @@ import type { BeaconMintResult, BeaconUpdateResult } from "../shared/beacon-conf
 import { getBeaconPairingStore } from "./beacon-pairing-host"
 import type { BeaconRegistry } from "./beacon-registry"
 import { validateMcpServer } from "./mcp-validator"
-import { startMcpOAuth, completeMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
+import { startMcpOAuth, completeMcpOAuth } from "./mcp-oauth.adapter"
+import { resolveMcpBearer } from "./mcp-bearer"
 import { fetchGitHubReleases } from "./diff-store"
 import { log } from "../shared/log"
 import {
@@ -30,6 +30,7 @@ import {
 import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { PackageUpdateManager } from "./package-update-manager"
 
+export { resolveMcpBearer as resolveMcpTestBearer } from "./mcp-bearer"
 
 export interface ResolvedAppSettings {
   getSnapshot(): AppSettingsSnapshot
@@ -106,21 +107,6 @@ export async function testOAuthToken(
   }
 }
 
-export async function resolveMcpTestBearer<TWriteResult>(
-  entry: McpServerConfig,
-  appSettings: { writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
-): Promise<string | undefined> {
-  if (entry.transport === "stdio" || entry.oauth?.status !== "authenticated") return undefined
-  try {
-    return await ensureFreshMcpToken(entry, {
-      persist: (oauth) =>
-        void appSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
-    })
-  } catch {
-    return undefined
-  }
-}
-
 export async function runMcpAutoTest<TWriteResult>(
   id: string,
   appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
@@ -133,7 +119,7 @@ export async function runMcpAutoTest<TWriteResult>(
         setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
       },
     })
-    const bearer = await resolveMcpTestBearer(entry, appSettings)
+    const bearer = await resolveMcpBearer(entry, appSettings)
     const result = await validateMcpServer(entry, bearer ? { bearer } : {})
     await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
   } catch (err) {
@@ -270,7 +256,7 @@ export async function handleSettingsCommand(
           setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
         },
       })
-      const testBearer = await resolveMcpTestBearer(entry, resolvedAppSettings)
+      const testBearer = await resolveMcpBearer(entry, resolvedAppSettings)
       const lastTest = await validateMcpServer(entry, testBearer ? { bearer: testBearer } : {})
       await resolvedAppSettings.writePatch({
         customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
