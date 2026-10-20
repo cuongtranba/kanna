@@ -1,7 +1,9 @@
-import { CalendarClock, Settings, Webhook, Workflow } from "lucide-react"
+import { CalendarClock, Inbox, Settings, Webhook, Workflow } from "lucide-react"
 import type { NavigateFunction } from "react-router-dom"
 import { cn } from "../lib/utils"
 import { HoverHint } from "../components/ui/truncated-text"
+import { formatUnreadBadge } from "../lib/inboxPresentation"
+import { selectInboxUnreadCount, useInboxStore } from "../stores/inboxStore"
 import { PluginSidebarItems } from "./PluginSidebarItems"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"
 
@@ -10,6 +12,7 @@ export interface SidebarUtilityNavProps {
   readonly navigate: NavigateFunction
   readonly onClose: () => void
   readonly workflowsButtonClass: string
+  readonly isInboxActive: boolean
   readonly isCronJobsActive: boolean
   readonly isWebhooksActive: boolean
   readonly isSettingsActive: boolean
@@ -24,6 +27,7 @@ export function SidebarUtilityNav({
   navigate,
   onClose,
   workflowsButtonClass,
+  isInboxActive,
   isCronJobsActive,
   isWebhooksActive,
   isSettingsActive,
@@ -32,6 +36,7 @@ export function SidebarUtilityNav({
   pluginItems,
   onSelectPluginItem,
 }: SidebarUtilityNavProps) {
+  const inboxUnread = useInboxStore(selectInboxUnreadCount)
   return (
   <div className="border-t border-border">
     <HoverHint label={activeChatId ? "Open workflows" : "Open a chat to view workflows"} side="right">
@@ -53,6 +58,24 @@ export function SidebarUtilityNav({
         <span className="text-sm flex-1">Workflows</span>
       </button>
     </HoverHint>
+    <button
+      type="button"
+      aria-label={inboxUnread > 0 ? `Inbox, ${String(inboxUnread)} unread` : "Inbox"}
+      onClick={() => {
+        navigate("/inbox")
+        onClose()
+      }}
+      className={cn(
+        "w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors duration-150 rounded-none",
+        isInboxActive ? "bg-muted" : "hover:bg-muted/50"
+      )}
+    >
+      <Inbox className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="text-sm flex-1">Inbox</span>
+      {inboxUnread > 0 ? (
+        <span className="font-mono text-xs tabular-nums text-foreground">{formatUnreadBadge(inboxUnread)}</span>
+      ) : null}
+    </button>
     <button
       type="button"
       onClick={() => {

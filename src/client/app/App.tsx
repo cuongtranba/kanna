@@ -18,6 +18,7 @@ import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { selectChatSoundId, selectChatSoundPreference, useAppSettingsStore } from "../stores/appSettingsStore"
 import { usePluginContributions } from "../plugins/usePluginContributions"
 import { playChatNotificationSound, shouldPlayChatSound } from "../lib/chatSounds"
+import { useInboxToasts } from "./useInboxToasts"
 import { useWaitingChatTabs } from "./useWaitingChatTabs"
 import { getChatSoundBurstCount, getNotificationTitle } from "./chatNotifications"
 import { cn } from "../lib/utils"
@@ -33,6 +34,7 @@ import { KannaSocketProvider } from "./KannaSocketProvider"
 import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
 import { createDrawerVisual } from "./drawerVisual"
+import { selectInboxUnreadCount, useInboxStore } from "../stores/inboxStore"
 import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
 import { isMobileViewport } from "../lib/viewport"
 import type { AppSettingsSnapshot, LocalProjectSummary } from "../../shared/types"
@@ -478,7 +480,8 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     dom.setTitle(APP_NAME)
   }, [dom, location.key])
 
-  const notificationTitle = getNotificationTitle(state.sidebarData)
+  const inboxUnread = useInboxStore(selectInboxUnreadCount)
+  const notificationTitle = getNotificationTitle(state.sidebarData, inboxUnread)
   const notificationTitleRef = useRef(notificationTitle)
 
   useEffect(() => {
@@ -507,6 +510,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   }, [dom, location.key, notificationTitle])
 
   useWaitingChatTabs(state.sidebarData, state.sidebarReady)
+  useInboxToasts()
 
   useEffect(() => {
     const burstCount = getChatSoundBurstCount(previousSidebarDataRef.current, state.sidebarData)
@@ -596,6 +600,8 @@ function AuthedApp() {
           <Route path="/workflows/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/cron" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/webhooks" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/inbox" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path="/inbox/:threadId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/:projectId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/boards/stack/:stackId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />

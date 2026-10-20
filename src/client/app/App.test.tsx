@@ -55,6 +55,10 @@ describe("auth boot helpers", () => {
 })
 
 describe("getNotificationTitleCount", () => {
+  test("includes unread inbox threads", () => {
+    expect(getNotificationTitleCount({ starredProjectGroups: [], projectGroups: [], stacks: [] }, 3)).toBe(3)
+  })
+
   test("counts unread chats and waiting-for-user chats", () => {
     expect(getNotificationTitleCount({
       starredProjectGroups: [],
@@ -142,6 +146,11 @@ describe("getNotificationTitle", () => {
 
   test("is the plain app name when nothing needs attention", () => {
     expect(getNotificationTitle(createSidebarData([createChatRow("a")]))).toBe("Kanna")
+  })
+
+  test("adds unread inbox threads to the count", () => {
+    expect(getNotificationTitle(createSidebarData([createChatRow("a", { unread: true })]), 2)).toBe("[3] Kanna")
+    expect(getNotificationTitle(createSidebarData([createChatRow("a")]), 4)).toBe("[4] Kanna")
   })
 })
 
