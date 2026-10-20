@@ -93,6 +93,9 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
+import { createBusTap } from "./service-bus/event-store-tap"
+import { createInMemoryServiceBus } from "./service-bus/in-memory-service-bus"
+import type { ServiceBus } from "./service-bus/service-bus"
 import type { WebhookService } from "./webhooks/webhook-service"
 
 export { buildAgentAppSettingsView }
@@ -140,6 +143,7 @@ export interface StartKannaServerOptions {
 
 interface ApplicationServices {
   store: EventStore
+  bus: ServiceBus
   diffStore: DiffStore
   auth: PasswordAuth | null
   analytics: KannaAnalyticsReporter
@@ -169,6 +173,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
+  const bus = createInMemoryServiceBus()
+  store.tap = createBusTap(bus, (chatId) => store.getChat(chatId)?.projectId, Date.now)
 
   let broadcastChatState: ((chatId: string) => void) | null = null
   let pushFollowedSessions: (() => void) | null = null
@@ -547,6 +553,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 
   return {
     store,
+    bus,
     diffStore,
     auth,
     analytics,

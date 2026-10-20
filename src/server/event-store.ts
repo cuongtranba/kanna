@@ -126,7 +126,6 @@ export class EventStore implements PushEventStore {
 
   private readonly storage: StorageBackend
 
-
   private readonly initDeps: EventStoreInitDeps
   private readonly msgReadDeps: MessageRead.MessageReadDeps
   private readonly peripheralDeps: PeripheralEvents.PeripheralEventsDeps
@@ -262,6 +261,7 @@ export class EventStore implements PushEventStore {
 
   private applyEvent(event: StoreEvent) {
     applyStoreEvent(event, this.state, this.legacyMessagesByChatId, this.replayChatProvider)
+    this.tap?.onEventApplied(event)
     if ("kind" in event) return
     const typedEvent: Exclude<StoreEvent, AutoContinueEvent> = event
     if (typedEvent.type === "chat_deleted") {
@@ -466,6 +466,7 @@ export class EventStore implements PushEventStore {
 
   async appendMessage(chatId: string, entry: TranscriptEntry) {
     await TranscriptWrite.appendMessage(this.chatTranscriptDeps, chatId, entry)
+    this.tap?.onEntryAppended(chatId, entry)
     const taskEvents = ChatTasks.mirrorTranscriptEntry({
       pending: this.pendingNativeTaskCalls,
       chatTasksByChatId: this.state.chatTasksByChatId,
@@ -500,6 +501,7 @@ export class EventStore implements PushEventStore {
   }
 
   onTurnTerminal: ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void) | null = null
+  tap: import("./service-bus/event-store-tap").EventStoreTap | null = null
 
   async recordTurnFinished(chatId: string) {
     await this.commit(buildTurnFinishedEvent(this.state.chatsById, chatId))
@@ -558,7 +560,6 @@ export class EventStore implements PushEventStore {
   }
 
   getSidebarProjectOrder() { return [...this.sidebarProjectOrderRef.value] }
-
 
   getMessages(chatId: string) { return MessageRead.getMessages(this.msgReadDeps, chatId) }
 
@@ -661,7 +662,6 @@ export class EventStore implements PushEventStore {
       .filter(([, entries]) => entries.length > 0)
       .map(([chatId]) => chatId)
   }
-
 
   async appendTunnelEvent(event: CloudflareTunnelEvent): Promise<void> { return PeripheralEvents.appendTunnelEvent(this.peripheralDeps, event) }
 
