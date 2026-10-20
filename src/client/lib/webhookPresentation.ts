@@ -26,6 +26,10 @@ export function webhookUrl(origin: string, hookId: string): string {
 
 export function describeLastDelivery(delivery: WebhookDeliveryOutcome | undefined): string {
   if (!delivery) return "No deliveries since the server started"
+  if (delivery.filtered) {
+    const reason = delivery.detail.replace(/^filtered: /, "")
+    return `Filtered (${reason}) at ${new Date(delivery.at).toLocaleString()}`
+  }
   return `${delivery.ok ? "Delivered" : "Failed"} (${delivery.status}) at ${new Date(delivery.at).toLocaleString()}`
 }
 

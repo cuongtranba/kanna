@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto"
+import { log } from "../../shared/log"
 import {
   WEBHOOK_RATE_LIMIT_PER_MINUTE,
   WEBHOOK_RECENT_DELIVERY_IDS,
@@ -10,6 +11,13 @@ import {
   type WebhookSummary,
 } from "../../shared/webhooks/types"
 import { mergeWebhookModel, validateWebhookInput } from "../../shared/webhooks/validate"
+import {
+  compileWebhookFilter,
+  rejectingWebhookFilter,
+  type WebhookFilter,
+  type WebhookFilterInput,
+  type WebhookFilterVerdict,
+} from "./webhook-filter"
 import { WebhookRateLimiter, type RateDecision } from "./webhook-rate-limit"
 
 export interface StoredWebhook extends WebhookConfig {
@@ -51,6 +59,10 @@ function configOf(hook: StoredWebhook): WebhookConfig {
     ...(hook.chatId ? { chatId: hook.chatId } : {}),
     ...(hook.projectId ? { projectId: hook.projectId } : {}),
     ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
+    ...(hook.threadKeyPath ? { threadKeyPath: hook.threadKeyPath } : {}),
+    ...(hook.senderPath ? { senderPath: hook.senderPath } : {}),
+    ...(hook.replyHint ? { replyHint: hook.replyHint } : {}),
+    ...(hook.filter ? { filter: hook.filter } : {}),
   }
 }
 
@@ -58,6 +70,7 @@ export class WebhookRegistry {
   private readonly hooks = new Map<string, StoredWebhook>()
   private readonly lastDeliveries = new Map<string, WebhookDeliveryOutcome>()
   private readonly recentDeliveryIds = new Map<string, string[]>()
+  private readonly filters = new Map<string, WebhookFilter>()
   private readonly listeners = new Set<() => void>()
   private readonly limiter: WebhookRateLimiter
 
@@ -69,7 +82,21 @@ export class WebhookRegistry {
   }
 
   async initialize(): Promise<void> {
-    for (const hook of await this.store.load()) this.hooks.set(hook.id, hook)
+    for (const hook of await this.store.load()) {
+      this.hooks.set(hook.id, hook)
+      if (!hook.filter) continue
+      const compiled = compileWebhookFilter(hook.filter)
+      if (compiled.ok) {
+        this.filters.set(hook.id, compiled.filter)
+        continue
+      }
+      log.warn(`[webhooks] hook ${hook.id} has a filter that no longer compiles: ${compiled.errors[0]}`)
+      this.filters.set(hook.id, rejectingWebhookFilter(compiled.errors[0]))
+    }
+  }
+
+  matchFilter(hookId: string, input: WebhookFilterInput): WebhookFilterVerdict {
+    return this.filters.get(hookId)?.match(input) ?? { matched: true }
   }
 
   snapshot(): WebhooksSnapshot {
@@ -94,6 +121,8 @@ export class WebhookRegistry {
   async create(input: WebhookInput): Promise<WebhookMutation<CreatedWebhook>> {
     const errors = validateWebhookInput(input)
     if (errors.length > 0) return { ok: false, errors }
+    const filter = this.compileFilter(input.filter)
+    if (!filter.ok) return { ok: false, errors: filter.errors }
     const at = this.now()
     const stored: StoredWebhook = {
       id: generateWebhookId(),
@@ -107,8 +136,13 @@ export class WebhookRegistry {
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.provider && input.model ? { provider: input.provider, model: input.model.trim() } : {}),
+      ...(input.threadKeyPath?.trim() ? { threadKeyPath: input.threadKeyPath.trim() } : {}),
+      ...(input.senderPath?.trim() ? { senderPath: input.senderPath.trim() } : {}),
+      ...(input.replyHint?.trim() ? { replyHint: input.replyHint.trim() } : {}),
+      ...(input.filter?.trim() ? { filter: input.filter.trim() } : {}),
     }
     this.hooks.set(stored.id, stored)
+    this.setFilter(stored.id, filter.compiled)
     await this.persist()
     return { ok: true, value: { hook: this.summarize(stored), secret: stored.secret } }
   }
@@ -119,7 +153,10 @@ export class WebhookRegistry {
     const merged = this.applyPatch(existing, patch)
     const errors = validateWebhookInput(merged)
     if (errors.length > 0) return { ok: false, errors }
+    const filter = patch.filter === undefined ? null : this.compileFilter(merged.filter)
+    if (filter && !filter.ok) return { ok: false, errors: filter.errors }
     this.hooks.set(hookId, merged)
+    if (filter) this.setFilter(hookId, filter.compiled)
     await this.persist()
     return { ok: true, value: this.summarize(merged) }
   }
@@ -137,6 +174,7 @@ export class WebhookRegistry {
     if (!this.hooks.delete(hookId)) return false
     this.lastDeliveries.delete(hookId)
     this.recentDeliveryIds.delete(hookId)
+    this.filters.delete(hookId)
     this.limiter.forget(hookId)
     await this.persist()
     return true
@@ -175,6 +213,10 @@ export class WebhookRegistry {
     if (patch.template !== undefined) next.template = patch.template.trim()
     if (patch.chatId !== undefined) setOrClear(next, "chatId", patch.chatId)
     if (patch.projectId !== undefined) setOrClear(next, "projectId", patch.projectId)
+    if (patch.threadKeyPath !== undefined) setOrClear(next, "threadKeyPath", patch.threadKeyPath)
+    if (patch.senderPath !== undefined) setOrClear(next, "senderPath", patch.senderPath)
+    if (patch.replyHint !== undefined) setOrClear(next, "replyHint", patch.replyHint)
+    if (patch.filter !== undefined) setOrClear(next, "filter", patch.filter)
     if (patch.provider !== undefined || patch.model !== undefined) {
       const { provider, model } = mergeWebhookModel(existing, patch)
       delete next.provider
@@ -185,6 +227,19 @@ export class WebhookRegistry {
       }
     }
     return next
+  }
+
+  private compileFilter(
+    source: string | undefined,
+  ): { ok: true; compiled: WebhookFilter | null } | { ok: false; errors: string[] } {
+    if (!source?.trim()) return { ok: true, compiled: null }
+    const result = compileWebhookFilter(source.trim())
+    return result.ok ? { ok: true, compiled: result.filter } : { ok: false, errors: result.errors }
+  }
+
+  private setFilter(hookId: string, filter: WebhookFilter | null): void {
+    if (filter) this.filters.set(hookId, filter)
+    else this.filters.delete(hookId)
   }
 
   private summarize(hook: StoredWebhook): WebhookSummary {
@@ -206,7 +261,10 @@ export class WebhookRegistry {
   }
 }
 
-function setOrClear(target: StoredWebhook, key: "chatId" | "projectId", value: string | null): void {
-  if (value === null || value === "") delete target[key]
-  else target[key] = value
+type ClearableKey = "chatId" | "projectId" | "threadKeyPath" | "senderPath" | "replyHint" | "filter"
+
+function setOrClear(target: StoredWebhook, key: ClearableKey, value: string | null): void {
+  const trimmed = value?.trim()
+  if (!trimmed) delete target[key]
+  else target[key] = trimmed
 }

@@ -312,7 +312,29 @@ so an unknown model is refused instead of `normalizeServerModel` silently
 running the default. Delivery must not call `setChatModel`: an `inline` hook
 would otherwise permanently change the model the user picked for that chat.
 `parseStoredWebhook` and the WS sanitizers whitelist fields, so a new hook field
-is dropped on reload or on the wire until it is added to both.
+is dropped on reload or on the wire until it is added to both. **A hook field
+has FOUR whitelists, not two:** `parseStoredWebhook`, the registry's `configOf`
+/ `create` / `applyPatch`, and `sanitizeInput` / `sanitizePatch` in
+`ws-router-webhooks.ts`. `threadKeyPath`, `senderPath` and `replyHint` were
+declared, validated and read at delivery while every one of those dropped them,
+so they never reached disk or the client; `webhook-store.adapter.test.ts` and
+`webhook-registry.test.ts` now round-trip them.
+
+**The payload filter runs after auth and before the delivery-id claim and the
+rate-limit token** (`webhook-filter.ts`, `adr-20261020-webhook-payload-filter`).
+It is YAML — `on` (events from `X-GitHub-Event`, optional `types` against
+`body.action`) and `if` (CEL via `@bufbuild/cel`, over `body`, `event`,
+`headers`) — compiled once in the registry on create, update and boot, and
+answered `200 {ok:true, filtered:true}` when it does not match. Each position
+is load-bearing: before auth it would tell a stranger what the filter accepts;
+after the claim a filtered delivery would burn its id, so GitHub's Redeliver
+after a filter fix answers `duplicate`; after the token, filtered noise starves
+the 20/min bucket the matching events need. A CEL evaluation error (a missing
+key) is a non-match, never a 500. A stored filter that stops compiling FAILS
+CLOSED (`rejectingWebhookFilter`): every delivery is filtered with
+`filter invalid: …` until the filter is fixed, rather than the hook silently
+delivering everything. `yaml` and `@bufbuild/cel` are server-only; the shared
+validator checks only the length because it runs in the browser.
 
 **Hook urls are reachable wherever Kanna is.** Localhost by default;
 `--remote`, `--share` and tunnels make them public, and then the secret is the

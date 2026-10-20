@@ -4,13 +4,14 @@ import { createWebhookHarness } from "../test-helpers/webhook-harness"
 import { handleWebhookRequest } from "./webhook-http-routes"
 import { WEBHOOK_BODY_MAX_BYTES } from "../../shared/webhooks/types"
 
-async function setup(options: { enabled?: boolean; now?: () => number } = {}) {
+async function setup(options: { enabled?: boolean; now?: () => number; filter?: string } = {}) {
   const harness = await createWebhookHarness(options)
   const created = await harness.registry.create({
     name: "CI",
     mode: "inline",
     chatId: harness.chat.id,
     template: "{{repo}} {{status}}",
+    ...(options.filter ? { filter: options.filter } : {}),
   })
   if (!created.ok) throw new Error(created.errors.join())
   const { hook, secret } = created.value
@@ -88,4 +89,70 @@ test("a path that is not a hook is left to the rest of the server", async () => 
   const { service } = await setup()
   const url = new URL("http://localhost/api/other")
   expect(await handleWebhookRequest(new Request(url, { method: "POST" }), url, service)).toBeNull()
+})
+
+const ASSIGNED_FILTER = `on:
+  issues:
+    types: [assigned]
+if: >-
+  body.assignee.login == "cuongtranba"
+`
+
+const issueEvent = (action: string, assignee?: string) =>
+  JSON.stringify({ action, ...(assignee ? { assignee: { login: assignee } } : {}) })
+
+test("an event the filter does not list is acknowledged as filtered and queues nothing", async () => {
+  const { post, sign, store, chat } = await setup({ filter: ASSIGNED_FILTER })
+  const body = issueEvent("labeled")
+  const response = await post({ "X-Hub-Signature-256": sign(body), "X-GitHub-Event": "issues", "X-GitHub-Delivery": "d-labeled" }, body)
+  expect(response?.status).toBe(200)
+  expect(await response?.json()).toEqual({ ok: true, filtered: true })
+  expect(store.getQueuedMessages(chat.id)).toEqual([])
+})
+
+test("an event that satisfies the filter is delivered once", async () => {
+  const { post, sign, store, chat } = await setup({ filter: ASSIGNED_FILTER })
+  const body = issueEvent("assigned", "cuongtranba")
+  const response = await post({ "X-Hub-Signature-256": sign(body), "X-GitHub-Event": "issues", "X-GitHub-Delivery": "d-assigned" }, body)
+  expect(response?.status).toBe(202)
+  expect(store.getQueuedMessages(chat.id)).toHaveLength(1)
+})
+
+test("a condition reading a field the payload lacks filters the delivery instead of failing", async () => {
+  const { post, secret, store, chat } = await setup({ filter: 'if: body.assignee.login == "x"' })
+  const response = await post({ Authorization: `Bearer ${secret}` }, BODY)
+  expect(response?.status).toBe(200)
+  expect(await response?.json()).toEqual({ ok: true, filtered: true })
+  expect(store.getQueuedMessages(chat.id)).toEqual([])
+})
+
+test("an unauthenticated request learns nothing about the filter", async () => {
+  const { post } = await setup({ filter: ASSIGNED_FILTER })
+  const response = await post({ "X-GitHub-Event": "issues" }, issueEvent("labeled"))
+  expect(response?.status).toBe(401)
+})
+
+test("a filtered delivery id is accepted once the filter is changed to match", async () => {
+  const { post, sign, registry, hook, store, chat } = await setup({ filter: ASSIGNED_FILTER })
+  const body = issueEvent("labeled")
+  const headers = { "X-Hub-Signature-256": sign(body), "X-GitHub-Event": "issues", "X-GitHub-Delivery": "d-redeliver" }
+  expect((await post(headers, body))?.status).toBe(200)
+  await registry.update(hook.id, { filter: "on: issues" })
+  expect((await post(headers, body))?.status).toBe(202)
+  expect(store.getQueuedMessages(chat.id)).toHaveLength(1)
+})
+
+test("filtered deliveries do not drain the rate limit", async () => {
+  const { post, secret, registry, hook } = await setup({ now: () => 1_000_000, filter: 'if: "false"' })
+  const headers = { Authorization: `Bearer ${secret}` }
+  for (let i = 0; i < 25; i++) await post(headers, BODY)
+  await registry.update(hook.id, { filter: null })
+  expect((await post(headers, BODY))?.status).toBe(202)
+})
+
+test("a filtered delivery shows on the hook as filtered with its reason", async () => {
+  const { post, secret, registry, hook } = await setup({ filter: "on: issues" })
+  await post({ Authorization: `Bearer ${secret}`, "X-GitHub-Event": "push" }, BODY)
+  const lastDelivery = registry.snapshot().hooks.find((entry) => entry.id === hook.id)?.lastDelivery
+  expect(lastDelivery).toMatchObject({ ok: true, filtered: true, detail: 'filtered: event "push" not in on' })
 })

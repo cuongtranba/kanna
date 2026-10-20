@@ -29,6 +29,11 @@ interface FormProps extends Props {
 
 const CREATE_KEY = pendingActionKey("webhooks.create")
 
+const FILTER_PLACEHOLDER = `on:
+  issues:
+    types: [assigned]
+if: body.assignee.login == "octocat"`
+
 const MODE_OPTIONS: SegmentedOption<WebhookMode>[] = (["notify", "inline", "spawn"] as const).map((mode) => ({
   value: mode,
   label: webhookModeLabel(mode),
@@ -52,6 +57,14 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
   const setProjectId = WebhookCreateStore.useScopedStore((state) => state.setProjectId)
   const setModelValue = WebhookCreateStore.useScopedStore((state) => state.setModelValue)
   const setTemplate = WebhookCreateStore.useScopedStore((state) => state.setTemplate)
+  const filter = WebhookCreateStore.useScopedStore((state) => state.filter)
+  const threadKeyPath = WebhookCreateStore.useScopedStore((state) => state.threadKeyPath)
+  const senderPath = WebhookCreateStore.useScopedStore((state) => state.senderPath)
+  const replyHint = WebhookCreateStore.useScopedStore((state) => state.replyHint)
+  const setFilter = WebhookCreateStore.useScopedStore((state) => state.setFilter)
+  const setThreadKeyPath = WebhookCreateStore.useScopedStore((state) => state.setThreadKeyPath)
+  const setSenderPath = WebhookCreateStore.useScopedStore((state) => state.setSenderPath)
+  const setReplyHint = WebhookCreateStore.useScopedStore((state) => state.setReplyHint)
   const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
   const modelOptions = useMemo(() => listWebhookModelOptions(catalog), [catalog])
   const startsTurn = mode !== "notify"
@@ -64,8 +77,12 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
       template,
       ...(mode === "spawn" ? { projectId } : { chatId }),
       ...(choice ? { provider: choice.provider, model: choice.model } : {}),
+      ...(filter.trim() ? { filter } : {}),
+      ...(threadKeyPath.trim() ? { threadKeyPath: threadKeyPath.trim() } : {}),
+      ...(senderPath.trim() ? { senderPath: senderPath.trim() } : {}),
+      ...(replyHint.trim() ? { replyHint } : {}),
     }
-  }, [chatId, mode, modelValue, name, projectId, startsTurn, template])
+  }, [chatId, filter, mode, modelValue, name, projectId, replyHint, senderPath, startsTurn, template, threadKeyPath])
   const errors = useMemo(
     () => [...validateWebhookInput(input), ...validateWebhookModel(input, catalog)],
     [catalog, input],
@@ -80,6 +97,22 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
     (event: ChangeEvent<HTMLTextAreaElement>) => setTemplate(event.target.value),
     [setTemplate],
   )
+  const handleFilterChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => setFilter(event.target.value),
+    [setFilter],
+  )
+  const handleThreadKeyPathChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => setThreadKeyPath(event.target.value),
+    [setThreadKeyPath],
+  )
+  const handleSenderPathChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => setSenderPath(event.target.value),
+    [setSenderPath],
+  )
+  const handleReplyHintChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => setReplyHint(event.target.value),
+    [setReplyHint],
+  )
   const handleSubmit = useCallback(() => {
     if (errors.length > 0) return
     runPendingAction(submitKey, async () => {
@@ -92,6 +125,10 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
           projectId: input.projectId ?? null,
           provider: input.provider ?? null,
           model: input.model ?? null,
+          filter: input.filter ?? null,
+          threadKeyPath: input.threadKeyPath ?? null,
+          senderPath: input.senderPath ?? null,
+          replyHint: input.replyHint ?? null,
         }
         await sendWebhookCommand(socket, { type: "webhooks.update", id: editing.id, patch })
       } else {
@@ -151,6 +188,46 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
             <p className="text-xs text-muted-foreground">
               Insert fields from the JSON body with <code className="font-mono">{"{{repo.name}}"}</code>. The body is
               appended to the prompt as untrusted data.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="webhook-filter" className="text-sm font-medium text-foreground">Filter (optional)</label>
+            <Textarea
+              id="webhook-filter"
+              className="font-mono"
+              rows={5}
+              value={filter}
+              onChange={handleFilterChange}
+              placeholder={FILTER_PLACEHOLDER}
+            />
+            <p className="text-xs text-muted-foreground">
+              YAML with <code className="font-mono">on</code> (event name from{" "}
+              <code className="font-mono">X-GitHub-Event</code>, optional <code className="font-mono">types</code> matched
+              against <code className="font-mono">body.action</code>) and <code className="font-mono">if</code> (a CEL
+              condition over <code className="font-mono">body</code>, <code className="font-mono">event</code> and{" "}
+              <code className="font-mono">headers</code>). Deliveries that do not match are acknowledged and ignored.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label htmlFor="webhook-thread-key" className="text-sm font-medium text-foreground">Thread key path</label>
+              <Input id="webhook-thread-key" className="font-mono" value={threadKeyPath} onChange={handleThreadKeyPathChange} />
+              <p className="text-xs text-muted-foreground">Deliveries with the same value share one Inbox thread, and in spawn mode one chat.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="webhook-sender" className="text-sm font-medium text-foreground">Sender path</label>
+              <Input id="webhook-sender" className="font-mono" value={senderPath} onChange={handleSenderPathChange} />
+              <p className="text-xs text-muted-foreground">Shown as the sender of the thread.</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="webhook-reply-hint" className="text-sm font-medium text-foreground">Reply hint</label>
+            <Textarea id="webhook-reply-hint" rows={3} value={replyHint} onChange={handleReplyHintChange} />
+            <p className="text-xs text-muted-foreground">
+              Tells the agent how to send a reply through the server's tools when you answer from the Inbox.
             </p>
           </div>
 
