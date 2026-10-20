@@ -1,0 +1,25 @@
+fact: c3-248
+claim: "MCP sources are implemented at src/server/mcp-sources/ with the contract in src/shared/mcp-sources/ and the Settings section in src/client/app/McpSourcesSection.tsx"
+code:
+  - src/shared/mcp-sources/types.ts
+  - src/shared/mcp-sources/validate.ts
+  - src/shared/mcp-sources/validate.test.ts
+  - src/shared/mcp-sources/presets.ts
+  - src/server/mcp-sources/mcp-source-runner.ts
+  - src/server/mcp-sources/mcp-source-runner.test.ts
+  - src/server/mcp-sources/mcp-source-client.adapter.ts
+  - src/server/mcp-sources/mcp-source-client.adapter.test.ts
+  - src/server/mcp-sources/mcp-source-cursor-store.adapter.ts
+  - src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts
+  - src/server/mcp-sources/mcp-sources-boot.ts
+  - src/server/mcp-sources-settings.ts
+  - src/server/mcp-sources-settings.test.ts
+  - src/client/app/McpSourcesSection.tsx
+  - src/client/app/McpSourcesSection.test.tsx
+  - src/client/app/McpSourceForm.tsx
+  - src/client/stores/mcpSourcesStore.ts
+  - src/client/stores/mcpSourcesSectionStore.ts
+  - src/client/lib/mcpSourceDraft.ts
+  - src/client/lib/mcpSourceDraft.test.ts
+  - src/client/lib/mcpSourcePresentation.ts
+  - src/client/lib/mcpSourcePresentation.test.ts

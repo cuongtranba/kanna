@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 745e1b27fda2bf33d505b4372ac720d12323355f58eebde53bef5c43ed60ae5b
+c3-seal: 0de3115e5ef8a1bccbec0771b712c29228c7ca1c0cb2df18cc2657707aba6c4b
 title: Server
 type: container
 boundary: service
@@ -74,3 +74,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-245 | docs-site | feature | active | Keep wiki/src/content/docs as the single place Kanna's user and operator docs are written, and publish it to two generated outputs, the Starlight site and the repository's GitHub Wiki, so neither output can drift from the source. |
 | c3-246 | service-bus | feature | active | Publish every durable fact the server records on one in-process service bus, so that the inbox, notifications and an optional external mirror read a single stream instead of each tapping the EventStore and the registries separately. |
 | c3-247 | inbox | feature | active | Turn every inbound message Kanna receives, from a webhook or an MCP source, into a conversation thread the user can read, have pre-handled by an agent in its own chat, and answer from one place, while every other bus event is kept as a browsable activity record. |
+| c3-248 | mcp-sources | feature | active | Let Kanna itself hold a long-lived connection to a user-configured MCP server and turn the messages that server exposes, by resource subscription or by polling a list tool, into inbox threads, so a conversation that happens on another service reaches the user and their agent without the model having to poll. |
