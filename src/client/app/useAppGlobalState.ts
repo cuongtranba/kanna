@@ -542,21 +542,12 @@ export function useAppGlobalState(
   }, [socket])
 
   useEffect(() => {
-    return socket.subscribe<InboxSnapshot>({ type: "inbox" }, (snapshot) => {
-      useInboxStore.getState().applySnapshot(snapshot)
-    })
-  }, [socket])
-
-  useEffect(() => {
-    return socket.subscribe<McpSourcesSnapshot>({ type: "mcp-sources" }, (snapshot) => {
-      useMcpSourcesStore.getState().setStatuses(snapshot.sources)
-    })
-  }, [socket])
-
-  useEffect(() => {
-    return socket.subscribe<ServiceBusStatus>({ type: "service-bus" }, (status) => {
-      useServiceBusStore.getState().setStatus(status)
-    })
+    const unsubscribes = [
+      socket.subscribe<InboxSnapshot>({ type: "inbox" }, (snapshot) => { useInboxStore.getState().applySnapshot(snapshot) }),
+      socket.subscribe<McpSourcesSnapshot>({ type: "mcp-sources" }, (snapshot) => { useMcpSourcesStore.getState().setStatuses(snapshot.sources) }),
+      socket.subscribe<ServiceBusStatus>({ type: "service-bus" }, (status) => { useServiceBusStore.getState().setStatus(status) }),
+    ]
+    return () => { for (const unsubscribe of unsubscribes) unsubscribe() }
   }, [socket])
 
   useEffect(() => {

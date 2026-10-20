@@ -777,6 +777,11 @@ c3-245:
 c3-246:
   - src/shared/service-bus/*.ts
   - src/server/service-bus/*.ts
+  - src/shared/release-sums.ts
+  - src/server/service-bus-settings.ts
+  - src/server/ws-router-service-bus.ts
+  - src/client/app/ServiceBus*.tsx
+  - src/client/stores/serviceBus*.ts
 c3-247:
   - src/shared/inbox/*.ts
   - src/shared/inbound/*.ts

@@ -1,8 +1,11 @@
 fact: c3-246
-claim: "the in-process service bus is implemented at src/server/service-bus/ with the envelope contract in src/shared/service-bus/"
+claim: "the in-process service bus and its NATS JetStream mirror are implemented at src/server/service-bus/ with the envelope and JetStream contracts in src/shared/service-bus/"
 code:
   - src/shared/service-bus/envelope.ts
   - src/shared/service-bus/envelope.test.ts
+  - src/shared/service-bus/jetstream-config.ts
+  - src/shared/service-bus/jetstream-config.test.ts
+  - src/shared/release-sums.ts
   - src/server/service-bus/service-bus.ts
   - src/server/service-bus/in-memory-service-bus.ts
   - src/server/service-bus/in-memory-service-bus.test.ts
@@ -10,3 +13,26 @@ code:
   - src/server/service-bus/store-event-subjects.test.ts
   - src/server/service-bus/event-store-tap.ts
   - src/server/service-bus/event-store-tap.test.ts
+  - src/server/service-bus/service-bus-boot.ts
+  - src/server/service-bus/service-bus-boot.test.ts
+  - src/server/service-bus/nats-server-release.ts
+  - src/server/service-bus/nats-server-install.adapter.ts
+  - src/server/service-bus/nats-server-install.adapter.test.ts
+  - src/server/service-bus/nats-server-process.adapter.ts
+  - src/server/service-bus/nats-server-process.adapter.test.ts
+  - src/server/service-bus/nats-mirror-queue.ts
+  - src/server/service-bus/nats-mirror-queue.test.ts
+  - src/server/service-bus/nats-mirror.ts
+  - src/server/service-bus/nats-mirror.test.ts
+  - src/server/service-bus/jetstream-reconcile.ts
+  - src/server/service-bus/jetstream-reconcile.test.ts
+  - src/server/service-bus/nats-service-bus.adapter.ts
+  - src/server/service-bus/nats-service-bus.adapter.integration.test.ts
+  - src/server/service-bus-settings.ts
+  - src/server/ws-router-service-bus.ts
+  - src/client/app/ServiceBusSection.tsx
+  - src/client/app/ServiceBusSection.test.tsx
+  - src/client/app/ServiceBusStreamGroup.tsx
+  - src/client/app/ServiceBusConsumersGroup.tsx
+  - src/client/app/ServiceBusEmbeddedGroup.tsx
+  - src/client/app/ServiceBusFields.tsx
