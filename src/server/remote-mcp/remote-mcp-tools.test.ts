@@ -137,13 +137,17 @@ async function readAuditRecords(): Promise<JsonValue[]> {
   return text.split("\n").filter((line) => line.length > 0).map((line) => safeJsonParse(line) ?? null)
 }
 
-async function auditRecordFor(callId: string): Promise<JsonValue | undefined> {
+async function auditRecordWhere(matches: (entry: JsonValue) => boolean): Promise<JsonValue | undefined> {
   const deadline = Date.now() + 5000
   for (;;) {
-    const found = (await readAuditRecords()).find((entry) => field(entry, "callId") === callId)
+    const found = (await readAuditRecords()).find(matches)
     if (found || Date.now() > deadline) return found
     await new Promise((resolve) => setTimeout(resolve, 20))
   }
+}
+
+function auditRecordFor(callId: string): Promise<JsonValue | undefined> {
+  return auditRecordWhere((entry) => field(entry, "callId") === callId)
 }
 
 async function newChat(): Promise<string> {
@@ -314,10 +318,9 @@ describe("remote MCP typed tools", () => {
     const reply = await call("kanna_command", { type: "chat.rename", params: { chatId: "missing", title: "x", apiKey: "sk-live-leak" } })
     expect(reply.isError).toBe(true)
 
-    const records = await readAuditRecords()
-    const record = records.find((entry) => field(entry, "tool") === "kanna_command" && JSON.stringify(entry).includes("[redacted]"))
+    const record = await auditRecordWhere((entry) => field(entry, "tool") === "kanna_command" && JSON.stringify(entry).includes("[redacted]"))
     expect(record && field(record, "outcome")).toBe("error")
-    expect(JSON.stringify(records)).not.toContain("sk-live-leak")
+    expect(JSON.stringify(await readAuditRecords())).not.toContain("sk-live-leak")
   })
 
   test("a message to a new chat in a project reports the created chat id", async () => {
