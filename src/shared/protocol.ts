@@ -42,6 +42,7 @@ import type {
 import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
 import type { InboxFilter, InboxSnapshot } from "./inbox/types"
+import type { McpSourcesSnapshot } from "./mcp-sources/types"
 import type { WebhookInput, WebhookPatch, WebhooksSnapshot } from "./webhooks/types"
 
 export type { EditorPreset }
@@ -72,6 +73,7 @@ export type SubscriptionTopic =
   | { type: "package-updates" }
   | { type: "webhooks" }
   | { type: "inbox" }
+  | { type: "mcp-sources" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -471,6 +473,7 @@ export type ServerSnapshot =
   | { type: "package-updates"; data: import("./packages/types").PackageUpdateSnapshot }
   | { type: "webhooks"; data: WebhooksSnapshot }
   | { type: "inbox"; data: InboxSnapshot }
+  | { type: "mcp-sources"; data: McpSourcesSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind

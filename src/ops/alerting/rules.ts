@@ -68,6 +68,8 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   `${promMetricName(REMOTE_MCP_TOOL_CALL)}_total`,
   `${promMetricName(BUS_PUBLISHED_TOTAL)}_total`,
   `${promMetricName(BUS_HANDLER_ERRORS_TOTAL)}_total`,
+  "kanna_mcp_source_items_total",
+  "kanna_mcp_source_errors_total",
   ...[promMetricName(COMPACTION_PRE_TOKENS), promMetricName(COMPACTION_POST_TOKENS)].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,

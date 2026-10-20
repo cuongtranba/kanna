@@ -98,6 +98,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     customModels: seedCustomModelsFromBuiltins(),
     customProviders: [],
     textSnippets: [],
+    mcpSources: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,

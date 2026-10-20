@@ -61,6 +61,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     customModels: [],
     customProviders: [],
     textSnippets: [],
+    mcpSources: [],
     claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
     globalPromptAppend: "",
     shareDefaultTtlHours: 24,

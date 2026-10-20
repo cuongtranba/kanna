@@ -26,6 +26,7 @@ import {
   DownloadCloud,
   LogOut,
   Type,
+  Antenna,
 } from "lucide-react"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
@@ -55,6 +56,7 @@ import {
 import { renderMarkdownToReact } from "../components/lexical/markdown/lexicalToReact"
 import { SubagentsSettingsBranch } from "./SubagentsSection"
 import { McpServersSettingsBranch } from "./McpServersSection"
+import { McpSourcesSettingsBranch } from "./McpSourcesSection"
 import { BeaconsSettingsBranch } from "./BeaconsSection"
 import { ModelsSettingsBranch } from "./ModelsSection"
 import { useProviderCatalog } from "./useProviderCatalog"
@@ -173,6 +175,12 @@ const sidebarItems = [
     subtitle: "Install custom MCP servers (stdio, http, sse, ws) and connect-test them.",
   },
   {
+    id: "mcp-sources",
+    label: "MCP sources",
+    icon: Antenna,
+    subtitle: "Bring messages from an MCP server, such as Zalo, into the Inbox by subscription or polling.",
+  },
+  {
     id: "remote-mcp",
     label: "Remote MCP",
     icon: Network,
@@ -214,6 +222,7 @@ type SidebarPageId = SidebarItem["id"]
 
 const SETTINGS_SERVICE_BRANCHES: Partial<Record<SidebarPageId, ComponentType<{ state: KannaState }>>> = {
   "mcp-servers": McpServersSettingsBranch,
+  "mcp-sources": McpSourcesSettingsBranch,
   "remote-mcp": RemoteMcpSection,
   beacons: BeaconsSettingsBranch,
 }
@@ -2153,7 +2162,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
                 {ServiceBranch && <ServiceBranch state={state} />}
                 {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
                 {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
-                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "remote-mcp", "beacons", "snippets", "instructions"].includes(selectedPage) && (
+                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "mcp-sources", "remote-mcp", "beacons", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}

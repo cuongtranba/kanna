@@ -21,6 +21,7 @@ import { buildBeaconStatusRows } from "../shared/beacon-status"
 import { chatHasPendingWork } from "../shared/chat-activity"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { InboxRegistry } from "./inbox/inbox-registry"
+import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
@@ -76,6 +77,7 @@ export interface EnvelopeDeps {
   followedSessionRegistry?: FollowedSessionRegistry
   webhooks?: WebhookRegistry
   inbox?: InboxRegistry
+  mcpSources?: McpSourcesTopic
   machineDisplayName: string
   updateManager: UpdateManager | null
   packageUpdateManager?: PackageUpdateManager
@@ -172,6 +174,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     followedSessionRegistry,
     webhooks,
     inbox,
+    mcpSources,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -437,6 +440,15 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         type: "snapshot",
         id,
         snapshot: { type: "inbox", data: inbox?.snapshot() ?? { threads: [], items: [], unreadCount: 0, total: 0 } },
+      }
+    }
+
+    if (topic.type === "mcp-sources") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: { type: "mcp-sources", data: mcpSources?.snapshot() ?? { sources: [] } },
       }
     }
 

@@ -8,6 +8,7 @@ import type {
 } from "./core-types"
 import type { BeaconConfig, BeaconPatch } from "./beacon-config"
 import type { BeaconScope } from "./beacon-scope"
+import type { McpSource, McpSourceInput, McpSourcePatch } from "./mcp-sources/types"
 import type { PackageKind } from "./packages/types"
 import type { AuthSettings } from "./settings/auth"
 import {
@@ -307,6 +308,7 @@ export interface AppSettingsSnapshot {
   customMcpServers: McpServerConfig[]
   customBeacons: BeaconConfig[]
   customModels: CustomModelEntry[]
+  mcpSources: McpSource[]
   customProviders: CustomProviderPublic[]
   textSnippets: TextSnippet[]
   claudeDriver: ClaudeDriverSettings
@@ -392,6 +394,12 @@ export interface AppSettingsPatch {
     create?: CustomModelInput
     update?: { id: string; patch: CustomModelPatch }
     delete?: { id: string }
+  }
+  mcpSources?: {
+    create?: McpSourceInput
+    update?: { id: string; patch: McpSourcePatch }
+    delete?: { id: string }
+    setEnabled?: { id: string; enabled: boolean }
   }
   customProviders?: {
     create?: CustomProviderInput

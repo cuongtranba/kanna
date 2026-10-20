@@ -1,5 +1,6 @@
 import type { InboundHandler } from "../../shared/inbound/handler"
 import { instructInboxThread, replyToInboxThread, type InboundHandlerResolver, type InboxReplyAgent, type InboxReplyStore } from "../inbound/inbox-reply"
+import type { McpSourcesRuntime } from "../mcp-sources/mcp-sources-boot"
 import type { ServiceBus } from "../service-bus/service-bus"
 import type { PushManager } from "../push/push-manager"
 import { webhookHandler } from "../webhooks/webhook-delivery"
@@ -14,12 +15,28 @@ export async function createInbox(dataDir: string, bus: ServiceBus): Promise<Inb
   return inbox
 }
 
-export function webhookHandlerResolver(webhooks: WebhookRegistry): InboundHandlerResolver {
+export function webhookHandlerResolver(webhooks: Pick<WebhookRegistry, "resolve">): InboundHandlerResolver {
   return (thread): InboundHandler | null => {
     if (thread.sourceKind !== "webhook") return null
     const hook = webhooks.resolve(thread.sourceId)
     return hook ? webhookHandler(hook) : null
   }
+}
+
+export function mcpSourceHandlerResolver(mcpSources: Pick<McpSourcesRuntime, "sources">): InboundHandlerResolver {
+  return (thread): InboundHandler | null => {
+    if (thread.sourceKind !== "mcp") return null
+    return mcpSources.sources().find((source) => source.id === thread.sourceId)?.handler ?? null
+  }
+}
+
+export function inboxHandlerResolver(
+  webhooks: Pick<WebhookRegistry, "resolve">,
+  mcpSources: Pick<McpSourcesRuntime, "sources">,
+): InboundHandlerResolver {
+  const fromWebhook = webhookHandlerResolver(webhooks)
+  const fromMcp = mcpSourceHandlerResolver(mcpSources)
+  return (thread) => fromWebhook(thread) ?? fromMcp(thread)
 }
 
 export function createInboxReplyActions(

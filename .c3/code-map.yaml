@@ -405,6 +405,7 @@ c3-224:
 c3-226:
   - src/server/mcp-oauth.adapter.ts
   - src/server/mcp-validator.ts
+  - src/server/mcp-bearer.ts
   - src/server/kanna-mcp-beacon.ts
   - src/server/kanna-mcp-beacon.test.ts
   - src/server/kanna-mcp-beacon-transfer.ts
@@ -795,3 +796,13 @@ c3-126:
   - src/client/lib/inboxFilter.ts
   - src/client/lib/inboxPresentation.ts
   - src/client/lib/inboxCommands.ts
+c3-248:
+  - src/shared/mcp-sources/*.ts
+  - src/server/mcp-sources/*.ts
+  - src/server/mcp-sources-settings.ts
+  - src/client/app/McpSourcesSection.tsx
+  - src/client/app/McpSourceForm.tsx
+  - src/client/stores/mcpSourcesStore.ts
+  - src/client/stores/mcpSourcesSectionStore.ts
+  - src/client/lib/mcpSourceDraft.ts
+  - src/client/lib/mcpSourcePresentation.ts

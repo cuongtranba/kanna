@@ -18,6 +18,7 @@ import {
   updateBeacon,
 } from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
+import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normalizeMcpSources } from "./mcp-sources-settings"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
 import {
@@ -149,6 +150,7 @@ interface AppSettingsFile {
   customMcpServers?: JsonArray
   customBeacons?: JsonArray
   customModels?: JsonArray
+  mcpSources?: JsonArray
   customProviders?: JsonArray
   seededBuiltinModels?: JsonArray
   textSnippets?: JsonArray
@@ -979,6 +981,7 @@ function normalizeAppSettings<T>(
     customMcpServers: normalizeMcpServers(source?.customMcpServers, warnings),
     customBeacons: normalizeBeacons(source?.customBeacons, warnings),
     customModels,
+    mcpSources: normalizeMcpSources(source?.mcpSources, warnings),
     customProviders: normalizeCustomProviders(source?.customProviders, warnings),
     seededBuiltinModels,
     textSnippets,
@@ -1544,16 +1547,13 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
 
   const mcpPatch = patch.customMcpServers
   const nextSubagents = applyCollectionPatch(state.subagents, patch.subagents, SUBAGENT_CRUD) ?? state.subagents
-  const nextMcpServers = applyCollectionPatch(state.customMcpServers, mcpPatch, MCP_CRUD)
-    ?? (mcpPatch ? applyMcpSetterPatch(state.customMcpServers, mcpPatch) : state.customMcpServers)
+  const nextMcpServers = applyCollectionPatch(state.customMcpServers, mcpPatch, MCP_CRUD) ?? (mcpPatch ? applyMcpSetterPatch(state.customMcpServers, mcpPatch) : state.customMcpServers)
   const beaconPatch = patch.customBeacons
-  const nextBeacons = applyCollectionPatch(state.customBeacons, beaconPatch, BEACON_CRUD)
-    ?? (beaconPatch ? applyBeaconSetters(state.customBeacons, beaconPatch) : state.customBeacons)
-  const nextCustomModels = applyCollectionPatch(state.customModels, patch.customModels, CUSTOM_MODEL_CRUD)
-    ?? state.customModels
+  const nextBeacons = applyCollectionPatch(state.customBeacons, beaconPatch, BEACON_CRUD) ?? (beaconPatch ? applyBeaconSetters(state.customBeacons, beaconPatch) : state.customBeacons)
+  const nextCustomModels = applyCollectionPatch(state.customModels, patch.customModels, CUSTOM_MODEL_CRUD) ?? state.customModels
+  const nextMcpSources = checkMcpSourceServers(applyCollectionPatch(state.mcpSources, patch.mcpSources, MCP_SOURCE_CRUD) ?? applyMcpSourceSetters(state.mcpSources, patch.mcpSources), patch.mcpSources, nextMcpServers)
   const nextCustomProviders = applyCollectionPatch(state.customProviders, patch.customProviders, CUSTOM_PROVIDER_CRUD) ?? state.customProviders
-  const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD)
-    ?? state.textSnippets
+  const nextTextSnippets = applyCollectionPatch(state.textSnippets, patch.textSnippets, TEXT_SNIPPET_CRUD) ?? state.textSnippets
 
   return normalizeAppSettings({
     ...toFilePayload(state),
@@ -1626,6 +1626,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     customMcpServers: nextMcpServers,
     customBeacons: nextBeacons,
     customModels: nextCustomModels,
+    mcpSources: nextMcpSources,
     customProviders: nextCustomProviders,
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),

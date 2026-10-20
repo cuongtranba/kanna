@@ -3,6 +3,7 @@ claim: "MCP OAuth adapter and validator are at src/server/mcp-oauth.adapter.ts a
 code:
   - src/server/mcp-oauth.adapter.ts
   - src/server/mcp-validator.ts
+  - src/server/mcp-bearer.ts
   - src/server/kanna-mcp-beacon.ts
   - src/server/kanna-mcp-beacon.test.ts
   - src/server/kanna-mcp-beacon-transfer.ts
