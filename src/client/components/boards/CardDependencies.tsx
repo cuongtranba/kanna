@@ -4,13 +4,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { cn } from "../../lib/utils"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
 import { onRejected } from "../../../shared/errors"
-import type { JsonValue } from "../../../shared/json"
-import type { ClientCommand } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 
 
-export interface CardDependenciesSocket {
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
-}
+export type CardDependenciesSocket = CommandPort
 
 export interface BlockerCandidate {
   id: string

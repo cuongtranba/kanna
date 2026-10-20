@@ -18,13 +18,12 @@ import { LOG_PREFIX } from "../../../shared/branding"
 import { onRejected } from "../../../shared/errors"
 import { log } from "../../../shared/log"
 import type { BoardsSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 import type { BoardOwnerKind, BoardSummary, BoardTemplate } from "../../../shared/boards/types"
-import type { JsonValue } from "../../../shared/json"
 
 
-export interface BoardsPageSocket {
+export interface BoardsPageSocket extends CommandPort {
   subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardsSnapshot) => void): () => void
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 const BOARD_ROW_ACTION_SCOPES = ["board.update", "board.duplicate", "board.saveAsTemplate", "board.archive"] as const

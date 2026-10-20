@@ -8,13 +8,10 @@ import { parseRepoSlug } from "../../../shared/boards/repo-slug"
 import type { BoardSyncStatus, RepoSuggestion, SyncColumnRouting } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict, SyncDirection } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
-import type { JsonValue } from "../../../shared/json"
-import type { ClientCommand } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 
 
-export interface BoardSyncPanelSocket {
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
-}
+export type BoardSyncPanelSocket = CommandPort
 
 export interface BoardSyncPanelProps {
   boardId: string

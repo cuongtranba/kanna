@@ -14,6 +14,7 @@ import type { JsonValue } from "../../shared/json"
 import { generateUUID } from "../lib/utils"
 import { runDetached } from "../lib/runDetached"
 import { getStoredPushDeviceId } from "./pushClient"
+import type { CommandPort, CommandReply } from "../ports/commandPort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import type { StoragePort } from "../ports/storagePort"
@@ -43,7 +44,7 @@ const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
 
 type SnapshotData = ServerSnapshot["data"]
 
-type CommandResult = Extract<ServerEnvelope, { type: "ack" }>["result"]
+type AckResult = Extract<ServerEnvelope, { type: "ack" }>["result"]
 
 interface InternalSubscriptionEntry {
   topic: SubscriptionTopic
@@ -51,14 +52,14 @@ interface InternalSubscriptionEntry {
   eventListener?(v: WsEvent): void
 }
 
-export class KannaSocket {
+export class KannaSocket implements CommandPort {
   private readonly url: string
   private ws: WebSocketLike | null = null
   private started = false
   private reconnectTimer: number | null = null
   private reconnectDelayMs = 750
   private readonly subscriptions = new Map<string, InternalSubscriptionEntry>()
-  private readonly pending = new Map<string, { resolve: (value: CommandResult) => void; reject: (reason: Error) => void }>()
+  private readonly pending = new Map<string, { resolve: (value: AckResult) => void; reject: (reason: Error) => void }>()
   private readonly outboundQueue: ClientEnvelope[] = []
   private readonly statusListeners = new Set<StatusListener>()
   private heartbeatTimer: number | null = null
@@ -187,11 +188,12 @@ export class KannaSocket {
     }
   }
 
+  command<C extends ClientCommand>(command: C): Promise<CommandReply<C>>
   command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
-  command(command: ClientCommand): Promise<CommandResult> {
+  command(command: ClientCommand): Promise<AckResult> {
     const id = generateUUID()
     const envelope: ClientEnvelope = { v: 1, type: "command", id, command }
-    return new Promise<CommandResult>((resolve, reject) => {
+    return new Promise<AckResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject })
       this.enqueue(envelope)
     })

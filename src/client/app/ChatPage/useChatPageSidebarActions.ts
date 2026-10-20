@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type {
-  BranchActionFailure,
-  BranchActionSuccess,
   ChatBranchListEntry,
   ChatBranchListResult,
-  ChatCheckoutBranchResult,
-  ChatCreateBranchResult,
-  ChatMergeBranchResult,
   ChatMergePreviewResult,
-  ChatSyncResult,
   DiffCommitMode,
-  DiffCommitResult,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
 } from "../../../shared/types"
@@ -121,7 +114,7 @@ export function useChatPageSidebarActions({
       throw new Error("Project not found")
     }
     const chatId = activeChatIdRef.current
-    const result = await state.socket.command<{ patch: string }>({
+    const result = await state.socket.command({
       type: "project.readDiffPatch",
       projectId,
       path: filePath,
@@ -224,7 +217,7 @@ export function useChatPageSidebarActions({
       return null
     }
     try {
-      const result = await state.socket.command<DiffCommitResult>({
+      const result = await state.socket.command({
         type: "chat.commitDiffs",
         chatId,
         paths: args.paths,
@@ -262,7 +255,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<ChatSyncResult>({
+      const result = await state.socket.command({
         type: "chat.syncBranch",
         chatId,
         action,
@@ -294,7 +287,7 @@ export function useChatPageSidebarActions({
       return { subject: "", body: "" }
     }
 
-    const result = await state.socket.command<{ subject: string; body: string }>({
+    const result = await state.socket.command({
       type: "chat.generateCommitMessage",
       chatId,
       paths: args.paths,
@@ -313,7 +306,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<BranchActionSuccess | BranchActionFailure>({
+      const result = await state.socket.command({
         type: "chat.initGit",
         chatId,
       })
@@ -349,7 +342,7 @@ export function useChatPageSidebarActions({
       } satisfies GitHubPublishInfo
     }
 
-    return await state.socket.command<GitHubPublishInfo>({
+    return await state.socket.command({
       type: "chat.getGitHubPublishInfo",
       chatId,
     })
@@ -364,7 +357,7 @@ export function useChatPageSidebarActions({
       } satisfies GitHubRepoAvailabilityResult
     }
 
-    return await state.socket.command<GitHubRepoAvailabilityResult>({
+    return await state.socket.command({
       type: "chat.checkGitHubRepoAvailability",
       chatId,
       owner: args.owner,
@@ -384,7 +377,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<BranchActionSuccess | BranchActionFailure>({
+      const result = await state.socket.command({
         type: "chat.publishToGitHub",
         chatId,
         owner: args.owner,
@@ -425,7 +418,7 @@ export function useChatPageSidebarActions({
       } satisfies ChatBranchListResult
     }
 
-    return await state.socket.command<ChatBranchListResult>({
+    return await state.socket.command({
       type: "chat.listBranches",
       chatId,
     })
@@ -452,7 +445,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<ChatCheckoutBranchResult>({
+      const result = await state.socket.command({
         type: "chat.checkoutBranch",
         chatId,
         branch: serializeBranchSelection(branch),
@@ -492,7 +485,7 @@ export function useChatPageSidebarActions({
       } satisfies ChatMergePreviewResult
     }
 
-    return await state.socket.command<ChatMergePreviewResult>({
+    return await state.socket.command({
       type: "chat.previewMergeBranch",
       chatId,
       branch: serializeBranchSelection(branch),
@@ -506,7 +499,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<ChatMergeBranchResult>({
+      const result = await state.socket.command({
         type: "chat.mergeBranch",
         chatId,
         branch: serializeBranchSelection(branch),
@@ -565,7 +558,7 @@ export function useChatPageSidebarActions({
     }
 
     try {
-      const result = await state.socket.command<ChatCreateBranchResult>({
+      const result = await state.socket.command({
         type: "chat.createBranch",
         chatId,
         name,

@@ -224,7 +224,9 @@ c3-208:
   - src/server/ws-router.ts
   - src/server/live-block-throttle.ts
   - src/server/live-block-throttle.test.ts
+  - src/server/ws-router-ack.ts
   - src/server/ws-router-agent-ctrl.ts
+  - src/server/ws-router-command-results.test.ts
   - src/server/ws-router-broadcast.ts
   - src/server/ws-router-chat.ts
   - src/server/ws-router-defaults.ts

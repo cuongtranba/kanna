@@ -38,13 +38,10 @@ import {
 } from "../../../shared/boards/worktree-cleanup"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
 import { onRejected } from "../../../shared/errors"
-import type { JsonValue } from "../../../shared/json"
-import type { ClientCommand } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 
 
-export interface CardDrawerSocket {
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
-}
+export type CardDrawerSocket = CommandPort
 
 export interface CardDrawerProps {
   cardId: string
