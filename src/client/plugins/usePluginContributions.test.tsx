@@ -1,22 +1,24 @@
 import { describe, expect, test, afterEach } from "bun:test"
+import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { usePluginContributions } from "./usePluginContributions"
 import type { LoadedPluginContributions } from "./loadPluginContributions"
 import { usePluginContributionsStore } from "../stores/pluginContributionsStore"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 
+const APP_SETTINGS_INITIAL = useAppSettingsStore.getInitialState()
+
 const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
   usePluginContributionsStore.getState().clearContributions()
+  useAppSettingsStore.setState(APP_SETTINGS_INITIAL)
 })
 
 function setPluginsEnabled(enabled: boolean): void {
-  useAppSettingsStore.setState((state) => ({
-    ...state,
-    settings: { ...(state.settings ?? {}), plugins: { enabled } },
-  }) as never)
+  const snapshot = buildInitialAppSettingsSnapshot()
+  useAppSettingsStore.getState().setFromServer({ ...snapshot, plugins: { ...snapshot.plugins, enabled } })
 }
 
 async function mountWith(load: () => Promise<LoadedPluginContributions>) {
