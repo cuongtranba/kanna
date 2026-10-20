@@ -10,7 +10,7 @@ code:
   - src/client/app/InboxReplyComposer.test.tsx
   - src/client/app/InboxFilterBar.tsx
   - src/client/app/useInboxToasts.ts
-  - src/client/app/useInboxToasts.test.ts
+  - src/client/app/useInboxToasts.test.tsx
   - src/client/stores/inboxStore.ts
   - src/client/stores/inboxStore.test.ts
   - src/client/lib/inboxFilter.ts
