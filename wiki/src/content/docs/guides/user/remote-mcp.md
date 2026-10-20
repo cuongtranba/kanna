@@ -122,8 +122,13 @@ are refused. The typed tools below cover the common flows.
 `kanna://projects`, `kanna://chats/{chatId}` and `kanna://boards/{boardId}`, and
 sends the client written instructions on how to use the chat tools.
 
-`read_app_settings` and `patch_app_settings` redact anything that looks like a
-secret — API keys, tokens, passwords, environment and header values.
+Secrets never leave Kanna through the MCP endpoint, whichever tool you use:
+`read_app_settings`, `patch_app_settings`, `kanna_read` with the `app-settings`
+topic and `kanna_command` with the settings commands all mask Claude OAuth tokens,
+custom MCP server environment and header values, MCP OAuth tokens and the LLM
+provider API key. The masked entries keep their shape, so a client can still see
+that a token exists. Values you ask for on purpose, such as a share link or a
+beacon pairing code, are returned as they are.
 
 ## Long turns, progress and waiting
 
