@@ -4,7 +4,8 @@ import { chatIdParams, chatIdShape } from "./fragments"
 import { chatBranchRefSchema, diffCommitModeSchema, gitSyncActionSchema } from "../git-diff-types.schema"
 
 const chatAndPathParams = z.object({ ...chatIdShape, path: z.string() })
-const chatAndBranchParams = z.object({ ...chatIdShape, branch: chatBranchRefSchema })
+const branchRefField = chatBranchRefSchema.describe("The branch: kind local, remote (with remoteRef) or pull_request (with prNumber and headRefName)")
+const chatAndBranchParams = z.object({ ...chatIdShape, branch: branchRefField })
 
 export const gitCommands = defineCommands(
   defineCommand("chat.refreshDiffs", {
@@ -62,13 +63,13 @@ export const gitCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("chat.syncBranch", {
-    params: z.object({ ...chatIdShape, action: gitSyncActionSchema }),
+    params: z.object({ ...chatIdShape, action: gitSyncActionSchema.describe("Which sync to perform") }),
     summary: "Fetch, pull, push or publish the current branch.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("chat.checkoutBranch", {
-    params: z.object({ ...chatIdShape, branch: chatBranchRefSchema, bringChanges: z.boolean().optional() }),
+    params: z.object({ ...chatIdShape, branch: branchRefField, bringChanges: z.boolean().optional().describe("Carry uncommitted changes to the branch") }),
     summary: "Check out a branch, optionally carrying uncommitted changes.",
     risk: "write",
     remote: REMOTE_ALLOWED,
@@ -88,10 +89,10 @@ export const gitCommands = defineCommands(
   defineCommand("chat.commitDiffs", {
     params: z.object({
       ...chatIdShape,
-      paths: z.array(z.string()),
-      summary: z.string(),
-      description: z.string().optional(),
-      mode: diffCommitModeSchema,
+      paths: z.array(z.string()).describe("Repository-relative paths of the files to commit"),
+      summary: z.string().describe("Commit subject line"),
+      description: z.string().optional().describe("Commit body"),
+      mode: diffCommitModeSchema.describe("commit_only, or commit_and_push to push the branch too"),
     }),
     summary: "Commit the given changed files.",
     risk: "write",

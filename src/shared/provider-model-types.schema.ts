@@ -31,7 +31,7 @@ export const codexModelOptionsSchema = z.object({
 
 export const openRouterModelOptionsSchema = z.record(z.string(), z.never())
 
-const optionalSlotSchema = z.record(z.string(), z.undefined())
+const optionalSlotSchema = z.record(z.string(), z.never().optional())
 
 export const partialClaudeModelOptionsSchema = claudeModelOptionsSchema.partial()
 export const partialCodexModelOptionsSchema = codexModelOptionsSchema.partial()

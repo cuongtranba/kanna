@@ -1,21 +1,24 @@
-import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
-import type { RemoteMcpHost } from "./remote-mcp-server"
-import { commandResult, jsonResult, readChat, runCommand } from "./remote-mcp-views"
+import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
+import { jsonResult, readChat, runCommand } from "./remote-mcp-views"
 
-const chatIdField = z.string().describe("Id of the chat whose working directory is the repository")
+const BRANCH_CHOICE_MESSAGE = "Give exactly one of branch (a branch object from list_branches) or the legacy name (a local branch name)."
 
-export function registerGitTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
-  tools.registerTool(
-    "get_git_status",
-    {
-      title: "Git status",
-      description: "Refresh and read the git state of a chat's working directory: branch, ahead/behind counts and changed files.",
-      inputSchema: z.object({ chatId: chatIdField }),
-      annotations: { readOnlyHint: true },
-    },
-    async ({ chatId }) => {
+function exactlyOneBranch(args: { branch?: object; name?: string }, ctx: z.RefinementCtx): void {
+  if ((args.branch === undefined) === (args.name === undefined)) ctx.addIssue({ code: "custom", message: BRANCH_CHOICE_MESSAGE })
+}
+
+export const gitTools: readonly RemoteTool[] = [
+  topicTool({
+    name: "get_git_status",
+    title: "Git status",
+    description: "Refresh and read the git state of a chat's working directory: branch, ahead/behind counts and changed files.",
+    annotations: { readOnlyHint: true },
+    topic: "project-git",
+    commands: ["chat.refreshDiffs"],
+    input: z.object({ chatId: z.string().describe("Id of the chat whose working directory is the repository") }),
+    handle: async ({ chatId }, { host }) => {
       const chat = readChat(host, chatId, 1)
       if (!chat) return fail(`Chat ${chatId} was not found.`)
       const refreshed = await runCommand(host, { type: "chat.refreshDiffs", chatId })
@@ -37,61 +40,48 @@ export function registerGitTools(tools: ToolRegistrar, host: RemoteMcpHost): voi
         })),
       })
     },
-  )
-
-  tools.registerTool(
-    "commit_changes",
-    {
-      title: "Commit changes",
-      description: "Commit the given changed files of a chat's repository. Mode commit_and_push also pushes the branch.",
-      inputSchema: z.object({
-        chatId: chatIdField,
-        paths: z.array(z.string()).min(1).describe("Repository-relative paths of the files to commit"),
-        summary: z.string().describe("Commit subject line"),
-        description: z.string().optional().describe("Commit body"),
-        mode: z.enum(["commit_only", "commit_and_push"]).optional().describe("commit_only (default) or commit_and_push"),
-      }),
+  }),
+  commandTool({
+    name: "commit_changes",
+    title: "Commit changes",
+    description: "Commit the given changed files of a chat's repository. Mode commit_and_push also pushes the branch.",
+    command: "chat.commitDiffs",
+    input: (params) => params.extend({
+      mode: params.shape.mode.optional().describe("commit_only (default) or commit_and_push. Optional for compatibility with clients that never sent it"),
+    }),
+    handle: ({ mode, ...args }, { run }) => run({ type: "chat.commitDiffs", ...args, mode: mode ?? "commit_only" }),
+  }),
+  commandTool({
+    name: "list_branches",
+    title: "List branches",
+    description: "List the local, remote and pull-request branches of a chat's repository and the current branch.",
+    annotations: { readOnlyHint: true },
+    command: "chat.listBranches",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "chat.listBranches", ...args }),
+  }),
+  commandTool({
+    name: "checkout_branch",
+    title: "Check out a branch",
+    description: "Switch a chat's repository to a local, remote or pull-request branch, optionally carrying uncommitted changes along. Take the branch object from list_branches.",
+    command: "chat.checkoutBranch",
+    input: (params) => params
+      .extend({
+        branch: params.shape.branch.optional().describe(`${params.shape.branch.description ?? "The branch"}. Give this or the legacy name, not both`),
+        name: z.string().optional().describe("Legacy, accepted for compatibility: the name of a local branch, the same as branch {kind: local, name}"),
+      })
+      .superRefine(exactlyOneBranch),
+    handle: ({ name, branch, ...args }, { run }) => {
+      const target = branch ?? (name === undefined ? undefined : { kind: "local" as const, name })
+      return target ? run({ type: "chat.checkoutBranch", ...args, branch: target }) : fail(BRANCH_CHOICE_MESSAGE)
     },
-    ({ chatId, paths, summary, description, mode }) =>
-      commandResult(host, { type: "chat.commitDiffs", chatId, paths, summary, description, mode: mode ?? "commit_only" }),
-  )
-
-  tools.registerTool(
-    "list_branches",
-    {
-      title: "List branches",
-      description: "List the local, remote and pull-request branches of a chat's repository and the current branch.",
-      inputSchema: z.object({ chatId: chatIdField }),
-      annotations: { readOnlyHint: true },
-    },
-    ({ chatId }) => commandResult(host, { type: "chat.listBranches", chatId }),
-  )
-
-  tools.registerTool(
-    "checkout_branch",
-    {
-      title: "Check out a branch",
-      description: "Switch a chat's repository to a local branch, optionally carrying uncommitted changes along.",
-      inputSchema: z.object({
-        chatId: chatIdField,
-        name: z.string().describe("Name of the local branch"),
-        bringChanges: z.boolean().optional().describe("Carry uncommitted changes to the branch"),
-      }),
-    },
-    ({ chatId, name, bringChanges }) =>
-      commandResult(host, { type: "chat.checkoutBranch", chatId, branch: { kind: "local", name }, bringChanges }),
-  )
-
-  tools.registerTool(
-    "sync_branch",
-    {
-      title: "Sync a branch",
-      description: "Fetch, pull, push or publish the current branch of a chat's repository.",
-      inputSchema: z.object({
-        chatId: chatIdField,
-        action: z.enum(["fetch", "pull", "push", "publish"]).describe("Which sync to perform"),
-      }),
-    },
-    ({ chatId, action }) => commandResult(host, { type: "chat.syncBranch", chatId, action }),
-  )
-}
+  }),
+  commandTool({
+    name: "sync_branch",
+    title: "Sync a branch",
+    description: "Fetch, pull, push or publish the current branch of a chat's repository.",
+    command: "chat.syncBranch",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "chat.syncBranch", ...args }),
+  }),
+]

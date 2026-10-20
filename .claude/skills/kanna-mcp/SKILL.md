@@ -171,11 +171,51 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
 - **Every tool runs through the ws-router seam.** `router.dispatchCommand` and
   `router.readSnapshot` reuse the exact handlers, so WebSocket clients still
   receive the broadcasts; a tool that reads the store instead skips them. The
-  only store-direct tools are `upload_attachment` and `read_project_file`.
-- **The command catalog is typed AND regex-checked.** `COMMAND_CATALOG` is a
-  record keyed by the `ClientCommand` union (a missing command is a type error)
-  and `command-catalog.test.ts` also scans the protocol source, because a union
-  member added through a constant such as `SHARE_CMD_*` is invisible to the type.
+  store-direct paths are `upload_attachment`, `read_project_file` and the
+  `beforeCursor` page of `get_chat`, which calls `store.getMessagesPageBefore`,
+  the very method `chat.loadHistory` wraps (the page is typed `ChatHistoryPage`,
+  which a JSON ack result is not).
+- **The command registry is the only command catalog.** `src/shared/commands`
+  derives `ClientCommand`, validates `kanna_command` params and publishes the
+  JSON Schemas; `COMMAND_CATALOG` is gone. See
+  `adr-20261020-command-registry-single-source-of-truth`.
+- **A typed tool is one entry of the tool table, and its input comes from the
+  registry.** `remote-mcp-tool-table.ts` lists every tool (`REMOTE_TOOLS`), each
+  built by `commandTool`, `topicTool` or `mcpOnlyTool` from
+  `remote-mcp-tool-spec.ts`. A `commandTool` names its registry command and
+  derives `input` from that command's params: `input: (params) => params` takes
+  all of them, `params.omit({...}).extend({...})` drops the fields in `hidden`
+  (each with a reason, e.g. `origin`, which the registrar stamps) and adds
+  tool-only fields such as `idempotencyKey`, `wait`, `timeoutSeconds`. A param
+  added to a command therefore reaches its tool; hand-writing an inline zod
+  object for a command's params is how `send_message` once lost `effort`,
+  `modelOptions` and `autoResumeOnRateLimit`. `remote-mcp-tool-table.test.ts`
+  fails when a non-hidden param is missing, a hidden field is unknown or still
+  accepted, a reason is empty, a backing command is remote-excluded, or a topic
+  is unknown; the tools test checks the served tool list and schemas against the
+  table. A tool backed by no command or topic must say why (`mcpOnlyTool`).
+  Field descriptions live on the registry schemas (`describe`), so the web UI,
+  `kanna_commands` and the tools share them.
+- **A typed tool's input only grows; legacy fields stay accepted.** Clients
+  pin the shapes of the released tools, so a tool must accept every call it
+  accepted in the last release: no field removed or renamed, none made required,
+  no enum value dropped. When a registry command gets stricter than the tool it
+  backs (a field becomes required, a scalar becomes an object), relax it in the
+  `input: (params) => ...` hook and apply the old default in `handle`:
+  `commit_changes` keeps `mode` optional (default `commit_only`), `move_card`
+  keeps both positions optional (default null), `checkout_branch` accepts the
+  legacy `name` (a local branch) as an alternative to `branch`, and `list_boards`
+  accepts the legacy `projectId` as an alternative to `ownerId` and `ownerKind`.
+  Where two fields mean one thing, a `superRefine` demands exactly one, and the
+  message names both. Say "Legacy, accepted for compatibility" in the field's
+  `describe`. The test "typed tools still accept their v1.85 inputs" in
+  `remote-mcp-tools.test.ts` is the pin; an environment error (no git
+  repository) is fine there, a message starting "Input validation error" is not.
+- **A registry schema must render as JSON Schema.** The MCP SDK renders every
+  tool input with `z.toJSONSchema` on `tools/list`, and one unrepresentable
+  type (`z.undefined()`, a transform on the input side) fails the whole list with
+  "Undefined cannot be represented in JSON Schema". `modelOptions` slots use
+  `z.never().optional()` for that reason.
 - **The endpoint is stateless.** `createMcpHandler` builds the MCP server per
   request (`remote-mcp-boot.ts`), so there is no session registry to bound or evict.
 - **Tests need native streams.** `scripts/test-preload.ts` restores the native
@@ -192,9 +232,9 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `kanna_command` parameter cannot label itself MCP. The origin flows through
   `QueuedChatMessage` into `UserPromptEntry`, is withheld from share snapshots,
   and becomes a `remote_mcp` board `CardActor` that `board-sync` holds like an
-  agent write unless the binding sets `allowAgentPush`. Every new `register*`
-  tool takes the `ToolRegistrar` and an object `inputSchema` (`z.object({})` when
-  it has no parameters), not the raw `McpServer`.
+  agent write unless the binding sets `allowAgentPush`. Every tool is registered
+  through the `ToolRegistrar` with an object `inputSchema` (`z.object({})` when
+  it has no parameters), never the raw `McpServer`; the tool table does this.
 - **Secrets are masked once, at the host, by data shape.** `buildRemoteMcpServer`
   wraps the host in `withEgressRedaction` (`remote-mcp-egress-redaction.ts`), so
   every tool, resource and follow loop reads masked data no matter which one
