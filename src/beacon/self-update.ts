@@ -1,12 +1,14 @@
 import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import { isBeaconBehind } from "../shared/beacon-status"
+import { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl } from "../shared/release-sums"
 import type { BeaconUpdater } from "./ports"
+
+export { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl }
 
 export const DEFAULT_RELEASE_BASE = "https://github.com/cuongtranba/kanna/releases/download"
 export const UPDATE_RETRY_BACKOFF_MS = 30 * 60_000
 export const UPDATE_STAGING_SUFFIX = ".kanna-update"
 export const UPDATE_OLD_SUFFIX = ".old"
-export const SHA256SUMS_ASSET = "SHA256SUMS"
 
 export interface BeaconReleaseTarget {
   bunTarget: string
@@ -42,7 +44,6 @@ export interface UpdateDecisionInput {
 export type UpdateDecision = { kind: "none" } | { kind: "current" } | { kind: "install"; version: string }
 
 const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
-const SHA256SUMS_LINE = /^([0-9a-fA-F]{64}) [ *](.+)$/
 
 export function isReleaseVersion(version: string): boolean {
   return RELEASE_VERSION.test(version)
@@ -65,21 +66,6 @@ export function decideUpdate(input: UpdateDecisionInput): UpdateDecision {
 
 export function releaseAssetFor(platform: string, arch: string): string | null {
   return BEACON_RELEASE_TARGETS.find((target) => target.platform === platform && target.arch === arch)?.asset ?? null
-}
-
-export function releaseAssetUrl(base: string, version: string, asset: string): string {
-  return `${base.replace(/\/+$/, "")}/v${version}/${asset}`
-}
-
-export function parseSha256Sums(text: string): ReadonlyMap<string, string> {
-  const sums = new Map<string, string>()
-  for (const line of text.split(/\r?\n/)) {
-    const match = SHA256SUMS_LINE.exec(line.trimEnd())
-    if (match === null) continue
-    const [, hash, name] = match
-    if (hash !== undefined && name !== undefined) sums.set(name, hash.toLowerCase())
-  }
-  return sums
 }
 
 export function isBunRuntimePath(execPath: string): boolean {
