@@ -580,6 +580,37 @@ describe("remote MCP typed tools", () => {
     expect(incomplete.text).toContain("remoteRef")
   })
 
+  test("typed tools still accept their v1.85 inputs", async () => {
+    const rejectedForInput = (reply: ToolReply) => reply.isError && reply.text.startsWith("Input validation error")
+    const boardId = stringField((await call("kanna_command", { type: "board.create", params: { ownerKind: "project", ownerId: projectId, title: "Legacy" } })).json, "id")
+    const column = stringField((await call("kanna_command", { type: "board.column.create", params: { boardId, title: "Queue" } })).json, "id")
+    const first = stringField((await call("create_card", { boardId, columnId: column, title: "first" })).json, "id")
+    const second = stringField((await call("create_card", { boardId, columnId: column, title: "second" })).json, "id")
+    const chatId = await newChat()
+
+    const boards = await call("list_boards", { projectId })
+    const checkout = await call("checkout_branch", { chatId, name: "main" })
+    const commit = await call("commit_changes", { chatId, paths: ["hello.txt"], summary: "legacy" })
+    const moved = await call("move_card", { cardId: first, toColumnId: column })
+
+    expect(boards.isError).toBe(false)
+    expect(JSON.stringify(boards.json)).toContain(boardId)
+    expect(rejectedForInput(checkout)).toBe(false)
+    expect(checkout.text).toContain("git repository")
+    expect(rejectedForInput(commit)).toBe(false)
+    expect(commit.text).toContain("git repository")
+    expect(moved.isError).toBe(false)
+    const cards = field(field(field((await call("get_board", { boardId })).json, "data") ?? null, "view") ?? null, "cards") ?? null
+    expect(arrayField(cards, column).map((card) => field(card, "id"))).toEqual([second, first])
+
+    const ambiguousOwner = await call("list_boards", { projectId, ownerId: projectId })
+    const ambiguousBranch = await call("checkout_branch", { chatId, name: "main", branch: { kind: "local", name: "main" } })
+    expect(rejectedForInput(ambiguousOwner)).toBe(true)
+    expect(ambiguousOwner.text).toContain("projectId")
+    expect(rejectedForInput(ambiguousBranch)).toBe(true)
+    expect(ambiguousBranch.text).toContain("name")
+  })
+
   test("kanna_command chat.send with the same idempotencyKey starts one turn", async () => {
     const params = { projectId, content: "send through the generic command once" }
 

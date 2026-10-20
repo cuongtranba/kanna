@@ -3,6 +3,12 @@ import { fail } from "../kanna-mcp-tool"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 import { jsonResult, readChat, runCommand } from "./remote-mcp-views"
 
+const BRANCH_CHOICE_MESSAGE = "Give exactly one of branch (a branch object from list_branches) or the legacy name (a local branch name)."
+
+function exactlyOneBranch(args: { branch?: object; name?: string }, ctx: z.RefinementCtx): void {
+  if ((args.branch === undefined) === (args.name === undefined)) ctx.addIssue({ code: "custom", message: BRANCH_CHOICE_MESSAGE })
+}
+
 export const gitTools: readonly RemoteTool[] = [
   topicTool({
     name: "get_git_status",
@@ -40,8 +46,10 @@ export const gitTools: readonly RemoteTool[] = [
     title: "Commit changes",
     description: "Commit the given changed files of a chat's repository. Mode commit_and_push also pushes the branch.",
     command: "chat.commitDiffs",
-    input: (params) => params,
-    handle: (args, { run }) => run({ type: "chat.commitDiffs", ...args }),
+    input: (params) => params.extend({
+      mode: params.shape.mode.optional().describe("commit_only (default) or commit_and_push. Optional for compatibility with clients that never sent it"),
+    }),
+    handle: ({ mode, ...args }, { run }) => run({ type: "chat.commitDiffs", ...args, mode: mode ?? "commit_only" }),
   }),
   commandTool({
     name: "list_branches",
@@ -57,8 +65,16 @@ export const gitTools: readonly RemoteTool[] = [
     title: "Check out a branch",
     description: "Switch a chat's repository to a local, remote or pull-request branch, optionally carrying uncommitted changes along. Take the branch object from list_branches.",
     command: "chat.checkoutBranch",
-    input: (params) => params,
-    handle: (args, { run }) => run({ type: "chat.checkoutBranch", ...args }),
+    input: (params) => params
+      .extend({
+        branch: params.shape.branch.optional().describe(`${params.shape.branch.description ?? "The branch"}. Give this or the legacy name, not both`),
+        name: z.string().optional().describe("Legacy, accepted for compatibility: the name of a local branch, the same as branch {kind: local, name}"),
+      })
+      .superRefine(exactlyOneBranch),
+    handle: ({ name, branch, ...args }, { run }) => {
+      const target = branch ?? (name === undefined ? undefined : { kind: "local" as const, name })
+      return target ? run({ type: "chat.checkoutBranch", ...args, branch: target }) : fail(BRANCH_CHOICE_MESSAGE)
+    },
   }),
   commandTool({
     name: "sync_branch",

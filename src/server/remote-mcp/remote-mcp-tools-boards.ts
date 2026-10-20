@@ -1,7 +1,17 @@
 import { z } from "zod"
 import { boardOwnerKindSchema } from "../../shared/boards/types.schema"
+import { fail } from "../kanna-mcp-tool"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
+
+const OWNER_CHOICE_MESSAGE = "Give ownerId (with an optional ownerKind), or the legacy projectId on its own. Not both, and not neither."
+
+function oneOwner(args: { ownerId?: string; ownerKind?: string; projectId?: string }, ctx: z.RefinementCtx): void {
+  const givenOwner = args.ownerId !== undefined
+  const givenLegacy = args.projectId !== undefined
+  const legacyClashes = givenLegacy && (givenOwner || (args.ownerKind !== undefined && args.ownerKind !== "project"))
+  if (givenOwner === givenLegacy || legacyClashes) ctx.addIssue({ code: "custom", message: OWNER_CHOICE_MESSAGE })
+}
 
 export const boardTools: readonly RemoteTool[] = [
   topicTool({
@@ -10,12 +20,19 @@ export const boardTools: readonly RemoteTool[] = [
     description: "List the kanban boards owned by a project or a stack.",
     annotations: { readOnlyHint: true },
     topic: "boards",
-    input: z.object({
-      ownerId: z.string().describe("Id of the project or stack that owns the boards"),
-      ownerKind: boardOwnerKindSchema.optional().describe("project (default) or stack"),
-    }),
-    handle: ({ ownerId, ownerKind }, { host }) =>
-      envelopeToToolResult(host.readSnapshot({ type: "boards", ownerKind: ownerKind ?? "project", ownerId })),
+    input: z
+      .object({
+        ownerId: z.string().optional().describe("Id of the project or stack that owns the boards. Give this or the legacy projectId"),
+        ownerKind: boardOwnerKindSchema.optional().describe("project (default) or stack"),
+        projectId: z.string().optional().describe("Legacy, accepted for compatibility: the id of the project that owns the boards, the same as ownerId with ownerKind project"),
+      })
+      .superRefine(oneOwner),
+    handle: ({ ownerId, ownerKind, projectId }, { host }) => {
+      const owner = ownerId ?? projectId
+      return owner === undefined
+        ? fail(OWNER_CHOICE_MESSAGE)
+        : envelopeToToolResult(host.readSnapshot({ type: "boards", ownerKind: ownerKind ?? "project", ownerId: owner }))
+    },
   }),
   topicTool({
     name: "get_board",
@@ -42,8 +59,12 @@ export const boardTools: readonly RemoteTool[] = [
     title: "Move a card",
     description: "Move a card to a column. aboveCardId and belowCardId name the neighbours it should land between; null means the top or the bottom of the column.",
     command: "board.card.move",
-    input: (params) => params,
-    handle: (args, { run }) => run({ type: "board.card.move", ...args }),
+    input: (params) => params.extend({
+      aboveCardId: params.shape.aboveCardId.optional().describe(`${params.shape.aboveCardId.description ?? "The card above"}. Optional, null when omitted`),
+      belowCardId: params.shape.belowCardId.optional().describe(`${params.shape.belowCardId.description ?? "The card below"}. Optional, null when omitted`),
+    }),
+    handle: ({ aboveCardId, belowCardId, ...args }, { run }) =>
+      run({ type: "board.card.move", ...args, aboveCardId: aboveCardId ?? null, belowCardId: belowCardId ?? null }),
   }),
   commandTool({
     name: "comment_card",

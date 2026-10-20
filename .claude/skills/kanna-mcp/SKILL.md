@@ -196,6 +196,21 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   table. A tool backed by no command or topic must say why (`mcpOnlyTool`).
   Field descriptions live on the registry schemas (`describe`), so the web UI,
   `kanna_commands` and the tools share them.
+- **A typed tool's input only grows; legacy fields stay accepted.** Clients
+  pin the shapes of the released tools, so a tool must accept every call it
+  accepted in the last release: no field removed or renamed, none made required,
+  no enum value dropped. When a registry command gets stricter than the tool it
+  backs (a field becomes required, a scalar becomes an object), relax it in the
+  `input: (params) => ...` hook and apply the old default in `handle`:
+  `commit_changes` keeps `mode` optional (default `commit_only`), `move_card`
+  keeps both positions optional (default null), `checkout_branch` accepts the
+  legacy `name` (a local branch) as an alternative to `branch`, and `list_boards`
+  accepts the legacy `projectId` as an alternative to `ownerId` and `ownerKind`.
+  Where two fields mean one thing, a `superRefine` demands exactly one, and the
+  message names both. Say "Legacy, accepted for compatibility" in the field's
+  `describe`. The test "typed tools still accept their v1.85 inputs" in
+  `remote-mcp-tools.test.ts` is the pin; an environment error (no git
+  repository) is fine there, a message starting "Input validation error" is not.
 - **A registry schema must render as JSON Schema.** The MCP SDK renders every
   tool input with `z.toJSONSchema` on `tools/list`, and one unrepresentable
   type (`z.undefined()`, a transform on the input side) fails the whole list with
