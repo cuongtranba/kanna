@@ -1,30 +1,32 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { z } from "zod"
 import { COMMAND_REGISTRY } from "../shared/commands"
 import type { ClientCommand } from "../shared/protocol"
 import { DEFAULT_KEYBINDINGS } from "../shared/types"
+import { AppSettingsManager } from "./app-settings"
 import { DiffStore } from "./diff-store"
+import { KeybindingsManager } from "./keybindings"
+import { readLlmProviderSnapshot, writeLlmProviderSnapshot } from "./llm-provider"
 import { createTestEventStore } from "./storage/test-helpers"
 import { makeTempRepo, type TempRepo } from "./test-helpers/worktree-repo"
 import { createWsRouter } from "./ws-router"
 
 const repos: TempRepo[] = []
+const settingsDirs: string[] = []
 
 afterEach(() => {
   for (const repo of repos.splice(0)) repo.cleanup()
+  for (const dir of settingsDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-async function createRouterOverRepo() {
-  const repo = makeTempRepo()
-  repos.push(repo)
-  const store = createTestEventStore(`/command-results-${repo.dir}`)
-  await store.initialize()
-  const project = await store.openProject(repo.dir)
-  const chat = await store.createChat(project.id)
-  const router = createWsRouter({
+type RouterArgs = Parameters<typeof createWsRouter>[0]
+
+function createRouterOver(store: RouterArgs["store"], overrides: Partial<RouterArgs>) {
+  return createWsRouter({
     store,
-    diffStore: new DiffStore(repo.dir),
     agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
     terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
     keybindings: { getSnapshot: () => ({ bindings: DEFAULT_KEYBINDINGS, warning: null, filePathDisplay: "~/.kanna/keybindings.json" }), onChange: () => () => {} } as never,
@@ -33,8 +35,48 @@ async function createRouterOverRepo() {
     machineDisplayName: "Local Machine",
     updateManager: null,
     pushManager: { getPreferences: () => ({ globalEnabled: true, mutedProjectPaths: [], mutedChatIds: [] }) } as never,
+    ...overrides,
   })
+}
+
+async function createRouterOverRepo() {
+  const repo = makeTempRepo()
+  repos.push(repo)
+  const store = createTestEventStore(`/command-results-${repo.dir}`)
+  await store.initialize()
+  const project = await store.openProject(repo.dir)
+  const chat = await store.createChat(project.id)
+  const router = createRouterOver(store, { diffStore: new DiffStore(repo.dir) })
   return { repo, router, chatId: chat.id, projectId: project.id }
+}
+
+async function createRouterOverSettings() {
+  const dir = mkdtempSync(join(tmpdir(), "kanna-settings-results-"))
+  settingsDirs.push(dir)
+  const store = createTestEventStore(`/command-results-${dir}`)
+  await store.initialize()
+  const appSettings = new AppSettingsManager(join(dir, "settings.json"))
+  await appSettings.initialize()
+  const keybindings = new KeybindingsManager(join(dir, "keybindings.json"))
+  await keybindings.initialize()
+  const llmFile = join(dir, "llm-provider.json")
+  const router = createRouterOver(store, {
+    appSettings,
+    keybindings,
+    llmProvider: {
+      read: () => readLlmProviderSnapshot(llmFile),
+      write: (value) => writeLlmProviderSnapshot(value, llmFile),
+      validate: async () => ({ ok: true, error: null }),
+    },
+    listOpenRouterModels: async () => [
+      { id: "vendor/model", label: "Model", contextLength: 8192, pricing: { promptPerTok: 0.000001, completionPerTok: 0.000002 } },
+    ],
+  })
+  return { router }
+}
+
+function resultSchemaOf(type: ClientCommand["type"]): z.ZodType | undefined {
+  return COMMAND_REGISTRY.find((candidate) => candidate.type === type)?.result
 }
 
 describe("command results", () => {
@@ -54,12 +96,93 @@ describe("command results", () => {
     ]
 
     for (const command of commands) {
-      const definition = COMMAND_REGISTRY.find((candidate) => candidate.type === command.type)
       const envelope = await router.dispatchCommand(command)
 
       expect(envelope.type).toBe("ack")
-      const verdict = definition?.result?.safeParse(envelope.type === "ack" ? envelope.result : undefined)
+      const verdict = resultSchemaOf(command.type)?.safeParse(envelope.type === "ack" ? envelope.result : undefined)
       expect(verdict?.success).toBe(true)
     }
+  }, 30_000)
+
+  test("the ack a settings command's real handler sends parses with the result schema in the command registry", async () => {
+    const { router } = await createRouterOverSettings()
+    const commands: ClientCommand[] = [
+      { type: "settings.readAppSettings" },
+      {
+        type: "settings.writeAppSettingsPatch",
+        patch: {
+          textSnippets: { create: { shortcut: "/hi", expansion: "hello" } },
+          customModels: { create: { id: "my-model", label: "My model", provider: "claude", aliases: ["mine"] } },
+        },
+      },
+      { type: "settings.writeAppSettings", analyticsEnabled: false },
+      { type: "appSettings.setCloudflareTunnel", patch: { enabled: true } },
+      { type: "appSettings.setClaudeAuth", patch: { concurrencyDefault: 2 } },
+      { type: "appSettings.testOAuthToken", token: "" },
+      { type: "settings.readKeybindings" },
+      { type: "settings.writeKeybindings", bindings: DEFAULT_KEYBINDINGS },
+      { type: "settings.readLlmProvider" },
+      { type: "settings.writeLlmProvider", provider: "custom", apiKey: "secret", model: "m", baseUrl: "http://localhost:1234/v1" },
+      { type: "settings.validateLlmProvider", provider: "openai", apiKey: "", model: "", baseUrl: "" },
+      { type: "settings.listOpenRouterModels" },
+      { type: "settings.testMcpServer", id: "missing" },
+      { type: "settings.startMcpOAuth", id: "missing" },
+      { type: "settings.completeMcpOAuth", id: "missing", callbackUrl: "http://localhost/callback" },
+      { type: "beacons.mintPairingCode" },
+      { type: "beacons.update", beaconId: "missing" },
+      { type: "update.check" },
+    ]
+
+    for (const command of commands) {
+      const envelope = await router.dispatchCommand(command)
+
+      expect(envelope.type).toBe("ack")
+      const verdict = resultSchemaOf(command.type)?.safeParse(envelope.type === "ack" ? envelope.result : undefined)
+      expect({ type: command.type, success: verdict?.success }).toEqual({ type: command.type, success: true })
+    }
+  }, 30_000)
+
+  test("the ack of a subagent command's real handler parses with the result schema in the command registry", async () => {
+    const { router } = await createRouterOverSettings()
+    const created = await router.dispatchCommand({
+      type: "subagent.create",
+      input: {
+        name: "reviewer",
+        provider: "claude",
+        model: "claude-sonnet-4-5",
+        modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+        systemPrompt: "Review the change.",
+        contextScope: "previous-assistant-reply",
+      },
+    })
+    const duplicate = await router.dispatchCommand({
+      type: "subagent.create",
+      input: {
+        name: "reviewer",
+        provider: "claude",
+        model: "claude-sonnet-4-5",
+        modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
+        systemPrompt: "Review the change.",
+        contextScope: "previous-assistant-reply",
+      },
+    })
+    const createdResult = created.type === "ack" ? created.result : undefined
+    const subagentId = createdResult && typeof createdResult === "object" && "subagent" in createdResult && createdResult.subagent && typeof createdResult.subagent === "object" && "id" in createdResult.subagent && typeof createdResult.subagent.id === "string"
+      ? createdResult.subagent.id
+      : ""
+    const updated = await router.dispatchCommand({ type: "subagent.update", id: subagentId, patch: { systemPrompt: "Review harder." } })
+    const deleted = await router.dispatchCommand({ type: "subagent.delete", id: subagentId })
+
+    expect(subagentId).not.toBe("")
+    for (const [type, envelope] of [
+      ["subagent.create", created],
+      ["subagent.create", duplicate],
+      ["subagent.update", updated],
+      ["subagent.delete", deleted],
+    ] as const) {
+      expect(envelope.type).toBe("ack")
+      expect(resultSchemaOf(type)?.safeParse(envelope.type === "ack" ? envelope.result : undefined).success).toBe(true)
+    }
+    expect(duplicate.type === "ack" && duplicate.result).toMatchObject({ ok: false })
   }, 30_000)
 })

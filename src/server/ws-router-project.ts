@@ -119,7 +119,7 @@ export async function handleProjectCommand(
       const snapshot = updateManager
         ? await updateManager.checkForUpdates({ force: command.force })
         : unavailableSnapshot
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "update.install": {
@@ -127,7 +127,7 @@ export async function handleProjectCommand(
         throw new Error("Update manager unavailable.")
       }
       const result = await updateManager.installUpdate({ version: command.version })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "update.reload": {
@@ -135,7 +135,7 @@ export async function handleProjectCommand(
         throw new Error("Update manager unavailable.")
       }
       const result = await updateManager.forceReload()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
 

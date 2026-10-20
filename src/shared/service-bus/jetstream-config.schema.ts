@@ -4,6 +4,7 @@ import type {
   JetStreamConsumerSettings,
   JetStreamStreamSettings,
   ServiceBusSettingsPatch,
+  ServiceBusSettingsPublic,
 } from "./jetstream-config"
 import { assertParity } from "../type-parity"
 
@@ -37,9 +38,21 @@ export const embeddedServerSettingsSchema = z.object({
   logLevel: z.enum(["info", "debug"]),
 })
 
+const serviceBusModeSchema = z.enum(["embedded", "external"])
+
+export const serviceBusSettingsPublicSchema = z.object({
+  enabled: z.boolean(),
+  mode: serviceBusModeSchema,
+  url: z.string(),
+  stream: jetStreamStreamSettingsSchema,
+  consumers: z.array(jetStreamConsumerSettingsSchema),
+  embedded: embeddedServerSettingsSchema,
+  tokenHint: z.string().nullable(),
+})
+
 export const serviceBusSettingsPatchSchema = z.object({
   enabled: z.boolean().optional(),
-  mode: z.enum(["embedded", "external"]).optional(),
+  mode: serviceBusModeSchema.optional(),
   url: z.string().optional(),
   token: z.string().nullable().optional(),
   stream: jetStreamStreamSettingsSchema.partial().optional(),
@@ -51,3 +64,4 @@ assertParity<z.output<typeof jetStreamStreamSettingsSchema>, JetStreamStreamSett
 assertParity<z.output<typeof jetStreamConsumerSettingsSchema>, JetStreamConsumerSettings>()
 assertParity<z.output<typeof embeddedServerSettingsSchema>, EmbeddedServerSettings>()
 assertParity<z.output<typeof serviceBusSettingsPatchSchema>, ServiceBusSettingsPatch>()
+assertParity<z.output<typeof serviceBusSettingsPublicSchema>, ServiceBusSettingsPublic>()

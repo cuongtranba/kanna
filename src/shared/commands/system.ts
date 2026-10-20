@@ -1,7 +1,9 @@
 import { z } from "zod"
 import { defineCommand, defineCommands, noParams, REMOTE_ALLOWED } from "./define"
 import { projectIdShape } from "./fragments"
+import { beaconMintResultSchema, beaconUpdateResultSchema } from "../beacon-config.schema"
 import { editorOpenSettingsSchema } from "../core-types.schema"
+import { updateInstallResultSchema, updateSnapshotSchema } from "../types.schema"
 
 const openExternalActionSchema = z.enum(["open_finder", "open_terminal", "open_editor", "open_preview", "open_default"])
 
@@ -26,30 +28,35 @@ export const systemCommands = defineCommands(
   }),
   defineCommand("update.check", {
     params: z.object({ force: z.boolean().optional() }),
+    result: updateSnapshotSchema,
     summary: "Check whether a newer Kanna version is available.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("update.install", {
     params: z.object({ version: z.string().optional() }),
+    result: updateInstallResultSchema,
     summary: "Install a Kanna update and restart the server.",
     risk: "destructive",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("update.reload", {
     params: noParams,
+    result: updateInstallResultSchema,
     summary: "Reload the running Kanna client after an update.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("beacons.mintPairingCode", {
     params: noParams,
+    result: beaconMintResultSchema,
     summary: "Mint a one-time pairing code for a remote beacon.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("beacons.update", {
     params: z.object({ beaconId: z.string() }),
+    result: beaconUpdateResultSchema,
     summary: "Ask a paired beacon to update itself.",
     risk: "write",
     remote: REMOTE_ALLOWED,

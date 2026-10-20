@@ -1,5 +1,13 @@
 import { z } from "zod"
-import type { SubagentContextScope, SubagentInput, SubagentPatch, SubagentTriggerMode } from "./subagent-types"
+import type {
+  Subagent,
+  SubagentContextScope,
+  SubagentInput,
+  SubagentPatch,
+  SubagentTriggerMode,
+  SubagentValidationError,
+} from "./subagent-types"
+import type { SubagentCommandResult, SubagentDeleteResult } from "./protocol"
 import { agentProviderSchema } from "./core-types.schema"
 import {
   claudeModelOptionsSchema,
@@ -45,7 +53,54 @@ export const subagentPatchSchema = z.object({
   allowBeaconTools: z.boolean().optional(),
 })
 
+const subagentModelOptionsSchema = z.union([claudeModelOptionsSchema, codexModelOptionsSchema, openRouterModelOptionsSchema])
+
+export const subagentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  provider: agentProviderSchema,
+  model: z.string(),
+  modelOptions: subagentModelOptionsSchema,
+  systemPrompt: z.string(),
+  contextScope: subagentContextScopeSchema,
+  triggerMode: subagentTriggerModeSchema,
+  workingDir: z.string().optional(),
+  allowedPaths: z.array(z.string()).optional(),
+  maxTurns: z.number().optional(),
+  allowBeaconTools: z.boolean().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+
+export const subagentValidationErrorSchema = z.object({
+  code: z.enum([
+    "EMPTY_NAME",
+    "INVALID_CHAR",
+    "RESERVED_NAME",
+    "DUPLICATE_NAME",
+    "TOO_LONG",
+    "NOT_FOUND",
+    "RESTRICTION_NOT_SUPPORTED",
+    "INVALID_PATH",
+    "PATH_ESCAPE",
+    "EMPTY_ALLOWED_PATHS",
+  ]),
+  message: z.string(),
+})
+
+export const subagentCommandResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), subagent: subagentSchema }),
+  z.object({ ok: z.literal(false), error: subagentValidationErrorSchema }),
+])
+
+export const subagentDeleteResultSchema = z.object({ ok: z.literal(true) })
+
 assertParity<z.output<typeof subagentContextScopeSchema>, SubagentContextScope>()
 assertParity<z.output<typeof subagentTriggerModeSchema>, SubagentTriggerMode>()
 assertParity<z.output<typeof subagentInputSchema>, SubagentInput>()
 assertParity<z.output<typeof subagentPatchSchema>, SubagentPatch>()
+assertParity<z.output<typeof subagentSchema>, Subagent>()
+assertParity<z.output<typeof subagentValidationErrorSchema>, SubagentValidationError>()
+assertParity<z.output<typeof subagentCommandResultSchema>, SubagentCommandResult>()
+assertParity<z.output<typeof subagentDeleteResultSchema>, SubagentDeleteResult>()

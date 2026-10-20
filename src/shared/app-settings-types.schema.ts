@@ -1,7 +1,9 @@
 import { z } from "zod"
 import type {
   AppSettingsPatch,
+  AppSettingsSnapshot,
   ClaudeAuthSettings,
+  ClaudeDriverSettings,
   ClaudeLifecycleSettings,
   KeybindingsSnapshot,
   OAuthTokenEntry,
@@ -17,13 +19,16 @@ import {
   editorPresetSchema,
 } from "./core-types.schema"
 import {
+  chatProviderPreferencesSchema,
   claudeModelOptionsSchema,
   codexModelOptionsSchema,
+  customModelEntrySchema,
   customModelInputSchema,
   customModelPatchSchema,
   openRouterModelOptionsSchema,
   textSnippetInputSchema,
   textSnippetPatchSchema,
+  textSnippetSchema,
 } from "./provider-model-types.schema"
 import {
   authSettingsSchema,
@@ -36,17 +41,18 @@ import {
   typographySettingsSchema,
   uploadSettingsSchema,
 } from "./settings/settings.schema"
-import { beaconPatchSchema, beaconScopeSchema } from "./beacon-config.schema"
-import { customProviderInputSchema, customProviderPatchSchema } from "./custom-providers.schema"
+import { beaconConfigSchema, beaconPatchSchema, beaconScopeSchema } from "./beacon-config.schema"
+import { customProviderInputSchema, customProviderPatchSchema, customProviderPublicSchema } from "./custom-providers.schema"
 import {
   mcpOAuthStateSchema,
+  mcpServerConfigSchema,
   mcpServerInputSchema,
   mcpServerPatchSchema,
   mcpServerTestResultSchema,
 } from "./mcp-types.schema"
-import { mcpSourceInputSchema, mcpSourcePatchSchema } from "./mcp-sources/types.schema"
-import { serviceBusSettingsPatchSchema } from "./service-bus/jetstream-config.schema"
-import { subagentInputSchema, subagentPatchSchema } from "./subagent-types.schema"
+import { mcpSourceInputSchema, mcpSourcePatchSchema, mcpSourceSchema } from "./mcp-sources/types.schema"
+import { serviceBusSettingsPatchSchema, serviceBusSettingsPublicSchema } from "./service-bus/jetstream-config.schema"
+import { subagentInputSchema, subagentPatchSchema, subagentSchema } from "./subagent-types.schema"
 import { assertParity } from "./type-parity"
 
 const oauthTokenEntrySchema = z.object({
@@ -186,6 +192,52 @@ export const appSettingsPatchSchema = z.object({
     .optional(),
 })
 
+const claudeDriverSettingsSchema = z.object({ lifecycle: claudeLifecycleSettingsSchema })
+
+export const keybindingsSnapshotSchema = z.object({
+  bindings: keybindingsBindingsSchema,
+  warning: z.string().nullable(),
+  filePathDisplay: z.string(),
+})
+
+export const appSettingsSnapshotSchema = z.object({
+  analyticsEnabled: z.boolean(),
+  browserSettingsMigrated: z.boolean(),
+  theme: appThemePreferenceSchema,
+  typography: typographySettingsSchema,
+  chatSoundPreference: chatSoundPreferenceSchema,
+  chatSoundId: chatSoundIdSchema,
+  terminal: z.object({ scrollbackLines: z.number(), minColumnWidth: z.number() }),
+  panes: z.object({ tabMinWidth: z.number() }),
+  editor: z.object({ preset: editorPresetSchema, commandTemplate: z.string() }),
+  defaultProvider: defaultProviderPreferenceSchema,
+  providerDefaults: chatProviderPreferencesSchema,
+  warning: z.string().nullable(),
+  filePathDisplay: z.string(),
+  cloudflareTunnel: cloudflareTunnelSettingsSchema,
+  push: pushSettingsSchema,
+  telemetry: telemetrySettingsSchema,
+  auth: authSettingsSchema,
+  claudeAuth: claudeAuthSettingsSchema,
+  uploads: uploadSettingsSchema,
+  subagents: z.array(subagentSchema),
+  customMcpServers: z.array(mcpServerConfigSchema),
+  customBeacons: z.array(beaconConfigSchema),
+  customModels: z.array(customModelEntrySchema),
+  mcpSources: z.array(mcpSourceSchema),
+  customProviders: z.array(customProviderPublicSchema),
+  textSnippets: z.array(textSnippetSchema),
+  claudeDriver: claudeDriverSettingsSchema,
+  globalPromptAppend: z.string(),
+  shareDefaultTtlHours: z.number(),
+  subagentRuntime: subagentRuntimeSettingsSchema,
+  packageUpdates: packageUpdateSettingsSchema,
+  plugins: pluginSettingsSchema,
+  installedPlugins: z.array(installedPluginConfigSchema),
+  remoteMcp: remoteMcpSettingsSchema,
+  serviceBus: serviceBusSettingsPublicSchema,
+})
+
 assertParity<z.output<typeof claudeAuthSettingsSchema>, ClaudeAuthSettings>()
 assertParity<z.output<typeof oauthTokenEntrySchema>, OAuthTokenEntry>()
 assertParity<z.output<typeof keybindingsBindingsSchema>, KeybindingsSnapshot["bindings"]>()
@@ -193,3 +245,6 @@ assertParity<z.output<typeof claudeLifecycleSettingsSchema>, ClaudeLifecycleSett
 assertParity<z.output<typeof subagentRuntimeSettingsSchema>, SubagentRuntimeSettings>()
 assertParity<z.output<typeof packageUpdateSettingsSchema>, PackageUpdateSettings>()
 assertParity<z.output<typeof appSettingsPatchSchema>, AppSettingsPatch>()
+assertParity<z.output<typeof claudeDriverSettingsSchema>, ClaudeDriverSettings>()
+assertParity<z.output<typeof keybindingsSnapshotSchema>, KeybindingsSnapshot>()
+assertParity<z.output<typeof appSettingsSnapshotSchema>, AppSettingsSnapshot>()

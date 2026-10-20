@@ -13,6 +13,7 @@ import type {
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { AnalyticsReporter } from "./analytics"
 import { KeybindingsManager } from "./keybindings"
+import { ackResult } from "./ws-router-ack"
 import type { BeaconMintResult, BeaconUpdateResult } from "../shared/beacon-config"
 import { getBeaconPairingStore } from "./beacon-pairing-host"
 import type { BeaconRegistry } from "./beacon-registry"
@@ -137,16 +138,16 @@ export async function handleSettingsCommand(
 
   switch (command.type) {
     case "settings.readKeybindings": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: keybindings.getSnapshot() })
+      send(ackResult(id, command, keybindings.getSnapshot()))
       return true
     }
     case "settings.writeKeybindings": {
       const snapshot = await keybindings.write(command.bindings)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "settings.readAppSettings": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: resolvedAppSettings.getSnapshot() })
+      send(ackResult(id, command, resolvedAppSettings.getSnapshot()))
       return true
     }
     case "settings.writeAppSettings": {
@@ -155,7 +156,7 @@ export async function handleSettingsCommand(
         resolvedAnalytics.track("analytics_disabled")
       }
       const snapshot = await resolvedAppSettings.write({ analyticsEnabled: command.analyticsEnabled })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       if (!previousAnalyticsEnabled && command.analyticsEnabled) {
         resolvedAnalytics.track("analytics_enabled")
       }
@@ -164,24 +165,24 @@ export async function handleSettingsCommand(
     case "appSettings.setCloudflareTunnel": {
       await resolvedAppSettings.setCloudflareTunnel(command.patch)
       const snapshot = resolvedAppSettings.getSnapshot()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "appSettings.setClaudeAuth": {
       await resolvedAppSettings.setClaudeAuth(command.patch)
       const snapshot = resolvedAppSettings.getSnapshot()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "appSettings.testOAuthToken": {
       const result = await testOAuthToken(command.token, command.baseUrl)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "settings.writeAppSettingsPatch": {
       const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
       const snapshot = await resolvedAppSettings.writePatch(command.patch)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
 
       const targetId = (() => {
         const ops = command.patch.customMcpServers
@@ -208,47 +209,32 @@ export async function handleSettingsCommand(
     }
     case "subagent.create": {
       const result = await resolvedAppSettings.createSubagent(command.input)
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: isSubagentValidationError(result)
-          ? { ok: false, error: result }
-          : { ok: true, subagent: result },
-      })
+      send(ackResult(id, command, isSubagentValidationError(result)
+        ? { ok: false, error: result }
+        : { ok: true, subagent: result }))
       return true
     }
     case "subagent.update": {
       const result = await resolvedAppSettings.updateSubagent(command.id, command.patch)
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: isSubagentValidationError(result)
-          ? { ok: false, error: result }
-          : { ok: true, subagent: result },
-      })
+      send(ackResult(id, command, isSubagentValidationError(result)
+        ? { ok: false, error: result }
+        : { ok: true, subagent: result }))
       return true
     }
     case "subagent.delete": {
       await resolvedAppSettings.deleteSubagent(command.id)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+      send(ackResult(id, command, { ok: true }))
       return true
     }
     case "settings.testMcpServer": {
       const snapshot = resolvedAppSettings.getSnapshot()
       const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
       if (!entry) {
-        send({
-          v: PROTOCOL_VERSION,
-          type: "ack",
-          id,
-          result: {
-            ok: false,
-            message: "MCP server not found",
-            lastTest: { status: "error", testedAt: new Date().toISOString(), message: "not found" } as const,
-          },
-        })
+        send(ackResult(id, command, {
+          ok: false,
+          message: "MCP server not found",
+          lastTest: { status: "error", testedAt: new Date().toISOString(), message: "not found" },
+        }))
         return true
       }
       await resolvedAppSettings.writePatch({
@@ -261,51 +247,43 @@ export async function handleSettingsCommand(
       await resolvedAppSettings.writePatch({
         customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
       })
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: {
-          ok: lastTest.status === "ok",
-          message: lastTest.status === "error" ? lastTest.message : undefined,
-          lastTest,
-        },
-      })
+      send(ackResult(id, command, {
+        ok: lastTest.status === "ok",
+        message: lastTest.status === "error" ? lastTest.message : undefined,
+        lastTest,
+      }))
       return true
     }
     case "beacons.mintPairingCode": {
       const minted: BeaconMintResult = authEnabled
         ? { ok: true, ...getBeaconPairingStore().mint() }
         : { ok: false, error: "Pairing a beacon requires a server password. Start Kanna with --password." }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: minted })
+      send(ackResult(id, command, minted))
       return true
     }
     case "beacons.update": {
       const requested: BeaconUpdateResult = beaconRegistry
         ? beaconRegistry.requestUpdate(command.beaconId)
         : { ok: false, error: BEACONS_UNAVAILABLE }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: requested })
+      send(ackResult(id, command, requested))
       return true
     }
     case "settings.startMcpOAuth": {
       const snapshot = resolvedAppSettings.getSnapshot()
       const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
       if (!entry || entry.transport === "stdio") {
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found or unsupported transport" } })
+        send(ackResult(id, command, { ok: false, error: "not found or unsupported transport" }))
         return true
       }
       try {
         const result = await startMcpOAuth(entry, {
           persist: (oauth) => void resolvedAppSettings.writePatch({ customMcpServers: { setOAuthState: { id: entry.id, oauth } } }),
         })
-        send({
-          v: PROTOCOL_VERSION, type: "ack", id,
-          result: result.kind === "authorizationUrl"
-            ? { ok: true, authorizationUrl: result.authorizationUrl }
-            : { ok: true, alreadyAuthenticated: true },
-        })
+        send(ackResult(id, command, result.kind === "authorizationUrl"
+          ? { ok: true, authorizationUrl: result.authorizationUrl }
+          : { ok: true, alreadyAuthenticated: true }))
       } catch (err) {
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth start failed" } })
+        send(ackResult(id, command, { ok: false, error: err instanceof Error ? err.message : "oauth start failed" }))
       }
       return true
     }
@@ -313,7 +291,7 @@ export async function handleSettingsCommand(
       const snapshot = resolvedAppSettings.getSnapshot()
       const entry = snapshot.customMcpServers.find((s) => s.id === command.id)
       if (!entry || entry.transport === "stdio") {
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: "not found" } })
+        send(ackResult(id, command, { ok: false, error: "not found" }))
         return true
       }
       try {
@@ -324,24 +302,24 @@ export async function handleSettingsCommand(
             return r.status === "ok" ? r.toolCount : 0
           },
         })
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true, testResult: result } })
+        send(ackResult(id, command, { ok: true, testResult: result }))
       } catch (err) {
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: false, error: err instanceof Error ? err.message : "oauth complete failed" } })
+        send(ackResult(id, command, { ok: false, error: err instanceof Error ? err.message : "oauth complete failed" }))
       }
       return true
     }
     case "settings.readLlmProvider": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: await resolvedLlmProvider.read() })
+      send(ackResult(id, command, await resolvedLlmProvider.read()))
       return true
     }
     case "settings.listOpenRouterModels": {
       const models = listOpenRouterModels ? await listOpenRouterModels() : []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: models })
+      send(ackResult(id, command, models))
       return true
     }
     case "settings.getChangelog": {
       const releases = await fetchGitHubReleases("cuongtranba/kanna")
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: releases })
+      send(ackResult(id, command, releases))
       return true
     }
     case "settings.writeLlmProvider": {
@@ -351,7 +329,7 @@ export async function handleSettingsCommand(
         model: command.model,
         baseUrl: command.baseUrl,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "settings.validateLlmProvider": {
@@ -361,7 +339,7 @@ export async function handleSettingsCommand(
         model: command.model,
         baseUrl: command.baseUrl,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "skills.search": {

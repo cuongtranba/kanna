@@ -1,6 +1,6 @@
 ---
 id: adr-20261020-command-registry-single-source-of-truth
-c3-seal: 1a9bd608d2634d46389e94ccf711e25bf63bbb71254f1fe8b756fd478da5b745
+c3-seal: 6305078cfa01de5f5286a3c2471354c1b51f0360ad7df7c45eccab258ffa34e1
 title: command-registry-single-source-of-truth
 type: adr
 goal: Record the decision to make a command registry in src/shared/commands the single source of truth for every WebSocket command that the browser and the remote MCP server dispatch. One defineCommand entry per command carries its zod params, summary, risk and remote policy. The ClientCommand union is derived from the registry, parseClientCommand validates a command with the same schema at the WS router and at kanna_command, and kanna_commands publishes a JSON Schema of each command's params.
@@ -27,6 +27,8 @@ A command may also declare the shape of its ack result. defineCommand takes an o
 The client never parses a result at runtime, since transcripts and history pages are hot paths. The schema is the type source and the server enforces it. A handler sends its ack through ackResult in ws-router-ack.ts, whose result parameter is the CommandResult of the command being answered, so a handler returning a different shape fails to compile. A TypeScript type that already exists for a result is tied to its schema by assertParity, and a type that only the server used is now derived from the schema. A behavioural test dispatches real git commands through dispatchCommand over a temporary repository and requires each ack to parse with the schema in the registry. A runtime parse in the production ack path was rejected because the compile-time check already covers every handler that goes through ackResult and a JSON round trip would cost every command.
 
 kanna_commands lists a resultSchema, rendered from the output side of the schema, for each command that declares one and omits it for the rest. The git and diff domain is the pilot: chat.initGit, chat.getGitHubPublishInfo, chat.checkGitHubRepoAvailability, chat.publishToGitHub, chat.listBranches, chat.previewMergeBranch, chat.mergeBranch, chat.syncBranch, chat.checkoutBranch, chat.createBranch, chat.generateCommitMessage, chat.commitDiffs, chat.discardDiffFile, chat.ignoreDiffFile and project.readDiffPatch. chat.refreshDiffs acks without a result and has no slot.
+
+The settings and system domain is the second: settings.readKeybindings, settings.writeKeybindings, settings.readAppSettings, settings.writeAppSettings, settings.writeAppSettingsPatch, appSettings.setCloudflareTunnel, appSettings.setClaudeAuth, appSettings.testOAuthToken, settings.readLlmProvider, settings.writeLlmProvider, settings.validateLlmProvider, settings.listOpenRouterModels, settings.getChangelog, settings.testMcpServer, settings.startMcpOAuth, settings.completeMcpOAuth, subagent.create, subagent.update, subagent.delete, update.check, update.install, update.reload, beacons.mintPairingCode and beacons.update. AppSettingsSnapshot, KeybindingsSnapshot, LlmProviderSnapshot and every type nested in them are tied to their schemas by assertParity. The getChangelog schema covers only the release fields the client reads, because the payload is GitHub's. system.ping and system.openExternal ack without a result.
 
 ## Affected Topology
 

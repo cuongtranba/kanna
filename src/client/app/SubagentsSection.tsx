@@ -604,7 +604,7 @@ export function SubagentsSettingsBranch(props: {
   const handlers = useMemo<SubagentsSectionHandlers>(
     () => ({
       onCreate: async (input) => {
-        const result = await props.state.socket.command<SubagentCommandResult>({
+        const result = await props.state.socket.command({
           type: "subagent.create",
           input,
         })
@@ -612,7 +612,7 @@ export function SubagentsSettingsBranch(props: {
         return result
       },
       onUpdate: async (id, input) => {
-        const result = await props.state.socket.command<SubagentCommandResult>({
+        const result = await props.state.socket.command({
           type: "subagent.update",
           id,
           patch: { ...input, maxTurns: input.maxTurns ?? null },
