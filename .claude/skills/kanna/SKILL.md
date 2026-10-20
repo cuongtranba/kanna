@@ -25,6 +25,14 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | Running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
 | `/loop`, `setup_loop`, `run_verify`, an armed loop, a loop that stalled or declared GOAL MET too early, `PROGRESS.md` and the tracking-doc tools | `.claude/skills/kanna-loop/SKILL.md` |
 | `delegate_subagent`, `keep_alive` / `run_in_background`, a run that failed `AUTH_REQUIRED` / `CAP_EXCEEDED` / `MAX_TURNS`, the permit pool | `.claude/skills/kanna-subagents/SKILL.md` |
+| Session/turn lifecycle: `/clear` `/compact`, compaction, a chat stuck busy, a lost queued message, background-task keep-alive, live blocks, the idle reaper, `CLAUDE_TOOLSET` | `.claude/skills/kanna-sessions/SKILL.md` |
+| `/cron`, `arm_cron`, a cron job that never fired or stayed running | `.claude/skills/kanna-cron/SKILL.md` |
+| Model catalog, custom Anthropic-compatible endpoints, a wrong context window, a Codex turn failure | `.claude/skills/kanna-providers/SKILL.md` |
+| Custom MCP servers, MCP OAuth, Kanna's remote `/mcp` endpoint | `.claude/skills/kanna-mcp/SKILL.md` |
+| Service bus, NATS, the Inbox, MCP sources, inbound webhooks | `.claude/skills/kanna-inbox/SKILL.md` |
+| Mermaid validation, Generative UI (`kanna-ui`), charts, share links | `.claude/skills/kanna-genui/SKILL.md` |
+| Beacons — file transfer, self-update, the Windows 7 Go port | `.claude/skills/kanna-beacon/SKILL.md` |
+| Boards, project delete, tus uploads, package auto-update, the plugin system, import live-tail | `.claude/skills/kanna-features/SKILL.md` |
 | Publishing a version, changelog, npm release | `.claude/skills/release/SKILL.md` |
 | Reviewing a pull request for safety or correctness | `.claude/skills/review-pr/SKILL.md` |
 | Filing a bug or feature request, writing up a defect found mid-task, handing a finding to another agent | `.claude/skills/github-issue/SKILL.md` |
