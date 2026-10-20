@@ -68,7 +68,7 @@ export function BoardsPage({ ownerKind, ownerId, ownerName, socket, onOpenBoard 
     let cancelled = false
     const pageStore = useBoardsPageStore.getState()
     if (pageStore.templatesStatus !== "ready") pageStore.beginTemplatesLoad()
-    socket.command<BoardTemplate[]>({ type: "board.templates.list" }).then(
+    socket.command({ type: "board.templates.list" }).then(
       (list) => {
         if (!cancelled) setTemplates(list)
       },

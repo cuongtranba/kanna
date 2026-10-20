@@ -1,3 +1,4 @@
+import type { InboxPage } from "../../shared/inbox/types.schema"
 import { toError } from "../../shared/errors"
 import type { InboxEvent } from "../../shared/inbox/events"
 import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
@@ -42,10 +43,7 @@ export interface InboundIngestMeta {
 
 export type InboxReportResult = { ok: true } | { ok: false; error: string }
 
-export interface InboxPage {
-  threads: InboxThread[]
-  items: InboxActivityItem[]
-}
+export type { InboxPage }
 
 const DEFAULT_SNAPSHOT_LIMIT = 200
 const INBOX_SUBJECT_PREFIX = "kanna.inbox."

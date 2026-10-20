@@ -1,6 +1,6 @@
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { PushSubscribeRequestPayload } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import { ackResult } from "./ws-router-ack"
 
 
 export interface PushManagerDep {
@@ -40,7 +40,7 @@ export async function handlePushCommand(
         await pushManager.recordDeviceSeen(command.pushDeviceId)
         await broadcastPushConfig()
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "push.subscribe": {
@@ -51,7 +51,7 @@ export async function handlePushCommand(
       })
       setPushDeviceId(result.id)
       await broadcastPushConfig()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "push.unsubscribe": {
@@ -60,7 +60,7 @@ export async function handlePushCommand(
         setPushDeviceId(null)
       }
       await broadcastPushConfig()
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "push.test": {
@@ -68,19 +68,19 @@ export async function handlePushCommand(
       if (deviceId) {
         await pushManager.sendTest(deviceId)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "push.setProjectMute": {
       await pushManager.setProjectMute(command.localPath, command.muted)
       await broadcastPushConfig()
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "push.setChatMute": {
       await pushManager.setChatMute(command.chatId, command.muted)
       await broadcastPushConfig()
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "push.setFocusedChat": {
@@ -88,7 +88,7 @@ export async function handlePushCommand(
       if (deviceId) {
         pushManager.setFocusedChat(deviceId, command.chatId)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     default:

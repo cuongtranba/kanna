@@ -1,11 +1,9 @@
 import type { JsonObject } from "../shared/json"
 
-import { PROTOCOL_VERSION } from "../shared/types"
 import { ackResult } from "./ws-router-ack"
 import type { GitWorktree } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { TerminalSnapshot } from "../shared/protocol"
-import type { ShareCommandResult } from "../shared/session-share/protocol"
 import type { MintRequest, MintResponse, RevokeRequest, ShareError, ShareSummary } from "../shared/session-share/types"
 
 
@@ -177,39 +175,25 @@ export async function handleMiscCommand(
 
     case "share.mint": {
       if (!sessionShare) {
-        const noSvcResult: ShareCommandResult = { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: noSvcResult })
+        send(ackResult(id, command, { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } }))
         return true
       }
       const r = await sessionShare.mintToken(command.payload, getOriginHost())
-      const result: ShareCommandResult = r.ok
-        ? { ok: true, kind: "mint", data: r.data }
-        : { ok: false, error: r.error }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, r.ok ? { ok: true, kind: "mint", data: r.data } : { ok: false, error: r.error }))
       return true
     }
     case "share.revoke": {
       if (!sessionShare) {
-        const noSvcResult: ShareCommandResult = { ok: false, error: { kind: "not_found" } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: noSvcResult })
+        send(ackResult(id, command, { ok: false, error: { kind: "not_found" } }))
         return true
       }
       const r = await sessionShare.revokeToken(command.payload)
-      const result: ShareCommandResult = r.ok
-        ? { ok: true, kind: "revoke", data: r.data }
-        : { ok: false, error: r.error }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, r.ok ? { ok: true, kind: "revoke", data: r.data } : { ok: false, error: r.error }))
       return true
     }
     case "share.list": {
-      if (!sessionShare) {
-        const emptyResult: ShareCommandResult = { ok: true, kind: "list", data: { shares: [] } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: emptyResult })
-        return true
-      }
-      const shares = sessionShare.listSharesForChat(command.payload.chatId, getOriginHost())
-      const listResult: ShareCommandResult = { ok: true, kind: "list", data: { shares } }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: listResult })
+      const shares = sessionShare ? sessionShare.listSharesForChat(command.payload.chatId, getOriginHost()) : []
+      send(ackResult(id, command, { ok: true, kind: "list", data: { shares } }))
       return true
     }
 

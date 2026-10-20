@@ -1,3 +1,4 @@
+import type { BindingPullResult, DrainSummary, PullSummary } from "../shared/commands/results/board"
 
 import type { BoardColumn, Card, CardActor, FieldValue, ProviderId, SyncBinding } from "../shared/boards/types"
 import { columnForRemoteState, remoteStateOfColumn } from "../shared/boards/types"
@@ -33,28 +34,7 @@ export interface BoardSyncDeps {
   now: () => number
 }
 
-export interface BindingPullResult {
-  bindingId: string
-  cursor: string | null
-  rateLimitRemaining: number | null
-  error: string | null
-}
-
-export interface PullSummary {
-  created: number
-  updated: number
-  unchanged: number
-  conflicts: number
-  queued: number
-  rateLimitRemaining: number | null
-  bindings: readonly BindingPullResult[]
-}
-
-export interface DrainSummary {
-  pushed: number
-  failed: number
-  held: number
-}
+export type { BindingPullResult, DrainSummary, PullSummary }
 
 function textOf(value: FieldValue | undefined): string | null {
   if (!value) return null

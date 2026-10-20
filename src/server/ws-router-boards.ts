@@ -15,6 +15,7 @@ import { BLOCKED_BY } from "../shared/boards/dependencies"
 import type { CleanupDecision, WorktreeCleanupView } from "../shared/boards/worktree-cleanup"
 import type { WorktreeCleanupOutcome } from "./board-worktree-cleanup"
 import { errorMessage } from "../shared/errors"
+import { ackResult } from "./ws-router-ack"
 
 export interface BoardCommandDeps {
   boardRegistry: BoardRegistry | undefined
@@ -93,7 +94,7 @@ export async function handleBoardCommand(
         send({ v: PROTOCOL_VERSION, type: "error", id, message: "Starting work is not available on this server." })
         return true
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: await startWork(command.cardId) })
+      send(ackResult(id, command, await startWork(command.cardId)))
       return true
     }
     if (command.type === "board.card.resolveWorktree") {
@@ -101,12 +102,7 @@ export async function handleBoardCommand(
         send({ v: PROTOCOL_VERSION, type: "error", id, message: "Worktree cleanup is not available on this server." })
         return true
       }
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: await resolveCleanup(command.cardId, command.decision),
-      })
+      send(ackResult(id, command, await resolveCleanup(command.cardId, command.decision)))
       return true
     }
     if (command.type === "board.card.detail") {
@@ -118,7 +114,7 @@ export async function handleBoardCommand(
             cleanup: cleanupView ? await cleanupView(command.cardId) : null,
           }
         : null
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: view })
+      send(ackResult(id, command, view))
       return true
     }
     if (command.type.startsWith("board.sync.")) {
@@ -153,13 +149,13 @@ async function dispatchSync(
       projectId: command.projectId ?? null,
       detachFromBoardId: command.detachFromBoardId ?? null,
     })
-    send({ v: PROTOCOL_VERSION, type: "ack", id, result: binding })
+    send(ackResult(id, command, binding))
     return true
   }
 
   if (command.type === "board.sync.unbind") {
     registry.unbindSync(command.boardId, command.bindingId)
-    send({ v: PROTOCOL_VERSION, type: "ack", id, result: { bindingId: command.bindingId } })
+    send(ackResult(id, command, { bindingId: command.bindingId }))
     return true
   }
 
@@ -176,7 +172,7 @@ async function dispatchSync(
         closed: named(columnForRemoteState(columns, "closed")),
       },
     }
-    send({ v: PROTOCOL_VERSION, type: "ack", id, result: status })
+    send(ackResult(id, command, status))
     return true
   }
 
@@ -186,12 +182,12 @@ async function dispatchSync(
   }
 
   if (command.type === "board.sync.pull") {
-    send({ v: PROTOCOL_VERSION, type: "ack", id, result: await sync.pull(command.boardId) })
+    send(ackResult(id, command, await sync.pull(command.boardId)))
     return true
   }
 
   if (command.type === "board.sync.push") {
-    send({ v: PROTOCOL_VERSION, type: "ack", id, result: await sync.drain(command.boardId) })
+    send(ackResult(id, command, await sync.drain(command.boardId)))
     return true
   }
 
@@ -214,7 +210,7 @@ function dispatch(
         definition: template?.definition ?? null,
         templateId: template?.id ?? null,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: board })
+      send(ackResult(id, command, board))
       return true
     }
 
@@ -239,28 +235,23 @@ function dispatch(
         patch.cardFields = cardFields
       }
 
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateBoard(command.boardId, patch) })
+      send(ackResult(id, command, registry.updateBoard(command.boardId, patch)))
       return true
     }
 
     case "board.duplicate": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.duplicateBoard(command.boardId, command.title) })
+      send(ackResult(id, command, registry.duplicateBoard(command.boardId, command.title)))
       return true
     }
 
     case "board.saveAsTemplate": {
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: registry.saveBoardAsTemplate(command.boardId, command.name),
-      })
+      send(ackResult(id, command, registry.saveBoardAsTemplate(command.boardId, command.name)))
       return true
     }
 
     case "board.archive": {
       registry.archiveBoard(command.boardId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
@@ -270,7 +261,7 @@ function dispatch(
         title: command.title,
         afterColumnId: command.afterColumnId ?? null,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      send(ackResult(id, command, column))
       return true
     }
 
@@ -281,19 +272,19 @@ function dispatch(
         ...(command.colorToken === undefined ? {} : { colorToken: command.colorToken }),
         ...(command.wipLimit === undefined ? {} : { wipLimit: command.wipLimit }),
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      send(ackResult(id, command, column))
       return true
     }
 
     case "board.column.move": {
       const column = registry.moveColumn({ columnId: command.columnId, afterColumnId: command.afterColumnId })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: column })
+      send(ackResult(id, command, column))
       return true
     }
 
     case "board.column.delete": {
       registry.deleteColumn(command.columnId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
@@ -306,7 +297,7 @@ function dispatch(
         afterCardId: command.afterCardId ?? null,
         actor,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
+      send(ackResult(id, command, card))
       return true
     }
 
@@ -318,35 +309,30 @@ function dispatch(
         belowCardId: command.belowCardId,
         actor,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: card })
+      send(ackResult(id, command, card))
       return true
     }
 
     case "board.card.archive": {
       registry.archiveCard(command.cardId, actor)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
     case "board.card.comment": {
-      send({
-        v: PROTOCOL_VERSION,
-        type: "ack",
-        id,
-        result: registry.addComment(command.cardId, actor, command.body),
-      })
+      send(ackResult(id, command, registry.addComment(command.cardId, actor, command.body)))
       return true
     }
 
     case "board.card.block": {
       registry.addCardLink(command.cardId, BLOCKED_BY, command.blockedByCardId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
     case "board.card.unblock": {
       registry.removeCardLink(command.cardId, BLOCKED_BY, command.blockedByCardId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
@@ -373,7 +359,7 @@ function dispatch(
         patch.content = content
       }
 
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.updateCard(command.cardId, patch, actor) })
+      send(ackResult(id, command, registry.updateCard(command.cardId, patch, actor)))
       return true
     }
 
@@ -383,12 +369,12 @@ function dispatch(
         limit: command.limit,
         afterRank: command.afterRank ?? null,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: page })
+      send(ackResult(id, command, page))
       return true
     }
 
     case "board.templates.list": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: registry.listTemplates() })
+      send(ackResult(id, command, registry.listTemplates()))
       return true
     }
 
