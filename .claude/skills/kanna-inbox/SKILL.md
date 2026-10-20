@@ -168,8 +168,9 @@ not an implementation detail.
   `INBOX_MAX_ITEMS` (2000) while never dropping an unread thread younger than
   seven days, and rewrites the file only at boot when it holds more than twice
   the live records. A StoreEvent log was rejected because it touches five
-  files that already drift (`chat-tasks.jsonl` is truncated and snapshotted
-  but not replayed — a filed follow-up).
+  files that must be kept in step by hand (`chat-tasks.jsonl` drifted: it was
+  snapshotted and truncated but never replayed or counted toward the truncation
+  threshold, until #1325).
 - **Activity items are every internal envelope** except `kanna.inbox.>` (no
   feedback loop). `attention` — and therefore unread — is `kanna.turn.failed`,
   `kanna.toolRequest.put`, a failed `kanna.cron.runOutcome`,

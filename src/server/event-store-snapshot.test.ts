@@ -356,6 +356,13 @@ describe("calcShouldTruncateLogs", () => {
     const result = await calcShouldTruncateLogs(storage, PATHS)
     expect(result).toBe(true)
   })
+
+  test("counts the chat-tasks log toward the truncation threshold", async () => {
+    const bigData = "x".repeat(2 * 1024 * 1024)
+    const storage = makeStorage({ [PATHS.chatTasksLogPath]: bigData })
+    const result = await calcShouldTruncateLogs(storage, PATHS)
+    expect(result).toBe(true)
+  })
 })
 
 describe("readSidebarOrderFromProjectsLog", () => {
