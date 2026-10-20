@@ -1,6 +1,6 @@
 ---
 id: c3-243
-c3-seal: 61c8471e61df6464c8701ac16fedaa969e0a487d0061fd5f304ac57c388faab1
+c3-seal: 6799a27df0e647a9407d404d9ce1604e6c44d4c36ec3e3df4ad6f0f8d38a26dc
 title: webhooks
 type: component
 category: feature
@@ -47,6 +47,7 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 | webhook_delivery transcript entry | OUT | One card per delivery with hook id, hook name, mode, delivery id and, for notify, the rendered message | Excluded from shareableEntries, so it stays private by default. | src/shared/transcript-types.ts |
 | Queued prompt | OUT | inline and spawn enqueue the rendered prompt with autoContinue scheduleId webhook-hookId-deliveryId | The body is appended in a fenced block capped at 16000 characters under a line that marks it as untrusted external data. | src/shared/webhooks/template.ts |
 | Hook model | IN/OUT | An optional provider and model pair, set or cleared together, rides the queued message so it applies to that one turn | Validated on create and update against the same provider catalog the chat snapshot serves; an unknown model is refused, never silently replaced. Delivery never calls setChatModel, so an inline hook does not change the chat's own model. | src/shared/webhooks/validate.ts |
+| Delivery path | OUT | deliverWebhook maps a hook to an InboundDelivery and calls deliverInbound (c3-247), which publishes the inbound envelope, upserts the inbox thread keyed by threadKeyPath or the delivery id, and appends the handler instruction to the queued prompt | The webhook_delivery card and the webhook-hookId-deliveryId schedule id are unchanged; threadKeyPath, senderPath and replyHint are optional hook fields | src/server/webhooks/webhook-delivery.ts |
 
 ## Derived Materials
 

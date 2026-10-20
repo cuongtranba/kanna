@@ -776,3 +776,10 @@ c3-245:
 c3-246:
   - src/shared/service-bus/*.ts
   - src/server/service-bus/*.ts
+c3-247:
+  - src/shared/inbox/*.ts
+  - src/shared/inbound/*.ts
+  - src/server/inbox/*.ts
+  - src/server/inbound/*.ts
+  - src/server/kanna-mcp-inbox.ts
+  - src/server/ws-router-inbox.ts

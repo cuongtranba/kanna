@@ -3107,6 +3107,67 @@ stays the store of record; the bus persists nothing.
   paid for by three removed blank lines. A second call site or a new import
   line there fails `check:arch`; put new bus logic in `src/server/service-bus/`.
 
+# Inbox — inbound threads, one handler chat per thread, draft-only agent
+
+`src/server/inbox/` + `src/server/inbound/` (component `c3-247`) turn every
+inbound message — a webhook delivery today, an MCP source message once PR4
+lands — into an **inbox thread** the user reads and answers in one place, and
+keep every other bus envelope as a browsable **activity item**. The user chose
+"agent pre-handles, then tells me", so the shape below is a product decision,
+not an implementation detail.
+
+- **`deliverInbound` is the ONE delivery path.** `deliverWebhook` is a thin
+  caller that maps a hook to an `InboundDelivery`. It publishes the inbound
+  envelope, upserts the thread keyed by `(source, threadKey)` (`threadKeyPath`
+  on the source, else the delivery id), resolves the handler chat, appends the
+  card, queues the handler prompt and marks the thread pending. The
+  `webhook_delivery` card and the `webhook-<hookId>-<deliveryId>` schedule id
+  are unchanged and pinned by `webhook-delivery.test.ts`; an MCP delivery
+  appends an `inbound_delivery` card, absent from `shareableEntries` on purpose.
+- **One chat per thread.** `spawn` creates the chat on the thread's first
+  message, renames it `<source> · <sender>` and binds it
+  (`inbox_thread_chat_bound`); later messages in that thread reuse it, so the
+  agent keeps the conversation context. `inline` binds the fixed chat;
+  `notify` binds nothing and escalates straight to `needs_you`.
+- **The agent only drafts.** The queued prompt ends with
+  `renderHandlerInstruction`, which tells the model to call
+  `mcp__kanna__inbox_report({ thread_id, verdict, summary, draft_reply? })` and
+  NEVER to send anything to the sender. `InboxRegistry.report` accepts a report
+  only from the thread's bound chat; `buildInboxToolList` registers the tool for
+  main chats (`depth === 0`) only. Codex handler chats get no Kanna MCP tools
+  and therefore always hit the fallback.
+- **A reportless turn is not silence.** `markPending` runs BEFORE
+  `enqueueMessage` (a fast handler could otherwise report first and the later
+  mark would re-arm the fallback); on `kanna.turn.finished|failed` for a
+  thread's chat while it is still pending, the registry escalates to
+  `needs_you` with an empty summary. Known gap: the fallback keys on the chat,
+  not the turn, so a second message landing while the first turn runs can
+  escalate early; a later report corrects the state.
+- **Only `needs_you` is a notification.** `onNeedsYou` fires once when a thread
+  enters that state — by report, by notify-mode escalation or by the fallback —
+  and is the only signal the toast/badge/push layer consumes. `fyi` is visible
+  but quiet; `handled` lives in Activity only.
+- **Reply and instruct go through the thread chat.** `inbox.reply` enqueues
+  "send exactly this text through your source tool, then confirm" (the source's
+  `replyHint` with `{{path}}` substituted from the latest payload, the reply
+  fenced, the original re-fenced under the untrusted notice) under
+  `inbox-reply-<threadId>-<replyCount+1>` and marks the thread `replied`;
+  `inbox.instruct` enqueues the instruction plus the handler instruction so the
+  agent reports a fresh draft, under `inbox-instruct-<threadId>-<ts>`. Kanna
+  never calls a source tool itself in v1.
+- **`inbox.jsonl` is a peripheral log, not a StoreEvent log.** The registry
+  projects it at boot (`inbox-projection.ts` is pure), caps live records at
+  `INBOX_MAX_ITEMS` (2000) while never dropping an unread thread younger than
+  seven days, and rewrites the file only at boot when it holds more than twice
+  the live records. A StoreEvent log was rejected because it touches five
+  files that already drift (`chat-tasks.jsonl` is truncated and snapshotted
+  but not replayed — a filed follow-up).
+- **Activity items are every internal envelope** except `kanna.inbox.>` (no
+  feedback loop). `attention` — and therefore unread — is `kanna.turn.failed`,
+  `kanna.toolRequest.put`, a failed `kanna.cron.runOutcome`,
+  `kanna.subagent.failed` and a failed `kanna.loop.runOutcome`; everything else
+  lands already read so the badge means "needs a look".
+
 # Inbound Webhooks (KANNA_WEBHOOKS)
 
 An external system POSTs to `/hooks/<id>`; the hook's mode (`notify` card only,

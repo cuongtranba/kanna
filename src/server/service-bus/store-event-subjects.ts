@@ -78,6 +78,7 @@ export const TRANSCRIPT_BUS_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Se
   "compact_boundary",
   "context_cleared",
   "webhook_delivery",
+  "inbound_delivery",
   "loop_disarmed",
   "cron_armed",
   "cron_command_error",

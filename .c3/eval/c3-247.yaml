@@ -1,0 +1,27 @@
+fact: c3-247
+claim: "the inbox is implemented at src/server/inbox/ and src/server/inbound/ with the contracts and prompts in src/shared/inbox/ and src/shared/inbound/"
+code:
+  - src/shared/inbox/types.ts
+  - src/shared/inbox/events.ts
+  - src/shared/inbox/describe.ts
+  - src/shared/inbox/describe.test.ts
+  - src/shared/inbox/policy.ts
+  - src/shared/inbox/policy.test.ts
+  - src/shared/inbound/handler.ts
+  - src/shared/inbound/template.ts
+  - src/shared/inbound/template.test.ts
+  - src/shared/inbound/reply-prompt.ts
+  - src/shared/inbound/reply-prompt.test.ts
+  - src/server/inbox/inbox-registry.ts
+  - src/server/inbox/inbox-registry.test.ts
+  - src/server/inbox/inbox-projection.ts
+  - src/server/inbox/inbox-log.adapter.ts
+  - src/server/inbox/inbox-log.adapter.test.ts
+  - src/server/inbox/inbox-boot.ts
+  - src/server/inbound/deliver-inbound.ts
+  - src/server/inbound/deliver-inbound.test.ts
+  - src/server/inbound/inbox-reply.ts
+  - src/server/inbound/inbox-reply.test.ts
+  - src/server/kanna-mcp-inbox.ts
+  - src/server/kanna-mcp-inbox.test.ts
+  - src/server/ws-router-inbox.ts
