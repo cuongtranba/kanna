@@ -102,6 +102,11 @@ describe("getNewestRemainingChatId", () => {
     const groups = [makeProjectGroup("p1", ["a"]), makeProjectGroup("p2", ["b", "c"])]
     expect(getNewestRemainingChatId(groups, "b")).toBe("c")
   })
+
+  test("skips every chat removed in the same batch, not only the active one", () => {
+    const groups = [makeProjectGroup("p", ["a", "b", "c"])]
+    expect(getNewestRemainingChatId(groups, "a", ["a", "b"])).toBe("c")
+  })
 })
 
 
