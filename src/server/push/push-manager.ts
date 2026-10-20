@@ -1,6 +1,7 @@
 import webpush from "web-push"
 import { log } from "../../shared/log"
 import { isRecord } from "../../shared/errors"
+import type { InboxThread } from "../../shared/inbox/types"
 import type {
   KannaStatus,
   PushPayload,
@@ -299,7 +300,7 @@ export class PushManager {
       this.lastStatusByChat.set(chat.chatId, chat.status)
       const kind = this.resolveKind(chat, prev)
       if (!kind) continue
-      if (this.isDuplicate(chat.chatId, kind)) continue
+      if (this.isDuplicate(`${chat.chatId}:${kind}`)) continue
       if (this.mutedProjects.has(chat.projectLocalPath)) continue
       if (this.mutedChats.has(chat.chatId)) continue
       const payload = this.buildPayload(chat, kind)
@@ -365,8 +366,7 @@ export class PushManager {
     }
   }
 
-  private isDuplicate(chatId: string, kind: PushTransitionKind): boolean {
-    const key = `${chatId}:${kind}`
+  private isDuplicate(key: string): boolean {
     const ts = this.now()
     const last = this.dedupKeyToTs.get(key)
     if (last !== undefined && ts - last <= 2000) return true
@@ -374,9 +374,27 @@ export class PushManager {
     return false
   }
 
-  private async fanOut(payload: PushPayload): Promise<void> {
+  async notifyInbox(thread: InboxThread): Promise<void> {
+    if (this.isDuplicate(`inbox:${thread.id}:${thread.lastMessageAt}`)) return
+    await this.fanOut(
+      {
+        v: 1,
+        kind: "inbox",
+        projectLocalPath: "",
+        projectTitle: thread.sourceName,
+        chatId: thread.chatId ?? "",
+        chatTitle: `${thread.sender}`.slice(0, 80),
+        chatUrl: `/inbox/${thread.id}`,
+        threadId: thread.id,
+        ts: this.now(),
+      },
+      false,
+    )
+  }
+
+  private async fanOut(payload: PushPayload, skipFocusedChat = true): Promise<void> {
     for (const sub of [...this.subscriptions.values()]) {
-      if (this.focusedByDevice.get(sub.id) === payload.chatId) continue
+      if (skipFocusedChat && this.focusedByDevice.get(sub.id) === payload.chatId) continue
       await this.deliver(sub, payload)
     }
   }

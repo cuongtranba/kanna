@@ -200,6 +200,8 @@ describe("normalizeLayout", () => {
           pageTab("settings", "/settings/models"),
           pageTab("settings", "/cron"),
           pageTab("boards", "/chat/c1"),
+          pageTab("inbox", "/inbox/t1"),
+          pageTab("inbox", "/inbx"),
         ],
         focusedTabId: null,
       },
@@ -208,6 +210,7 @@ describe("normalizeLayout", () => {
 
     expect(collectPanes(layout.root).flatMap((pane) => pane.tabs.map((tab) => tab.target))).toEqual([
       { kind: "page", page: "settings", path: "/settings/models" },
+      { kind: "page", page: "inbox", path: "/inbox/t1" },
     ])
   })
 })

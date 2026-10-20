@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
+import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
+import { useInboxStore } from "../stores/inboxStore"
 import { SidebarUtilityNav } from "./SidebarUtilityNav"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"
 
@@ -14,6 +16,7 @@ function render(items: readonly PluginSidebarItem[] = NO_ITEMS, activeChatId: st
         navigate={() => {}}
         onClose={() => {}}
         workflowsButtonClass=""
+        isInboxActive={false}
         isCronJobsActive={false}
         isWebhooksActive={false}
         isSettingsActive={false}
@@ -32,6 +35,34 @@ describe("SidebarUtilityNav", () => {
     expect(html).toContain("Cron jobs")
     expect(html).toContain("Settings")
     expect(html).toContain("Connected")
+  })
+
+  test("shows the unread count beside Inbox and nothing when everything is read", async () => {
+    expect(render()).not.toContain("Inbox, ")
+    useInboxStore.setState({ unreadCount: 120 })
+    try {
+      const { html, cleanup } = await renderClientMarkup(<MemoryRouter><SidebarUtilityNav
+        activeChatId={null}
+        navigate={() => {}}
+        onClose={() => {}}
+        workflowsButtonClass=""
+        isInboxActive={false}
+        isCronJobsActive={false}
+        isWebhooksActive={false}
+        isSettingsActive={false}
+        statusDotClass=""
+        statusLabel="Connected"
+        pluginItems={NO_ITEMS}
+      /></MemoryRouter>)
+      try {
+        expect(html).toContain("Inbox, 120 unread")
+        expect(html).toContain("99+")
+      } finally {
+        await cleanup()
+      }
+    } finally {
+      useInboxStore.setState(useInboxStore.getInitialState())
+    }
   })
 
   test("contributes nothing when no plugin supplied a sidebar item", () => {

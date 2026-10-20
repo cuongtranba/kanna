@@ -3,8 +3,8 @@ import type { SidebarData } from "../../shared/types"
 
 const WAITING_TITLE_MAX_LENGTH = 40
 
-export function getNotificationTitleCount(sidebarData: SidebarData) {
-  return sidebarData.projectGroups.reduce((count, group) => (
+export function getNotificationTitleCount(sidebarData: SidebarData, inboxUnread = 0) {
+  return inboxUnread + sidebarData.projectGroups.reduce((count, group) => (
     count + group.chats.reduce((chatCount, chat) => (
       chatCount + (chat.unread ? 1 : 0) + (chat.status === "waiting_for_user" ? 1 : 0)
     ), 0)
@@ -53,8 +53,8 @@ function truncateTitle(title: string): string {
   return title.length > WAITING_TITLE_MAX_LENGTH ? `${title.slice(0, WAITING_TITLE_MAX_LENGTH)}…` : title
 }
 
-export function getNotificationTitle(sidebarData: SidebarData): string {
-  const count = getNotificationTitleCount(sidebarData)
+export function getNotificationTitle(sidebarData: SidebarData, inboxUnread = 0): string {
+  const count = getNotificationTitleCount(sidebarData, inboxUnread)
   if (count === 0) return APP_NAME
 
   const waitingTitles = sidebarData.projectGroups.flatMap((group) =>
