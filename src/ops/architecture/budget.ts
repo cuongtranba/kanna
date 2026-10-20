@@ -79,7 +79,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "untyped-command-results",
     include: ["src/client/"],
     pattern: "\\.command<",
-    max: 47,
+    max: 28,
     issue: 899,
     rationale:
       "Commands with a result schema in the registry are typed by socket.command(command); every remaining socket.command<TResult> call takes the result type as a free parameter with no relation to the command passed, an unchecked assertion that a handler changing its return shape breaks at zero call sites. Migrate a domain by adding result schemas and deleting its type arguments.",

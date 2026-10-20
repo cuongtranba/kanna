@@ -1,5 +1,6 @@
 import { z } from "zod"
-import type { BeaconPatch } from "./beacon-config"
+import type { BeaconConfig, BeaconMintResult, BeaconPatch, BeaconUpdateResult } from "./beacon-config"
+import type { BeaconOs } from "./beacon-protocol"
 import type { BeaconScope } from "./beacon-scope"
 import { assertParity } from "./type-parity"
 
@@ -15,6 +16,30 @@ export const beaconScopeSchema = z.object({
   maxConcurrent: z.number(),
 })
 
+export const beaconOsSchema = z.enum(["darwin", "linux", "windows"])
+
+export const beaconConfigSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  alias: z.string().optional(),
+  publicKey: z.string(),
+  os: beaconOsSchema,
+  scope: beaconScopeSchema,
+  enabled: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export const beaconMintResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), code: z.string(), expiresAt: z.number() }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+])
+
+export const beaconUpdateResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+])
+
 export const beaconPatchSchema = z.object({
   label: z.string().optional(),
   alias: z.string().nullable().optional(),
@@ -24,3 +49,7 @@ export const beaconPatchSchema = z.object({
 
 assertParity<z.output<typeof beaconScopeSchema>, BeaconScope>()
 assertParity<z.output<typeof beaconPatchSchema>, BeaconPatch>()
+assertParity<z.output<typeof beaconOsSchema>, BeaconOs>()
+assertParity<z.output<typeof beaconConfigSchema>, BeaconConfig>()
+assertParity<z.output<typeof beaconMintResultSchema>, BeaconMintResult>()
+assertParity<z.output<typeof beaconUpdateResultSchema>, BeaconUpdateResult>()

@@ -4,12 +4,16 @@ import type {
   ClaudeModelOptions,
   ClaudeReasoningEffort,
   CodexModelOptions,
+  ChatProviderPreferences,
   CodexReasoningEffort,
+  CustomModelEntry,
   CustomModelInput,
   CustomModelPatch,
   ModelOptions,
+  OpenRouterModel,
   OpenRouterModelOptions,
   ProviderContextWindowOption,
+  TextSnippet,
   TextSnippetInput,
   TextSnippetPatch,
 } from "./provider-model-types"
@@ -62,6 +66,29 @@ export const customModelInputSchema = z.object({
   contextWindowOptions: z.array(providerContextWindowOptionSchema).readonly().optional(),
 })
 
+export const customModelEntrySchema = customModelInputSchema.extend({
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+
+export const openRouterModelSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  contextLength: z.number(),
+  pricing: z.object({ promptPerTok: z.number(), completionPerTok: z.number() }).optional(),
+})
+
+function providerPreferenceSchema<M extends z.ZodType>(modelOptions: M) {
+  return z.object({ model: z.string(), modelOptions, planMode: z.boolean() })
+}
+
+export const chatProviderPreferencesSchema = z.object({
+  claude: providerPreferenceSchema(claudeModelOptionsSchema),
+  codex: providerPreferenceSchema(codexModelOptionsSchema),
+  openrouter: providerPreferenceSchema(openRouterModelOptionsSchema),
+  custom: providerPreferenceSchema(openRouterModelOptionsSchema),
+})
+
 export const customModelPatchSchema = z.object({
   label: z.string().optional(),
   supportedEfforts: z.array(claudeReasoningEffortSchema).readonly().nullable().optional(),
@@ -72,6 +99,12 @@ export const customModelPatchSchema = z.object({
 export const textSnippetInputSchema = z.object({
   shortcut: z.string(),
   expansion: z.string(),
+})
+
+export const textSnippetSchema = textSnippetInputSchema.extend({
+  id: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
 })
 
 export const textSnippetPatchSchema = textSnippetInputSchema.partial()
@@ -88,3 +121,7 @@ assertParity<z.output<typeof customModelInputSchema>, CustomModelInput>()
 assertParity<z.output<typeof customModelPatchSchema>, CustomModelPatch>()
 assertParity<z.output<typeof textSnippetInputSchema>, TextSnippetInput>()
 assertParity<z.output<typeof textSnippetPatchSchema>, TextSnippetPatch>()
+assertParity<z.output<typeof customModelEntrySchema>, CustomModelEntry>()
+assertParity<z.output<typeof openRouterModelSchema>, OpenRouterModel>()
+assertParity<z.output<typeof chatProviderPreferencesSchema>, ChatProviderPreferences>()
+assertParity<z.output<typeof textSnippetSchema>, TextSnippet>()

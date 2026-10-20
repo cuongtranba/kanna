@@ -3,6 +3,7 @@ import { isJsonObject, type JsonValue } from "../../shared/json"
 import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
 import type { ClientCommand } from "../../shared/protocol"
 import type { KannaSocket } from "../app/socket"
+import type { CommandReply } from "../ports/commandPort"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 
 export interface InboxPageResult {
@@ -10,7 +11,7 @@ export interface InboxPageResult {
   items: InboxActivityItem[]
 }
 
-export async function sendInboxCommand(socket: KannaSocket | null, command: ClientCommand): Promise<JsonValue> {
+export async function sendInboxCommand<C extends ClientCommand>(socket: KannaSocket | null, command: C): Promise<CommandReply<C>> {
   if (!socket) throw new Error("Not connected to the Kanna server")
   try {
     const result = await socket.command(command)

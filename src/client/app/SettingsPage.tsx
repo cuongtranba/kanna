@@ -968,7 +968,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
   }, [handleReadLlmProvider, isConnecting, selectedPage])
 
   const fetchChangelogReleases = useCallback<FetchReleases>(
-    () => state.socket.command<GithubRelease[]>({ type: "settings.getChangelog" }),
+    () => state.socket.command({ type: "settings.getChangelog" }),
     [state.socket]
   )
 

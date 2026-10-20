@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { type ChatNavigatorPort } from "./chatNavigator"
-import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type OpenRouterModel, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
+import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateSnapshot } from "../../shared/types"
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useNewSessionStore } from "../stores/newSessionStore"
@@ -30,8 +30,6 @@ import { useWebhooksStore } from "../stores/webhooksStore"
 import { useMcpSourcesStore } from "../stores/mcpSourcesStore"
 import { useServiceBusStore } from "../stores/serviceBusStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
-import { parseBeaconMintResult } from "../lib/parseBeaconMintResult"
-import { parseBeaconUpdateResult } from "../lib/parseBeaconUpdateResult"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
@@ -614,7 +612,7 @@ export function useAppGlobalState(
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
-    void socket.command<UpdateSnapshot>({ type: "update.check", force: true }).catch((error) => {
+    void socket.command({ type: "update.check", force: true }).catch((error) => {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     })
   }, [connectionStatus, socket])
@@ -624,7 +622,7 @@ export function useAppGlobalState(
     function handleWindowFocus() {
       if (!updateSnapshot?.lastCheckedAt) return
       if (Date.now() - updateSnapshot.lastCheckedAt <= 60 * 60 * 1000) return
-      void socket.command<UpdateSnapshot>({ type: "update.check" }).catch((error) => {
+      void socket.command({ type: "update.check" }).catch((error) => {
         useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       })
     }
@@ -650,7 +648,7 @@ export function useAppGlobalState(
   const handleReadAppSettings = useCallback(async () => {
     try {
       useAppSettingsStore.getState().setHydrationStatus("loading")
-      const snapshot = await socket.command<AppSettingsSnapshot>({ type: "settings.readAppSettings" })
+      const snapshot = await socket.command({ type: "settings.readAppSettings" })
       const store = useKannaStateStore.getState()
       useAppSettingsStore.getState().setFromServer(snapshot)
       useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
@@ -663,7 +661,7 @@ export function useAppGlobalState(
 
   const handleReadLlmProvider = useCallback(async () => {
     try {
-      const snapshot = await socket.command<LlmProviderSnapshot>({ type: "settings.readLlmProvider" })
+      const snapshot = await socket.command({ type: "settings.readLlmProvider" })
       const store = useKannaStateStore.getState()
       store.setLlmProvider(snapshot)
       store.setCommandError(null)
@@ -682,7 +680,7 @@ export function useAppGlobalState(
     const store = useOpenRouterModelsStore.getState()
     store.setLoading()
     void socket
-      .command<OpenRouterModel[]>({ type: "settings.listOpenRouterModels" })
+      .command({ type: "settings.listOpenRouterModels" })
       .then((models) => {
         useOpenRouterModelsStore.getState().setModels(models)
       })
@@ -695,7 +693,7 @@ export function useAppGlobalState(
   const handleWriteAppSettings = useCallback(async (patch: AppSettingsPatch) => {
     try {
       useAppSettingsStore.getState().applyOptimisticPatch(patch)
-      const snapshot = await socket.command<AppSettingsSnapshot>({
+      const snapshot = await socket.command({
         type: "settings.writeAppSettingsPatch",
         patch,
       })
@@ -748,7 +746,7 @@ export function useAppGlobalState(
 
   const handleMintBeaconPairingCode = useCallback(async (): Promise<BeaconMintResult> => {
     try {
-      return parseBeaconMintResult(await socket.command({ type: "beacons.mintPairingCode" }))
+      return await socket.command({ type: "beacons.mintPairingCode" })
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
@@ -756,7 +754,7 @@ export function useAppGlobalState(
 
   const handleUpdateBeacon = useCallback(async (beaconId: string): Promise<BeaconUpdateResult> => {
     try {
-      return parseBeaconUpdateResult(await socket.command({ type: "beacons.update", beaconId }))
+      return await socket.command({ type: "beacons.update", beaconId })
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
@@ -764,7 +762,7 @@ export function useAppGlobalState(
 
   const handleStartMcpOAuth = useCallback(async (id: string) => {
     try {
-      const result = await socket.command<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>({
+      const result = await socket.command({
         type: "settings.startMcpOAuth",
         id,
       })
@@ -779,7 +777,7 @@ export function useAppGlobalState(
 
   const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string) => {
     try {
-      const result = await socket.command<{ ok: boolean; error?: string }>({
+      const result = await socket.command({
         type: "settings.completeMcpOAuth",
         id,
         callbackUrl,
@@ -806,7 +804,7 @@ export function useAppGlobalState(
   const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
     try {
       useAppSettingsStore.getState().applyOptimisticPatch({ cloudflareTunnel: patch })
-      const snapshot = await socket.command<AppSettingsSnapshot>({
+      const snapshot = await socket.command({
         type: "appSettings.setCloudflareTunnel",
         patch,
       })
@@ -824,7 +822,7 @@ export function useAppGlobalState(
   const handleWriteClaudeAuth = useCallback(async (patch: Partial<ClaudeAuthSettings>) => {
     try {
       useAppSettingsStore.getState().applyOptimisticPatch({ claudeAuth: patch })
-      const snapshot = await socket.command<AppSettingsSnapshot>({
+      const snapshot = await socket.command({
         type: "appSettings.setClaudeAuth",
         patch,
       })
@@ -840,7 +838,7 @@ export function useAppGlobalState(
   }, [handleReadAppSettings, socket])
 
   const handleTestOAuthToken = useCallback(async (token: string, baseUrl?: string) => {
-    return await socket.command<{ ok: boolean; error: string | null }>({
+    return await socket.command({
       type: "appSettings.testOAuthToken",
       token,
       baseUrl,
@@ -851,7 +849,7 @@ export function useAppGlobalState(
     value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">
   ) => {
     try {
-      const snapshot = await socket.command<LlmProviderSnapshot>({
+      const snapshot = await socket.command({
         type: "settings.writeLlmProvider",
         provider: value.provider,
         apiKey: value.apiKey,
@@ -870,7 +868,7 @@ export function useAppGlobalState(
   const handleValidateLlmProvider = useCallback(async (
     value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">
   ) => {
-    return await socket.command<LlmProviderValidationResult>({
+    return await socket.command({
       type: "settings.validateLlmProvider",
       provider: value.provider,
       apiKey: value.apiKey,
@@ -892,7 +890,7 @@ export function useAppGlobalState(
 
   const handleCheckForUpdates = useCallback(async (options?: { force?: boolean }) => {
     try {
-      await socket.command<UpdateSnapshot>({ type: "update.check", force: options?.force })
+      await socket.command({ type: "update.check", force: options?.force })
       useKannaStateStore.getState().setCommandError(null)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -902,7 +900,7 @@ export function useAppGlobalState(
   const handleInstallUpdate = useCallback(async (version?: string) => {
     markUiRestartPhase("awaiting_disconnect")
     try {
-      const result = await socket.command<UpdateInstallResult>({ type: "update.install", version })
+      const result = await socket.command({ type: "update.install", version })
       if (!result.ok) {
         clearUiRestartPhase()
         useKannaStateStore.getState().setCommandError(null)
@@ -929,7 +927,7 @@ export function useAppGlobalState(
   const handleForceReload = useCallback(async () => {
     markUiRestartPhase("awaiting_disconnect")
     try {
-      const result = await socket.command<UpdateInstallResult>({ type: "update.reload" })
+      const result = await socket.command({ type: "update.reload" })
       if (!result.ok) {
         clearUiRestartPhase()
         useKannaStateStore.getState().setCommandError(null)
