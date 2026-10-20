@@ -1,0 +1,20 @@
+fact: c3-126
+claim: "the Inbox page, its store and the needs-you notifications are implemented under src/client/app/Inbox*, src/client/stores/inboxStore.ts and src/client/lib/inbox*"
+code:
+  - src/client/app/InboxPage.tsx
+  - src/client/app/InboxPage.test.tsx
+  - src/client/app/InboxThreadRow.tsx
+  - src/client/app/InboxActivityRow.tsx
+  - src/client/app/InboxThreadDetail.tsx
+  - src/client/app/InboxReplyComposer.tsx
+  - src/client/app/InboxReplyComposer.test.tsx
+  - src/client/app/InboxFilterBar.tsx
+  - src/client/app/useInboxToasts.ts
+  - src/client/app/useInboxToasts.test.ts
+  - src/client/stores/inboxStore.ts
+  - src/client/stores/inboxStore.test.ts
+  - src/client/lib/inboxFilter.ts
+  - src/client/lib/inboxFilter.test.ts
+  - src/client/lib/inboxPresentation.ts
+  - src/client/lib/inboxPresentation.test.ts
+  - src/client/lib/inboxCommands.ts

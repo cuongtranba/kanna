@@ -3167,6 +3167,25 @@ not an implementation detail.
   `kanna.toolRequest.put`, a failed `kanna.cron.runOutcome`,
   `kanna.subagent.failed` and a failed `kanna.loop.runOutcome`; everything else
   lands already read so the badge means "needs a look".
+- **The page is a workspace tab, and `needs_you` is the only interrupt**
+  (`src/client/app/Inbox*.tsx`, `stores/inboxStore.ts`, client fact
+  `c3-126`). `/inbox` and `/inbox/:threadId` are page-kind `inbox`
+  (`adr-20261013-pages-as-workspace-tabs`): the thread id rides the tab path
+  and reaches `InboxPage` as a prop, never through `useParams`. Opening a
+  thread sends `inbox.markRead`; Send / Instruct / Archive / Mark all read /
+  Load older go through `runPendingAction` and render pending. The Inbox tab
+  shows threads in `new | needs_you | fyi` plus attention items; filters apply
+  to the Activity tab only. `useInboxToasts` diffs the needs-you thread ids per
+  snapshot (not per render) and shows at most three sonner toasts plus one
+  overflow toast when not on `/inbox` — sonner is imported dynamically inside
+  the port so it stays out of the entry bundle. The sidebar badge and the
+  window title count read `selectInboxUnreadCount`. Push: `PushTransitionKind`
+  gained `"inbox"`, `PushManager.notifyInbox` ignores chat focus and dedupes
+  on `inbox:<threadId>:<lastMessageAt>`, `public/sw.js` tags on `threadId`
+  with a `chatId` fallback, and `wireInboxPush` (`inbox-boot.ts`) honours the
+  source handler's `pushEnabled`. Day labels come from the store's
+  `snapshotAt`, because `Date.now()` in render fails the purity lint — a
+  "Today" label can go stale across midnight until the next snapshot.
 
 # Inbound Webhooks (KANNA_WEBHOOKS)
 

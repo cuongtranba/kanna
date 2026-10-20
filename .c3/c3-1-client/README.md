@@ -1,7 +1,7 @@
 ---
 id: c3-1
 c3-version: 4
-c3-seal: 9580254bec6c9fc32b67f633bc1e57b3dd9eea8f160b6030e593d0dae8c07f43
+c3-seal: 5c68d8344422af86ca168f1c67048fb4be9ab249d3d178bf302ad6f01c99f2d8
 title: Client
 type: container
 boundary: app
@@ -47,3 +47,4 @@ Render the chat experience: hydrate transcripts, accept input, drive sidebar/set
 | c3-123 | genui-ui | feature | active | Render kanna-ui fences in the transcript as validated interactive views, run their local and Kanna actions, and hand agent actions back after the user confirms. |
 | c3-124 | remote-mcp-ui | feature | active | Show the Remote MCP settings page where the owner turns the server on or off, sets its public URL and copies per-client setup snippets. |
 | c3-125 | webhooks-ui | feature | active | Render the inbound webhook feature in the client: a Webhooks page opened as a workspace pane tab, the one-time secret dialog, and the transcript card for each delivery. |
+| c3-126 | inbox-ui | feature | active | Give the user one page where inbound threads and attention items are read, the agent's verdict and draft are reviewed, and a reply or instruction is sent, and make a thread that needs them reach them through a toast, the sidebar badge, the window title and a push notification. |
