@@ -1,5 +1,8 @@
 import { EventStore } from "../event-store"
 import { InMemoryStorageBackend } from "../storage/in-memory-storage"
+import { InboxRegistry } from "../inbox/inbox-registry"
+import { createInMemoryServiceBus } from "../service-bus/in-memory-service-bus"
+import { createMemoryInboxLog } from "./inbox-harness"
 import { WebhookRegistry, type StoredWebhook, type WebhookStorePort } from "../webhooks/webhook-registry"
 import { WebhookService } from "../webhooks/webhook-service"
 import type { WebhookDeliveryAgent } from "../webhooks/webhook-delivery"
@@ -38,7 +41,10 @@ export async function createWebhookHarness(options: { enabled?: boolean; now?: (
     },
     emitStateChange: () => {},
   }
+  const bus = createInMemoryServiceBus()
+  const inbox = new InboxRegistry(createMemoryInboxLog(), bus, options.now)
+  await inbox.initialize()
   const registry = new WebhookRegistry(createMemoryWebhookStore(), options.now)
-  const service = new WebhookService(registry, store, agent, options.enabled ?? true, options.now)
-  return { store, project, chat, agent, registry, service, startedChats }
+  const service = new WebhookService(registry, store, agent, bus, inbox, options.enabled ?? true, options.now)
+  return { store, project, chat, agent, registry, service, startedChats, bus, inbox }
 }

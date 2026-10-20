@@ -373,6 +373,19 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           ...(entry.message !== undefined ? { message: entry.message } : {}),
         })
         break
+      case "inbound_delivery":
+        messages.push({
+          ...createBaseMessage(entry),
+          kind: "inbound_delivery",
+          sourceKind: entry.sourceKind,
+          sourceId: entry.sourceId,
+          sourceName: entry.sourceName,
+          mode: entry.mode,
+          deliveryId: entry.deliveryId,
+          threadId: entry.threadId,
+          ...(entry.message !== undefined ? { message: entry.message } : {}),
+        })
+        break
       case "loop_disarmed":
         messages.push({
           ...createBaseMessage(entry),

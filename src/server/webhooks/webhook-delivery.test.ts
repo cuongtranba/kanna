@@ -19,8 +19,8 @@ function hook(overrides: Partial<WebhookConfig>): WebhookConfig {
 }
 
 test("notify leaves a card with the rendered message and queues nothing", async () => {
-  const { store, agent, chat } = await createWebhookHarness()
-  const result = await deliverWebhook(store, agent, hook({ chatId: chat.id }), "d1", BODY, 10)
+  const { store, agent, chat, bus, inbox } = await createWebhookHarness()
+  const result = await deliverWebhook(store, agent, bus, inbox, hook({ chatId: chat.id }), "d1", BODY, 10)
   expect(result).toEqual({ ok: true, chatId: chat.id })
   const cards = store.getMessages(chat.id).filter((entry) => entry.kind === "webhook_delivery")
   expect(cards).toMatchObject([{ hookName: "CI", mode: "notify", deliveryId: "d1", message: "kanna is failed" }])
@@ -28,8 +28,8 @@ test("notify leaves a card with the rendered message and queues nothing", async 
 })
 
 test("inline queues the rendered prompt on the target chat under a per-delivery schedule id", async () => {
-  const { store, agent, chat, startedChats } = await createWebhookHarness()
-  await deliverWebhook(store, agent, hook({ mode: "inline", chatId: chat.id }), "d2", BODY, 10)
+  const { store, agent, chat, startedChats, bus, inbox } = await createWebhookHarness()
+  await deliverWebhook(store, agent, bus, inbox, hook({ mode: "inline", chatId: chat.id }), "d2", BODY, 10)
   const queued = store.getQueuedMessages(chat.id)
   expect(queued).toHaveLength(1)
   expect(queued[0].content).toContain("kanna is failed")
@@ -39,10 +39,12 @@ test("inline queues the rendered prompt on the target chat under a per-delivery 
 })
 
 test("a hook with a provider and model queues its prompt under that provider and model", async () => {
-  const { store, agent, project } = await createWebhookHarness()
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
   const result = await deliverWebhook(
     store,
     agent,
+    bus,
+    inbox,
     hook({ mode: "spawn", projectId: project.id, provider: "codex", model: "gpt-5.4" }),
     "d6",
     BODY,
@@ -53,17 +55,17 @@ test("a hook with a provider and model queues its prompt under that provider and
 })
 
 test("a hook without a model queues a prompt that names no provider or model", async () => {
-  const { store, agent, chat } = await createWebhookHarness()
-  await deliverWebhook(store, agent, hook({ mode: "inline", chatId: chat.id }), "d7", BODY, 10)
+  const { store, agent, chat, bus, inbox } = await createWebhookHarness()
+  await deliverWebhook(store, agent, bus, inbox, hook({ mode: "inline", chatId: chat.id }), "d7", BODY, 10)
   const [queued] = store.getQueuedMessages(chat.id)
   expect(queued.provider).toBeUndefined()
   expect(queued.model).toBeUndefined()
 })
 
 test("spawn creates a new chat in the project holding the card and the queued prompt", async () => {
-  const { store, agent, project } = await createWebhookHarness()
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
   const before = store.listChatsByProject(project.id).length
-  const result = await deliverWebhook(store, agent, hook({ mode: "spawn", projectId: project.id }), "d3", BODY, 10)
+  const result = await deliverWebhook(store, agent, bus, inbox, hook({ mode: "spawn", projectId: project.id }), "d3", BODY, 10)
   if (!result.ok) throw new Error(result.detail)
   expect(store.listChatsByProject(project.id)).toHaveLength(before + 1)
   expect(store.getMessages(result.chatId).some((entry) => entry.kind === "webhook_delivery")).toBe(true)
@@ -71,10 +73,10 @@ test("spawn creates a new chat in the project holding the card and the queued pr
 })
 
 test("a missing target chat or project fails without side effects", async () => {
-  const { store, agent, project, chat } = await createWebhookHarness()
+  const { store, agent, project, chat, bus, inbox } = await createWebhookHarness()
   const chats = store.listChatsByProject(project.id).length
-  const missingChat = await deliverWebhook(store, agent, hook({ mode: "inline", chatId: "gone" }), "d4", BODY, 10)
-  const missingProject = await deliverWebhook(store, agent, hook({ mode: "spawn", projectId: "gone" }), "d5", BODY, 10)
+  const missingChat = await deliverWebhook(store, agent, bus, inbox, hook({ mode: "inline", chatId: "gone" }), "d4", BODY, 10)
+  const missingProject = await deliverWebhook(store, agent, bus, inbox, hook({ mode: "spawn", projectId: "gone" }), "d5", BODY, 10)
   expect(missingChat.ok).toBe(false)
   expect(missingProject.ok).toBe(false)
   expect(store.listChatsByProject(project.id)).toHaveLength(chats)

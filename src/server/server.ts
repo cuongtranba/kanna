@@ -93,6 +93,7 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
+import { createInbox, createInboxReplyActions, webhookHandlerResolver } from "./inbox/inbox-boot"
 import { createBusTap } from "./service-bus/event-store-tap"
 import { createInMemoryServiceBus } from "./service-bus/in-memory-service-bus"
 import type { ServiceBus } from "./service-bus/service-bus"
@@ -175,7 +176,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   await store.initialize()
   const bus = createInMemoryServiceBus()
   store.tap = createBusTap(bus, (chatId) => store.getChat(chatId)?.projectId, Date.now)
-
+  const inbox = await createInbox(store.dataDir, bus)
   let broadcastChatState: ((chatId: string) => void) | null = null
   let pushFollowedSessions: (() => void) | null = null
 
@@ -378,6 +379,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     toolCallback,
     workflowRegistry,
     boardRegistry,
+    inboxRegistry: inbox,
     beaconRegistry: beacon.registry,
     getBeacons: () => appSettings.getSnapshot().customBeacons,
     backgroundTaskOutputRegistry,
@@ -406,8 +408,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     },
   })
 
-  const webhooks = await createWebhookService(store.dataDir, store, agent, process.env.KANNA_WEBHOOKS !== "disabled")
-
+  const webhooks = await createWebhookService(store.dataDir, store, agent, bus, inbox, process.env.KANNA_WEBHOOKS !== "disabled")
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -535,9 +536,12 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     packageUpdateManager,
     genuiDatasets,
     webhooks: webhooks.registry,
+    inbox,
+    ...createInboxReplyActions(store, agent, inbox, webhookHandlerResolver(webhooks.registry)),
   })
 
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
+  inbox.subscribe(() => { router.pushInbox() })
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }

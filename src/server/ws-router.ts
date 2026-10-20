@@ -55,7 +55,9 @@ import { handleMiscCommand } from "./ws-router-misc"
 import type { MiscCommandDeps } from "./ws-router-misc"
 import { handleProjectCommand } from "./ws-router-project"
 import { handleGenUICommand } from "./ws-router-genui"
+import { handleInboxCommand, type InboxReplyAction } from "./ws-router-inbox"
 import { handleWebhooksCommand } from "./ws-router-webhooks"
+import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { GenUIDatasetService } from "./genui/dataset-service"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
@@ -131,6 +133,9 @@ interface CreateWsRouterArgs {
   packageUpdateManager?: PackageUpdateManager
   genuiDatasets?: GenUIDatasetService
   webhooks?: WebhookRegistry
+  inbox?: InboxRegistry
+  inboxReply?: InboxReplyAction
+  inboxInstruct?: InboxReplyAction
   authEnabled?: boolean
 }
 
@@ -167,6 +172,9 @@ export function createWsRouter({
   packageUpdateManager,
   genuiDatasets,
   webhooks,
+  inbox,
+  inboxReply,
+  inboxInstruct,
   authEnabled,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
@@ -186,6 +194,7 @@ export function createWsRouter({
     backgroundTaskOutputRegistry,
     followedSessionRegistry,
     webhooks,
+    inbox,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -384,6 +393,7 @@ export function createWsRouter({
       ),
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
       () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
+      () => handleInboxCommand(inbox, inboxReply, inboxInstruct, sendToClient, command, id),
       () => handleWebhooksCommand(
         webhooks,
         sendToClient,
@@ -484,6 +494,7 @@ export function createWsRouter({
     pushFollowedSessions: () => broadcast.pushFollowedSessions(),
     pushCronJobs: () => broadcast.pushCronJobs(),
     pushWebhooks: () => broadcast.pushWebhooks(),
+    pushInbox: () => broadcast.pushInbox(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       const parsed: JsonValue | null = safeJsonParse(String(raw))
       if (parsed === null) {

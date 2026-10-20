@@ -596,7 +596,11 @@ export class BroadcastManager {
     this.pushTopic("webhooks")
   }
 
-  private pushTopic(topicType: "cron-jobs" | "webhooks"): void {
+  pushInbox(): void {
+    this.pushTopic("inbox")
+  }
+
+  private pushTopic(topicType: "cron-jobs" | "webhooks" | "inbox"): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {

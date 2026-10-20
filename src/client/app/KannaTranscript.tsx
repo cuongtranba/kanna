@@ -10,6 +10,7 @@ import { CronCommandErrorMessage } from "../components/messages/CronCommandError
 import { CronJobChangeMessage } from "../components/messages/CronJobChangeMessage"
 import { CronListMessage } from "../components/messages/CronListMessage"
 import { CronRunMessage } from "../components/messages/CronRunMessage"
+import { InboundDeliveryMessage } from "../components/messages/InboundDeliveryMessage"
 import { WebhookDeliveryMessage } from "../components/messages/WebhookDeliveryMessage"
 import { CronRunSkippedMessage } from "../components/messages/CronRunSkippedMessage"
 import { TextMessage } from "../components/messages/TextMessage"
@@ -331,6 +332,8 @@ function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptM
       return true
     case "webhook_delivery":
       return right.kind === "webhook_delivery" && left.deliveryId === right.deliveryId && left.message === right.message
+    case "inbound_delivery":
+      return right.kind === "inbound_delivery" && left.deliveryId === right.deliveryId && left.message === right.message
   }
 }
 
@@ -604,6 +607,9 @@ const TranscriptSingleRow = memo(({
         break
       case "webhook_delivery":
         rendered = <WebhookDeliveryMessage key={message.id} message={message} />
+        break
+      case "inbound_delivery":
+        rendered = <InboundDeliveryMessage key={message.id} message={message} />
         break
       case "loop_disarmed":
         rendered = <LoopDisarmedMessage key={message.id} message={message} />

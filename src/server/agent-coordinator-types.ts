@@ -100,6 +100,7 @@ export interface AgentCoordinatorArgs {
   claudeSessionLifecycle?: Partial<ClaudeSessionLifecycleOptions>
   workflowRegistry?: import("./workflow-registry").WorkflowRegistry
   boardRegistry?: import("./board-registry").BoardRegistry
+  inboxRegistry?: import("./inbox/inbox-registry").InboxRegistry
   beaconRegistry?: import("./beacon-registry").BeaconRegistry
   getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry

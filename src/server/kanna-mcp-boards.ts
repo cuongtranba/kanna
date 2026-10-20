@@ -5,7 +5,7 @@ import { BoardStoreError } from "./board-store"
 import { errorMessage } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
 import type { CardActor } from "../shared/boards/types"
-import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
+import { ok, fail, type KannaToolFactory, type ToolResult } from "./kanna-mcp-tool"
 
 const CARD_WINDOW = 20
 
@@ -40,12 +40,7 @@ function requireString(value: JsonValue | undefined, name: string): string {
   return value
 }
 
-export type BoardToolFactory<TTool> = (
-  name: string,
-  description: string,
-  schema: Record<string, z.ZodType<JsonValue | undefined>>,
-  handler: (input: ToolArgs) => Promise<ToolResult>,
-) => TTool
+export type BoardToolFactory<TTool> = KannaToolFactory<TTool>
 
 export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFactory<TTool>): TTool[] {
   const { boardRegistry, chatId, projectId } = deps

@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
+import { buildInboxToolList } from "./kanna-mcp-inbox"
 import { buildBeaconToolList } from "./kanna-mcp-beacon"
 import type { BeaconRegistry } from "./beacon-registry"
 import type { BeaconConfig } from "../shared/beacon-config"
@@ -12,6 +13,7 @@ import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { ok, fail } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
+import type { InboxRegistry } from "./inbox/inbox-registry"
 import { z } from "zod"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
@@ -76,6 +78,7 @@ export interface KannaMcpDelegationContext {
 export interface KannaMcpArgs extends OfferDownloadArgs {
   chatId?: string
   boardRegistry?: BoardRegistry
+  inboxRegistry?: InboxRegistry
   beaconRegistry?: BeaconRegistry
   getBeacons?: () => readonly BeaconConfig[]
   beaconToolsAllowed?: boolean
@@ -1021,6 +1024,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
     ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop, isRunAlive: args.isRunAlive }),
     ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
+    ...buildInboxToolList(args.inboxRegistry, chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildBeaconToolList({
       beaconRegistry: args.beaconRegistry,
       getBeacons: args.getBeacons ?? (() => []),
