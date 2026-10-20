@@ -3066,6 +3066,47 @@ When a file is **renamed to `.adapter.ts`** (IO seal enforcement): update both
 When a file is **deleted**: remove its entry from both files — stale anchors
 surface as warnings on `c3x repair`/`c3x check`; keep those clean.
 
+# Service bus — every durable fact is published once, after it is on disk
+
+`src/server/service-bus/` (component `c3-246`, ADR
+`adr-20261020-service-bus-event-store-tap`) is an in-process bus that every
+durable fact the server records is published on. It exists so the Inbox, the
+notification layer and an optional NATS mirror read ONE stream instead of each
+tapping the EventStore and the registries separately. The JSONL EventStore
+stays the store of record; the bus persists nothing.
+
+- **One tap, two seams.** `EventStore.tap` (`EventStoreTap`) is called in
+  `applyEvent` right after `applyStoreEvent` — the only place every durable
+  fact passes AFTER its disk write, chat-task and subagent events included —
+  and in `appendMessage` right after the transcript write, because transcript
+  entries bypass `commit`. Do not wire the bus into `emitStateChange` (a UI
+  broadcast signal with no payload, ~40 call sites) or the registries'
+  `subscribe()` sets (no event, and several are single-slot).
+- **The slot is set AFTER `store.initialize()` resolves** (`server.ts`), so
+  boot replay publishes nothing. Setting it earlier replays the whole history
+  into every subscriber on each restart; `event-store-tap.test.ts` pins it.
+- **`publish` is synchronous and never throws.** The in-memory bus
+  (`in-memory-service-bus.ts`) guards every subscriber and mirror call: a
+  failure is logged, counted (`kanna_bus_handler_errors_total`) and never
+  reaches the EventStore write that triggered it.
+- **`STORE_EVENT_SUBJECT` decides every kind, and `null` means never.** It is
+  `satisfies Record<StoreEventKind, string | null>`, so a new event kind is a
+  compile error until someone decides its subject. `session_token_set`,
+  `pending_fork_session_token_set`, `subagent_message_delta`,
+  `subagent_entry_appended`, `chat_read_state_set`, `chat_source_hash_set`,
+  `chat_compact_failures_set` and `sidebar_project_order_set` are `null` —
+  secrets and per-token noise stay inside the process. Transcript entries go
+  out only for the kinds in `TRANSCRIPT_BUS_KINDS`; assistant text, tool
+  calls and results never do.
+- **Subjects are `kanna.<domain>.<event>`** (`busSubject`), matched with
+  NATS semantics (`*` one token, `>` one or more trailing tokens —
+  `subjectMatches`). `idempotencyKey` is deterministic
+  (`store:<kind>:<entity>:<timestamp>`, `transcript:<chatId>:<entryId>`) so a
+  mirror can dedupe; it is the planned JetStream `Nats-Msg-Id`.
+- **`event-store.ts` is at the 700-line budget.** The tap cost three lines,
+  paid for by three removed blank lines. A second call site or a new import
+  line there fails `check:arch`; put new bus logic in `src/server/service-bus/`.
+
 # Inbound Webhooks (KANNA_WEBHOOKS)
 
 An external system POSTs to `/hooks/<id>`; the hook's mode (`notify` card only,

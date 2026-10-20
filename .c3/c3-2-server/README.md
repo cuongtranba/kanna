@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: a8dcb2e855470e394651c808fde4511f461e58f51728fc2fd56f9f67b811b7d2
+c3-seal: 3d607dbef9e03296cd38a8178e55eab65c07e31cdf2fafd144952f7fe57acbc2
 title: Server
 type: container
 boundary: service
@@ -72,3 +72,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-243 | webhooks | feature | active | Accept inbound webhooks from external systems and turn each authenticated delivery into a card, a queued prompt, or a new chat, without widening the session-cookie boundary or leaking the hook secrets. |
 | c3-244 | push-notifications | feature | active | Tell a user's subscribed browsers when a chat needs them, failed, or finished, without notifying for a chat they are already looking at or for work that is still running in the background. |
 | c3-245 | docs-site | feature | active | Keep wiki/src/content/docs as the single place Kanna's user and operator docs are written, and publish it to two generated outputs, the Starlight site and the repository's GitHub Wiki, so neither output can drift from the source. |
+| c3-246 | service-bus | feature | active | Publish every durable fact the server records on one in-process service bus, so that the inbox, notifications and an optional external mirror read a single stream instead of each tapping the EventStore and the registries separately. |

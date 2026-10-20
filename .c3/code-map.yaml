@@ -773,3 +773,6 @@ c3-245:
   - wiki/src/components/*.astro
   - wiki/scripts/**/*.ts
   - .github/workflows/wiki-deploy.yml
+c3-246:
+  - src/shared/service-bus/*.ts
+  - src/server/service-bus/*.ts

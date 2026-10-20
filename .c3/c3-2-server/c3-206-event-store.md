@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 0f13e128510bf941fbd93f181c6b930fb29155f17be9aa8fe38fac269bb8f381
+c3-seal: 27998b5efe4179be3e8591934ba8adfcd299976030e4836d05e6fb9b77b63e1c
 title: event-store
 type: component
 category: foundation
@@ -71,6 +71,7 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | append(event) | IN | Typed append, returns ack | c3-210 | src/server/event-store.ts |
 | replay() | OUT | Yields events in order | c3-207 | src/server/event-store.ts |
 | compact() | OUT | Writes snapshot.json + truncates JSONL | c3-206 | src/server/event-store.ts |
+| tap (EventStoreTap) | OUT | Optional slot called after applyStoreEvent for every applied event and after the transcript write for every appended entry; set by server boot after initialize so replay publishes nothing | c3-246 | src/server/event-store.ts |
 
 ## Change Safety
 
