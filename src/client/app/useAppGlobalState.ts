@@ -18,6 +18,7 @@ import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
 import type { InboxSnapshot } from "../../shared/inbox/types"
 import type { WebhooksSnapshot } from "../../shared/webhooks/types"
 import type { McpSourcesSnapshot } from "../../shared/mcp-sources/types"
+import type { ServiceBusStatus } from "../../shared/service-bus/jetstream-config"
 import type { BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconsSnapshot } from "../../shared/beacon-status"
 import type { PackageUpdateSnapshot } from "../../shared/packages/types"
@@ -27,6 +28,7 @@ import { useCronJobsStore } from "../stores/cronJobsStore"
 import { useInboxStore } from "../stores/inboxStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useMcpSourcesStore } from "../stores/mcpSourcesStore"
+import { useServiceBusStore } from "../stores/serviceBusStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
 import { parseBeaconMintResult } from "../lib/parseBeaconMintResult"
 import { parseBeaconUpdateResult } from "../lib/parseBeaconUpdateResult"
@@ -548,6 +550,12 @@ export function useAppGlobalState(
   useEffect(() => {
     return socket.subscribe<McpSourcesSnapshot>({ type: "mcp-sources" }, (snapshot) => {
       useMcpSourcesStore.getState().setStatuses(snapshot.sources)
+    })
+  }, [socket])
+
+  useEffect(() => {
+    return socket.subscribe<ServiceBusStatus>({ type: "service-bus" }, (status) => {
+      useServiceBusStore.getState().setStatus(status)
     })
   }, [socket])
 
