@@ -6,6 +6,7 @@ import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import type { ClientCommand, ImportSessionsByIdsResult, ProjectDeleteResult, ServerEnvelope } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "./claude-session-importer.adapter"
 import type { DiscoveredProject } from "./discovery.adapter"
+import { ackResult } from "./ws-router-ack"
 
 
 export interface ProjectStoreDep {
@@ -203,7 +204,7 @@ export async function handleProjectCommand(
         projectPath: chat ? resolveSpawnPaths(chat, project.localPath).cwd : project.localPath,
         path: command.path,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
 

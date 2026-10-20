@@ -303,6 +303,14 @@ describe("remote MCP typed tools", () => {
     expect(arrayField(schema, "required")).toEqual(expect.arrayContaining(["chatId", "title"]))
   })
 
+  test("kanna_commands describes the result of a command that declares one and omits it for a command that does not", async () => {
+    const listing = await call("kanna_commands", { domain: "chat" })
+
+    const schema = field(commandRow(listing, "chat.listBranches"), "resultSchema") ?? null
+    expect(arrayField(schema, "required")).toEqual(expect.arrayContaining(["recent", "local", "remote", "pullRequests", "pullRequestsStatus"]))
+    expect(field(commandRow(listing, "chat.rename"), "resultSchema")).toBeUndefined()
+  })
+
   test("the audit log never holds a secret passed in a tool call and records a failed call as an error", async () => {
     const reply = await call("kanna_command", { type: "chat.rename", params: { chatId: "missing", title: "x", apiKey: "sk-live-leak" } })
     expect(reply.isError).toBe(true)

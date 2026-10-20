@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { DiffStore } from "./diff-store"
+import { ackResult } from "./ws-router-ack"
 
 
 export type DiffStoreDep = Pick<
@@ -52,7 +53,7 @@ export async function handleDiffCommand(
       const result = await resolvedDiffStore.initializeGit({
         projectPath: repoPath,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -63,7 +64,7 @@ export async function handleDiffCommand(
       const result = await resolvedDiffStore.getGitHubPublishInfo({
         projectPath: repoPath,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "chat.checkGitHubRepoAvailability": {
@@ -71,7 +72,7 @@ export async function handleDiffCommand(
         owner: command.owner,
         name: command.name,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "chat.publishToGitHub": {
@@ -83,7 +84,7 @@ export async function handleDiffCommand(
         visibility: command.visibility,
         description: command.description,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -94,7 +95,7 @@ export async function handleDiffCommand(
       const result = await resolvedDiffStore.listBranches({
         projectPath: repoPath,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "chat.previewMergeBranch": {
@@ -103,7 +104,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         branch: command.branch,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "chat.mergeBranch": {
@@ -112,7 +113,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         branch: command.branch,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -125,7 +126,7 @@ export async function handleDiffCommand(
         branch: command.branch,
         bringChanges: command.bringChanges,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -137,7 +138,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         action: command.action,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -150,7 +151,7 @@ export async function handleDiffCommand(
         name: command.name,
         baseBranchName: command.baseBranchName,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -162,7 +163,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         paths: command.paths,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "chat.commitDiffs": {
@@ -174,7 +175,7 @@ export async function handleDiffCommand(
         description: command.description,
         mode: command.mode,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -186,7 +187,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         path: command.path,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }
@@ -198,7 +199,7 @@ export async function handleDiffCommand(
         projectPath: repoPath,
         path: command.path,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       if (result.snapshotChanged) {
         void broadcastSnapshots()
       }

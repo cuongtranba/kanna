@@ -1,6 +1,5 @@
 
 export type { HttpPort, HttpRequestOptions, HttpResponse } from "./httpPort"
-export type { CommandPort } from "./commandPort"
 export type { StoragePort } from "./storagePort"
 export type { TimerPort } from "./timerPort"
 export type { DomPort } from "./domPort"
@@ -8,3 +7,4 @@ export type { NotificationPort, NotificationPermission } from "./notificationPor
 export type { SoundPort } from "./soundPort"
 export type { ClipboardPort } from "./clipboardPort"
 export type { PushPort } from "./pushPort"
+export type { CommandPort, CommandReply } from "./commandPort"
