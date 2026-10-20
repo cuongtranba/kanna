@@ -1,6 +1,7 @@
 import type { JsonObject } from "../shared/json"
 
 import { PROTOCOL_VERSION } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
 import type { GitWorktree } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { TerminalSnapshot } from "../shared/protocol"
@@ -103,22 +104,22 @@ export async function handleMiscCommand(
         rows: command.rows,
         scrollback: command.scrollback,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "terminal.input": {
       terminals.write(command.terminalId, command.data)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "terminal.resize": {
       terminals.resize(command.terminalId, command.cols, command.rows)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "terminal.close": {
       terminals.close(command.terminalId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       pushTerminalSnapshot(command.terminalId)
       return true
     }
@@ -128,39 +129,39 @@ export async function handleMiscCommand(
       if (command.instructions?.trim()) {
         await store.setStackInstructions(stack.id, command.instructions)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
+      send(ackResult(id, command, { stackId: stack.id }))
       analytics.track("stack_created")
       await broadcastSidebar()
       return true
     }
     case "stack.rename": {
       await store.renameStack(command.stackId, command.title)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.setInstructions": {
       await store.setStackInstructions(command.stackId, command.instructions)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       analytics.track("stack_instructions_set")
       await broadcastSidebar()
       return true
     }
     case "stack.remove": {
       await store.removeStack(command.stackId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.addProject": {
       await store.addProjectToStack(command.stackId, command.projectId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.removeProject": {
       await store.removeProjectFromStack(command.stackId, command.projectId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
@@ -170,7 +171,7 @@ export async function handleMiscCommand(
         throw new Error("Project not found")
       }
       const worktrees = await listWorktrees(project.localPath)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
+      send(ackResult(id, command, { worktrees }))
       return true
     }
 

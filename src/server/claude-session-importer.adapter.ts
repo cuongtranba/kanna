@@ -8,6 +8,7 @@ import { scanClaudeSessions, locateClaudeSessionFile } from "./claude-session-sc
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
+import type { ImportClaudeSessionsResult } from "../shared/commands/results/project"
 import { isRecord } from "../shared/errors"
 import type {
   ClaudeSessionCustomTitleRecord,
@@ -15,13 +16,7 @@ import type {
   ParsedClaudeSession,
 } from "./claude-session-types"
 
-export interface ImportClaudeSessionsResult {
-  imported: number
-  updated: number
-  skipped: number
-  failed: number
-  newProjects: number
-}
+export type { ImportClaudeSessionsResult }
 
 const IMPORTED_SESSION_TITLE = "Imported session"
 const NEW_CHAT_TITLE = "New Chat"

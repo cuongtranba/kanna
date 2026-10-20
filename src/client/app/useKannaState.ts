@@ -1072,7 +1072,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     try {
       let projectId = selectedProjectId ?? sidebarProjectGroups[0]?.groupKey ?? null
       if (!activeChatId && !projectId && fallbackLocalProjectPath) {
-        const project = await socket.command<{ projectId: string }>({
+        const project = await socket.command({
           type: "project.open",
           localPath: fallbackLocalProjectPath,
         })

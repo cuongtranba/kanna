@@ -1,5 +1,5 @@
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
 import type { ServiceBusController } from "./service-bus/service-bus-boot"
 
 export async function handleServiceBusCommand(
@@ -11,6 +11,6 @@ export async function handleServiceBusCommand(
   if (command.type !== "serviceBus.resetStore") return false
   if (!serviceBus) throw new Error("The service bus is not available on this server")
   await serviceBus.resetStore()
-  send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+  send(ackResult(id, command, { ok: true }))
   return true
 }

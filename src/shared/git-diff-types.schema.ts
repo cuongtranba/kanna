@@ -12,6 +12,7 @@ import type {
   DiffCommitResult,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
+  GitWorktree,
 } from "./git-diff-types"
 import { assertParity } from "./type-parity"
 
@@ -142,6 +143,15 @@ export const generateCommitMessageResultSchema = z.object({
   failureMessage: z.string().nullable(),
 })
 
+export const gitWorktreeSchema = z.object({
+  path: z.string(),
+  branch: z.string(),
+  sha: z.string(),
+  isPrimary: z.boolean(),
+  isLocked: z.boolean(),
+})
+
+assertParity<z.output<typeof gitWorktreeSchema>, GitWorktree>()
 assertParity<z.output<typeof branchActionResultSchema>, BranchActionSuccess | BranchActionFailure>()
 assertParity<z.output<typeof chatSyncResultSchema>, ChatSyncResult>()
 assertParity<z.output<typeof diffCommitResultSchema>, DiffCommitResult>()

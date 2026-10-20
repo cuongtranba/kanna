@@ -12,7 +12,6 @@ import { useTerminalLayoutStore } from "../stores/terminalLayoutStore"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useAppDialog } from "../components/ui/app-dialog"
 import type { EditorOpenSettings, ImportSessionsByIdsResult, OpenExternalAction } from "../../shared/protocol"
-import { readProjectDeleteResult } from "../../shared/protocol"
 import type { FollowedSessionsSnapshot } from "../../shared/protocol"
 import type { CronJobsGlobalSnapshot } from "../../shared/cron/types"
 import type { InboxSnapshot } from "../../shared/inbox/types"
@@ -981,11 +980,11 @@ export function useAppGlobalState(
     }
 
     if (intent.kind === "local_path") {
-      const result = await socket.command<{ projectId: string }>({ type: "project.open", localPath: intent.localPath })
+      const result = await socket.command({ type: "project.open", localPath: intent.localPath })
       return { projectId: result.projectId, localPath: intent.localPath }
     }
 
-    const result = await socket.command<{ projectId: string }>(
+    const result = await socket.command(
       intent.project.mode === "new"
         ? { type: "project.create", localPath: intent.project.localPath, title: intent.project.title }
         : { type: "project.open", localPath: intent.project.localPath }
@@ -1161,7 +1160,7 @@ export function useAppGlobalState(
     })
     if (!confirmed) return
     try {
-      const result = readProjectDeleteResult(await socket.command({ type: "project.delete", projectId }))
+      const result = await socket.command({ type: "project.delete", projectId })
       forgetProjectLayout(projectId)
       forgetDeletedLocally({ chatIds, boardIds: result.deletedBoardIds, projectId })
       useKannaStateStore.getState().setCommandError(
@@ -1225,7 +1224,7 @@ export function useAppGlobalState(
 
   const handleListStackWorktrees = useCallback(async (projectId: string): Promise<GitWorktree[]> => {
     try {
-      const result = await socket.command<{ worktrees: GitWorktree[] }>({ type: "stack.listWorktrees", projectId })
+      const result = await socket.command({ type: "stack.listWorktrees", projectId })
       useKannaStateStore.getState().setCommandError(null)
       return result.worktrees
     } catch (error) {
@@ -1236,12 +1235,12 @@ export function useAppGlobalState(
 
 
   const importClaudeSessions = useCallback(async () => {
-    const result = await socket.command<{ imported: number; updated: number; skipped: number; failed: number; newProjects: number }>({ type: "sessions.importClaude" })
+    const result = await socket.command({ type: "sessions.importClaude" })
     return result
   }, [socket])
 
   const importClaudeSession = useCallback(async (sessionIds: string[]) => {
-    return await socket.command<ImportSessionsByIdsResult>({ type: "sessions.importClaudeSession", sessionIds })
+    return await socket.command({ type: "sessions.importClaudeSession", sessionIds })
   }, [socket])
 
 

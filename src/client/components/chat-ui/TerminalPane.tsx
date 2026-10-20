@@ -496,7 +496,7 @@ function TerminalPaneInner({
       const size = getMeasuredTerminalSize(terminal, element, dom) ?? getTerminalSize(terminal)
       terminal.resize(size.cols, size.rows)
       lastSizeRef.current = size
-      void socket.command<TerminalSnapshot | null>({
+      void socket.command({
         type: "terminal.create",
         projectId,
         terminalId,
@@ -506,9 +506,7 @@ function TerminalPaneInner({
       }).then((snapshot) => {
         hasCreatedRef.current = true
         storeSetError(null)
-        if (snapshot) {
-          applySnapshot(snapshot)
-        }
+        applySnapshot(snapshot)
         scheduleResizeSync()
       }).catch((commandError) => {
         storeSetError(commandError instanceof Error ? commandError.message : String(commandError))

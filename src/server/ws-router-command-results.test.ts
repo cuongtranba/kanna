@@ -24,11 +24,32 @@ afterEach(() => {
 
 type RouterArgs = Parameters<typeof createWsRouter>[0]
 
+const terminalsStub = {
+  getSnapshot: () => null,
+  onEvent: () => () => {},
+  closeByCwd: () => {},
+  write: () => {},
+  resize: () => {},
+  close: () => {},
+  createTerminal: (args: { terminalId: string; cols: number; rows: number; scrollback: number; projectPath: string }) => ({
+    terminalId: args.terminalId,
+    title: "shell",
+    cwd: args.projectPath,
+    shell: "/bin/sh",
+    cols: args.cols,
+    rows: args.rows,
+    scrollback: args.scrollback,
+    serializedState: "",
+    status: "running" as const,
+    exitCode: null,
+  }),
+}
+
 function createRouterOver(store: RouterArgs["store"], overrides: Partial<RouterArgs>) {
   return createWsRouter({
     store,
     agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
-    terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
+    terminals: terminalsStub as never,
     keybindings: { getSnapshot: () => ({ bindings: DEFAULT_KEYBINDINGS, warning: null, filePathDisplay: "~/.kanna/keybindings.json" }), onChange: () => () => {} } as never,
     refreshDiscovery: async () => [],
     getDiscoveredProjects: () => [],
@@ -47,7 +68,7 @@ async function createRouterOverRepo() {
   const project = await store.openProject(repo.dir)
   const chat = await store.createChat(project.id)
   const router = createRouterOver(store, { diffStore: new DiffStore(repo.dir) })
-  return { repo, router, chatId: chat.id, projectId: project.id }
+  return { repo, router, store, chatId: chat.id, projectId: project.id }
 }
 
 async function createRouterOverSettings() {
@@ -77,6 +98,14 @@ async function createRouterOverSettings() {
 
 function resultSchemaOf(type: ClientCommand["type"]): z.ZodType | undefined {
   return COMMAND_REGISTRY.find((candidate) => candidate.type === type)?.result
+}
+
+async function expectAcksToMatchRegistry(router: ReturnType<typeof createWsRouter>, commands: readonly ClientCommand[]) {
+  for (const command of commands) {
+    const envelope = await router.dispatchCommand(command)
+    const verdict = resultSchemaOf(command.type)?.safeParse(envelope.type === "ack" ? envelope.result : undefined)
+    expect({ type: command.type, envelope: envelope.type, success: verdict?.success }).toEqual({ type: command.type, envelope: "ack", success: true })
+  }
 }
 
 describe("command results", () => {
@@ -185,4 +214,43 @@ describe("command results", () => {
     }
     expect(duplicate.type === "ack" && duplicate.result).toMatchObject({ ok: false })
   }, 30_000)
+
+  test("the ack of a project, stack, skill and package command's real handler parses with the result schema in the command registry", async () => {
+    const { router, store, projectId } = await createRouterOverRepo()
+    const created = mkdtempSync(join(tmpdir(), "kanna-project-results-"))
+    settingsDirs.push(created)
+    const sibling = await store.openProject(created)
+    const third = await store.openProject(mkdtempSync(join(created, "third-")))
+    const stackProjectIds = [projectId, sibling.id, third.id]
+    const stack = await router.dispatchCommand({ type: "stack.create", title: "trio", projectIds: stackProjectIds })
+    const stackId = stack.type === "ack" && stack.result && typeof stack.result === "object" && "stackId" in stack.result ? String(stack.result.stackId) : ""
+
+    expect(stackId).not.toBe("")
+    await expectAcksToMatchRegistry(router, [
+      { type: "stack.create", title: "trio", projectIds: stackProjectIds },
+      { type: "stack.listWorktrees", projectId },
+      { type: "stack.rename", stackId, title: "renamed" },
+      { type: "stack.setInstructions", stackId, instructions: "be brief" },
+      { type: "stack.removeProject", stackId, projectId: third.id },
+      { type: "stack.addProject", stackId, projectId: third.id },
+      { type: "stack.remove", stackId },
+      { type: "project.open", localPath: created },
+      { type: "project.create", localPath: join(created, "fresh"), title: "Fresh" },
+      { type: "project.setStar", projectId, starred: true },
+      { type: "project.setInstructions", projectId, instructions: "be careful" },
+      { type: "sidebar.reorderProjectGroups", projectIds: [projectId] },
+      { type: "sessions.importClaudeSession", sessionIds: [] },
+      { type: "skills.listInstalled" },
+      { type: "packages.listInstalled" },
+      { type: "packages.checkUpdates" },
+      { type: "packages.update", id: "missing" },
+      { type: "system.ping" },
+      { type: "terminal.create", projectId, terminalId: "t1", cols: 80, rows: 24, scrollback: 1000 },
+      { type: "terminal.input", terminalId: "t1", data: "ls\n" },
+      { type: "terminal.resize", terminalId: "t1", cols: 100, rows: 30 },
+      { type: "terminal.close", terminalId: "t1" },
+      { type: "project.remove", projectId },
+      { type: "project.delete", projectId: sibling.id },
+    ])
+  }, 60_000)
 })

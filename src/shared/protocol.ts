@@ -1,5 +1,5 @@
 import type { z } from "zod"
-import type { ClientCommand, CommandAckResult, CommandResult } from "./commands"
+import type { ClientCommand, CommandAckResult, CommandResult, NoResultClientCommand } from "./commands"
 import type { editorOpenSettingsSchema } from "./core-types.schema"
 import type { BeaconsSnapshot } from "./beacon-status"
 import { isJsonArray, isJsonObject, type JsonValue } from "./json"
@@ -176,7 +176,7 @@ export interface BoardSnapshot {
   view: BoardViewSnapshot | null
 }
 
-export type { CommandAckResult, CommandResult }
+export type { CommandAckResult, CommandResult, NoResultClientCommand }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }

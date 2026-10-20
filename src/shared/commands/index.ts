@@ -42,6 +42,14 @@ export type CommandResult<C extends ClientCommand, Fallback = CommandAckResult> 
   Extract<RegisteredCommand, { readonly type: C["type"] }>,
   Fallback
 >
+type NoResultTypeOf<D> = D extends { readonly type: infer T }
+  ? [ResultSchemaOf<D>] extends [never]
+    ? never
+    : [ResultSchemaOf<D>] extends [z.ZodUndefined]
+      ? T
+      : never
+  : never
+export type NoResultClientCommand = Extract<ClientCommand, { type: NoResultTypeOf<RegisteredCommand> }>
 export type ShareClientCommand = Extract<ClientCommand, { type: `share.${string}` }>
 
 const REGISTERED_BY_TYPE: ReadonlyMap<string, RegisteredCommand> = new Map(

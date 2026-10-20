@@ -1,4 +1,4 @@
-import { PROTOCOL_VERSION, normalizeAnthropicBaseUrl } from "../shared/types"
+import { normalizeAnthropicBaseUrl } from "../shared/types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -344,43 +344,43 @@ export async function handleSettingsCommand(
     }
     case "skills.search": {
       const snapshot = await searchSkills(command.query, command.limit)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "skills.install": {
       const result = await installSkill(command.source, command.skillId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "skills.uninstall": {
       const result = await uninstallSkill(command.skillId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "skills.listInstalled": {
       const result = await listInstalledSkills()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "packages.listInstalled": {
       const result = await readPackageInventory()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "packages.checkUpdates": {
       const result = await packageUpdateManager?.checkUpdates({ force: true }) ?? null
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       return true
     }
     case "packages.update": {
       const results = await packageUpdateManager?.applyUpdates([command.id]) ?? []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: results })
+      send(ackResult(id, command, results))
       void packageUpdateManager?.checkUpdates({ force: true })
       return true
     }
     case "packages.updateAll": {
       const results = await packageUpdateManager?.applyUpdates(command.ids) ?? []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: results })
+      send(ackResult(id, command, results))
       void packageUpdateManager?.checkUpdates({ force: true })
       return true
     }

@@ -68,3 +68,4 @@ export function defineCommands<const T extends readonly CommandDefinition[]>(...
 }
 
 export const noParams = z.object({})
+export const noResult = z.undefined()
