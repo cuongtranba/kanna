@@ -169,6 +169,7 @@ export const COMMAND_CATALOG: Readonly<Record<CommandType, CommandCatalogEntry>>
   "inbox.page": entry("inbox", "read", "beforeTs: number, limit: number, filter?: {sourceKind?, projectId?, chatId?, attentionOnly?}", "Read a page of inbox threads and activity items older than a time."),
   "inbox.reply": entry("inbox", "write", "threadId: string, text: string", "Send a reply to an inbox thread through its handler chat and source tools."),
   "inbox.instruct": entry("inbox", "write", "threadId: string, text: string", "Tell an inbox thread's handler chat what to do and ask it to report a fresh draft."),
+  "serviceBus.resetStore": entry("serviceBus", "destructive", "(none)", "Stop the embedded NATS server, delete its JetStream store and start it again."),
   "share.mint": entry("share", "write", "payload: {chatId: string, ttlHours?: number}", "Create a read-only share link for a chat."),
   "share.revoke": entry("share", "write", "payload: {tokenId: string}", "Revoke a share link."),
   "share.list": entry("share", "read", "payload: {chatId: string}", "List the share links of a chat."),

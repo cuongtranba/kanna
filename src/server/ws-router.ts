@@ -59,6 +59,8 @@ import { handleInboxCommand, type InboxReplyAction } from "./ws-router-inbox"
 import { handleWebhooksCommand } from "./ws-router-webhooks"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
+import { handleServiceBusCommand } from "./ws-router-service-bus"
+import type { ServiceBusController } from "./service-bus/service-bus-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { GenUIDatasetService } from "./genui/dataset-service"
 import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
@@ -138,6 +140,7 @@ interface CreateWsRouterArgs {
   mcpSources?: McpSourcesTopic
   inboxReply?: InboxReplyAction
   inboxInstruct?: InboxReplyAction
+  serviceBus?: Pick<ServiceBusController, "status" | "resetStore">
   authEnabled?: boolean
 }
 
@@ -178,6 +181,7 @@ export function createWsRouter({
   mcpSources,
   inboxReply,
   inboxInstruct,
+  serviceBus,
   authEnabled,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
@@ -199,6 +203,7 @@ export function createWsRouter({
     webhooks,
     inbox,
     mcpSources,
+    serviceBus,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -399,6 +404,7 @@ export function createWsRouter({
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
       () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
       () => handleInboxCommand(inbox, inboxReply, inboxInstruct, sendToClient, command, id),
+      () => handleServiceBusCommand(serviceBus, sendToClient, command, id),
       () => handleWebhooksCommand(
         webhooks,
         sendToClient,
@@ -500,6 +506,7 @@ export function createWsRouter({
     pushCronJobs: () => broadcast.pushCronJobs(),
     pushWebhooks: () => broadcast.pushWebhooks(),
     pushInbox: () => broadcast.pushInbox(),
+    pushServiceBus: () => broadcast.pushServiceBus(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
       const parsed: JsonValue | null = safeJsonParse(String(raw))
       if (parsed === null) {

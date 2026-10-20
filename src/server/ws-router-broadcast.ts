@@ -604,7 +604,11 @@ export class BroadcastManager {
     this.pushTopic("mcp-sources")
   }
 
-  private pushTopic(topicType: "cron-jobs" | "webhooks" | "inbox" | "mcp-sources"): void {
+  pushServiceBus(): void {
+    this.pushTopic("service-bus")
+  }
+
+  private pushTopic(topicType: "cron-jobs" | "webhooks" | "inbox" | "mcp-sources" | "service-bus"): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {

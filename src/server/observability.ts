@@ -54,6 +54,10 @@ export const BUS_PUBLISHED_TOTAL = "kanna.bus.published"
 
 export const BUS_HANDLER_ERRORS_TOTAL = "kanna.bus.handler_errors"
 
+export const BUS_MIRROR_DROPPED_TOTAL = "kanna.bus.mirror_dropped"
+
+export const NATS_SERVER_RESTARTS_TOTAL = "kanna.nats_server.restarts"
+
 export const GENUI_SPEC_CHECKED = "kanna.genui.spec.checked"
 
 export const GENUI_DATASET_QUERY = "kanna.genui.dataset.query"
