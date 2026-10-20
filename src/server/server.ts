@@ -148,6 +148,7 @@ interface ApplicationServices {
   packageUpdateManager: PackageUpdateManager
   agent: AgentCoordinator
   router: ReturnType<typeof createWsRouter>
+  refreshDiscovery: () => Promise<DiscoveredProject[]>
   beacon: BeaconServices
   appSettings: AppSettingsManager
   keybindings: KeybindingsManager
@@ -565,6 +566,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     packageUpdateManager,
     agent,
     router,
+    refreshDiscovery,
     beacon,
     appSettings,
     keybindings,
@@ -643,9 +645,9 @@ const MAX_PORT_ATTEMPTS = 20
 
 export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const services = await createApplicationServices(options)
-  const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, beacon, analytics } = services
+  const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, refreshDiscovery, beacon, analytics } = services
 
-  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router })
+  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
   const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks })
 

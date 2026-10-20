@@ -10,7 +10,7 @@ import {
 } from "../boards/types.schema"
 
 const boardIdParams = z.object({ boardId: z.string() })
-const cardIdParams = z.object({ cardId: z.string() })
+const cardIdParams = z.object({ cardId: z.string().describe("Id of the card") })
 const columnIdParams = z.object({ columnId: z.string() })
 const cardBlockerParams = z.object({ cardId: z.string(), blockedByCardId: z.string() })
 
@@ -125,11 +125,11 @@ export const boardCommands = defineCommands(
   }),
   defineCommand("board.card.create", {
     params: z.object({
-      boardId: z.string(),
-      columnId: z.string(),
-      title: z.string(),
-      projectId: z.string().nullable().optional(),
-      afterCardId: z.string().nullable().optional(),
+      boardId: z.string().describe("Id of the board"),
+      columnId: z.string().describe("Id of the column that receives the card"),
+      title: z.string().describe("Card title"),
+      projectId: z.string().nullable().optional().describe("Project the card belongs to, when it differs from the board's"),
+      afterCardId: z.string().nullable().optional().describe("Place the card directly after this card instead of at the end"),
     }),
     summary: "Create a card in a column.",
     risk: "write",
@@ -137,10 +137,10 @@ export const boardCommands = defineCommands(
   }),
   defineCommand("board.card.move", {
     params: z.object({
-      cardId: z.string(),
-      toColumnId: z.string(),
-      aboveCardId: z.string().nullable(),
-      belowCardId: z.string().nullable(),
+      cardId: z.string().describe("Id of the card"),
+      toColumnId: z.string().describe("Id of the destination column"),
+      aboveCardId: z.string().nullable().describe("Id of the card that ends up directly above the moved card, or null at the top of the column"),
+      belowCardId: z.string().nullable().describe("Id of the card that ends up directly below the moved card, or null at the bottom of the column"),
     }),
     summary: "Move a card to a column position.",
     risk: "write",
@@ -159,7 +159,7 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.comment", {
-    params: z.object({ cardId: z.string(), body: z.string() }),
+    params: z.object({ cardId: z.string().describe("Id of the card"), body: z.string().describe("Comment text") }),
     summary: "Add a comment to a card.",
     risk: "write",
     remote: REMOTE_ALLOWED,

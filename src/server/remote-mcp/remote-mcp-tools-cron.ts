@@ -1,52 +1,40 @@
-import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
-import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
-import { commandResult } from "./remote-mcp-views"
+import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 
-const chatIdField = z.string().describe("Id of the chat that owns the cron job")
-const jobIdField = z.string().describe("Id of the cron job")
-
-export function registerCronTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
-  tools.registerTool(
-    "list_cron_jobs",
-    {
-      title: "List cron jobs",
-      inputSchema: z.object({}),
-      description: "List every cron job across all projects with its schedule, state and next fire time.",
-      annotations: { readOnlyHint: true },
-    },
-    () => envelopeToToolResult(host.readSnapshot({ type: "cron-jobs" })),
-  )
-
-  tools.registerTool(
-    "pause_cron_job",
-    {
-      title: "Pause a cron job",
-      description: "Pause a cron job so it stops firing until resumed.",
-      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
-    },
-    ({ chatId, jobId }) => commandResult(host, { type: "cron.pause", chatId, jobId }),
-  )
-
-  tools.registerTool(
-    "resume_cron_job",
-    {
-      title: "Resume a cron job",
-      description: "Resume a paused cron job.",
-      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
-    },
-    ({ chatId, jobId }) => commandResult(host, { type: "cron.resume", chatId, jobId }),
-  )
-
-  tools.registerTool(
-    "remove_cron_job",
-    {
-      title: "Remove a cron job",
-      description: "Permanently remove a cron job and its schedule. Its past run records stay in the chat transcript.",
-      inputSchema: z.object({ chatId: chatIdField, jobId: jobIdField }),
-      annotations: { destructiveHint: true },
-    },
-    ({ chatId, jobId }) => commandResult(host, { type: "cron.remove", chatId, jobId }),
-  )
-}
+export const cronTools: readonly RemoteTool[] = [
+  topicTool({
+    name: "list_cron_jobs",
+    title: "List cron jobs",
+    description: "List every cron job across all projects with its schedule, state and next fire time.",
+    annotations: { readOnlyHint: true },
+    topic: "cron-jobs",
+    input: z.object({}),
+    handle: (_args, { host }) => envelopeToToolResult(host.readSnapshot({ type: "cron-jobs" })),
+  }),
+  commandTool({
+    name: "pause_cron_job",
+    title: "Pause a cron job",
+    description: "Pause a cron job so it stops firing until resumed.",
+    command: "cron.pause",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "cron.pause", ...args }),
+  }),
+  commandTool({
+    name: "resume_cron_job",
+    title: "Resume a cron job",
+    description: "Resume a paused cron job.",
+    command: "cron.resume",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "cron.resume", ...args }),
+  }),
+  commandTool({
+    name: "remove_cron_job",
+    title: "Remove a cron job",
+    description: "Permanently remove a cron job and its schedule. Its past run records stay in the chat transcript.",
+    annotations: { destructiveHint: true },
+    command: "cron.remove",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "cron.remove", ...args }),
+  }),
+]

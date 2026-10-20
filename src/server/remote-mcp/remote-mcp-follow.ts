@@ -1,4 +1,5 @@
 import type { ServerContext } from "@modelcontextprotocol/server"
+import type { ClientCommand } from "../../shared/protocol"
 import { onRejected } from "../../shared/errors"
 import { log } from "../../shared/log"
 import type { ToolResult } from "../kanna-mcp-tool"
@@ -9,6 +10,8 @@ import type { RemoteMcpHost } from "./remote-mcp-server"
 import { guardedDispatch, type GuardedOutcome } from "./remote-mcp-send-guard"
 import { jsonResult, runCommand, stringFieldOf } from "./remote-mcp-views"
 import { dispatchSend, followChat, type SendCommand } from "./send-and-wait"
+
+export type EnqueueCommand = Extract<ClientCommand, { type: "message.enqueue" }>
 
 const MS_PER_SECOND = 1000
 const UNKNOWN_CLIENT_ID = "unknown"
@@ -68,13 +71,14 @@ export function guardedChatSend(host: RemoteMcpHost, command: SendCommand, idemp
   )
 }
 
-export async function guardedEnqueue(host: RemoteMcpHost, chatId: string, content: string): Promise<GuardedOutcome> {
+export async function guardedEnqueue(host: RemoteMcpHost, command: EnqueueCommand, idempotencyKey?: string): Promise<GuardedOutcome> {
+  const { chatId, content } = command
   return guardedDispatch(
     host,
     { scope: "enqueue", clientId: callerClientId(), chatId, content },
-    undefined,
+    idempotencyKey,
     async () => {
-      const outcome = await runCommand(host, { type: "message.enqueue", chatId, content })
+      const outcome = await runCommand(host, command)
       if (!outcome.ok) return outcome
       const queuedMessageId = stringFieldOf(outcome.result, "queuedMessageId")
       return { ok: true, record: { chatId, baseline: 0, ...(queuedMessageId ? { queuedMessageId } : {}) } }
