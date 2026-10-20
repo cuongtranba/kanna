@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.85.0](https://github.com/cuongtranba/kanna/compare/v1.84.0...v1.85.0) (2026-10-20)
+
+
+### Features
+
+* **commands:** one command registry for the web UI, the WS router and remote MCP ([#1339](https://github.com/cuongtranba/kanna/issues/1339)) ([94f0395](https://github.com/cuongtranba/kanna/commit/94f03955821ded628440ad300cfeb0aba0f3827c))
+
+
+### Bug Fixes
+
+* **remote-mcp:** redact secrets at the MCP egress for every tool ([#1337](https://github.com/cuongtranba/kanna/issues/1337)) ([0d1af59](https://github.com/cuongtranba/kanna/commit/0d1af593caa4ba127cdb57428f95a149a32364e4))
+
 ## [1.84.0](https://github.com/cuongtranba/kanna/compare/v1.83.2...v1.84.0) (2026-10-20)
 
 
