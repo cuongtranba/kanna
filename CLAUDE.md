@@ -3110,8 +3110,7 @@ stays the store of record; the bus persists nothing.
 # Inbox — inbound threads, one handler chat per thread, draft-only agent
 
 `src/server/inbox/` + `src/server/inbound/` (component `c3-247`) turn every
-inbound message — a webhook delivery today, an MCP source message once PR4
-lands — into an **inbox thread** the user reads and answers in one place, and
+inbound message — a webhook delivery or an MCP source message — into an **inbox thread** the user reads and answers in one place, and
 keep every other bus envelope as a browsable **activity item**. The user chose
 "agent pre-handles, then tells me", so the shape below is a product decision,
 not an implementation detail.
@@ -3186,6 +3185,74 @@ not an implementation detail.
   source handler's `pushEnabled`. Day labels come from the store's
   `snapshotAt`, because `Date.now()` in render fails the purity lint — a
   "Today" label can go stale across midnight until the next snapshot.
+
+# MCP sources — Kanna as a long-lived MCP client that feeds the Inbox
+
+`src/server/mcp-sources/` + `src/shared/mcp-sources/` turn a configured custom
+MCP server into an inbound source. The user chose "Kanna connects itself", so a
+source is a *client* the server holds open, not a tool the model calls. Every
+item it ingests goes through `deliverInbound` exactly like a webhook delivery
+(`source.kind: "mcp"`), and `inbox-boot.ts` resolves the reply handler for
+`thread.sourceKind === "mcp"` through `inboxHandlerResolver`, so `inbox.reply`
+and `inbox.instruct` need nothing new.
+
+- **Two modes, one runner.** `subscribe` opens MCP revision 2026-07-28
+  `subscriptions/listen` with `resourceSubscriptions: [uri…]` and reads each
+  resource on `notifications/resources/updated`; the body handed to the handler
+  is `{ uri, contents }` so `threadKeyPath` can address either. `poll` calls a
+  list tool every `intervalMs` (5 s to 1 h) with the persisted cursor under
+  `cursorArg`, takes the array at `itemsPath`, keys each item by `itemKeyPath`
+  (else a hash of the item) and stores the value at `cursorPath` afterwards.
+  Polls never overlap: the loop is `call → sleep → call`, never a timer that
+  re-arms while a call is in flight.
+- **The legacy fallback is in the adapter, not the runner.** `openListening`
+  (`mcp-source-client.adapter.ts`) tries `listen()`; only the typed
+  `SdkErrorCode.MethodNotSupportedByProtocolVersion` error — a 2025-era server —
+  falls back to `subscribeResource` per URI with `honoredUris = uris` and
+  `closed` taken from the transport. Any other failure is a real failure and
+  must not be mistaken for "old server". The runner sees one `McpSourceListening`
+  and treats an empty `honoredUris` as `error: "server honored no subscriptions"`.
+- **Reconnect policy.** `remote` close backs off 1 s doubling to 60 s with
+  jitter, `graceful` reconnects after 30 s, `local` ends the loop. A poll error
+  backs off to at most 5x the interval. A 401-shaped error drops the
+  connection and reconnects once at once (the bearer is re-resolved on every
+  open, which refreshes an OAuth token); a second 401 backs off.
+- **Dedupe and the cursor are runtime state, not settings.**
+  `<dataDir>/mcp-source-cursors.json` holds `{ [sourceId]: { cursor, recentKeys } }`
+  (newest 256 keys, temp file + rename) behind `McpSourceCursorStorePort`. A
+  failed delivery records neither its key nor the cursor, so the item is retried
+  by the next poll. Deleting a source prunes its entry. The first poll of a
+  source with no cursor delivers whatever the tool returns, so a `spawn` source
+  pointed at a busy account creates one chat per thread at once.
+- **Configuration is `settings.mcpSources`,** a CRUD branch exactly like
+  `customModels` (`create`, `update`, `delete`) plus `setEnabled`, normalised by
+  `mcp-sources-settings.ts`, which drops invalid entries with a warning. The
+  `serverId` is checked against `customMcpServers` only when a source is created
+  or edited; deleting a server leaves its sources in place and the runner reports
+  `MCP server not found`. `app-settings.ts` is pinned at its 1900-line ceiling,
+  so everything but the glue lives in that module.
+- **The runner reconciles; it does not watch.** `McpSourceRunner.reconcile`
+  restarts a source only when its `updatedAt` or its server's `updatedAt` or
+  `enabled` changes, so an OAuth token refresh (which does not touch
+  `updatedAt`) never restarts a connection. `startMcpSources` calls it on every
+  `appSettings.onChange`, and `router.dispose()` awaits `stop()`.
+- **A stdio server started here is a separate process** from the one a chat's
+  session starts, with its own state. Prefer `http` or `sse`; the form says so.
+  `ws` is not offered, because `@modelcontextprotocol/client` 2.x ships no
+  WebSocket transport.
+- **`@modelcontextprotocol/client` is a production dependency now** (it was a dev
+  dependency used only by tests). It is imported only by
+  `mcp-source-client.adapter.ts`. The existing validator and OAuth code stay on
+  `@modelcontextprotocol/sdk` 1.x.
+- **`resolveMcpBearer` moved to `src/server/mcp-bearer.ts`** so the runner does
+  not import `ws-router-settings.ts`; `resolveMcpTestBearer` is still exported
+  from the old place for the dataset service and the router.
+- **The Zalo preset** (`MCP_SOURCE_PRESETS.zalo`) is data, not code: tool
+  `zalo_get_messages`, `since` / `cursor` / `messages` / `messageId`, thread key
+  `threadId`, sender `senderName`, 15 s, `spawn`. The user picks the server and
+  project in the form. Settings → MCP sources shows the live state per source
+  from the `mcp-sources` topic (`McpSourcesSnapshot`), pushed on every status
+  change and deduplicated by snapshot signature like the other global topics.
 
 # Inbound Webhooks (KANNA_WEBHOOKS)
 
