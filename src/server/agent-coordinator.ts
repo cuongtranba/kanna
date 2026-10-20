@@ -268,6 +268,7 @@ export class AgentCoordinator {
   private readonly claudeSessionSweepTimer: ReturnType<typeof setInterval> | null
   readonly workflowRegistry: import("./workflow-registry").WorkflowRegistry | null
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
+  readonly inboxRegistry: import("./inbox/inbox-registry").InboxRegistry | null
   readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
   readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
@@ -415,6 +416,7 @@ export class AgentCoordinator {
     this.claudeSessionSweepTimer?.unref?.()
     this.workflowRegistry = args.workflowRegistry ?? null
     this.boardRegistry = args.boardRegistry ?? null
+    this.inboxRegistry = args.inboxRegistry ?? null
     this.beaconRegistry = args.beaconRegistry ?? null
     this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
@@ -1010,6 +1012,7 @@ export class AgentCoordinator {
       tunnelGateway: this.tunnelGateway,
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
       boardRegistry: this.boardRegistry ?? undefined,
+      inboxRegistry: this.inboxRegistry ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
       getBeacons: this.getBeacons,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),

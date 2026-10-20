@@ -21,6 +21,7 @@ import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { LoopSetupInput } from "./loop-template"
 import type { BoardRegistry } from "./board-registry"
+import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { BeaconRegistry } from "./beacon-registry"
 import type { BeaconConfig } from "../shared/beacon-config"
 import type { LoopState } from "./auto-continue/read-model"
@@ -79,6 +80,7 @@ export interface SpawnClaudeTurnDeps {
   isRunAlive: (chatId: string, runId: string) => boolean
   chatTaskStore?: ChatTaskStorePort
   boardRegistry?: BoardRegistry
+  inboxRegistry?: InboxRegistry
   beaconRegistry?: BeaconRegistry
   getBeacons?: () => readonly BeaconConfig[]
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
@@ -219,6 +221,7 @@ export async function spawnClaudeTurn(
         isRunAlive: deps.isRunAlive,
         chatTaskStore: deps.chatTaskStore,
         boardRegistry: deps.boardRegistry,
+        inboxRegistry: delegationContext.depth === 0 ? deps.inboxRegistry : undefined,
         beaconRegistry: deps.beaconRegistry,
         getBeacons: deps.getBeacons,
         toolCallback: deps.toolCallback ?? undefined,

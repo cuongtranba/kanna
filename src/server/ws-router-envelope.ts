@@ -20,6 +20,7 @@ import type { BeaconRegistry } from "./beacon-registry"
 import { buildBeaconStatusRows } from "../shared/beacon-status"
 import { chatHasPendingWork } from "../shared/chat-activity"
 import type { FollowedSessionRegistry } from "./followed-session-registry"
+import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
@@ -74,6 +75,7 @@ export interface EnvelopeDeps {
   beaconRegistry?: BeaconRegistry
   followedSessionRegistry?: FollowedSessionRegistry
   webhooks?: WebhookRegistry
+  inbox?: InboxRegistry
   machineDisplayName: string
   updateManager: UpdateManager | null
   packageUpdateManager?: PackageUpdateManager
@@ -169,6 +171,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     beaconRegistry,
     followedSessionRegistry,
     webhooks,
+    inbox,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -425,6 +428,15 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         type: "snapshot",
         id,
         snapshot: { type: "webhooks", data: webhooks?.snapshot() ?? { hooks: [] } },
+      }
+    }
+
+    if (topic.type === "inbox") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: { type: "inbox", data: inbox?.snapshot() ?? { threads: [], items: [], unreadCount: 0, total: 0 } },
       }
     }
 
