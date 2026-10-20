@@ -422,6 +422,16 @@ describe("remote MCP typed tools", () => {
     expect((await call("list_installed_packages")).isError).toBe(false)
   })
 
+  test("a typed tool rejects a nested value that breaks the command schema and leaves the setting unchanged", async () => {
+    const before = server.appSettings.getSnapshot().analyticsEnabled
+
+    const rejected = await call("patch_app_settings", { patch: { analyticsEnabled: "yes" } })
+
+    expect(rejected.isError).toBe(true)
+    expect(rejected.text).toContain("analyticsEnabled")
+    expect(server.appSettings.getSnapshot().analyticsEnabled).toBe(before)
+  })
+
   test("files can be uploaded and read, and the project root is enforced", async () => {
     const uploaded = await call("upload_attachment", {
       projectId,

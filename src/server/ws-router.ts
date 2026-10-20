@@ -461,8 +461,14 @@ export function createWsRouter({
     return { v: PROTOCOL_VERSION, type: "error", id, message: messageText }
   }
 
-  async function dispatchCommand(command: ClientCommand, origin?: CommandOrigin): Promise<ServerEnvelope> {
+  async function dispatchCommand(candidate: ClientCommand, origin?: CommandOrigin): Promise<ServerEnvelope> {
     const id = randomUUID()
+    const validated = parseClientCommand(safeJsonParse(JSON.stringify(candidate)) ?? null)
+    if (!validated.ok) {
+      log.warn("[ws-router] invalid command rejected", { id, message: validated.error })
+      return { v: PROTOCOL_VERSION, type: "error", id, message: validated.error }
+    }
+    const command = validated.command
     const captured: ServerEnvelope[] = []
     const connection: CommandConnection = {
       data: { subscriptions: new Map(), snapshotSignatures: new Map(), originHost: "", commandOrigin: origin },
