@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:d763e273d728da22c6d881591dac2b8b495c71db194057463f35496e224976bd -->
+<!-- hash: sha256:9804be88416766003c36fca6aadfec295ca3f374b9b4a3fd939e13f14fcbde20 -->
 
 ## c3-0 — Kanna (system)
 
@@ -319,7 +319,7 @@ files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-i
 ## c3-242 — remote-mcp (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, ref-ws-subscription, rule-colocated-bun-test, rule-strong-typing
-files: src/server/better-auth-oauth.adapter.ts, src/server/command-origin-stamp.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/command-origin.ts, src/shared/remote-mcp/command-catalog.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
+files: src/server/better-auth-oauth.adapter.ts, src/server/command-origin-stamp.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/command-origin.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
 
 ## c3-243 — webhooks (component)
 container: c3-2 | context: c3-0
@@ -361,7 +361,7 @@ files: src/shared/analytics.ts, src/shared/app-settings-types.ts, src/shared/bui
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/live-block.ts, src/shared/protocol.ts
+files: src/shared/app-settings-types.schema.ts, src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.schema.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/boards/types.schema.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/command-origin.schema.ts, src/shared/commands/**/*.ts, src/shared/core-types.schema.ts, src/shared/cron/types.schema.ts, src/shared/custom-providers.schema.ts, src/shared/git-diff-types.schema.ts, src/shared/inbound/handler.schema.ts, src/shared/inbox/types.schema.ts, src/shared/live-block.ts, src/shared/mcp-sources/types.schema.ts, src/shared/mcp-types.schema.ts, src/shared/permission-policy.schema.ts, src/shared/protocol.ts, src/shared/provider-model-types.schema.ts, src/shared/service-bus/jetstream-config.schema.ts, src/shared/session-share/types.schema.ts, src/shared/settings/settings.schema.ts, src/shared/subagent-types.schema.ts, src/shared/type-parity.ts, src/shared/types.schema.ts, src/shared/webhooks/types.schema.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -1091,7 +1091,6 @@ src/server/command-origin-stamp.ts → c3-242
 src/server/project-file-path.ts → c3-242
 src/server/remote-mcp/**/*.ts → c3-242
 src/shared/command-origin.ts → c3-242
-src/shared/remote-mcp/command-catalog.ts → c3-242
 src/shared/remote-mcp/topics.ts → c3-242
 src/shared/settings/remote-mcp.test.ts → c3-242
 src/shared/settings/remote-mcp.ts → c3-242
@@ -1252,8 +1251,10 @@ src/shared/transcript-types.ts → c3-301
 src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
+src/shared/app-settings-types.schema.ts → c3-302
 src/shared/beacon-alias.test.ts → c3-302
 src/shared/beacon-alias.ts → c3-302
+src/shared/beacon-config.schema.ts → c3-302
 src/shared/beacon-config.ts → c3-302
 src/shared/beacon-pair-link.test.ts → c3-302
 src/shared/beacon-pair-link.ts → c3-302
@@ -1266,10 +1267,30 @@ src/shared/beacon-status.ts → c3-302
 src/shared/beacon-tool-request.ts → c3-302
 src/shared/beacon-tools.ts → c3-302
 src/shared/beacon-transfer.ts → c3-302
+src/shared/boards/types.schema.ts → c3-302
 src/shared/chat-ops.test.ts → c3-302
 src/shared/chat-ops.ts → c3-302
+src/shared/command-origin.schema.ts → c3-302
+src/shared/commands/**/*.ts → c3-302
+src/shared/core-types.schema.ts → c3-302
+src/shared/cron/types.schema.ts → c3-302
+src/shared/custom-providers.schema.ts → c3-302
+src/shared/git-diff-types.schema.ts → c3-302
+src/shared/inbound/handler.schema.ts → c3-302
+src/shared/inbox/types.schema.ts → c3-302
 src/shared/live-block.ts → c3-302
+src/shared/mcp-sources/types.schema.ts → c3-302
+src/shared/mcp-types.schema.ts → c3-302
+src/shared/permission-policy.schema.ts → c3-302
 src/shared/protocol.ts → c3-302
+src/shared/provider-model-types.schema.ts → c3-302
+src/shared/service-bus/jetstream-config.schema.ts → c3-302
+src/shared/session-share/types.schema.ts → c3-302
+src/shared/settings/settings.schema.ts → c3-302
+src/shared/subagent-types.schema.ts → c3-302
+src/shared/type-parity.ts → c3-302
+src/shared/types.schema.ts → c3-302
+src/shared/webhooks/types.schema.ts → c3-302
 src/shared/tools.test.ts → c3-303
 src/shared/tools.ts → c3-303
 src/shared/dev-ports.test.ts → c3-304

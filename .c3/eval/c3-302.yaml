@@ -19,3 +19,25 @@ code:
   - src/shared/live-block.ts
   - src/shared/beacon-pair-link.ts
   - src/shared/beacon-pair-link.test.ts
+  - src/shared/commands/**/*.ts
+  - src/shared/type-parity.ts
+  - src/shared/core-types.schema.ts
+  - src/shared/types.schema.ts
+  - src/shared/command-origin.schema.ts
+  - src/shared/provider-model-types.schema.ts
+  - src/shared/subagent-types.schema.ts
+  - src/shared/app-settings-types.schema.ts
+  - src/shared/mcp-types.schema.ts
+  - src/shared/beacon-config.schema.ts
+  - src/shared/custom-providers.schema.ts
+  - src/shared/git-diff-types.schema.ts
+  - src/shared/permission-policy.schema.ts
+  - src/shared/boards/types.schema.ts
+  - src/shared/cron/types.schema.ts
+  - src/shared/inbound/handler.schema.ts
+  - src/shared/inbox/types.schema.ts
+  - src/shared/mcp-sources/types.schema.ts
+  - src/shared/service-bus/jetstream-config.schema.ts
+  - src/shared/session-share/types.schema.ts
+  - src/shared/settings/settings.schema.ts
+  - src/shared/webhooks/types.schema.ts
