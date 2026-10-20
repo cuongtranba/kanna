@@ -962,7 +962,7 @@ export function useAppGlobalState(
         ? getMostRecentProjectProvider(sidebarProjectGroups, projectId)
         : null
 
-    const result = await socket.command<{ chatId: string }>({ type: "chat.create", projectId })
+    const result = await socket.command({ type: "chat.create", projectId })
     chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
     useNewSessionStore.getState().markSpawned(result.chatId)
     runDetached("fly chat title to tab", flyChatTitleToTab(result.chatId))
@@ -1021,7 +1021,7 @@ export function useAppGlobalState(
 
   const handleForkChat = useCallback(async (chat: SidebarChatRow) => {
     try {
-      const result = await socket.command<{ chatId: string }>({
+      const result = await socket.command({
         type: "chat.fork",
         chatId: chat.chatId,
       })
@@ -1204,7 +1204,7 @@ export function useAppGlobalState(
       const sourceComposerState = activeChatId
         ? chatPreferences.getComposerState(activeChatId)
         : chatPreferences.getComposerState(NEW_CHAT_COMPOSER_ID)
-      const result = await socket.command<{ chatId: string }>({
+      const result = await socket.command({
         type: "chat.create",
         projectId: primaryProjectId,
         stackId,

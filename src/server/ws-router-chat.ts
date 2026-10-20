@@ -1,8 +1,8 @@
 import type { JsonObject } from "../shared/json"
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { ChatHistoryPage, StackBinding } from "../shared/types"
-import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import type { ClientCommand, CommandResult, ServerEnvelope } from "../shared/protocol"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../shared/permission-policy"
+import { ackResult } from "./ws-router-ack"
 
 
 export interface ChatStoreDep {
@@ -27,7 +27,7 @@ export interface ChatToolCallbackServiceDep {
 }
 
 export interface ChatAgentDep {
-  send(command: Extract<ClientCommand, { type: "chat.send" }>): Promise<{ chatId?: string | null }>
+  send(command: Extract<ClientCommand, { type: "chat.send" }>): Promise<CommandResult<Extract<ClientCommand, { type: "chat.send" }>>>
   forkChat(chatId: string): Promise<{ chatId: string }>
   cancel(chatId: string): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: string): Promise<void>
@@ -113,57 +113,57 @@ export async function handleChatCommand(
         stackId: command.stackId,
         stackBindings: command.stackBindings,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { chatId: chat.id } })
+      send(ackResult(id, command, { chatId: chat.id }))
       analytics.track("chat_created")
       await broadcastChatAndSidebar(chat.id)
       return true
     }
     case "chat.fork": {
       const result = await agent.forkChat(command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       await broadcastSidebar()
       return true
     }
     case "chat.rename": {
       await store.renameChat(command.chatId, command.title)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "chat.archive": {
       await store.archiveChat(command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "chat.unarchive": {
       await store.unarchiveChat(command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "chat.delete": {
       await deleteChatWithTeardown(deps, command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       analytics.track("chat_deleted")
       await broadcastSidebar()
       return true
     }
     case "chat.markRead": {
       await store.setChatReadState(command.chatId, false)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "chat.setPolicyOverride": {
       await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "chat.setDraftProtection": {
       setDraftProtection(command.chatIds)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastAll()
       return true
     }
@@ -176,7 +176,7 @@ export async function handleChatCommand(
       logSendProfilingFn(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack", {
         chatId: result.chatId ?? null,
       })
-      const payloadBytes = send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      const payloadBytes = send(ackResult(id, command, result))
       logSendProfilingFn(profile?.traceId ?? command.clientTraceId, profile?.startedAt, "ws.chat_send_ack_completed", {
         chatId: result.chatId ?? null,
         payloadBytes,
@@ -188,24 +188,24 @@ export async function handleChatCommand(
       if (agent.toolCallbackService) {
         await agent.toolCallbackService.cancelAllForChat(command.chatId, "chat_cancelled")
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "chat.stopDraining": {
       await agent.stopDraining(command.chatId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "chat.loadHistory": {
       const chat = store.getChat(command.chatId)
       if (!chat) throw new Error("Chat not found")
       const page = store.getMessagesPageBefore(command.chatId, command.beforeCursor, command.limit)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: page })
+      send(ackResult(id, command, page))
       return true
     }
     case "chat.respondTool": {
       await agent.respondTool(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "chat.toolRequestAnswer": {
@@ -216,18 +216,18 @@ export async function handleChatCommand(
         throw new Error("Tool request does not belong to this chat")
       }
       await toolCallbackSvc.answer(command.toolRequestId, command.decision)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "chat.respondSubagentTool": {
       await agent.respondSubagentTool(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "chat.cancelSubagentRun": {
       await agent.cancelSubagentRun(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     default:

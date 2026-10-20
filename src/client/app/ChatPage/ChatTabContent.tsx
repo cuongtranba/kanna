@@ -354,13 +354,13 @@ export function ChatTabContent({
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
     const chatId = state.activeChatId
     if (!chatId) return null
-    return state.socket.command<WorkflowRun | null>({ type: "workflows.getRun", chatId, runId })
+    return state.socket.command({ type: "workflows.getRun", chatId, runId })
   }, [state.activeChatId, state.socket])
 
   const handleGetSubagentTranscript = useCallback(async (agentId: string): Promise<TranscriptEntry[]> => {
     const chatId = state.activeChatId
     if (!chatId) return []
-    return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
+    return state.socket.command({ type: "subagents.getRun", chatId, agentId })
   }, [state.activeChatId, state.socket])
 
 

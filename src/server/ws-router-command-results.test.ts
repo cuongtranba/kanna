@@ -253,4 +253,44 @@ describe("command results", () => {
       { type: "project.delete", projectId: sibling.id },
     ])
   }, 60_000)
+
+  test("the ack of a chat, transcript and tunnel command's real handler parses with the result schema in the command registry", async () => {
+    const { router, store, chatId, projectId } = await createRouterOverRepo()
+    await store.appendMessage(chatId, { _id: "u1", createdAt: 1, kind: "user_prompt", content: "list files" })
+    await store.appendMessage(chatId, {
+      _id: "c1",
+      createdAt: 2,
+      kind: "tool_call",
+      tool: { kind: "tool", toolKind: "bash", toolName: "Bash", toolId: "tool-1", input: { command: "ls", runInBackground: false } },
+    })
+    await store.appendMessage(chatId, { _id: "r1", createdAt: 3, kind: "tool_result", toolId: "tool-1", content: "a.txt" })
+    await store.appendMessage(chatId, { _id: "a1", createdAt: 4, kind: "assistant_text", text: "done" })
+
+    await expectAcksToMatchRegistry(router, [
+      { type: "chat.create", projectId },
+      { type: "chat.loadHistory", chatId, beforeCursor: "idx:4", limit: 2 },
+      { type: "chat.rename", chatId, title: "Renamed" },
+      { type: "chat.markRead", chatId },
+      { type: "chat.setPolicyOverride", chatId, policyOverride: { defaultAction: "ask" } },
+      { type: "chat.setDraftProtection", chatIds: [chatId] },
+      { type: "chat.archive", chatId },
+      { type: "chat.unarchive", chatId },
+      { type: "workflows.getRun", chatId, runId: "missing" },
+      { type: "workflows.getAgentTranscript", chatId, runId: "missing", agentId: "none" },
+      { type: "subagents.getRun", chatId, agentId: "none" },
+      { type: "tunnel.accept", chatId, tunnelId: "t1" },
+      { type: "tunnel.stop", chatId, tunnelId: "t1" },
+      { type: "tunnel.retry", chatId, tunnelId: "t1" },
+    ])
+  }, 30_000)
+
+  test("the background task output a chat command answers with parses as the snapshot the registry declares", async () => {
+    const { router, chatId } = await createRouterOverRepo()
+
+    const envelope = await router.dispatchCommand({ type: "backgroundTasks.getOutput", chatId, taskId: "task-1" })
+
+    expect(envelope.type).toBe("snapshot")
+    const reply = envelope.type === "snapshot" ? envelope.snapshot : undefined
+    expect(resultSchemaOf("backgroundTasks.getOutput")?.safeParse(reply).success).toBe(true)
+  }, 30_000)
 })

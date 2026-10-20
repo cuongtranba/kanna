@@ -2,7 +2,7 @@ import type { z } from "zod"
 import type { ClientCommand, CommandAckResult, CommandResult, NoResultClientCommand } from "./commands"
 import type { editorOpenSettingsSchema } from "./core-types.schema"
 import type { BeaconsSnapshot } from "./beacon-status"
-import { isJsonArray, isJsonObject, type JsonValue } from "./json"
+import { isJsonObject, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   ChatDiffSnapshot,
@@ -111,16 +111,6 @@ export interface ImportSessionsByIdsResult {
 export interface ProjectDeleteResult {
   deletedBoardIds: string[]
   failures: string[]
-}
-
-function stringsOf(value: JsonValue | undefined): string[] {
-  if (value === undefined || !isJsonArray(value)) return []
-  return value.filter((item): item is string => typeof item === "string")
-}
-
-export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
-  const record = isJsonObject(value) ? value : {}
-  return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
 }
 
 export interface ChatLiveEvent {

@@ -78,7 +78,6 @@ export { jsonObjectSchema, jsonValueSchema } from "./json-schema"
 export {
   DATASET_ERROR_CODES,
   DATASET_ERROR_MESSAGES,
-  decodeDatasetQueryOutcome,
   type DatasetErrorCode,
   type DatasetQueryOutcome,
 } from "./protocol"

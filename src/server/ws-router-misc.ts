@@ -75,19 +75,19 @@ export async function handleMiscCommand(
   switch (command.type) {
     case "message.enqueue": {
       const result = await agent.enqueue(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "message.steer": {
       await agent.steer(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "message.dequeue": {
       await agent.dequeue(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }

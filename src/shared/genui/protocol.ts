@@ -1,7 +1,7 @@
 import { z } from "zod"
-import type { JsonValue } from "../json"
 import { TIME_GRAINS } from "./datasets"
 import { COMPARE_MODES, type QueryResult } from "./query"
+import { assertParity } from "../type-parity"
 
 export const DATASET_ERROR_CODES = [
   "invalid_dataset",
@@ -41,16 +41,13 @@ const queryResultSchema = z.object({
   sourceRowCount: z.number(),
 })
 
-const outcomeSchema = z.discriminatedUnion("status", [
+export const datasetQueryOutcomeSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("ok"), result: queryResultSchema, revision: z.string(), fetchedAt: z.number() }),
   z.object({ status: z.literal("needs_approval"), server: z.string(), tool: z.string(), message: z.string() }),
   z.object({ status: z.literal("error"), code: z.enum(DATASET_ERROR_CODES), message: z.string() }),
 ])
 
-export function decodeDatasetQueryOutcome(value: JsonValue): DatasetQueryOutcome | null {
-  const parsed = outcomeSchema.safeParse(value)
-  return parsed.success ? parsed.data : null
-}
+assertParity<z.output<typeof datasetQueryOutcomeSchema>, DatasetQueryOutcome>()
 
 export const DATASET_ERROR_MESSAGES: Readonly<Record<DatasetErrorCode, string>> = {
   invalid_dataset: "This report describes its data incorrectly",
