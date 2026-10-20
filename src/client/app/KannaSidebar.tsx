@@ -598,9 +598,10 @@ function KannaSidebarImpl({
   const isLocalProjectsActive = location.pathname === "/"
   const isSettingsActive = location.pathname.startsWith("/settings")
   const isWorkflowsActive = location.pathname.startsWith("/workflows")
+  const isInboxActive = location.pathname.startsWith("/inbox")
   const isCronJobsActive = location.pathname.startsWith("/cron")
   const isWebhooksActive = location.pathname.startsWith("/webhooks")
-  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive || isCronJobsActive || isWebhooksActive
+  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive || isCronJobsActive || isWebhooksActive || isInboxActive
   const isConnecting = connectionStatus === "connecting"
   let statusLabel: string
   if (isConnecting) {
@@ -900,6 +901,7 @@ function KannaSidebarImpl({
           navigate={navigate}
           onClose={onClose}
           workflowsButtonClass={workflowsButtonClass}
+          isInboxActive={isInboxActive}
           isCronJobsActive={isCronJobsActive}
           isWebhooksActive={isWebhooksActive}
           isSettingsActive={isSettingsActive}

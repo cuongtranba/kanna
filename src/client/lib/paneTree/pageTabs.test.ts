@@ -20,6 +20,8 @@ describe("resolvePageRoute", () => {
     expect(resolvePageRoute("/cron")).toEqual({ page: "cron", params: {} })
     expect(resolvePageRoute("/workflows/c1")).toEqual({ page: "workflows", params: { chatId: "c1" } })
     expect(resolvePageRoute("/boards/p1")).toEqual({ page: "boards", params: { projectId: "p1" } })
+    expect(resolvePageRoute("/inbox")).toEqual({ page: "inbox", params: {} })
+    expect(resolvePageRoute("/inbox/t1")).toEqual({ page: "inbox", params: { threadId: "t1" } })
   })
 
   test("reads /boards/stack/x as a stack, not a project called stack", () => {

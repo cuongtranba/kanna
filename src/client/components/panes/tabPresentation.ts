@@ -2,6 +2,7 @@ import {
   CalendarClock,
   FolderOpen,
   GitCompare,
+  Inbox,
   MessageSquare,
   Settings,
   SquareKanban,
@@ -48,6 +49,7 @@ const PAGE_PRESENTATION: Readonly<Record<PageKind, { label: string; icon: Lucide
   settings: { label: "Settings", icon: Settings },
   cron: { label: "Cron jobs", icon: CalendarClock },
   webhooks: { label: "Webhooks", icon: Webhook },
+  inbox: { label: "Inbox", icon: Inbox },
   workflows: { label: "Workflows", icon: Workflow },
   boards: { label: "Boards", icon: SquareKanban },
 }
