@@ -1,22 +1,10 @@
 import { randomUUID } from "node:crypto"
 import { homedir } from "node:os"
 import path from "node:path"
-import {
-  mkdirRecursive,
-  readBunFileText,
-  readTextFileOrThrow,
-  renameFile,
-  writeTextFileUtf8,
-} from "./app-settings-io.adapter"
+import { mkdirRecursive, readBunFileText, readTextFileOrThrow, renameFile, writeTextFileUtf8 } from "./app-settings-io.adapter"
 import { getSettingsFilePath } from "../shared/branding"
 import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
-import {
-  applyBeaconSetters,
-  beaconNotFound,
-  createBeacon,
-  normalizeBeacons,
-  updateBeacon,
-} from "./beacon-settings"
+import { applyBeaconSetters, beaconNotFound, createBeacon, normalizeBeacons, updateBeacon } from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
 import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normalizeMcpSources } from "./mcp-sources-settings"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
@@ -106,6 +94,7 @@ import {
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
 import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput, CustomProviderPatch } from "../shared/custom-providers"
+import { applyServiceBusPatch, normalizeServiceBusSettings, toPublicServiceBus, type ServiceBusSettingsStored } from "./service-bus-settings"
 import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
 import { isPlainObject } from "../shared/settings/plain-object"
 import type { JsonArray, JsonObject, JsonValue } from "../shared/json"
@@ -165,6 +154,7 @@ interface AppSettingsFile {
   plugins?: JsonObject
   installedPlugins?: JsonArray
   remoteMcp?: JsonObject
+  serviceBus?: JsonObject
 }
 
 function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
@@ -183,9 +173,10 @@ function isMcpTransport<T>(value: T): value is T & McpServerTransport {
   return value === "stdio" || value === "http" || value === "sse" || value === "ws"
 }
 
-interface AppSettingsState extends Omit<AppSettingsSnapshot, "customProviders"> {
+interface AppSettingsState extends Omit<AppSettingsSnapshot, "customProviders" | "serviceBus"> {
   analyticsUserId: string
   customProviders: CustomProviderEntry[]
+  serviceBus: ServiceBusSettingsStored
   seededBuiltinModels: string[]
 }
 
@@ -890,9 +881,10 @@ function toSnapshot({
   analyticsUserId: _analyticsUserId,
   seededBuiltinModels: _seededBuiltinModels,
   customProviders,
+  serviceBus,
   ...snapshot
 }: AppSettingsState): AppSettingsSnapshot {
-  return { ...snapshot, customProviders: customProviders.map(toPublicCustomProvider) }
+  return { ...snapshot, customProviders: customProviders.map(toPublicCustomProvider), serviceBus: toPublicServiceBus(serviceBus) }
 }
 
 function normalizeAppSettings<T>(
@@ -992,6 +984,7 @@ function normalizeAppSettings<T>(
     packageUpdates,
     ...pluginState,
     remoteMcp,
+    serviceBus: normalizeServiceBusSettings(source?.serviceBus, warnings),
   }
 
   const filePayload = toFilePayload(state)
@@ -1631,6 +1624,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     textSnippets: nextTextSnippets,
     ...mergePluginPatch(state, patch),
     remoteMcp: { ...state.remoteMcp, ...patch.remoteMcp },
+    serviceBus: applyServiceBusPatch(state.serviceBus, patch.serviceBus),
     claudeDriver: {
       lifecycle: {
         ...state.claudeDriver.lifecycle,
@@ -1708,6 +1702,8 @@ export class AppSettingsManager {
   getCustomProviderCredential(id: string): CustomProviderCredential | null {
     return credentialOfCustomProvider(this.state.customProviders, id)
   }
+
+  getServiceBusCredential(): string | null { return this.state.serviceBus.token }
 
   onChange(listener: (snapshot: AppSettingsSnapshot) => void) {
     this.listeners.add(listener)

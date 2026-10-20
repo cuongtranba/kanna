@@ -27,6 +27,7 @@ import type { PushSettings } from "./settings/push"
 import { PUSH_DEFAULTS } from "./settings/push"
 import type { RemoteMcpSettings } from "./settings/remote-mcp"
 import { REMOTE_MCP_SETTINGS_DEFAULTS } from "./settings/remote-mcp"
+import type { ServiceBusSettingsPatch, ServiceBusSettingsPublic } from "./service-bus/jetstream-config"
 import type { TelemetrySettings } from "./settings/telemetry"
 import { TELEMETRY_DEFAULTS } from "./settings/telemetry"
 import type { TypographySettings } from "./settings/typography"
@@ -319,6 +320,7 @@ export interface AppSettingsSnapshot {
   plugins: PluginSettings
   installedPlugins: InstalledPluginConfig[]
   remoteMcp: RemoteMcpSettings
+  serviceBus: ServiceBusSettingsPublic
 }
 
 export interface SubagentRuntimeSettings {
@@ -420,6 +422,7 @@ export interface AppSettingsPatch {
   packageUpdates?: Partial<PackageUpdateSettings>
   plugins?: Partial<PluginSettings>
   remoteMcp?: Partial<RemoteMcpSettings>
+  serviceBus?: ServiceBusSettingsPatch
   installedPlugins?: {
     create?: { sourceDir: string; id: string }
     update?: { id: string; patch: { enabled?: boolean } }

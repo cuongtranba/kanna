@@ -7,6 +7,7 @@ import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { REMOTE_MCP_SETTINGS_DEFAULTS, type RemoteMcpSettings } from "../../shared/settings/remote-mcp"
+import { SERVICE_BUS_PUBLIC_DEFAULTS, applyServiceBusPatchToPublic, type ServiceBusSettingsPublic } from "../../shared/service-bus/jetstream-config"
 
 type AppSettingsHydrationStatus = "idle" | "loading" | "ready" | "error"
 
@@ -109,6 +110,7 @@ export function mergeAppSettingsPatch(
       ...settings.remoteMcp,
       ...patch.remoteMcp,
     },
+    serviceBus: applyServiceBusPatchToPublic(settings.serviceBus, patch.serviceBus),
     claudeDriver: {
       lifecycle: {
         ...settings.claudeDriver.lifecycle,
@@ -180,6 +182,9 @@ export const selectInstalledPlugins = (state: AppSettingsStoreState): readonly I
 
 export const selectRemoteMcpSettings = (state: AppSettingsStoreState): RemoteMcpSettings =>
   state.settings?.remoteMcp ?? REMOTE_MCP_SETTINGS_DEFAULTS
+
+export const selectServiceBusSettings = (state: AppSettingsStoreState): ServiceBusSettingsPublic =>
+  state.settings?.serviceBus ?? SERVICE_BUS_PUBLIC_DEFAULTS
 
 const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"

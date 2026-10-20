@@ -27,6 +27,7 @@ import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import { UPDATE_PROTOCOL } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry } from "./beacon-registry"
+import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
 
 
 function makeSnapshot(): AppSettingsSnapshot {
@@ -69,6 +70,7 @@ function makeSnapshot(): AppSettingsSnapshot {
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
     remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
+    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
     installedPlugins: [],
   }
 }

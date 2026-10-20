@@ -31,6 +31,7 @@ import type { BeaconConfig } from "../shared/beacon-config"
 import type { McpSourceStatus } from "../shared/mcp-sources/types"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry } from "./beacon-registry"
+import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
 
 function withSidebarGroupDefaults(group: {
   groupKey: string
@@ -157,6 +158,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
   plugins: PLUGIN_SETTINGS_DEFAULTS,
   remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
+  serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
   installedPlugins: [],
 }
 
