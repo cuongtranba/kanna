@@ -3082,8 +3082,8 @@ stays the store of record; the bus persists nothing.
   entries bypass `commit`. Do not wire the bus into `emitStateChange` (a UI
   broadcast signal with no payload, ~40 call sites) or the registries'
   `subscribe()` sets (no event, and several are single-slot).
-- **The slot is set AFTER `store.initialize()` resolves** (`server.ts`), so
-  boot replay publishes nothing. Setting it earlier replays the whole history
+- **The slot is set AFTER `store.initialize()` resolves** (`createStoreBus`,
+  called from `server.ts`), so boot replay publishes nothing. Setting it earlier replays the whole history
   into every subscriber on each restart; `event-store-tap.test.ts` pins it.
 - **`publish` is synchronous and never throws.** The in-memory bus
   (`in-memory-service-bus.ts`) guards every subscriber and mirror call: a
@@ -3106,6 +3106,74 @@ stays the store of record; the bus persists nothing.
 - **`event-store.ts` is at the 700-line budget.** The tap cost three lines,
   paid for by three removed blank lines. A second call site or a new import
   line there fails `check:arch`; put new bus logic in `src/server/service-bus/`.
+
+## Embedded NATS mirror
+
+`bus.addMirror` carries one optional mirror: a NATS JetStream stream, either a
+`nats-server` Kanna manages or one the user runs. **The JSONL EventStore stays
+the store of record and Kanna boots and works with NATS absent.** Settings →
+Service bus (`settings.serviceBus`, `src/server/service-bus-settings.ts`,
+`src/shared/service-bus/jetstream-config.ts`, user doc
+`wiki/src/content/docs/guides/user/service-bus.md`).
+
+- **Never block, never throw.** `NatsMirror.sink.publish` only pushes onto a
+  bounded queue (`nats-mirror-queue.ts`, 2000, drop-oldest, counted by
+  `kanna.bus.mirror_dropped`); a separate pump publishes with `msgID =
+  idempotencyKey` and a 5 s timeout, retries a failed message once at the head
+  and then drops it. The pump does not run while the link is down, so an outage
+  fills the queue instead of failing appends. Every public method catches; the
+  warning is throttled to once per 30 s. The in-memory bus already guards each
+  mirror call, this is the second wall.
+- **Embedded = a supervised child process, not a library.** No JS or WASM
+  nats-server exists, so `nats-server-install.adapter.ts` downloads the pinned
+  `NATS_SERVER_VERSION` (2.15.1) from the official GitHub release on first
+  enable, fetches `SHA256SUMS`, refuses the archive on a mismatch, extracts the
+  one binary with the minimal reader in `tar-gz.ts` and renames it into
+  `<dataDir>/nats/bin/nats-server-v<ver>` atomically (same posture as the
+  beacon self-updater; `parseSha256Sums` and `releaseAssetUrl` now live once in
+  `src/shared/release-sums.ts`). `KANNA_NATS_RELEASE_BASE` is a machine-local
+  test override read inside that adapter only. macOS and Linux are supported;
+  Windows needs a zip reader and answers "use external mode".
+- **The token lives in two places and never in argv.** `settings.json` holds it
+  (mode 0644, like `customProviders.apiKey`; the snapshot carries only
+  `tokenHint`, reachable raw only through `getServiceBusCredential()`), and
+  `nats-server-process.adapter.ts` writes it into `<dataDir>/nats/server.conf`
+  at 0600 (temp file, chmod, rename) for `nats-server -c`. A patch with no token
+  or an empty one keeps it, `null` clears it. Embedded mode generates one on
+  first start. The child gets a minimal env, not Kanna's.
+- **Supervision.** Ready is the `Server is ready` line on stderr (a `log_file`
+  would move it out of stderr, so none is configured). The port is picked once
+  and reused across restarts so the client's own reconnect finds it. An
+  unexpected exit restarts with 1 s doubling to 60 s (reset after a 60 s run),
+  counted by `kanna.nats_server.restarts`. `stop` is SIGTERM, then SIGKILL after
+  5 s. A stale pid file is reaped only if the pid is still a `nats-server`.
+- **Reconcile is create-or-update on every connect** (`jetstream-reconcile.ts`).
+  A missing stream is added; a drifted one is updated in place for subjects,
+  max age, bytes, messages, discard and duplicate window. **`retention`,
+  `storage` and `replicas` cannot change on a live stream, so the status goes to
+  `error` naming the field and the stream is left alone: Kanna never deletes a
+  stream.** Consumers are created or updated, and a consumer is deleted only if
+  it carries `metadata["kanna-managed"] === "true"` and is no longer configured;
+  consumers someone else created are never touched. An ack or deliver policy
+  change is reported, not applied, because the server forbids it.
+- **The stream prefix is configurable, the envelope subject is not.**
+  `subjectWithPrefix` swaps the leading `kanna` token for `stream.subjectPrefix`
+  at publish time; the envelope JSON keeps the original subject.
+- **One owner of status.** `service-bus-boot.ts` composes the phase it owns
+  (installing, starting, restarting, failed) over the mirror's own state
+  (connecting, connected, reconnecting, error) and pushes it on the
+  `service-bus` topic. Settings changes serialise through one promise chain: a
+  change to `enabled|mode|url|token|embedded` restarts, one to `stream` or
+  `consumers` only reconciles. `serviceBus.resetStore` stops the child, deletes
+  `<dataDir>/nats/store` and starts again.
+- **`server.ts` stays under 700 lines** because the bus is built by
+  `createStoreBus` (it also sets the EventStore tap) and carries the mirror's
+  lifecycle itself. Add new bus wiring to `service-bus-boot.ts`, not to
+  `server.ts`.
+- **The connect loop is Kanna's, not the client's.** `waitOnFirstConnect` would
+  hide a dead server behind an uncancellable promise, so the first connect is
+  retried here (2 s doubling to 30 s) and the failure is visible as `error`.
+  Later outages use the client's own reconnect (`maxReconnectAttempts: -1`).
 
 # Inbox — inbound threads, one handler chat per thread, draft-only agent
 
