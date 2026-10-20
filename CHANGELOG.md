@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.83.2](https://github.com/cuongtranba/kanna/compare/v1.83.1...v1.83.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **deps:** pin better-auth packages to one version ([#1329](https://github.com/cuongtranba/kanna/issues/1329)) ([bdfe784](https://github.com/cuongtranba/kanna/commit/bdfe7844d729094c622973335b1fabf782039c29))
+* **event-store:** replay chat-tasks.jsonl on boot ([#1331](https://github.com/cuongtranba/kanna/issues/1331)) ([8008278](https://github.com/cuongtranba/kanna/commit/80082789a77f7a50789e4be7adaa21b97289e16a)), closes [#1325](https://github.com/cuongtranba/kanna/issues/1325)
+
 ## [1.83.1](https://github.com/cuongtranba/kanna/compare/v1.83.0...v1.83.1) (2026-10-20)
 
 
