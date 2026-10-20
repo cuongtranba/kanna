@@ -4,9 +4,8 @@ import { jsonObjectSchema } from "../../shared/genui/json-schema"
 import { isJsonObject, type JsonValue } from "../../shared/json"
 import type { AppSettingsPatch } from "../../shared/app-settings-types"
 import { fail } from "../kanna-mcp-tool"
-import { redactSecrets } from "./redact-secrets"
 import type { RemoteMcpHost } from "./remote-mcp-server"
-import { commandResult, jsonResult, runCommand } from "./remote-mcp-views"
+import { commandResult, jsonResult } from "./remote-mcp-views"
 
 function isSettingsPatchShape(value: JsonValue): value is JsonValue & AppSettingsPatch {
   return isJsonObject(value)
@@ -21,10 +20,7 @@ export function registerSettingsTools(tools: ToolRegistrar, host: RemoteMcpHost)
       description: "Read Kanna's application settings. Values that look like secrets (API keys, tokens, passwords, env and headers) are redacted.",
       annotations: { readOnlyHint: true },
     },
-    async () => {
-      const outcome = await runCommand(host, { type: "settings.readAppSettings" })
-      return outcome.ok ? jsonResult(redactSecrets(outcome.result)) : fail(outcome.message)
-    },
+    () => commandResult(host, { type: "settings.readAppSettings" }),
   )
 
   tools.registerTool(
@@ -36,8 +32,7 @@ export function registerSettingsTools(tools: ToolRegistrar, host: RemoteMcpHost)
     },
     async ({ patch }) => {
       if (!isSettingsPatchShape(patch)) return fail("The patch must be an object.")
-      const outcome = await runCommand(host, { type: "settings.writeAppSettingsPatch", patch })
-      return outcome.ok ? jsonResult(redactSecrets(outcome.result)) : fail(outcome.message)
+      return commandResult(host, { type: "settings.writeAppSettingsPatch", patch })
     },
   )
 

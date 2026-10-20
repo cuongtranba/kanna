@@ -195,6 +195,19 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   agent write unless the binding sets `allowAgentPush`. Every new `register*`
   tool takes the `ToolRegistrar` and an object `inputSchema` (`z.object({})` when
   it has no parameters), not the raw `McpServer`.
+- **Secrets are masked once, at the host, by data shape.** `buildRemoteMcpServer`
+  wraps the host in `withEgressRedaction` (`remote-mcp-egress-redaction.ts`), so
+  every tool, resource and follow loop reads masked data no matter which one
+  reached it. It masks the app-settings and llm-provider snapshots and the acks of
+  `settings.readAppSettings`, `writeAppSettings`, `writeAppSettingsPatch`,
+  `appSettings.setCloudflareTunnel`, `appSettings.setClaudeAuth`,
+  `settings.readLlmProvider` and `writeLlmProvider`: Claude OAuth token values,
+  custom MCP server `env` and `headers` values, MCP OAuth state (reduced to
+  enabled, status, issuer, error) and the LLM `apiKey`. Do not blanket-apply
+  `redactSecrets` to results: `share.mint`, `beacons.mintPairingCode` and
+  transcript token counts are meant to reach the caller. A new command or topic
+  that returns one of these snapshots joins the sets in that module; the web
+  socket is untouched and still carries the raw token to `OAuthTokenPoolCard`.
 - **The audit sink is `remote-mcp-calls.jsonl` in the data dir.** One redacted
   record per tool call through the `StorageBackend` port, rotated to `.1` at
   10 MiB; a failed write is logged and never reaches the tool. The counter
