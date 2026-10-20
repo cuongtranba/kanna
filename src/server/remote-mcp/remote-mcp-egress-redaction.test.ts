@@ -32,6 +32,14 @@ describe("remote MCP egress redaction", () => {
     expect(envelope).toMatchObject({ type: "ack", result: { provider: "openai", model: "gpt-test", enabled: true } })
   })
 
+  test("a secret-bearing command whose reply is not the expected snapshot is withheld instead of passed through", async () => {
+    const envelope = await hostAnswering({ ok: true, code: RAW_API_KEY, expiresAt: 3 })
+      .dispatchCommand({ type: "settings.readLlmProvider" })
+
+    expect(JSON.stringify(envelope)).not.toContain(RAW_API_KEY)
+    expect(envelope).toMatchObject({ type: "error", id: "x" })
+  })
+
   test("a share token and a beacon pairing code a caller asked for are not masked", async () => {
     const minted = await hostAnswering({
       ok: true,

@@ -78,20 +78,28 @@ function isLlmProviderSnapshot(result: CommandResult<ClientCommand>): result is 
   return typeof result === "object" && result !== null && "apiKey" in result && typeof result.apiKey === "string"
 }
 
-function redactAckResult(command: ClientCommand, result: CommandResult<ClientCommand>): CommandResult<ClientCommand> | undefined {
+const WITHHELD_MESSAGE = "The result was withheld because it did not have the expected shape for a command that carries secrets."
+
+type RedactedAck = { readonly withheld: false; readonly result: CommandResult<ClientCommand> } | { readonly withheld: true }
+
+const WITHHELD: RedactedAck = { withheld: true }
+
+function redactAckResult(command: ClientCommand, result: CommandResult<ClientCommand>): RedactedAck {
   if (APP_SETTINGS_ACK_COMMANDS.has(command.type)) {
-    return isAppSettingsSnapshot(result) ? redactAppSettingsSnapshot(result) : undefined
+    return isAppSettingsSnapshot(result) ? { withheld: false, result: redactAppSettingsSnapshot(result) } : WITHHELD
   }
   if (LLM_PROVIDER_ACK_COMMANDS.has(command.type)) {
-    return isLlmProviderSnapshot(result) ? redactLlmProviderSnapshot(result) : undefined
+    return isLlmProviderSnapshot(result) ? { withheld: false, result: redactLlmProviderSnapshot(result) } : WITHHELD
   }
-  return result
+  return { withheld: false, result }
 }
 
 export function redactCommandEnvelope(command: ClientCommand, envelope: ServerEnvelope): ServerEnvelope {
   if (envelope.type === "snapshot") return { ...envelope, snapshot: redactSnapshot(envelope.snapshot) }
   if (envelope.type !== "ack" || envelope.result === undefined) return envelope
-  return { ...envelope, result: redactAckResult(command, envelope.result) }
+  const redacted = redactAckResult(command, envelope.result)
+  if (redacted.withheld) return { v: envelope.v, type: "error", id: envelope.id, message: WITHHELD_MESSAGE }
+  return { ...envelope, result: redacted.result }
 }
 
 export function redactReadEnvelope(envelope: ServerEnvelope): ServerEnvelope {
