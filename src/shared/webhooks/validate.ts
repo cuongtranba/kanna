@@ -1,8 +1,10 @@
 import type { AgentProvider } from "../core-types"
 import type { ProviderCatalogEntry } from "../provider-model-types"
+import { isInboundHandlerMode, validateInboundTarget } from "../inbound/handler"
 import {
   WEBHOOK_MODEL_MAX_CHARS,
-  WEBHOOK_MODES,
+  WEBHOOK_PATH_MAX_CHARS,
+  WEBHOOK_REPLY_HINT_MAX_CHARS,
   WEBHOOK_NAME_MAX_CHARS,
   WEBHOOK_TEMPLATE_MAX_CHARS,
   type WebhookInput,
@@ -21,14 +23,11 @@ export interface WebhookModelFields {
 }
 
 export function isWebhookMode(value: string): value is WebhookMode {
-  return WEBHOOK_MODES.some((mode) => mode === value)
+  return isInboundHandlerMode(value)
 }
 
 export function validateWebhookTarget(fields: WebhookTargetFields): string[] {
-  const needsChat = fields.mode === "notify" || fields.mode === "inline"
-  if (needsChat && !fields.chatId) return ["A chat is required for notify and inline hooks"]
-  if (fields.mode === "spawn" && !fields.projectId) return ["A project is required for spawn hooks"]
-  return []
+  return validateInboundTarget(fields)
 }
 
 export function validateWebhookInput(input: WebhookInput): string[] {
@@ -41,6 +40,13 @@ export function validateWebhookInput(input: WebhookInput): string[] {
   if (template.length === 0) errors.push("Template is required")
   if (template.length > WEBHOOK_TEMPLATE_MAX_CHARS) {
     errors.push(`Template must be at most ${WEBHOOK_TEMPLATE_MAX_CHARS} characters`)
+  }
+  const paths = [input.threadKeyPath, input.senderPath]
+  if (paths.some((path) => (path?.length ?? 0) > WEBHOOK_PATH_MAX_CHARS)) {
+    errors.push(`Paths must be at most ${WEBHOOK_PATH_MAX_CHARS} characters`)
+  }
+  if ((input.replyHint?.length ?? 0) > WEBHOOK_REPLY_HINT_MAX_CHARS) {
+    errors.push(`Reply hint must be at most ${WEBHOOK_REPLY_HINT_MAX_CHARS} characters`)
   }
   return errors
 }

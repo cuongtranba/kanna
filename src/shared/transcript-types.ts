@@ -6,6 +6,7 @@ import type { ToolRequestStatus, ToolRequestDecision } from "./permission-policy
 import type { NormalizedToolCall, HydratedToolCall } from "./tool-call-types"
 import type { CodexErrorInfoTag } from "./codex-error-classification"
 import type { CronMode, CronSkipReason } from "./cron/types"
+import type { InboundHandlerMode } from "./inbound/handler"
 import type { WebhookMode } from "./webhooks/types"
 
 
@@ -272,6 +273,17 @@ export interface WebhookDeliveryEntry extends TranscriptEntryBase {
   message?: string
 }
 
+export interface InboundDeliveryEntry extends TranscriptEntryBase {
+  kind: "inbound_delivery"
+  sourceKind: "mcp" | "webhook"
+  sourceId: string
+  sourceName: string
+  mode: InboundHandlerMode
+  deliveryId: string
+  threadId: string
+  message?: string
+}
+
 export type TranscriptEntry =
   | UserPromptEntry
   | SystemInitEntry
@@ -301,6 +313,7 @@ export type TranscriptEntry =
   | CronListEntry
   | CronJobChangeEntry
   | WebhookDeliveryEntry
+  | InboundDeliveryEntry
 
 
 export type HydratedTranscriptMessage =
@@ -330,4 +343,5 @@ export type HydratedTranscriptMessage =
   | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed" | "updated"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ kind: "webhook_delivery"; hookId: string; hookName: string; mode: WebhookMode; deliveryId: string; message?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | ({ kind: "inbound_delivery"; sourceKind: "mcp" | "webhook"; sourceId: string; sourceName: string; mode: InboundHandlerMode; deliveryId: string; threadId: string; message?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)

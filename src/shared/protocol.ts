@@ -41,6 +41,7 @@ import type {
 } from "./boards/types"
 import type { CleanupDecision } from "./boards/worktree-cleanup"
 import type { WorkflowRunSummary } from "./workflow-types"
+import type { InboxFilter, InboxSnapshot } from "./inbox/types"
 import type { WebhookInput, WebhookPatch, WebhooksSnapshot } from "./webhooks/types"
 
 export type { EditorPreset }
@@ -70,6 +71,7 @@ export type SubscriptionTopic =
   | { type: "background-task-output"; chatId: string; taskId: string }
   | { type: "package-updates" }
   | { type: "webhooks" }
+  | { type: "inbox" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -432,6 +434,12 @@ export type ClientCommand =
   | { type: "webhooks.update"; id: string; patch: WebhookPatch }
   | { type: "webhooks.delete"; id: string }
   | { type: "webhooks.rotateSecret"; id: string }
+  | { type: "inbox.markRead"; ids: string[] }
+  | { type: "inbox.markAllRead"; beforeTs?: number }
+  | { type: "inbox.archive"; threadId: string }
+  | { type: "inbox.page"; beforeTs: number; limit: number; filter?: InboxFilter }
+  | { type: "inbox.reply"; threadId: string; text: string }
+  | { type: "inbox.instruct"; threadId: string; text: string }
   | ShareClientCommand
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
@@ -462,6 +470,7 @@ export type ServerSnapshot =
   | { type: "background-task-output"; data: BackgroundTaskOutputSnapshot }
   | { type: "package-updates"; data: import("./packages/types").PackageUpdateSnapshot }
   | { type: "webhooks"; data: WebhooksSnapshot }
+  | { type: "inbox"; data: InboxSnapshot }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind
