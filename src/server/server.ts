@@ -93,7 +93,7 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
-import { createInbox, createInboxReplyActions, webhookHandlerResolver } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, webhookHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
 import { createBusTap } from "./service-bus/event-store-tap"
 import { createInMemoryServiceBus } from "./service-bus/in-memory-service-bus"
 import type { ServiceBus } from "./service-bus/service-bus"
@@ -542,6 +542,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
   inbox.subscribe(() => { router.pushInbox() })
+  wireInboxPush(inbox, pushManager, webhookHandlerResolver(webhooks.registry))
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }

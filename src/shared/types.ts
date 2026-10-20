@@ -119,7 +119,7 @@ export interface InternalUserAttachmentsData {
   llmHintText: string
 }
 
-export type PushTransitionKind = "waiting_for_user" | "failed" | "completed"
+export type PushTransitionKind = "waiting_for_user" | "failed" | "completed" | "inbox"
 
 export interface PushSubscriptionRecord {
   id: string
@@ -139,6 +139,7 @@ export interface PushPayload {
   chatId: string
   chatTitle: string
   chatUrl: string
+  threadId?: string
   ts: number
 }
 
