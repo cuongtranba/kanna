@@ -17,6 +17,7 @@ import {
 } from "../shared/types"
 import { buildAgentAppSettingsView } from "./server"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
+import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
 
 function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
   return {
@@ -74,6 +75,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
     remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
+    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
     installedPlugins: [],
     ...overrides,
   }

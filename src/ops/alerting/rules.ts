@@ -7,6 +7,8 @@ import {
   REMOTE_MCP_TOOL_CALL,
   BUS_PUBLISHED_TOTAL,
   BUS_HANDLER_ERRORS_TOTAL,
+  BUS_MIRROR_DROPPED_TOTAL,
+  NATS_SERVER_RESTARTS_TOTAL,
   HOST_MEMORY_TOTAL_BYTES,
   PACKAGE_APPLY_DURATION_MS,
   PACKAGE_APPLY_FINISHED,
@@ -70,6 +72,8 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   `${promMetricName(BUS_HANDLER_ERRORS_TOTAL)}_total`,
   "kanna_mcp_source_items_total",
   "kanna_mcp_source_errors_total",
+  `${promMetricName(BUS_MIRROR_DROPPED_TOTAL)}_total`,
+  `${promMetricName(NATS_SERVER_RESTARTS_TOTAL)}_total`,
   ...[promMetricName(COMPACTION_PRE_TOKENS), promMetricName(COMPACTION_POST_TOKENS)].flatMap((base) => [
     `${base}_bucket`,
     `${base}_count`,

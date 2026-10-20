@@ -24,6 +24,7 @@ import type {
   SubagentPatch,
 } from "../shared/types"
 import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
+import { SERVICE_BUS_PUBLIC_DEFAULTS, applyServiceBusPatchToPublic } from "../shared/service-bus/jetstream-config"
 import type { AppSettingsManager } from "./app-settings"
 
 
@@ -178,6 +179,7 @@ export function mergeAppSettingsPatch(
       ...snapshot.remoteMcp,
       ...patch.remoteMcp,
     },
+    serviceBus: applyServiceBusPatchToPublic(snapshot.serviceBus, patch.serviceBus),
     claudeDriver: {
       lifecycle: {
         ...snapshot.claudeDriver.lifecycle,
@@ -269,6 +271,7 @@ export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
     plugins: PLUGIN_SETTINGS_DEFAULTS,
     installedPlugins: [],
     remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
+    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
   }
 }
 

@@ -8,6 +8,7 @@ import { AppSettingsManager, readAppSettingsSnapshot, seedCustomModelsFromBuilti
 import type { AppSettingsSnapshot, McpOAuthState, SubagentInput } from "../shared/types"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH } from "../shared/pane-tab-width"
+import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
 
 let tempDirs: string[] = []
 let activeManagers: AppSettingsManager[] = []
@@ -106,6 +107,7 @@ function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettin
     packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
     plugins: PLUGIN_SETTINGS_DEFAULTS,
     remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
+    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
     installedPlugins: [],
     ...overrides,
   }
@@ -2160,5 +2162,48 @@ describe("openrouter and custom providers in persisted settings", () => {
       ["router", "openrouter", "moonshotai/kimi-k2.5:nitro"],
       ["glm-worker", "custom", "glm/glm-5.3"],
     ])
+  })
+})
+
+describe("serviceBus", () => {
+  const TOKEN = "bus-token-1234567890"
+
+  async function freshManager() {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+    await manager.initialize()
+    return { manager, filePath }
+  }
+
+  test("persists the token to the settings file but exposes only its hint, and hands the server the credential", async () => {
+    const { manager, filePath } = await freshManager()
+
+    const written = await manager.writePatch({ serviceBus: { enabled: true, token: TOKEN } })
+
+    const onDisk = JSON.parse(await readFile(filePath, "utf8")) as { serviceBus: { token: string; enabled: boolean } }
+    expect(onDisk.serviceBus.token).toBe(TOKEN)
+    expect(JSON.stringify(written)).not.toContain(TOKEN)
+    expect(JSON.stringify(await readAppSettingsSnapshot(filePath))).not.toContain(TOKEN)
+    expect(manager.getSnapshot().serviceBus.tokenHint).toBe(TOKEN.slice(-4))
+    expect(manager.getServiceBusCredential()).toBe(TOKEN)
+  })
+
+  test("a patch without a token keeps it, an empty token keeps it, and null clears it", async () => {
+    const { manager } = await freshManager()
+    await manager.writePatch({ serviceBus: { token: TOKEN } })
+
+    await manager.writePatch({ serviceBus: { enabled: true } })
+    await manager.writePatch({ serviceBus: { token: "" } })
+    expect(manager.getServiceBusCredential()).toBe(TOKEN)
+
+    await manager.writePatch({ serviceBus: { token: null } })
+    expect(manager.getServiceBusCredential()).toBeNull()
+    expect(manager.getSnapshot().serviceBus.tokenHint).toBeNull()
+  })
+
+  test("rejects an invalid stream value without changing the stored settings", async () => {
+    const { manager } = await freshManager()
+    await expect(manager.writePatch({ serviceBus: { stream: { replicas: 0 } } })).rejects.toThrow("Replicas")
+    expect(manager.getSnapshot().serviceBus.stream.replicas).toBe(1)
   })
 })

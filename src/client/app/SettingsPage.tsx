@@ -27,6 +27,7 @@ import {
   LogOut,
   Type,
   Antenna,
+  Waypoints,
 } from "lucide-react"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
@@ -113,6 +114,7 @@ import type { KannaState } from "./useKannaState"
 import { PushNotificationsSection } from "../components/settings/PushNotificationsSection"
 import { PluginsSection } from "../components/settings/PluginsSection"
 import { RemoteMcpSection } from "../components/settings/RemoteMcpSection"
+import { ServiceBusSection } from "./ServiceBusSection"
 import { detectPushSupport } from "./pushClient"
 import { usePushDeviceActions } from "./usePushDeviceActions"
 import { createLlmProviderDraftForSelection } from "./llmProviderDraft"
@@ -187,6 +189,12 @@ const sidebarItems = [
     subtitle: "Let Claude, Codex and ChatGPT drive Kanna over MCP, with setup snippets for each client.",
   },
   {
+    id: "service-bus",
+    label: "Service bus",
+    icon: Waypoints,
+    subtitle: "Mirror Kanna's events into NATS JetStream, with an embedded or your own server.",
+  },
+  {
     id: "beacons",
     label: "Beacons",
     icon: Radio,
@@ -224,6 +232,7 @@ const SETTINGS_SERVICE_BRANCHES: Partial<Record<SidebarPageId, ComponentType<{ s
   "mcp-servers": McpServersSettingsBranch,
   "mcp-sources": McpSourcesSettingsBranch,
   "remote-mcp": RemoteMcpSection,
+  "service-bus": ServiceBusSection,
   beacons: BeaconsSettingsBranch,
 }
 
@@ -2162,7 +2171,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
                 {ServiceBranch && <ServiceBranch state={state} />}
                 {selectedPage === "snippets" && <TextSnippetsSettingsBranch state={state} />}
                 {selectedPage === "instructions" && <GlobalInstructionsSection state={state} />}
-                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "mcp-sources", "remote-mcp", "beacons", "snippets", "instructions"].includes(selectedPage) && (
+                {!["general", "providers", "keybindings", "skills", "plugins", "subagents", "models", "mcp-servers", "mcp-sources", "remote-mcp", "service-bus", "beacons", "snippets", "instructions"].includes(selectedPage) && (
                   <ChangelogSection
                     status={changelogStatus}
                     releases={releases}

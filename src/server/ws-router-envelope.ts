@@ -23,6 +23,8 @@ import type { FollowedSessionRegistry } from "./followed-session-registry"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
+import type { ServiceBusController } from "./service-bus/service-bus-boot"
+import { DISABLED_SERVICE_BUS_STATUS } from "../shared/service-bus/jetstream-config"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
 import type { PushManager } from "./push/push-manager"
@@ -78,6 +80,7 @@ export interface EnvelopeDeps {
   webhooks?: WebhookRegistry
   inbox?: InboxRegistry
   mcpSources?: McpSourcesTopic
+  serviceBus?: Pick<ServiceBusController, "status">
   machineDisplayName: string
   updateManager: UpdateManager | null
   packageUpdateManager?: PackageUpdateManager
@@ -175,6 +178,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     webhooks,
     inbox,
     mcpSources,
+    serviceBus,
     machineDisplayName,
     updateManager,
     packageUpdateManager,
@@ -449,6 +453,15 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
         type: "snapshot",
         id,
         snapshot: { type: "mcp-sources", data: mcpSources?.snapshot() ?? { sources: [] } },
+      }
+    }
+
+    if (topic.type === "service-bus") {
+      return {
+        v: PROTOCOL_VERSION,
+        type: "snapshot",
+        id,
+        snapshot: { type: "service-bus", data: serviceBus?.status() ?? DISABLED_SERVICE_BUS_STATUS },
       }
     }
 

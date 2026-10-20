@@ -31,11 +31,7 @@ import { createBoardStore } from "./board-store.adapter"
 import { createBoardSync } from "./board-sync"
 import { startWork as runStartWork, startWorkView as runStartWorkView, type StartWorkDeps } from "./board-start-work"
 import { addWorktree, isDirty, listWorktrees, localBranchExists, removeWorktree } from "./worktree-store.adapter"
-import {
-  resolveWorktreeCleanup,
-  worktreeCleanupView,
-  type WorktreeCleanupDeps,
-} from "./board-worktree-cleanup"
+import { resolveWorktreeCleanup, worktreeCleanupView, type WorktreeCleanupDeps } from "./board-worktree-cleanup"
 import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
 import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
@@ -95,9 +91,7 @@ import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
 import { createInbox, createInboxReplyActions, inboxHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
-import { createBusTap } from "./service-bus/event-store-tap"
-import { createInMemoryServiceBus } from "./service-bus/in-memory-service-bus"
-import type { ServiceBus } from "./service-bus/service-bus"
+import { createStoreBus, type StoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
 
 export { buildAgentAppSettingsView }
@@ -145,7 +139,7 @@ export interface StartKannaServerOptions {
 
 interface ApplicationServices {
   store: EventStore
-  bus: ServiceBus
+  bus: StoreBus
   diffStore: DiffStore
   auth: PasswordAuth | null
   analytics: KannaAnalyticsReporter
@@ -175,8 +169,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
-  const bus = createInMemoryServiceBus()
-  store.tap = createBusTap(bus, (chatId) => store.getChat(chatId)?.projectId, Date.now)
+  const bus = createStoreBus(store)
   const inbox = await createInbox(store.dataDir, bus)
   let broadcastChatState: ((chatId: string) => void) | null = null
   let pushFollowedSessions: (() => void) | null = null
@@ -237,6 +230,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     machineName: machineDisplayName,
   })
   appSettings.onChange((snapshot) => observability.applyTelemetrySettings(snapshot.telemetry))
+  bus.attachMirror(appSettings, store.dataDir)
   const pushManager = new PushManager({
     store,
     sender: realWebPushSender,
@@ -539,11 +533,13 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     webhooks: webhooks.registry,
     inbox,
     mcpSources,
+    serviceBus: bus,
     ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
   })
 
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
   inbox.subscribe(() => { router.pushInbox() })
+  bus.subscribeStatus(() => { router.pushServiceBus() })
   wireInboxPush(inbox, pushManager, inboxHandlerResolver(webhooks.registry, mcpSources))
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
@@ -615,7 +611,7 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
 async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
   const { store, agent, auth, appSettings, keybindings, scheduleManager, cronScheduler,
     tunnelGateway, snapshotSweepHandle, observability, staleEmptyChatPruneInterval,
-    followedSessionTickInterval, router, terminals, packageUpdateManager, beacon } = services
+    followedSessionTickInterval, router, terminals, packageUpdateManager, beacon, bus } = services
 
   packageUpdateManager.stop()
   appSettings.dispose()
@@ -638,6 +634,7 @@ async function shutdownServices(services: ApplicationServices, server: Server<Cl
   await auth?.dispose()
   terminals.closeAll()
   await store.flush()
+  await bus.stop()
   await store.snapshotAndTruncateLogs()
   server.stop(true)
 }

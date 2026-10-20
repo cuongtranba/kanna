@@ -44,6 +44,7 @@ import type { WorkflowRunSummary } from "./workflow-types"
 import type { InboxFilter, InboxSnapshot } from "./inbox/types"
 import type { McpSourcesSnapshot } from "./mcp-sources/types"
 import type { WebhookInput, WebhookPatch, WebhooksSnapshot } from "./webhooks/types"
+import type { ServiceBusStatus } from "./service-bus/jetstream-config"
 
 export type { EditorPreset }
 
@@ -74,6 +75,7 @@ export type SubscriptionTopic =
   | { type: "webhooks" }
   | { type: "inbox" }
   | { type: "mcp-sources" }
+  | { type: "service-bus" }
 
 export interface TerminalSnapshot {
   terminalId: string
@@ -442,6 +444,7 @@ export type ClientCommand =
   | { type: "inbox.page"; beforeTs: number; limit: number; filter?: InboxFilter }
   | { type: "inbox.reply"; threadId: string; text: string }
   | { type: "inbox.instruct"; threadId: string; text: string }
+  | { type: "serviceBus.resetStore" }
   | ShareClientCommand
 
 export type OpenExternalAction = Extract<ClientCommand, { type: "system.openExternal" }>["action"]
@@ -474,6 +477,7 @@ export type ServerSnapshot =
   | { type: "webhooks"; data: WebhooksSnapshot }
   | { type: "inbox"; data: InboxSnapshot }
   | { type: "mcp-sources"; data: McpSourcesSnapshot }
+  | { type: "service-bus"; data: ServiceBusStatus }
 
 export interface BoardsSnapshot {
   ownerKind: BoardOwnerKind

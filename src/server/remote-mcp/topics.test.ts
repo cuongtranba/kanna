@@ -41,6 +41,7 @@ const MINIMAL_TOPICS: Readonly<Record<string, JsonObject>> = {
   webhooks: {},
   inbox: {},
   "mcp-sources": {},
+  "service-bus": {},
 }
 
 describe("subscription topic schema", () => {
