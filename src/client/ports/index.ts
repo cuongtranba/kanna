@@ -7,3 +7,4 @@ export type { NotificationPort, NotificationPermission } from "./notificationPor
 export type { SoundPort } from "./soundPort"
 export type { ClipboardPort } from "./clipboardPort"
 export type { PushPort } from "./pushPort"
+export type { CommandPort, CommandReply } from "./commandPort"

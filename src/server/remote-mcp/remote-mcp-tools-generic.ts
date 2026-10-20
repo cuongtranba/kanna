@@ -9,10 +9,10 @@ import { IDEMPOTENCY_KEY_FIELD } from "./remote-mcp-tool-fields"
 import { mcpOnlyTool, type RemoteTool } from "./remote-mcp-tool-spec"
 
 const KANNA_COMMANDS_DESCRIPTION =
-  "List every Kanna command with its domain, summary, risk, whether it can run remotely (with the reason when it cannot) and a JSON Schema of its params."
+  "List every Kanna command with its domain, summary, risk, whether it can run remotely (with the reason when it cannot), a JSON Schema of its params and, for commands that declare one, a JSON Schema of the result it returns."
 const KANNA_COMMAND_DESCRIPTION =
   "Run one Kanna command (the same operations the web UI performs) by its dotted type, for example chat.rename or board.card.move. "
-  + "Call kanna_commands first to see each command's params (JSON Schema) and risk; destructive commands delete or discard data, local commands act on the host machine. "
+  + "Call kanna_commands first to see each command's params (JSON Schema), result (JSON Schema, when declared) and risk; destructive commands delete or discard data, local commands act on the host machine. "
   + "Prefer send_message over chat.send: kanna_command returns as soon as the message is accepted and does not wait, and an identical chat.send or message.enqueue "
   + "to a chat that is already working on it is suppressed as a duplicate, and an idempotencyKey makes a repeated chat.send or message.enqueue return the original chat. Follow a chat with wait_for_chat."
 const KANNA_READ_DESCRIPTION =

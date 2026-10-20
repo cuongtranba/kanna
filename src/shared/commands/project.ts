@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { defineCommand, defineCommands, noParams, REMOTE_ALLOWED } from "./define"
 import { projectIdParams, projectIdShape } from "./fragments"
+import { diffPatchResultSchema } from "../git-diff-types.schema"
 
 export const projectCommands = defineCommands(
   defineCommand("project.open", {
@@ -44,6 +45,7 @@ export const projectCommands = defineCommands(
   }),
   defineCommand("project.readDiffPatch", {
     params: z.object({ ...projectIdShape, path: z.string(), chatId: z.string().optional() }),
+    result: diffPatchResultSchema,
     summary: "Read the git patch of one changed file in the project.",
     risk: "read",
     remote: REMOTE_ALLOWED,

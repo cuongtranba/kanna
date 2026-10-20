@@ -1,6 +1,8 @@
 import path from "node:path"
 import { QuickResponseAdapter } from "./quick-response"
+import type { z } from "zod"
 import { isJsonObject, type JsonValue } from "../shared/json"
+import type { generateCommitMessageResultSchema } from "../shared/git-diff-types.schema"
 
 interface CommitMessageFile {
   path: string
@@ -18,12 +20,7 @@ const COMMIT_MESSAGE_SCHEMA = {
   additionalProperties: false,
 } as const
 
-export interface GenerateCommitMessageResult {
-  subject: string
-  body: string
-  usedFallback: boolean
-  failureMessage: string | null
-}
+export type GenerateCommitMessageResult = z.output<typeof generateCommitMessageResultSchema>
 
 function summarizeFailures(failures: Array<{ provider: "openai" | "claude" | "codex"; reason: string }>) {
   if (failures.length === 0) return null

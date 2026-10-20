@@ -1,6 +1,6 @@
 ---
 id: adr-20261020-command-registry-single-source-of-truth
-c3-seal: f68e22b00214626704b572addaccc59a71b08edda35fbdf31bff9671005b0d28
+c3-seal: 1a9bd608d2634d46389e94ccf711e25bf63bbb71254f1fe8b756fd478da5b745
 title: command-registry-single-source-of-truth
 type: adr
 goal: Record the decision to make a command registry in src/shared/commands the single source of truth for every WebSocket command that the browser and the remote MCP server dispatch. One defineCommand entry per command carries its zod params, summary, risk and remote policy. The ClientCommand union is derived from the registry, parseClientCommand validates a command with the same schema at the WS router and at kanna_command, and kanna_commands publishes a JSON Schema of each command's params.
@@ -19,6 +19,14 @@ The command surface was described four times and only the names were checked. Th
 ## Decision
 
 Each command is declared once with defineCommand(type, spec) in a per-domain file under src/shared/commands and the index assembles them. The spec holds a zod object for the params without the type field, a summary, a risk of read, write, destructive or local, and a remote policy that is either allowed or excluded with a required reason. The domain is the part of the type before the first dot. defineCommand extends the params with the type literal, so ClientCommand is the output type of that union of schemas and adding a command means adding one entry. The output type is used, not the input type, because the MCP SDK OAuth schemas inside the settings patch coerce and transform values; for every other schema the two are identical. Nested domain types get named schemas in a schema.ts file beside the owning type, and a compile-time assertParity check between each schema and its type fails the build when either drifts, including an optional field the schema lacks. parseClientCommand returns the typed command or an error naming the command and the failing path. The WS router calls it before origin stamping and answers an error envelope for the same id on failure, kanna_command calls it after refusing an excluded command with that command's reason, and unknown keys are stripped. kanna_commands lists type, domain, summary, risk, remote policy and params as a JSON Schema from z.toJSONSchema. command-catalog.ts is deleted and the serviceBus handler now matches serviceBus.resetStore exactly.
+
+## Results
+
+A command may also declare the shape of its ack result. defineCommand takes an optional result zod schema, and CommandResult of a command is the output type of that schema, or CommandAckResult for a command that declares none, so a command is migrated one at a time and the rest keep compiling. KannaSocket.command is generic over the command it is given: command(command) resolves to the result type its registry entry declares, and the client falls back to JsonValue for an undeclared one because the value crossed a JSON wire. The form of command that takes an explicit type argument stays as an overload until the last such call is gone, and the untyped-command-results budget counts what is left.
+
+The client never parses a result at runtime, since transcripts and history pages are hot paths. The schema is the type source and the server enforces it. A handler sends its ack through ackResult in ws-router-ack.ts, whose result parameter is the CommandResult of the command being answered, so a handler returning a different shape fails to compile. A TypeScript type that already exists for a result is tied to its schema by assertParity, and a type that only the server used is now derived from the schema. A behavioural test dispatches real git commands through dispatchCommand over a temporary repository and requires each ack to parse with the schema in the registry. A runtime parse in the production ack path was rejected because the compile-time check already covers every handler that goes through ackResult and a JSON round trip would cost every command.
+
+kanna_commands lists a resultSchema, rendered from the output side of the schema, for each command that declares one and omits it for the rest. The git and diff domain is the pilot: chat.initGit, chat.getGitHubPublishInfo, chat.checkGitHubRepoAvailability, chat.publishToGitHub, chat.listBranches, chat.previewMergeBranch, chat.mergeBranch, chat.syncBranch, chat.checkoutBranch, chat.createBranch, chat.generateCommitMessage, chat.commitDiffs, chat.discardDiffFile, chat.ignoreDiffFile and project.readDiffPatch. chat.refreshDiffs acks without a result and has no slot.
 
 ## Affected Topology
 

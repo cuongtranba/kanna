@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:9804be88416766003c36fca6aadfec295ca3f374b9b4a3fd939e13f14fcbde20 -->
+<!-- hash: sha256:39799826124e39176b0d0ba5073b9815509d554180294e689c25af423d21b9a6 -->
 
 ## c3-0 — Kanna (system)
 
@@ -152,7 +152,7 @@ files: src/server/read-models.test.ts, src/server/read-models.ts
 ## c3-208 — ws-router (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-cqrs-read-models, ref-ws-subscription, rule-colocated-bun-test
-files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/live-block-throttle.test.ts, src/server/live-block-throttle.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router-agent-ctrl.ts, src/server/ws-router-broadcast.ts, src/server/ws-router-chat.ts, src/server/ws-router-defaults.ts, src/server/ws-router-diff.ts, src/server/ws-router-envelope.ts, src/server/ws-router-io.adapter.ts, src/server/ws-router-misc.ts, src/server/ws-router-project.ts, src/server/ws-router-settings.ts, src/server/ws-router-skills.ts, src/server/ws-router-utils.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
+files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/live-block-throttle.test.ts, src/server/live-block-throttle.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router-ack.ts, src/server/ws-router-agent-ctrl.ts, src/server/ws-router-broadcast.ts, src/server/ws-router-chat.ts, src/server/ws-router-command-results.test.ts, src/server/ws-router-defaults.ts, src/server/ws-router-diff.ts, src/server/ws-router-envelope.ts, src/server/ws-router-io.adapter.ts, src/server/ws-router-misc.ts, src/server/ws-router-project.ts, src/server/ws-router-settings.ts, src/server/ws-router-skills.ts, src/server/ws-router-utils.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
 
 ## c3-209 — process-utils (component)
 container: c3-2 | context: c3-0
@@ -765,9 +765,11 @@ src/server/live-block-throttle.test.ts → c3-208
 src/server/live-block-throttle.ts → c3-208
 src/server/project-kanna-files.adapter.test.ts → c3-208
 src/server/project-kanna-files.adapter.ts → c3-208
+src/server/ws-router-ack.ts → c3-208
 src/server/ws-router-agent-ctrl.ts → c3-208
 src/server/ws-router-broadcast.ts → c3-208
 src/server/ws-router-chat.ts → c3-208
+src/server/ws-router-command-results.test.ts → c3-208
 src/server/ws-router-defaults.ts → c3-208
 src/server/ws-router-diff.ts → c3-208
 src/server/ws-router-envelope.ts → c3-208

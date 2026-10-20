@@ -13,16 +13,15 @@ import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
-import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
+import type { BoardSnapshot, SubscriptionTopic } from "../../../shared/protocol"
+import type { CommandPort } from "../../ports/commandPort"
 import { errorMessage, onRejected } from "../../../shared/errors"
 import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
-import type { JsonValue } from "../../../shared/json"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
 
 
-export interface BoardPaneSocket {
+export interface BoardPaneSocket extends CommandPort {
   subscribe(topic: SubscriptionTopic, onSnapshot: (snapshot: BoardSnapshot) => void): () => void
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
 }
 
 const EMPTY_CANDIDATES: readonly BlockerCandidate[] = []

@@ -177,7 +177,9 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   which a JSON ack result is not).
 - **The command registry is the only command catalog.** `src/shared/commands`
   derives `ClientCommand`, validates `kanna_command` params and publishes the
-  JSON Schemas; `COMMAND_CATALOG` is gone. See
+  JSON Schemas; `COMMAND_CATALOG` is gone. A command that declares a `result`
+  schema also publishes it as `resultSchema` in `kanna_commands` (omitted
+  otherwise), and its handler answers through `ackResult`. See
   `adr-20261020-command-registry-single-source-of-truth`.
 - **A typed tool is one entry of the tool table, and its input comes from the
   registry.** `remote-mcp-tool-table.ts` lists every tool (`REMOTE_TOOLS`), each

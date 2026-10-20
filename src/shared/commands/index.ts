@@ -2,7 +2,7 @@ import { z } from "zod"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../json"
 import { boardCommands } from "./board"
 import { chatCommands } from "./chat"
-import { defineCommands, type CommandRisk, type ParseOutcome, type RemotePolicy } from "./define"
+import { defineCommands, type CommandAckResult, type CommandRisk, type ParseOutcome, type RemotePolicy } from "./define"
 import { gitCommands } from "./git"
 import { inboxCommands } from "./inbox"
 import { projectCommands } from "./project"
@@ -11,7 +11,7 @@ import { settingsCommands } from "./settings"
 import { shareCommands } from "./share"
 import { systemCommands } from "./system"
 
-export type { CommandRisk, RemotePolicy }
+export type { CommandAckResult, CommandRisk, RemotePolicy }
 
 export const COMMAND_REGISTRY = defineCommands(
   ...projectCommands,
@@ -29,6 +29,19 @@ type RegisteredCommand = (typeof COMMAND_REGISTRY)[number]
 
 export type CommandType = RegisteredCommand["type"]
 export type ClientCommand = z.output<RegisteredCommand["schema"]>
+type ResultSchemaOf<D> = D extends { readonly result: infer R } ? Exclude<R, undefined> : never
+type ResultOf<D, Fallback> = D extends { readonly type: string }
+  ? [ResultSchemaOf<D>] extends [never]
+    ? Fallback
+    : ResultSchemaOf<D> extends z.ZodType
+      ? z.output<ResultSchemaOf<D>>
+      : Fallback
+  : never
+
+export type CommandResult<C extends ClientCommand, Fallback = CommandAckResult> = ResultOf<
+  Extract<RegisteredCommand, { readonly type: C["type"] }>,
+  Fallback
+>
 export type ShareClientCommand = Extract<ClientCommand, { type: `share.${string}` }>
 
 const REGISTERED_BY_TYPE: ReadonlyMap<string, RegisteredCommand> = new Map(
@@ -61,15 +74,14 @@ export interface CommandDescriptor {
   readonly risk: CommandRisk
   readonly remote: RemotePolicy
   readonly paramsSchema: JsonObject
+  readonly resultSchema?: JsonObject
 }
 
-function paramsJsonSchema(definition: RegisteredCommand): JsonObject {
-  const rendered = safeJsonParse(
-    JSON.stringify(z.toJSONSchema(definition.params, { io: "input", unrepresentable: "any" })),
-  )
+function renderJsonSchema(schema: z.ZodType, io: "input" | "output"): JsonObject {
+  const rendered = safeJsonParse(JSON.stringify(z.toJSONSchema(schema, { io, unrepresentable: "any" })))
   if (rendered === null || !isJsonObject(rendered)) return {}
-  const { $schema: _dialect, ...schema } = rendered
-  return schema
+  const { $schema: _dialect, ...rest } = rendered
+  return rest
 }
 
 const DESCRIPTOR_CACHE = new Map<CommandType, CommandDescriptor>()
@@ -83,7 +95,8 @@ function describeCommand(definition: RegisteredCommand): CommandDescriptor {
     summary: definition.summary,
     risk: definition.risk,
     remote: definition.remote,
-    paramsSchema: paramsJsonSchema(definition),
+    paramsSchema: renderJsonSchema(definition.params, "input"),
+    ...(definition.result ? { resultSchema: renderJsonSchema(definition.result, "output") } : {}),
   }
   DESCRIPTOR_CACHE.set(definition.type, descriptor)
   return descriptor

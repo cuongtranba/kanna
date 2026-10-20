@@ -13,8 +13,8 @@ import {
   type FieldOption,
 } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
-import type { JsonArray, JsonValue } from "../../../shared/json"
-import type { ClientCommand } from "../../../shared/protocol"
+import type { JsonArray } from "../../../shared/json"
+import type { CommandPort } from "../../ports/commandPort"
 
 function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
   return fields.map((field) => ({
@@ -29,9 +29,7 @@ function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
 }
 
 
-export interface CardSchemaPanelSocket {
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
-}
+export type CardSchemaPanelSocket = CommandPort
 
 export interface CardSchemaPanelProps {
   boardId: string
