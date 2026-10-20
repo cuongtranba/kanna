@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.83.0](https://github.com/cuongtranba/kanna/compare/v1.82.0...v1.83.0) (2026-10-20)
+
+
+### Features
+
+* **mcp-sources:** ingest MCP server messages into the Inbox by subscription or polling ([#1323](https://github.com/cuongtranba/kanna/issues/1323)) ([18672d5](https://github.com/cuongtranba/kanna/commit/18672d5d4c20d33dd39e09f10894958269c70604))
+* **service-bus:** mirror the bus into an embedded or external NATS JetStream ([#1327](https://github.com/cuongtranba/kanna/issues/1327)) ([0baf8c4](https://github.com/cuongtranba/kanna/commit/0baf8c482442d45b7d5069011dfd81abd17e9057))
+
 ## [1.82.0](https://github.com/cuongtranba/kanna/compare/v1.81.2...v1.82.0) (2026-10-20)
 
 
