@@ -1,6 +1,6 @@
 ---
 id: adr-20261016-remote-mcp-provenance-and-progress
-c3-seal: 796a1746f83de0e5282bd26be033ee78105d110012c4cb3c18fb2b0bdd026f7a
+c3-seal: 5df4769ba86bbf3124ff754beae23df552d19d4fc96278179b73d8bb8d7f9a9d
 title: remote-mcp-provenance-and-progress
 type: adr
 goal: Make every message that reaches Kanna through the remote MCP endpoint attributable, followable and safe to retry. A command dispatched by an MCP tool carries a server-stamped origin into the queue, the transcript and the board actor; every tool call lands in a durable audit log; long turns are followed with progress and a wait_for_chat tool instead of one silent blocking call; and an identical request that is already running is never dispatched twice.
@@ -65,7 +65,7 @@ Origin is a server-stamped fact, not a client claim. The tool registrar builds a
 | Alternative | Rejected because |
 | --- | --- |
 | Let the client send its own origin in the command | A browser or a forged kanna_command parameter could then label a message as MCP; only the server knows the caller, so the router stamps and strips |
-| Thread the origin through every tool as a parameter | Thirty tools call dispatchCommand through shared helpers; an AsyncLocalStorage scope set once by the registrar reaches all of them without changing a signature |
+| Thread the origin through every tool as a parameter | Every typed tool calls dispatchCommand through shared helpers; an AsyncLocalStorage scope set once by the registrar reaches all of them without changing a signature |
 | Keep one blocking send_message and raise the timeouts | A silent response is closed by Bun after 10 seconds and by a tunnel after 125, and the caller still gets no way to follow a long turn |
 | Dedupe in the per-request McpServer | createMcpHandler builds a fresh server per request, so state there is lost; the store lives in the runtime |
 

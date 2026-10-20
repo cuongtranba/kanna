@@ -1,53 +1,42 @@
-import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
-import type { RemoteMcpHost } from "./remote-mcp-server"
 import { envelopeToToolResult } from "./remote-mcp-envelope"
-import { commandResult } from "./remote-mcp-views"
+import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 
-const chatIdField = z.string().describe("Id of the chat")
-
-export function registerObservabilityTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
-  tools.registerTool(
-    "list_workflows",
-    {
-      title: "List workflow runs",
-      description: "List the workflow runs of a chat with their status.",
-      inputSchema: z.object({ chatId: chatIdField }),
-      annotations: { readOnlyHint: true },
-    },
-    ({ chatId }) => envelopeToToolResult(host.readSnapshot({ type: "workflows", chatId })),
-  )
-
-  tools.registerTool(
-    "get_workflow_run",
-    {
-      title: "Read a workflow run",
-      description: "Read the full detail of one workflow run, including its agents and phases.",
-      inputSchema: z.object({ chatId: chatIdField, runId: z.string().describe("Id of the workflow run") }),
-      annotations: { readOnlyHint: true },
-    },
-    ({ chatId, runId }) => commandResult(host, { type: "workflows.getRun", chatId, runId }),
-  )
-
-  tools.registerTool(
-    "get_subagent_run",
-    {
-      title: "Read a subagent run",
-      description: "Read the transcript and result of one subagent run.",
-      inputSchema: z.object({ chatId: chatIdField, agentId: z.string().describe("Id of the subagent run") }),
-      annotations: { readOnlyHint: true },
-    },
-    ({ chatId, agentId }) => commandResult(host, { type: "subagents.getRun", chatId, agentId }),
-  )
-
-  tools.registerTool(
-    "get_background_task_output",
-    {
-      title: "Read background task output",
-      description: "Read the captured output of a background task started by a chat.",
-      inputSchema: z.object({ chatId: chatIdField, taskId: z.string().describe("Id of the background task") }),
-      annotations: { readOnlyHint: true },
-    },
-    ({ chatId, taskId }) => commandResult(host, { type: "backgroundTasks.getOutput", chatId, taskId }),
-  )
-}
+export const observabilityTools: readonly RemoteTool[] = [
+  topicTool({
+    name: "list_workflows",
+    title: "List workflow runs",
+    description: "List the workflow runs of a chat with their status.",
+    annotations: { readOnlyHint: true },
+    topic: "workflows",
+    input: z.object({ chatId: z.string().describe("Id of the chat") }),
+    handle: ({ chatId }, { host }) => envelopeToToolResult(host.readSnapshot({ type: "workflows", chatId })),
+  }),
+  commandTool({
+    name: "get_workflow_run",
+    title: "Read a workflow run",
+    description: "Read the full detail of one workflow run, including its agents and phases.",
+    annotations: { readOnlyHint: true },
+    command: "workflows.getRun",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "workflows.getRun", ...args }),
+  }),
+  commandTool({
+    name: "get_subagent_run",
+    title: "Read a subagent run",
+    description: "Read the transcript and result of one subagent run.",
+    annotations: { readOnlyHint: true },
+    command: "subagents.getRun",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "subagents.getRun", ...args }),
+  }),
+  commandTool({
+    name: "get_background_task_output",
+    title: "Read background task output",
+    description: "Read the captured output of a background task started by a chat.",
+    annotations: { readOnlyHint: true },
+    command: "backgroundTasks.getOutput",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "backgroundTasks.getOutput", ...args }),
+  }),
+]

@@ -7,70 +7,20 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
 import type { TranscriptEntry } from "../../shared/transcript-types"
+import { COMMAND_REGISTRY } from "../../shared/commands"
+import type { DiscoveredProject } from "../discovery.adapter"
 import { startKannaServer } from "../server"
+import { REMOTE_TOOLS } from "./remote-mcp-tool-table"
+import { assistantText } from "./test-helpers/chat-snapshots"
 
 const PASSWORD = "secret"
-
-const EXPECTED_TOOLS = [
-  "answer_tool_request",
-  "archive_chat",
-  "cancel_chat",
-  "check_package_updates",
-  "checkout_branch",
-  "comment_card",
-  "commit_changes",
-  "create_card",
-  "create_chat",
-  "create_project",
-  "delete_chat",
-  "enqueue_message",
-  "fetch",
-  "fork_chat",
-  "get_background_task_output",
-  "get_board",
-  "get_chat",
-  "get_git_status",
-  "get_subagent_run",
-  "get_update_status",
-  "get_workflow_run",
-  "kanna_command",
-  "kanna_commands",
-  "kanna_read",
-  "list_boards",
-  "list_branches",
-  "list_chats",
-  "list_cron_jobs",
-  "list_installed_packages",
-  "list_pending_tool_requests",
-  "list_projects",
-  "list_subagents",
-  "list_workflows",
-  "move_card",
-  "open_project",
-  "patch_app_settings",
-  "pause_cron_job",
-  "ping",
-  "read_app_settings",
-  "read_project_file",
-  "remove_cron_job",
-  "rename_chat",
-  "respond_tool",
-  "resume_cron_job",
-  "search",
-  "send_message",
-  "server_info",
-  "start_work_on_card",
-  "sync_branch",
-  "unarchive_chat",
-  "upload_attachment",
-  "wait_for_chat",
-]
 
 let dataDir = ""
 let projectDir = ""
 let projectId = ""
 let server: Awaited<ReturnType<typeof startKannaServer>>
 let client: Client
+let discovered: DiscoveredProject[] = []
 
 beforeAll(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), "kanna-remote-tools-data-"))
@@ -83,7 +33,7 @@ beforeAll(async () => {
     strictPort: false,
     password: PASSWORD,
     trustProxy: false,
-    discoverProjects: () => [],
+    discoverProjects: () => discovered,
     agentOverrides: { throwOnClaudeSessionStart: true },
   })
   projectId = (await server.store.openProject(projectDir, "Project")).id
@@ -160,10 +110,18 @@ async function newChat(): Promise<string> {
 }
 
 describe("remote MCP typed tools", () => {
-  test("the server lists exactly the documented tools", async () => {
-    const names = (await client.listTools()).tools.map((tool) => tool.name).sort()
+  test("the server registers exactly the tools of the tool table, each exposing every param of its command", async () => {
+    const listed = (await client.listTools()).tools
 
-    expect(names).toEqual([...EXPECTED_TOOLS].sort())
+    expect(listed.map((tool) => tool.name).sort()).toEqual(REMOTE_TOOLS.map((tool) => tool.name).sort())
+    for (const tool of REMOTE_TOOLS) {
+      if (tool.backing.kind !== "command") continue
+      const { command, hidden } = tool.backing
+      const served = listed.find((entry) => entry.name === tool.name)
+      const properties = Object.keys(served?.inputSchema.properties ?? {})
+      const params = Object.keys(COMMAND_REGISTRY.find((definition) => definition.type === command)?.params.shape ?? {})
+      expect(properties).toEqual(expect.arrayContaining(params.filter((param) => !(param in hidden))))
+    }
   })
 
   test("projects and chats can be listed, created, renamed, found and fetched", async () => {
@@ -378,14 +336,14 @@ describe("remote MCP typed tools", () => {
     const todo = stringField((await call("kanna_command", { type: "board.column.create", params: { boardId, title: "Todo" } })).json, "id")
     const done = stringField((await call("kanna_command", { type: "board.column.create", params: { boardId, title: "Done" } })).json, "id")
 
-    const boards = await call("list_boards", { projectId })
+    const boards = await call("list_boards", { ownerId: projectId })
     expect(JSON.stringify(boards.json)).toContain(boardId)
 
     const card = await call("create_card", { boardId, columnId: todo, title: "Write the tests" })
     const cardId = stringField(card.json, "id")
     expect(JSON.stringify((await call("get_board", { boardId })).json)).toContain("Write the tests")
 
-    const moved = await call("move_card", { cardId, toColumnId: done })
+    const moved = await call("move_card", { cardId, toColumnId: done, aboveCardId: null, belowCardId: null })
     expect(moved.isError).toBe(false)
     expect(field(moved.json, "columnId")).toBe(done)
 
@@ -560,9 +518,9 @@ describe("remote MCP typed tools", () => {
       expect((await call("fork_chat", { chatId })).text).toContain("provider")
       for (const reply of [
         await call("list_branches", { chatId }),
-        await call("checkout_branch", { chatId, name: "main" }),
+        await call("checkout_branch", { chatId, branch: { kind: "local", name: "main" } }),
         await call("sync_branch", { chatId, action: "fetch" }),
-        await call("commit_changes", { chatId, paths: ["a.txt"], summary: "x" }),
+        await call("commit_changes", { chatId, paths: ["a.txt"], summary: "x", mode: "commit_only" }),
       ]) {
         expect(reply.isError).toBe(true)
         expect(reply.text).toContain("git repository")
@@ -576,6 +534,133 @@ describe("remote MCP typed tools", () => {
       expect((await call("start_work_on_card", { cardId: "none" })).isError).toBe(true)
     } finally {
       await rm(extra, { recursive: true, force: true })
+    }
+  })
+  test("send_message carries the model options of the send command through to the chat", async () => {
+    const chatId = await newChat()
+    const modelOptions = { claude: { reasoningEffort: "high", contextWindow: "1m" } } as const
+
+    await call("send_message", { chatId, content: "tuned", model: "claude-opus-4-1", modelOptions, effort: "high", autoResumeOnRateLimit: true, wait: false })
+
+    expect(server.store.getChat(chatId)?.modelOptions).toEqual(modelOptions)
+  })
+
+  test("enqueue_message keeps the model, plan mode and attachments of the queued command", async () => {
+    const chatId = await newChat()
+
+    const queued = await call("enqueue_message", { chatId, content: "later with options", model: "claude-opus-4-1", planMode: true })
+
+    const message = server.store.getQueuedMessages(chatId).find((entry) => entry.id === field(queued.json, "queuedMessageId"))
+    expect(message).toMatchObject({ content: "later with options", model: "claude-opus-4-1", planMode: true })
+  })
+
+  test("move_card places a card between the neighbours it names", async () => {
+    const boardId = stringField((await call("kanna_command", { type: "board.create", params: { ownerKind: "project", ownerId: projectId, title: "Order" } })).json, "id")
+    const column = stringField((await call("kanna_command", { type: "board.column.create", params: { boardId, title: "Queue" } })).json, "id")
+    const bottom = stringField((await call("create_card", { boardId, columnId: column, title: "bottom" })).json, "id")
+    const middle = stringField((await call("create_card", { boardId, columnId: column, title: "middle" })).json, "id")
+    const top = stringField((await call("create_card", { boardId, columnId: column, title: "top" })).json, "id")
+
+    const moved = await call("move_card", { cardId: bottom, toColumnId: column, aboveCardId: top, belowCardId: middle })
+
+    expect(moved.isError).toBe(false)
+    const board = await call("get_board", { boardId })
+    const cards = field(field(field(board.json, "data") ?? null, "view") ?? null, "cards") ?? null
+    expect(arrayField(cards, column).map((card) => field(card, "title"))).toEqual(["top", "bottom", "middle"])
+  })
+
+  test("checkout_branch accepts a remote branch ref and rejects one without its remoteRef", async () => {
+    const chatId = await newChat()
+
+    const remote = await call("checkout_branch", { chatId, branch: { kind: "remote", name: "origin/feature", remoteRef: "refs/remotes/origin/feature" } })
+    const incomplete = await call("checkout_branch", { chatId, branch: { kind: "remote", name: "origin/feature" } })
+
+    expect(remote.text).toContain("git repository")
+    expect(incomplete.isError).toBe(true)
+    expect(incomplete.text).toContain("remoteRef")
+  })
+
+  test("typed tools still accept their v1.85 inputs", async () => {
+    const rejectedForInput = (reply: ToolReply) => reply.isError && reply.text.startsWith("Input validation error")
+    const boardId = stringField((await call("kanna_command", { type: "board.create", params: { ownerKind: "project", ownerId: projectId, title: "Legacy" } })).json, "id")
+    const column = stringField((await call("kanna_command", { type: "board.column.create", params: { boardId, title: "Queue" } })).json, "id")
+    const first = stringField((await call("create_card", { boardId, columnId: column, title: "first" })).json, "id")
+    const second = stringField((await call("create_card", { boardId, columnId: column, title: "second" })).json, "id")
+    const chatId = await newChat()
+
+    const boards = await call("list_boards", { projectId })
+    const checkout = await call("checkout_branch", { chatId, name: "main" })
+    const commit = await call("commit_changes", { chatId, paths: ["hello.txt"], summary: "legacy" })
+    const moved = await call("move_card", { cardId: first, toColumnId: column })
+
+    expect(boards.isError).toBe(false)
+    expect(JSON.stringify(boards.json)).toContain(boardId)
+    expect(rejectedForInput(checkout)).toBe(false)
+    expect(checkout.text).toContain("git repository")
+    expect(rejectedForInput(commit)).toBe(false)
+    expect(commit.text).toContain("git repository")
+    expect(moved.isError).toBe(false)
+    const cards = field(field(field((await call("get_board", { boardId })).json, "data") ?? null, "view") ?? null, "cards") ?? null
+    expect(arrayField(cards, column).map((card) => field(card, "id"))).toEqual([second, first])
+
+    const ambiguousOwner = await call("list_boards", { projectId, ownerId: projectId })
+    const ambiguousBranch = await call("checkout_branch", { chatId, name: "main", branch: { kind: "local", name: "main" } })
+    expect(rejectedForInput(ambiguousOwner)).toBe(true)
+    expect(ambiguousOwner.text).toContain("projectId")
+    expect(rejectedForInput(ambiguousBranch)).toBe(true)
+    expect(ambiguousBranch.text).toContain("name")
+  })
+
+  test("kanna_command chat.send with the same idempotencyKey starts one turn", async () => {
+    const params = { projectId, content: "send through the generic command once" }
+
+    const first = await call("kanna_command", { type: "chat.send", params, idempotencyKey: "generic-send-1" })
+    const second = await call("kanna_command", { type: "chat.send", params, idempotencyKey: "generic-send-1" })
+
+    const chatId = stringField(first.json, "chatId")
+    expect(stringField(second.json, "chatId")).toBe(chatId)
+    expect(field(second.json, "duplicate")).toBe(true)
+    expect(server.store.getMessages(chatId).filter((entry: TranscriptEntry) => entry.kind === "user_prompt")).toHaveLength(1)
+  })
+
+  test("kanna_command message.enqueue with the same idempotencyKey queues one message", async () => {
+    const chatId = await newChat()
+    const params = { chatId, content: "queue once through the generic command" }
+
+    await call("kanna_command", { type: "message.enqueue", params, idempotencyKey: "generic-enqueue-1" })
+    const second = await call("kanna_command", { type: "message.enqueue", params, idempotencyKey: "generic-enqueue-1" })
+
+    expect(field(second.json, "duplicate")).toBe(true)
+    expect(server.store.getQueuedMessages(chatId)).toHaveLength(1)
+  })
+
+  test("get_chat pages back through older entries with the cursor it reports", async () => {
+    const chatId = await newChat()
+    for (let at = 1; at <= 5; at += 1) await server.store.appendMessage(chatId, assistantText(at, `entry ${at}`))
+
+    const newest = await call("get_chat", { chatId, limit: 2 })
+    expect(field(newest.json, "hasOlder")).toBe(true)
+    const older = await call("get_chat", { chatId, limit: 2, beforeCursor: stringField(newest.json, "olderCursor") })
+    const oldest = await call("get_chat", { chatId, limit: 2, beforeCursor: stringField(older.json, "olderCursor") })
+
+    const texts = (reply: ToolReply) => arrayField(reply.json, "entries").map((entry) => field(entry, "text"))
+    expect(texts(newest)).toEqual(["entry 4", "entry 5"])
+    expect(texts(older)).toEqual(["entry 2", "entry 3"])
+    expect(texts(oldest)).toEqual(["entry 1"])
+    expect(field(oldest.json, "hasOlder")).toBe(false)
+  })
+
+  test("kanna_read of local-projects runs the project discovery the web subscription runs", async () => {
+    const found = await mkdtemp(path.join(tmpdir(), "kanna-remote-tools-discovered-"))
+    try {
+      discovered = [{ localPath: found, title: "Discovered", modifiedAt: 1, discoveredByProviders: ["claude"] }]
+
+      const read = await call("kanna_read", { topic: { type: "local-projects" } })
+
+      expect(read.text).toContain(found)
+    } finally {
+      discovered = []
+      await rm(found, { recursive: true, force: true })
     }
   })
 })

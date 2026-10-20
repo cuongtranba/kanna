@@ -39,7 +39,7 @@ export const settingsCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("settings.writeAppSettingsPatch", {
-    params: z.object({ patch: appSettingsPatchSchema }),
+    params: z.object({ patch: appSettingsPatchSchema.describe("A partial settings object, for example {\"remoteMcp\":{\"enabled\":false}}") }),
     summary: "Apply a partial update to the application settings.",
     risk: "write",
     remote: REMOTE_ALLOWED,

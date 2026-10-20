@@ -1,10 +1,9 @@
-import type { ToolRegistrar } from "./remote-mcp-tool-registrar"
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import { isWithinRoot, resolveProjectFilePath } from "../project-file-path"
 import { getServerFile, realPathOrNull, statFile } from "../server-io.adapter"
 import { inferProjectFileContentType, persistProjectUpload } from "../uploads"
-import type { RemoteMcpHost } from "./remote-mcp-server"
+import { mcpOnlyTool, type RemoteTool } from "./remote-mcp-tool-spec"
 import { jsonResult } from "./remote-mcp-views"
 
 const BYTES_PER_MB = 1024 * 1024
@@ -16,20 +15,19 @@ function hasNullByte(bytes: Uint8Array): boolean {
   return bytes.includes(0)
 }
 
-export function registerFileTools(tools: ToolRegistrar, host: RemoteMcpHost): void {
-  tools.registerTool(
-    "upload_attachment",
-    {
-      title: "Upload an attachment",
-      description: "Store a file in a project's upload folder and return an attachment object to pass in send_message.attachments.",
-      inputSchema: z.object({
-        projectId: z.string().describe("Id of the project that receives the file"),
-        fileName: z.string().describe("File name, without a directory"),
-        contentBase64: z.string().describe("File content, base64 encoded"),
-        contentType: z.string().optional().describe("MIME type, used when it cannot be detected from the bytes"),
-      }),
-    },
-    async ({ projectId, fileName, contentBase64, contentType }) => {
+export const fileTools: readonly RemoteTool[] = [
+  mcpOnlyTool({
+    name: "upload_attachment",
+    title: "Upload an attachment",
+    description: "Store a file in a project's upload folder and return an attachment object to pass in send_message.attachments.",
+    reason: "Carries file bytes as base64 through the MCP request; the web UI uploads over tus, so no WebSocket command matches.",
+    input: z.object({
+      projectId: z.string().describe("Id of the project that receives the file"),
+      fileName: z.string().describe("File name, without a directory"),
+      contentBase64: z.string().describe("File content, base64 encoded"),
+      contentType: z.string().optional().describe("MIME type, used when it cannot be detected from the bytes"),
+    }),
+    handle: async ({ projectId, fileName, contentBase64, contentType }, { host }) => {
       const project = host.store.getProject(projectId)
       if (!project) return fail(`Project ${projectId} was not found.`)
       const maxBytes = host.appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB
@@ -49,21 +47,19 @@ export function registerFileTools(tools: ToolRegistrar, host: RemoteMcpHost): vo
       })
       return jsonResult({ attachments: [attachment] })
     },
-  )
-
-  tools.registerTool(
-    "read_project_file",
-    {
-      title: "Read a project file",
-      description: "Read a file inside a project folder. Text comes back as text; binary files come back base64 encoded. Paths outside the project are refused.",
-      inputSchema: z.object({
-        projectId: z.string().describe("Id of the project"),
-        path: z.string().describe("Path relative to the project folder"),
-        maxBytes: z.number().int().min(1).max(MAX_READ_BYTES).optional().describe(`Most bytes to read (default ${DEFAULT_READ_BYTES}, max ${MAX_READ_BYTES})`),
-      }),
-      annotations: { readOnlyHint: true },
-    },
-    async ({ projectId, path: requestedPath, maxBytes }) => {
+  }),
+  mcpOnlyTool({
+    name: "read_project_file",
+    title: "Read a project file",
+    description: "Read a file inside a project folder. Text comes back as text; binary files come back base64 encoded. Paths outside the project are refused.",
+    annotations: { readOnlyHint: true },
+    reason: "Reads a file under the project root straight from disk; the web UI serves files over HTTP, so no command matches.",
+    input: z.object({
+      projectId: z.string().describe("Id of the project"),
+      path: z.string().describe("Path relative to the project folder"),
+      maxBytes: z.number().int().min(1).max(MAX_READ_BYTES).optional().describe(`Most bytes to read (default ${DEFAULT_READ_BYTES}, max ${MAX_READ_BYTES})`),
+    }),
+    handle: async ({ projectId, path: requestedPath, maxBytes }, { host }) => {
       const project = host.store.getProject(projectId)
       if (!project) return fail(`Project ${projectId} was not found.`)
       const resolved = resolveProjectFilePath(project.localPath, requestedPath)
@@ -88,5 +84,5 @@ export function registerFileTools(tools: ToolRegistrar, host: RemoteMcpHost): vo
           : { ...base, text: new TextDecoder().decode(bytes) },
       )
     },
-  )
-}
+  }),
+]

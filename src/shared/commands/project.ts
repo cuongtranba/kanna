@@ -4,13 +4,16 @@ import { projectIdParams, projectIdShape } from "./fragments"
 
 export const projectCommands = defineCommands(
   defineCommand("project.open", {
-    params: z.object({ localPath: z.string() }),
+    params: z.object({ localPath: z.string().describe("Absolute path of the folder on the machine running Kanna") }),
     summary: "Open an existing folder as a project, registering it if new.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("project.create", {
-    params: z.object({ localPath: z.string(), title: z.string() }),
+    params: z.object({
+      localPath: z.string().describe("Absolute path of the folder to create"),
+      title: z.string().describe("Display title of the project"),
+    }),
     summary: "Create a project directory and register it as a project.",
     risk: "write",
     remote: REMOTE_ALLOWED,

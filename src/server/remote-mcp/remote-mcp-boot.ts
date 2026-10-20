@@ -1,6 +1,7 @@
 import { createMcpHandler } from "@modelcontextprotocol/server"
 import type { AppSettingsManager } from "../app-settings"
 import type { PasswordAuth } from "../better-auth.adapter"
+import type { DiscoveredProject } from "../discovery.adapter"
 import type { EventStore } from "../event-store"
 import { getMachineDisplayName } from "../machine-name.adapter"
 import { log } from "../../shared/log"
@@ -31,6 +32,7 @@ export interface RemoteMcpRuntimeSources {
     dispatchCommand: (command: ClientCommand, origin?: CommandOrigin) => Promise<ServerEnvelope>
     readSnapshot: (topic: SubscriptionTopic) => ServerEnvelope
   }
+  refreshDiscovery: () => Promise<DiscoveredProject[]>
   storage?: StorageBackend
 }
 
@@ -40,7 +42,7 @@ const REJECTING_VERIFIER: RemoteMcpBearerVerifier = {
   verifyBearer: async () => ({ ok: false, status: 401 }),
 }
 
-export function createRemoteMcpRuntime({ auth, appSettings, store, commands, storage }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
+export function createRemoteMcpRuntime({ auth, appSettings, store, commands, refreshDiscovery, storage }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
   const machineName = getMachineDisplayName()
   const audit = createRemoteMcpAuditLog({ storage: storage ?? new FsStorageBackend(), dataDir: store.dataDir })
   const dedupe = createDedupeStore({ now: Date.now })
@@ -53,6 +55,9 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands, sto
     (request) => buildRemoteMcpServer({
       dispatchCommand,
       readSnapshot: commands.readSnapshot,
+      refreshLocalProjects: async () => {
+        await refreshDiscovery()
+      },
       store,
       appSettings,
       machineName,
