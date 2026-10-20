@@ -241,6 +241,7 @@ export async function calcShouldTruncateLogs(
     storage.size(paths.schedulesLogPath),
     storage.size(paths.stacksLogPath),
     storage.size(paths.toolRequestsLogPath),
+    storage.size(paths.chatTasksLogPath),
   ])
   return sizes.reduce((total, size) => total + size, 0) >= SNAPSHOT_THRESHOLD_BYTES
 }
@@ -317,6 +318,7 @@ export async function loadAndReplayLogs(
     ...await loadReplayEventsFromFile(storage, paths.turnsLogPath, 5, clearStorage),
     ...await loadReplayEventsFromFile(storage, paths.schedulesLogPath, 6, clearStorage),
     ...await loadReplayEventsFromFile(storage, paths.toolRequestsLogPath, 7, clearStorage),
+    ...await loadReplayEventsFromFile(storage, paths.chatTasksLogPath, 8, clearStorage),
   ]
 
   if (isStorageReset()) return

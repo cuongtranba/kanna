@@ -12,6 +12,7 @@ import { getLatestContextWindowUsage } from "./proactive-compact"
 import { deriveCronJobs, findRunningCronRuns } from "./cron/read-model"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
+import { CHAT_TASK_EVENT_VERSION } from "../shared/chat-tasks/types"
 
 const originalRuntimeProfile = process.env.KANNA_RUNTIME_PROFILE
 const tempDirs: string[] = []
@@ -312,6 +313,42 @@ describe("EventStore", () => {
     expect(reloadedChat.modelOptions).toEqual({
       claude: { reasoningEffort: "high", contextWindow: "1m" },
     })
+  })
+
+  test("replays chat-task events written since the last snapshot after a crash", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const chat = await store.createChat(project.id)
+    const timestamp = Date.now()
+
+    await store.appendChatTaskEvents([
+      {
+        v: CHAT_TASK_EVENT_VERSION,
+        timestamp,
+        chatId: chat.id,
+        type: "chat_task_created",
+        taskId: "k:plan",
+        subject: "Write the plan",
+        source: "kanna",
+      },
+      {
+        v: CHAT_TASK_EVENT_VERSION,
+        timestamp: timestamp + 1,
+        chatId: chat.id,
+        type: "chat_task_claimed",
+        taskId: "k:plan",
+        claimId: "claim-1",
+      },
+    ])
+
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
+
+    const projection = reloaded.getChatTasks(chat.id, { now: timestamp + 2 })
+    expect(projection.tasks.map((task) => [task.id, task.status])).toEqual([["k:plan", "in_progress"]])
   })
 
   test("carries the cron run tag through enqueue and reload", async () => {

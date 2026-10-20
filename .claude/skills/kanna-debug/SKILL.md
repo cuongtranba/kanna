@@ -103,6 +103,7 @@ The transcript is the model-facing view. Server-side events (chat lifecycle, too
 - `~/.kanna/data/turns.jsonl` — turn events per chat
 - `~/.kanna/data/tool-requests.jsonl` — durable approval requests
 - `~/.kanna/data/chats.jsonl` — chat create/rename/archive
+- `~/.kanna/data/chat-tasks.jsonl` — `chat_task_*` events (the loop task list) since the last snapshot
 - `~/.kanna/data/snapshot.json` — periodic full state
 
 Filter any of these by `chatId`:
