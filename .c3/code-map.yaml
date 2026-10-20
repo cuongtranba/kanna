@@ -783,3 +783,15 @@ c3-247:
   - src/server/inbound/*.ts
   - src/server/kanna-mcp-inbox.ts
   - src/server/ws-router-inbox.ts
+c3-126:
+  - src/client/app/InboxPage.tsx
+  - src/client/app/InboxThreadRow.tsx
+  - src/client/app/InboxActivityRow.tsx
+  - src/client/app/InboxThreadDetail.tsx
+  - src/client/app/InboxReplyComposer.tsx
+  - src/client/app/InboxFilterBar.tsx
+  - src/client/app/useInboxToasts.ts
+  - src/client/stores/inboxStore.ts
+  - src/client/lib/inboxFilter.ts
+  - src/client/lib/inboxPresentation.ts
+  - src/client/lib/inboxCommands.ts

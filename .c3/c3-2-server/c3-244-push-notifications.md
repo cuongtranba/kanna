@@ -1,6 +1,6 @@
 ---
 id: c3-244
-c3-seal: 8aa3fed24f9af38d1afd7e31ca4baf6c399d7b5970444c47f1623d9376ea90b9
+c3-seal: b05f5f4fd7f76fc4d9d9ba1839b46e906e0fe90637a5cd88e33ddaa90397fd87
 title: push-notifications
 type: component
 category: feature
@@ -44,6 +44,7 @@ Owns browser push notifications: the VAPID keypair in vapid.json (mode 0600), th
 | push.* WS commands | IN | identifyDevice, subscribe, unsubscribe, sendTest, setProjectMute, setChatMute and setFocusedChat, each acknowledged on the command id | The browser client drops a subscription made with a different VAPID key before subscribing again (src/client/app/pushClient.ts), so a rotated key never strands a device. | src/server/ws-router-push.ts |
 | PushPayload | OUT | v 1 with kind, project, chat id, chat title of at most 80 characters and chatUrl; urgency high for failed, low for completed | Never sent to a device whose focused chat is the chat the payload is about; repeats of the same chat and kind within 2 seconds are dropped. | src/server/push/push-manager.ts |
 | Completed transition | OUT | Sent on running to idle only when the chat has no pending background work; held otherwise and released when the chat goes idle with none left | A cancelled turn clears the hold and sends nothing. | src/server/push/push-manager.ts |
+| Inbox kind | OUT | notifyInbox sends kind inbox for a thread that entered needs_you, with the thread id, the sender as the title and the source as the project title, at normal urgency, deduped on inbox:threadId:lastMessageAt | Never skipped for a focused chat, because a thread belongs to no open chat; skipped when the source handler disabled push | src/server/push/push-manager.ts |
 | vapid.json | IN/OUT | publicKey, privateKey and a valid mailto or https subject, written with mode 0600; an invalid stored subject is healed to the default | The contact subject in Settings overrides the stored one at send time. | src/server/push/vapid.adapter.ts |
 
 ## Derived Materials
