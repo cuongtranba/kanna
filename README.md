@@ -153,6 +153,10 @@ Pages live in `wiki/src/content/docs/`. Change a page in the same PR as the beha
 
 The [GitHub Wiki](https://github.com/cuongtranba/kanna/wiki) is a generated mirror of the same pages, rewritten from `wiki/` on every push to `main` that touches it. Edit `wiki/`, never the GitHub Wiki: changes made there are overwritten on the next sync. To preview the mirror, run `bun run export:github-wiki <dir>` in `wiki/`.
 
+## Partners
+
+[Undercroft](https://undercroft.lowbit.link) is an open-source, Vietnamese-first data platform (any REST source into an immutable raw lake, Postgres, dbt models and BI) whose MCP endpoint Kanna connects to as an MCP client over OAuth.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=cuongtranba%2Fkanna&type=date&legend=top-left">
