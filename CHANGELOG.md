@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.86.0](https://github.com/cuongtranba/kanna/compare/v1.85.0...v1.86.0) (2026-10-20)
+
+
+### Features
+
+* **commands:** type command results from the registry, pilot on git/diff ([#1346](https://github.com/cuongtranba/kanna/issues/1346)) ([64cafff](https://github.com/cuongtranba/kanna/commit/64cafff028c54fad1e41610d0d53d24860af2c3f))
+* **remote-mcp:** derive typed tool inputs from the command registry ([#1340](https://github.com/cuongtranba/kanna/issues/1340)) ([7b800cb](https://github.com/cuongtranba/kanna/commit/7b800cb96799251ab3b5dcfba800cb77611107fc))
+
 ## [1.85.0](https://github.com/cuongtranba/kanna/compare/v1.84.0...v1.85.0) (2026-10-20)
 
 
