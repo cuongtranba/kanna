@@ -5,6 +5,7 @@ const SLACK_DRAFT: WebhookDraftFields = {
   name: "Slack",
   kind: "slack",
   mode: "notify",
+  handling: "triage",
   chatId: "chat-1",
   projectId: "project-1",
   modelValue: "",
@@ -59,4 +60,15 @@ test("a generic draft keeps its mode and optional fields and sends no Slack bloc
     senderPath: "c.d",
     replyHint: "hint",
   })
+})
+
+test("a task handling reaches only generic hooks that start a turn, and a patch clears it otherwise", () => {
+  const generic: WebhookDraftFields = { ...SLACK_DRAFT, kind: "generic", mode: "inline", template: "t", handling: "task" }
+  expect(buildWebhookInput(generic).handling).toBe("task")
+  expect(buildWebhookPatch(buildWebhookInput(generic)).handling).toBe("task")
+  expect(buildWebhookInput({ ...generic, mode: "notify" }).handling).toBeUndefined()
+  expect(buildWebhookPatch(buildWebhookInput({ ...generic, handling: "triage" })).handling).toBeNull()
+  const slack = buildWebhookInput({ ...SLACK_DRAFT, handling: "task" })
+  expect(slack.handling).toBeUndefined()
+  expect(buildWebhookPatch(slack).handling).toBeUndefined()
 })
