@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.87.0](https://github.com/cuongtranba/kanna/compare/v1.86.0...v1.87.0) (2026-10-20)
+
+
+### Features
+
+* **commands:** type settings and system command results ([#1347](https://github.com/cuongtranba/kanna/issues/1347)) ([cd80052](https://github.com/cuongtranba/kanna/commit/cd80052aae08699f122fcc734e06b4d076c21191))
+
 ## [1.86.0](https://github.com/cuongtranba/kanna/compare/v1.85.0...v1.86.0) (2026-10-20)
 
 
