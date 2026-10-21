@@ -144,7 +144,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
-    "@happy-dom/global-registrator": "^20.9.0",
+    "@happy-dom/global-registrator": "^21.0.3",
     "@playwright/test": "^1.62.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
