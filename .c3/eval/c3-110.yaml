@@ -20,6 +20,7 @@ code:
   - src/client/hooks/useBeaconSuggestions.ts
   - src/client/lib/beaconMentionChips.ts
   - src/client/app/useAppGlobalState.test.ts
+  - src/client/app/bulkChatRemoval.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx
   - src/client/app/useKannaState.test.ts

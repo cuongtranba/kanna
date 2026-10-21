@@ -38,6 +38,7 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { onRejected } from "../../shared/errors"
 import { getPathBasename } from "../lib/formatters"
 import { forgetDeletedLocally } from "./forgetDeletedLocally"
+import { getNewestRemainingChatId, useBulkArchiveChats } from "./bulkChatRemoval"
 import { runDetached } from "../lib/runDetached"
 import { runPendingAction } from "../stores/pendingActionsStore"
 import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
@@ -52,6 +53,8 @@ import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } f
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { HTTP_ROUTES } from "../../shared/http-routes"
 
+
+export { getNewestRemainingChatId }
 
 export const LLM_PROVIDER_READ_KEY = "settings.readLlmProvider"
 export const COMPOSE_CHAT_KEY = "chat.compose"
@@ -178,13 +181,6 @@ export function applySidebarProjectOrder(
   return nextProjectGroups.every((group, index) => group === projectGroups[index])
     ? projectGroups
     : nextProjectGroups
-}
-
-export function getNewestRemainingChatId(projectGroups: SidebarData["projectGroups"], activeChatId: string): string | null {
-  const projectGroup = projectGroups.find((group) => group.chats.some((chat) => chat.chatId === activeChatId))
-  if (!projectGroup) return null
-
-  return projectGroup.chats.find((chat) => chat.chatId !== activeChatId)?.chatId ?? null
 }
 
 export function getProjectIdForChat(
@@ -327,6 +323,7 @@ export interface AppGlobalState extends StackCommands {
   handleArchiveChat: (chat: SidebarChatRow) => Promise<void>
   handleOpenArchivedChat: (chatId: string) => Promise<void>
   handleDeleteChat: (chat: SidebarChatRow) => Promise<void>
+  handleArchiveBulkChats: (chatIds: string[]) => Promise<void>
   handleDeleteBulkChats: (chatIds: string[]) => Promise<void>
   handleHideProject: (projectId: string) => Promise<void>
   handleDeleteProject: (projectId: string) => Promise<void>
@@ -1098,7 +1095,7 @@ export function useAppGlobalState(
         await socket.command({ type: "chat.delete", chatId })
         forgetDeletedLocally({ chatIds: [chatId] })
       }
-      if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
+      if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId, chatIds); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
     } catch (err) { useKannaStateStore.getState().setCommandError(err instanceof Error ? err.message : String(err)) }
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
@@ -1118,6 +1115,8 @@ export function useAppGlobalState(
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
+
+  const handleArchiveBulkChats = useBulkArchiveChats(socket, chatNavigator, activeChatId, sidebarProjectGroups)
 
   const handleOpenArchivedChat = useCallback(async (chatId: string) => {
     try {
@@ -1397,6 +1396,7 @@ export function useAppGlobalState(
     handleArchiveChat,
     handleOpenArchivedChat,
     handleDeleteChat,
+    handleArchiveBulkChats,
     handleDeleteBulkChats,
     handleHideProject,
     handleDeleteProject,
