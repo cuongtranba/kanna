@@ -34,7 +34,7 @@ handler mode skips the agent and goes straight to **needs you**.
 
 | Tab | Shows |
 | --- | --- |
-| **Inbox** | Threads that are new, need you, or are FYI, unread first, grouped by day — plus attention items: a failed turn, a question an agent is waiting on, a failed cron, subagent or loop run. |
+| **Inbox** | Threads that are new, need you, or are FYI, unread first, grouped by day — plus attention items: a failed turn, a tool call waiting for your approval (until it is answered), a failed cron, subagent or loop run. Tool calls your permission policy approves or denies on its own never appear here. |
 | **Activity** | Every event the server records — chats, turns, queue, tasks, cron, loops, subagents, webhooks, MCP messages — newest first, with filters by source, project, chat and *needs attention*, and **Load older** for history. |
 
 Opening a thread marks it read. **Mark all read** clears the whole Inbox tab.

@@ -181,9 +181,17 @@ not an implementation detail.
   threshold, until #1325).
 - **Activity items are every internal envelope** except `kanna.inbox.>` (no
   feedback loop). `attention` — and therefore unread — is `kanna.turn.failed`,
-  `kanna.toolRequest.put`, a failed `kanna.cron.runOutcome`,
-  `kanna.subagent.failed` and a failed `kanna.loop.runOutcome`; everything else
-  lands already read so the badge means "needs a look".
+  a `kanna.toolRequest.put` whose `request.policyVerdict` is `ask`, a failed
+  `kanna.cron.runOutcome`, `kanna.subagent.failed` and a failed
+  `kanna.loop.runOutcome`; everything else lands already read so the badge
+  means "needs a look". An auto-allowed or auto-denied tool request still
+  writes a put then a resolved event (`tool-callback.ts`), so the verdict check
+  is what keeps those out of "Needs you".
+- **Attention is derived in the projection, not trusted from the log.**
+  `inbox-projection.ts` re-applies `isAttention` to every added item and clears
+  a tool-request put once the `kanna.toolRequest.resolved` item with the same
+  request id arrives. Both run on replay, so a policy change corrects items
+  already in `inbox.jsonl` at the next boot with no migration.
 - **The page is a workspace tab, and `needs_you` is the only interrupt**
   (`src/client/app/Inbox*.tsx`, `stores/inboxStore.ts`, client fact
   `c3-126`). `/inbox` and `/inbox/:threadId` are page-kind `inbox`

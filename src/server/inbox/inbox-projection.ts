@@ -1,4 +1,5 @@
 import type { InboxEvent } from "../../shared/inbox/events"
+import { isAttention, isToolRequestPutFor, settledToolRequestId } from "../../shared/inbox/policy"
 import {
   INBOX_MAX_ITEMS,
   INBOX_THREAD_MAX_MESSAGES,
@@ -34,11 +35,24 @@ function clearPending(state: InboxState, thread: InboxThread): void {
   state.pendingSince.delete(thread.id)
 }
 
+function addActivityItem(state: InboxState, incoming: InboxActivityItem): void {
+  if (state.items.some((item) => item.id === incoming.id)) return
+  const attention = incoming.attention && isAttention(incoming)
+  state.items.push({ ...incoming, attention, unread: incoming.unread && attention })
+  const settledId = settledToolRequestId(incoming)
+  if (settledId === null) return
+  for (const item of state.items) {
+    if (isToolRequestPutFor(item, settledId)) {
+      item.attention = false
+      item.unread = false
+    }
+  }
+}
+
 export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
   switch (event.kind) {
     case "inbox_activity_added": {
-      if (state.items.some((item) => item.id === event.item.id)) return
-      state.items.push(event.item)
+      addActivityItem(state, event.item)
       return
     }
     case "inbox_thread_message_added": {

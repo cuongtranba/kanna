@@ -37,11 +37,16 @@ function attention(subject: string, payload: JsonValue): boolean {
   return isAttention({ subject, payload })
 }
 
-test("failed turns, tool requests and failed subagents ask for attention", () => {
+test("failed turns and failed subagents ask for attention", () => {
   expect(attention("kanna.turn.failed", {})).toBe(true)
-  expect(attention("kanna.toolRequest.put", {})).toBe(true)
   expect(attention("kanna.subagent.failed", {})).toBe(true)
   expect(attention("kanna.turn.finished", {})).toBe(false)
+})
+
+test("only tool requests the policy left to the user ask for attention", () => {
+  expect(attention("kanna.toolRequest.put", { request: { id: "r1", policyVerdict: "ask" } })).toBe(true)
+  expect(attention("kanna.toolRequest.put", { request: { id: "r2", policyVerdict: "auto-allow" } })).toBe(false)
+  expect(attention("kanna.toolRequest.put", { request: { id: "r3", policyVerdict: "auto-deny" } })).toBe(false)
 })
 
 test("cron and loop outcomes ask for attention only when they failed", () => {
