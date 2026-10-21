@@ -11,6 +11,7 @@ import {
   type WebhookInput,
   type WebhookMode,
 } from "./types"
+import { validateSlackHookFields } from "./slack"
 
 export interface WebhookTargetFields {
   mode: WebhookMode
@@ -31,14 +32,28 @@ export function validateWebhookTarget(fields: WebhookTargetFields): string[] {
   return validateInboundTarget(fields)
 }
 
-export function validateWebhookInput(input: WebhookInput): string[] {
+export interface WebhookValidationOptions {
+  requireSlackSecrets?: boolean
+}
+
+function validateSlackKind(input: WebhookInput, requireSecrets: boolean): string[] {
   const errors: string[] = []
+  if (input.mode !== "spawn") errors.push("Slack hooks must use spawn mode")
+  if (input.filter?.trim()) errors.push("Slack hooks do not support a filter")
+  errors.push(...validateSlackHookFields(input.slack ?? {}, { requireSecrets }))
+  return errors
+}
+
+export function validateWebhookInput(input: WebhookInput, options: WebhookValidationOptions = {}): string[] {
+  const errors: string[] = []
+  const isSlack = input.kind === "slack"
   const name = input.name.trim()
   if (name.length === 0) errors.push("Name is required")
   if (name.length > WEBHOOK_NAME_MAX_CHARS) errors.push(`Name must be at most ${WEBHOOK_NAME_MAX_CHARS} characters`)
   errors.push(...validateWebhookTarget(input))
+  if (isSlack) errors.push(...validateSlackKind(input, options.requireSlackSecrets ?? true))
   const template = input.template.trim()
-  if (template.length === 0) errors.push("Template is required")
+  if (template.length === 0 && !isSlack) errors.push("Template is required")
   if (template.length > WEBHOOK_TEMPLATE_MAX_CHARS) {
     errors.push(`Template must be at most ${WEBHOOK_TEMPLATE_MAX_CHARS} characters`)
   }

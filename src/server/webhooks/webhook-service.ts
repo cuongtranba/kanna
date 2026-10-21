@@ -8,6 +8,7 @@ import {
   type WebhookDeliveryStore,
 } from "./webhook-delivery"
 import type { StoredWebhook, WebhookRegistry } from "./webhook-registry"
+import type { SlackService } from "./slack/slack-service"
 
 export class WebhookService {
   constructor(
@@ -16,6 +17,7 @@ export class WebhookService {
     private readonly agent: WebhookDeliveryAgent,
     private readonly bus: BusSink,
     private readonly inbox: InboxRegistry,
+    readonly slack: SlackService,
     readonly enabled: boolean,
     private readonly now: () => number = Date.now,
   ) {}

@@ -52,3 +52,17 @@ export function hmacCurlSample(url: string, secret: string): string {
     `  -d "$BODY"`,
   ].join("\n")
 }
+
+const LOOPBACK_HOSTS: readonly string[] = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]
+
+export function isPublicHttpsOrigin(origin: string): boolean {
+  const parsed = URL.canParse(origin) ? new URL(origin) : null
+  if (parsed === null || parsed.protocol !== "https:") return false
+  return !LOOPBACK_HOSTS.includes(parsed.hostname)
+}
+
+export function describeSavedSecret(hint: string): string {
+  return `Saved secret ending …${hint}`
+}
+
+export const KEEP_SAVED_SECRET_PLACEHOLDER = "Leave blank to keep the saved secret"

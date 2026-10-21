@@ -14,6 +14,25 @@ code:
   - src/server/webhooks/webhook-service.ts
   - src/server/webhooks/webhook-store.adapter.ts
   - src/server/webhooks/webhook-store.adapter.test.ts
+  - src/server/webhooks/slack/slack-api.adapter.test.ts
+  - src/server/webhooks/slack/slack-api.adapter.ts
+  - src/server/webhooks/slack/slack-api.ts
+  - src/server/webhooks/slack/slack-events.test.ts
+  - src/server/webhooks/slack/slack-events.ts
+  - src/server/webhooks/slack/slack-http.test.ts
+  - src/server/webhooks/slack/slack-prompt.test.ts
+  - src/server/webhooks/slack/slack-prompt.ts
+  - src/server/webhooks/slack/slack-service.test.ts
+  - src/server/webhooks/slack/slack-service.ts
+  - src/server/webhooks/slack/slack-signature.test.ts
+  - src/server/webhooks/slack/slack-signature.ts
+  - src/server/webhooks/slack/slack-task-tracker.ts
+  - src/server/webhooks/slack/slack-thread-store.adapter.test.ts
+  - src/server/webhooks/slack/slack-thread-store.adapter.ts
+  - src/server/webhooks/slack/slack-threads.ts
+  - src/server/test-helpers/slack-harness.ts
+  - src/server/test-helpers/slack-hook-harness.ts
+  - src/shared/webhooks/slack.ts
   - src/server/test-helpers/webhook-harness.ts
   - src/server/ws-router-webhooks.ts
   - src/shared/webhooks/types.ts

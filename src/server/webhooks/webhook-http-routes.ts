@@ -91,6 +91,7 @@ export async function handleWebhookRequest(
 
   const raw = await readCappedBody(req)
   if (raw === null) return reject(413, "payload too large")
+  if (hook.kind === "slack") return service.slack.handleRequest(hook, req.headers, raw)
   if (verifyWebhookRequest(hook.secret, req.headers, raw) !== "ok") return reject(401, "unauthorized")
 
   const body = parseBody(new TextDecoder().decode(raw))

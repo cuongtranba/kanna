@@ -1030,7 +1030,7 @@ broken. Read the skill before changing the code it names.
 
 **`kanna-mcp`** — user MCP names must never be `kanna`; a stale OAuth bearer is a respawn trigger; the remote `/mcp` OAuth handler is an allowlist and every tool runs through the ws-router seam.
 
-**`kanna-inbox`** — the bus tap is set after `store.initialize()`; `publish` never throws; Kanna never deletes a NATS stream; the agent only drafts inbox replies; webhook secrets live only in `webhooks.json` at 0600 and the route sits before the auth gate.
+**`kanna-inbox`** — the bus tap is set after `store.initialize()`; `publish` never throws; Kanna never deletes a NATS stream; the agent only drafts inbox replies; webhook secrets live only in `webhooks.json` at 0600 and the route sits before the auth gate; Slack hooks bypass the Inbox on purpose and correlate turns from the bus `transcript.user_prompt` scheduleId, captured synchronously.
 
 **`kanna-genui`** — `parseGenUISpec` is the trust boundary and nothing the model writes executes; `shareableEntries` is a privacy allowlist; share datasets are frozen at mint.
 

@@ -2,7 +2,7 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { ProviderCatalogEntry } from "../shared/provider-model-types"
 import { isAgentProvider } from "../shared/types"
 import { ackResult } from "./ws-router-ack"
-import type { WebhookInput, WebhookPatch } from "../shared/webhooks/types"
+import type { WebhookInput, WebhookPatch, WebhookSlackInput, WebhookSlackPatch } from "../shared/webhooks/types"
 import { isWebhookMode, mergeWebhookModel, validateWebhookModel } from "../shared/webhooks/validate"
 import type { WebhookMutation, WebhookRegistry } from "./webhooks/webhook-registry"
 
@@ -14,9 +14,33 @@ function provider(value: string | null | undefined) {
   return typeof value === "string" && isAgentProvider(value) ? value : undefined
 }
 
+function textList(value: readonly string[] | undefined): string[] | undefined {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined
+}
+
+function sanitizeSlackInput(slack: WebhookSlackInput | undefined): WebhookSlackInput | undefined {
+  if (!slack) return undefined
+  return {
+    allowedUserIds: textList(slack.allowedUserIds) ?? [],
+    signingSecret: text(slack.signingSecret) ?? "",
+    botToken: text(slack.botToken) ?? "",
+  }
+}
+
+function sanitizeSlackPatch(slack: WebhookSlackPatch | undefined): WebhookSlackPatch | undefined {
+  if (!slack) return undefined
+  return {
+    allowedUserIds: textList(slack.allowedUserIds),
+    signingSecret: text(slack.signingSecret),
+    botToken: text(slack.botToken),
+  }
+}
+
 function sanitizeInput(input: WebhookInput): WebhookInput {
   return {
     name: text(input.name) ?? "",
+    kind: input.kind === "slack" ? "slack" : "generic",
+    slack: sanitizeSlackInput(input.slack),
     mode: isWebhookMode(String(input.mode)) ? input.mode : "notify",
     template: text(input.template) ?? "",
     chatId: text(input.chatId),
@@ -37,6 +61,7 @@ function clearableText(value: string | null | undefined): string | null | undefi
 function sanitizePatch(patch: WebhookPatch): WebhookPatch {
   return {
     name: text(patch.name),
+    slack: sanitizeSlackPatch(patch.slack),
     template: text(patch.template),
     enabled: typeof patch.enabled === "boolean" ? patch.enabled : undefined,
     mode: patch.mode !== undefined && isWebhookMode(String(patch.mode)) ? patch.mode : undefined,

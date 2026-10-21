@@ -7,6 +7,7 @@ import {
   type WebhookDeliveryOutcome,
   type WebhookInput,
   type WebhookPatch,
+  type WebhookSlackPatch,
   type WebhooksSnapshot,
   type WebhookSummary,
 } from "../../shared/webhooks/types"
@@ -22,6 +23,13 @@ import { WebhookRateLimiter, type RateDecision } from "./webhook-rate-limit"
 
 export interface StoredWebhook extends WebhookConfig {
   secret: string
+  slackBotToken?: string
+}
+
+export interface SlackCredentials {
+  signingSecret: string
+  botToken: string
+  allowedUserIds: string[]
 }
 
 export interface WebhookStorePort {
@@ -33,7 +41,7 @@ export type WebhookMutation<T> = { ok: true; value: T } | { ok: false; errors: s
 
 export interface CreatedWebhook {
   hook: WebhookSummary
-  secret: string
+  secret: string | null
 }
 
 const SECRET_PREFIX = "kwh_"
@@ -47,11 +55,50 @@ export function generateWebhookId(): string {
   return randomBytes(12).toString("base64url")
 }
 
-function configOf(hook: StoredWebhook): WebhookConfig {
+export function slackCredentialsOf(hook: StoredWebhook): SlackCredentials | null {
+  if (hook.kind !== "slack" || !hook.slackBotToken) return null
+  return {
+    signingSecret: hook.secret,
+    botToken: hook.slackBotToken,
+    allowedUserIds: [...(hook.slack?.allowedUserIds ?? [])],
+  }
+}
+
+function dedupeIds(ids: readonly string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()))]
+}
+
+function inputOf(hook: StoredWebhook): WebhookInput {
+  return {
+    name: hook.name,
+    mode: hook.mode,
+    template: hook.template,
+    kind: hook.kind,
+    ...(hook.kind === "slack"
+      ? {
+          slack: {
+            allowedUserIds: hook.slack?.allowedUserIds ?? [],
+            signingSecret: hook.secret,
+            botToken: hook.slackBotToken ?? "",
+          },
+        }
+      : {}),
+    ...(hook.chatId ? { chatId: hook.chatId } : {}),
+    ...(hook.projectId ? { projectId: hook.projectId } : {}),
+    ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
+    ...(hook.threadKeyPath ? { threadKeyPath: hook.threadKeyPath } : {}),
+    ...(hook.senderPath ? { senderPath: hook.senderPath } : {}),
+    ...(hook.replyHint ? { replyHint: hook.replyHint } : {}),
+    ...(hook.filter ? { filter: hook.filter } : {}),
+  }
+}
+
+function configOf(hook: StoredWebhook): Omit<WebhookConfig, "slack"> {
   return {
     id: hook.id,
     name: hook.name,
     enabled: hook.enabled,
+    kind: hook.kind,
     mode: hook.mode,
     template: hook.template,
     createdAt: hook.createdAt,
@@ -124,15 +171,20 @@ export class WebhookRegistry {
     const filter = this.compileFilter(input.filter)
     if (!filter.ok) return { ok: false, errors: filter.errors }
     const at = this.now()
+    const slack = input.kind === "slack" ? input.slack : undefined
     const stored: StoredWebhook = {
       id: generateWebhookId(),
       name: input.name.trim(),
       enabled: true,
+      kind: slack ? "slack" : "generic",
       mode: input.mode,
       template: input.template.trim(),
       createdAt: at,
       updatedAt: at,
-      secret: generateWebhookSecret(),
+      secret: slack ? slack.signingSecret.trim() : generateWebhookSecret(),
+      ...(slack
+        ? { slack: { allowedUserIds: dedupeIds(slack.allowedUserIds) }, slackBotToken: slack.botToken.trim() }
+        : {}),
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.provider && input.model ? { provider: input.provider, model: input.model.trim() } : {}),
@@ -144,14 +196,17 @@ export class WebhookRegistry {
     this.hooks.set(stored.id, stored)
     this.setFilter(stored.id, filter.compiled)
     await this.persist()
-    return { ok: true, value: { hook: this.summarize(stored), secret: stored.secret } }
+    return { ok: true, value: { hook: this.summarize(stored), secret: slack ? null : stored.secret } }
   }
 
   async update(hookId: string, patch: WebhookPatch): Promise<WebhookMutation<WebhookSummary>> {
     const existing = this.hooks.get(hookId)
     if (!existing) return { ok: false, errors: ["Webhook not found"] }
+    if (patch.slack !== undefined && existing.kind !== "slack") {
+      return { ok: false, errors: ["Slack settings only apply to Slack hooks"] }
+    }
     const merged = this.applyPatch(existing, patch)
-    const errors = validateWebhookInput(merged)
+    const errors = validateWebhookInput(inputOf(merged))
     if (errors.length > 0) return { ok: false, errors }
     const filter = patch.filter === undefined ? null : this.compileFilter(merged.filter)
     if (filter && !filter.ok) return { ok: false, errors: filter.errors }
@@ -164,6 +219,9 @@ export class WebhookRegistry {
   async rotateSecret(hookId: string): Promise<WebhookMutation<{ secret: string }>> {
     const existing = this.hooks.get(hookId)
     if (!existing) return { ok: false, errors: ["Webhook not found"] }
+    if (existing.kind === "slack") {
+      return { ok: false, errors: ["Slack hooks use the Slack signing secret; edit the hook to change it"] }
+    }
     const rotated = { ...existing, secret: generateWebhookSecret(), updatedAt: this.now() }
     this.hooks.set(hookId, rotated)
     await this.persist()
@@ -217,6 +275,7 @@ export class WebhookRegistry {
     if (patch.senderPath !== undefined) setOrClear(next, "senderPath", patch.senderPath)
     if (patch.replyHint !== undefined) setOrClear(next, "replyHint", patch.replyHint)
     if (patch.filter !== undefined) setOrClear(next, "filter", patch.filter)
+    if (patch.slack !== undefined) applySlackPatch(next, patch.slack)
     if (patch.provider !== undefined || patch.model !== undefined) {
       const { provider, model } = mergeWebhookModel(existing, patch)
       delete next.provider
@@ -246,6 +305,14 @@ export class WebhookRegistry {
     const lastDelivery = this.lastDeliveries.get(hook.id)
     return {
       ...configOf(hook),
+      ...(hook.kind === "slack"
+        ? {
+            slack: {
+              allowedUserIds: [...(hook.slack?.allowedUserIds ?? [])],
+              botTokenHint: (hook.slackBotToken ?? "").slice(-SECRET_HINT_CHARS),
+            },
+          }
+        : {}),
       secretHint: hook.secret.slice(-SECRET_HINT_CHARS),
       ...(lastDelivery ? { lastDelivery } : {}),
     }
@@ -259,6 +326,14 @@ export class WebhookRegistry {
   private notify(): void {
     for (const listener of this.listeners) listener()
   }
+}
+
+function applySlackPatch(target: StoredWebhook, patch: WebhookSlackPatch): void {
+  if (patch.allowedUserIds !== undefined) target.slack = { allowedUserIds: dedupeIds(patch.allowedUserIds) }
+  const signingSecret = patch.signingSecret?.trim()
+  if (signingSecret) target.secret = signingSecret
+  const botToken = patch.botToken?.trim()
+  if (botToken) target.slackBotToken = botToken
 }
 
 type ClearableKey = "chatId" | "projectId" | "threadKeyPath" | "senderPath" | "replyHint" | "filter"

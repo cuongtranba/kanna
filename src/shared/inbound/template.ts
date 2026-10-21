@@ -51,13 +51,16 @@ export function fenced(text: string, language: string): string {
   return `${fence}${language}\n${text}\n${fence}`
 }
 
+export function renderUntrustedText(text: string, notice: string, language: string): string {
+  const truncated = text.length > INBOUND_PROMPT_BODY_MAX_CHARS
+  const bounded = truncated
+    ? `${text.slice(0, INBOUND_PROMPT_BODY_MAX_CHARS)}\n${INBOUND_TRUNCATION_MARKER}`
+    : text
+  return `${notice}\n\n${fenced(bounded, language)}`
+}
+
 export function renderInboundBlock(body: JsonValue, notice: string): string {
-  const serialized = serializeBody(body)
-  const truncated = serialized.length > INBOUND_PROMPT_BODY_MAX_CHARS
-  const text = truncated
-    ? `${serialized.slice(0, INBOUND_PROMPT_BODY_MAX_CHARS)}\n${INBOUND_TRUNCATION_MARKER}`
-    : serialized
-  return `${notice}\n\n${fenced(text, "json")}`
+  return renderUntrustedText(serializeBody(body), notice, "json")
 }
 
 export function renderInboundMessage(template: string, body: JsonValue): string {
