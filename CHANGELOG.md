@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.88.0](https://github.com/cuongtranba/kanna/compare/v1.87.0...v1.88.0) (2026-10-21)
+
+
+### Features
+
+* **commands:** every command declares its result; drop client casts and the untyped-results budget ([#1349](https://github.com/cuongtranba/kanna/issues/1349)) ([57f0978](https://github.com/cuongtranba/kanna/commit/57f09784784ae5ddabd3d055be7a135e2791e8cb))
+* **parity:** serve HTTP-only web actions as commands and gate web, backend and MCP drift in CI ([#1341](https://github.com/cuongtranba/kanna/issues/1341)) ([6200373](https://github.com/cuongtranba/kanna/commit/62003730270abbd46aaaf2783e72f1213b09ca57))
+
 ## [1.87.0](https://github.com/cuongtranba/kanna/compare/v1.86.0...v1.87.0) (2026-10-20)
 
 
