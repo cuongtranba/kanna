@@ -1,9 +1,8 @@
 import type { AppSettingsSnapshot } from "../../shared/app-settings-types"
-import { safeJsonParse } from "../../shared/json"
 import type { McpOAuthState, McpServerConfig } from "../../shared/mcp-types"
-import type { ClientCommand, CommandAckResult, ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../../shared/protocol"
+import type { ClientCommand, CommandResult, ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../../shared/protocol"
 import type { LlmProviderSnapshot } from "../../shared/types"
-import { REDACTED, redactSecrets } from "./redact-secrets"
+import { REDACTED } from "./redact-secrets"
 
 export interface EgressHost {
   dispatchCommand: (command: ClientCommand) => Promise<ServerEnvelope>
@@ -71,32 +70,36 @@ export function redactSnapshot(snapshot: ServerSnapshot): ServerSnapshot {
   return snapshot
 }
 
-function isAppSettingsSnapshot(result: CommandAckResult): result is AppSettingsSnapshot {
+function isAppSettingsSnapshot(result: CommandResult<ClientCommand>): result is AppSettingsSnapshot {
   return typeof result === "object" && result !== null && "claudeAuth" in result && "customMcpServers" in result
 }
 
-function isLlmProviderSnapshot(result: CommandAckResult): result is LlmProviderSnapshot {
+function isLlmProviderSnapshot(result: CommandResult<ClientCommand>): result is LlmProviderSnapshot {
   return typeof result === "object" && result !== null && "apiKey" in result && typeof result.apiKey === "string"
 }
 
-function failClosed(result: CommandAckResult): CommandAckResult {
-  return redactSecrets(safeJsonParse(JSON.stringify(result)) ?? null)
-}
+const WITHHELD_MESSAGE = "The result was withheld because it did not have the expected shape for a command that carries secrets."
 
-function redactAckResult(command: ClientCommand, result: CommandAckResult): CommandAckResult {
+type RedactedAck = { readonly withheld: false; readonly result: CommandResult<ClientCommand> } | { readonly withheld: true }
+
+const WITHHELD: RedactedAck = { withheld: true }
+
+function redactAckResult(command: ClientCommand, result: CommandResult<ClientCommand>): RedactedAck {
   if (APP_SETTINGS_ACK_COMMANDS.has(command.type)) {
-    return isAppSettingsSnapshot(result) ? redactAppSettingsSnapshot(result) : failClosed(result)
+    return isAppSettingsSnapshot(result) ? { withheld: false, result: redactAppSettingsSnapshot(result) } : WITHHELD
   }
   if (LLM_PROVIDER_ACK_COMMANDS.has(command.type)) {
-    return isLlmProviderSnapshot(result) ? redactLlmProviderSnapshot(result) : failClosed(result)
+    return isLlmProviderSnapshot(result) ? { withheld: false, result: redactLlmProviderSnapshot(result) } : WITHHELD
   }
-  return result
+  return { withheld: false, result }
 }
 
 export function redactCommandEnvelope(command: ClientCommand, envelope: ServerEnvelope): ServerEnvelope {
   if (envelope.type === "snapshot") return { ...envelope, snapshot: redactSnapshot(envelope.snapshot) }
   if (envelope.type !== "ack" || envelope.result === undefined) return envelope
-  return { ...envelope, result: redactAckResult(command, envelope.result) }
+  const redacted = redactAckResult(command, envelope.result)
+  if (redacted.withheld) return { v: envelope.v, type: "error", id: envelope.id, message: WITHHELD_MESSAGE }
+  return { ...envelope, result: redacted.result }
 }
 
 export function redactReadEnvelope(envelope: ServerEnvelope): ServerEnvelope {

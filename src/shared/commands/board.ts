@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineCommand, defineCommands, noParams, REMOTE_ALLOWED } from "./define"
+import { defineCommand, defineCommands, noParams, noResult, REMOTE_ALLOWED } from "./define"
 import { jsonValueSchema } from "../genui/json-schema"
 import {
   boardOwnerKindSchema,
@@ -8,6 +8,22 @@ import {
   columnSemanticSchema,
   syncDirectionSchema,
 } from "../boards/types.schema"
+import {
+  boardColumnSchema,
+  boardSchema,
+  boardSyncStatusSchema,
+  boardTemplateSchema,
+  cardCommentSchema,
+  cardDetailViewSchema,
+  cardPageSchema,
+  cardSchema,
+  drainSummarySchema,
+  pullSummarySchema,
+  startWorkResultSchema,
+  syncBindingSchema,
+  syncUnbindResultSchema,
+  worktreeCleanupOutcomeSchema,
+} from "./results/board"
 
 const boardIdParams = z.object({ boardId: z.string() })
 const cardIdParams = z.object({ cardId: z.string().describe("Id of the card") })
@@ -16,6 +32,7 @@ const cardBlockerParams = z.object({ cardId: z.string(), blockedByCardId: z.stri
 
 export const boardCommands = defineCommands(
   defineCommand("board.create", {
+    result: boardSchema,
     params: z.object({
       ownerKind: boardOwnerKindSchema,
       ownerId: z.string(),
@@ -27,12 +44,14 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.archive", {
+    result: noResult,
     params: boardIdParams,
     summary: "Archive a board.",
     risk: "destructive",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.update", {
+    result: boardSchema,
     params: z.object({
       boardId: z.string(),
       title: z.string().optional(),
@@ -44,18 +63,21 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.duplicate", {
+    result: boardSchema,
     params: z.object({ boardId: z.string(), title: z.string() }),
     summary: "Duplicate a board under a new title.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.saveAsTemplate", {
+    result: boardTemplateSchema,
     params: z.object({ boardId: z.string(), name: z.string() }),
     summary: "Save a board's columns as a reusable template.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.sync.bind", {
+    result: syncBindingSchema,
     params: z.object({
       boardId: z.string(),
       owner: z.string(),
@@ -70,36 +92,42 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.sync.unbind", {
+    result: syncUnbindResultSchema,
     params: z.object({ boardId: z.string(), bindingId: z.string() }),
     summary: "Remove a board's GitHub binding.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.sync.pull", {
+    result: pullSummarySchema,
     params: boardIdParams,
     summary: "Pull issues from the bound GitHub repository into the board.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.sync.push", {
+    result: drainSummarySchema,
     params: boardIdParams,
     summary: "Push held board changes to the bound GitHub repository.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.sync.status", {
+    result: boardSyncStatusSchema,
     params: boardIdParams,
     summary: "Read the sync status of a board.",
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.column.create", {
+    result: boardColumnSchema,
     params: z.object({ boardId: z.string(), title: z.string(), afterColumnId: z.string().nullable().optional() }),
     summary: "Add a column to a board.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.column.update", {
+    result: boardColumnSchema,
     params: z.object({
       columnId: z.string(),
       title: z.string().optional(),
@@ -112,18 +140,21 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.column.move", {
+    result: boardColumnSchema,
     params: z.object({ columnId: z.string(), afterColumnId: z.string().nullable() }),
     summary: "Reorder a column.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.column.delete", {
+    result: noResult,
     params: columnIdParams,
     summary: "Delete a column.",
     risk: "destructive",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.create", {
+    result: cardSchema,
     params: z.object({
       boardId: z.string().describe("Id of the board"),
       columnId: z.string().describe("Id of the column that receives the card"),
@@ -136,6 +167,7 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.move", {
+    result: cardSchema,
     params: z.object({
       cardId: z.string().describe("Id of the card"),
       toColumnId: z.string().describe("Id of the destination column"),
@@ -147,60 +179,70 @@ export const boardCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.archive", {
+    result: noResult,
     params: cardIdParams,
     summary: "Archive a card.",
     risk: "destructive",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.detail", {
+    result: cardDetailViewSchema.nullable(),
     params: cardIdParams,
     summary: "Read a card with its comments, links and blockers.",
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.comment", {
+    result: cardCommentSchema,
     params: z.object({ cardId: z.string().describe("Id of the card"), body: z.string().describe("Comment text") }),
     summary: "Add a comment to a card.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.block", {
+    result: noResult,
     params: cardBlockerParams,
     summary: "Mark a card as blocked by another card.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.unblock", {
+    result: noResult,
     params: cardBlockerParams,
     summary: "Remove a blocker from a card.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.update", {
+    result: cardSchema,
     params: z.object({ cardId: z.string(), title: z.string().optional(), content: jsonValueSchema.optional() }),
     summary: "Update a card's title or content.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.startWork", {
+    result: startWorkResultSchema,
     params: cardIdParams,
     summary: "Create a worktree and chat for a card and start the agent.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.card.resolveWorktree", {
+    result: worktreeCleanupOutcomeSchema,
     params: z.object({ cardId: z.string(), decision: cleanupDecisionSchema }),
     summary: "Merge, discard or keep the worktree of a finished card.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.cards.page", {
+    result: cardPageSchema,
     params: z.object({ columnId: z.string(), limit: z.number(), afterRank: z.string().nullable().optional() }),
     summary: "Read a page of cards in a column.",
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("board.templates.list", {
+    result: z.array(boardTemplateSchema),
     params: noParams,
     summary: "List board templates.",
     risk: "read",

@@ -5,7 +5,7 @@ import { Input } from "../ui/input"
 import { SegmentedControl, type SegmentedOption } from "../ui/segmented-control"
 import { bindingSlug, useBoardSyncPanelStore } from "./BoardSyncPanel.store"
 import { parseRepoSlug } from "../../../shared/boards/repo-slug"
-import type { BoardSyncStatus, RepoSuggestion, SyncColumnRouting } from "../../../shared/boards/sync-types"
+import type { RepoSuggestion, SyncColumnRouting } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict, SyncDirection } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
 import type { CommandPort } from "../../ports/commandPort"
@@ -180,7 +180,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
 
   const load = useCallback(() => {
     void socket
-      .command<BoardSyncStatus>({ type: "board.sync.status", boardId })
+      .command({ type: "board.sync.status", boardId })
       .then(setStatus)
       .catch(onRejected((error) => {
         setError(error.message)

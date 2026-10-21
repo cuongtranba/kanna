@@ -558,6 +558,9 @@ c3-302:
   - src/shared/beacon-config.schema.ts
   - src/shared/custom-providers.schema.ts
   - src/shared/git-diff-types.schema.ts
+  - src/shared/transcript-types.schema.ts
+  - src/shared/tool-call-types.schema.ts
+  - src/shared/workflow-types.schema.ts
   - src/shared/permission-policy.schema.ts
   - src/shared/boards/types.schema.ts
   - src/shared/cron/types.schema.ts

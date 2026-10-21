@@ -280,9 +280,11 @@ describe("board.sync", () => {
 
     await handleBoardCommand(deps, { type: "board.sync.status", boardId: board.id }, "req-1")
 
-    const ack = sent[0] as { result: { suggestedRepos: { projectId: string; repo: unknown }[] } }
-    expect(ack.result.suggestedRepos).toHaveLength(2)
-    expect(ack.result.suggestedRepos[1]).toMatchObject({ projectId: "p2", repo: null })
+    const ack = sent[0]
+    const result = ack?.type === "ack" ? ack.result : undefined
+    const suggestedRepos = result && typeof result === "object" && "suggestedRepos" in result ? result.suggestedRepos : []
+    expect(suggestedRepos).toHaveLength(2)
+    expect(suggestedRepos[1]).toMatchObject({ projectId: "p2", repo: null })
   })
 
   test("unbind disconnects one repo and leaves the board's other bindings alone", async () => {

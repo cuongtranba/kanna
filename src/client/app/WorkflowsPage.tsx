@@ -207,12 +207,12 @@ export function WorkflowsPage({ chatId }: { chatId?: string }) {
 
   const getRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
     if (!chatId) return null
-    return state.socket.command<WorkflowRun | null>({ type: "workflows.getRun", chatId, runId })
+    return state.socket.command({ type: "workflows.getRun", chatId, runId })
   }, [chatId, state.socket])
 
   const getAgentTranscript = useCallback(async (runId: string, agentId: string): Promise<TranscriptEntry[]> => {
     if (!chatId) return []
-    return state.socket.command<TranscriptEntry[]>({ type: "workflows.getAgentTranscript", chatId, runId, agentId })
+    return state.socket.command({ type: "workflows.getAgentTranscript", chatId, runId, agentId })
   }, [chatId, state.socket])
 
   const handleBackToChat = useCallback(() => {

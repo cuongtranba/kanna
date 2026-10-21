@@ -10,7 +10,6 @@ import type {
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
 import { log } from "../../shared/log"
-import type { JsonValue } from "../../shared/json"
 import { generateUUID } from "../lib/utils"
 import { runDetached } from "../lib/runDetached"
 import { getStoredPushDeviceId } from "./pushClient"
@@ -189,7 +188,6 @@ export class KannaSocket implements CommandPort {
   }
 
   command<C extends ClientCommand>(command: C): Promise<CommandReply<C>>
-  command<TResult = JsonValue>(command: ClientCommand): Promise<TResult>
   command(command: ClientCommand): Promise<AckResult> {
     const id = generateUUID()
     const envelope: ClientEnvelope = { v: 1, type: "command", id, command }

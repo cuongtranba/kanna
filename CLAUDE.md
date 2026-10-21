@@ -336,10 +336,23 @@ index-signature type, so (1) a predicate must be written
 reaching a JSON field needs an explicit field-by-field encoder — never a cast,
 and never `JSON.parse(JSON.stringify(x))` on a hot path.
 
-**The one residue is named, not hidden.** `CommandAckResult`
-(`shared/protocol.ts`) is `JsonPrimitive | object`: the ack channel carries 51
-concrete result types with no common supertype, and relating result to command
-is issue #899 (`untyped-command-results`), not something a type can fix here.
+**The ack channel has no residue.** Every command in the registry
+(`src/shared/commands/`) declares a `result` zod schema, and
+`CommandResult<C>` is its output type, so the ack envelope's `result` is the union
+of those outputs rather than a loose `object`. A command that acks with nothing
+declares `noResult` (`z.undefined()`): `ackResult(id, command)` takes no result
+and compiles only for such a command, and `kanna_commands` renders the schema as
+`{ "not": {} }` with a description saying the ack carries no result and the
+remote MCP server reports it as `{"ok":true}`. A handler answers through
+`ackResult(id, command, result)`, so a reply of another shape fails to compile.
+`socket.command(command)` resolves to that type and there is no overload that
+takes a type argument, so a client cast is not expressible. `defineCommand`
+requires `result`, so a command cannot ship without one. A type that already
+exists for a result is tied to its schema with `assertParity`. The hot-path
+payloads (`TranscriptEntry[]`, `ChatHistoryPage`) are typed by schema and never
+parsed on the client. The one handler that does not use `ackResult` is
+`backgroundTasks.getOutput`, which answers with a `snapshot` envelope; its
+schema describes that snapshot and a parity check ties it to `ServerSnapshot`.
 
 # Architecture Budget (ratchet — `bun run check:arch`)
 
@@ -360,7 +373,7 @@ Two budgets, deliberately shaped differently:
   pin because this repo routinely has 15+ live worktrees and exact line pins
   would make every parallel edit to a large module a manifest merge conflict.
 - **`PATTERN_BUDGETS`** — an **exact ratchet** on counted defect populations
-  (`deps-bundles`, `ws-router-dispatch-arms`, `untyped-command-results`, …).
+  (`deps-bundles`, `ws-router-dispatch-arms`, …).
   Growing fails; **shrinking also fails**, because a pin left above the real
   count is a pin the population can creep back up to. Each entry carries the
   `issue` it regresses and a `rationale`, so a breach message says which filed

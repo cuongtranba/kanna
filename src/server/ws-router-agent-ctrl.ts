@@ -1,5 +1,5 @@
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import { ackResult } from "./ws-router-ack"
 
 
 export interface AgentCtrlAgentDep {
@@ -33,19 +33,19 @@ export async function handleAgentCtrlCommand(
   switch (command.type) {
     case "autoContinue.accept": {
       await agent.acceptAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "autoContinue.reschedule": {
       await agent.rescheduleAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "autoContinue.cancel": {
       await agent.cancelAutoContinue(command.chatId, command.scheduleId, "user")
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -59,7 +59,7 @@ export async function handleAgentCtrlCommand(
         ok: true,
         command: { sub, jobId: command.jobId },
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -68,7 +68,7 @@ export async function handleAgentCtrlCommand(
         ok: true,
         command: { sub: "update", jobId: command.jobId, patch: command.patch },
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -76,7 +76,7 @@ export async function handleAgentCtrlCommand(
       if (tunnelGateway) {
         await tunnelGateway.accept(command.chatId, command.tunnelId)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -84,7 +84,7 @@ export async function handleAgentCtrlCommand(
       if (tunnelGateway) {
         await tunnelGateway.stop(command.chatId, command.tunnelId)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -92,7 +92,7 @@ export async function handleAgentCtrlCommand(
       if (tunnelGateway) {
         await tunnelGateway.retry(command.chatId, command.tunnelId)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }

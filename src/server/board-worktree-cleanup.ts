@@ -1,3 +1,4 @@
+import type { WorktreeCleanupOutcome } from "../shared/commands/results/board"
 
 import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
@@ -29,10 +30,7 @@ export interface WorktreeCleanupDeps {
   removeWorktree(repoRoot: string, worktreePath: string, opts: { force: boolean }): Promise<void>
 }
 
-export type WorktreeCleanupOutcome =
-  | { decision: "leave"; worktreePath: string }
-  | { decision: "discard"; worktreePath: string }
-  | { decision: "merge"; worktreePath: string; message: string }
+export type { WorktreeCleanupOutcome }
 
 interface Resolved {
   worktreePath: string

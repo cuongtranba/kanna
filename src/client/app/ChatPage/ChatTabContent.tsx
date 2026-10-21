@@ -23,7 +23,6 @@ import { useChatTabState } from "./ChatTabRoot"
 import { EMPTY_CRON_JOBS, EMPTY_SCHEDULES } from "../KannaTranscript"
 import { findRetryPromptForResult } from "../../lib/retryPrompt"
 import { useShareStore } from "../../components/share/share-store"
-import type { ShareCommandResult } from "../../../shared/session-share/protocol"
 import { COMPOSE_CHAT_KEY } from "../useAppGlobalState"
 import { ChatTranscriptViewport } from "./ChatTranscriptViewport"
 import { TranscriptActionsProvider, type TranscriptActionsContextValue } from "../transcriptActionsContext"
@@ -354,13 +353,13 @@ export function ChatTabContent({
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
     const chatId = state.activeChatId
     if (!chatId) return null
-    return state.socket.command<WorkflowRun | null>({ type: "workflows.getRun", chatId, runId })
+    return state.socket.command({ type: "workflows.getRun", chatId, runId })
   }, [state.activeChatId, state.socket])
 
   const handleGetSubagentTranscript = useCallback(async (agentId: string): Promise<TranscriptEntry[]> => {
     const chatId = state.activeChatId
     if (!chatId) return []
-    return state.socket.command<TranscriptEntry[]>({ type: "subagents.getRun", chatId, agentId })
+    return state.socket.command({ type: "subagents.getRun", chatId, agentId })
   }, [state.activeChatId, state.socket])
 
 
@@ -483,20 +482,18 @@ export function ChatTabContent({
   const removeShare = useShareStore((s) => s.removeShare)
 
   const handleShareMint = useCallback(async (chatId: string): Promise<void> => {
-    const reply = await state.socket.command<ShareCommandResult>({
+    const reply = await state.socket.command({
       type: "share.mint",
       payload: { chatId },
     })
     if (!reply.ok) throw new Error(describeShareFailure(reply.error))
-    if (reply.kind === "mint") {
-      addShare(chatId, reply.data.summary)
-    }
+    addShare(chatId, reply.data.summary)
   }, [addShare, state.socket])
 
   const handleShareRevoke = useCallback(async (tokenId: string): Promise<void> => {
     const chatId = state.activeChatId
     if (!chatId) return
-    const reply = await state.socket.command<ShareCommandResult>({
+    const reply = await state.socket.command({
       type: "share.revoke",
       payload: { tokenId },
     })

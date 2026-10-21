@@ -1,5 +1,4 @@
 import { errorMessage } from "../shared/errors"
-import { PROTOCOL_VERSION } from "../shared/types"
 import { resolveSpawnPaths } from "./claude-session-config"
 import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
@@ -96,12 +95,12 @@ export async function handleProjectCommand(
 
   switch (command.type) {
     case "system.ping": {
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "system.openExternal": {
       await openExternalFn(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
 
@@ -145,7 +144,7 @@ export async function handleProjectCommand(
       const existingProjectId = store.state.projectIdsByPath.get(normalizedPath)
       const project = await store.openProject(command.localPath)
       await refreshDiscovery()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { projectId: project.id } })
+      send(ackResult(id, command, { projectId: project.id }))
       if (!existingProjectId) {
         analytics.track("project_opened")
       }
@@ -157,7 +156,7 @@ export async function handleProjectCommand(
       const existingProjectId = store.state.projectIdsByPath.get(normalizedPath)
       const project = await store.openProject(command.localPath, command.title)
       await refreshDiscovery()
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { projectId: project.id } })
+      send(ackResult(id, command, { projectId: project.id }))
       if (!existingProjectId) {
         analytics.track("project_opened")
         analytics.track("project_created")
@@ -170,26 +169,26 @@ export async function handleProjectCommand(
       if (project) {
         terminals.closeByCwd(project.localPath)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       analytics.track("project_removed")
       return true
     }
     case "project.delete": {
       const result = await deleteProjectData(deps, command.projectId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       analytics.track("project_deleted")
       await broadcastSidebar()
       return true
     }
     case "project.setStar": {
       await store.setProjectStar(command.projectId, command.starred)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "project.setInstructions": {
       await store.setProjectInstructions(command.projectId, command.instructions)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       analytics.track("project_instructions_set")
       await broadcastSidebar()
       return true
@@ -213,7 +212,7 @@ export async function handleProjectCommand(
       if (result.newProjects > 0) {
         await refreshDiscovery()
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       await broadcastSidebar()
       return true
     }
@@ -222,14 +221,14 @@ export async function handleProjectCommand(
       if (result.newProjects > 0) {
         await refreshDiscovery()
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       await broadcastSidebar()
       return true
     }
 
     case "sidebar.reorderProjectGroups": {
       await store.setSidebarProjectOrder(command.projectIds)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }

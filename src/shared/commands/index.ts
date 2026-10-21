@@ -2,7 +2,7 @@ import { z } from "zod"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../json"
 import { boardCommands } from "./board"
 import { chatCommands } from "./chat"
-import { defineCommands, type CommandAckResult, type CommandRisk, type ParseOutcome, type RemotePolicy } from "./define"
+import { defineCommands, noResult, type CommandRisk, type ParseOutcome, type RemotePolicy } from "./define"
 import { gitCommands } from "./git"
 import { inboxCommands } from "./inbox"
 import { projectCommands } from "./project"
@@ -11,7 +11,7 @@ import { settingsCommands } from "./settings"
 import { shareCommands } from "./share"
 import { systemCommands } from "./system"
 
-export type { CommandAckResult, CommandRisk, RemotePolicy }
+export type { CommandRisk, RemotePolicy }
 
 export const COMMAND_REGISTRY = defineCommands(
   ...projectCommands,
@@ -29,19 +29,11 @@ type RegisteredCommand = (typeof COMMAND_REGISTRY)[number]
 
 export type CommandType = RegisteredCommand["type"]
 export type ClientCommand = z.output<RegisteredCommand["schema"]>
-type ResultSchemaOf<D> = D extends { readonly result: infer R } ? Exclude<R, undefined> : never
-type ResultOf<D, Fallback> = D extends { readonly type: string }
-  ? [ResultSchemaOf<D>] extends [never]
-    ? Fallback
-    : ResultSchemaOf<D> extends z.ZodType
-      ? z.output<ResultSchemaOf<D>>
-      : Fallback
-  : never
+type ResultOf<D> = D extends { readonly result: infer R extends z.ZodType } ? z.output<R> : never
+type NoResultTypeOf<D> = D extends { readonly type: infer T; readonly result: z.ZodUndefined } ? T : never
 
-export type CommandResult<C extends ClientCommand, Fallback = CommandAckResult> = ResultOf<
-  Extract<RegisteredCommand, { readonly type: C["type"] }>,
-  Fallback
->
+export type CommandResult<C extends ClientCommand> = ResultOf<Extract<RegisteredCommand, { readonly type: C["type"] }>>
+export type NoResultClientCommand = Extract<ClientCommand, { type: NoResultTypeOf<RegisteredCommand> }>
 export type ShareClientCommand = Extract<ClientCommand, { type: `share.${string}` }>
 
 const REGISTERED_BY_TYPE: ReadonlyMap<string, RegisteredCommand> = new Map(
@@ -74,7 +66,7 @@ export interface CommandDescriptor {
   readonly risk: CommandRisk
   readonly remote: RemotePolicy
   readonly paramsSchema: JsonObject
-  readonly resultSchema?: JsonObject
+  readonly resultSchema: JsonObject
 }
 
 function renderJsonSchema(schema: z.ZodType, io: "input" | "output"): JsonObject {
@@ -82,6 +74,11 @@ function renderJsonSchema(schema: z.ZodType, io: "input" | "output"): JsonObject
   if (rendered === null || !isJsonObject(rendered)) return {}
   const { $schema: _dialect, ...rest } = rendered
   return rest
+}
+
+const NO_RESULT_JSON_SCHEMA: JsonObject = {
+  description: "The ack carries no result field, and the remote MCP server reports it as {\"ok\":true}.",
+  not: {},
 }
 
 const DESCRIPTOR_CACHE = new Map<CommandType, CommandDescriptor>()
@@ -96,7 +93,7 @@ function describeCommand(definition: RegisteredCommand): CommandDescriptor {
     risk: definition.risk,
     remote: definition.remote,
     paramsSchema: renderJsonSchema(definition.params, "input"),
-    ...(definition.result ? { resultSchema: renderJsonSchema(definition.result, "output") } : {}),
+    resultSchema: definition.result === noResult ? NO_RESULT_JSON_SCHEMA : renderJsonSchema(definition.result, "output"),
   }
   DESCRIPTOR_CACHE.set(definition.type, descriptor)
   return descriptor

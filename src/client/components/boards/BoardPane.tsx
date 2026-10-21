@@ -119,7 +119,7 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     const sync = useBoardSyncStore.getState()
     sync.startSync(boardId)
     void socket
-      .command<{ created: number; updated: number; unchanged: number; conflicts: number }>({
+      .command({
         type: "board.sync.pull",
         boardId,
       })

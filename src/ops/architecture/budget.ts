@@ -76,15 +76,6 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
       "Was 106 per-command arms with no exhaustiveness check, which silently dropped six real commands (stack.setInstructions, cron.update, project.setInstructions, board.card.block/unblock, board.sync.unbind) to broadcastSnapshots(). The router now dispatches by chaining the handlers over the Promise<boolean> contract they already implement, so it enumerates no command at all and any arm here means per-command routing is creeping back in. The first fix enumerated every command a second time in per-module lists, which cost 213 net lines to buy compile-time detection; ws-router-coverage.test.ts replaces that for 55 lines by reading each handler's ACTUAL case labels against the ClientCommand union, which also catches the case the lists could not - a command listed for a group whose module has no case for it.",
   },
   {
-    id: "untyped-command-results",
-    include: ["src/client/"],
-    pattern: "\\.command<",
-    max: 28,
-    issue: 899,
-    rationale:
-      "Commands with a result schema in the registry are typed by socket.command(command); every remaining socket.command<TResult> call takes the result type as a free parameter with no relation to the command passed, an unchecked assertion that a handler changing its return shape breaks at zero call sites. Migrate a domain by adding result schemas and deleting its type arguments.",
-  },
-  {
     id: "mcp-inline-tool-results",
     include: ["src/server/kanna-mcp.ts"],
     pattern: 'type: "text" as const',
