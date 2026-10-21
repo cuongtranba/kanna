@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.90.0](https://github.com/cuongtranba/kanna/compare/v1.89.0...v1.90.0) (2026-10-21)
+
+
+### Features
+
+* **sidebar:** shift/cmd-click multi-select with bulk archive ([#1343](https://github.com/cuongtranba/kanna/issues/1343)) ([328ac3f](https://github.com/cuongtranba/kanna/commit/328ac3fe4c74ad68b4f8cf077a409af230d17f79))
+
+
+### Bug Fixes
+
+* **inbox:** stop flagging auto-decided tool requests as needs-you ([#1355](https://github.com/cuongtranba/kanna/issues/1355)) ([90919ac](https://github.com/cuongtranba/kanna/commit/90919acc3f9485d089e0cc59caab97010ea23b25))
+
 ## [1.89.0](https://github.com/cuongtranba/kanna/compare/v1.88.0...v1.89.0) (2026-10-21)
 
 
