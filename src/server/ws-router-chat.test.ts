@@ -16,6 +16,7 @@ function makeStore(overrides: Partial<ChatStoreDep> = {}): ChatStoreDep {
     renameChat: mock(async () => {}),
     archiveChat: mock(async () => {}),
     unarchiveChat: mock(async () => {}),
+    setChatPin: mock(async () => {}),
     deleteChat: mock(async () => {}),
     setChatReadState: mock(async () => {}),
     setChatPolicyOverride: mock(async () => {}),
@@ -170,6 +171,19 @@ describe("handleChatCommand", () => {
     expect(deps.chatSidebarBroadcasts).toHaveLength(0)
   })
 
+
+  test("chat.setPin — pins, acks, broadcasts sidebar only", async () => {
+    const deps = makeDeps()
+    const handled = await handleChatCommand(
+      deps,
+      { type: "chat.setPin", chatId: "chat-1", pinned: true },
+      "r4b",
+    )
+    expect(handled).toBe(true)
+    expect(deps.store.setChatPin as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", true)
+    expect(deps.sidebarBroadcasts).toBe(1)
+    expect(deps.chatSidebarBroadcasts).toHaveLength(0)
+  })
 
   test("chat.delete — cancels, closes schedules, closes chat, cancels tool callbacks, deletes, tracks analytics", async () => {
     const scheduleId = "sched-1"

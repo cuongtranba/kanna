@@ -1,5 +1,5 @@
 import { type MouseEvent, type ReactNode, memo } from "react"
-import { Archive, BellOff, Check, ShieldAlert, Split } from "lucide-react"
+import { Archive, BellOff, Check, Pin, ShieldAlert, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
@@ -34,6 +34,7 @@ interface Props {
   onOpenInFinder: (localPath: string) => Promise<void>
   onForkChat: (chatId: string) => Promise<void>
   onArchiveChat: (chatId: string) => Promise<void>
+  onTogglePin: (chatId: string, pinned: boolean) => Promise<void>
   onDeleteChat: (chatId: string) => Promise<void>
   onEditPermissions?: (chatId: string) => void
   silent?: boolean
@@ -53,6 +54,7 @@ function ChatRowImpl({
   onOpenInFinder,
   onForkChat,
   onArchiveChat,
+  onTogglePin,
   onDeleteChat,
   onEditPermissions,
   silent = false,
@@ -186,6 +188,7 @@ function ChatRowImpl({
       {chat.hasPolicyOverride ? (
         <ShieldAlert className="size-3 shrink-0 text-warning-text" aria-label="Per-chat permission override active" />
       ) : null}
+      {chat.pinnedAt !== undefined ? <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" /> : null}
       <span
         className={cn(
           "min-w-0 flex-1 truncate text-sm",
@@ -226,6 +229,8 @@ function ChatRowImpl({
           onOpenInFinder={() => launch("chat.openInFinder", () => onOpenInFinder(chat.localPath))}
           onFork={() => launch("chat.fork", () => onForkChat(chat.chatId))}
           onArchive={() => launch("chat.archive", () => onArchiveChat(chat.chatId))}
+          pinned={chat.pinnedAt !== undefined}
+          onTogglePin={() => launch("chat.setPin", () => onTogglePin(chat.chatId, chat.pinnedAt === undefined))}
           onDelete={() => launch("chat.delete", () => onDeleteChat(chat.chatId))}
           onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
         >

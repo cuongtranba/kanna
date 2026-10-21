@@ -1,6 +1,6 @@
 import { pendingActionKey, usePendingActionsStore } from "../../../stores/pendingActionsStore"
 
-export type ChatRowAction = "chat.rename" | "chat.fork" | "chat.archive" | "chat.delete" | "chat.openInFinder"
+export type ChatRowAction = "chat.rename" | "chat.fork" | "chat.archive" | "chat.setPin" | "chat.delete" | "chat.openInFinder"
 
 export type ProjectAction =
   | "project.copyPath"
@@ -11,7 +11,7 @@ export type ProjectAction =
   | "project.delete"
   | "project.setInstructions"
 
-const CHAT_ROW_ACTIONS: readonly ChatRowAction[] = ["chat.rename", "chat.fork", "chat.archive", "chat.delete", "chat.openInFinder"]
+const CHAT_ROW_ACTIONS: readonly ChatRowAction[] = ["chat.rename", "chat.fork", "chat.archive", "chat.setPin", "chat.delete", "chat.openInFinder"]
 
 const PROJECT_ACTIONS: readonly ProjectAction[] = [
   "project.copyPath",

@@ -14,6 +14,7 @@ export const STORE_EVENT_SUBJECT = {
   chat_deleted: "chat.deleted",
   chat_archived: "chat.archived",
   chat_unarchived: "chat.unarchived",
+  chat_pin_set: "chat.pinned",
   chat_provider_set: "chat.provider",
   chat_model_set: "chat.model",
   chat_plan_mode_set: "chat.planMode",

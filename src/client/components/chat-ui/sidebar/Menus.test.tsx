@@ -1,6 +1,8 @@
 import { describe, expect, test, mock } from "bun:test"
+import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { ProjectSectionMenu } from "./Menus"
+import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
+import { ChatRowMenu, ProjectSectionMenu } from "./Menus"
 
 type MenuProps = Omit<Parameters<typeof ProjectSectionMenu>[0], "children">
 
@@ -79,5 +81,41 @@ describe("ProjectSectionMenu — Edit instructions", () => {
         </ProjectSectionMenu>
       )
     ).not.toThrow()
+  })
+})
+
+describe("ChatRowMenu — Pin", () => {
+  async function openMenuText(pinned: boolean) {
+    const { cleanup } = await renderForLoopCheck(
+      <ChatRowMenu
+        onRename={() => undefined}
+        onOpenInFinder={() => undefined}
+        onFork={() => undefined}
+        onArchive={() => undefined}
+        pinned={pinned}
+        onTogglePin={() => undefined}
+        onDelete={() => undefined}
+      >
+        <button data-testid="chat-row-trigger">trigger</button>
+      </ChatRowMenu>
+    )
+    const trigger = document.querySelector('[data-testid="chat-row-trigger"]')
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 }))
+    })
+    const text = document.body.textContent ?? ""
+    await cleanup()
+    return text
+  }
+
+  test("offers 'Pin to top' for an unpinned chat", async () => {
+    const text = await openMenuText(false)
+    expect(text).toContain("Pin to top")
+    expect(text).not.toContain("Unpin")
+  })
+
+  test("offers 'Unpin' for a pinned chat", async () => {
+    const text = await openMenuText(true)
+    expect(text).toContain("Unpin")
   })
 })

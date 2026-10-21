@@ -69,6 +69,13 @@ export const chatCommands = defineCommands(
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("chat.setPin", {
+    result: noResult,
+    params: z.object({ ...chatIdShape, pinned: z.boolean() }),
+    summary: "Pin a chat to the top of its project, or unpin it.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("chat.unarchive", {
     result: noResult,
     params: chatIdParams,

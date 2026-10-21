@@ -1,5 +1,5 @@
 import { type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Pin, PinOff, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -159,6 +159,8 @@ export function ChatRowMenu({
   onOpenInFinder,
   onFork,
   onArchive,
+  pinned,
+  onTogglePin,
   onDelete,
   onEditPermissions,
   children,
@@ -168,6 +170,8 @@ export function ChatRowMenu({
   onOpenInFinder: () => void
   onFork: () => void
   onArchive: () => void
+  pinned: boolean
+  onTogglePin: () => void
   onDelete: () => void
   onEditPermissions?: () => void
   children: ReactNode
@@ -178,6 +182,15 @@ export function ChatRowMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onTogglePin()
+          }}
+        >
+          {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+          <span className="text-xs font-medium">{pinned ? "Unpin" : "Pin to top"}</span>
+        </ContextMenuItem>
         <ContextMenuItem
           onSelect={(event) => {
             event.preventDefault()

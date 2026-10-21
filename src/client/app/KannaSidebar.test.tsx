@@ -55,6 +55,7 @@ function sidebarProps(data: SidebarData, overrides: Partial<SidebarProps> = {}):
     onHideProject: async () => undefined,
     onDeleteProject: async () => undefined,
     onToggleStar: async () => undefined,
+    onTogglePinChat: async () => undefined,
     onSetProjectInstructions: async () => undefined,
     onReorderProjectGroups: async () => undefined,
     onCreateStack: async () => undefined,

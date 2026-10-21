@@ -410,6 +410,56 @@ describe("read models", () => {
     expect(sidebar.projectGroups[0]?.defaultCollapsed).toBe(false)
   })
 
+  test("lists an old pinned chat above newer chats and keeps it in the preview", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", { id: "project-1", localPath: "/tmp/project", title: "Project", createdAt: 1, updatedAt: 1 })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    const baseChat = {
+      projectId: "project-1",
+      unread: false,
+      provider: "claude" as const,
+      planMode: false,
+      sessionTokensByProvider: {},
+      sourceHash: null,
+      lastTurnOutcome: null,
+    }
+    state.chatsById.set("chat-pinned", { ...baseChat, id: "chat-pinned", title: "Pinned", createdAt: 10, updatedAt: 10, lastMessageAt: 1_000_000 - 30 * 24 * 60 * 60 * 1_000, pinnedAt: 5_000 })
+    state.chatsById.set("chat-new", { ...baseChat, id: "chat-new", title: "New", createdAt: 20, updatedAt: 20, lastMessageAt: 1_000_000 - 60 * 1_000 })
+    state.chatsById.set("chat-old", { ...baseChat, id: "chat-old", title: "Old", createdAt: 30, updatedAt: 30, lastMessageAt: 1_000_000 - 26 * 60 * 60 * 1_000 })
+
+    const group = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]
+
+    expect(group?.chats.map((chat) => chat.chatId)).toEqual(["chat-pinned", "chat-new", "chat-old"])
+    expect(group?.chats[0]?.pinnedAt).toBe(5_000)
+    expect(group?.previewChats.map((chat) => chat.chatId)).toEqual(["chat-pinned", "chat-new"])
+    expect(group?.olderChats.map((chat) => chat.chatId)).toEqual(["chat-old"])
+  })
+
+  test("does not collapse a project whose only chat is an old pinned chat", () => {
+    const state = createEmptyState()
+    state.projectsById.set("project-1", { id: "project-1", localPath: "/tmp/project", title: "Project", createdAt: 1, updatedAt: 1 })
+    state.projectIdsByPath.set("/tmp/project", "project-1")
+    const oldChat: ChatRecord = {
+      id: "chat-1",
+      projectId: "project-1",
+      title: "Old",
+      createdAt: 10,
+      updatedAt: 10,
+      unread: false,
+      provider: "claude",
+      planMode: false,
+      sessionTokensByProvider: {},
+      sourceHash: null,
+      lastMessageAt: 1_000_000 - 30 * 24 * 60 * 60 * 1_000,
+      lastTurnOutcome: null,
+    }
+    state.chatsById.set("chat-1", oldChat)
+    expect(deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(true)
+
+    state.chatsById.set("chat-1", { ...oldChat, pinnedAt: 5_000 })
+    expect(deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(false)
+  })
+
   test("shows all recent chats in the preview before folding older chats", () => {
     const state = createEmptyState()
     state.projectsById.set("project-1", {

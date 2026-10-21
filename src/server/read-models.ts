@@ -129,11 +129,22 @@ function isSidebarChatRecent(chat: Pick<SidebarChatRow, "lastMessageAt" | "_crea
   return Math.max(0, nowMs - getSidebarChatTimestamp(chat)) < SIDEBAR_RECENT_WINDOW_MS
 }
 
+function compareSidebarChatRecords(a: ChatRecord, b: ChatRecord) {
+  const pinDiff = (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0)
+  if (pinDiff !== 0) return pinDiff
+  return getSidebarChatSortTimestamp(b) - getSidebarChatSortTimestamp(a)
+}
+
 function getSidebarChatBuckets(chats: SidebarChatRow[], nowMs: number) {
-  const recentChats = chats.filter((chat) => isSidebarChatRecent(chat, nowMs))
-  const previewChats = recentChats.length > 0
-    ? recentChats
-    : chats.slice(0, Math.min(SIDEBAR_FALLBACK_PREVIEW_LIMIT, chats.length))
+  const pinnedChats = chats.filter((chat) => chat.pinnedAt !== undefined)
+  const unpinnedChats = chats.filter((chat) => chat.pinnedAt === undefined)
+  const recentChats = unpinnedChats.filter((chat) => isSidebarChatRecent(chat, nowMs))
+  const previewChats = [
+    ...pinnedChats,
+    ...(recentChats.length > 0
+      ? recentChats
+      : unpinnedChats.slice(0, Math.min(SIDEBAR_FALLBACK_PREVIEW_LIMIT, unpinnedChats.length))),
+  ]
   const previewChatIds = new Set(previewChats.map((chat) => chat.chatId))
 
   return {
@@ -208,7 +219,7 @@ export function deriveSidebarData(
 
   function toSidebarChatRows(project: NonNullable<typeof projects[number]>, projectChats: ChatRecord[]) {
     return projectChats
-      .sort((a, b) => getSidebarChatSortTimestamp(b) - getSidebarChatSortTimestamp(a))
+      .sort(compareSidebarChatRecords)
       .map((chat) => ({
         _id: chat.id,
         _creationTime: chat.createdAt,
@@ -225,6 +236,7 @@ export function deriveSidebarData(
         stackId: chat.stackId,
         sessionState: claudeSessionStates.get(chat.id) ?? "cold",
         hasPolicyOverride: chat.policyOverride != null,
+        ...(chat.pinnedAt !== undefined ? { pinnedAt: chat.pinnedAt } : {}),
       }))
   }
 
@@ -242,7 +254,7 @@ export function deriveSidebarData(
       previewChats,
       olderChats,
       ...(archivedChats.length ? { archivedChats } : {}),
-      defaultCollapsed: chats.every((chat) => !isSidebarChatRecent(chat, nowMs)),
+      defaultCollapsed: chats.every((chat) => chat.pinnedAt === undefined && !isSidebarChatRecent(chat, nowMs)),
       ...(project.starredAt != null ? { starredAt: project.starredAt } : {}),
       ...(sourceProvider != null ? { sourceProvider } : {}),
       ...(project.instructions ? { instructions: project.instructions } : {}),

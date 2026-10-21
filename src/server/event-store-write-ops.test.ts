@@ -24,6 +24,7 @@ import {
   buildRenameChatEvent,
   buildResolveToolRequestEvent,
   buildSetProjectInstructionsEvent,
+  buildSetChatPinEvent,
   buildSetProjectStarEvent,
   buildSetStackInstructionsEvent,
   buildTurnCancelledEvent,
@@ -465,6 +466,21 @@ describe("buildArchiveChatEvent / buildUnarchiveChatEvent", () => {
 
   test("throws if chat not found", () => {
     expect(() => buildArchiveChatEvent(new Map(), "missing")).toThrow()
+  })
+})
+
+describe("buildSetChatPinEvent", () => {
+  test("returns chat_pin_set with pinnedAt when pinning and null when unpinning", () => {
+    const chatsById = new Map([["chat-1", makeChat()]])
+    const pinned = buildSetChatPinEvent(chatsById, "chat-1", true)
+    const unpinned = buildSetChatPinEvent(chatsById, "chat-1", false)
+    expect(pinned.type).toBe("chat_pin_set")
+    if (pinned.type === "chat_pin_set") expect(pinned.pinnedAt).toBe(pinned.timestamp)
+    if (unpinned.type === "chat_pin_set") expect(unpinned.pinnedAt).toBeNull()
+  })
+
+  test("throws if chat not found", () => {
+    expect(() => buildSetChatPinEvent(new Map(), "missing", true)).toThrow()
   })
 })
 

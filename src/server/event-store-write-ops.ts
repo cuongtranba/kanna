@@ -328,6 +328,12 @@ export function buildArchiveChatEvent(chatsById: Map<string, ChatRecord>, chatId
   return { v: STORE_VERSION, type: "chat_archived", timestamp: Date.now(), chatId }
 }
 
+export function buildSetChatPinEvent(chatsById: Map<string, ChatRecord>, chatId: string, pinned: boolean): ChatEvent {
+  requireChat(chatsById, chatId)
+  const now = Date.now()
+  return { v: STORE_VERSION, type: "chat_pin_set", timestamp: now, chatId, pinnedAt: pinned ? now : null }
+}
+
 export function buildUnarchiveChatEvent(chatsById: Map<string, ChatRecord>, chatId: string): ChatEvent {
   requireChat(chatsById, chatId)
   return { v: STORE_VERSION, type: "chat_unarchived", timestamp: Date.now(), chatId }

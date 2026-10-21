@@ -95,6 +95,7 @@ interface KannaSidebarProps {
   onHideProject: (projectId: string) => Promise<void>
   onDeleteProject: (projectId: string) => Promise<void>
   onToggleStar: (projectId: string, starred: boolean) => Promise<void>
+  onTogglePinChat: (chatId: string, pinned: boolean) => Promise<void>
   onSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>
   onReorderProjectGroups: (projectIds: string[]) => Promise<void>
   onCreateStack: (title: string, projectIds: string[], instructions?: string) => Promise<void>
@@ -138,6 +139,7 @@ function KannaSidebarImpl({
   onHideProject,
   onDeleteProject,
   onToggleStar,
+  onTogglePinChat,
   onSetProjectInstructions,
   onReorderProjectGroups,
   onCreateStack,
@@ -440,6 +442,7 @@ function KannaSidebarImpl({
         onOpenInFinder={() => onOpenExternalPath("open_finder", chat.localPath)}
         onForkChat={() => onForkChat(chat)}
         onArchiveChat={() => onArchiveChat(chat)}
+        onTogglePin={onTogglePinChat}
         onDeleteChat={() => onDeleteChat(chat)}
         onEditPermissions={onEditChatPermissions}
         silent={mutedChatIds.includes(chat.chatId)}
@@ -448,7 +451,7 @@ function KannaSidebarImpl({
         onSelectionGesture={(gesture) => handleSelectionGesture(chat.chatId, gesture)}
       />
     )
-  }, [activeChatId, isSelecting, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, selectedChatIds, showNumberJumpHints, handleSelectionGesture, visibleIndexByChatId])
+  }, [activeChatId, isSelecting, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, onTogglePinChat, resolvedKeybindings, selectedChatIds, showNumberJumpHints, handleSelectionGesture, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = timer.setInterval(() => {
