@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.91.0](https://github.com/cuongtranba/kanna/compare/v1.90.0...v1.91.0) (2026-10-21)
+
+
+### Features
+
+* **webhooks:** answer Slack [@mentions](https://github.com/mentions) with a Slack hook kind ([#1352](https://github.com/cuongtranba/kanna/issues/1352)) ([8ecee86](https://github.com/cuongtranba/kanna/commit/8ecee861a687f019dd9d06a2409edb5a11cd4147))
+
 ## [1.90.0](https://github.com/cuongtranba/kanna/compare/v1.89.0...v1.90.0) (2026-10-21)
 
 
