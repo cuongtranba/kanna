@@ -1,7 +1,7 @@
 {
   "name": "@cuongtran001/kanna",
   "type": "module",
-  "version": "1.88.0",
+  "version": "1.89.0",
   "description": "A beautiful web UI for Claude Code",
   "license": "MIT",
   "keywords": [
@@ -61,7 +61,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.301",
+    "@anthropic-ai/claude-agent-sdk": "0.3.302",
     "@atlaskit/pragmatic-drag-and-drop": "3.1.0",
     "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "3.2.1",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "3.0.0",
@@ -144,7 +144,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/bricolage-grotesque": "^5.2.10",
-    "@happy-dom/global-registrator": "^20.9.0",
+    "@happy-dom/global-registrator": "^21.0.3",
     "@playwright/test": "^1.62.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",

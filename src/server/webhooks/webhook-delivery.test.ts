@@ -73,6 +73,24 @@ test("spawn creates a new chat in the project holding the card and the queued pr
   expect(store.getQueuedMessages(result.chatId)).toHaveLength(1)
 })
 
+test("a spawn hook with task handling queues the task instruction instead of the triage one", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const result = await deliverWebhook(
+    store,
+    agent,
+    bus,
+    inbox,
+    hook({ mode: "spawn", projectId: project.id, handling: "task" }),
+    "d8",
+    BODY,
+    10,
+  )
+  if (!result.ok) throw new Error(result.detail)
+  const [queued] = store.getQueuedMessages(result.chatId)
+  expect(queued.content).toContain("You are running a task")
+  expect(queued.content).not.toContain("NEVER send anything to the sender")
+})
+
 test("a missing target chat or project fails without side effects", async () => {
   const { store, agent, project, chat, bus, inbox } = await createWebhookHarness()
   const chats = store.listChatsByProject(project.id).length

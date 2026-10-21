@@ -24,3 +24,11 @@ test("untrusted text is fenced in the requested language and cut at the prompt c
   expect(long).toContain(INBOUND_TRUNCATION_MARKER)
   expect(long).not.toContain("x".repeat(INBOUND_PROMPT_BODY_MAX_CHARS + 1))
 })
+
+test("the task instruction tells the agent to carry out the hook's instruction and report once, without the triage ban", () => {
+  const text = renderHandlerInstruction({ threadId: "t-9", sourceName: "Mail", replyHint: "Use send_mail.", handling: "task" })
+  expect(text).toContain("You are running a task triggered by an inbound message from Mail")
+  expect(text).toContain(`call ${INBOX_REPORT_TOOL_NAME} once with thread_id t-9`)
+  expect(text).toContain("Use send_mail.")
+  expect(text).not.toContain("NEVER send anything to the sender")
+})

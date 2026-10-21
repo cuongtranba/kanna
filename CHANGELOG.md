@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.89.0](https://github.com/cuongtranba/kanna/compare/v1.88.0...v1.89.0) (2026-10-21)
+
+
+### Features
+
+* **webhooks:** run a hook's template as a task instead of triaging it ([#1353](https://github.com/cuongtranba/kanna/issues/1353)) ([b4b36c5](https://github.com/cuongtranba/kanna/commit/b4b36c563e3e39602aa5e2ded309da810611bc34))
+
 ## [1.88.0](https://github.com/cuongtranba/kanna/compare/v1.87.0...v1.88.0) (2026-10-21)
 
 

@@ -1,4 +1,4 @@
-import { type ReactNode, memo } from "react"
+import { type MouseEvent, type ReactNode, memo } from "react"
 import { Archive, BellOff, Check, ShieldAlert, Split } from "lucide-react"
 import type { SidebarChatRow } from "../../../../shared/types"
 import { Button } from "../../ui/button"
@@ -21,6 +21,8 @@ import { Spinner } from "../../ui/spinner"
 import { ChatRowMenu } from "./Menus"
 import { chatRowActionKey, useChatRowPending, type ChatRowAction } from "./sidebarPendingActions"
 
+export type SelectionGesture = "toggle" | "range"
+
 interface Props {
   chat: SidebarChatRow
   activeChatId: string | null
@@ -36,7 +38,8 @@ interface Props {
   onEditPermissions?: (chatId: string) => void
   silent?: boolean
   isSelected?: boolean
-  onToggleSelect?: () => void
+  isSelecting?: boolean
+  onSelectionGesture?: (gesture: SelectionGesture) => void
 }
 
 function ChatRowImpl({
@@ -54,7 +57,8 @@ function ChatRowImpl({
   onEditPermissions,
   silent = false,
   isSelected = false,
-  onToggleSelect,
+  isSelecting = false,
+  onSelectionGesture,
 }: Props) {
   const isLiveState = (chat.status === "running" || chat.status === "waiting_for_user") && chat.stateEnteredAt != null
   const indicator = chatStatusIndicator(chat)
@@ -87,15 +91,30 @@ function ChatRowImpl({
     runPendingAction(chatRowActionKey(action, chat.chatId), run)
   }
 
+  function handleMainClick(event: MouseEvent) {
+    let gesture: SelectionGesture | null = null
+    if (event.shiftKey) gesture = "range"
+    else if (event.metaKey || event.ctrlKey || isSelecting) gesture = "toggle"
+    if (gesture && onSelectionGesture) {
+      onSelectionGesture(gesture)
+      return
+    }
+    onSelectChat(chat.chatId)
+  }
+
+  function handleMainMouseDown(event: MouseEvent) {
+    if (event.shiftKey) event.preventDefault()
+  }
+
   let rowBgClass: string
-  if (onToggleSelect) {
+  if (isSelecting) {
     rowBgClass = isSelected ? "bg-muted/60" : "hover:bg-muted/40"
   } else {
     rowBgClass = isActive ? "bg-muted" : "hover:bg-muted/40"
   }
 
   let leadingIndicator: ReactNode
-  if (onToggleSelect) {
+  if (isSelecting) {
     const checkboxBorderBg = isSelected
       ? "border-foreground bg-foreground"
       : "border-muted-foreground/50 bg-transparent"
@@ -147,8 +166,9 @@ function ChatRowImpl({
     <button
       type="button"
       className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left origin-left transition-transform duration-[var(--motion-instant)] ease-[var(--motion-ease-arriving)] active:scale-[0.985] motion-reduce:transition-none motion-reduce:active:scale-100"
-      onClick={() => onToggleSelect ? onToggleSelect() : onSelectChat(chat.chatId)}
-      aria-pressed={onToggleSelect ? isSelected : undefined}
+      onClick={handleMainClick}
+      onMouseDown={handleMainMouseDown}
+      aria-pressed={isSelecting ? isSelected : undefined}
     >
       <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center" aria-hidden>
         {leadingIndicator}
@@ -197,7 +217,7 @@ function ChatRowImpl({
           className="kanna-spawn-rail-in pointer-events-none absolute inset-y-0 left-0 w-0.5 rounded-full bg-logo"
         />
       ) : null}
-      {onToggleSelect ? (
+      {isSelecting ? (
         mainAction
       ) : (
         <ChatRowMenu
@@ -212,7 +232,7 @@ function ChatRowImpl({
           {mainAction}
         </ChatRowMenu>
       )}
-      {!onToggleSelect && (
+      {!isSelecting && (
         <div
           className={cn(
             "flex h-8 shrink-0 items-center justify-end gap-0",

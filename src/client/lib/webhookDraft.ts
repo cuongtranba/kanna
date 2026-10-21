@@ -1,3 +1,4 @@
+import type { InboundHandling } from "../../shared/inbound/handler"
 import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
 import type { WebhookInput, WebhookKind, WebhookMode, WebhookPatch, WebhookSlackInput } from "../../shared/webhooks/types"
 import { validateWebhookInput, validateWebhookModel } from "../../shared/webhooks/validate"
@@ -7,6 +8,7 @@ export interface WebhookDraftFields {
   name: string
   kind: WebhookKind
   mode: WebhookMode
+  handling: InboundHandling
   chatId: string
   projectId: string
   modelValue: string
@@ -57,6 +59,7 @@ export function buildWebhookInput(draft: WebhookDraftFields): WebhookInput {
   if (draft.kind === "slack") return { ...base, kind: "slack", slack: slackInputOf(draft) }
   return {
     ...base,
+    ...(webhookDraftStartsTurn(draft) && draft.handling === "task" ? { handling: draft.handling } : {}),
     ...(draft.filter.trim() ? { filter: draft.filter } : {}),
     ...(draft.threadKeyPath.trim() ? { threadKeyPath: draft.threadKeyPath.trim() } : {}),
     ...(draft.senderPath.trim() ? { senderPath: draft.senderPath.trim() } : {}),
@@ -78,7 +81,7 @@ export function buildWebhookPatch(input: WebhookInput): WebhookPatch {
     senderPath: input.senderPath ?? null,
     replyHint: input.replyHint ?? null,
   }
-  if (input.kind !== "slack" || !input.slack) return patch
+  if (input.kind !== "slack" || !input.slack) return { ...patch, handling: input.handling ?? null }
   const { allowedUserIds, signingSecret, botToken } = input.slack
   return {
     ...patch,

@@ -3,6 +3,7 @@ import type { ProviderCatalogEntry } from "../shared/provider-model-types"
 import { isAgentProvider } from "../shared/types"
 import { ackResult } from "./ws-router-ack"
 import type { WebhookInput, WebhookPatch, WebhookSlackInput, WebhookSlackPatch } from "../shared/webhooks/types"
+import { isInboundHandling, type InboundHandling } from "../shared/inbound/handler"
 import { isWebhookMode, mergeWebhookModel, validateWebhookModel } from "../shared/webhooks/validate"
 import type { WebhookMutation, WebhookRegistry } from "./webhooks/webhook-registry"
 
@@ -36,12 +37,17 @@ function sanitizeSlackPatch(slack: WebhookSlackPatch | undefined): WebhookSlackP
   }
 }
 
+function handling(value: string | null | undefined): InboundHandling | undefined {
+  return typeof value === "string" && isInboundHandling(value) ? value : undefined
+}
+
 function sanitizeInput(input: WebhookInput): WebhookInput {
   return {
     name: text(input.name) ?? "",
     kind: input.kind === "slack" ? "slack" : "generic",
     slack: sanitizeSlackInput(input.slack),
     mode: isWebhookMode(String(input.mode)) ? input.mode : "notify",
+    handling: handling(input.handling),
     template: text(input.template) ?? "",
     chatId: text(input.chatId),
     projectId: text(input.projectId),
@@ -65,6 +71,7 @@ function sanitizePatch(patch: WebhookPatch): WebhookPatch {
     template: text(patch.template),
     enabled: typeof patch.enabled === "boolean" ? patch.enabled : undefined,
     mode: patch.mode !== undefined && isWebhookMode(String(patch.mode)) ? patch.mode : undefined,
+    handling: patch.handling === null ? null : handling(patch.handling),
     chatId: patch.chatId === null ? null : text(patch.chatId),
     projectId: patch.projectId === null ? null : text(patch.projectId),
     provider: patch.provider === null ? null : provider(patch.provider),

@@ -1,5 +1,10 @@
 import type { AgentProvider } from "../core-types"
-import { INBOUND_HANDLER_MODES, INBOUND_PROMPT_BODY_MAX_CHARS, type InboundHandlerMode } from "../inbound/handler"
+import {
+  INBOUND_HANDLER_MODES,
+  INBOUND_PROMPT_BODY_MAX_CHARS,
+  type InboundHandlerMode,
+  type InboundHandling,
+} from "../inbound/handler"
 
 export type WebhookMode = InboundHandlerMode
 
@@ -35,6 +40,7 @@ export interface WebhookConfig {
   kind: WebhookKind
   slack?: WebhookSlackConfig
   mode: WebhookMode
+  handling?: InboundHandling
   chatId?: string
   projectId?: string
   provider?: AgentProvider
@@ -71,6 +77,7 @@ export interface WebhookInput {
   kind?: WebhookKind
   slack?: WebhookSlackInput
   mode: WebhookMode
+  handling?: InboundHandling
   chatId?: string
   projectId?: string
   provider?: AgentProvider
@@ -87,6 +94,7 @@ export interface WebhookPatch {
   slack?: WebhookSlackPatch
   enabled?: boolean
   mode?: WebhookMode
+  handling?: InboundHandling | null
   chatId?: string | null
   projectId?: string | null
   provider?: AgentProvider | null

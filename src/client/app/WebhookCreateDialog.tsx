@@ -1,5 +1,6 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
 import { useShallow } from "zustand/react/shallow"
+import type { InboundHandling } from "../../shared/inbound/handler"
 import type { SidebarData } from "../../shared/types"
 import type { WebhookInput, WebhookKind, WebhookMode, WebhookSummary } from "../../shared/webhooks/types"
 import { Button } from "../components/ui/button"
@@ -15,7 +16,12 @@ import {
   validateWebhookDraft,
   webhookDraftStartsTurn,
 } from "../lib/webhookDraft"
-import { webhookModeConsequence, webhookModeLabel } from "../lib/webhookPresentation"
+import {
+  webhookHandlingConsequence,
+  webhookHandlingLabel,
+  webhookModeConsequence,
+  webhookModeLabel,
+} from "../lib/webhookPresentation"
 import { listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
@@ -52,6 +58,11 @@ const KIND_OPTIONS: SegmentedOption<WebhookKind>[] = [
 const SLACK_DESCRIPTION = "Mention @Kanna in a Slack channel to start or continue a chat. Kanna replies in the thread."
 const GENERIC_DESCRIPTION = "An outside system POSTs to the webhook url and Kanna reacts."
 
+const HANDLING_OPTIONS: SegmentedOption<InboundHandling>[] = (["triage", "task"] as const).map((handling) => ({
+  value: handling,
+  label: webhookHandlingLabel(handling),
+}))
+
 function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps) {
   const socket = useOptionalKannaSocket()
   const catalog = useProviderCatalog()
@@ -62,6 +73,7 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
   const setName = WebhookCreateStore.useScopedStore((state) => state.setName)
   const setKind = WebhookCreateStore.useScopedStore((state) => state.setKind)
   const setMode = WebhookCreateStore.useScopedStore((state) => state.setMode)
+  const setHandling = WebhookCreateStore.useScopedStore((state) => state.setHandling)
   const setChatId = WebhookCreateStore.useScopedStore((state) => state.setChatId)
   const setProjectId = WebhookCreateStore.useScopedStore((state) => state.setProjectId)
   const setModelValue = WebhookCreateStore.useScopedStore((state) => state.setModelValue)
@@ -141,6 +153,14 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
           </div>
 
           {isSlack ? <WebhookSlackFields editing={editing} origin={origin} /> : null}
+
+          {startsTurn && !isSlack ? (
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium text-foreground">Handling</span>
+              <SegmentedControl value={draft.handling} onValueChange={setHandling} options={HANDLING_OPTIONS} size="sm" />
+              <p className="text-xs text-muted-foreground">{webhookHandlingConsequence(draft.handling)}</p>
+            </div>
+          ) : null}
 
           {startsTurn ? (
             <div className="space-y-1.5">

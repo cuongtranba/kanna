@@ -1,9 +1,12 @@
-import { describe, expect, test } from "bun:test"
-import { createElement } from "react"
+import { afterEach, describe, expect, test } from "bun:test"
+import { type ComponentProps, act, createElement } from "react"
+import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
+import "../lib/testing/setupHappyDom"
 import { MemoryRouter } from "react-router-dom"
 import { TooltipProvider } from "../components/ui/tooltip"
-import type { SidebarData, SidebarProjectGroup } from "../../shared/types"
+import { EMPTY_CHAT_ACTIVITY, type SidebarChatRow, type SidebarData, type SidebarProjectGroup } from "../../shared/types"
+import { useSidebarSelectionStore } from "../stores/sidebarSelectionStore"
 import { KannaSidebar } from "./KannaSidebar"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 
@@ -22,51 +25,55 @@ function createGroup(groupKey: string, starredAt?: number): SidebarProjectGroup 
   }
 }
 
+type SidebarProps = ComponentProps<typeof KannaSidebar>
+
+function sidebarProps(data: SidebarData, overrides: Partial<SidebarProps> = {}): SidebarProps {
+  return {
+    data,
+    activeChatId: null,
+    connectionStatus: "connected",
+    open: true,
+    collapsed: false,
+    showMobileOpenButton: false,
+    onOpen: () => undefined,
+    onClose: () => undefined,
+    onCollapse: () => undefined,
+    onExpand: () => undefined,
+    onCreateChat: async () => undefined,
+    onForkChat: async () => undefined,
+    currentProjectId: null,
+    keybindings: null,
+    onRenameChat: async () => undefined,
+    onArchiveChat: async () => undefined,
+    onOpenArchivedChat: async () => undefined,
+    onDeleteChat: async () => undefined,
+    onArchiveBulkChats: async () => undefined,
+    onDeleteBulkChats: async () => undefined,
+    onOpenAddProjectModal: () => undefined,
+    onCopyPath: async () => undefined,
+    onOpenExternalPath: async () => undefined,
+    onHideProject: async () => undefined,
+    onDeleteProject: async () => undefined,
+    onToggleStar: async () => undefined,
+    onSetProjectInstructions: async () => undefined,
+    onReorderProjectGroups: async () => undefined,
+    onCreateStack: async () => undefined,
+    onRenameStack: async () => undefined,
+    onSetStackInstructions: async () => undefined,
+    onRemoveStack: async () => undefined,
+    onCreateStackChat: async () => undefined,
+    onListStackWorktrees: async () => [],
+    editorLabel: "Cursor",
+    updateSnapshot: null,
+    ...overrides,
+  }
+}
+
 function renderSidebar(data: SidebarData) {
   return renderToStaticMarkup(createElement(
     MemoryRouter,
     null,
-    createElement(
-      TooltipProvider,
-      null,
-      createElement(KannaSidebar, {
-        data,
-        activeChatId: null,
-        connectionStatus: "connected",
-        open: true,
-        collapsed: false,
-        showMobileOpenButton: false,
-        onOpen: () => undefined,
-        onClose: () => undefined,
-        onCollapse: () => undefined,
-        onExpand: () => undefined,
-        onCreateChat: async () => undefined,
-        onForkChat: async () => undefined,
-        currentProjectId: null,
-        keybindings: null,
-        onRenameChat: async () => undefined,
-        onArchiveChat: async () => undefined,
-        onOpenArchivedChat: async () => undefined,
-        onDeleteChat: async () => undefined,
-        onDeleteBulkChats: async () => undefined,
-        onOpenAddProjectModal: () => undefined,
-        onCopyPath: async () => undefined,
-        onOpenExternalPath: async () => undefined,
-        onHideProject: async () => undefined,
-        onDeleteProject: async () => undefined,
-        onToggleStar: async () => undefined,
-        onSetProjectInstructions: async () => undefined,
-        onReorderProjectGroups: async () => undefined,
-        onCreateStack: async () => undefined,
-        onRenameStack: async () => undefined,
-        onSetStackInstructions: async () => undefined,
-        onRemoveStack: async () => undefined,
-        onCreateStackChat: async () => undefined,
-        onListStackWorktrees: async () => [],
-        editorLabel: "Cursor",
-        updateSnapshot: null,
-      })
-    )
+    createElement(TooltipProvider, null, createElement(KannaSidebar, sidebarProps(data)))
   ))
 }
 
@@ -141,5 +148,84 @@ describe("KannaSidebar top chrome band", () => {
     const html = renderSidebar({ starredProjectGroups: [], projectGroups: [], stacks: [] })
 
     expect(html).toContain(SHELL_TOP_BAND_CLASS)
+  })
+})
+
+function chatRow(chatId: string): SidebarChatRow {
+  return {
+    _id: chatId,
+    _creationTime: 1,
+    chatId,
+    title: `Chat ${chatId}`,
+    status: "idle",
+    unread: false,
+    localPath: "/tmp/alpha",
+    provider: "codex",
+    activity: EMPTY_CHAT_ACTIVITY,
+  }
+}
+
+function groupWithChats(chatIds: string[]): SidebarProjectGroup {
+  const chats = chatIds.map(chatRow)
+  return { ...createGroup("alpha"), chats, previewChats: chats }
+}
+
+function clickRow(container: HTMLElement, chatId: string, modifiers: MouseEventInit) {
+  const button = container.querySelector(`[data-chat-id="${chatId}"] button`)
+  if (!button) throw new Error(`no row button for ${chatId}`)
+  act(() => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...modifiers }))
+  })
+}
+
+let unmountSidebar: (() => void) | null = null
+
+afterEach(() => {
+  unmountSidebar?.()
+  unmountSidebar = null
+  useSidebarSelectionStore.getState().stopSelecting()
+})
+
+describe("KannaSidebar modifier multi-select", () => {
+  test("shift-click selects a range from the active chat, cmd-click adds one, and Archive receives the batch", async () => {
+    const archived: string[][] = []
+    const data: SidebarData = {
+      starredProjectGroups: [],
+      projectGroups: [groupWithChats(["A", "B", "C", "D"])],
+      stacks: [],
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    unmountSidebar = () => {
+      act(() => root.unmount())
+      container.remove()
+    }
+    await act(async () => {
+      root.render(createElement(
+        MemoryRouter,
+        null,
+        createElement(TooltipProvider, null, createElement(KannaSidebar, sidebarProps(data, {
+          activeChatId: "A",
+          onArchiveBulkChats: async (chatIds) => {
+            archived.push(chatIds)
+          },
+        })))
+      ))
+    })
+
+    clickRow(container, "C", { shiftKey: true })
+    expect(container.textContent).toContain("3 selected")
+
+    clickRow(container, "D", { metaKey: true })
+    expect(container.textContent).toContain("4 selected")
+
+    const archive = [...container.querySelectorAll("button")].find((node) => node.textContent?.includes("Archive") && !node.closest("[data-chat-id]"))
+    if (!archive) throw new Error("no bulk Archive button")
+    await act(async () => {
+      archive.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(archived).toEqual([["A", "B", "C", "D"]])
   })
 })

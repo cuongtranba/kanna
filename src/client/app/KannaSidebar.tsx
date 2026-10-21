@@ -15,9 +15,9 @@ import { SidebarUtilityNav } from "./SidebarUtilityNav"
 import { usePluginContributionsStore, selectPluginSidebarItems } from "../stores/pluginContributionsStore"
 import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
 import { getPathBasename } from "../lib/formatters"
-import { cn } from "../lib/utils"
+import { cn, normalizeChatId } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
-import { ChatRow } from "../components/chat-ui/sidebar/ChatRow"
+import { ChatRow, type SelectionGesture } from "../components/chat-ui/sidebar/ChatRow"
 import { SidebarBulkActionBar } from "../components/chat-ui/sidebar/SidebarBulkActionBar"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
@@ -84,6 +84,7 @@ interface KannaSidebarProps {
   onArchiveChat: (chat: SidebarChatRow) => Promise<void>
   onOpenArchivedChat: (chatId: string) => Promise<void>
   onDeleteChat: (chat: SidebarChatRow) => Promise<void>
+  onArchiveBulkChats: (chatIds: string[]) => Promise<void>
   onDeleteBulkChats: (chatIds: string[]) => Promise<void>
   onEditChatPermissions?: (chatId: string) => void
   onOpenAddProjectModal: () => void
@@ -126,6 +127,7 @@ function KannaSidebarImpl({
   onArchiveChat,
   onOpenArchivedChat,
   onDeleteChat,
+  onArchiveBulkChats,
   onDeleteBulkChats,
   onEditChatPermissions,
   onOpenAddProjectModal,
@@ -151,7 +153,7 @@ function KannaSidebarImpl({
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
 
-  const { isSelecting, selectedChatIds, startSelecting, stopSelecting, toggle: toggleSelect, selectAll, clearAll } = useSidebarSelectionStore(useShallow((s) => s))
+  const { isSelecting, selectedChatIds, startSelecting, stopSelecting, toggle: toggleSelect, selectRange, selectAll, clearAll } = useSidebarSelectionStore(useShallow((s) => s))
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -398,6 +400,21 @@ function KannaSidebarImpl({
     stopSelecting()
   }, [selectedChatIds, onDeleteBulkChats, stopSelecting])
 
+  const handleBulkArchive = useCallback(async () => {
+    if (!selectedChatIds.size) return
+    await onArchiveBulkChats([...selectedChatIds])
+    stopSelecting()
+  }, [selectedChatIds, onArchiveBulkChats, stopSelecting])
+
+  const handleSelectionGesture = useCallback((chatId: string, gesture: SelectionGesture) => {
+    if (gesture === "toggle") {
+      toggleSelect(chatId)
+      return
+    }
+    const activeEntry = visibleChats.find((entry) => normalizeChatId(entry.chat.chatId) === activeChatId)
+    selectRange(visibleChats.map((entry) => entry.chat.chatId), chatId, activeEntry?.chat.chatId ?? null)
+  }, [activeChatId, selectRange, toggleSelect, visibleChats])
+
   const handleSelectAll = useCallback(() => {
     const allIds = visibleChats.map((e) => e.chat.chatId)
     if (selectedChatIds.size === allIds.length) clearAll()
@@ -427,10 +444,11 @@ function KannaSidebarImpl({
         onEditPermissions={onEditChatPermissions}
         silent={mutedChatIds.includes(chat.chatId)}
         isSelected={isSelecting ? selectedChatIds.has(chat.chatId) : undefined}
-        onToggleSelect={isSelecting ? () => toggleSelect(chat.chatId) : undefined}
+        isSelecting={isSelecting}
+        onSelectionGesture={(gesture) => handleSelectionGesture(chat.chatId, gesture)}
       />
     )
-  }, [activeChatId, isSelecting, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, selectedChatIds, showNumberJumpHints, toggleSelect, visibleIndexByChatId])
+  }, [activeChatId, isSelecting, mutedChatIds, navigate, nowMs, onArchiveChat, onClose, onDeleteChat, onEditChatPermissions, onForkChat, onOpenExternalPath, onRenameChat, resolvedKeybindings, selectedChatIds, showNumberJumpHints, handleSelectionGesture, visibleIndexByChatId])
 
   useEffect(() => {
     const intervalId = timer.setInterval(() => {
@@ -892,6 +910,7 @@ function KannaSidebarImpl({
             selectedCount={selectedChatIds.size}
             visibleChatCount={visibleChats.length}
             onSelectAll={handleSelectAll}
+            onArchive={handleBulkArchive}
             onDelete={handleBulkDelete}
           />
         )}

@@ -24,6 +24,7 @@ const PROJECT_ACTIONS: readonly ProjectAction[] = [
 ]
 
 export const BULK_DELETE_CHATS_KEY = pendingActionKey("chat.delete", "bulk")
+export const BULK_ARCHIVE_CHATS_KEY = pendingActionKey("chat.archive", "bulk")
 export const REORDER_PROJECT_GROUPS_KEY = pendingActionKey("sidebar.reorderProjectGroups")
 export const STACK_PANEL_SAVE_KEY = pendingActionKey("stack.save")
 export const IMPORT_ALL_SESSIONS_KEY = pendingActionKey("sessions.importClaude")

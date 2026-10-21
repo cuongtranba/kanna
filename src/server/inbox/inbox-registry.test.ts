@@ -135,6 +135,21 @@ test("internal envelopes become activity items and only failures ask for attenti
   expect(inbox.unreadCount()).toBe(2)
 })
 
+test("a tool request stops asking for attention once it is resolved, including after a restart", async () => {
+  const { inbox, bus, log } = await createInboxHarness({ now: tick })
+  bus.publish(internal("kanna.toolRequest.put", { request: { id: "r1", policyVerdict: "ask", status: "pending" } }, "c1"))
+  await inbox.flush()
+  expect(inbox.snapshot().items.filter((item) => item.attention)).toHaveLength(1)
+  expect(inbox.unreadCount()).toBe(1)
+  bus.publish(internal("kanna.toolRequest.resolved", { id: "r1", status: "answered" }))
+  await inbox.flush()
+  expect(inbox.snapshot().items.filter((item) => item.attention)).toEqual([])
+  expect(inbox.unreadCount()).toBe(0)
+  const restarted = await createInboxHarness({ now: tick, log })
+  expect(restarted.inbox.snapshot().items.filter((item) => item.attention)).toEqual([])
+  expect(restarted.inbox.unreadCount()).toBe(0)
+})
+
 test("the inbox's own envelopes never become activity items", async () => {
   const { inbox, bus } = await createInboxHarness({ now: tick })
   const thread = await inbox.ingestInbound(inbound("d1"), meta("d1"))

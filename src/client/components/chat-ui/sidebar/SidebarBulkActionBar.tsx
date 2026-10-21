@@ -1,17 +1,19 @@
-import { Trash2 } from "lucide-react"
+import { Archive, Trash2 } from "lucide-react"
 import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { Spinner } from "../../ui/spinner"
-import { BULK_DELETE_CHATS_KEY } from "./sidebarPendingActions"
+import { BULK_ARCHIVE_CHATS_KEY, BULK_DELETE_CHATS_KEY } from "./sidebarPendingActions"
 
 interface Props {
   selectedCount: number
   visibleChatCount: number
   onSelectAll: () => void
+  onArchive: () => Promise<void>
   onDelete: () => Promise<void>
 }
 
-export function SidebarBulkActionBar({ selectedCount, visibleChatCount, onSelectAll, onDelete }: Props) {
+export function SidebarBulkActionBar({ selectedCount, visibleChatCount, onSelectAll, onArchive, onDelete }: Props) {
   const deleting = usePendingAction(BULK_DELETE_CHATS_KEY)
+  const archiving = usePendingAction(BULK_ARCHIVE_CHATS_KEY)
   return (
     <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border/50 shrink-0">
       <button
@@ -27,8 +29,18 @@ export function SidebarBulkActionBar({ selectedCount, visibleChatCount, onSelect
         )}
         <button
           type="button"
+          onClick={() => runPendingAction(BULK_ARCHIVE_CHATS_KEY, onArchive)}
+          disabled={selectedCount === 0 || deleting || archiving}
+          aria-busy={archiving || undefined}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-transparent px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-40 transition-colors duration-150"
+        >
+          {archiving ? <Spinner /> : <Archive className="size-3.5" aria-hidden />}
+          Archive
+        </button>
+        <button
+          type="button"
           onClick={() => runPendingAction(BULK_DELETE_CHATS_KEY, onDelete)}
-          disabled={selectedCount === 0 || deleting}
+          disabled={selectedCount === 0 || deleting || archiving}
           aria-busy={deleting || undefined}
           className="inline-flex items-center gap-1.5 rounded-md border border-destructive/50 bg-transparent px-2.5 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-40 transition-colors duration-150"
         >

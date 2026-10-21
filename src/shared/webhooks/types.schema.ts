@@ -1,7 +1,7 @@
 import { z } from "zod"
 import type { WebhookSummary, WebhookInput, WebhookPatch } from "./types"
 import { agentProviderSchema } from "../core-types.schema"
-import { inboundHandlerModeSchema } from "../inbound/handler.schema"
+import { inboundHandlerModeSchema, inboundHandlingSchema } from "../inbound/handler.schema"
 import { assertParity } from "../type-parity"
 
 export const webhookKindSchema = z.enum(["generic", "slack"])
@@ -15,6 +15,7 @@ export const webhookInputSchema = z.object({
     botToken: z.string(),
   }).optional(),
   mode: inboundHandlerModeSchema,
+  handling: inboundHandlingSchema.optional(),
   chatId: z.string().optional(),
   projectId: z.string().optional(),
   provider: agentProviderSchema.optional(),
@@ -35,6 +36,7 @@ export const webhookPatchSchema = z.object({
   }).optional(),
   enabled: z.boolean().optional(),
   mode: inboundHandlerModeSchema.optional(),
+  handling: inboundHandlingSchema.nullable().optional(),
   chatId: z.string().nullable().optional(),
   projectId: z.string().nullable().optional(),
   provider: agentProviderSchema.nullable().optional(),
@@ -53,6 +55,7 @@ export const webhookSummarySchema = z.object({
   kind: webhookKindSchema,
   slack: z.object({ allowedUserIds: z.array(z.string()), botTokenHint: z.string() }).optional(),
   mode: inboundHandlerModeSchema,
+  handling: inboundHandlingSchema.optional(),
   chatId: z.string().optional(),
   projectId: z.string().optional(),
   provider: agentProviderSchema.optional(),

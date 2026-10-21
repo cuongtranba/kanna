@@ -1,6 +1,7 @@
 import { createScopedStore } from "../lib/createScopedStore"
 import type { WebhookDraftFields } from "../lib/webhookDraft"
 import { encodeWebhookModel } from "../lib/webhookTargets"
+import type { InboundHandling } from "../../shared/inbound/handler"
 import type { WebhookKind, WebhookMode, WebhookSummary } from "../../shared/webhooks/types"
 
 export const DEFAULT_WEBHOOK_TEMPLATE = "A webhook was received. Summarize what happened and say whether it needs attention."
@@ -10,6 +11,7 @@ export interface WebhookCreateDraft extends WebhookDraftFields {
   setName: (name: string) => void
   setKind: (kind: WebhookKind) => void
   setMode: (mode: WebhookMode) => void
+  setHandling: (handling: InboundHandling) => void
   setChatId: (chatId: string) => void
   setProjectId: (projectId: string) => void
   setModelValue: (modelValue: string) => void
@@ -29,6 +31,7 @@ export function selectWebhookDraftFields(state: WebhookCreateDraft): WebhookDraf
     name: state.name,
     kind: state.kind,
     mode: state.mode,
+    handling: state.handling,
     chatId: state.chatId,
     projectId: state.projectId,
     modelValue: state.modelValue,
@@ -55,6 +58,7 @@ export const WebhookCreateStore = createScopedStore<WebhookSummary | undefined, 
     name: hook?.name ?? "",
     kind: hook?.kind ?? "generic",
     mode: hook?.mode ?? "notify",
+    handling: hook?.handling ?? "triage",
     chatId: hook?.chatId ?? "",
     projectId: hook?.projectId ?? "",
     modelValue: hook?.provider && hook.model ? encodeWebhookModel(hook.provider, hook.model) : "",
@@ -70,6 +74,7 @@ export const WebhookCreateStore = createScopedStore<WebhookSummary | undefined, 
     setName: (name) => set({ name }),
     setKind: (kind) => set((state) => ({ kind, template: templateAfterKindChange(kind, state.template) })),
     setMode: (mode) => set({ mode }),
+    setHandling: (handling) => set({ handling }),
     setChatId: (chatId) => set({ chatId }),
     setProjectId: (projectId) => set({ projectId }),
     setModelValue: (modelValue) => set({ modelValue }),

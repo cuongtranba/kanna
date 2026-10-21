@@ -19,6 +19,21 @@ answers `@Kanna` mentions in a Slack thread; see [Slack](#slack).
 Every delivery leaves a **Webhook** card in the chat it lands in, so you can see
 what arrived and when. The card is private: it is never included in a share link.
 
+## Handling
+
+**Run in chat** and **New chat** hooks also choose how the agent treats your
+instruction template. Every delivery opens a thread in the **Inbox** either way.
+
+| Handling | What the agent does |
+| --- | --- |
+| **Triage** (default) | Reads the message, decides whether you need to act, writes a short summary and, when it fits, drafts a reply for you to send from the Inbox. It does not do the work itself and never contacts the sender. |
+| **Run as task** | Treats your template as a request from you and carries it out with its tools, for example "fix the issue assigned to me, open a PR and merge it". It reports to the Inbox once, when it is done (**Handled**) or when it is blocked on something only you can decide (**Needs you**). |
+
+Choose **Run as task** when the template is a job to do. With **Triage**, a
+template such as "fix this bug" only produces a summary that asks you to start
+the fix. In both modes the JSON body stays untrusted data, and the agent never
+follows instructions written inside it.
+
 ## Create a hook
 
 1. Open **Webhooks** and choose **New webhook**.
@@ -46,8 +61,8 @@ not offer rather than silently running a different one.
 
 ## Edit a hook
 
-Choose the pencil button on a hook to change its name, mode, target, model,
-template, filter, thread key path, sender path or reply hint. The url and the
+Choose the pencil button on a hook to change its name, mode, handling, target,
+model, template, filter, thread key path, sender path or reply hint. The url and the
 secret stay the same. Clearing a field removes it.
 
 ## Filter deliveries

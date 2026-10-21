@@ -5,7 +5,7 @@ import type { WebhookSummary } from "../../shared/webhooks/types"
 import { useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
-import { describeLastDelivery, webhookModeLabel, webhookUrl } from "../lib/webhookPresentation"
+import { describeLastDelivery, webhookActionLabel, webhookUrl } from "../lib/webhookPresentation"
 import { describeWebhookModel, describeWebhookTarget, type WebhookTargets } from "../lib/webhookTargets"
 import { cn } from "../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -81,7 +81,7 @@ export function WebhookRow({ hook, targets, catalog, origin, divider }: Props) {
               Slack · <span className="tabular-nums">{hook.slack?.allowedUserIds.length ?? 0}</span> allowed
             </span>
           ) : (
-            <span className="text-xs text-muted-foreground">{webhookModeLabel(hook.mode)}</span>
+            <span className="text-xs text-muted-foreground">{webhookActionLabel(hook.mode, hook.handling)}</span>
           )}
           {hook.enabled ? null : <span className="text-xs font-medium text-muted-foreground">Disabled</span>}
         </div>

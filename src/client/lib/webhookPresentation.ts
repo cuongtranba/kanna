@@ -1,3 +1,4 @@
+import type { InboundHandling } from "../../shared/inbound/handler"
 import { webhookUrlPath, type WebhookDeliveryOutcome, type WebhookMode } from "../../shared/webhooks/types"
 
 const MODE_LABEL: Readonly<Record<WebhookMode, string>> = {
@@ -10,6 +11,28 @@ const MODE_CONSEQUENCE: Readonly<Record<WebhookMode, string>> = {
   notify: "Leaves a card in the chosen chat. No turn starts.",
   inline: "Leaves a card and queues the prompt in the chosen chat. It runs when the chat is idle.",
   spawn: "Creates a new chat in the chosen project, leaves a card and runs the prompt there.",
+}
+
+const HANDLING_LABEL: Readonly<Record<InboundHandling, string>> = {
+  triage: "Triage",
+  task: "Run as task",
+}
+
+const HANDLING_CONSEQUENCE: Readonly<Record<InboundHandling, string>> = {
+  triage: "The agent reads the message, decides whether you need to act and drafts a reply. It never does the work itself.",
+  task: "The agent carries out your instruction with its tools and reports when it is done or blocked.",
+}
+
+export function webhookHandlingLabel(handling: InboundHandling): string {
+  return HANDLING_LABEL[handling]
+}
+
+export function webhookHandlingConsequence(handling: InboundHandling): string {
+  return HANDLING_CONSEQUENCE[handling]
+}
+
+export function webhookActionLabel(mode: WebhookMode, handling: InboundHandling | undefined): string {
+  return handling === "task" && mode !== "notify" ? `${MODE_LABEL[mode]} · task` : MODE_LABEL[mode]
 }
 
 export function webhookModeLabel(mode: WebhookMode): string {
