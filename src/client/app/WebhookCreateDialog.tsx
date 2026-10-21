@@ -1,4 +1,5 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
+import type { InboundHandling } from "../../shared/inbound/handler"
 import type { SidebarData } from "../../shared/types"
 import type { WebhookInput, WebhookMode, WebhookPatch, WebhookSummary } from "../../shared/webhooks/types"
 import { validateWebhookInput, validateWebhookModel } from "../../shared/webhooks/validate"
@@ -8,7 +9,12 @@ import { Input } from "../components/ui/input"
 import { SearchableSelect } from "../components/ui/searchable-select"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
-import { webhookModeConsequence, webhookModeLabel } from "../lib/webhookPresentation"
+import {
+  webhookHandlingConsequence,
+  webhookHandlingLabel,
+  webhookModeConsequence,
+  webhookModeLabel,
+} from "../lib/webhookPresentation"
 import { decodeWebhookModel, listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
@@ -39,6 +45,11 @@ const MODE_OPTIONS: SegmentedOption<WebhookMode>[] = (["notify", "inline", "spaw
   label: webhookModeLabel(mode),
 }))
 
+const HANDLING_OPTIONS: SegmentedOption<InboundHandling>[] = (["triage", "task"] as const).map((handling) => ({
+  value: handling,
+  label: webhookHandlingLabel(handling),
+}))
+
 function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
   const socket = useOptionalKannaSocket()
   const catalog = useProviderCatalog()
@@ -47,12 +58,14 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
   const closeEditor = useWebhooksStore((state) => state.closeEditor)
   const name = WebhookCreateStore.useScopedStore((state) => state.name)
   const mode = WebhookCreateStore.useScopedStore((state) => state.mode)
+  const handling = WebhookCreateStore.useScopedStore((state) => state.handling)
   const chatId = WebhookCreateStore.useScopedStore((state) => state.chatId)
   const projectId = WebhookCreateStore.useScopedStore((state) => state.projectId)
   const modelValue = WebhookCreateStore.useScopedStore((state) => state.modelValue)
   const template = WebhookCreateStore.useScopedStore((state) => state.template)
   const setName = WebhookCreateStore.useScopedStore((state) => state.setName)
   const setMode = WebhookCreateStore.useScopedStore((state) => state.setMode)
+  const setHandling = WebhookCreateStore.useScopedStore((state) => state.setHandling)
   const setChatId = WebhookCreateStore.useScopedStore((state) => state.setChatId)
   const setProjectId = WebhookCreateStore.useScopedStore((state) => state.setProjectId)
   const setModelValue = WebhookCreateStore.useScopedStore((state) => state.setModelValue)
@@ -74,6 +87,7 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
     return {
       name,
       mode,
+      ...(startsTurn && handling === "task" ? { handling } : {}),
       template,
       ...(mode === "spawn" ? { projectId } : { chatId }),
       ...(choice ? { provider: choice.provider, model: choice.model } : {}),
@@ -82,7 +96,7 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
       ...(senderPath.trim() ? { senderPath: senderPath.trim() } : {}),
       ...(replyHint.trim() ? { replyHint } : {}),
     }
-  }, [chatId, filter, mode, modelValue, name, projectId, replyHint, senderPath, startsTurn, template, threadKeyPath])
+  }, [chatId, filter, handling, mode, modelValue, name, projectId, replyHint, senderPath, startsTurn, template, threadKeyPath])
   const errors = useMemo(
     () => [...validateWebhookInput(input), ...validateWebhookModel(input, catalog)],
     [catalog, input],
@@ -120,6 +134,7 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
         const patch: WebhookPatch = {
           name: input.name,
           mode: input.mode,
+          handling: input.handling ?? null,
           template: input.template,
           chatId: input.chatId ?? null,
           projectId: input.projectId ?? null,
@@ -166,6 +181,14 @@ function WebhookEditorForm({ sidebarData, onCreate, editing }: FormProps) {
               <WebhookTargetSelect id="webhook-target" value={chatId} options={targets.chats} placeholder="Choose a chat" searchPlaceholder="Search chats..." onValueChange={setChatId} />
             )}
           </div>
+
+          {startsTurn ? (
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium text-foreground">Handling</span>
+              <SegmentedControl value={handling} onValueChange={setHandling} options={HANDLING_OPTIONS} size="sm" />
+              <p className="text-xs text-muted-foreground">{webhookHandlingConsequence(handling)}</p>
+            </div>
+          ) : null}
 
           {startsTurn ? (
             <div className="space-y-1.5">

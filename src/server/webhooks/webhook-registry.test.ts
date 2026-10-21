@@ -40,6 +40,15 @@ test("updating a filter to null clears it", async () => {
   expect(registry.matchFilter(hook.id, { body: {}, headers: new Headers() })).toEqual({ matched: true })
 })
 
+test("a hook's task handling is kept on create and cleared back to triage by null", async () => {
+  const registry = new WebhookRegistry(createMemoryWebhookStore())
+  const created = await registry.create({ ...BASE, mode: "inline", handling: "task" })
+  if (!created.ok) throw new Error(created.errors.join())
+  expect(created.value.hook.handling).toBe("task")
+  await registry.update(created.value.hook.id, { handling: null })
+  expect(registry.snapshot().hooks[0].handling).toBeUndefined()
+})
+
 test("a stored filter that no longer compiles rejects every delivery after a reload", async () => {
   const store = createMemoryWebhookStore()
   const first = new WebhookRegistry(store)

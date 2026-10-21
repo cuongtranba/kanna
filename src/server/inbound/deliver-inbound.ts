@@ -126,7 +126,12 @@ async function queuePrompt(
   const scheduleId = inboundScheduleId(delivery.source, delivery.deliveryId)
   const prompt = [
     renderInboundPrompt(handler.template, delivery.body, noticeFor(delivery)),
-    renderHandlerInstruction({ threadId, sourceName: delivery.sourceName, replyHint: handler.replyHint }),
+    renderHandlerInstruction({
+      threadId,
+      sourceName: delivery.sourceName,
+      replyHint: handler.replyHint,
+      handling: handler.handling,
+    }),
   ].join("\n\n")
   await inbox.markPending(threadId, scheduleId)
   await agent.enqueueMessage(chatId, prompt, [], {

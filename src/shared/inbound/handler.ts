@@ -4,10 +4,15 @@ export type InboundHandlerMode = "notify" | "inline" | "spawn"
 
 export const INBOUND_HANDLER_MODES: readonly InboundHandlerMode[] = ["notify", "inline", "spawn"]
 
+export type InboundHandling = "triage" | "task"
+
+export const INBOUND_HANDLINGS: readonly InboundHandling[] = ["triage", "task"]
+
 export const INBOUND_PROMPT_BODY_MAX_CHARS = 16000
 
 export interface InboundHandler {
   mode: InboundHandlerMode
+  handling?: InboundHandling
   chatId?: string
   projectId?: string
   template: string
@@ -25,6 +30,10 @@ export interface InboundTargetFields {
 
 export function isInboundHandlerMode(value: string): value is InboundHandlerMode {
   return INBOUND_HANDLER_MODES.some((mode) => mode === value)
+}
+
+export function isInboundHandling(value: string): value is InboundHandling {
+  return INBOUND_HANDLINGS.some((handling) => handling === value)
 }
 
 export function validateInboundTarget(handler: InboundTargetFields): string[] {

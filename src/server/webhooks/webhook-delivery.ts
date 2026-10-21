@@ -26,6 +26,7 @@ export function webhookHandler(hook: WebhookConfig): InboundHandler {
     template: hook.template,
     replyHint: hook.replyHint ?? "",
     pushEnabled: true,
+    ...(hook.handling === "task" ? { handling: hook.handling } : {}),
     ...(hook.chatId ? { chatId: hook.chatId } : {}),
     ...(hook.projectId ? { projectId: hook.projectId } : {}),
     ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),

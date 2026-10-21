@@ -26,6 +26,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   const senderPath = optionalString(value.senderPath)
   const replyHint = optionalString(value.replyHint)
   const filter = optionalString(value.filter)
+  const handling = value.handling === "task" ? value.handling : undefined
   return {
     id,
     name,
@@ -35,6 +36,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     enabled,
     createdAt,
     updatedAt,
+    ...(handling ? { handling } : {}),
     ...(chatId ? { chatId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(provider && model ? { provider, model } : {}),

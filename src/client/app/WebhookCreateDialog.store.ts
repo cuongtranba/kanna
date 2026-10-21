@@ -1,5 +1,6 @@
 import { createScopedStore } from "../lib/createScopedStore"
 import { encodeWebhookModel } from "../lib/webhookTargets"
+import type { InboundHandling } from "../../shared/inbound/handler"
 import type { WebhookMode, WebhookSummary } from "../../shared/webhooks/types"
 
 export const DEFAULT_WEBHOOK_TEMPLATE = "A webhook was received. Summarize what happened and say whether it needs attention."
@@ -7,6 +8,7 @@ export const DEFAULT_WEBHOOK_TEMPLATE = "A webhook was received. Summarize what 
 export interface WebhookCreateDraft {
   name: string
   mode: WebhookMode
+  handling: InboundHandling
   chatId: string
   projectId: string
   modelValue: string
@@ -17,6 +19,7 @@ export interface WebhookCreateDraft {
   replyHint: string
   setName: (name: string) => void
   setMode: (mode: WebhookMode) => void
+  setHandling: (handling: InboundHandling) => void
   setChatId: (chatId: string) => void
   setProjectId: (projectId: string) => void
   setModelValue: (modelValue: string) => void
@@ -32,6 +35,7 @@ export const WebhookCreateStore = createScopedStore<WebhookSummary | undefined, 
   (hook) => (set) => ({
     name: hook?.name ?? "",
     mode: hook?.mode ?? "notify",
+    handling: hook?.handling ?? "triage",
     chatId: hook?.chatId ?? "",
     projectId: hook?.projectId ?? "",
     modelValue: hook?.provider && hook.model ? encodeWebhookModel(hook.provider, hook.model) : "",
@@ -42,6 +46,7 @@ export const WebhookCreateStore = createScopedStore<WebhookSummary | undefined, 
     replyHint: hook?.replyHint ?? "",
     setName: (name) => set({ name }),
     setMode: (mode) => set({ mode }),
+    setHandling: (handling) => set({ handling }),
     setChatId: (chatId) => set({ chatId }),
     setProjectId: (projectId) => set({ projectId }),
     setModelValue: (modelValue) => set({ modelValue }),
