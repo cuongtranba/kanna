@@ -28,11 +28,32 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
 
     expect(html).toContain(">1m<")
+  })
+
+  test("marks a pinned chat with an accessible Pinned label", () => {
+    const render = (pinnedAt?: number) => renderToStaticMarkup(
+      <ChatRow
+        chat={{ ...baseChat, ...(pinnedAt === undefined ? {} : { pinnedAt }) }}
+        activeChatId={null}
+        nowMs={60_000}
+        onSelectChat={() => undefined}
+        onRenameChat={async () => undefined}
+        onOpenInFinder={async () => undefined}
+        onForkChat={async () => undefined}
+        onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
+        onDeleteChat={async () => undefined}
+      />
+    )
+
+    expect(render(5_000)).toContain('aria-label="Pinned"')
+    expect(render()).not.toContain('aria-label="Pinned"')
   })
 
   test("falls back to the chat creation time for the age label", () => {
@@ -46,6 +67,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -64,6 +86,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -85,6 +108,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -105,6 +129,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -123,6 +148,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -143,6 +169,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -163,6 +190,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -181,6 +209,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -201,6 +230,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )
@@ -220,6 +250,7 @@ describe("ChatRow", () => {
         onOpenInFinder={async () => undefined}
         onForkChat={async () => undefined}
         onArchiveChat={async () => undefined}
+        onTogglePin={async () => undefined}
         onDeleteChat={async () => undefined}
       />
     )

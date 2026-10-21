@@ -119,6 +119,7 @@ export function getReplayEventPriority(event: StoreEvent): number {
     case "chat_deleted":
     case "chat_archived":
     case "chat_unarchived":
+    case "chat_pin_set":
       return 10
     case "auto_continue_proposed":
     case "auto_continue_accepted":

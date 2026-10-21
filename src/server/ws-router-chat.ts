@@ -13,6 +13,7 @@ export interface ChatStoreDep {
   renameChat(chatId: string, title: string): Promise<void>
   archiveChat(chatId: string): Promise<void>
   unarchiveChat(chatId: string): Promise<void>
+  setChatPin(chatId: string, pinned: boolean): Promise<void>
   deleteChat(chatId: string): Promise<void>
   setChatReadState(chatId: string, unread: boolean): Promise<void>
   setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null): Promise<void>
@@ -132,6 +133,12 @@ export async function handleChatCommand(
     }
     case "chat.archive": {
       await store.archiveChat(command.chatId)
+      send(ackResult(id, command))
+      await broadcastSidebar()
+      return true
+    }
+    case "chat.setPin": {
+      await store.setChatPin(command.chatId, command.pinned)
       send(ackResult(id, command))
       await broadcastSidebar()
       return true

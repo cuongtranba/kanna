@@ -28,6 +28,7 @@ export interface ChatRecord {
   updatedAt: number
   deletedAt?: number
   archivedAt?: number
+  pinnedAt?: number
   unread: boolean
   provider: AgentProvider | null
   model?: string
@@ -164,6 +165,13 @@ export type ChatEvent =
       type: "chat_unarchived"
       timestamp: number
       chatId: string
+    }
+  | {
+      v: 3
+      type: "chat_pin_set"
+      timestamp: number
+      chatId: string
+      pinnedAt: number | null
     }
   | {
       v: 3
@@ -474,6 +482,7 @@ export const LOG_OF_EVENT = {
   chat_deleted: "chats",
   chat_archived: "chats",
   chat_unarchived: "chats",
+  chat_pin_set: "chats",
   chat_provider_set: "chats",
   chat_model_set: "chats",
   chat_plan_mode_set: "chats",

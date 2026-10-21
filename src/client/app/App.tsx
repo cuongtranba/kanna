@@ -306,6 +306,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleHideProject,
     handleDeleteProject,
     handleToggleProjectStar,
+    handleToggleChatPin,
     handleSetProjectInstructions,
     handleReorderProjectGroups,
     importClaudeSessions,
@@ -418,6 +419,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       onHideProject={handleHideProject}
       onDeleteProject={handleDeleteProject}
       onToggleStar={handleToggleProjectStar}
+      onTogglePinChat={handleToggleChatPin}
       onSetProjectInstructions={handleSetProjectInstructions}
       onReorderProjectGroups={handleReorderProjectGroups}
       onCreateStack={state.handleCreateStack}
@@ -448,6 +450,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     handleHideProject,
     handleDeleteProject,
     handleToggleProjectStar,
+    handleToggleChatPin,
     handleSetProjectInstructions,
     state.handleSetStackInstructions,
     showMobileOpenButton,

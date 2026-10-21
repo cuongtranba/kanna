@@ -49,6 +49,7 @@ import type { ClipboardPort } from "../ports/clipboardPort"
 import { postAuthLogout, fetchAuthStatus } from "../api/auth"
 import type { KannaSocket, SocketStatus } from "./socket"
 import { useStackCommands, type StackCommands } from "./useStackCommands"
+import { useToggleChatPin } from "./useToggleChatPin"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { HTTP_ROUTES } from "../../shared/http-routes"
@@ -328,6 +329,7 @@ export interface AppGlobalState extends StackCommands {
   handleHideProject: (projectId: string) => Promise<void>
   handleDeleteProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
+  handleToggleChatPin: (chatId: string, pinned: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   handleCreateStackChat:(primaryProjectId: string, stackId: string, stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>) => Promise<void>
   handleListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
@@ -1401,6 +1403,7 @@ export function useAppGlobalState(
     handleHideProject,
     handleDeleteProject,
     handleToggleProjectStar,
+    handleToggleChatPin: useToggleChatPin(socket),
     handleReorderProjectGroups,
     ...stackCommands,
     handleCreateStackChat,

@@ -575,6 +575,7 @@ export interface KannaState {
   handleHideProject: (projectId: string) => Promise<void>
   handleDeleteProject: (projectId: string) => Promise<void>
   handleToggleProjectStar: (projectId: string, starred: boolean) => Promise<void>
+  handleToggleChatPin: (chatId: string, pinned: boolean) => Promise<void>
   handleReorderProjectGroups: (projectIds: string[]) => Promise<void>
   stacks: StackSummary[]
   handleSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>

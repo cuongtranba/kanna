@@ -240,6 +240,7 @@ export interface SidebarChatRow {
   stackId?: string
   sessionState?: ClaudeSessionLifecycleStatus
   hasPolicyOverride?: boolean
+  pinnedAt?: number
 }
 
 export interface SidebarProjectGroup {

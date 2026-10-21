@@ -82,6 +82,7 @@ import {
   buildRenameChatEvent,
   buildSessionTokenEvent,
   buildSetProjectStarEvent,
+  buildSetChatPinEvent,
   buildTurnCancelledEvent,
   buildTurnFailedEvent,
   buildTurnFinishedEvent,
@@ -321,9 +322,8 @@ export class EventStore implements PushEventStore {
     await this.storage.remove(path.join(this.dataDir, "projects", projectId), { recursive: true })
   }
 
-  async setProjectStar(projectId: string, starred: boolean) {
-    await this.commit(buildSetProjectStarEvent(this.state.projectsById, projectId, starred))
-  }
+  async setProjectStar(projectId: string, starred: boolean) { await this.commit(buildSetProjectStarEvent(this.state.projectsById, projectId, starred)) }
+  async setChatPin(chatId: string, pinned: boolean) { await this.commit(buildSetChatPinEvent(this.state.chatsById, chatId, pinned)) }
 
   async createStack(title: string, projectIds: string[]): Promise<StackRecord> {
     const event = buildCreateStackEvent(

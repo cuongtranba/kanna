@@ -261,6 +261,17 @@ export function applyChatLifecycleEvent(
       chat.updatedAt = event.timestamp
       break
     }
+    case "chat_pin_set": {
+      const chat = state.chatsById.get(event.chatId)
+      if (!chat) break
+      if (event.pinnedAt == null) {
+        delete chat.pinnedAt
+      } else {
+        chat.pinnedAt = event.pinnedAt
+      }
+      chat.updatedAt = event.timestamp
+      break
+    }
     case "chat_provider_set": {
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break

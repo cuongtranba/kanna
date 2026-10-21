@@ -217,6 +217,16 @@ describe("applyChatLifecycleEvent — chat events", () => {
     expect(state.chatTimingsByChatId.has("c1")).toBe(false)
   })
 
+  test("chat_pin_set sets and clears pinnedAt", () => {
+    const state = makeChatLifecycleState()
+    const replay = makeReplayChatProvider()
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_created", timestamp: TS, chatId: "c1", projectId: "p1", title: "C" })
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_pin_set", timestamp: TS + 1, chatId: "c1", pinnedAt: TS + 1 })
+    expect(state.chatsById.get("c1")!.pinnedAt).toBe(TS + 1)
+    applyChatLifecycleEvent(state, replay, { v: 3, type: "chat_pin_set", timestamp: TS + 2, chatId: "c1", pinnedAt: null })
+    expect(state.chatsById.get("c1")!.pinnedAt).toBeUndefined()
+  })
+
   test("chat_provider_set updates provider and replay map", () => {
     const state = makeChatLifecycleState()
     const replay = makeReplayChatProvider()
