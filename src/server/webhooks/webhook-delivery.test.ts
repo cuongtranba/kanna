@@ -10,6 +10,7 @@ function hook(overrides: Partial<WebhookConfig>): WebhookConfig {
     id: "hook-12345678",
     name: "CI",
     enabled: true,
+    kind: "generic",
     mode: "notify",
     template: "{{repo}} is {{status}}",
     createdAt: 1,

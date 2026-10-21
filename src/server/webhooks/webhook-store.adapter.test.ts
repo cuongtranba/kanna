@@ -17,6 +17,7 @@ const HOOK: StoredWebhook = {
   id: "abcdefgh12345678",
   name: "CI",
   enabled: true,
+  kind: "generic",
   mode: "notify",
   chatId: "chat-1",
   template: "build {{status}}",
@@ -75,4 +76,39 @@ test("the file is owner-only after a rewrite over a looser one", async () => {
   await createFileWebhookStore(dir).save([HOOK])
   const mode = (await stat(path)).mode & 0o777
   expect(mode).toBe(0o600)
+})
+
+const SLACK_HOOK: StoredWebhook = {
+  id: "slackhook12345678",
+  name: "Slack",
+  enabled: true,
+  kind: "slack",
+  slack: { allowedUserIds: ["UOWNER000"] },
+  slackBotToken: "xoxb-placeholder-token",
+  mode: "spawn",
+  projectId: "project-1",
+  template: "",
+  createdAt: 1,
+  updatedAt: 2,
+  secret: "slack-signing-secret",
+}
+
+test("a hook saved before Slack support has no kind and loads as a generic hook", async () => {
+  const dir = await tempDir()
+  const { kind: _kind, ...legacy } = HOOK
+  await writeFile(join(dir, "webhooks.json"), JSON.stringify({ hooks: [legacy] }))
+  expect(await createFileWebhookStore(dir).load()).toEqual([HOOK])
+})
+
+test("a Slack hook keeps its token, signing secret and allowlist across a reload", async () => {
+  const dir = await tempDir()
+  await createFileWebhookStore(dir).save([SLACK_HOOK])
+  expect(await createFileWebhookStore(dir).load()).toEqual([SLACK_HOOK])
+})
+
+test("a Slack hook that lost its bot token is dropped instead of loaded half-configured", async () => {
+  const dir = await tempDir()
+  const { slackBotToken: _token, ...tokenless } = SLACK_HOOK
+  await writeFile(join(dir, "webhooks.json"), JSON.stringify({ hooks: [tokenless, HOOK] }))
+  expect(await createFileWebhookStore(dir).load()).toEqual([HOOK])
 })

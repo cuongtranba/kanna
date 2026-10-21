@@ -12,12 +12,21 @@ function optionalString(value: JsonValue | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
+function parseSlackIds(value: JsonValue | undefined): string[] {
+  if (value === undefined || !isJsonObject(value) || !isJsonArray(value.allowedUserIds)) return []
+  return value.allowedUserIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+}
+
 function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   if (!isJsonObject(value)) return null
   const { id, name, secret, template, mode, enabled, createdAt, updatedAt } = value
   if (typeof id !== "string" || typeof name !== "string" || typeof secret !== "string") return null
   if (typeof template !== "string" || typeof mode !== "string" || !isWebhookMode(mode)) return null
   if (typeof enabled !== "boolean" || typeof createdAt !== "number" || typeof updatedAt !== "number") return null
+  const kind = value.kind === undefined ? "generic" : value.kind
+  if (kind !== "generic" && kind !== "slack") return null
+  const slackBotToken = optionalString(value.slackBotToken)
+  if (kind === "slack" && !slackBotToken) return null
   const chatId = optionalString(value.chatId)
   const projectId = optionalString(value.projectId)
   const provider = typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined
@@ -36,7 +45,11 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     enabled,
     createdAt,
     updatedAt,
-    ...(handling ? { handling } : {}),
+    kind,
+    ...(kind === "slack" && slackBotToken
+      ? { slack: { allowedUserIds: parseSlackIds(value.slack) }, slackBotToken }
+      : {}),
+    ...(kind === "generic" && handling ? { handling } : {}),
     ...(chatId ? { chatId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(provider && model ? { provider, model } : {}),

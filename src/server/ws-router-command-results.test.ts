@@ -359,7 +359,7 @@ describe("command results", () => {
   }, 30_000)
 
   test("the ack of an inbox, webhook, share and push command's real handler parses with the result schema in the command registry", async () => {
-    const { store, inbox, registry, chat } = await createWebhookHarness()
+    const { store, inbox, registry, chat, project } = await createWebhookHarness()
     const pushManager = {
       getPreferences: () => ({ globalEnabled: true, mutedProjectPaths: [], mutedChatIds: [] }),
       recordDeviceSeen: async () => {},
@@ -387,6 +387,17 @@ describe("command results", () => {
     expect(hookId).not.toBe("")
     await expectAcksToMatchRegistry(router, [
       { type: "webhooks.create", input: { name: "deploy", mode: "notify", chatId: chat.id, template: "deploy {{status}}" } },
+      {
+        type: "webhooks.create",
+        input: {
+          name: "slack",
+          kind: "slack",
+          mode: "spawn",
+          projectId: project.id,
+          template: "",
+          slack: { allowedUserIds: ["UOWNER000"], signingSecret: "signing-secret", botToken: "xoxb-bot-token" },
+        },
+      },
       { type: "webhooks.update", id: hookId, patch: { enabled: false } },
       { type: "webhooks.rotateSecret", id: hookId },
       { type: "webhooks.delete", id: hookId },

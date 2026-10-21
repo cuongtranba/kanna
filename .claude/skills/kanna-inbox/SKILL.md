@@ -1,6 +1,6 @@
 ---
 name: kanna-inbox
-description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), and inbound webhooks (/hooks/<id>, secrets, delivery modes). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
+description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/<id>, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
 ---
 
 # Kanna service bus, Inbox, MCP sources, webhooks
@@ -356,3 +356,51 @@ validator checks only the length because it runs in the browser.
 `--remote`, `--share` and tunnels make them public, and then the secret is the
 only barrier. The client reads `webhooks` through the global subscription and
 never persists a revealed secret.
+
+### Slack command hooks (`kind: "slack"`)
+
+A hook of kind `slack` lets an allowlisted Slack member drive a chat by
+mentioning the app in a thread; the agent's final reply is posted back. Code:
+`src/server/webhooks/slack/`, `src/shared/webhooks/slack.ts` (manifest, scopes,
+validation), client `WebhookSlackFields.tsx` / `WebhookSlackSetup.tsx`; decision
+`adr-20261021-slack-command-webhooks`; user doc is the Slack section of the
+webhooks wiki page.
+
+**It is a deliberate exception to the draft-only Inbox agent
+(`adr-20261020-inbox-threads-draft-only-agent`).** `handleWebhookRequest` hands a
+Slack hook to `SlackService` right after the capped body read, so it bypasses
+`verifyWebhookRequest`, the payload filter, `deliverInbound` and the Inbox
+entirely: no inbox thread, no `webhook_delivery` card, no approval step. A
+mention from an allowed member IS the instruction. Do not "fix" this by routing
+Slack through `deliverInbound`.
+
+- **Auth is Slack v0 signing**, not bearer/HMAC: the hook's `secret` field holds
+  the Slack signing secret and `slackBotToken` holds the `xoxb-` token. Both are
+  write-only (`secretHint`, `botTokenHint`); `create` acks `secret: null` and
+  `rotateSecret` is refused. A new Slack hook field is another whitelist entry in
+  `parseStoredWebhook`, the registry and the WS sanitizers.
+- **Ack first, work in the background.** Slack needs a 200 within 3 seconds, so
+  `handleRequest` answers immediately and runs the command through
+  `SlackTaskTracker` (tests `flush()` it). `event_id` dedupes retries in an
+  in-memory ring that a restart forgets.
+- **Thread to chat binding** lives in `<dataDir>/slack-threads.json` at 0600
+  (temp file, `chmod`, rename, same as `webhooks.json`), capped at 1000, dropped
+  on `chat.deleted`. Follow-up mentions continue the chat and send only thread
+  messages newer than `lastSeenTs`.
+- **Prompt shape:** trusted instruction first, then standing instructions, then
+  the thread as UNTRUSTED fenced data (`renderUntrustedText`). Never move thread
+  text outside the fence.
+- **Turn correlation invariant.** Capture the `autoContinue.scheduleId` from the
+  `transcript.user_prompt` bus envelope SYNCHRONOUSLY in the subscriber, then
+  reply on `turn.finished/failed/cancelled` only when that id belongs to the
+  hook (`slack-<hookId>-<eventId>`). Never read the store inside
+  `EventStore.commit` or after an `await` to find the prompt: the commit has not
+  landed yet and the reply attaches to the wrong turn. `repliedScheduleId` on the
+  binding keeps a repeated terminal event from posting twice.
+- **Reply:** `chat.postMessage` with `markdown_text`, split on paragraph and fence
+  boundaries into at most 4 chunks of 10000 characters; 👀 on the mention while
+  working, then ✅ or ❌.
+- **Known limits:** a turn waiting on `waiting_for_user` is not surfaced to Slack
+  (answer it in Kanna); the reply is posted verbatim to the channel, so thread
+  content could steer exfiltration. The allowlist and the untrusted fence are the
+  mitigations, and the docs recommend private channels.

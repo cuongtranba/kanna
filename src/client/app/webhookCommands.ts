@@ -25,9 +25,10 @@ export function readRevealedSecret(result: JsonValue, hookId: string, hookName: 
   throw new Error("The server did not return a secret")
 }
 
-export function readCreatedWebhook(result: JsonValue): WebhookSecretReveal {
+export function readCreatedWebhook(result: JsonValue): WebhookSecretReveal | null {
   const hook = isJsonObject(result) ? result.hook : null
   if (hook && isJsonObject(hook) && typeof hook.id === "string" && typeof hook.name === "string") {
+    if (hook.kind === "slack" && !(isJsonObject(result) && typeof result.secret === "string")) return null
     return readRevealedSecret(result, hook.id, hook.name)
   }
   throw new Error("The server did not return the new webhook")

@@ -14,4 +14,10 @@ code:
   - src/client/lib/webhookPresentation.test.ts
   - src/client/lib/webhookTargets.ts
   - src/client/lib/webhookTargets.test.ts
+  - src/client/app/WebhookSlackFields.tsx
+  - src/client/app/WebhookSlackSetup.tsx
+  - src/client/app/WebhookGenericFields.tsx
+  - src/client/app/webhookCommands.test.ts
+  - src/client/lib/webhookDraft.ts
+  - src/client/lib/webhookDraft.test.ts
   - src/client/components/messages/WebhookDeliveryMessage.tsx

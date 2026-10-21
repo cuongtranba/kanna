@@ -31,7 +31,7 @@ const SIDEBAR: SidebarData = {
 
 test("a target is described by its project and chat names, and a vanished one says so", () => {
   const targets = listWebhookTargets(SIDEBAR)
-  const base = { id: "h", name: "n", enabled: true, template: "t", createdAt: 1, updatedAt: 1 }
+  const base = { id: "h", name: "n", enabled: true, kind: "generic" as const, template: "t", createdAt: 1, updatedAt: 1 }
   expect(describeWebhookTarget({ ...base, mode: "inline", chatId: "chat-1" }, targets)).toBe("kanna / Fix CI")
   expect(describeWebhookTarget({ ...base, mode: "spawn", projectId: "project-1" }, targets)).toBe("New chat in kanna")
   expect(describeWebhookTarget({ ...base, mode: "notify", chatId: "gone" }, targets)).toBe("Chat no longer available")

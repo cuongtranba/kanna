@@ -14,7 +14,8 @@ async function setup(options: { enabled?: boolean; now?: () => number; filter?: 
     ...(options.filter ? { filter: options.filter } : {}),
   })
   if (!created.ok) throw new Error(created.errors.join())
-  const { hook, secret } = created.value
+  const { hook } = created.value
+  const secret = created.value.secret ?? ""
   const post = (headers: Record<string, string>, body: string, id = hook.id) => {
     const url = new URL(`http://localhost/hooks/${id}`)
     return handleWebhookRequest(new Request(url, { method: "POST", headers, body }), url, harness.service)

@@ -86,7 +86,7 @@ test("a thread whose source disabled push is not pushed", async () => {
 
 test("a reply on an MCP source's thread resolves that source's handler, and a webhook thread still resolves its hook", () => {
   const resolve = inboxHandlerResolver(
-    { resolve: (id) => (id === "hook-1" ? { id, name: "CI", enabled: true, mode: "notify", chatId: "c1", template: "build", createdAt: 1, updatedAt: 1, secret: "unused" } : null) },
+    { resolve: (id) => (id === "hook-1" ? { id, name: "CI", enabled: true, kind: "generic", mode: "notify", chatId: "c1", template: "build", createdAt: 1, updatedAt: 1, secret: "unused" } : null) },
     { sources: () => [SOURCE] },
   )
 

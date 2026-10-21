@@ -5,7 +5,8 @@ description: Let CI, GitHub, monitoring or a curl command tell Kanna that someth
 
 An **inbound webhook** is a url that an outside system can POST to. Kanna checks
 the caller's secret, then reacts in one of three ways. Open **Webhooks** in the
-sidebar to create and manage them.
+sidebar to create and manage them. A **Slack** hook is a different kind that
+answers `@Kanna` mentions in a Slack thread; see [Slack](#slack).
 
 ## Modes
 
@@ -176,6 +177,98 @@ first, so a filtered delivery does not use up its id and does not count toward
 the 20-per-minute limit: after you fix a filter, GitHub's **Redeliver** goes
 through.
 
+## Slack
+
+A **Slack** hook lets people in your workspace ask Kanna to work from a Slack
+thread. Someone you have allowed mentions `@Kanna` in a thread, Kanna starts a
+chat in the project you chose, and the agent's final reply is posted back into
+the same thread. A follow-up mention in that thread continues the same chat.
+
+Unlike a generic hook, a Slack hook does not go through the Inbox and the agent
+does not stop to draft a reply for you to approve: a mention from an allowed
+member is treated as an instruction, and the answer is posted automatically.
+
+### What you need
+
+- **A public HTTPS url for Kanna.** Slack sends events to the hook url, so it
+  must be reachable from the internet. Use a named Cloudflare tunnel, as in
+  [Cloudflare tunnel](/guides/ops/cloudflare-tunnel/). A quick tunnel gets a new
+  url every time it starts, so you would have to update the Slack app each time.
+  Kanna's dialog warns you when the page you are on is not a public HTTPS url.
+- A Slack workspace where you can create and install an app.
+- The Slack member ID of everyone who may use it.
+
+### Set it up
+
+1. Open **Webhooks**, choose **New webhook** and set **Kind** to **Slack**. The
+   dialog shows a **Set up the Slack app** guide with an app manifest you can
+   copy. Keep it open.
+2. At [api.slack.com/apps](https://api.slack.com/apps) choose **Create New App**,
+   then **From a manifest**, and paste the manifest. It names the app *Kanna* and
+   asks for these bot scopes: `app_mentions:read`, `channels:history`,
+   `groups:history`, `mpim:history`, `chat:write` and `reactions:write`. It also
+   subscribes the app to the `app_mention` event.
+3. **Install** the app to your workspace.
+4. Copy the **Bot User OAuth Token** (it starts with `xoxb-`) from **OAuth &
+   Permissions**, and the **Signing Secret** from **Basic Information**.
+5. Find your member ID: open your Slack profile, choose **⋯**, then **Copy
+   member ID**. It looks like `U01ABCDEF`.
+6. Back in Kanna, give the hook a name, pick the **project** the chats should be
+   created in, and paste the signing secret, the bot token and the allowed member
+   IDs (up to 10, separated by commas or spaces). Optionally add **standing
+   instructions** that go with every request, and a **model**. Choose **Create**.
+7. Copy the hook's **Request URL** from the hook row or from the setup guide. In
+   the Slack app, open **Event Subscriptions**, turn events on, paste the url and
+   wait for Slack to show it as **Verified**. Subscribe to the bot event
+   `app_mention` if it is not already listed, then save.
+8. In each channel you want to use, run `/invite @Kanna`.
+
+Kanna keeps the signing secret and the bot token and shows only their last four
+characters afterwards. To change one, open the hook and type a new value; leave
+the field blank to keep the saved one. There is no **Rotate secret** for a Slack
+hook, because the signing secret comes from Slack.
+
+### Use it
+
+Mention `@Kanna` in a thread, or start a thread with a mention, and write what
+you want:
+
+> @Kanna why did the nightly build fail? Look at the log above.
+
+- Kanna adds a 👀 reaction to your message while it works. It becomes a
+  ✅ when the reply is posted and an ❌ if the turn failed, was
+  cancelled, or the reply could not be posted.
+- The reply is the agent's final message of the turn. A reply longer than Slack
+  allows is split into up to four messages and cut off with a pointer back to
+  Kanna if it is longer still.
+- Each thread has its own chat, named *Slack · …* in the project you chose. A
+  later mention in the same thread continues that chat and shows the agent only
+  the thread messages added since the last time.
+- The agent can read the thread, so you can mention it under a message you want
+  it to look at. The thread text is passed as data, not as instructions.
+- Only a mention from an allowed member does anything. Mentions from anyone else,
+  from bots, and edits to a message are ignored, and the hook row records why.
+
+If the agent needs your approval to run a tool, the turn waits in Kanna. Slack
+does not show the question, so open the chat in Kanna and answer it there.
+
+### Security
+
+- **Only the allowed member IDs can start work.** Every request must also carry a
+  valid Slack signature; one that does not answers `401` and does nothing.
+- **Thread content is untrusted.** Anyone who can post in the thread can try to
+  steer the agent through what they write, even though only you can start it.
+- **The reply goes to the channel.** The agent's final message is posted as it
+  is, so anything it quotes from your repository is visible to everyone in that
+  channel. Use a **private channel**, with only people who may see that project,
+  for anything sensitive.
+- The signing secret and the bot token are stored in `webhooks.json` in the Kanna
+  data directory, readable only by your user, and are never shown again. The
+  link between a Slack thread and its chat is stored in `slack-threads.json` in
+  the same directory with the same permissions.
+- Kanna remembers recent Slack event ids in memory only, so after a restart a
+  retried mention can run twice.
+
 ## Who can reach a hook
 
 A hook url is reachable **wherever Kanna is reachable**. By default Kanna listens
@@ -194,5 +287,5 @@ not your session. Set `KANNA_WEBHOOKS=disabled` to turn the whole feature off.
 ## Where secrets are stored
 
 Secrets live in `webhooks.json` in the Kanna data directory, readable only by
-your user. They are never sent back to the browser after creation, only the last
+your user. For a Slack hook these are the signing secret and the bot token. They are never sent back to the browser after creation, only the last
 four characters, and they never appear in logs or transcripts.
