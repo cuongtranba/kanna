@@ -16,6 +16,7 @@ import { readLlmProviderSnapshot, writeLlmProviderSnapshot } from "./llm-provide
 import { createTestEventStore } from "./storage/test-helpers"
 import { makeTempRepo, type TempRepo } from "./test-helpers/worktree-repo"
 import { createWebhookHarness } from "./test-helpers/webhook-harness"
+import { persistProjectUpload } from "./uploads"
 import { createWsRouter } from "./ws-router"
 
 const repos: TempRepo[] = []
@@ -135,6 +136,24 @@ describe("command results", () => {
       const verdict = resultSchemaOf(command.type)?.safeParse(envelope.type === "ack" ? envelope.result : undefined)
       expect(verdict?.success).toBe(true)
     }
+  }, 30_000)
+
+  test("the ack of a project file, upload and plugin command's real handler parses with the result schema in the command registry", async () => {
+    const { repo, router, projectId } = await createRouterOverRepo()
+    writeFileSync(join(repo.dir, "kept.txt"), "kept\n")
+    await persistProjectUpload({
+      projectId,
+      localPath: repo.dir,
+      fileName: "draft.txt",
+      bytes: new TextEncoder().encode("draft"),
+      fallbackMimeType: "text/plain",
+    })
+
+    await expectAcksToMatchRegistry(router, [
+      { type: "project.listPaths", projectId, query: "kept" },
+      { type: "upload.delete", projectId, storedName: "draft.txt" },
+      { type: "plugins.list" },
+    ])
   }, 30_000)
 
   test("the ack a settings command's real handler sends parses with the result schema in the command registry", async () => {

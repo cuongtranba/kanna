@@ -167,12 +167,19 @@ export function isBenignStaleStateMessage(message: string): boolean {
 export interface CommandConnection {
   data: ClientState
   send(payload: string): number
+  onSent?: (envelope: ServerEnvelope) => void
 }
 
 export function send(ws: CommandConnection, message: ServerEnvelope): number {
   const payload = JSON.stringify(message)
   ws.send(payload)
+  ws.onSent?.(message)
   return payload.length
+}
+
+export function silentCommandMessage(commandType: string): string {
+  return `Command "${commandType}" was claimed by a ws-router handler that sent no reply. `
+    + `Every handler must answer with an ack, a snapshot or an error for the command id.`
 }
 
 export function ensureSnapshotSignatures(

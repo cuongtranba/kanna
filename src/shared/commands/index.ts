@@ -5,6 +5,7 @@ import { chatCommands } from "./chat"
 import { defineCommands, noResult, type CommandRisk, type ParseOutcome, type RemotePolicy } from "./define"
 import { gitCommands } from "./git"
 import { inboxCommands } from "./inbox"
+import { pluginsCommands } from "./plugins"
 import { projectCommands } from "./project"
 import { pushCommands } from "./push"
 import { settingsCommands } from "./settings"
@@ -23,6 +24,7 @@ export const COMMAND_REGISTRY = defineCommands(
   ...pushCommands,
   ...inboxCommands,
   ...shareCommands,
+  ...pluginsCommands,
 )
 
 type RegisteredCommand = (typeof COMMAND_REGISTRY)[number]

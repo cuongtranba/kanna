@@ -185,6 +185,16 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `ackResult`, and only `backgroundTasks.getOutput` replies with a snapshot
   envelope instead of an ack, so its schema describes the snapshot. See
   `adr-20261020-command-registry-single-source-of-truth`.
+  `src/server/ws-router-coverage.test.ts` reads the ws-router handlers from the
+  syntax tree and fails when a registry command has no handler literal or a
+  handler claims a literal the registry lacks.
+- **A web capability needs an MCP path or a stated reason.** The web client's
+  plain HTTP calls are listed in `src/shared/http-routes.ts` (`HTTP_ROUTES`), each
+  naming its MCP tool, its registry command or an exclusion with a reason; the
+  client builds those paths from it, and `src/ops/parity` plus
+  `remote-mcp-parity.test.ts` fail on a stray `/api/` literal, an unused entry,
+  a tool the server does not register or an exclusion the wiki page omits.
+  Actions and small reads belong in the registry, not in a new HTTP route.
 - **A typed tool is one entry of the tool table, and its input comes from the
   registry.** `remote-mcp-tool-table.ts` lists every tool (`REMOTE_TOOLS`), each
   built by `commandTool`, `topicTool` or `mcpOnlyTool` from

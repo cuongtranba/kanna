@@ -2,6 +2,7 @@ import type { AttachmentKind, UploadedAttachment } from "../../shared/types"
 import type { DetailedError, PreviousUpload, UploadOptions } from "tus-js-client"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 import { runDetached } from "./runDetached"
+import { buildRoutePath, HTTP_ROUTES } from "../../shared/http-routes"
 
 const ATTACHMENT_KINDS = new Set<string>(["image", "file", "mention"] satisfies AttachmentKind[])
 
@@ -123,7 +124,7 @@ export function uploadFile(args: UploadFileArgs): UploadHandle {
       if (aborted) return
 
       const upload = new Upload(args.file, {
-        endpoint: `/api/projects/${encodeURIComponent(args.projectId)}/uploads/tus`,
+        endpoint: buildRoutePath(HTTP_ROUTES.uploadTus.path, { projectId: args.projectId }),
         chunkSize: CHUNK_SIZE_BYTES,
         retryDelays: RETRY_DELAYS_MS,
         storeFingerprintForResuming: true,

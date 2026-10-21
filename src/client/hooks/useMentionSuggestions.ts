@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react"
 import { ChatTabScopedStore, type MentionSuggestionsState } from "../stores/chatTabScopedStore"
 import { fetchProjectPaths, type ProjectPath } from "../api/projects"
-import type { HttpPort } from "../ports/httpPort"
+import type { CommandPort } from "../ports/commandPort"
 import type { TimerPort } from "../ports/timerPort"
-import { httpAdapter } from "../adapters/http.adapter"
+import { useOptionalKannaSocket } from "../app/KannaSocketProvider"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { onRejected } from "../../shared/errors"
 
@@ -12,13 +12,8 @@ export type { ProjectPath }
 const DEBOUNCE_MS = 120
 
 interface MentionSuggestionsPorts {
-  http: HttpPort
-  timer: TimerPort
-}
-
-const DEFAULT_PORTS: MentionSuggestionsPorts = {
-  http: httpAdapter,
-  timer: timerAdapter,
+  commands?: CommandPort
+  timer?: TimerPort
 }
 
 const EMPTY_STATE: MentionSuggestionsState = { items: [], loading: false, error: null }
@@ -29,7 +24,9 @@ export function useMentionSuggestions(args: {
   enabled: boolean
   ports?: MentionSuggestionsPorts
 }): MentionSuggestionsState {
-  const { http, timer } = args.ports ?? DEFAULT_PORTS
+  const socket = useOptionalKannaSocket()
+  const commands = args.ports?.commands ?? socket
+  const timer = args.ports?.timer ?? timerAdapter
   const state = ChatTabScopedStore.useScopedStore((s) => s.mentionSuggestions)
   const setMentionSuggestions = ChatTabScopedStore.useScopedStore((s) => s.setMentionSuggestions)
   const chatTabStoreApi = ChatTabScopedStore.useScopedStoreApi()
@@ -50,7 +47,7 @@ export function useMentionSuggestions(args: {
     abortRef.current = controller
 
     debounceRef.current = timer.setTimeout(() => {
-      fetchProjectPaths(args.projectId!, args.query, { signal: controller.signal, http }).then(
+      fetchProjectPaths(commands, args.projectId!, args.query).then(
         (items) => {
           if (controller.signal.aborted) return
           setMentionSuggestions({ items, loading: false, error: null })
@@ -66,7 +63,7 @@ export function useMentionSuggestions(args: {
       if (debounceRef.current !== null) timer.clearTimeout(debounceRef.current)
       controller.abort()
     }
-  }, [args.enabled, args.projectId, args.query, http, timer, setMentionSuggestions, chatTabStoreApi])
+  }, [args.enabled, args.projectId, args.query, commands, timer, setMentionSuggestions, chatTabStoreApi])
 
   return state
 }

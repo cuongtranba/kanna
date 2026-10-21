@@ -360,32 +360,6 @@ describe("uploads", () => {
     expect(await Bun.file(attachment.absolutePath).exists()).toBe(false)
   })
 
-  test("deletes uploaded attachment content through the project delete URL", async () => {
-    const projectDir = await mkdtemp(path.join(tmpdir(), "kanna-project-delete-"))
-    tempDirs.push(projectDir)
-
-    const server = await startIsolatedServer({ port: 4311 })
-
-    try {
-      const project = await server.store.openProject(projectDir, "Project")
-      const attachment = await persistProjectUpload({
-        projectId: project.id,
-        localPath: projectDir,
-        fileName: "bye.txt",
-        bytes: new TextEncoder().encode("delete over http"),
-        fallbackMimeType: "text/plain",
-      })
-
-      const deleteUrl = `http://localhost:${server.port}${attachment.contentUrl.replace(/\/content$/, "")}`
-      const response = await fetch(deleteUrl, { method: "DELETE" })
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual({ ok: true })
-      expect(await Bun.file(attachment.absolutePath).exists()).toBe(false)
-    } finally {
-      await server.stop()
-    }
-  })
-
   test("serves arbitrary local files via /api/local-file", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "kanna-local-file-"))
     tempDirs.push(dir)
@@ -607,7 +581,7 @@ describe("resumable uploads (tus)", () => {
     }
   })
 
-  test("a stored file literally named tus is still served and deleted through the attachment routes", async () => {
+  test("a stored file literally named tus is still served by the attachment content route", async () => {
     const { server, project, projectDir, base } = await startProject("kanna-tus-name-")
     try {
       const attachment = await persistProjectUpload({
@@ -620,10 +594,6 @@ describe("resumable uploads (tus)", () => {
       const response = await fetch(`${base}${attachment.contentUrl}`)
       expect(response.status).toBe(200)
       expect(await response.text()).toBe("named tus")
-
-      const deleted = await fetch(`${base}/api/projects/${project.id}/uploads/tus`, { method: "DELETE" })
-      expect(await deleted.json()).toEqual({ ok: true })
-      expect((await fetch(`${base}${attachment.contentUrl}`)).status).toBe(404)
     } finally {
       await server.stop()
     }

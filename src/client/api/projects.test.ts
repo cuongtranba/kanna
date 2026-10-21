@@ -1,51 +1,30 @@
-
 import { describe, expect, test } from "bun:test"
 import { fetchProjectPaths } from "./projects"
-import { makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
+import { makeFakeCommandPort } from "../adapters/testing/makeFakePorts"
 
 describe("fetchProjectPaths", () => {
-  test("returns path list on success", async () => {
-    const http = makeFakeHttpPort()
+  test("asks the project.listPaths command and returns the paths it answers with", async () => {
     const paths = [
       { path: "src/index.ts", kind: "file" as const },
       { path: "src/", kind: "dir" as const },
     ]
-    http.routes.push({
-      method: "GET",
-      url: "/api/projects/proj1/paths",
-      response: { ok: true, status: 200, body: { paths } },
-    })
-    const result = await fetchProjectPaths("proj1", "src", { http })
+    const commands = makeFakeCommandPort(() => ({ paths }))
+
+    const result = await fetchProjectPaths(commands, "proj1", "src")
+
     expect(result).toEqual(paths)
+    expect(commands.calls).toEqual([{ type: "project.listPaths", projectId: "proj1", query: "src" }])
   })
 
-  test("returns empty array on non-ok response", async () => {
-    const http = makeFakeHttpPort()
-    http.routes.push({
-      method: "GET",
-      url: "/api/projects/proj1/paths",
-      response: { ok: false, status: 404, body: null },
+  test("returns an empty list when no socket is connected yet", async () => {
+    expect(await fetchProjectPaths(null, "proj1", "x")).toEqual([])
+  })
+
+  test("lets a rejected command surface so the typeahead can report it", async () => {
+    const commands = makeFakeCommandPort(() => {
+      throw new Error("Project not found")
     })
-    const result = await fetchProjectPaths("proj1", "x", { http })
-    expect(result).toEqual([])
-  })
 
-  test("returns empty array on network error", async () => {
-    const http = makeFakeHttpPort()
-    const result = await fetchProjectPaths("proj1", "y", { http })
-    expect(result).toEqual([])
-  })
-
-  test("encodes projectId in URL", async () => {
-    const http = makeFakeHttpPort()
-    const encodedId = encodeURIComponent("my project/id")
-    http.routes.push({
-      method: "GET",
-      url: `/api/projects/${encodedId}/paths`,
-      response: { ok: true, status: 200, body: { paths: [] } },
-    })
-    const result = await fetchProjectPaths("my project/id", "q", { http })
-    expect(result).toEqual([])
-    expect(http.calls[0]?.url).toContain(encodedId)
+    await expect(fetchProjectPaths(commands, "gone", "x")).rejects.toThrow("Project not found")
   })
 })

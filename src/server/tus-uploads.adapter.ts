@@ -3,6 +3,7 @@ import path from "node:path"
 import { FileStore } from "@tus/file-store"
 import { EVENTS, Server, type Upload } from "@tus/server"
 import { errorMessage } from "../shared/errors"
+import { buildRoutePath, HTTP_ROUTES } from "../shared/http-routes"
 import { log } from "../shared/log"
 import { getProjectUploadDir } from "./paths"
 import { discardPartialUpload, finalizeUploadFromFile } from "./uploads.adapter"
@@ -38,7 +39,7 @@ interface ProjectTusServer {
 }
 
 export function tusUploadsPath(projectId: string): string {
-  return `/api/projects/${projectId}/uploads/tus`
+  return buildRoutePath(HTTP_ROUTES.uploadTus.path, { projectId })
 }
 
 function errorBody(message: string): string {

@@ -9,3 +9,4 @@ code:
   - src/server/project-file-path.ts
   - src/shared/command-origin.ts
   - src/server/command-origin-stamp.ts
+  - src/ops/parity/remote-mcp-docs.test.ts

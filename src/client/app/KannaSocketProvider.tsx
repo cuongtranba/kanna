@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 import { KannaSocket, type KannaSocketPorts } from "./socket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
+import { HTTP_ROUTES } from "../../shared/http-routes"
 
 
 const KannaSocketContext = createContext<KannaSocket | null>(null)
@@ -10,7 +11,7 @@ export function wsUrl(dom: DomPort): string {
   const href = dom.getHref()
   const protocol = href.startsWith("https://") ? "wss:" : "ws:"
   const url = new URL(href)
-  return `${protocol}//${url.host}/ws`
+  return `${protocol}//${url.host}${HTTP_ROUTES.websocket.path}`
 }
 
 export interface KannaSocketProviderProps {

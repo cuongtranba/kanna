@@ -1,5 +1,7 @@
 
+import type { CommandPort } from "../ports/commandPort"
 import type { HttpPort } from "../ports/httpPort"
+import { HTTP_ROUTES, matchRoutePath } from "../../shared/http-routes"
 import { httpAdapter } from "../adapters/http.adapter"
 
 export type FileProbeResult =
@@ -25,16 +27,12 @@ export async function probeFileUrl(
   }
 }
 
-export async function deleteUploadedFile(
-  contentUrl: string,
-  options: { http?: HttpPort } = {},
-): Promise<void> {
-  const http = options.http ?? httpAdapter
-  const deleteUrl = contentUrl.replace(/\/content$/, "")
-  const result = await http.del(deleteUrl)
-  if (!result.ok && result.status !== 404) {
-    throw new Error(`Delete request failed with status ${result.status}`)
-  }
+export async function deleteUploadedFile(contentUrl: string, commands: CommandPort | null): Promise<void> {
+  const [pathname = ""] = contentUrl.split("?")
+  const upload = matchRoutePath(HTTP_ROUTES.uploadContent.path, pathname)
+  if (!upload) throw new Error(`Not an upload content URL: ${contentUrl}`)
+  if (!commands) throw new Error("Not connected to the server")
+  await commands.command({ type: "upload.delete", projectId: upload.projectId, storedName: upload.storedName })
 }
 
 export interface TextPreviewResult {

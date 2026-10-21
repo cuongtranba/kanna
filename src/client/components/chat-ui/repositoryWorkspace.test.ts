@@ -480,7 +480,7 @@ describe("getDiffPreviewAttachment", () => {
   test("encodes the file path in contentUrl", () => {
     const file = { ...baseFile, path: "assets/my file.png" }
     const attachment = getDiffPreviewAttachment("project-1", file)
-    expect(attachment?.contentUrl).toContain(encodeURIComponent("assets/my file.png"))
+    expect(attachment?.contentUrl).toBe("/api/projects/project-1/files/assets/my%20file.png/content")
   })
 })
 

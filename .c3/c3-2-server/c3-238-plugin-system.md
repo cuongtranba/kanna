@@ -1,6 +1,6 @@
 ---
 id: c3-238
-c3-seal: 1a3e3bc10e4724bca86b44be5f04f365c3acd8c9dea0f2b2c6e4d2485684110f
+c3-seal: a5214aecb088c9060438f1086e751fd4fe7f868f9f04982b933f24936fcd331c
 title: plugin-system
 type: component
 category: feature
@@ -45,7 +45,7 @@ A plugin is untrusted third-party code, so the design keeps it at arm's length i
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | PluginService | OUT | install / list / reload / restore / setEnabled / start / stop / status / call / logs / clientBundle / recordClientError — the one surface the CLI, HTTP and MCP paths share | c3-210 | src/server/plugins/plugin-service.ts |
-| HTTP /api/plugins/* | OUT | list, client.js, logs, rpc, reload, client-error. Inherits the /api/ auth gate; a disabled surface answers 404 everywhere, never 403 | c3-121 | src/server/plugin-http-routes.ts |
+| HTTP /api/plugins/* | OUT | client.js, logs, rpc, client-error. Inherits the /api/ auth gate; a disabled surface answers 404 everywhere, never 403. The plugin list and reload moved to the plugins.list and plugins.reload commands, which answer an empty list or an error while plugins are switched off | c3-121 | src/server/plugin-http-routes.ts, src/server/ws-router-plugins.ts |
 | Install persistence | IN | InstalledPluginStore port bound to settings.installedPlugins; restore() re-registers at boot without recompiling | c3-206 | src/server/plugins/installed-plugin-store.ts |
 | MCP authoring tools | OUT | plugin_list / plugin_validate / plugin_logs / plugin_scaffold / plugin_install / plugin_reload; the three mutating tools are withheld at depth > 0 | c3-210 | src/server/kanna-mcp-plugins.ts |
 | CLI | OUT | kanna plugin install / ls / reload / logs, dispatched into the same service | c3-202 | src/server/plugin-cli-dispatch.ts |

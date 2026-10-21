@@ -1,4 +1,5 @@
 import path from "node:path"
+import type { ProjectPathEntry } from "../shared/commands/results/project"
 import {
   pathExists,
   readDirEntries,
@@ -7,10 +8,7 @@ import {
   type DirEntry,
 } from "./project-paths-io.adapter"
 
-export interface ProjectPath {
-  path: string
-  kind: "file" | "dir"
-}
+export type ProjectPath = ProjectPathEntry
 
 interface CacheEntry {
   files: string[]

@@ -5,6 +5,17 @@ import { assertParity } from "../../type-parity"
 
 export const projectIdResultSchema = z.object({ projectId: z.string() })
 
+export const projectPathEntrySchema = z.object({
+  path: z.string(),
+  kind: z.enum(["file", "dir"]),
+})
+
+export type ProjectPathEntry = z.output<typeof projectPathEntrySchema>
+
+export const projectListPathsResultSchema = z.object({ paths: z.array(projectPathEntrySchema) })
+
+export const uploadDeleteResultSchema = z.object({ deleted: z.boolean() })
+
 export const projectDeleteResultSchema = z.object({
   deletedBoardIds: z.array(z.string()),
   failures: z.array(z.string()),

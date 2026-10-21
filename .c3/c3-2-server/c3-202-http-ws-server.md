@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: f35a83736b9b361ab0d1f3b383d42d3cc8b1e8269aae7d48a9db59718b06175d
+c3-seal: d293493a07b722edd80a00fa7fc33780219b8f9d899c63b7626775364bc43a53
 title: http-ws-server
 type: component
 category: foundation
@@ -49,7 +49,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | Outcome | Client connects, authenticates, opens single WS | c3-101 |
 | Primary path | HTTP serves assets → upgrade → ws-router | c3-208 |
 | Alternate — health | /health returns 200 for liveness checks | c3-202 |
-| Alternate — API | /api/* routes serve JSON endpoints and the tus upload endpoint under /api/projects/:projectId/uploads/tus | c3-217 |
+| Alternate — API | /api/* routes serve byte transfer only, the tus upload endpoint, file and upload content and the plugin client bundle; actions and small reads are registry commands over the WebSocket, so path autocomplete, upload deletion and plugin list and reload are no longer HTTP routes | c3-217 |
 | Failure — auth reject | 401 close on missing/invalid cookie | c3-203 |
 
 ## Governance
@@ -71,6 +71,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | /assets/share-view/* | OUT | Reserved static path for the share viewer bundle, also pre-auth | c3-228 | src/server/http.ts |
 | /beacon scope sync | IN/OUT | Persists a validated set-scope, deletes the beacon on unpair, refuses unknown or disabled beacons before the challenge, and pushes the stored scope to connected protocol-2 beacons on every settings change | c3-241 | src/server/beacon-connection.ts |
 | /beacon update | IN/OUT | Sends the server version in ready and incompatible, keeps each beacon's last update_status until it reconnects, and answers beacons.update with a field-less update frame, refusing a beacon that is offline or below protocol 4; it never sends a URL or a version | c3-241 | src/server/beacon-registry.ts |
+| HTTP route inventory | IN | Every route and method listed in HTTP_ROUTES is answered by the dispatcher itself rather than falling through to the client bundle, proven against a real server with a signed-in session | c3-302 | src/server/http-route-inventory.test.ts, src/shared/http-routes.ts |
 | /mcp | IN | Remote MCP Streamable HTTP endpoint, dispatched BEFORE the cookie gate because it authenticates with a bearer; answers 404 without --password or when remoteMcp.enabled is off | c3-242 | src/server/http-dispatcher.ts |
 
 ## Change Safety

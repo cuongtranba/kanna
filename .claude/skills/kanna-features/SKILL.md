@@ -150,6 +150,10 @@ carry a big file. ADR `adr-20261008-tus-resumable-uploads`, component `c3-217`.
   `reused: true`; different bytes take the next counter name from
   `getUploadCandidateNames`. Client cleanup relies on `reused` so it never deletes a file
   another attachment owns.
+- **Deleting an unsent upload is the `upload.delete` command, not an HTTP route.**
+  The composer sends it for an attachment the user removes or a generation that
+  was abandoned; a stored name is one path segment, so a file literally named
+  `tus` deletes like any other. `reused` uploads are never deleted.
 - **The partial is removed on tus `POST_FINISH`, not inside `onUploadFinish`.** A
   zero-length upload finishes during creation and `PostHandler` reads the upload again
   after the hook; deleting the partial in the hook made every empty file a 404. The hook

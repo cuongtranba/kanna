@@ -7,8 +7,10 @@ import {
   importSessionsByIdsResultSchema,
   projectDeleteResultSchema,
   projectIdResultSchema,
+  projectListPathsResultSchema,
   stackIdResultSchema,
   stackWorktreesResultSchema,
+  uploadDeleteResultSchema,
 } from "./results/project"
 
 export const projectCommands = defineCommands(
@@ -62,6 +64,20 @@ export const projectCommands = defineCommands(
     result: diffPatchResultSchema,
     summary: "Read the git patch of one changed file in the project.",
     risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("project.listPaths", {
+    params: z.object({ ...projectIdShape, query: z.string().optional(), limit: z.number().optional() }),
+    result: projectListPathsResultSchema,
+    summary: "List files and folders of a project for path autocomplete, best matches first; an empty query lists the top level.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("upload.delete", {
+    params: z.object({ ...projectIdShape, storedName: z.string() }),
+    result: uploadDeleteResultSchema,
+    summary: "Delete one stored upload of a project, such as an attachment that was never sent.",
+    risk: "destructive",
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("sessions.importClaude", {

@@ -1,6 +1,7 @@
 
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
+import { buildLocalFileContentUrl } from "../../shared/projectFileUrl"
 
 export interface ParsedLocalFileLink {
   path: string
@@ -126,7 +127,7 @@ export function toLocalFileUrl(value: string): string {
       absolute = absolute.slice("file://".length)
     }
   }
-  return `/api/local-file?path=${encodeURIComponent(absolute)}`
+  return buildLocalFileContentUrl(absolute)
 }
 
 export function stripWorkspacePath(path: string | undefined, localPath: string | undefined | null): string {

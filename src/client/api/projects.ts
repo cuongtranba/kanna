@@ -1,15 +1,7 @@
+import type { CommandPort } from "../ports/commandPort"
+import type { ProjectPathEntry } from "../../shared/commands/results/project"
 
-import type { HttpPort } from "../ports/httpPort"
-import { httpAdapter } from "../adapters/http.adapter"
-
-export interface ProjectPath {
-  path: string
-  kind: "file" | "dir"
-}
-
-interface ProjectPathsApiResponse {
-  paths?: ProjectPath[]
-}
+export type ProjectPath = ProjectPathEntry
 
 export const projectQueryKeys = {
   all: ["projects"] as const,
@@ -17,20 +9,11 @@ export const projectQueryKeys = {
 }
 
 export async function fetchProjectPaths(
+  commands: CommandPort | null,
   projectId: string,
   query: string,
-  options: { signal?: AbortSignal; http?: HttpPort } = {},
 ): Promise<ProjectPath[]> {
-  const http = options.http ?? httpAdapter
-  const params = new URLSearchParams({ query })
-  try {
-    const result = await http.getJson<ProjectPathsApiResponse>(
-      `/api/projects/${encodeURIComponent(projectId)}/paths?${params.toString()}`,
-      { signal: options.signal },
-    )
-    if (!result.ok) return []
-    return result.data.paths ?? []
-  } catch {
-    return []
-  }
+  if (!commands) return []
+  const { paths } = await commands.command({ type: "project.listPaths", projectId, query })
+  return paths
 }

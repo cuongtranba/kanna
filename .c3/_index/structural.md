@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:5650fd301bd29bae959a29e788f7cb4d7d36a5b4844b93f13be121fdc2d07864 -->
+<!-- hash: sha256:f86f8a757458c4f971a33bcd617f5eb56e00ebf96301d22c91727ba61f9701f6 -->
 
 ## c3-0 — Kanna (system)
 
@@ -122,7 +122,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-host.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/server-io.adapter.ts, src/server/server.ts
+files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-host.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-route-inventory.test.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/server-data-dir.test.ts, src/server/server-io.adapter.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -152,7 +152,7 @@ files: src/server/read-models.test.ts, src/server/read-models.ts
 ## c3-208 — ws-router (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-cqrs-read-models, ref-ws-subscription, rule-colocated-bun-test
-files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/live-block-throttle.test.ts, src/server/live-block-throttle.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router-ack.ts, src/server/ws-router-agent-ctrl.ts, src/server/ws-router-broadcast.ts, src/server/ws-router-chat.ts, src/server/ws-router-command-results.test.ts, src/server/ws-router-defaults.ts, src/server/ws-router-diff.ts, src/server/ws-router-envelope.ts, src/server/ws-router-io.adapter.ts, src/server/ws-router-misc.ts, src/server/ws-router-project.ts, src/server/ws-router-settings.ts, src/server/ws-router-skills.ts, src/server/ws-router-utils.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
+files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server/live-block-throttle.test.ts, src/server/live-block-throttle.ts, src/server/project-kanna-files.adapter.test.ts, src/server/project-kanna-files.adapter.ts, src/server/ws-router-ack.ts, src/server/ws-router-agent-ctrl.ts, src/server/ws-router-broadcast.ts, src/server/ws-router-chat.ts, src/server/ws-router-command-results.test.ts, src/server/ws-router-coverage.test.ts, src/server/ws-router-defaults.ts, src/server/ws-router-diff.ts, src/server/ws-router-envelope.ts, src/server/ws-router-io.adapter.ts, src/server/ws-router-misc.ts, src/server/ws-router-plugins.test.ts, src/server/ws-router-plugins.ts, src/server/ws-router-project-files.test.ts, src/server/ws-router-project-files.ts, src/server/ws-router-project.ts, src/server/ws-router-settings.ts, src/server/ws-router-skills.ts, src/server/ws-router-utils.ts, src/server/ws-router.test.ts, src/server/ws-router.ts
 
 ## c3-209 — process-utils (component)
 container: c3-2 | context: c3-0
@@ -319,7 +319,7 @@ files: apps/beacon-desktop/**/*, apps/beacon-win7/**/*, scripts/beacon-desktop-i
 ## c3-242 — remote-mcp (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, ref-ws-subscription, rule-colocated-bun-test, rule-strong-typing
-files: src/server/better-auth-oauth.adapter.ts, src/server/command-origin-stamp.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/command-origin.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
+files: src/ops/parity/remote-mcp-docs.test.ts, src/server/better-auth-oauth.adapter.ts, src/server/command-origin-stamp.ts, src/server/project-file-path.ts, src/server/remote-mcp/**/*.ts, src/shared/command-origin.ts, src/shared/remote-mcp/topics.ts, src/shared/settings/remote-mcp.test.ts, src/shared/settings/remote-mcp.ts
 
 ## c3-243 — webhooks (component)
 container: c3-2 | context: c3-0
@@ -361,7 +361,7 @@ files: src/shared/analytics.ts, src/shared/app-settings-types.ts, src/shared/bui
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/shared/app-settings-types.schema.ts, src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.schema.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/boards/types.schema.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/command-origin.schema.ts, src/shared/commands/**/*.ts, src/shared/core-types.schema.ts, src/shared/cron/types.schema.ts, src/shared/custom-providers.schema.ts, src/shared/git-diff-types.schema.ts, src/shared/inbound/handler.schema.ts, src/shared/inbox/types.schema.ts, src/shared/live-block.ts, src/shared/mcp-sources/types.schema.ts, src/shared/mcp-types.schema.ts, src/shared/permission-policy.schema.ts, src/shared/protocol.ts, src/shared/provider-model-types.schema.ts, src/shared/service-bus/jetstream-config.schema.ts, src/shared/session-share/types.schema.ts, src/shared/settings/settings.schema.ts, src/shared/subagent-types.schema.ts, src/shared/tool-call-types.schema.ts, src/shared/transcript-types.schema.ts, src/shared/type-parity.ts, src/shared/types.schema.ts, src/shared/webhooks/types.schema.ts, src/shared/workflow-types.schema.ts
+files: src/ops/parity/http-route-inventory.test.ts, src/shared/app-settings-types.schema.ts, src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.schema.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/boards/types.schema.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/command-origin.schema.ts, src/shared/commands/**/*.ts, src/shared/core-types.schema.ts, src/shared/cron/types.schema.ts, src/shared/custom-providers.schema.ts, src/shared/git-diff-types.schema.ts, src/shared/http-routes.test.ts, src/shared/http-routes.ts, src/shared/inbound/handler.schema.ts, src/shared/inbox/types.schema.ts, src/shared/live-block.ts, src/shared/mcp-sources/types.schema.ts, src/shared/mcp-types.schema.ts, src/shared/permission-policy.schema.ts, src/shared/protocol.ts, src/shared/provider-model-types.schema.ts, src/shared/service-bus/jetstream-config.schema.ts, src/shared/session-share/types.schema.ts, src/shared/settings/settings.schema.ts, src/shared/subagent-types.schema.ts, src/shared/tool-call-types.schema.ts, src/shared/transcript-types.schema.ts, src/shared/type-parity.ts, src/shared/types.schema.ts, src/shared/webhooks/types.schema.ts, src/shared/workflow-types.schema.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -722,9 +722,11 @@ src/server/custom-providers-settings.ts → c3-202
 src/server/fs-stat.adapter.ts → c3-202
 src/server/http-api-routes.ts → c3-202
 src/server/http-dispatcher.ts → c3-202
+src/server/http-route-inventory.test.ts → c3-202
 src/server/http-static.ts → c3-202
 src/server/input-validation.ts → c3-202
 src/server/json-boundary.ts → c3-202
+src/server/server-data-dir.test.ts → c3-202
 src/server/server-io.adapter.ts → c3-202
 src/server/server.ts → c3-202
 src/client/app/PasswordScreen.store.ts → c3-203
@@ -770,11 +772,16 @@ src/server/ws-router-agent-ctrl.ts → c3-208
 src/server/ws-router-broadcast.ts → c3-208
 src/server/ws-router-chat.ts → c3-208
 src/server/ws-router-command-results.test.ts → c3-208
+src/server/ws-router-coverage.test.ts → c3-208
 src/server/ws-router-defaults.ts → c3-208
 src/server/ws-router-diff.ts → c3-208
 src/server/ws-router-envelope.ts → c3-208
 src/server/ws-router-io.adapter.ts → c3-208
 src/server/ws-router-misc.ts → c3-208
+src/server/ws-router-plugins.test.ts → c3-208
+src/server/ws-router-plugins.ts → c3-208
+src/server/ws-router-project-files.test.ts → c3-208
+src/server/ws-router-project-files.ts → c3-208
 src/server/ws-router-project.ts → c3-208
 src/server/ws-router-settings.ts → c3-208
 src/server/ws-router-skills.ts → c3-208
@@ -1088,6 +1095,7 @@ src/beacon/transfer.adapter.ts → c3-241
 src/beacon/transport.adapter.ts → c3-241
 src/beacon/version.test.ts → c3-241
 src/beacon/version.ts → c3-241
+src/ops/parity/remote-mcp-docs.test.ts → c3-242
 src/server/better-auth-oauth.adapter.ts → c3-242
 src/server/command-origin-stamp.ts → c3-242
 src/server/project-file-path.ts → c3-242
@@ -1253,6 +1261,7 @@ src/shared/transcript-types.ts → c3-301
 src/shared/turn-model-selection.ts → c3-301
 src/shared/types.test.ts → c3-301
 src/shared/types.ts → c3-301
+src/ops/parity/http-route-inventory.test.ts → c3-302
 src/shared/app-settings-types.schema.ts → c3-302
 src/shared/beacon-alias.test.ts → c3-302
 src/shared/beacon-alias.ts → c3-302
@@ -1278,6 +1287,8 @@ src/shared/core-types.schema.ts → c3-302
 src/shared/cron/types.schema.ts → c3-302
 src/shared/custom-providers.schema.ts → c3-302
 src/shared/git-diff-types.schema.ts → c3-302
+src/shared/http-routes.test.ts → c3-302
+src/shared/http-routes.ts → c3-302
 src/shared/inbound/handler.schema.ts → c3-302
 src/shared/inbox/types.schema.ts → c3-302
 src/shared/live-block.ts → c3-302
