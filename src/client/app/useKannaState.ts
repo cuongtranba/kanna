@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
-import { PROVIDERS, isEndpointProvider, type AgentProvider, type AppSettingsPatch, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ChatHistoryPage, type ClaudeAuthSettings, type CloudflareTunnelSettings, type GitWorktree, type KeybindingsSnapshot, type LocalProjectsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type SidebarChatRow, type SidebarData, type StackSummary, type TranscriptEntry, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
+import { PROVIDERS, isEndpointProvider, type AgentProvider, type AppSettingsPatch, type AskUserQuestionAnswerMap, type ChatAttachment, type ChatDiffSnapshot, type ClaudeAuthSettings, type CloudflareTunnelSettings, type GitWorktree, type KeybindingsSnapshot, type LocalProjectsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type ModelOptions, type OpenRouterModel, type ProviderCatalogEntry, type PushConfigSnapshot, type QueuedChatMessage, type SidebarChatRow, type SidebarData, type StackSummary, type TranscriptEntry, type UpdateSnapshot, type UserPromptEntry } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, type ComposerState, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { DEFAULT_EDITOR_PRESET, getEditorPresetLabel } from "../stores/terminalPreferencesStore"
 import { selectCustomProviders, useAppSettingsStore } from "../stores/appSettingsStore"
@@ -1004,7 +1004,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
 
     useChatStateStore.getState().setIsHistoryLoading(activeChatId, true)
     try {
-      const page = await socket.command<ChatHistoryPage>({
+      const page = await socket.command({
         type: "chat.loadHistory",
         chatId: activeChatId,
         beforeCursor: historyCursor,
@@ -1072,7 +1072,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     try {
       let projectId = selectedProjectId ?? sidebarProjectGroups[0]?.groupKey ?? null
       if (!activeChatId && !projectId && fallbackLocalProjectPath) {
-        const project = await socket.command<{ projectId: string }>({
+        const project = await socket.command({
           type: "project.open",
           localPath: fallbackLocalProjectPath,
         })
@@ -1085,7 +1085,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       }
 
       const autoResumeOnRateLimit = usePreferencesStore.getState().autoResumeOnRateLimit
-      const result = await socket.command<{ chatId?: string; queuedMessageId?: string; queued?: boolean }>({
+      const result = await socket.command({
         type: "chat.send",
         chatId: activeChatId ?? undefined,
         projectId: activeChatId ? undefined : projectId ?? undefined,
@@ -1099,12 +1099,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         autoResumeOnRateLimit,
       })
       sendTrace.ackAt = performance.now()
-      sendTrace.serverChatId = result.chatId ?? sendTrace.serverChatId
+      sendTrace.serverChatId = result.chatId
 
       if (result.queued) {
         useKannaStateStore.getState().setOptimisticUserPrompts((current) => pruneOptimisticOnQueuedAck(current, optimisticId, { queued: true }))
         useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
-      } else if (!activeChatId && result.chatId) {
+      } else if (!activeChatId) {
         useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
         useChatStateStore.getState().setOptimisticProcessing(result.chatId, { ackedAt: performance.now() })
       } else {
@@ -1113,13 +1113,13 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         ))
       }
       logSendToStartingTrace(sendTrace, "chat_send_ack_received", {
-        resultChatId: result.chatId ?? null,
+        resultChatId: result.chatId,
         queued: result.queued ?? false,
       }, sessStore, localStore)
 
-      if (!activeChatId && result.chatId) {
+      if (!activeChatId) {
         useKannaStateStore.getState().setOptimisticUserPrompts((current) => current.map((prompt) => (
-          prompt.id === optimisticId ? { ...prompt, scopeId: result.chatId! } : prompt
+          prompt.id === optimisticId ? { ...prompt, scopeId: result.chatId } : prompt
         )))
         const chatPreferences = useChatPreferencesStore.getState()
         chatPreferences.setComposerState(

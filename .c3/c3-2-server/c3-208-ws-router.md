@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 6e249af7a58c8b389b7856346959935ee21fc7eaa32b16168b7837fbb712f8b1
+c3-seal: e16918a8f85ba0bb6d584f96ad0d6bc8217cb219ad63c0aaf15bbd2b5313c0d9
 title: ws-router
 type: component
 category: foundation
@@ -70,7 +70,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | --- | --- | --- | --- | --- |
 | Envelope dispatch | IN | Decodes ClientEnvelope, validates the command with parseClientCommand before origin stamping and answers an error envelope for the same id when it fails, then routes to a handler | c3-101 | src/server/ws-router.ts |
 | Snapshot push | OUT | Pushes typed ServerEnvelope to subscribers | c3-101 | src/server/ws-router.ts |
-| Command result | OUT | Correlates result envelope to client command; a handler of a command with a result schema in the registry answers through ackResult, whose result parameter is that schema output type | c3-101 | src/server/ws-router.ts |
+| Command result | OUT | Correlates result envelope to client command; every handler but the background task output one answers through ackResult, whose result parameter is the schema output type of the command it answers | c3-101 | src/server/ws-router.ts |
 | Reply guarantee | OUT | routeCommand reports unclaimed, answered or silent by watching the envelopes a handler sends through the send utility for the command id; a command no handler claims, and a command a handler claims without replying, are both answered with an error envelope on the browser socket and from dispatchCommand, so a handler bug cannot hang the browser promise or become a fabricated ack for a remote client | c3-242 | src/server/ws-router.ts, src/server/ws-router-utils.ts |
 | Command coverage gate | IN | Every registry command is named by a ws-router handler literal and every command literal or prefix a handler claims is a registry command, checked from the syntax tree rather than from text | c3-302 | src/server/ws-router-coverage.test.ts |
 | Project files and plugins | IN | project.listPaths and upload.delete answer the path autocomplete and abandoned-upload cleanup that used to be HTTP routes; plugins.list and plugins.reload drive the plugin service and answer an empty list or an error while plugins are switched off | c3-238 | src/server/ws-router-project-files.ts, src/server/ws-router-plugins.ts |

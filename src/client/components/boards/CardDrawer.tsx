@@ -29,7 +29,7 @@ import type {
   FieldDef,
   FieldValue,
 } from "../../../shared/boards/types"
-import { startWorkLabel, type CardDetailView, type StartWorkResult } from "../../../shared/boards/start-work"
+import { startWorkLabel } from "../../../shared/boards/start-work"
 import {
   describeWorktreeContents,
   discardBlockedReason,
@@ -107,7 +107,7 @@ export function CardDrawer({
 
   const load = useCallback(() => {
     void socket
-      .command<CardDetailView | null>({ type: "board.card.detail", cardId })
+      .command({ type: "board.card.detail", cardId })
       .then(setDetail)
       .catch(onRejected((error) => {
         setError(error.message)
@@ -154,7 +154,7 @@ export function CardDrawer({
   const handleStartWork = useCallback(() => {
     useCardDrawerStore.getState().beginStartWork()
     void socket
-      .command<StartWorkResult>({ type: "board.card.startWork", cardId })
+      .command({ type: "board.card.startWork", cardId })
       .then((result) => {
         openChatTab(result.chatId)
         useCardDrawerStore.getState().endStartWork(describeStartWork(result))

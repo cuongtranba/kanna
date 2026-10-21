@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fetchProjectPaths } from "./projects"
 import { makeFakeCommandPort } from "../adapters/testing/makeFakePorts"
-import type { JsonValue } from "../../shared/json"
 
 describe("fetchProjectPaths", () => {
   test("asks the project.listPaths command and returns the paths it answers with", async () => {
@@ -15,15 +14,6 @@ describe("fetchProjectPaths", () => {
 
     expect(result).toEqual(paths)
     expect(commands.calls).toEqual([{ type: "project.listPaths", projectId: "proj1", query: "src" }])
-  })
-
-  test("drops entries that are not a path with a file or dir kind", async () => {
-    const reply: JsonValue = {
-      paths: [{ path: "a.ts", kind: "file" }, { path: "b", kind: "symlink" }, { kind: "dir" }, "c"],
-    }
-    const commands = makeFakeCommandPort(() => reply)
-
-    expect(await fetchProjectPaths(commands, "proj1", "")).toEqual([{ path: "a.ts", kind: "file" }])
   })
 
   test("returns an empty list when no socket is connected yet", async () => {

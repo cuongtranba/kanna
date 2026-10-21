@@ -1,11 +1,5 @@
 import { useMemo } from "react"
-import {
-  decodeDatasetQueryOutcome,
-  jsonObjectSchema,
-  type DatasetDecl,
-  type DatasetQuery,
-  type DatasetQueryOutcome,
-} from "../../../shared/genui"
+import { jsonObjectSchema, type DatasetDecl, type DatasetQuery } from "../../../shared/genui"
 import type { JsonObject } from "../../../shared/json"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { useOptionalKannaSocket } from "../../app/KannaSocketProvider"
@@ -17,8 +11,6 @@ function toJsonObject(value: DatasetDecl | DatasetQuery): JsonObject {
   return parsed.data
 }
 
-const UNEXPECTED: DatasetQueryOutcome = { status: "error", code: "source_unavailable", message: "The server sent an unexpected response" }
-
 export function useChatGenUIHost(chatId: string | null, workspaceRoot: string | null): GenUIHost {
   const socket = useOptionalKannaSocket()
   return useMemo((): GenUIHost => {
@@ -29,8 +21,7 @@ export function useChatGenUIHost(chatId: string | null, workspaceRoot: string | 
       workspaceRoot,
       queryDataset: live
         ? async (decl, query, refresh) => {
-            const raw = await socket.command({ type: "genui.dataset.query", chatId, dataset: toJsonObject(decl), query: toJsonObject(query), refresh })
-            return decodeDatasetQueryOutcome(raw) ?? UNEXPECTED
+            return await socket.command({ type: "genui.dataset.query", chatId, dataset: toJsonObject(decl), query: toJsonObject(query), refresh })
           }
         : null,
       approveTool: live

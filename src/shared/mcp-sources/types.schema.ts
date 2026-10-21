@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { McpSourceInput, McpSourceMode, McpSourcePatch } from "./types"
+import type { McpSource, McpSourceInput, McpSourceMode, McpSourcePatch } from "./types"
 import { jsonObjectSchema } from "../genui/json-schema"
 import { inboundHandlerSchema } from "../inbound/handler.schema"
 import { assertParity } from "../type-parity"
@@ -19,6 +19,33 @@ export const mcpSourceInputSchema = z.discriminatedUnion("mode", [
   z.object({ ...mcpSourceInputBaseShape, mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }),
   z.object({
     ...mcpSourceInputBaseShape,
+    mode: z.literal("poll"),
+    tool: z.string(),
+    args: jsonObjectSchema,
+    cursorArg: z.string(),
+    cursorPath: z.string(),
+    itemsPath: z.string(),
+    itemKeyPath: z.string().nullable(),
+    intervalMs: z.number(),
+  }),
+])
+
+const mcpSourceBaseShape = {
+  id: z.string(),
+  name: z.string(),
+  serverId: z.string(),
+  enabled: z.boolean(),
+  threadKeyPath: z.string(),
+  senderPath: z.string(),
+  handler: inboundHandlerSchema,
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}
+
+export const mcpSourceSchema = z.discriminatedUnion("mode", [
+  z.object({ ...mcpSourceBaseShape, mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }),
+  z.object({
+    ...mcpSourceBaseShape,
     mode: z.literal("poll"),
     tool: z.string(),
     args: jsonObjectSchema,
@@ -51,3 +78,4 @@ export const mcpSourcePatchSchema = z.object({
 assertParity<z.output<typeof mcpSourceModeSchema>, McpSourceMode>()
 assertParity<z.output<typeof mcpSourceInputSchema>, McpSourceInput>()
 assertParity<z.output<typeof mcpSourcePatchSchema>, McpSourcePatch>()
+assertParity<z.output<typeof mcpSourceSchema>, McpSource>()

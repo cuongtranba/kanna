@@ -1,10 +1,9 @@
 import type { JsonObject } from "../shared/json"
 
-import { PROTOCOL_VERSION } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
 import type { GitWorktree } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { TerminalSnapshot } from "../shared/protocol"
-import type { ShareCommandResult } from "../shared/session-share/protocol"
 import type { MintRequest, MintResponse, RevokeRequest, ShareError, ShareSummary } from "../shared/session-share/types"
 
 
@@ -74,19 +73,19 @@ export async function handleMiscCommand(
   switch (command.type) {
     case "message.enqueue": {
       const result = await agent.enqueue(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, result))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "message.steer": {
       await agent.steer(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
     case "message.dequeue": {
       await agent.dequeue(command)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
     }
@@ -103,22 +102,22 @@ export async function handleMiscCommand(
         rows: command.rows,
         scrollback: command.scrollback,
       })
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: snapshot })
+      send(ackResult(id, command, snapshot))
       return true
     }
     case "terminal.input": {
       terminals.write(command.terminalId, command.data)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "terminal.resize": {
       terminals.resize(command.terminalId, command.cols, command.rows)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     case "terminal.close": {
       terminals.close(command.terminalId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       pushTerminalSnapshot(command.terminalId)
       return true
     }
@@ -128,39 +127,39 @@ export async function handleMiscCommand(
       if (command.instructions?.trim()) {
         await store.setStackInstructions(stack.id, command.instructions)
       }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { stackId: stack.id } })
+      send(ackResult(id, command, { stackId: stack.id }))
       analytics.track("stack_created")
       await broadcastSidebar()
       return true
     }
     case "stack.rename": {
       await store.renameStack(command.stackId, command.title)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.setInstructions": {
       await store.setStackInstructions(command.stackId, command.instructions)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       analytics.track("stack_instructions_set")
       await broadcastSidebar()
       return true
     }
     case "stack.remove": {
       await store.removeStack(command.stackId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.addProject": {
       await store.addProjectToStack(command.stackId, command.projectId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
     case "stack.removeProject": {
       await store.removeProjectFromStack(command.stackId, command.projectId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       await broadcastSidebar()
       return true
     }
@@ -170,45 +169,31 @@ export async function handleMiscCommand(
         throw new Error("Project not found")
       }
       const worktrees = await listWorktrees(project.localPath)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { worktrees } })
+      send(ackResult(id, command, { worktrees }))
       return true
     }
 
     case "share.mint": {
       if (!sessionShare) {
-        const noSvcResult: ShareCommandResult = { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: noSvcResult })
+        send(ackResult(id, command, { ok: false, error: { kind: "snapshot_write_failed", message: "session-share service unavailable" } }))
         return true
       }
       const r = await sessionShare.mintToken(command.payload, getOriginHost())
-      const result: ShareCommandResult = r.ok
-        ? { ok: true, kind: "mint", data: r.data }
-        : { ok: false, error: r.error }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, r.ok ? { ok: true, kind: "mint", data: r.data } : { ok: false, error: r.error }))
       return true
     }
     case "share.revoke": {
       if (!sessionShare) {
-        const noSvcResult: ShareCommandResult = { ok: false, error: { kind: "not_found" } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: noSvcResult })
+        send(ackResult(id, command, { ok: false, error: { kind: "not_found" } }))
         return true
       }
       const r = await sessionShare.revokeToken(command.payload)
-      const result: ShareCommandResult = r.ok
-        ? { ok: true, kind: "revoke", data: r.data }
-        : { ok: false, error: r.error }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+      send(ackResult(id, command, r.ok ? { ok: true, kind: "revoke", data: r.data } : { ok: false, error: r.error }))
       return true
     }
     case "share.list": {
-      if (!sessionShare) {
-        const emptyResult: ShareCommandResult = { ok: true, kind: "list", data: { shares: [] } }
-        send({ v: PROTOCOL_VERSION, type: "ack", id, result: emptyResult })
-        return true
-      }
-      const shares = sessionShare.listSharesForChat(command.payload.chatId, getOriginHost())
-      const listResult: ShareCommandResult = { ok: true, kind: "list", data: { shares } }
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: listResult })
+      const shares = sessionShare ? sessionShare.listSharesForChat(command.payload.chatId, getOriginHost()) : []
+      send(ackResult(id, command, { ok: true, kind: "list", data: { shares } }))
       return true
     }
 

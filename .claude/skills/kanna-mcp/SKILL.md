@@ -173,13 +173,17 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   receive the broadcasts; a tool that reads the store instead skips them. The
   store-direct paths are `upload_attachment`, `read_project_file` and the
   `beforeCursor` page of `get_chat`, which calls `store.getMessagesPageBefore`,
-  the very method `chat.loadHistory` wraps (the page is typed `ChatHistoryPage`,
-  which a JSON ack result is not).
+  the very method `chat.loadHistory` wraps (the page is a `ChatHistoryPage`, the
+  schema-typed result `chat.loadHistory` returns).
 - **The command registry is the only command catalog.** `src/shared/commands`
   derives `ClientCommand`, validates `kanna_command` params and publishes the
-  JSON Schemas; `COMMAND_CATALOG` is gone. A command that declares a `result`
-  schema also publishes it as `resultSchema` in `kanna_commands` (omitted
-  otherwise), and its handler answers through `ackResult`. See
+  JSON Schemas; `COMMAND_CATALOG` is gone. Every command declares a `result`
+  schema (`defineCommand` requires it), so `kanna_commands` always lists a
+  `resultSchema`. A command that acks with nothing declares `noResult`, which
+  renders as `{ "not": {} }` with a description that the ack carries no result
+  and `kanna_command` reports it as `{"ok":true}`. A handler answers through
+  `ackResult`, and only `backgroundTasks.getOutput` replies with a snapshot
+  envelope instead of an ack, so its schema describes the snapshot. See
   `adr-20261020-command-registry-single-source-of-truth`.
   `src/server/ws-router-coverage.test.ts` reads the ws-router handlers from the
   syntax tree and fails when a registry command has no handler literal or a

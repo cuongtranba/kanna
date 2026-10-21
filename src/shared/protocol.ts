@@ -1,8 +1,8 @@
 import type { z } from "zod"
-import type { ClientCommand, CommandAckResult, CommandResult } from "./commands"
+import type { ClientCommand, CommandResult, NoResultClientCommand } from "./commands"
 import type { editorOpenSettingsSchema } from "./core-types.schema"
 import type { BeaconsSnapshot } from "./beacon-status"
-import { isJsonArray, isJsonObject, type JsonValue } from "./json"
+import { isJsonObject, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   ChatDiffSnapshot,
@@ -113,16 +113,6 @@ export interface ProjectDeleteResult {
   failures: string[]
 }
 
-function stringsOf(value: JsonValue | undefined): string[] {
-  if (value === undefined || !isJsonArray(value)) return []
-  return value.filter((item): item is string => typeof item === "string")
-}
-
-export function readProjectDeleteResult(value: JsonValue): ProjectDeleteResult {
-  const record = isJsonObject(value) ? value : {}
-  return { deletedBoardIds: stringsOf(record.deletedBoardIds), failures: stringsOf(record.failures) }
-}
-
 export interface ChatLiveEvent {
   type: "chat.live"
   chatId: string
@@ -176,12 +166,12 @@ export interface BoardSnapshot {
   view: BoardViewSnapshot | null
 }
 
-export type { CommandAckResult, CommandResult }
+export type { CommandResult, NoResultClientCommand }
 
 export type ServerEnvelope =
   | { v: 1; type: "snapshot"; id: string; snapshot: ServerSnapshot }
   | { v: 1; type: "event"; id: string; event: WsEvent }
-  | { v: 1; type: "ack"; id: string; result?: CommandAckResult }
+  | { v: 1; type: "ack"; id: string; result?: CommandResult<ClientCommand> }
   | { v: 1; type: "error"; id?: string; message: string }
 
 export function isClientEnvelope(value: JsonValue): value is JsonValue & ClientEnvelope {

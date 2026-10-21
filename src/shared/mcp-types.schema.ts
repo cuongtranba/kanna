@@ -5,7 +5,7 @@ import {
   OAuthTokensSchema,
   OpenIdProviderDiscoveryMetadataSchema,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import type { McpOAuthState, McpServerInput, McpServerPatch, McpServerTestResult } from "./mcp-types"
+import type { McpOAuthState, McpServerConfig, McpServerInput, McpServerPatch, McpServerTestResult } from "./mcp-types"
 import { assertParity } from "./type-parity"
 
 const stringRecordSchema = z.record(z.string(), z.string())
@@ -73,7 +73,52 @@ export const mcpServerPatchSchema = z.object({
   oauth: mcpOAuthStateSchema.optional(),
 })
 
+const mcpServerBaseShape = {
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastTest: mcpServerTestResultSchema,
+}
+
+export const mcpServerConfigSchema = z.union([
+  z.object({
+    ...mcpServerBaseShape,
+    transport: z.literal("stdio"),
+    command: z.string(),
+    args: z.array(z.string()),
+    env: stringRecordSchema,
+    cwd: z.string().optional(),
+  }),
+  z.object({
+    ...mcpServerBaseShape,
+    transport: z.enum(["http", "sse", "ws"]),
+    url: z.string(),
+    headers: stringRecordSchema,
+    oauth: mcpOAuthStateSchema.optional(),
+  }),
+])
+
+export const mcpServerTestCommandResultSchema = z.object({
+  ok: z.boolean(),
+  message: z.string().optional(),
+  lastTest: mcpServerTestResultSchema,
+})
+
+export const mcpOAuthStartResultSchema = z.union([
+  z.object({ ok: z.literal(false), error: z.string() }),
+  z.object({ ok: z.literal(true), authorizationUrl: z.string() }),
+  z.object({ ok: z.literal(true), alreadyAuthenticated: z.literal(true) }),
+])
+
+export const mcpOAuthCompleteResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), testResult: mcpServerTestResultSchema }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+])
+
 assertParity<z.output<typeof mcpServerTestResultSchema>, McpServerTestResult>()
 assertParity<z.output<typeof mcpOAuthStateSchema>, McpOAuthState>()
 assertParity<z.output<typeof mcpServerInputSchema>, McpServerInput>()
 assertParity<z.output<typeof mcpServerPatchSchema>, McpServerPatch>()
+assertParity<z.output<typeof mcpServerConfigSchema>, McpServerConfig>()

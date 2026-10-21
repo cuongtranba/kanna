@@ -1,13 +1,11 @@
+import type { ProjectPathEntry } from "../shared/commands/results/project"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
+
+export type { ProjectPathEntry }
 
 export interface ProjectLookup {
   getProject(projectId: string): { id: string; localPath: string } | null | undefined
-}
-
-export interface ProjectPathEntry {
-  path: string
-  kind: "file" | "dir"
 }
 
 export type ListProjectPaths = (args: {
@@ -43,7 +41,7 @@ export async function handleProjectPathsCommand(
     query: command.query ?? "",
     limit: command.limit,
   })
-  send({ v: PROTOCOL_VERSION, type: "ack", id, result: { paths } })
+  send(ackResult(id, command, { paths }))
   return true
 }
 
@@ -59,6 +57,6 @@ export async function handleUploadDeleteCommand(
   if (!project) throw new Error("Project not found")
   if (!isSingleFileName(command.storedName)) throw new Error("Invalid attachment path")
   const deleted = await deleteProjectUpload({ localPath: project.localPath, storedName: command.storedName })
-  send({ v: PROTOCOL_VERSION, type: "ack", id, result: { deleted } })
+  send(ackResult(id, command, { deleted }))
   return true
 }

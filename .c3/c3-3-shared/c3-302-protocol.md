@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: 722bd0b27c63e955d143f7550e52ffff56f0738f8c8bd65b3d5738b22e999134
+c3-seal: e6bb6b3ab3bfadd97f01f3d2b99cce0f095174c5e43322b2f17b426b6436545c
 title: protocol
 type: component
 category: foundation
@@ -50,7 +50,7 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 | Primary path | Client encodes → server decodes → reply encoded | c3-208 |
 | Alternate — push | Server pushes typed snapshot envelope without correlation | c3-208 |
 | Alternate — error | Both sides handle typed error envelope | c3-101 |
-| Command registry | src/shared/commands holds one defineCommand entry per command with its zod params, summary, risk and remote policy plus an optional result schema; ClientCommand is derived from it, CommandResult of a command is the output type of its result schema, and parseClientCommand validates a command at the WS router and at remote MCP | c3-208 |
+| Command registry | src/shared/commands holds one defineCommand entry per command with its zod params, summary, risk and remote policy plus a required result schema (noResult for an ack with nothing); ClientCommand is derived from it, CommandResult of a command is the output type of its result schema, and parseClientCommand validates a command at the WS router and at remote MCP | c3-208 |
 
 ## Governance
 

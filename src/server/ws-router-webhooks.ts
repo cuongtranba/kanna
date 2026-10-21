@@ -1,6 +1,7 @@
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { ProviderCatalogEntry } from "../shared/provider-model-types"
-import { isAgentProvider, PROTOCOL_VERSION } from "../shared/types"
+import { isAgentProvider } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
 import type { WebhookInput, WebhookPatch } from "../shared/webhooks/types"
 import { isWebhookMode, mergeWebhookModel, validateWebhookModel } from "../shared/webhooks/validate"
 import type { WebhookMutation, WebhookRegistry } from "./webhooks/webhook-registry"
@@ -62,24 +63,25 @@ function requireValidModel(errors: string[]) {
 async function run(
   registry: WebhookRegistry,
   command: ClientCommand,
+  id: string,
   providerCatalog: () => readonly ProviderCatalogEntry[],
-) {
+): Promise<ServerEnvelope | null> {
   switch (command.type) {
     case "webhooks.create": {
       const input = sanitizeInput(command.input)
       requireValidModel(validateWebhookModel(input, providerCatalog()))
-      return unwrap(await registry.create(input))
+      return ackResult(id, command, unwrap(await registry.create(input)))
     }
     case "webhooks.update": {
       const patch = sanitizePatch(command.patch)
       const existing = registry.resolve(command.id)
       if (existing) requireValidModel(validateWebhookModel(mergeWebhookModel(existing, patch), providerCatalog()))
-      return { hook: unwrap(await registry.update(command.id, patch)) }
+      return ackResult(id, command, { hook: unwrap(await registry.update(command.id, patch)) })
     }
     case "webhooks.rotateSecret":
-      return unwrap(await registry.rotateSecret(command.id))
+      return ackResult(id, command, unwrap(await registry.rotateSecret(command.id)))
     case "webhooks.delete":
-      return { ok: await registry.delete(command.id) }
+      return ackResult(id, command, { ok: await registry.delete(command.id) })
     default:
       return null
   }
@@ -94,8 +96,8 @@ export async function handleWebhooksCommand(
 ): Promise<boolean> {
   if (!command.type.startsWith("webhooks.")) return false
   if (!registry) throw new Error("Webhooks are not available on this server")
-  const result = await run(registry, command, providerCatalog)
-  if (result === null) return false
-  send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+  const envelope = await run(registry, command, id, providerCatalog)
+  if (envelope === null) return false
+  send(envelope)
   return true
 }

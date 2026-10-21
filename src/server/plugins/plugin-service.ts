@@ -1,5 +1,7 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
+import type { z } from "zod"
+import type { pluginRuntimeStateSchema, pluginSummarySchema } from "../../shared/commands/results/plugins"
 import { errorMessage } from "../../shared/errors"
 import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -26,7 +28,7 @@ const START_TIMEOUT_MS = 30_000
 const CALL_TIMEOUT_MS = 30_000
 const STOP_GRACE_MS = 5_000
 
-export type PluginRuntimeState = "stopped" | "starting" | "running" | "stopping" | "crashed"
+export type PluginRuntimeState = z.output<typeof pluginRuntimeStateSchema>
 
 export type PluginCallResult = { readonly ok: true; readonly output: JsonValue } | { readonly ok: false; readonly error: string }
 
@@ -48,12 +50,7 @@ interface PluginRuntimeRecord {
   nextCallId: number
 }
 
-export interface PluginSummary {
-  readonly id: string
-  readonly sourceDir: string
-  readonly enabled: boolean
-  readonly state: PluginRuntimeState
-}
+export type PluginSummary = Readonly<z.output<typeof pluginSummarySchema>>
 
 export interface InstalledPluginStore {
   list(): readonly InstalledPluginConfig[]

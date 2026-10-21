@@ -1,7 +1,5 @@
 import { z } from "zod"
-import type { JsonPrimitive, JsonValue } from "../json"
-
-export type CommandAckResult = JsonPrimitive | object
+import type { JsonValue } from "../json"
 
 export type CommandRisk = "read" | "write" | "destructive" | "local"
 
@@ -9,9 +7,9 @@ export type RemotePolicy =
   | { readonly kind: "allowed" }
   | { readonly kind: "excluded"; readonly reason: string }
 
-export interface CommandSpec<S extends z.core.$ZodShape, R extends z.ZodType | undefined> {
+export interface CommandSpec<S extends z.core.$ZodShape, R extends z.ZodType> {
   readonly params: z.ZodObject<S>
-  readonly result?: R
+  readonly result: R
   readonly summary: string
   readonly risk: CommandRisk
   readonly remote: RemotePolicy
@@ -42,7 +40,7 @@ function describeIssues(type: string, error: z.ZodError): string {
 export function defineCommand<
   const K extends string,
   S extends z.core.$ZodShape,
-  R extends z.ZodType | undefined = undefined,
+  R extends z.ZodType,
 >(type: K, spec: CommandSpec<S, R>) {
   const schema = spec.params.extend({ type: z.literal(type) })
   return {
@@ -68,3 +66,4 @@ export function defineCommands<const T extends readonly CommandDefinition[]>(...
 }
 
 export const noParams = z.object({})
+export const noResult = z.undefined()

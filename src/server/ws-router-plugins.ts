@@ -1,7 +1,7 @@
 import { isValidPluginId } from "../shared/plugins/manifest"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { PluginService } from "./plugins/plugin-service"
+import { ackResult } from "./ws-router-ack"
 
 export interface PluginsHostDep {
   enabled: () => boolean
@@ -16,8 +16,8 @@ export async function handlePluginsCommand(
 ): Promise<boolean> {
   switch (command.type) {
     case "plugins.list": {
-      const summaries = plugins?.enabled() ? plugins.service().list() : []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { plugins: summaries } })
+      const summaries = plugins?.enabled() ? [...plugins.service().list()] : []
+      send(ackResult(id, command, { plugins: summaries }))
       return true
     }
     case "plugins.reload": {
@@ -26,7 +26,7 @@ export async function handlePluginsCommand(
       const service = plugins.service()
       if (!service.status(command.pluginId)) throw new Error(`Plugin "${command.pluginId}" is not installed`)
       await service.reload(command.pluginId)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       return true
     }
     default:

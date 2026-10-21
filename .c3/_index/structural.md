@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:b59a74903b6c5eb5fe92851a33b06752efd2a69f52c7abf0bf0c5a0670035d86 -->
+<!-- hash: sha256:f86f8a757458c4f971a33bcd617f5eb56e00ebf96301d22c91727ba61f9701f6 -->
 
 ## c3-0 — Kanna (system)
 
@@ -361,7 +361,7 @@ files: src/shared/analytics.ts, src/shared/app-settings-types.ts, src/shared/bui
 ## c3-302 — protocol (component)
 container: c3-3 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, rule-strong-typing
-files: src/ops/parity/http-route-inventory.test.ts, src/shared/app-settings-types.schema.ts, src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.schema.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/boards/types.schema.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/command-origin.schema.ts, src/shared/commands/**/*.ts, src/shared/core-types.schema.ts, src/shared/cron/types.schema.ts, src/shared/custom-providers.schema.ts, src/shared/git-diff-types.schema.ts, src/shared/http-routes.test.ts, src/shared/http-routes.ts, src/shared/inbound/handler.schema.ts, src/shared/inbox/types.schema.ts, src/shared/live-block.ts, src/shared/mcp-sources/types.schema.ts, src/shared/mcp-types.schema.ts, src/shared/permission-policy.schema.ts, src/shared/protocol.ts, src/shared/provider-model-types.schema.ts, src/shared/service-bus/jetstream-config.schema.ts, src/shared/session-share/types.schema.ts, src/shared/settings/settings.schema.ts, src/shared/subagent-types.schema.ts, src/shared/type-parity.ts, src/shared/types.schema.ts, src/shared/webhooks/types.schema.ts
+files: src/ops/parity/http-route-inventory.test.ts, src/shared/app-settings-types.schema.ts, src/shared/beacon-alias.test.ts, src/shared/beacon-alias.ts, src/shared/beacon-config.schema.ts, src/shared/beacon-config.ts, src/shared/beacon-pair-link.test.ts, src/shared/beacon-pair-link.ts, src/shared/beacon-protocol.test.ts, src/shared/beacon-protocol.ts, src/shared/beacon-scope.test.ts, src/shared/beacon-scope.ts, src/shared/beacon-status.test.ts, src/shared/beacon-status.ts, src/shared/beacon-tool-request.ts, src/shared/beacon-tools.ts, src/shared/beacon-transfer.ts, src/shared/boards/types.schema.ts, src/shared/chat-ops.test.ts, src/shared/chat-ops.ts, src/shared/command-origin.schema.ts, src/shared/commands/**/*.ts, src/shared/core-types.schema.ts, src/shared/cron/types.schema.ts, src/shared/custom-providers.schema.ts, src/shared/git-diff-types.schema.ts, src/shared/http-routes.test.ts, src/shared/http-routes.ts, src/shared/inbound/handler.schema.ts, src/shared/inbox/types.schema.ts, src/shared/live-block.ts, src/shared/mcp-sources/types.schema.ts, src/shared/mcp-types.schema.ts, src/shared/permission-policy.schema.ts, src/shared/protocol.ts, src/shared/provider-model-types.schema.ts, src/shared/service-bus/jetstream-config.schema.ts, src/shared/session-share/types.schema.ts, src/shared/settings/settings.schema.ts, src/shared/subagent-types.schema.ts, src/shared/tool-call-types.schema.ts, src/shared/transcript-types.schema.ts, src/shared/type-parity.ts, src/shared/types.schema.ts, src/shared/webhooks/types.schema.ts, src/shared/workflow-types.schema.ts
 
 ## c3-303 — tools (component)
 container: c3-3 | context: c3-0
@@ -1301,9 +1301,12 @@ src/shared/service-bus/jetstream-config.schema.ts → c3-302
 src/shared/session-share/types.schema.ts → c3-302
 src/shared/settings/settings.schema.ts → c3-302
 src/shared/subagent-types.schema.ts → c3-302
+src/shared/tool-call-types.schema.ts → c3-302
+src/shared/transcript-types.schema.ts → c3-302
 src/shared/type-parity.ts → c3-302
 src/shared/types.schema.ts → c3-302
 src/shared/webhooks/types.schema.ts → c3-302
+src/shared/workflow-types.schema.ts → c3-302
 src/shared/tools.test.ts → c3-303
 src/shared/tools.ts → c3-303
 src/shared/dev-ports.test.ts → c3-304

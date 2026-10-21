@@ -1,8 +1,8 @@
 import { datasetDeclSchema, datasetQuerySchema } from "../shared/genui"
 import type { DatasetQueryOutcome } from "../shared/genui/protocol"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { GenUIDatasetService } from "./genui/dataset-service"
+import { ackResult } from "./ws-router-ack"
 
 function invalid(code: "invalid_dataset" | "invalid_query", message: string): DatasetQueryOutcome {
   return { status: "error", code, message }
@@ -28,13 +28,13 @@ export async function handleGenUICommand(
   switch (command.type) {
     case "genui.dataset.query": {
       if (!service) throw new Error("Generative UI datasets are not available on this server")
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: await runQuery(service, command) })
+      send(ackResult(id, command, await runQuery(service, command)))
       return true
     }
     case "genui.dataset.approve": {
       if (!service) throw new Error("Generative UI datasets are not available on this server")
       service.approveTool(command.chatId, command.server, command.tool)
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: { ok: true } })
+      send(ackResult(id, command, { ok: true }))
       return true
     }
     default:

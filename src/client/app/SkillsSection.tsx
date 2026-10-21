@@ -2,11 +2,7 @@ import { useCallback, useEffect, type ReactNode } from "react"
 import { ExternalLink, Loader2, Search, X } from "lucide-react"
 import type {
   InstalledSkillSummary,
-  InstalledSkillsSnapshot,
-  SkillInstallResult,
   SkillSearchResult,
-  SkillSearchSnapshot,
-  SkillUninstallResult,
 } from "../../shared/types"
 import type { PackageUpdateEntry } from "../../shared/packages/types"
 import type { ClientCommand } from "../../shared/protocol"
@@ -223,7 +219,7 @@ export function SkillsSection({
     try {
       setInstalledLoading(true)
       setInstalledError(null)
-      const snapshot = await socket.command<InstalledSkillsSnapshot>({ type: "skills.listInstalled" })
+      const snapshot = await socket.command({ type: "skills.listInstalled" })
       setInstalledSkills(snapshot.skills)
       setInstalledSkillIds(new Set(snapshot.skills.map((skill) => skill.name)))
     } catch (error) {
@@ -260,7 +256,7 @@ export function SkillsSection({
     setSearchError(null)
 
     const timeout = timer.setTimeout(() => {
-      void socket.command<SkillSearchSnapshot>({
+      void socket.command({
         type: "skills.search",
         query: normalizedQuery,
         limit: 100,
@@ -296,7 +292,7 @@ export function SkillsSection({
       setInstallingSkillId(skill.id)
       setOperationError(null)
       clearInstallMessage(skill.id)
-      await socket.command<SkillInstallResult>({
+      await socket.command({
         type: "skills.install",
         source: skill.source,
         skillId: skill.skillId,
@@ -320,7 +316,7 @@ export function SkillsSection({
     try {
       setUninstallingSkillId(skill.name)
       setOperationError(null)
-      await socket.command<SkillUninstallResult>({
+      await socket.command({
         type: "skills.uninstall",
         skillId: skill.name,
       })

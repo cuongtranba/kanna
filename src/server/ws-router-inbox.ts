@@ -1,6 +1,6 @@
 import { INBOX_REPLY_MAX_CHARS, type InboxFilter } from "../shared/inbox/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
-import { PROTOCOL_VERSION } from "../shared/types"
+import { ackResult } from "./ws-router-ack"
 import type { InboxReplyResult } from "./inbound/inbox-reply"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 
@@ -47,27 +47,28 @@ async function run(
   reply: InboxReplyAction,
   instruct: InboxReplyAction,
   command: ClientCommand,
-) {
+  id: string,
+): Promise<ServerEnvelope | null> {
   switch (command.type) {
     case "inbox.markRead":
       await registry.markRead(Array.isArray(command.ids) ? command.ids.filter((id) => typeof id === "string") : [])
-      return { ok: true }
+      return ackResult(id, command, { ok: true })
     case "inbox.markAllRead":
       await registry.markAllRead(typeof command.beforeTs === "number" ? command.beforeTs : undefined)
-      return { ok: true }
+      return ackResult(id, command, { ok: true })
     case "inbox.archive":
       await registry.archive(requireId(command.threadId, "threadId"))
-      return { ok: true }
+      return ackResult(id, command, { ok: true })
     case "inbox.page":
-      return registry.page(
+      return ackResult(id, command, registry.page(
         typeof command.beforeTs === "number" ? command.beforeTs : Number.MAX_SAFE_INTEGER,
         clampLimit(command.limit),
         sanitizeFilter(command.filter),
-      )
+      ))
     case "inbox.reply":
-      return unwrap(await reply(requireId(command.threadId, "threadId"), requireText(command.text)))
+      return ackResult(id, command, unwrap(await reply(requireId(command.threadId, "threadId"), requireText(command.text))))
     case "inbox.instruct":
-      return unwrap(await instruct(requireId(command.threadId, "threadId"), requireText(command.text)))
+      return ackResult(id, command, unwrap(await instruct(requireId(command.threadId, "threadId"), requireText(command.text))))
     default:
       return null
   }
@@ -83,8 +84,8 @@ export async function handleInboxCommand(
 ): Promise<boolean> {
   if (!command.type.startsWith("inbox.")) return false
   if (!registry || !reply || !instruct) throw new Error("The inbox is not available on this server")
-  const result = await run(registry, reply, instruct, command)
-  if (result === null) return false
-  send({ v: PROTOCOL_VERSION, type: "ack", id, result })
+  const envelope = await run(registry, reply, instruct, command, id)
+  if (envelope === null) return false
+  send(envelope)
   return true
 }

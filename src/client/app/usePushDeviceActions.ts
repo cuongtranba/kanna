@@ -21,7 +21,7 @@ export function usePushDeviceActions(state: Pick<KannaState, "pushConfig" | "soc
       const id = await subscribePush({
         vapidPublicKey: pushConfig.vapidPublicKey,
         sendToServer: async (payload) => {
-          const result = await socket.command<{ id: string }>({
+          const result = await socket.command({
             type: "push.subscribe",
             subscription: payload.subscription,
             label: payload.label,

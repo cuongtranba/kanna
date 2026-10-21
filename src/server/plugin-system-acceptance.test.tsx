@@ -420,7 +420,7 @@ describe("P9a — Settings → Plugins page", () => {
     const { renderToStaticMarkup } = await import("react-dom/server")
     const { makeFakeCommandPort } = await import("../client/adapters/testing/makeFakePorts")
 
-    const commands = makeFakeCommandPort(() => ({ ok: true }))
+    const commands = makeFakeCommandPort(() => undefined)
     const handlers = buildPluginsSectionHandlers(commands)
     await handlers.onReload("hello")
     expect(commands.calls).toEqual([{ type: "plugins.reload", pluginId: "hello" }])

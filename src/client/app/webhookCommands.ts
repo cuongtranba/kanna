@@ -4,8 +4,9 @@ import type { ClientCommand } from "../../shared/protocol"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import type { WebhookSecretReveal } from "../stores/webhooksStore"
 import type { KannaSocket } from "./socket"
+import type { CommandReply } from "../ports/commandPort"
 
-export async function sendWebhookCommand(socket: KannaSocket | null, command: ClientCommand): Promise<JsonValue> {
+export async function sendWebhookCommand<C extends ClientCommand>(socket: KannaSocket | null, command: C): Promise<CommandReply<C>> {
   if (!socket) throw new Error("Not connected to the Kanna server")
   try {
     const result = await socket.command(command)

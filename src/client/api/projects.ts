@@ -1,30 +1,11 @@
 import type { CommandPort } from "../ports/commandPort"
-import { isJsonArray, isJsonObject, type JsonValue } from "../../shared/json"
+import type { ProjectPathEntry } from "../../shared/commands/results/project"
 
-export interface ProjectPath {
-  path: string
-  kind: "file" | "dir"
-}
+export type ProjectPath = ProjectPathEntry
 
 export const projectQueryKeys = {
   all: ["projects"] as const,
   paths: (projectId: string, query: string) => ["projects", projectId, "paths", query] as const,
-}
-
-function readProjectPath(value: JsonValue): ProjectPath | null {
-  if (!isJsonObject(value)) return null
-  const { path, kind } = value
-  if (typeof path !== "string") return null
-  if (kind !== "file" && kind !== "dir") return null
-  return { path, kind }
-}
-
-export function readProjectPaths(result: JsonValue): ProjectPath[] {
-  if (!isJsonObject(result) || !isJsonArray(result.paths)) return []
-  return result.paths.flatMap((entry) => {
-    const parsed = readProjectPath(entry)
-    return parsed ? [parsed] : []
-  })
 }
 
 export async function fetchProjectPaths(
@@ -33,5 +14,6 @@ export async function fetchProjectPaths(
   query: string,
 ): Promise<ProjectPath[]> {
   if (!commands) return []
-  return readProjectPaths(await commands.command({ type: "project.listPaths", projectId, query }))
+  const { paths } = await commands.command({ type: "project.listPaths", projectId, query })
+  return paths
 }

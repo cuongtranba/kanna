@@ -1,8 +1,8 @@
 
 import type { JsonValue } from "../../../shared/json"
 import type { HttpPort, HttpRequestOptions, HttpResponse } from "../../ports/httpPort"
-import type { ClientCommand } from "../../../shared/protocol"
-import type { CommandPort } from "../../ports/commandPort"
+import type { ClientCommand, CommandResult } from "../../../shared/protocol"
+import type { CommandPort, CommandReply } from "../../ports/commandPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
 import type { ComputedStyleLike, DomPort, ServiceWorkerRegistrationLike } from "../../ports/domPort"
@@ -121,15 +121,16 @@ export interface FakeCommandPort extends CommandPort {
   calls: ClientCommand[]
 }
 
-export function makeFakeCommandPort(reply: (command: ClientCommand) => JsonValue | Promise<JsonValue>): FakeCommandPort {
+export function makeFakeCommandPort(
+  reply: (command: ClientCommand) => CommandResult<ClientCommand> | Promise<CommandResult<ClientCommand>>,
+): FakeCommandPort {
   const calls: ClientCommand[] = []
-  return {
-    calls,
-    async command(command: ClientCommand): Promise<JsonValue> {
-      calls.push(command)
-      return await reply(command)
-    },
+  async function command<C extends ClientCommand>(command: C): Promise<CommandReply<C>>
+  async function command(command: ClientCommand): Promise<CommandResult<ClientCommand>> {
+    calls.push(command)
+    return await reply(command)
   }
+  return { calls, command }
 }
 
 

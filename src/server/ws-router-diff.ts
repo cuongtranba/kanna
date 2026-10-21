@@ -1,4 +1,3 @@
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { DiffStore } from "./diff-store"
 import { ackResult } from "./ws-router-ack"
@@ -42,7 +41,7 @@ export async function handleDiffCommand(
     case "chat.refreshDiffs": {
       const repoPath = resolveChatRepoPath(command.chatId)
       const changed = await resolvedDiffStore.refreshSnapshot(repoPath)
-      send({ v: PROTOCOL_VERSION, type: "ack", id })
+      send(ackResult(id, command))
       if (changed) {
         void broadcastSnapshots()
       }

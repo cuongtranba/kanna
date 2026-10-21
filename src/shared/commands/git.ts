@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineCommand, defineCommands, REMOTE_ALLOWED } from "./define"
+import { defineCommand, defineCommands, noResult, REMOTE_ALLOWED } from "./define"
 import { chatIdParams, chatIdShape } from "./fragments"
 import {
   branchActionResultSchema,
@@ -23,6 +23,7 @@ const chatAndBranchParams = z.object({ ...chatIdShape, branch: branchRefField })
 
 export const gitCommands = defineCommands(
   defineCommand("chat.refreshDiffs", {
+    result: noResult,
     params: chatIdParams,
     summary: "Recompute the git diff snapshot of a chat.",
     risk: "write",

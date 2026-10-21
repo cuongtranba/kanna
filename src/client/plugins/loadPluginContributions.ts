@@ -1,5 +1,4 @@
 import { toError } from "../../shared/errors"
-import { isJsonArray, isJsonObject, type JsonValue } from "../../shared/json"
 import { HTTP_ROUTES, buildRoutePath } from "../../shared/http-routes"
 import type { CommandPort } from "../ports/commandPort"
 import type { PluginFooterPanel } from "../app/PluginsFooterSection"
@@ -75,22 +74,8 @@ export async function loadPluginContributions(
   }
 }
 
-function readPluginListEntry(value: JsonValue): PluginListEntry | null {
-  if (!isJsonObject(value)) return null
-  const { id, enabled } = value
-  return typeof id === "string" && typeof enabled === "boolean" ? { id, enabled } : null
-}
-
-export function readPluginList(result: JsonValue): readonly PluginListEntry[] {
-  if (!isJsonObject(result) || !isJsonArray(result.plugins)) return []
-  return result.plugins.flatMap((entry) => {
-    const parsed = readPluginListEntry(entry)
-    return parsed ? [parsed] : []
-  })
-}
-
 function listPluginsFromServer(commands: CommandPort | null): ListPluginsFn {
-  return async () => (commands ? readPluginList(await commands.command({ type: "plugins.list" })) : [])
+  return async () => (commands ? (await commands.command({ type: "plugins.list" })).plugins : [])
 }
 
 function importPluginModuleFromServer(cacheKey: string): ImportPluginModuleFn {

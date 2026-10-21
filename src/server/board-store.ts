@@ -1,3 +1,4 @@
+import type { CardPage } from "../shared/commands/results/board"
 
 import type {
   Board,
@@ -114,11 +115,7 @@ export interface CardPageQuery {
   afterRank?: string | null
 }
 
-export interface CardPage {
-  cards: Card[]
-  nextCursor: string | null
-  total: number
-}
+export type { CardPage }
 
 export interface CreateTemplateInput {
   name: string

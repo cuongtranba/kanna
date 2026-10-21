@@ -1,9 +1,9 @@
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { WorkflowRegistry } from "./workflow-registry"
 import type { SubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import type { EventStore } from "./event-store"
 import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
+import { ackResult } from "./ws-router-ack"
 
 
 export interface ObservabilityCommandDeps {
@@ -38,18 +38,18 @@ export async function handleObservabilityCommand(
   switch (command.type) {
     case "workflows.getRun": {
       const run = workflowRegistry?.getRun(command.chatId, command.runId) ?? null
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: run })
+      send(ackResult(id, command, run))
       return true
     }
     case "workflows.getAgentTranscript": {
       const entries = workflowRegistry?.getAgentTranscript(command.chatId, command.runId, command.agentId) ?? []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: entries })
+      send(ackResult(id, command, entries))
       return true
     }
     case "subagents.getRun": {
       if (subagentTranscriptRegistry) ensureSubagentDirRegistered(subagentTranscriptRegistry, store, command.chatId)
       const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
-      send({ v: PROTOCOL_VERSION, type: "ack", id, result: entries })
+      send(ackResult(id, command, entries))
       return true
     }
     default:
