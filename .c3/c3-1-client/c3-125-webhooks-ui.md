@@ -1,6 +1,6 @@
 ---
 id: c3-125
-c3-seal: 29f9686372b5f93ee359898053be07edd346f33d66f155c4b71fba1c55e0e91e
+c3-seal: 2b62d73a6769e941db45a6e204dece9117ae0d8cd3db0b3f4ec644cbba960c88
 title: webhooks-ui
 type: component
 category: feature
@@ -27,7 +27,7 @@ Render the inbound webhook feature in the client: a Webhooks page opened as a wo
 
 ## Purpose
 
-Lets the user create and edit hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data through a searchable picker that also matches the project path, choose an optional model for inline and spawn hooks, write an optional payload filter and set the thread key path, sender path and reply hint, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. The hook row shows the last delivery, including a filtered one with its reason. It also renders the webhook_delivery card with the hook name, mode and delivery id. Non-goals: it never stores a secret after the dialog closes, does not compute signatures, and does not compile the filter, which only the server can check.
+Lets the user create and edit hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data through a searchable picker that also matches the project path, choose an optional model and a triage or run-as-task handling for inline and spawn hooks, write an optional payload filter and set the thread key path, sender path and reply hint, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. The hook row shows the last delivery, including a filtered one with its reason. It also renders the webhook_delivery card with the hook name, mode and delivery id. Non-goals: it never stores a secret after the dialog closes, does not compute signatures, and does not compile the filter, which only the server can check.
 
 ## Governance
 

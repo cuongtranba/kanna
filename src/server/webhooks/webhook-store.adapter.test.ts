@@ -55,6 +55,13 @@ test("a hook's filter, thread key, sender path and reply hint survive a reload",
   expect(await createFileWebhookStore(dir).load()).toEqual([withFilter])
 })
 
+test("a hook's task handling survives a reload", async () => {
+  const dir = await tempDir()
+  const task: StoredWebhook = { ...HOOK, mode: "spawn", projectId: "project-1", handling: "task" }
+  await createFileWebhookStore(dir).save([task])
+  expect(await createFileWebhookStore(dir).load()).toEqual([task])
+})
+
 test("a missing or corrupt file loads as no hooks", async () => {
   const dir = await tempDir()
   expect(await createFileWebhookStore(dir).load()).toEqual([])

@@ -144,6 +144,14 @@ not an implementation detail.
   only from the thread's bound chat; `buildInboxToolList` registers the tool for
   main chats (`depth === 0`) only. Codex handler chats get no Kanna MCP tools
   and therefore always hit the fallback.
+- **Unless the handler is a task.** `InboundHandler.handling` is `triage`
+  (default; a missing field is triage) or `task`. A webhook stores it only when
+  `task`. Task handling swaps the instruction: the template is the user's own
+  request, carried out with tools, and `inbox_report` is called once at the end
+  (`handled`, or `needs_you` only when blocked). The "never send to the sender"
+  line is dropped, the untrusted-payload notice is not. Without it, a template
+  like "fix the issue assigned to me" was triaged into a `needs_you` summary and
+  never done. MCP sources carry the field in their schema but nothing sets it yet.
 - **A reportless turn is not silence.** `markPending` runs BEFORE
   `enqueueMessage` (a fast handler could otherwise report first and the later
   mark would re-arm the fallback); on `kanna.turn.finished|failed` for a

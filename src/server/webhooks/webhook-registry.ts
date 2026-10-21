@@ -56,6 +56,7 @@ function configOf(hook: StoredWebhook): WebhookConfig {
     template: hook.template,
     createdAt: hook.createdAt,
     updatedAt: hook.updatedAt,
+    ...(hook.handling === "task" ? { handling: hook.handling } : {}),
     ...(hook.chatId ? { chatId: hook.chatId } : {}),
     ...(hook.projectId ? { projectId: hook.projectId } : {}),
     ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
@@ -133,6 +134,7 @@ export class WebhookRegistry {
       createdAt: at,
       updatedAt: at,
       secret: generateWebhookSecret(),
+      ...(input.handling === "task" ? { handling: input.handling } : {}),
       ...(input.chatId ? { chatId: input.chatId } : {}),
       ...(input.projectId ? { projectId: input.projectId } : {}),
       ...(input.provider && input.model ? { provider: input.provider, model: input.model.trim() } : {}),
@@ -211,6 +213,10 @@ export class WebhookRegistry {
     if (patch.enabled !== undefined) next.enabled = patch.enabled
     if (patch.mode !== undefined) next.mode = patch.mode
     if (patch.template !== undefined) next.template = patch.template.trim()
+    if (patch.handling !== undefined) {
+      if (patch.handling === "task") next.handling = patch.handling
+      else delete next.handling
+    }
     if (patch.chatId !== undefined) setOrClear(next, "chatId", patch.chatId)
     if (patch.projectId !== undefined) setOrClear(next, "projectId", patch.projectId)
     if (patch.threadKeyPath !== undefined) setOrClear(next, "threadKeyPath", patch.threadKeyPath)

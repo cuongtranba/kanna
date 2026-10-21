@@ -1,6 +1,6 @@
 ---
 id: c3-243
-c3-seal: 425bdc389a9cd6cf916fa3c7c583aad38261adbc4f45f8123b93b7fe04db5119
+c3-seal: e8b861a3b6658e3677227c9d713e34935c7317ee0cc1f4245d9241aa099931bc
 title: webhooks
 type: component
 category: feature
@@ -48,6 +48,7 @@ Owns the inbound webhook feature: the hook registry with its 0600 secret file, b
 | Queued prompt | OUT | inline and spawn enqueue the rendered prompt with autoContinue scheduleId webhook-hookId-deliveryId | The body is appended in a fenced block capped at 16000 characters under a line that marks it as untrusted external data. | src/shared/webhooks/template.ts |
 | Hook model | IN/OUT | An optional provider and model pair, set or cleared together, rides the queued message so it applies to that one turn | Validated on create and update against the same provider catalog the chat snapshot serves; an unknown model is refused, never silently replaced. Delivery never calls setChatModel, so an inline hook does not change the chat's own model. | src/shared/webhooks/validate.ts |
 | Delivery path | OUT | deliverWebhook maps a hook to an InboundDelivery and calls deliverInbound (c3-247), which publishes the inbound envelope, upserts the inbox thread keyed by threadKeyPath or the delivery id, and appends the handler instruction to the queued prompt | The webhook_delivery card and the webhook-hookId-deliveryId schedule id are unchanged; threadKeyPath, senderPath, replyHint and filter are stored hook fields carried by parseStoredWebhook, the registry and the WS sanitizers, and a null patch clears each | src/server/webhooks/webhook-delivery.ts |
+| Hook handling | IN/OUT | An optional handling of triage or task for inline and spawn hooks, stored only when task, so a hook without the field loads as triage | renderHandlerInstruction picks the appended instruction: triage asks for a verdict and a draft and forbids contacting the sender; task tells the agent to carry out the template with its tools and report once when done or blocked. The payload stays untrusted data in both. A null patch clears it. | src/shared/inbound/template.ts |
 | Payload filter | IN | An optional YAML filter: on names events from X-GitHub-Event with optional types matched against body.action, and if is a CEL condition over body, event and headers that must be true; a non-match answers 200 filtered and records the reason as the last delivery | Checked after authentication and before the delivery-id claim and the rate-limit token. A CEL error is a non-match, and a stored filter that no longer compiles filters every delivery. yaml and @bufbuild/cel are server-only. | src/server/webhooks/webhook-filter.ts |
 
 ## Derived Materials
