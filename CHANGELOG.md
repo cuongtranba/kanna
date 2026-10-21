@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.92.0](https://github.com/cuongtranba/kanna/compare/v1.91.0...v1.92.0) (2026-10-21)
+
+
+### Features
+
+* **sidebar:** pin chats to the top of their project ([#1359](https://github.com/cuongtranba/kanna/issues/1359)) ([b9ff4e2](https://github.com/cuongtranba/kanna/commit/b9ff4e29e466fa88a8b019240d9df56058d030cc))
+
 ## [1.91.0](https://github.com/cuongtranba/kanna/compare/v1.90.0...v1.91.0) (2026-10-21)
 
 
