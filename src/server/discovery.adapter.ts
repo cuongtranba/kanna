@@ -198,9 +198,6 @@ function readCodexConfiguredProjects(configPath: string) {
 
 const FIRST_LINE_CHUNK_BYTES = 64 * 1024
 
-// Rollout files grow to tens of MB and there can be thousands of them; discovery
-// runs on the event loop on every `local-projects` subscribe, so read only up to
-// the first newline instead of the whole file.
 function readFirstLine(filePath: string): string {
   const fd = openSync(filePath, "r")
   try {
@@ -226,7 +223,6 @@ function readFirstLine(filePath: string): string {
 
 type CodexSessionMetadata = { sessionId: string; cwd: string; modifiedAt: number }
 
-// Keyed by file path; reused while mtime and size are unchanged.
 const codexSessionMetadataCache = new Map<string, { mtimeMs: number; size: number; metadata: CodexSessionMetadata | null }>()
 
 function parseCodexSessionMetadata(sessionFile: string, mtimeMs: number): CodexSessionMetadata | null {
