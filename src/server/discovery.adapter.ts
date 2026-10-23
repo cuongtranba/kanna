@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
+import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentProvider } from "../shared/types"
@@ -196,30 +196,83 @@ function readCodexConfiguredProjects(configPath: string) {
   return projects
 }
 
+const FIRST_LINE_CHUNK_BYTES = 64 * 1024
+
+// Rollout files grow to tens of MB and there can be thousands of them; discovery
+// runs on the event loop on every `local-projects` subscribe, so read only up to
+// the first newline instead of the whole file.
+function readFirstLine(filePath: string): string {
+  const fd = openSync(filePath, "r")
+  try {
+    const chunks: Buffer[] = []
+    let position = 0
+    while (true) {
+      const chunk = Buffer.alloc(FIRST_LINE_CHUNK_BYTES)
+      const bytesRead = readSync(fd, chunk, 0, chunk.length, position)
+      if (bytesRead === 0) break
+      const newlineIndex = chunk.subarray(0, bytesRead).indexOf(10)
+      if (newlineIndex !== -1) {
+        chunks.push(chunk.subarray(0, newlineIndex))
+        break
+      }
+      chunks.push(chunk.subarray(0, bytesRead))
+      position += bytesRead
+    }
+    return Buffer.concat(chunks).toString("utf8")
+  } finally {
+    closeSync(fd)
+  }
+}
+
+type CodexSessionMetadata = { sessionId: string; cwd: string; modifiedAt: number }
+
+// Keyed by file path; reused while mtime and size are unchanged.
+const codexSessionMetadataCache = new Map<string, { mtimeMs: number; size: number; metadata: CodexSessionMetadata | null }>()
+
+function parseCodexSessionMetadata(sessionFile: string, mtimeMs: number): CodexSessionMetadata | null {
+  const firstLine = readFirstLine(sessionFile)
+  if (!firstLine?.trim()) return null
+
+  const record = parseJsonRecord(firstLine)
+  if (!record || record.type !== "session_meta") return null
+
+  const payload = record.payload
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null
+
+  const payloadRecord: JsonObject = isJsonObject(payload) ? payload : {}
+  const sessionId = typeof payloadRecord.id === "string" ? payloadRecord.id : null
+  const cwd = typeof payloadRecord.cwd === "string" ? payloadRecord.cwd : null
+  if (!sessionId || !cwd) return null
+
+  const recordTimestamp = typeof record.timestamp === "string" ? Date.parse(record.timestamp) : Number.NaN
+  const payloadTimestamp = typeof payloadRecord.timestamp === "string" ? Date.parse(payloadRecord.timestamp) : Number.NaN
+  const modifiedAt = [recordTimestamp, payloadTimestamp, mtimeMs].find((value) => !Number.isNaN(value)) ?? mtimeMs
+
+  return { sessionId, cwd, modifiedAt }
+}
+
 function readCodexSessionMetadata(sessionsDir: string) {
   const metadataById = new Map<string, { cwd: string; modifiedAt: number }>()
+  const seenFiles = new Set<string>()
 
   for (const sessionFile of collectCodexSessionFiles(sessionsDir)) {
+    seenFiles.add(sessionFile)
     const fileStat = statSync(sessionFile)
-    const firstLine = readFileSync(sessionFile, "utf8").split("\n", 1)[0]
-    if (!firstLine?.trim()) continue
+    const cached = codexSessionMetadataCache.get(sessionFile)
+    let metadata: CodexSessionMetadata | null
+    if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+      metadata = cached.metadata
+    } else {
+      metadata = parseCodexSessionMetadata(sessionFile, fileStat.mtimeMs)
+      codexSessionMetadataCache.set(sessionFile, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, metadata })
+    }
+    if (!metadata) continue
 
-    const record = parseJsonRecord(firstLine)
-    if (!record || record.type !== "session_meta") continue
+    metadataById.set(metadata.sessionId, { cwd: metadata.cwd, modifiedAt: metadata.modifiedAt })
+  }
 
-    const payload = record.payload
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue
-
-    const payloadRecord: JsonObject = isJsonObject(payload) ? payload : {}
-    const sessionId = typeof payloadRecord.id === "string" ? payloadRecord.id : null
-    const cwd = typeof payloadRecord.cwd === "string" ? payloadRecord.cwd : null
-    if (!sessionId || !cwd) continue
-
-    const recordTimestamp = typeof record.timestamp === "string" ? Date.parse(record.timestamp) : Number.NaN
-    const payloadTimestamp = typeof payloadRecord.timestamp === "string" ? Date.parse(payloadRecord.timestamp) : Number.NaN
-    const modifiedAt = [recordTimestamp, payloadTimestamp, fileStat.mtimeMs].find((value) => !Number.isNaN(value)) ?? fileStat.mtimeMs
-
-    metadataById.set(sessionId, { cwd, modifiedAt })
+  for (const cachedFile of codexSessionMetadataCache.keys()) {
+    if (!seenFiles.has(cachedFile)) codexSessionMetadataCache.delete(cachedFile)
   }
 
   return metadataById
