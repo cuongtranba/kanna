@@ -159,6 +159,44 @@ describe("project discovery", () => {
     )
   })
 
+  test("Codex adapter reads a session_meta line longer than one read chunk and re-reads changed files", () => {
+    const homeDir = makeTempDir()
+    const sessionsDir = path.join(homeDir, ".codex", "sessions", "2026", "03", "16")
+    const firstProjectDir = path.join(homeDir, "workspace", "first")
+    const secondProjectDir = path.join(homeDir, "workspace", "second")
+    mkdirSync(firstProjectDir, { recursive: true })
+    mkdirSync(secondProjectDir, { recursive: true })
+    mkdirSync(sessionsDir, { recursive: true })
+    writeFileSync(path.join(homeDir, ".codex", "session_index.jsonl"), "")
+
+    const sessionFile = path.join(sessionsDir, "rollout-2026-03-16T23-05-52-long-meta.jsonl")
+    const writeSession = (cwd: string, mtime: Date) => {
+      writeFileSync(sessionFile, [
+        JSON.stringify({
+          timestamp: "2026-03-16T23:05:52.000Z",
+          type: "session_meta",
+          payload: {
+            id: "long-meta",
+            cwd,
+            base_instructions: "x".repeat(200 * 1024),
+          },
+        }),
+        JSON.stringify({ type: "response_item", payload: { text: "y".repeat(100 * 1024) } }),
+      ].join("\n"))
+      utimesSync(sessionFile, mtime, mtime)
+    }
+
+    writeSession(firstProjectDir, new Date("2026-03-16T23:10:00.000Z"))
+    expect(new CodexProjectDiscoveryAdapter().scan(homeDir).map((project) => project.localPath)).toEqual([
+      firstProjectDir,
+    ])
+
+    writeSession(secondProjectDir, new Date("2026-03-16T23:20:00.000Z"))
+    expect(new CodexProjectDiscoveryAdapter().scan(homeDir).map((project) => project.localPath)).toEqual([
+      secondProjectDir,
+    ])
+  })
+
   test("discoverProjects de-dupes provider results by normalized path and keeps the newest timestamp", () => {
     const adapters: ProjectDiscoveryAdapter[] = [
       {
