@@ -12,6 +12,16 @@ import {
 
 export const PROCESS_RSS_BYTES = "kanna.process.rss_bytes"
 
+export const EVENT_LOOP_DELAY_P50_MS = "kanna.event_loop.delay_p50_ms"
+
+export const EVENT_LOOP_DELAY_P99_MS = "kanna.event_loop.delay_p99_ms"
+
+export const EVENT_LOOP_DELAY_MAX_MS = "kanna.event_loop.delay_max_ms"
+
+export const CHILD_PROCESS_RSS_BYTES = "kanna.process.children.rss_bytes"
+
+export const CHILD_PROCESS_COUNT = "kanna.process.children.count"
+
 export const HOST_MEMORY_TOTAL_BYTES = "kanna.host.memory_total_bytes"
 
 export const PROCESS_MEMORY_CEILING_BYTES = "kanna.process.memory_ceiling_bytes"

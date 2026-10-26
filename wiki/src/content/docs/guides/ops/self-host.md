@@ -101,6 +101,17 @@ Two knobs worth knowing before you need them:
 
 - `KANNA_MEMLOG_MS` (default 60000) prints one `[kanna/mem] rss=…` line per
   interval. This is the correlation record if the process is ever OOM-killed.
+  The line ends with the event-loop delay of the last sample window
+  (`loopP99`, `loopMax`) and the memory of the processes Kanna started
+  (`children=…MB (claude=…MB×N …)`), so you can tell whether RAM sits in the
+  server or in the per-turn agent processes.
+- With telemetry on, the same readings are exported as gauges:
+  `kanna_event_loop_delay_p50_ms`, `kanna_event_loop_delay_p99_ms`,
+  `kanna_event_loop_delay_max_ms`, and `kanna_process_children_rss_bytes` /
+  `kanna_process_children_count` broken down by `kind` (`claude`, `codex`,
+  `nats-server`, `cloudflared`, `git`, `shell`, `bun`, `node`, `other`).
+  Child memory is read with `ps`, includes shared pages, and is not reported on
+  Windows.
 - `kill -USR2 <pid>` writes a Chrome-DevTools-loadable heap snapshot under the
   data dir — the only way to answer *what* is holding the bytes on a live
   process. `KANNA_HEAP_SNAPSHOT=disabled` opts out.

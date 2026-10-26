@@ -11,10 +11,15 @@ import { resourceFromAttributes } from "@opentelemetry/resources"
 import { log } from "../shared/log"
 import {
   resetMetricInstrumentCache,
+  CHILD_PROCESS_COUNT,
+  CHILD_PROCESS_RSS_BYTES,
   COMPACTION_POST_TOKENS,
   COMPACTION_PRE_TOKENS,
   COMPACTION_TOKEN_BUCKETS,
   DURATION_BUCKETS_MS,
+  EVENT_LOOP_DELAY_MAX_MS,
+  EVENT_LOOP_DELAY_P50_MS,
+  EVENT_LOOP_DELAY_P99_MS,
   HOST_MEMORY_TOTAL_BYTES,
   PROCESS_MEMORY_CEILING_BYTES,
   PROCESS_RSS_BYTES,
@@ -23,6 +28,8 @@ import {
   TURN_DURATION_MS,
 } from "./observability"
 import { resolveMemoryCeiling, resolveRssRatio } from "./memory-ceiling"
+import { startProcessVitalsSampler, type ProcessVitalsSampler } from "./process-vitals-sampler.adapter"
+import type { ProcessVitals } from "./process-vitals"
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 const HISTOGRAM_BUCKETS: readonly {
@@ -50,7 +57,24 @@ function positiveIntEnv(raw: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback
 }
 
-function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
+const DEFAULT_METRIC_INTERVAL_MS = 15_000
+
+function metricIntervalMs(): number {
+  return positiveIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, DEFAULT_METRIC_INTERVAL_MS) || DEFAULT_METRIC_INTERVAL_MS
+}
+
+function formatVitals({ eventLoop, children }: ProcessVitals, mb: (n: number) => number): string {
+  const loopPart = eventLoop
+    ? ` loopP99=${Math.round(eventLoop.p99Ms)}ms loopMax=${Math.round(eventLoop.maxMs)}ms`
+    : ""
+  if (!children) return loopPart
+  const totalMb = mb(children.reduce((sum, usage) => sum + usage.rssBytes, 0))
+  const breakdown = children.map((usage) => `${usage.kind}=${mb(usage.rssBytes)}MB×${usage.count}`).join(" ")
+  const breakdownPart = breakdown ? ` (${breakdown})` : ""
+  return `${loopPart} children=${totalMb}MB${breakdownPart}`
+}
+
+function startOtel(config: ResolvedOtelConfig, vitals: ProcessVitalsSampler): () => Promise<void> {
   const resource = resourceFromAttributes({
     "service.name": config.serviceName,
     "service.version": config.serviceVersion,
@@ -77,13 +101,13 @@ function startOtel(config: ResolvedOtelConfig): () => Promise<void> {
     readers: [
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter(config.metricUrl ? { url: config.metricUrl } : {}),
-        exportIntervalMillis: positiveIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, 15_000),
+        exportIntervalMillis: metricIntervalMs(),
       }),
     ],
   })
   metrics.setGlobalMeterProvider(meterProvider)
   resetMetricInstrumentCache()
-  registerMemoryGauges()
+  registerMemoryGauges(vitals)
   log.info("[kanna/otel] tracing + metrics enabled", {
     serviceName: config.serviceName,
     endpoint: config.traceUrl
@@ -105,11 +129,14 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
   let otelConfig: ResolvedOtelConfig | null = null
   let transition: Promise<void> = Promise.resolve()
 
+  const vitals = startProcessVitalsSampler({ intervalMs: metricIntervalMs() })
+  teardowns.push(() => vitals.stop())
+
   const startFromConfig = (config: ResolvedOtelConfig | null) => {
     otelConfig = config
     if (!config) return
     try {
-      otelTeardown = startOtel(config)
+      otelTeardown = startOtel(config, vitals)
     } catch (err) {
       otelTeardown = null
       log.warn("[kanna/otel] init failed; continuing without export", { err })
@@ -133,10 +160,9 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
     const timer = setInterval(() => {
       const usage = process.memoryUsage()
       const mb = (n: number) => Math.round(n / 1048576)
-      log.info(
-        `[kanna/mem] rss=${mb(usage.rss)}MB heapUsed=${mb(usage.heapUsed)}MB`
-        + ` heapTotal=${mb(usage.heapTotal)}MB external=${mb(usage.external)}MB`,
-      )
+      log.info(`[kanna/mem] rss=${mb(usage.rss)}MB heapUsed=${mb(usage.heapUsed)}MB`
+        + ` heapTotal=${mb(usage.heapTotal)}MB external=${mb(usage.external)}MB`
+        + `${formatVitals(vitals.latest(), mb)}`)
     }, memlogMs)
     timer.unref?.()
     teardowns.push(() => clearInterval(timer))
@@ -211,7 +237,7 @@ function isRunningUnderPm2(): boolean {
   return process.env.pm_id !== undefined
 }
 
-function registerMemoryGauges(): void {
+function registerMemoryGauges(vitals: ProcessVitalsSampler): void {
   const meter = metrics.getMeter("kanna")
   const rss = meter.createObservableGauge(PROCESS_RSS_BYTES)
   const heapUsed = meter.createObservableGauge("kanna.process.heap_used_bytes")
@@ -220,6 +246,11 @@ function registerMemoryGauges(): void {
   const hostMemoryTotal = meter.createObservableGauge(HOST_MEMORY_TOTAL_BYTES)
   const memoryCeiling = meter.createObservableGauge(PROCESS_MEMORY_CEILING_BYTES)
   const rssRatio = meter.createObservableGauge(PROCESS_RSS_RATIO)
+  const loopP50 = meter.createObservableGauge(EVENT_LOOP_DELAY_P50_MS)
+  const loopP99 = meter.createObservableGauge(EVENT_LOOP_DELAY_P99_MS)
+  const loopMax = meter.createObservableGauge(EVENT_LOOP_DELAY_MAX_MS)
+  const childRss = meter.createObservableGauge(CHILD_PROCESS_RSS_BYTES)
+  const childCount = meter.createObservableGauge(CHILD_PROCESS_COUNT)
   meter.addBatchObservableCallback(
     (result) => {
       const usage = process.memoryUsage()
@@ -232,7 +263,17 @@ function registerMemoryGauges(): void {
       result.observe(hostMemoryTotal, totalBytes)
       result.observe(memoryCeiling, ceilingBytes)
       result.observe(rssRatio, resolveRssRatio(usage.rss, ceilingBytes))
+      const { eventLoop, children } = vitals.latest()
+      if (eventLoop) {
+        result.observe(loopP50, eventLoop.p50Ms)
+        result.observe(loopP99, eventLoop.p99Ms)
+        result.observe(loopMax, eventLoop.maxMs)
+      }
+      for (const usage of children ?? []) {
+        result.observe(childRss, usage.rssBytes, { kind: usage.kind })
+        result.observe(childCount, usage.count, { kind: usage.kind })
+      }
     },
-    [rss, heapUsed, heapTotal, external, hostMemoryTotal, memoryCeiling, rssRatio],
+    [rss, heapUsed, heapTotal, external, hostMemoryTotal, memoryCeiling, rssRatio, loopP50, loopP99, loopMax, childRss, childCount],
   )
 }
