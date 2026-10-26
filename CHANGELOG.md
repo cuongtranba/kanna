@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.93.0](https://github.com/cuongtranba/kanna/compare/v1.92.1...v1.93.0) (2026-10-26)
+
+
+### Features
+
+* **telemetry:** export event-loop delay and child-process memory ([#1368](https://github.com/cuongtranba/kanna/issues/1368)) ([1bbec51](https://github.com/cuongtranba/kanna/commit/1bbec51f298a75bf93dc5bcb96657cb0d13d2935))
+
 ## [1.92.1](https://github.com/cuongtranba/kanna/compare/v1.92.0...v1.92.1) (2026-10-23)
 
 
