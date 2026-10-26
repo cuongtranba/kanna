@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:f8a521c51799a6f26e9c4636d68145d051fbfef3804a3bf156310009095eb299 -->
+<!-- hash: sha256:fa964519886245afc028698b289eccce15481039624b2bc7cb5cb5494273998d -->
 
 ## c3-0 — Kanna (system)
 
@@ -29,7 +29,7 @@ files: src/client/components/panes/**/*.ts, src/client/components/panes/**/*.tsx
 ## c3-110 — app-shell (component)
 container: c3-1 | context: c3-0
 refs: ref-cqrs-read-models, ref-ws-subscription
-files: src/client/adapters/*.ts, src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/bulkChatRemoval.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/drawerVisual.ts, src/client/app/forgetDeletedLocally.ts, src/client/app/share-view/**/*.ts, src/client/app/share-view/**/*.tsx, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/app/useWaitingChatTabs.ts, src/client/components/LocalDev.tsx, src/client/components/quick-switcher/**/*.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useBeaconSuggestions.ts, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/client/lib/beaconMentionChips.ts, src/client/ports/**/*.ts, src/main.tsx, src/vite-env.d.ts
+files: src/client/adapters/*.ts, src/client/app/App.test.tsx, src/client/app/App.tsx, src/client/app/AppBootstrap.tsx, src/client/app/AppGlobalProvider.tsx, src/client/app/PageHeader.tsx, src/client/app/appRuntime.test.ts, src/client/app/appRuntime.ts, src/client/app/bulkChatRemoval.ts, src/client/app/chatFocusPolicy.test.ts, src/client/app/chatFocusPolicy.ts, src/client/app/chatNotifications.ts, src/client/app/derived.ts, src/client/app/drawerVisual.ts, src/client/app/forgetDeletedLocally.ts, src/client/app/share-view/**/*.ts, src/client/app/share-view/**/*.tsx, src/client/app/sidebarSwipeGesture.ts, src/client/app/useAppGlobalState.test.ts, src/client/app/useAppGlobalState.ts, src/client/app/useKannaState.scrollback.test.tsx, src/client/app/useKannaState.test.ts, src/client/app/useKannaState.ts, src/client/app/usePushFocus.test.ts, src/client/app/usePushFocus.ts, src/client/app/useToggleChatPin.ts, src/client/app/useWaitingChatTabs.ts, src/client/components/LocalDev.tsx, src/client/components/quick-switcher/**/*.tsx, src/client/hooks/**/*.ts, src/client/hooks/**/*.tsx, src/client/hooks/useBeaconSuggestions.ts, src/client/hooks/useProjectSuggestions.test.ts, src/client/hooks/useProjectSuggestions.ts, src/client/lib/**/*.ts, src/client/lib/beaconMentionChips.ts, src/client/ports/**/*.ts, src/main.tsx, src/vite-env.d.ts
 
 ## c3-111 — sidebar (component)
 container: c3-1 | context: c3-0
@@ -279,7 +279,7 @@ files: src/server/cron/**/*.ts
 ## c3-234 — observability (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, rule-colocated-bun-test
-files: scripts/grafana-alerts.ts, scripts/perf-alert-issue.ts, src/ops/alerting/**/*.ts, src/server/memory-ceiling.test.ts, src/server/memory-ceiling.ts, src/server/observability.ts, src/server/otel-config.ts, src/server/otel.adapter.ts, src/server/test-helpers/metric-recorder.ts, src/server/ws-router-observability.ts
+files: scripts/grafana-alerts.ts, scripts/perf-alert-issue.ts, src/ops/alerting/**/*.ts, src/server/memory-ceiling.test.ts, src/server/memory-ceiling.ts, src/server/observability.ts, src/server/otel-config.ts, src/server/otel.adapter.ts, src/server/process-vitals-sampler.adapter.test.ts, src/server/process-vitals-sampler.adapter.ts, src/server/process-vitals.test.ts, src/server/process-vitals.ts, src/server/test-helpers/metric-recorder.ts, src/server/ws-router-observability.ts
 
 ## c3-235 — secret-scanning (component)
 container: c3-2 | context: c3-0
@@ -520,6 +520,7 @@ src/client/app/useKannaState.test.ts → c3-110
 src/client/app/useKannaState.ts → c3-110
 src/client/app/usePushFocus.test.ts → c3-110
 src/client/app/usePushFocus.ts → c3-110
+src/client/app/useToggleChatPin.ts → c3-110
 src/client/app/useWaitingChatTabs.ts → c3-110
 src/client/components/LocalDev.tsx → c3-110
 src/client/components/quick-switcher/**/*.tsx → c3-110
@@ -1024,6 +1025,10 @@ src/server/memory-ceiling.ts → c3-234
 src/server/observability.ts → c3-234
 src/server/otel-config.ts → c3-234
 src/server/otel.adapter.ts → c3-234
+src/server/process-vitals-sampler.adapter.test.ts → c3-234
+src/server/process-vitals-sampler.adapter.ts → c3-234
+src/server/process-vitals.test.ts → c3-234
+src/server/process-vitals.ts → c3-234
 src/server/test-helpers/metric-recorder.ts → c3-234
 src/server/ws-router-observability.ts → c3-234
 .githooks/pre-commit → c3-235

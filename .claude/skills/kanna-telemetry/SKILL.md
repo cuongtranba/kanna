@@ -39,7 +39,9 @@ are already wired:
 
 - `KANNA_MEMLOG_MS` (default 60000, `0` disables) prints one `[kanna/mem] rss=…`
   line per interval. This is the correlation record — three OOM kills went
-  undiagnosed for want of exactly this.
+  undiagnosed for want of exactly this. It ends with the latest process-vitals
+  reading: `loopP99=…ms loopMax=…ms children=…MB (claude=…MB×N …)`, so the
+  RAM of the per-turn `claude` processes is visible even with export off.
 - `kill -USR2 <pid>` writes a Chrome-DevTools-loadable `.heapsnapshot` under
   `<dataDir>/heap-snapshots` (`KANNA_HEAP_SNAPSHOT=disabled` opts out). It is the
   only way to answer *what holds the bytes* on a live process.
@@ -93,7 +95,19 @@ beyond the recipes below.
   `kanna.subagent.tokens`; histograms `kanna.turn.duration_ms`,
   `kanna.subagent.run.duration_ms`; gauges `kanna.process.rss_bytes`,
   `kanna.process.heap_used_bytes`, `kanna.process.heap_total_bytes`,
-  `kanna.process.external_bytes`.
+  `kanna.process.external_bytes`, `kanna.event_loop.delay_p50_ms`,
+  `kanna.event_loop.delay_p99_ms`, `kanna.event_loop.delay_max_ms`,
+  `kanna.process.children.rss_bytes{kind}`, `kanna.process.children.count{kind}`.
+- Process vitals (`src/server/process-vitals-sampler.adapter.ts`, pure half in
+  `process-vitals.ts`) sample once per `KANNA_OTEL_METRIC_INTERVAL_MS`, whether
+  or not export is on. Event-loop delay is a per-window reading: the histogram
+  is reset after each sample. Child RSS comes from `ps` over the server's
+  descendants, grouped by the direct child Kanna launched (`claude`, `codex`,
+  `nats-server`, `cloudflared`, `git`, `shell`, `bun`, `node`, `other`), so an
+  MCP server spawned by `claude` counts as `claude`. The Agent SDK exposes no
+  child pid, which is why this walks the process tree instead of tracking pids.
+  RSS includes shared pages, so a sum over several `claude` processes
+  over-reports. No `ps` (Windows) means no child series, never zeros.
 
 **Answering "which install is burning tokens".** Turn counts do not answer it —
 a 200k-token turn and a 2k-token turn are one turn each. Use the token
