@@ -1,6 +1,7 @@
 import path from "node:path"
 import process from "node:process"
 import type { ClientCommand, EditorOpenSettings, EditorPreset } from "../shared/protocol"
+import { DEFAULT_EDITOR_PRESET, getDefaultEditorCommandTemplate, normalizeEditorPreset } from "../shared/settings/editor"
 import { resolveLocalPath } from "./paths"
 import { canOpenMacApp, hasCommand, spawnDetached } from "./process-utils.adapter"
 import { statPathOrNull } from "./fs-stat.adapter"
@@ -17,8 +18,8 @@ interface CommandSpec {
 }
 
 const DEFAULT_EDITOR_SETTINGS: EditorOpenSettings = {
-  preset: "cursor",
-  commandTemplate: "cursor {path}",
+  preset: DEFAULT_EDITOR_PRESET,
+  commandTemplate: getDefaultEditorCommandTemplate(DEFAULT_EDITOR_PRESET),
 }
 
 export async function openExternal(command: OpenExternalCommand) {
@@ -387,18 +388,5 @@ function normalizeEditorSettings(editor: EditorOpenSettings): EditorOpenSettings
   return {
     preset,
     commandTemplate: editor.commandTemplate.trim() || DEFAULT_EDITOR_SETTINGS.commandTemplate,
-  }
-}
-
-function normalizeEditorPreset(preset: EditorPreset): EditorPreset {
-  switch (preset) {
-    case "vscode":
-    case "xcode":
-    case "windsurf":
-    case "custom":
-    case "cursor":
-      return preset
-    default:
-      return DEFAULT_EDITOR_SETTINGS.preset
   }
 }

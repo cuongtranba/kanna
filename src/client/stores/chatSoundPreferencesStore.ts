@@ -1,50 +1,29 @@
 import { create } from "zustand"
+import { CHAT_SOUND_IDS } from "../../shared/core-types"
+import {
+  DEFAULT_CHAT_SOUND_ID,
+  DEFAULT_CHAT_SOUND_PREFERENCE,
+  normalizeChatSoundId,
+  normalizeChatSoundPreference,
+} from "../../shared/settings/chat-sound"
 import type { ChatSoundId, ChatSoundPreference } from "../../shared/types"
 
 export type { ChatSoundId, ChatSoundPreference }
 
-export const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
-export const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
-
-export const CHAT_SOUND_OPTIONS: Array<{ value: ChatSoundId; label: string }> = [
-  { value: "blow", label: "Blow" },
-  { value: "bottle", label: "Bottle" },
-  { value: "frog", label: "Frog" },
-  { value: "funk", label: "Funk" },
-  { value: "glass", label: "Glass" },
-  { value: "ping", label: "Ping" },
-  { value: "pop", label: "Pop" },
-  { value: "purr", label: "Purr" },
-  { value: "tink", label: "Tink" },
-]
-
-export function normalizeChatSoundPreference(value?: string): ChatSoundPreference {
-  switch (value) {
-    case "never":
-    case "unfocused":
-    case "always":
-      return value
-    default:
-      return DEFAULT_CHAT_SOUND_PREFERENCE
-  }
+export {
+  DEFAULT_CHAT_SOUND_ID,
+  DEFAULT_CHAT_SOUND_PREFERENCE,
+  normalizeChatSoundId,
+  normalizeChatSoundPreference,
 }
 
-export function normalizeChatSoundId(value?: string): ChatSoundId {
-  switch (value) {
-    case "blow":
-    case "bottle":
-    case "frog":
-    case "funk":
-    case "glass":
-    case "ping":
-    case "pop":
-    case "purr":
-    case "tink":
-      return value
-    default:
-      return DEFAULT_CHAT_SOUND_ID
-  }
+function chatSoundLabel(id: ChatSoundId): string {
+  return `${id.charAt(0).toUpperCase()}${id.slice(1)}`
 }
+
+export const CHAT_SOUND_OPTIONS: Array<{ value: ChatSoundId; label: string }> = CHAT_SOUND_IDS.map(
+  (id) => ({ value: id, label: chatSoundLabel(id) }),
+)
 
 export interface ChatSoundPreferencesState {
   chatSoundPreference: ChatSoundPreference

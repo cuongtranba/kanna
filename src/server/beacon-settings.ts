@@ -217,6 +217,23 @@ export function beaconNotFound(id: string): BeaconValidationException {
   return new BeaconValidationException({ code: "NOT_FOUND", message: `Beacon ${id} not found` })
 }
 
+function updateBeaconById(
+  current: BeaconConfig[],
+  id: string,
+  change: (beacon: BeaconConfig) => BeaconConfig | null,
+): BeaconConfig[] {
+  const stamp = new Date().toISOString()
+  return current.map((beacon) => {
+    if (beacon.id !== id) return beacon
+    const changed = change(beacon)
+    return changed ? { ...changed, updatedAt: stamp } : beacon
+  })
+}
+
+function withTrustedScripts(beacon: BeaconConfig, hashes: string[]): BeaconConfig {
+  return { ...beacon, scope: { ...beacon.scope, trustedScriptHashes: hashes } }
+}
+
 export function applyBeaconSetters(
   current: BeaconConfig[],
   patch: {
@@ -226,34 +243,30 @@ export function applyBeaconSetters(
     removeTrustedScript?: { id: string; hash: string }
   },
 ): BeaconConfig[] {
-  const stamp = new Date().toISOString()
+  let next = current
   if (patch.setEnabled) {
     const { id, enabled } = patch.setEnabled
-    return current.map((b) => (b.id === id ? { ...b, enabled, updatedAt: stamp } : b))
+    next = updateBeaconById(next, id, (beacon) => ({ ...beacon, enabled }))
   }
   if (patch.setScope) {
     const { id, scope } = patch.setScope
-    return current.map((b) => (b.id === id ? { ...b, scope, updatedAt: stamp } : b))
+    next = updateBeaconById(next, id, (beacon) => ({ ...beacon, scope }))
   }
   if (patch.addTrustedScript) {
     const { id, hash } = patch.addTrustedScript
-    return current.map((b) =>
-      b.id === id && !b.scope.trustedScriptHashes.includes(hash)
-        ? { ...b, scope: { ...b.scope, trustedScriptHashes: [...b.scope.trustedScriptHashes, hash] }, updatedAt: stamp }
-        : b,
+    next = updateBeaconById(next, id, (beacon) =>
+      beacon.scope.trustedScriptHashes.includes(hash)
+        ? null
+        : withTrustedScripts(beacon, [...beacon.scope.trustedScriptHashes, hash]),
     )
   }
   if (patch.removeTrustedScript) {
     const { id, hash } = patch.removeTrustedScript
-    return current.map((b) =>
-      b.id === id && b.scope.trustedScriptHashes.includes(hash)
-        ? {
-            ...b,
-            scope: { ...b.scope, trustedScriptHashes: b.scope.trustedScriptHashes.filter((h) => h !== hash) },
-            updatedAt: stamp,
-          }
-        : b,
+    next = updateBeaconById(next, id, (beacon) =>
+      beacon.scope.trustedScriptHashes.includes(hash)
+        ? withTrustedScripts(beacon, beacon.scope.trustedScriptHashes.filter((h) => h !== hash))
+        : null,
     )
   }
-  return current
+  return next
 }

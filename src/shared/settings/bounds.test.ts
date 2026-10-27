@@ -6,8 +6,15 @@ import {
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
-} from "../shared/types"
-import { normalizeAuthSettings, normalizeUploadSettings } from "./app-settings-bounds"
+} from "../types"
+import {
+  boundViolation,
+  globalPromptAppendViolation,
+  normalizeAuthSettings,
+  normalizeBounded,
+  normalizeUploadSettings,
+  OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND,
+} from "./bounds"
 
 describe("normalizeAuthSettings", () => {
   test("returns defaults when value is undefined", () => {
@@ -180,5 +187,32 @@ describe("normalizeUploadSettings", () => {
     const result = normalizeUploadSettings({}, warnings)
     expect(result).toEqual(UPLOAD_DEFAULTS)
     expect(warnings).toHaveLength(0)
+  })
+})
+
+describe("token concurrency bound", () => {
+  test("has no ceiling and says so in its message", () => {
+    expect(boundViolation(OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND, 12)).toBeNull()
+    expect(boundViolation(OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND, 0)).toBe("claudeAuth.concurrencyDefault must be at least 1")
+  })
+
+  test("clamps a too-small value to the floor and warns", () => {
+    const warnings: string[] = []
+    expect(normalizeBounded(OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND, 0, 1, "clamp", warnings)).toBe(1)
+    expect(warnings).toHaveLength(1)
+  })
+
+  test("a non-number keeps the fallback and warns that it must be a number", () => {
+    const warnings: string[] = []
+    expect(normalizeBounded(OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND, "3", 1, "clamp", warnings)).toBe(1)
+    expect(warnings).toEqual(["claudeAuth.concurrencyDefault must be a number"])
+  })
+})
+
+describe("globalPromptAppendViolation", () => {
+  test("accepts text up to the limit and names the limit when exceeded", () => {
+    expect(globalPromptAppendViolation("ok")).toBeNull()
+    expect(globalPromptAppendViolation("x".repeat(8_001))).toBe("globalPromptAppend must be 8000 chars or fewer")
+    expect(globalPromptAppendViolation(5)).toBe("globalPromptAppend must be a string")
   })
 })

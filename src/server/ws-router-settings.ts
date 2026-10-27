@@ -1,5 +1,3 @@
-import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
-import { OAUTH_TOKEN_BASE_URL_MAX } from "../shared/app-settings-types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -7,8 +5,6 @@ import type {
   LlmProviderValidationResult,
   OpenRouterModel,
   Subagent,
-  SubagentInput,
-  SubagentPatch,
   SubagentValidationError,
 } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
@@ -19,8 +15,9 @@ import type { BeaconMintResult, BeaconUpdateResult } from "../shared/beacon-conf
 import { getBeaconPairingStore } from "./beacon-pairing-host"
 import type { BeaconRegistry } from "./beacon-registry"
 import { validateMcpServer } from "./mcp-validator"
+import { testMcpServer } from "./mcp-server-test"
+import { testOAuthToken } from "./claude-oauth-probe.adapter"
 import { startMcpOAuth, completeMcpOAuth } from "./mcp-oauth.adapter"
-import { resolveMcpBearer } from "./mcp-bearer"
 import { fetchGitHubReleases } from "./diff-store"
 import { log } from "../shared/log"
 import {
@@ -31,19 +28,9 @@ import {
 } from "./ws-router-skills"
 import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { PackageUpdateManager } from "./package-update-manager"
+import type { ResolvedAppSettings } from "./ws-router-defaults"
 
 export { resolveMcpBearer as resolveMcpTestBearer } from "./mcp-bearer"
-
-export interface ResolvedAppSettings {
-  getSnapshot(): AppSettingsSnapshot
-  write(value: { analyticsEnabled: boolean }): Promise<AppSettingsSnapshot>
-  writePatch(patch: AppSettingsPatch): Promise<AppSettingsSnapshot>
-  setCloudflareTunnel(patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>): Promise<AppSettingsSnapshot>
-  setClaudeAuth(patch: Partial<AppSettingsSnapshot["claudeAuth"]>): Promise<AppSettingsSnapshot>
-  createSubagent(input: SubagentInput): Promise<Subagent | SubagentValidationError>
-  updateSubagent(id: string, patch: SubagentPatch): Promise<Subagent | SubagentValidationError>
-  deleteSubagent(id: string): Promise<void>
-}
 
 export interface ResolvedLlmProvider {
   read(): Promise<LlmProviderSnapshot>
@@ -53,7 +40,7 @@ export interface ResolvedLlmProvider {
 
 export interface SettingsCommandDeps {
   keybindings: KeybindingsManager
-  resolvedAppSettings: ResolvedAppSettings
+  resolvedAppSettings: Omit<ResolvedAppSettings, "onChange">
   resolvedAnalytics: Pick<AnalyticsReporter, "track">
   resolvedLlmProvider: ResolvedLlmProvider
   listOpenRouterModels: (() => Promise<OpenRouterModel[]>) | undefined
@@ -72,43 +59,6 @@ export function isSubagentValidationError(
   return "code" in value && "message" in value
 }
 
-export const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
-
-export async function testOAuthToken(
-  token: string,
-  baseUrl?: string,
-): Promise<{ ok: boolean; error: string | null }> {
-  const trimmed = typeof token === "string" ? token.trim() : ""
-  if (!trimmed) return { ok: false, error: "Token is empty" }
-  const endpoint = (typeof baseUrl === "string" ? normalizeAnthropicBaseUrl(baseUrl, OAUTH_TOKEN_BASE_URL_MAX) : null)
-    ?? ANTHROPIC_DEFAULT_BASE_URL
-  try {
-    const res = await fetch(`${endpoint}/v1/messages`, {
-      method: "POST",
-      headers: {
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-        "authorization": `Bearer ${trimmed}`,
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ok" }],
-      }),
-      signal: AbortSignal.timeout(10_000),
-    })
-    if (res.status === 401 || res.status === 403) return { ok: false, error: "Unauthorized" }
-    if (res.status === 429) return { ok: true, error: "Token valid but currently rate-limited" }
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
-    return { ok: true, error: null }
-  } catch (err) {
-    if (err instanceof Error && err.name === "TimeoutError") {
-      return { ok: false, error: "Request timed out after 10s" }
-    }
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
 export async function runMcpAutoTest<TWriteResult>(
   id: string,
   appSettings: { getSnapshot(): AppSettingsSnapshot; writePatch(p: AppSettingsPatch): Promise<TWriteResult> },
@@ -116,17 +66,23 @@ export async function runMcpAutoTest<TWriteResult>(
   try {
     const entry = appSettings.getSnapshot().customMcpServers.find((s) => s.id === id)
     if (!entry) return
-    await appSettings.writePatch({
-      customMcpServers: {
-        setTestResult: { id, result: { status: "pending", startedAt: new Date().toISOString() } },
-      },
-    })
-    const bearer = await resolveMcpBearer(entry, appSettings)
-    const result = await validateMcpServer(entry, bearer ? { bearer } : {})
-    await appSettings.writePatch({ customMcpServers: { setTestResult: { id, result } } })
+    await testMcpServer(entry, appSettings)
   } catch (err) {
     log.warn("[kanna/ws-router] runMcpAutoTest failed", String(err))
   }
+}
+
+async function writeTrackingAnalytics<TResult>(
+  nextEnabled: boolean | undefined,
+  settings: Pick<ResolvedAppSettings, "getSnapshot">,
+  analytics: Pick<AnalyticsReporter, "track">,
+  write: () => Promise<TResult>,
+): Promise<TResult> {
+  const wasEnabled = settings.getSnapshot().analyticsEnabled
+  if (nextEnabled === false && wasEnabled) analytics.track("analytics_disabled")
+  const result = await write()
+  if (nextEnabled === true && !wasEnabled) analytics.track("analytics_enabled")
+  return result
 }
 
 
@@ -152,15 +108,13 @@ export async function handleSettingsCommand(
       return true
     }
     case "settings.writeAppSettings": {
-      const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
-      if (previousAnalyticsEnabled && !command.analyticsEnabled) {
-        resolvedAnalytics.track("analytics_disabled")
-      }
-      const snapshot = await resolvedAppSettings.write({ analyticsEnabled: command.analyticsEnabled })
+      const snapshot = await writeTrackingAnalytics(
+        command.analyticsEnabled,
+        resolvedAppSettings,
+        resolvedAnalytics,
+        () => resolvedAppSettings.write({ analyticsEnabled: command.analyticsEnabled }),
+      )
       send(ackResult(id, command, snapshot))
-      if (!previousAnalyticsEnabled && command.analyticsEnabled) {
-        resolvedAnalytics.track("analytics_enabled")
-      }
       return true
     }
     case "appSettings.setCloudflareTunnel": {
@@ -181,8 +135,12 @@ export async function handleSettingsCommand(
       return true
     }
     case "settings.writeAppSettingsPatch": {
-      const previousAnalyticsEnabled = resolvedAppSettings.getSnapshot().analyticsEnabled
-      const snapshot = await resolvedAppSettings.writePatch(command.patch)
+      const snapshot = await writeTrackingAnalytics(
+        command.patch.analyticsEnabled,
+        resolvedAppSettings,
+        resolvedAnalytics,
+        () => resolvedAppSettings.writePatch(command.patch),
+      )
       send(ackResult(id, command, snapshot))
 
       const targetId = (() => {
@@ -200,12 +158,6 @@ export async function handleSettingsCommand(
         void runMcpAutoTest(targetId, resolvedAppSettings)
       }
 
-      if (command.patch.analyticsEnabled !== undefined && previousAnalyticsEnabled && !snapshot.analyticsEnabled) {
-        resolvedAnalytics.track("analytics_disabled")
-      }
-      if (command.patch.analyticsEnabled !== undefined && !previousAnalyticsEnabled && snapshot.analyticsEnabled) {
-        resolvedAnalytics.track("analytics_enabled")
-      }
       return true
     }
     case "subagent.create": {
@@ -238,16 +190,7 @@ export async function handleSettingsCommand(
         }))
         return true
       }
-      await resolvedAppSettings.writePatch({
-        customMcpServers: {
-          setTestResult: { id: entry.id, result: { status: "pending", startedAt: new Date().toISOString() } },
-        },
-      })
-      const testBearer = await resolveMcpBearer(entry, resolvedAppSettings)
-      const lastTest = await validateMcpServer(entry, testBearer ? { bearer: testBearer } : {})
-      await resolvedAppSettings.writePatch({
-        customMcpServers: { setTestResult: { id: entry.id, result: lastTest } },
-      })
+      const lastTest = await testMcpServer(entry, resolvedAppSettings)
       send(ackResult(id, command, {
         ok: lastTest.status === "ok",
         message: lastTest.status === "error" ? lastTest.message : undefined,

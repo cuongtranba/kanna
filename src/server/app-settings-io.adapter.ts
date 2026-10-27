@@ -1,12 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-
-export function readTextFileOrThrow(p: string): Promise<string> {
-  return readFile(p, "utf8")
-}
-
-export function readBunFileText(p: string): Promise<string> {
-  return Bun.file(p).text()
-}
+import { mkdir, rename, writeFile } from "node:fs/promises"
 
 export async function writeTextFileUtf8(p: string, contents: string): Promise<void> {
   await writeFile(p, contents, "utf8")

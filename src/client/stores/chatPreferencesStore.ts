@@ -1,15 +1,9 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
+  DEFAULT_CLAUDE_CHAT_MODEL,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
-  DEFAULT_CODEX_MODEL_OPTIONS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
-  normalizeClaudeContextWindow,
-  normalizeClaudeModelId,
-  normalizeCodexModelId,
-  isClaudeReasoningEffort,
-  isCodexReasoningEffort,
-  normalizeClaudeReasoningEffort,
+  DEFAULT_CODEX_CHAT_MODEL,
   type AgentProvider,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
@@ -21,7 +15,14 @@ import {
   isEndpointProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
-import { claudeOptionsPatch, codexOptionsPatch, normalizeDefaultProvider } from "./providerOptionsPatch"
+import {
+  createDefaultProviderDefaults,
+  normalizeClaudePreference,
+  normalizeCodexPreference,
+  normalizeDefaultProvider,
+  normalizeProviderDefaults,
+} from "../../shared/settings/provider-defaults"
+import { claudeOptionsPatch, codexOptionsPatch } from "./providerOptionsPatch"
 import { providerDefaultsEqual } from "./providerDefaultsEqual"
 import { log } from "../../shared/log"
 
@@ -129,61 +130,6 @@ type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
   legacyComposerState?: PersistedComposerState
 }
 
-export function normalizeClaudePreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<ClaudeModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
-  if (isClaudeReasoningEffort(reasoningEffort)) {
-    normalizedEffort = reasoningEffort
-  } else if (isClaudeReasoningEffort(value?.effort)) {
-    normalizedEffort = value.effort
-  } else {
-    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
-  }
-  const model = normalizeClaudeModelId(value?.model, undefined, customModels)
-  const contextWindow = normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels)
-
-  return {
-    model,
-    modelOptions: {
-      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
-      contextWindow,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
-export function normalizeCodexPreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<CodexModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
-  if (isCodexReasoningEffort(reasoningEffort)) {
-    normalizedCodexEffort = reasoningEffort
-  } else if (isCodexReasoningEffort(value?.effort)) {
-    normalizedCodexEffort = value.effort
-  } else {
-    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
-  }
-  return {
-    model: normalizeCodexModelId(value?.model, undefined, customModels),
-    modelOptions: {
-      reasoningEffort: normalizedCodexEffort,
-      fastMode: typeof value?.modelOptions?.fastMode === "boolean"
-        ? value.modelOptions.fastMode
-        : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
 function forcePersistedCodexPreference<T extends {
   model?: string
   effort?: string
@@ -193,7 +139,7 @@ function forcePersistedCodexPreference<T extends {
   if (!value) return value
   return {
     ...value,
-    model: "gpt-5.5",
+    model: DEFAULT_CODEX_CHAT_MODEL,
   }
 }
 
@@ -201,7 +147,7 @@ function forcePersistedCodexComposerState<T extends PersistedComposerState | Com
   if (!value || value.provider !== "codex") return value
   return {
     ...value,
-    model: "gpt-5.5",
+    model: DEFAULT_CODEX_CHAT_MODEL,
   }
 }
 
@@ -216,59 +162,6 @@ function forcePersistedCodexChatStates(
       forcePersistedCodexComposerState(composerState) ?? composerState,
     ])
   )
-}
-
-export function createDefaultProviderDefaults(): ChatProviderPreferences {
-  return {
-    claude: {
-      model: "claude-opus-4-7",
-      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-      planMode: false,
-    },
-    codex: {
-      model: "gpt-5.5",
-      modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
-      planMode: false,
-    },
-    openrouter: {
-      model: DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: false,
-    },
-    custom: { model: "", modelOptions: {}, planMode: false },
-  }
-}
-
-export function normalizeProviderDefaults(value?: {
-  claude?: {
-    model?: string
-    effort?: string
-    modelOptions?: Partial<ClaudeModelOptions>
-    planMode?: boolean
-  }
-  codex?: {
-    model?: string
-    effort?: string
-    modelOptions?: Partial<CodexModelOptions>
-    planMode?: boolean
-  }
-  openrouter?: {
-    model?: string
-    modelOptions?: Record<string, never>
-    planMode?: boolean
-  }
-  custom?: { model?: string; modelOptions?: Record<string, never>; planMode?: boolean }
-}): ChatProviderPreferences {
-  return {
-    claude: normalizeClaudePreference(value?.claude),
-    codex: normalizeCodexPreference(value?.codex),
-    openrouter: {
-      model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: Boolean(value?.openrouter?.planMode),
-    },
-    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
-  }
 }
 
 function logChatPreferences(message: string, details?: object) {
@@ -541,7 +434,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
     pendingProviderSyncChatIds: new Set<string>(),
     legacyComposerState: {
       provider: "claude",
-      model: "claude-opus-4-7",
+      model: DEFAULT_CLAUDE_CHAT_MODEL,
       modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
       planMode: false,
     },

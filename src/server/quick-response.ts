@@ -3,6 +3,8 @@ import { log } from "../shared/log"
 import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
+import { DEFAULT_OPENAI_SDK_MODEL } from "../shared/core-types"
+import { QUICK_RESPONSE_CLAUDE_MODEL } from "../shared/provider-model-types"
 import type { LlmProviderSnapshot } from "../shared/types"
 import { ClaudeAuthErrorDetector } from "./auto-continue/auth-error-detector"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
@@ -150,7 +152,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     prompt: args.prompt,
     options: {
       cwd: args.cwd,
-      model: "claude-haiku-4-5-20251001",
+      model: QUICK_RESPONSE_CLAUDE_MODEL,
       tools: [],
       systemPrompt: "",
       effort: "low",
@@ -249,7 +251,7 @@ export async function runCodexStructured(
 ): Promise<JsonValue | null> {
   const response = await codexManager.generateStructured({
     cwd: args.cwd,
-    model: "gpt-5.4-mini",
+    model: DEFAULT_OPENAI_SDK_MODEL,
     prompt: `${args.prompt}\n\nReturn JSON only that matches this schema:\n${JSON.stringify(args.schema, null, 2)}`,
   })
   if (typeof response !== "string") return null

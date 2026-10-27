@@ -9,11 +9,15 @@ export interface JsonSettingsFileReader<Snapshot> {
   normalize: (value: JsonValue) => Snapshot
 }
 
-async function readTextOrNull(filePath: string): Promise<string | null> {
+export interface JsonSettingsFileReadOptions {
+  strict?: boolean
+}
+
+async function readTextOrNull(filePath: string, strict: boolean): Promise<string | null> {
   try {
     return await readFile(filePath, "utf8")
   } catch (error) {
-    if (isErrnoException(error) && error.code === "ENOENT") return null
+    if (!strict && isErrnoException(error) && error.code === "ENOENT") return null
     throw error
   }
 }
@@ -21,15 +25,17 @@ async function readTextOrNull(filePath: string): Promise<string | null> {
 export async function readJsonSettingsFile<Snapshot>(
   filePath: string,
   reader: JsonSettingsFileReader<Snapshot>,
+  options: JsonSettingsFileReadOptions = {},
 ): Promise<Snapshot> {
-  const text = await readTextOrNull(filePath)
+  const strict = options.strict === true
+  const text = await readTextOrNull(filePath, strict)
   if (text === null) return reader.defaults(null)
   if (!text.trim()) return reader.defaults(`${reader.label} file was empty. Using defaults.`)
   let parsed: JsonValue
   try {
     parsed = JSON.parse(text)
   } catch (error) {
-    if (error instanceof SyntaxError) return reader.defaults(`${reader.label} file is invalid JSON. Using defaults.`)
+    if (!strict && error instanceof SyntaxError) return reader.defaults(`${reader.label} file is invalid JSON. Using defaults.`)
     throw error
   }
   return reader.normalize(parsed)

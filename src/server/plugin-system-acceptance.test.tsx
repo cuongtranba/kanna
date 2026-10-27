@@ -30,8 +30,8 @@ describe("P0 — manifest, paths, settings collection", () => {
   })
 
   test("plugins are globally OFF by default", async () => {
-    const { buildInitialAppSettingsSnapshot } = await import("./ws-router-defaults")
-    const snapshot = buildInitialAppSettingsSnapshot()
+    const { defaultAppSettingsSnapshot } = await import("./app-settings")
+    const snapshot = defaultAppSettingsSnapshot()
     expect(snapshot.plugins.enabled).toBe(false)
     expect(snapshot.installedPlugins).toEqual([])
   })
