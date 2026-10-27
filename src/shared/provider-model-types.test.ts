@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AGENT_PROVIDERS } from "./core-types"
-import { providerExpandsSlashCommands, providerUsesSdkSession } from "./provider-model-types"
+import { getProviderCatalog, providerExpandsSlashCommands, providerUsesSdkSession } from "./provider-model-types"
 
 describe("providerExpandsSlashCommands", () => {
   test("claude and openrouter expand `/name` themselves — the SDK reads the catalog", () => {
@@ -22,5 +22,13 @@ describe("providerExpandsSlashCommands", () => {
     for (const provider of AGENT_PROVIDERS) {
       expect(providerExpandsSlashCommands(provider)).toBe(providerUsesSdkSession(provider))
     }
+  })
+})
+
+describe("model requirement hints", () => {
+  test("the catalog, not the picker, records that GPT-5.5 needs a recent codex-cli", () => {
+    const models = getProviderCatalog("codex").models
+    expect(models.find((model) => model.id === "gpt-5.5")?.requirementHint).toBe("codex-cli >= 0.124")
+    expect(models.find((model) => model.id === "gpt-5.4")?.requirementHint).toBeUndefined()
   })
 })

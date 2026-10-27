@@ -70,6 +70,10 @@ export function collectPanes(node: PaneNode): PaneLeaf[] {
   return node.children.flatMap(collectPanes)
 }
 
+export function activeTabIdOf(pane: PaneLeaf): string | null {
+  return pane.focusedTabId ?? pane.tabs[0]?.tabId ?? null
+}
+
 export function findPanePath(node: PaneNode, paneId: string): number[] | null {
   if (isPane(node)) return node.id === paneId ? [] : null
 

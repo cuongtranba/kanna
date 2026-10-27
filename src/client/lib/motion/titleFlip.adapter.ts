@@ -1,5 +1,6 @@
 import { animate } from "animejs"
 import { MOTION_DURATION, MOTION_EASE, prefersReducedMotion } from "."
+import { buildTabId } from "../paneTree/tabTarget"
 
 
 const LOOKUP_TIMEOUT_MS = 400
@@ -14,7 +15,7 @@ export interface TitleFlipPorts {
 function titleWithin(root: Document, attribute: string, value: string): HTMLElement | null {
   for (const element of root.querySelectorAll(`[${attribute}]`)) {
     if (element.getAttribute(attribute) !== value) continue
-    return element.querySelector<HTMLElement>("span.truncate")
+    return element.querySelector<HTMLElement>("[data-flip-title]")
   }
   return null
 }
@@ -96,10 +97,11 @@ async function waitForBothEnds(
   const now = ports.now ?? (() => Date.now())
   const raf = ports.raf ?? ((callback: () => void) => { requestAnimationFrame(callback) })
   const deadline = now() + LOOKUP_TIMEOUT_MS
+  const tabId = buildTabId({ kind: "chat", chatId })
 
   for (;;) {
     const fromElement = titleWithin(root, "data-chat-id", chatId)
-    const toElement = titleWithin(root, "data-tab-id", chatId)
+    const toElement = titleWithin(root, "data-tab-id", tabId)
     if (fromElement && toElement) {
       const from = fromElement.getBoundingClientRect()
       const to = toElement.getBoundingClientRect()

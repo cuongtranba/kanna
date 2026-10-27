@@ -11,7 +11,7 @@ import type {
   ITooltipSpec,
 } from "@visactor/vchart"
 import { formatMetricValue } from "../../../../shared/genui"
-import type { ChartModel, ChartPoint, ChartSeries } from "./chart-model"
+import type { ChartModel, ChartPoint, ChartSeries, SeriesRole } from "./chart-model"
 import type { ChartTheme } from "./chart-theme"
 
 export const BAR_MAX_WIDTH = 24
@@ -26,17 +26,20 @@ export interface ChartDatum {
   xLabel: string
   series: string
   seriesLabel: string
+  role: SeriesRole
   value: number
   start: number
   end: number
 }
 
-function datumOf(point: ChartPoint, labels: ReadonlyMap<string, string>): ChartDatum {
+function datumOf(point: ChartPoint, seriesById: ReadonlyMap<string, ChartSeries>): ChartDatum {
+  const series = seriesById.get(point.series)
   return {
     x: point.x,
     xLabel: point.xLabel,
     series: point.series,
-    seriesLabel: labels.get(point.series) ?? point.series,
+    seriesLabel: series?.label ?? point.series,
+    role: series?.role ?? "series",
     value: point.value,
     start: point.start ?? 0,
     end: point.end ?? point.value,
@@ -62,15 +65,20 @@ function colorScale(model: ChartModel, theme: ChartTheme) {
   return { type: "ordinal" as const, domain: model.series.map((series) => series.label), range: model.series.map((series) => seriesColor(series, theme)) }
 }
 
-function isCompareSeries(model: ChartModel, label: string): boolean {
-  return model.series.some((series) => series.label === label && series.role === "compare")
-}
-
 const SERIES_FIELD = "seriesLabel"
 
-function readField(datum: Datum | undefined, field: "series" | "seriesLabel" | "xLabel"): string {
+function readField(datum: Datum | undefined, field: "series" | "seriesLabel" | "xLabel" | "role"): string {
   const value = datum?.[field]
   return typeof value === "string" ? value : ""
+}
+
+function isCompareDatum(datum: Datum | undefined): boolean {
+  return readField(datum, "role") === "compare"
+}
+
+function datumsOf(model: ChartModel, belongsTo: (point: ChartPoint) => boolean = () => true): ChartDatum[] {
+  const seriesById = new Map(model.series.map((series) => [series.id, series]))
+  return model.points.filter(belongsTo).map((point) => datumOf(point, seriesById))
 }
 
 function readValue(datum: Datum | undefined): number | null {
@@ -128,16 +136,18 @@ function legends(model: ChartModel, theme: ChartTheme) {
   }
 }
 
-function shared(model: ChartModel, theme: ChartTheme) {
-  const labels = new Map(model.series.map((series) => [series.id, series.label]))
+function common(model: ChartModel, theme: ChartTheme) {
   return {
-    data: [{ id: "points", values: model.points.map((point) => datumOf(point, labels)) }],
     background: "transparent",
     padding: { top: 8, right: 12, bottom: 4, left: 4 },
     color: colorScale(model, theme),
     tooltip: tooltip(model),
     legends: legends(model, theme),
   }
+}
+
+function shared(model: ChartModel, theme: ChartTheme) {
+  return { data: [{ id: "points", values: datumsOf(model) }], ...common(model, theme) }
 }
 
 export function buildVChartSpec(model: ChartModel, theme: ChartTheme): ISpec {
@@ -171,7 +181,7 @@ function lineSpec(model: ChartModel, theme: ChartTheme): ILineChartSpec {
     seriesField: SERIES_FIELD,
     axes: axes(model, theme),
     crosshair: crosshair(theme),
-    line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round", lineDash: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "seriesLabel")) ? COMPARE_DASH : []) } },
+    line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round", lineDash: (datum: Datum | undefined) => (isCompareDatum(datum) ? COMPARE_DASH : []) } },
     point: { style: { size: POINT_SIZE, stroke: theme.surface, lineWidth: 2 } },
   }
 }
@@ -186,7 +196,7 @@ function areaSpec(model: ChartModel, theme: ChartTheme): IAreaChartSpec {
     axes: axes(model, theme),
     crosshair: crosshair(theme),
     line: { style: { lineWidth: LINE_WIDTH, lineCap: "round", lineJoin: "round" } },
-    area: { style: { fillOpacity: (datum: Datum | undefined) => (isCompareSeries(model, readField(datum, "seriesLabel")) ? 0 : AREA_OPACITY) } },
+    area: { style: { fillOpacity: (datum: Datum | undefined) => (isCompareDatum(datum) ? 0 : AREA_OPACITY) } },
     point: { visible: false },
   }
 }
@@ -210,16 +220,10 @@ function barSpec(model: ChartModel, theme: ChartTheme): IBarChartSpec {
 
 function comboSpec(model: ChartModel, theme: ChartTheme): ICommonChartSpec {
   const [bars, line] = model.series
-  const base = shared(model, theme)
-  const labels = new Map(model.series.map((series) => [series.id, series.label]))
-  const valuesOf = (id: string | undefined) => model.points.filter((point) => point.series === id).map((point) => datumOf(point, labels))
+  const valuesOf = (id: string | undefined) => datumsOf(model, (point) => point.series === id)
   return {
     type: "common",
-    background: base.background,
-    padding: base.padding,
-    color: base.color,
-    tooltip: base.tooltip,
-    legends: base.legends,
+    ...common(model, theme),
     data: [{ id: "bars", values: valuesOf(bars?.id) }, { id: "line", values: valuesOf(line?.id) }],
     series: [
       { type: "bar", dataIndex: 0, xField: "x", yField: "value", seriesField: SERIES_FIELD, barMaxWidth: BAR_MAX_WIDTH, bar: { style: { cornerRadius: [4, 4, 0, 0] } } },

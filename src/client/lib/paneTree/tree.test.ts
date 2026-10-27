@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  activeTabIdOf,
   collectPanes,
   createDefaultLayout,
   createGroup,
@@ -102,6 +103,23 @@ describe("findPaneContainingTab", () => {
     const root = twoPanes()
     expect(findPaneContainingTab(root, term("b").tabId)?.pane.id).toBe("pb")
     expect(findPaneContainingTab(root, "missing")).toBeNull()
+  })
+})
+
+describe("activeTabIdOf", () => {
+  test("is the focused tab when one is set", () => {
+    const a = term("a")
+    const b = term("b")
+    expect(activeTabIdOf({ ...createPane("p", [a, b]), focusedTabId: b.tabId })).toBe(b.tabId)
+  })
+
+  test("falls back to the first tab when none is focused", () => {
+    const a = term("a")
+    expect(activeTabIdOf({ ...createPane("p", [a, term("b")]), focusedTabId: null })).toBe(a.tabId)
+  })
+
+  test("is null for an empty pane", () => {
+    expect(activeTabIdOf(createPane("p", []))).toBeNull()
   })
 })
 

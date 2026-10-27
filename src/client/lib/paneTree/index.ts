@@ -25,6 +25,7 @@ export { CHAT_ROUTE_PATTERN, chatPath, fallbackPathAfterClose, pageTargetForPath
 export { buildTabId, isSingletonTabKind, normalizeTabTarget, tabTargetsEqual } from "./tabTarget"
 
 export {
+  activeTabIdOf,
   collectPanes,
   createDefaultLayout,
   createGroup,

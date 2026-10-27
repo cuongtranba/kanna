@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from "react"
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react"
 import { SerializeAddon } from "@xterm/addon-serialize"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { Terminal, type ITheme, type ITerminalOptions } from "@xterm/xterm"
@@ -16,6 +16,7 @@ import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { usePreferencesStore } from "../../stores/preferences"
 import { runDetached } from "../../lib/runDetached"
 import { errorMessage } from "../../../shared/errors"
+import { TERMINAL_PANE_PADDING_STYLE } from "./TerminalWorkspaceLayout"
 
 export interface TerminalPanePorts {
   dom?: DomPort
@@ -73,14 +74,10 @@ const TERMINAL_ANSI_DARK = {
   brightWhite: "#f8fafc",
 } as const
 
-function readCssVar(name: string, fallback: string, dom: DomPort): string {
-  return dom.getCssVar(name, fallback)
-}
-
 function buildTerminalTheme(mode: "light" | "dark", dom: DomPort): ITheme {
   const ansi = mode === "dark" ? TERMINAL_ANSI_DARK : TERMINAL_ANSI_LIGHT
-  const fg = readCssVar("--foreground", mode === "dark" ? "#f8fafc" : "#0f172a", dom)
-  const bg = readCssVar("--background", mode === "dark" ? "#000000" : "#ffffff", dom)
+  const fg = dom.getCssVar("--foreground", mode === "dark" ? "#f8fafc" : "#0f172a")
+  const bg = dom.getCssVar("--background", mode === "dark" ? "#000000" : "#ffffff")
   return {
     foreground: fg,
     background: "transparent",
@@ -226,16 +223,25 @@ export function getMacOptionInputSequence(event: MacOptionKeyEvent, platform = g
   }
 }
 
+interface TerminalSize {
+  cols: number
+  rows: number
+}
+
+function sameSize(a: TerminalSize | null, b: TerminalSize): boolean {
+  return a !== null && a.cols === b.cols && a.rows === b.rows
+}
+
 function syncTerminalSize(
   terminal: Terminal,
   container: HTMLElement,
-  lastSizeRef: MutableRefObject<{ cols: number; rows: number } | null>,
+  lastSizeRef: MutableRefObject<TerminalSize | null>,
   hasCreated: boolean,
   sendResize: (cols: number, rows: number) => void,
   dom: DomPort
 ) {
   const nextSize = getMeasuredTerminalSize(terminal, container, dom) ?? getTerminalSize(terminal)
-  if (lastSizeRef.current && lastSizeRef.current.cols === nextSize.cols && lastSizeRef.current.rows === nextSize.rows) {
+  if (sameSize(lastSizeRef.current, nextSize)) {
     return nextSize
   }
   terminal.resize(nextSize.cols, nextSize.rows)
@@ -269,14 +275,16 @@ function TerminalPaneInner({
   const hasCreatedRef = useRef(false)
   const createAttemptRef = useRef(0)
   const lastAppliedSnapshotKeyRef = useRef<string | null>(null)
-  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null)
+  const lastSizeRef = useRef<TerminalSize | null>(null)
   const metadata = TerminalPaneStore.useScopedStore((state) => state.metadata)
   const error = TerminalPaneStore.useScopedStore((state) => state.error)
   const storeSetError = TerminalPaneStore.useScopedStore((state) => state.setError)
   const setMetadataConditional = TerminalPaneStore.useScopedStore((state) => state.setMetadataConditional)
   const setMetadataFromExit = TerminalPaneStore.useScopedStore((state) => state.setMetadataFromExit)
   const resetTerminal = TerminalPaneStore.useScopedStore((state) => state.resetTerminal)
-  const terminalTheme = buildTerminalTheme(resolvedTheme === "dark" ? "dark" : "light", dom)
+  const themeMode = resolvedTheme === "dark" ? "dark" : "light"
+  const terminalTheme = useMemo(() => buildTerminalTheme(themeMode, dom), [themeMode, dom])
+  const terminalThemeRef = useRef(terminalTheme)
   const typographyServerDefault = useAppSettingsStore((state) => state.settings?.typography?.scale)
   const typographyOverride = usePreferencesStore((state) => state.typographyOverride)
   const typographyStep = resolveEffectiveScaleStep(typographyOverride, typographyServerDefault)
@@ -324,7 +332,11 @@ function TerminalPaneInner({
   }, [terminalFontSize])
 
   useEffect(() => {
-    const terminal = new Terminal(getTerminalOptions(scrollback, terminalTheme, terminalFontSizeRef.current))
+    terminalThemeRef.current = terminalTheme
+  }, [terminalTheme])
+
+  useEffect(() => {
+    const terminal = new Terminal(getTerminalOptions(scrollback, terminalThemeRef.current, terminalFontSizeRef.current))
     const serializeAddon = new SerializeAddon()
     terminal.loadAddon(serializeAddon)
     terminal.loadAddon(new WebLinksAddon())
@@ -360,7 +372,7 @@ function TerminalPaneInner({
     const resizeDisposable = terminal.onResize(({ cols, rows }) => {
       if (!hasCreatedRef.current) return
       const nextSize = { cols, rows }
-      if (lastSizeRef.current && lastSizeRef.current.cols === cols && lastSizeRef.current.rows === rows) {
+      if (sameSize(lastSizeRef.current, nextSize)) {
         return
       }
       lastSizeRef.current = nextSize
@@ -371,14 +383,7 @@ function TerminalPaneInner({
       const terminalInstance = terminalRef.current
       const element = containerRef.current
       if (!terminalInstance || !element) return
-      syncTerminalSize(terminalInstance, element, lastSizeRef, hasCreatedRef.current, (cols, rows) => {
-        runDetached("terminal.resize", socket.command({
-          type: "terminal.resize",
-          terminalId,
-          cols,
-          rows,
-        }))
-      }, dom)
+      syncTerminalSize(terminalInstance, element, lastSizeRef, hasCreatedRef.current, sendResize, dom)
     })
 
     if (element) {
@@ -393,7 +398,7 @@ function TerminalPaneInner({
       terminal.dispose()
       terminalRef.current = null
     }
-  }, [dom, scheduleResizeSync, scrollback, sendInput, sendResize, socket, terminalId, terminalTheme])
+  }, [dom, scheduleResizeSync, scrollback, sendInput, sendResize])
 
   useEffect(() => {
     const terminal = terminalRef.current
@@ -571,10 +576,10 @@ function TerminalPaneInner({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden px-3 py-1">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden py-1" style={TERMINAL_PANE_PADDING_STYLE}>
         <div ref={containerRef} className="kanna-terminal min-h-0 min-w-0 flex-1 overflow-hidden w-full" />
       </div>
-      {error ? <div className="px-3 py-1 text-xs text-destructive">Terminal error: {error}</div> : null}
+      {error ? <div className="py-1 text-xs text-destructive" style={TERMINAL_PANE_PADDING_STYLE}>Terminal error: {error}</div> : null}
     </div>
   )
 }

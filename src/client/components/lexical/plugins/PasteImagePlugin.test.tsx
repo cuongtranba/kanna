@@ -103,6 +103,25 @@ describe("getClipboardImageFiles", () => {
     expect(result[0].name).toBe("clipboard-99999.png")
   })
 
+  it("renames a pasted image the browser left unnamed using the clipboard timestamp", () => {
+    const item: Pick<DataTransferItem, "kind" | "type" | "getAsFile"> = {
+      kind: "file",
+      type: "image/png",
+      getAsFile: () => new File(["img"], "", { type: "image/png" }),
+    }
+    expect(getClipboardImageFiles([item], 456)[0]?.name).toBe("clipboard-456.png")
+  })
+
+  it("generates distinct names for multiple unnamed images in one paste event", () => {
+    const unnamed = (type: string): Pick<DataTransferItem, "kind" | "type" | "getAsFile"> => ({
+      kind: "file",
+      type,
+      getAsFile: () => new File(["x"], "", { type }),
+    })
+    const files = getClipboardImageFiles([unnamed("image/png"), unnamed("image/webp")], 789)
+    expect(files.map((file) => file.name)).toEqual(["clipboard-789.png", "clipboard-789-1.webp"])
+  })
+
   it("keeps non-generic filenames unchanged", () => {
     const fakeFile = new File(["data"], "screenshot-2024.png", { type: "image/png" })
     const item: Pick<DataTransferItem, "kind" | "type" | "getAsFile"> = {

@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import type { AutoContinueSchedule } from "../../../shared/types"
-import { formatLocal, parseLocal } from "../../lib/autoContinueTime"
+import { AUTO_CONTINUE_TIME_FORMAT_HINT, formatLocal, parseLocal } from "../../lib/autoContinueTime"
 import { Input } from "../ui/input"
 import { TranscriptActionCard, type CardAction } from "./TranscriptActionCard"
 import { AutoContinueCardStore } from "./AutoContinueCard.store"
@@ -10,6 +10,27 @@ export interface AutoContinueCardProps {
   onAccept: (scheduledAtMs: number) => Promise<void>
   onReschedule: (scheduledAtMs: number) => Promise<void>
   onCancel: () => Promise<void>
+}
+
+function ScheduleTimeInput({
+  draft,
+  onDraftChange,
+  error,
+}: {
+  draft: string
+  onDraftChange: (draft: string) => void
+  error: string | null
+}) {
+  return (
+    <div className="space-y-1">
+      <Input
+        value={draft}
+        onChange={(event) => onDraftChange(event.target.value)}
+        placeholder={AUTO_CONTINUE_TIME_FORMAT_HINT}
+      />
+      {error && <div className="text-destructive text-xs">{error}</div>}
+    </div>
+  )
 }
 
 export function AutoContinueCard({ schedule, onAccept, onReschedule, onCancel }: AutoContinueCardProps) {
@@ -27,12 +48,13 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
   const setDraft = AutoContinueCardStore.useScopedStore((state) => state.setDraft)
   const setEditing = AutoContinueCardStore.useScopedStore((state) => state.setEditing)
 
+  const effectiveAt = schedule.scheduledAt ?? schedule.resetAt
   const parsed = useMemo(() => parseLocal(draft, schedule.tz), [draft, schedule.tz])
   // eslint-disable-next-line react-hooks/purity
   const isFuture = parsed !== null && parsed > Date.now()
   let inputInvalid: string | null
   if (parsed === null) {
-    inputInvalid = "Use format dd/mm/yyyy hh:mm"
+    inputInvalid = `Use format ${AUTO_CONTINUE_TIME_FORMAT_HINT}`
   } else if (!isFuture) {
     inputInvalid = "Time must be in the future"
   } else {
@@ -40,7 +62,7 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
   }
 
   if (schedule.state === "fired") {
-    const at = formatLocal(schedule.scheduledAt ?? schedule.resetAt, schedule.tz)
+    const at = formatLocal(effectiveAt, schedule.tz)
     return <TranscriptActionCard title={`Auto-continued at ${at}`} tone="success" />
   }
 
@@ -72,22 +94,13 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
       <TranscriptActionCard
         title="Rate limit hit — schedule auto-continue?"
         description={passed ? "Reset time has passed — accept to continue now." : undefined}
-        body={
-          <div className="space-y-1">
-            <Input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="dd/mm/yyyy hh:mm"
-            />
-            {inputInvalid && <div className="text-destructive text-xs">{inputInvalid}</div>}
-          </div>
-        }
+        body={<ScheduleTimeInput draft={draft} onDraftChange={setDraft} error={inputInvalid} />}
         actions={actions}
       />
     )
   }
 
-  const displayAt = formatLocal(schedule.scheduledAt ?? schedule.resetAt, schedule.tz)
+  const displayAt = formatLocal(effectiveAt, schedule.tz)
   const tzLabel = schedule.tz === "system" ? "local" : schedule.tz
 
   if (!editing) {
@@ -135,16 +148,7 @@ function AutoContinueCardContent({ schedule, onAccept, onReschedule, onCancel }:
   return (
     <TranscriptActionCard
       title={`Auto-continue at ${displayAt} (${tzLabel})`}
-      body={
-        <div className="space-y-1">
-          <Input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="dd/mm/yyyy hh:mm"
-          />
-          {inputInvalid && <div className="text-destructive text-xs">{inputInvalid}</div>}
-        </div>
-      }
+      body={<ScheduleTimeInput draft={draft} onDraftChange={setDraft} error={inputInvalid} />}
       actions={editActions}
     />
   )

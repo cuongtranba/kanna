@@ -9,6 +9,8 @@ import type {
   DiffCommitMode,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
+  GitRepoVisibility,
+  GitSyncAction,
 } from "../../../shared/types"
 import { useAppDialog } from "../../components/ui/app-dialog"
 import type { KannaState } from "../useKannaState"
@@ -237,7 +239,7 @@ export function useChatPageSidebarActions({
     }))
   }, [refreshDiffs, runGitAction, state.socket])
 
-  const handleSyncBranch = useCallback(async (action: "fetch" | "pull" | "push" | "publish") => {
+  const handleSyncBranch = useCallback(async (action: GitSyncAction) => {
     const chatId = activeChatIdRef.current
     if (!chatId) {
       return null
@@ -317,7 +319,7 @@ export function useChatPageSidebarActions({
   const handleSetupGitHub = useCallback(async (args: {
     owner: string
     name: string
-    visibility: "public" | "private"
+    visibility: GitRepoVisibility
     description: string
   }) => {
     const chatId = activeChatIdRef.current

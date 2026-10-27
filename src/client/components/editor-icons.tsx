@@ -1,12 +1,13 @@
 import { FolderOpen } from "lucide-react"
 import type { EditorPreset } from "../../shared/protocol"
+import { getEditorPresetLabel } from "../stores/terminalPreferencesStore"
 
-export const EDITOR_OPTIONS: Array<{ value: EditorPreset; label: string }> = [
-  { value: "cursor", label: "Cursor" },
-  { value: "xcode", label: "Xcode" },
-  { value: "windsurf", label: "Windsurf" },
-  { value: "custom", label: "Custom" },
-]
+const LISTED_EDITOR_PRESETS: readonly EditorPreset[] = ["cursor", "xcode", "windsurf", "custom"]
+
+export const EDITOR_OPTIONS: ReadonlyArray<{ value: EditorPreset; label: string }> = LISTED_EDITOR_PRESETS.map((value) => ({
+  value,
+  label: getEditorPresetLabel(value),
+}))
 
 const ICON_SRC: Record<"cursor" | "finder" | "preview" | "defaultApp" | "xcode" | "terminal" | "windsurf" | "custom", string> = {
   cursor: "/editor-icons/cursor.png",

@@ -1,3 +1,5 @@
+export const AUTO_CONTINUE_TIME_FORMAT_HINT = "dd/mm/yyyy hh:mm"
+
 function resolveTimeZone(tz: string): string | undefined {
   if (tz === "system") return undefined
   return tz

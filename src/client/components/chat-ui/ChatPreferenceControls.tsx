@@ -26,6 +26,11 @@ type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 
 const NO_MODELS: ProviderCatalogEntry["models"] = []
 
+const PICKER_TRIGGER_BASE_CLASS =
+  "flex min-h-[36px] items-center gap-1.5 px-2 py-1 text-sm rounded-md text-muted-foreground [&>svg]:shrink-0 [&>span]:whitespace-nowrap"
+const PICKER_TRIGGER_DISABLED_CLASS = `${PICKER_TRIGGER_BASE_CLASS} opacity-70 cursor-default`
+const PICKER_TRIGGER_CLASS = `${PICKER_TRIGGER_BASE_CLASS} cursor-pointer touch-manipulation transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`
+
 const ENDPOINT_EMPTY_MESSAGE: Record<"openrouter" | "custom", string> = {
   openrouter: "Loading models… verify OpenRouter API key in Settings.",
   custom: "No models configured. Add an endpoint in Settings → Providers.",
@@ -135,13 +140,7 @@ export function InputPopover({
 }) {
   if (disabled) {
     return (
-      <button
-        disabled
-        className={cn(
-          "flex min-h-[36px] items-center gap-1.5 px-2 py-1 text-sm rounded-md text-muted-foreground [&>svg]:shrink-0 opacity-70 cursor-default [&>span]:whitespace-nowrap",
-          triggerClassName
-        )}
-      >
+      <button disabled className={cn(PICKER_TRIGGER_DISABLED_CLASS, triggerClassName)}>
         {trigger}
       </button>
     )
@@ -171,14 +170,7 @@ function InputPopoverContent({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex min-h-[36px] cursor-pointer touch-manipulation items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-muted-foreground [&>svg]:shrink-0 [&>span]:whitespace-nowrap",
-            "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            triggerClassName
-          )}
-        >
+        <button type="button" className={cn(PICKER_TRIGGER_CLASS, triggerClassName)}>
           {trigger}
         </button>
       </PopoverTrigger>
@@ -271,13 +263,7 @@ function SearchableModelPopoverContent({
   return (
     <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex min-h-[36px] cursor-pointer touch-manipulation items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors text-muted-foreground [&>svg]:shrink-0 [&>span]:whitespace-nowrap",
-            "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
+        <button type="button" className={PICKER_TRIGGER_CLASS}>
           <ModelIcon className="h-3.5 w-3.5" />
           <span className="max-w-[200px] truncate">{selectedLabel}</span>
         </button>
@@ -302,6 +288,10 @@ function SearchableModelPopoverContent({
   )
 }
 
+export interface ModelLock {
+  reason: string
+}
+
 export type ModelOptionChange =
   | { type: "claudeReasoningEffort"; effort: ClaudeReasoningEffort }
   | { type: "contextWindow"; contextWindow: ClaudeContextWindow }
@@ -312,11 +302,11 @@ interface ChatPreferenceControlsProps {
   availableProviders: ProviderCatalogEntry[]
   selectedProvider: AgentProvider
   showProviderPicker?: boolean
-  showCodexCliRequirementHints?: boolean
   model: string
   modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
   onProviderChange?: (provider: AgentProvider) => void
-  onModelChange?: (provider: AgentProvider, model: string) => void
+  onModelChange: (provider: AgentProvider, model: string) => void
+  modelLock?: ModelLock | null
   onModelOptionChange: (change: ModelOptionChange) => void
   planMode?: boolean
   onPlanModeChange?: (planMode: boolean) => void
@@ -328,11 +318,11 @@ export function ChatPreferenceControls({
   availableProviders,
   selectedProvider,
   showProviderPicker = true,
-  showCodexCliRequirementHints = false,
   model,
   modelOptions,
   onProviderChange,
   onModelChange,
+  modelLock = null,
   onModelOptionChange,
   planMode = false,
   onPlanModeChange,
@@ -356,7 +346,7 @@ export function ChatPreferenceControls({
     <SearchableModelPopover
       models={providerModels}
       selectedModel={model}
-      onSelect={(id) => onModelChange?.(activeProvider, id)}
+      onSelect={(id) => onModelChange(activeProvider, id)}
       ModelIcon={ModelIcon}
       emptyMessage={ENDPOINT_EMPTY_MESSAGE[activeProvider]}
     />
@@ -375,18 +365,18 @@ export function ChatPreferenceControls({
           <PopoverMenuItem
             key={candidate.id}
             onClick={() => {
-              onModelChange?.(activeProvider, candidate.id)
+              onModelChange(activeProvider, candidate.id)
               close()
             }}
             selected={model === candidate.id}
             icon={<Icon className="h-4 w-4 text-muted-foreground" />}
             label={
-              showCodexCliRequirementHints && activeProvider === "codex" && candidate.id === "gpt-5.5"
+              candidate.requirementHint
                 ? (
                   <>
                     {candidate.label}{" "}
                     <span className="text-xs font-normal text-muted-foreground">
-                      codex-cli &gt;= 0.124
+                      {candidate.requirementHint}
                     </span>
                   </>
                 )
@@ -428,12 +418,9 @@ export function ChatPreferenceControls({
         </InputPopover>
       ) : null}
 
-      {onModelChange == null ? (
-        <HoverHint label="Model is locked while a cron job is running — pause or remove the cron job to change it" side="top">
-          <span
-            aria-disabled="true"
-            className="flex min-h-[36px] items-center gap-1.5 px-2 py-1 text-sm rounded-md text-muted-foreground [&>svg]:shrink-0 opacity-70 cursor-default [&>span]:whitespace-nowrap"
-          >
+      {modelLock ? (
+        <HoverHint label={modelLock.reason} side="top">
+          <span aria-disabled="true" className={PICKER_TRIGGER_DISABLED_CLASS}>
             <Lock className="h-3.5 w-3.5" />
             <span>{modelLabel}</span>
           </span>

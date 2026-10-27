@@ -17,6 +17,7 @@ import type {
   TurnEvent,
   TurnRunConfig,
 } from "./events"
+import { canFormStack, STACK_MIN_PROJECTS } from "../shared/stacks"
 import { resolveLocalPath } from "./paths"
 import { liveRecord, requireLiveChat, requireLiveProject, requireLiveStack } from "./event-store-lookup"
 
@@ -96,7 +97,7 @@ export function buildCreateStackEvent(
 ): StackEvent & { stackId: string } {
   const trimmed = title.trim()
   if (trimmed === "") throw new Error("Stack title cannot be empty")
-  if (projectIds.length < 2) throw new Error("Stack requires at least 2 projects")
+  if (!canFormStack(projectIds.length)) throw new Error(`Stack requires at least ${STACK_MIN_PROJECTS} projects`)
   if (new Set(projectIds).size !== projectIds.length) throw new Error("Stack projectIds contain duplicates")
   for (const id of projectIds) {
     requireLiveProject(state.projectsById, id, { namedInError: true })
@@ -183,8 +184,8 @@ export function buildRemoveProjectFromStackEvent(
 ): StackEvent | null {
   const stack = requireLiveStack(stacksById, stackId)
   if (!stack.projectIds.includes(projectId)) return null
-  if (stack.projectIds.length <= 2) {
-    throw new Error("Stack must keep at least 2 projects. Delete the stack instead.")
+  if (!canFormStack(stack.projectIds.length - 1)) {
+    throw new Error(`Stack must keep at least ${STACK_MIN_PROJECTS} projects. Delete the stack instead.`)
   }
   return { v: STORE_VERSION, type: "stack_project_removed", timestamp: Date.now(), stackId, projectId }
 }

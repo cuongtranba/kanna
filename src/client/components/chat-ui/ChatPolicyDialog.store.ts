@@ -13,13 +13,12 @@ interface ChatPolicyDialogState {
   defaultAction: DefaultAction
   readDenyText: string
   writeDenyText: string
-  confirmUnsafeOpen: boolean
   pendingDefaultAction: DefaultAction | null
-  setDefaultAction: (action: DefaultAction) => void
+  requestDefaultAction: (action: DefaultAction) => void
+  confirmPendingDefaultAction: () => void
+  cancelPendingDefaultAction: () => void
   setReadDenyText: (text: string) => void
   setWriteDenyText: (text: string) => void
-  setConfirmUnsafeOpen: (open: boolean) => void
-  setPendingDefaultAction: (action: DefaultAction | null) => void
 }
 
 export const ChatPolicyDialogStore = createScopedStore<ChatPolicyDialogInitProps, ChatPolicyDialogState>(
@@ -28,12 +27,21 @@ export const ChatPolicyDialogStore = createScopedStore<ChatPolicyDialogInitProps
     defaultAction: initialDefaultAction,
     readDenyText: initialReadDenyText,
     writeDenyText: initialWriteDenyText,
-    confirmUnsafeOpen: false,
     pendingDefaultAction: null,
-    setDefaultAction: (defaultAction) => set({ defaultAction }),
+    requestDefaultAction: (action) =>
+      set((state) =>
+        action === "auto-allow" && state.defaultAction !== "auto-allow"
+          ? { pendingDefaultAction: action }
+          : { defaultAction: action },
+      ),
+    confirmPendingDefaultAction: () =>
+      set((state) =>
+        state.pendingDefaultAction === null
+          ? state
+          : { defaultAction: state.pendingDefaultAction, pendingDefaultAction: null },
+      ),
+    cancelPendingDefaultAction: () => set({ pendingDefaultAction: null }),
     setReadDenyText: (readDenyText) => set({ readDenyText }),
     setWriteDenyText: (writeDenyText) => set({ writeDenyText }),
-    setConfirmUnsafeOpen: (confirmUnsafeOpen) => set({ confirmUnsafeOpen }),
-    setPendingDefaultAction: (pendingDefaultAction) => set({ pendingDefaultAction }),
   }),
 )

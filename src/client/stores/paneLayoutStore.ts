@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
+  activeTabIdOf,
   closeTab as closeTabInLayout,
   collectPanes,
   createDefaultLayout,
@@ -135,14 +136,14 @@ export const usePaneLayoutStore = create<PaneLayoutState>()(
         closeFocusedTab: () =>
           apply((layout) => {
             const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
-            const tabId = pane?.focusedTabId ?? pane?.tabs[0]?.tabId
+            const tabId = pane ? activeTabIdOf(pane) : null
             return tabId ? closeTabInLayout(layout, tabId) : null
           }),
 
         splitFocusedPane: (position) => {
           const layout = get().layout
           const pane = collectPanes(layout.root).find((p) => p.id === layout.focusedPaneId)
-          const tabId = pane?.focusedTabId ?? pane?.tabs[0]?.tabId
+          const tabId = pane ? activeTabIdOf(pane) : null
           if (!pane || !tabId) return
 
           const ids = takeNodeIds()

@@ -14,6 +14,7 @@ import type { GitWorktree, StackSummary } from "../../../../shared/types"
 import { stackChatCreateRowStore } from "./StackChatCreateRow.store"
 import { runPendingAction } from "../../../stores/pendingActionsStore"
 import { createStackChatKey } from "./sidebarPendingActions"
+import { stackMembers } from "./stackMembers"
 
 interface StackChatCreateRowProps {
   stack: StackSummary
@@ -25,13 +26,24 @@ interface StackChatCreateRowProps {
   onCancel: () => void
 }
 
+type StackChatProject = StackChatCreateRowProps["projects"][number]
+
+interface StackChatMember {
+  project: StackChatProject
+  defaultWorktreePath: string
+}
+
+function toMember(project: StackChatProject): StackChatMember {
+  const primary = project.worktrees.find((worktree) => worktree.isPrimary) ?? project.worktrees[0]
+  return { project, defaultWorktreePath: primary?.path ?? "" }
+}
+
 function StackChatCreateRowInner({
   stack,
-  projects,
+  members,
   onCreate,
   onCancel,
-}: StackChatCreateRowProps): ReactNode {
-  const filteredProjects = projects.filter((p) => stack.projectIds.includes(p.id))
+}: Pick<StackChatCreateRowProps, "stack" | "onCreate" | "onCancel"> & { members: StackChatMember[] }): ReactNode {
   const isMobile = useIsMobile(640)
   const errorId = useId()
 
@@ -44,18 +56,23 @@ function StackChatCreateRowInner({
   const setIsSubmitting = stackChatCreateRowStore.useScopedStore((s) => s.setIsSubmitting)
   const setErrorMessage = stackChatCreateRowStore.useScopedStore((s) => s.setErrorMessage)
 
-  const isSingleProject = filteredProjects.length <= 1
+  const isSingleProject = members.length <= 1
+
+  const worktreePathOf = useCallback(
+    (member: StackChatMember) => selectedWorktrees.get(member.project.id) ?? member.defaultWorktreePath,
+    [selectedWorktrees],
+  )
 
   const submit = useCallback(
     async () => {
       setErrorMessage(null)
       setIsSubmitting(true)
       try {
-        const stackBindings = filteredProjects.map((p) => {
-          const role: "primary" | "additional" = p.id === primaryProjectId ? "primary" : "additional"
+        const stackBindings = members.map((member) => {
+          const role: "primary" | "additional" = member.project.id === primaryProjectId ? "primary" : "additional"
           return {
-            projectId: p.id,
-            worktreePath: selectedWorktrees.get(p.id) ?? p.worktrees[0]?.path ?? "",
+            projectId: member.project.id,
+            worktreePath: worktreePathOf(member),
             role,
           }
         })
@@ -65,7 +82,7 @@ function StackChatCreateRowInner({
         setIsSubmitting(false)
       }
     },
-    [filteredProjects, selectedWorktrees, primaryProjectId, onCreate, setErrorMessage, setIsSubmitting]
+    [members, worktreePathOf, primaryProjectId, onCreate, setErrorMessage, setIsSubmitting]
   )
 
   const handleSubmit = useCallback(
@@ -100,8 +117,9 @@ function StackChatCreateRowInner({
     >
       <fieldset disabled={isSubmitting} className="contents">
         <ul className="flex flex-col gap-3">
-          {filteredProjects.map((project) => {
-            const selectedPath = selectedWorktrees.get(project.id) ?? project.worktrees[0]?.path ?? ""
+          {members.map((member) => {
+            const { project } = member
+            const selectedPath = worktreePathOf(member)
             const isPrimary = project.id === primaryProjectId
             const onlyOneWorktree = project.worktrees.length <= 1
 
@@ -210,26 +228,16 @@ export function StackChatCreateRow({
   onCreate,
   onCancel,
 }: StackChatCreateRowProps): ReactNode {
-  const filteredProjects = projects.filter((p) => stack.projectIds.includes(p.id))
+  const members = stackMembers(stack, projects).map(toMember)
 
-  const initialSelectedWorktrees = new Map<string, string>()
-  for (const p of filteredProjects) {
-    const primary = p.worktrees.find((w) => w.isPrimary) ?? p.worktrees[0]
-    if (primary) initialSelectedWorktrees.set(p.id, primary.path)
-  }
-
-  const initialPrimaryProjectId = filteredProjects[0]?.id ?? ""
+  const initialSelectedWorktrees = new Map(members.map((member) => [member.project.id, member.defaultWorktreePath]))
+  const initialPrimaryProjectId = members[0]?.project.id ?? ""
 
   return (
     <stackChatCreateRowStore.Provider
       init={{ initialPrimaryProjectId, initialSelectedWorktrees }}
     >
-      <StackChatCreateRowInner
-        stack={stack}
-        projects={projects}
-        onCreate={onCreate}
-        onCancel={onCancel}
-      />
+      <StackChatCreateRowInner stack={stack} members={members} onCreate={onCreate} onCancel={onCancel} />
     </stackChatCreateRowStore.Provider>
   )
 }

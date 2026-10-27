@@ -45,6 +45,8 @@ import type {
   ChatMergeBranchResult,
   ChatMergePreviewResult,
   ChatSyncResult,
+  GitRepoVisibility,
+  GitSyncAction,
   DiffCommitMode,
 } from "../shared/types"
 import {
@@ -184,7 +186,7 @@ export class DiffStore {
     projectPath: string
     owner: string
     name: string
-    visibility: "public" | "private"
+    visibility: GitRepoVisibility
     description?: string
   }): Promise<BranchActionSuccess | BranchActionFailure> {
     const repo = await resolveRepo(args.projectPath)
@@ -427,7 +429,7 @@ export class DiffStore {
 
   async syncBranch(args: {
     projectPath: string
-    action: "fetch" | "pull" | "push" | "publish"
+    action: GitSyncAction
   }): Promise<ChatSyncResult> {
     return syncBranch(this.buildBranchOpsDeps(), args)
   }

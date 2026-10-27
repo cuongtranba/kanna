@@ -19,7 +19,7 @@ import "./flow-diagram.css"
 import { flowEdgeType, type FlowNode } from "../../../../shared/genui"
 import { useOptionalResolvedTheme } from "../../../hooks/useTheme"
 import { cn } from "../../../lib/utils"
-import { FlowKindIcon, FlowStatus, flowFileLabel } from "./flow-kinds"
+import { FlowKindIcon, FlowStatus, flowFileLabel, flowNodePaddingX } from "./flow-kinds"
 import type { FlowDirection, FlowLayout, FlowPoint } from "./flow-layout"
 import type { FlowRendererProps } from "./flow-renderer"
 
@@ -75,13 +75,14 @@ const StepNode = memo(({ data }: NodeProps<Node<StepData>>) => {
   return (
     <div
       className={cn(
-        "flex h-full w-full flex-col justify-center gap-0.5 border bg-card px-3 text-left text-foreground",
-        terminal ? "rounded-full px-4" : "rounded-md",
+        "flex h-full w-full flex-col justify-center gap-0.5 border bg-card text-left text-foreground",
+        terminal ? "rounded-full" : "rounded-md",
         node.kind === "external" && "border-dashed bg-muted",
         node.kind === "store" && "border-b-2",
         node.kind === "decision" && "border-l-2",
         stepBorderClass(node, selected),
       )}
+      style={{ paddingInline: flowNodePaddingX(node) }}
     >
       <Handle type="target" position={across ? Position.Left : Position.Top} isConnectable={false} />
       <div className="flex min-w-0 items-center gap-1.5">

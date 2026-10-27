@@ -5,6 +5,7 @@ import type {
   ChatMergePreviewResult,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
+  GitRepoVisibility,
 } from "../../shared/types"
 import { omitKey } from "../lib/recordOps"
 
@@ -70,7 +71,7 @@ interface GitHubPublishModalSlice {
   isLoadingPublishInfo: boolean
   publishOwner: string
   publishName: string
-  publishVisibility: "public" | "private"
+  publishVisibility: GitRepoVisibility
   publishDescription: string
   publishAvailability: GitHubRepoAvailabilityResult | null
   isCheckingPublishAvailability: boolean
@@ -79,7 +80,7 @@ interface GitHubPublishModalSlice {
   setIsLoadingPublishInfo: (v: boolean) => void
   setPublishOwner: (v: string) => void
   setPublishName: (v: string) => void
-  setPublishVisibility: (v: "public" | "private") => void
+  setPublishVisibility: (v: GitRepoVisibility) => void
   setPublishDescription: (v: string) => void
   setPublishAvailability: (v: GitHubRepoAvailabilityResult | null) => void
   setIsCheckingPublishAvailability: (v: boolean) => void

@@ -31,6 +31,7 @@ import type {
   ChatMergeBranchResult,
   ChatMergePreviewResult,
   ChatSyncResult,
+  GitSyncAction,
 } from "../shared/types"
 
 export interface DiffStoreBranchOpsDeps {
@@ -458,7 +459,7 @@ export async function syncBranch(
   deps: DiffStoreBranchOpsDeps,
   args: {
     projectPath: string
-    action: "fetch" | "pull" | "push" | "publish"
+    action: GitSyncAction
   }
 ): Promise<ChatSyncResult> {
   const repo = await resolveRepo(args.projectPath)

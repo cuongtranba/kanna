@@ -19,6 +19,7 @@ export interface ProviderModelOption {
   supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
+  requirementHint?: string
 }
 
 export interface ProviderEffortOption {
@@ -195,7 +196,7 @@ const PROVIDER_CATALOG: Readonly<Record<AgentProvider, ProviderCatalogEntry>> = 
     defaultModel: "gpt-5.5",
     supportsPlanMode: true,
     models: [
-      { id: "gpt-5.5", label: "GPT-5.5" },
+      { id: "gpt-5.5", label: "GPT-5.5", requirementHint: "codex-cli >= 0.124" },
       { id: "gpt-5.4", label: "GPT-5.4" },
       { id: "gpt-5.3-codex", label: "GPT-5.3 Codex", aliases: ["gpt-5-codex"] },
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark" },
