@@ -1,8 +1,10 @@
 fact: c3-236
-claim: "the architecture budget is a pure manifest plus checker, a filesystem and eslint-config scan adapter, the tightness prover, and the colocated test that fails CI when a defect population grows or a complexity ceiling is raised"
+claim: "the architecture budget is a pure manifest plus checker, a filesystem and lint-config scan adapter, the tightness prover, and the colocated test that fails CI when a defect population grows or a complexity ceiling is raised"
 code:
   - src/ops/architecture/budget.ts
   - src/ops/architecture/budget-scan.adapter.ts
   - scripts/check-complexity-limits.ts
+  - lint.config.ts
+  - src/ops/lint/oxlint-run.adapter.ts
   - src/ops/architecture/cjs-interop.ts
   - src/ops/architecture/cjs-interop-scan.adapter.ts

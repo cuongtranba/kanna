@@ -52,6 +52,8 @@ describe("directives survive", () => {
   const kept = [
     "// eslint-disable-next-line react-hooks/refs",
     "/* eslint-disable react-hooks/refs */",
+    "// oxlint-disable-next-line react-hooks/refs",
+    "/* oxlint-enable react-hooks/refs */",
     '/// <reference types="vite/client" />',
     "/* @vite-ignore */",
     "// @ts-expect-error deliberate",

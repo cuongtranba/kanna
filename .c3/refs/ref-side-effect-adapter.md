@@ -1,6 +1,6 @@
 ---
 id: ref-side-effect-adapter
-c3-seal: 818d721ea0a85a36a118aaf3158b868fe0a53504748ec30915534240a18d3799
+c3-seal: 9452f7af95d56ca3a413f2486d2e188e0691b6e369d998049a56adf88bc6b4ba
 title: side-effect-adapter
 type: ref
 goal: Keep every `node:fs`, `node:child_process`, `node:http`/`https`, `bun:sqlite`/`better-sqlite3`/`pg`, and `Bun.spawn`/`Bun.$`/`Bun.file`/`Bun.serve`/`Bun.Terminal` call site in a single, named, leaf-level wrapper file so the rest of `src/server/**` can stay pure and the seal is mechanically enforceable by ESLint without per-file allow-lists.
@@ -17,7 +17,7 @@ Two-shape adapter convention, both colocated next to the module that owns the po
 1. **Leaf-IO module** — a file whose only responsibility is the side effect itself. Suffix: `<name>.adapter.ts`. Examples on main: `src/server/storage/fs-storage.adapter.ts`, `src/server/terminal-manager-io.adapter.ts`, `src/server/machine-name.adapter.ts`, `src/server/orphan-persistence.adapter.ts`.
 2. **Mixed-concern module** — domain logic stays in `<name>.ts`; the IO it needs is extracted into a sibling `<name>-io.adapter.ts` and re-imported. Examples on main: `src/server/diff-store.ts` + `src/server/diff-store-io.adapter.ts`, `src/server/server.ts` + `src/server/server-io.adapter.ts`, `src/server/app-settings.ts` + `src/server/app-settings-io.adapter.ts`.
 
-Files matching `src/server/**/*.adapter.ts` (or the legacy `src/server/adapters/**` directory) are the only exempt globs in the `no-restricted-imports` + `no-restricted-globals` override in `eslint.config.js`. Tests, `__fixtures__`, and `test-helpers` are also exempt.
+Files matching `src/server/**/*.adapter.ts` (or the legacy `src/server/adapters/**` directory) are the only exempt globs in the `no-restricted-imports` + `no-restricted-globals` override in `lint.config.ts`. Tests, `__fixtures__`, and `test-helpers` are also exempt.
 
 ## Why
 

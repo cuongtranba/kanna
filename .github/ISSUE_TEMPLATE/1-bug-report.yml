@@ -219,7 +219,7 @@ body:
       options:
         - label: "`/c3 query <area>` run before coding; `/c3 change` run after if component boundaries, refs, or contracts moved"
         - label: "Failing test written first, then the fix — `bun run test src/<path>.test.ts`"
-        - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
+        - label: "`bun run typecheck`, `bun run lint` (`--deny-warnings`), `bunx ast-grep test`, `bun run lint:usestate` all green"
         - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
         - label: "`bun run test` green — full suite, not just the new case"
         - label: "UI changes follow `DESIGN.md` (token classes only, no hex, no backdrop-blur, project Tooltip over native `title`)"

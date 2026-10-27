@@ -69,3 +69,4 @@ apps/beacon-desktop/artifacts/
 
 # Superpowers brainstorm server scratch (port, auth token, rendered pages)
 .superpowers/
+.lint-limits-probe.json

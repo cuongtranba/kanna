@@ -122,37 +122,37 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   },
 ]
 
-export interface EslintLimitPin {
+export interface LintLimitPin {
   readonly rule: string
   readonly max: number
   readonly issue: number
   readonly rationale: string
 }
 
-export const ESLINT_LIMIT_PINS: readonly EslintLimitPin[] = [
+export const LINT_LIMIT_PINS: readonly LintLimitPin[] = [
   {
-    rule: "complexity",
+    rule: "eslint-js/complexity",
     max: 127,
     issue: 893,
     rationale:
       "Cyclomatic complexity per function. The peak is the SettingsPage component in SettingsPage.tsx (127). runClaudeSession in claude-session-runner.ts dropped from 131 to 122 when the PTY driver's compact_boundary finalize branch was deleted, and handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
   },
   {
-    rule: "max-params",
+    rule: "eslint-js/max-params",
     max: 11,
     issue: 892,
     rationale:
       "The peak is deriveChatSnapshot's 11 positional parameters, lowered from 12 when getLoopTracking was removed (the loop panel now reads chat tasks off state, parameter #1). Most are defaulted, so a caller wanting the last must spell out ones it does not care about, and two adjacent Map parameters can be swapped with no type error.",
   },
   {
-    rule: "max-depth",
+    rule: "eslint-js/max-depth",
     max: 7,
     issue: 893,
     rationale:
       "Nested block depth. The peak is again runClaudeSession, where the event loop's branches nest seven deep and no single concern can be read in isolation.",
   },
   {
-    rule: "max-nested-callbacks",
+    rule: "eslint-js/max-nested-callbacks",
     max: 4,
     issue: 897,
     rationale:
@@ -193,9 +193,9 @@ export type BudgetBreach =
   | { readonly kind: "limit_unpinned"; readonly rule: string; readonly actual: number }
   | { readonly kind: "limit_unconfigured"; readonly rule: string }
 
-export function checkEslintLimits(
+export function checkLintLimits(
   configured: ReadonlyMap<string, number>,
-  pins: readonly EslintLimitPin[] = ESLINT_LIMIT_PINS,
+  pins: readonly LintLimitPin[] = LINT_LIMIT_PINS,
 ): BudgetBreach[] {
   const breaches: BudgetBreach[] = []
   const byRule = new Map(pins.map((p) => [p.rule, p]))
@@ -288,16 +288,16 @@ export function formatBreach(breach: BudgetBreach): string {
     case "pattern_unknown":
       return `Measured "${breach.id}" has no PATTERN_BUDGETS entry.`
     case "limit_raised":
-      return `eslint.config.js raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
-        + `  ${eslintRationaleOf(breach.rule)}`
+      return `lint.config.ts raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
+        + `  ${lintRationaleOf(breach.rule)}`
     case "limit_slack":
-      return `eslint.config.js sets "${breach.rule}" to ${breach.actual} but the pin is still ${breach.max} — lower the pin in this PR.\n`
-        + `  Set max: ${breach.actual} in ESLINT_LIMIT_PINS so the ceiling cannot drift back up.`
+      return `lint.config.ts sets "${breach.rule}" to ${breach.actual} but the pin is still ${breach.max} — lower the pin in this PR.\n`
+        + `  Set max: ${breach.actual} in LINT_LIMIT_PINS so the ceiling cannot drift back up.`
     case "limit_unpinned":
-      return `eslint.config.js configures "${breach.rule}" at ${breach.actual} with no ESLINT_LIMIT_PINS entry.\n`
+      return `lint.config.ts configures "${breach.rule}" at ${breach.actual} with no LINT_LIMIT_PINS entry.\n`
         + `  Add one naming the issue it bounds, or the ceiling can be raised with nothing objecting.`
     case "limit_unconfigured":
-      return `ESLINT_LIMIT_PINS pins "${breach.rule}" but eslint.config.js configures no such rule — this gate is currently inert.\n`
+      return `LINT_LIMIT_PINS pins "${breach.rule}" but lint.config.ts configures no such rule — this gate is currently inert.\n`
         + `  Restore the rule, or drop the pin deliberately. Do NOT leave a pin with no enforcement behind it.`
     case "pattern_unmeasured":
       return `"${breach.id}" scanned no files — its include paths are stale, so this gate is currently inert.\n`
@@ -310,6 +310,6 @@ function rationaleOf(id: string): string {
   return PATTERN_BUDGETS.find((b) => b.id === id)?.rationale ?? ""
 }
 
-function eslintRationaleOf(rule: string): string {
-  return ESLINT_LIMIT_PINS.find((p) => p.rule === rule)?.rationale ?? ""
+function lintRationaleOf(rule: string): string {
+  return LINT_LIMIT_PINS.find((p) => p.rule === rule)?.rationale ?? ""
 }

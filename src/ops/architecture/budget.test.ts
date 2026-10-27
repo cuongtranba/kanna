@@ -1,12 +1,12 @@
 import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
-import { measureModules, measurePatterns, readEslintLimits } from "./budget-scan.adapter"
+import { measureModules, measurePatterns, readLintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
-  checkEslintLimits,
+  checkLintLimits,
   checkPatternBudget,
-  ESLINT_LIMIT_PINS,
+  LINT_LIMIT_PINS,
   formatBreach,
   MODULE_ALLOWANCES,
   MODULE_LINE_THRESHOLD,
@@ -104,7 +104,7 @@ describe("checkPatternBudget", () => {
   })
 })
 
-describe("checkEslintLimits", () => {
+describe("checkLintLimits", () => {
   const pins = [
     { rule: "complexity", max: 141, issue: 893, rationale: "r" },
     { rule: "max-params", max: 12, issue: 892, rationale: "r" },
@@ -112,26 +112,26 @@ describe("checkEslintLimits", () => {
   const configured = (entries: Record<string, number>) => new Map(Object.entries(entries))
 
   test("accepts ceilings sitting exactly on their pins", () => {
-    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12 }), pins)).toEqual([])
+    expect(checkLintLimits(configured({ complexity: 141, "max-params": 12 }), pins)).toEqual([])
   })
 
   test("rejects a raised ceiling", () => {
-    expect(checkEslintLimits(configured({ complexity: 150, "max-params": 12 }), pins))
+    expect(checkLintLimits(configured({ complexity: 150, "max-params": 12 }), pins))
       .toEqual([{ kind: "limit_raised", rule: "complexity", max: 141, actual: 150, issue: 893 }])
   })
 
   test("rejects a lowered ceiling whose pin was not lowered with it", () => {
-    expect(checkEslintLimits(configured({ complexity: 100, "max-params": 12 }), pins))
+    expect(checkLintLimits(configured({ complexity: 100, "max-params": 12 }), pins))
       .toEqual([{ kind: "limit_slack", rule: "complexity", max: 141, actual: 100, issue: 893 }])
   })
 
   test("rejects a configured limit rule that nothing pins", () => {
-    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12, "max-lines": 500 }), pins))
+    expect(checkLintLimits(configured({ complexity: 141, "max-params": 12, "max-lines": 500 }), pins))
       .toEqual([{ kind: "limit_unpinned", rule: "max-lines", actual: 500 }])
   })
 
-  test("rejects a pin whose rule eslint no longer configures, rather than passing vacuously", () => {
-    expect(checkEslintLimits(configured({ complexity: 141 }), pins))
+  test("rejects a pin whose rule the lint config no longer sets, rather than passing vacuously", () => {
+    expect(checkLintLimits(configured({ complexity: 141 }), pins))
       .toEqual([{ kind: "limit_unconfigured", rule: "max-params" }])
   })
 
@@ -177,9 +177,9 @@ describe("the repository satisfies its architecture budget", () => {
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
-  test("every ESLint ceiling equals its pin, so a raised limit is a build failure", async () => {
-    const configured = await readEslintLimits(root, ESLINT_LIMIT_PINS.map((p) => p.rule))
-    const breaches = checkEslintLimits(configured)
+  test("every lint ceiling equals its pin, so a raised limit is a build failure", () => {
+    const configured = readLintLimits(LINT_LIMIT_PINS.map((p) => p.rule))
+    const breaches = checkLintLimits(configured)
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 

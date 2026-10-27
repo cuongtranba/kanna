@@ -1,6 +1,6 @@
 ---
 id: c3-236
-c3-seal: 344603d79975ec770d6f9ef50c1c2995bd17194b141e3314db749e2c9a96047e
+c3-seal: 590d765b511735362e68a3acfb521af46e6619b9d33175f5b807fc982782fbcd
 title: architecture-budget
 type: component
 category: feature
@@ -46,7 +46,7 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | checkModuleBudget and checkPatternBudget | OUT | Pure functions returning every BudgetBreach rather than stopping at the first, so one run reports the whole regression. | No IO. Measurements are supplied by the caller. | src/ops/architecture/budget.test.ts |
 | measureModules and measurePatterns | OUT | Module lines match wc -l as a newline count; pattern counts match grep -c as matching lines, so any pin is checkable by hand. | The only filesystem reader in the component. | src/ops/architecture/budget-scan.adapter.ts |
 | filesScanned | OUT | A budget whose include paths reach zero files reports pattern_unmeasured, never a shrink. | Prevents a renamed target from reading as a vanished population and being pinned at zero. | src/ops/architecture/budget.test.ts |
-| ESLINT_LIMIT_PINS | IN | Each pin must equal the ceiling eslint.config.js configures for that rule. Raising it is limit_raised; lowering the ceiling without lowering the pin is limit_slack; a pin whose rule eslint no longer configures is limit_unconfigured rather than a vacuous pass. | ESLint owns the per-function measurement a regex cannot make; the budget owns only the direction. | src/ops/architecture/budget.ts |
+| LINT\_LIMIT\_PINS | IN | Each pin must equal the ceiling lint.config.ts configures for that rule. Raising it is limit_raised; lowering the ceiling without lowering the pin is limit_slack; a pin whose rule the config no longer sets is limit_unconfigured rather than a vacuous pass. | Oxlint owns the per-function measurement a regex cannot make; the budget owns only the direction. | src/ops/architecture/budget.ts |
 
 ## Derived Materials
 

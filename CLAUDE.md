@@ -47,21 +47,23 @@ The client dev server and build run through Vite+ (`vp dev` / `vp build`, from
 the `vite-plus` devDependency). It needs Node `^22.18.0 || ^24.11.0 || >=26.0.0`
 on PATH, and `vite` is aliased to `@voidzero-dev/vite-plus-core` both as a direct
 devDependency and in `overrides` — Bun needs both. Tests run on Vitest through
-`vp test`, still inside the Bun runtime (see "# Tests"); lint stays on ESLint.
+`vp test`, still inside the Bun runtime (see "# Tests"). Lint and type checking run
+in Oxlint through `vp lint` / `vp check` (see "# Lint"); there is no ESLint.
 
-Verification — `bun run check` is typecheck → lint → build:client → check:bundle:
+Verification — `bun run check` is `vp check` (lint + type check; formatting is off)
+→ lint:comments → build:client → check:bundle:
 
 ```bash
 bun run check
 bun run test                                   # Vitest via `vp test` under Bun (see # Tests)
 bun run test src/server/agent.test.ts          # one suite
-bun run typecheck                              # TS7 by explicit path, not bare `tsc`
+bun run typecheck                              # vp check --no-lint: tsgolint over the whole tsconfig program
 ```
 
 Gates that block a merge, each covering something the others do not:
 
 ```bash
-bun run lint             # eslint --max-warnings=0: side-effect seal + design gate
+bun run lint             # vp lint --deny-warnings (Oxlint): side-effect seal + design gate
 bun run lint:usestate    # ast-grep: React #185 rules + inline tint pairing
 bun run lint:limits      # proves the complexity ceilings are still TIGHT
 bun run check:arch       # architecture budget ratchet
@@ -209,35 +211,55 @@ no other repository is a valid PR target.
 prompts or guesses. Always pass `--repo cuongtranba/kanna` or
 `--base main --head <branch>` to make the target explicit.
 
-# TypeScript (dual install: TS7 compiler + TS6 API for tooling)
+# TypeScript (TS6 for the JS API, tsgolint for type checking)
 
-Type checking runs on **TypeScript 7** (native compiler). typescript-eslint
-has no TS7-compatible release yet (TS7 dropped the compiler JS API from
-`require('typescript')` — it now exports only `{version}`; the API moved to
-`typescript/unstable/*`), so two TypeScript packages are installed:
+Type checking runs in **tsgolint** (typescript-go, the TS7 native compiler)
+inside the Oxlint that `vite-plus` bundles. `bun run typecheck` is
+`vp check --no-lint`, the type-only pass; `bun run lint` reports the same
+diagnostics beside the rules, because `lint.options.typeCheck` is on. Both cover
+every file in `tsconfig.json`: `src/`, `scripts/`, `vite.config.ts` and
+`lint.config.ts`, so the base rules are scoped to `src/` by an override rather than
+by ignoring the other roots. Oxlint's `--type-check`
+is flagged experimental; it produced the same diagnostics as `tsc --noEmit`
+(91 against 91 on a deliberately broken tree) and caught a seeded error in each
+of the four roots. If it ever diverges, the fallback is a `typescript` 7 install
+and `tsc --noEmit`.
 
-- `"typescript": "6.0.3"` — classic TS6 with the full legacy JS API
-  (`createProgram`, `ModuleKind`, …) that typescript-eslint's parser loads
-  via `require('typescript')`. Peer range `<6.1.0` is satisfied.
-- `"typescript-7": "npm:typescript@^7.0.2"` — the real TS7 compiler used for
-  the actual type check.
-
-Both packages ship a `tsc` bin, so **never** rely on bare `tsc` / `bunx tsc`
-(the `.bin/tsc` link is ambiguous). The `typecheck` script invokes TS7 by
-explicit path (`node_modules/typescript-7/bin/tsc --noEmit`); CI's Type-check
-step and the local `check` script both call `bun run typecheck`. When
-typescript-eslint ships TS7 support, collapse back to a single `typescript`
-dep and restore `bunx tsc`.
+`"typescript": "6.0.3"` stays installed for its classic JS API
+(`createProgram`, `createScanner`, `ModuleKind`, …), which TS7 removed from
+`require('typescript')` — it now exports only `{version}`. `scripts/comment-scan.ts`,
+`ws-router-coverage.test.ts` and `http-route-inventory.test.ts` use it, and
+Dependabot is told to keep it on 6.x. Never rely on bare `tsc`.
 
 # Lint
 
-`bun run lint` runs ESLint on `src/` with `--max-warnings=0`. CI runs it
-before tests; merges blocked on lint errors AND on any warning count above
-the cap. The cap is a ratchet: when warnings drop, lower the cap in the
-same PR so they cannot creep back up. Plugin `react-hooks` (set 7+) enforces
-React 19 rules: `rules-of-hooks`, `purity`, `globals` are errors;
-`set-state-in-effect`, `refs`, `immutability`, `preserve-manual-memoization`,
-`exhaustive-deps` are warnings.
+`bun run lint` is `vp lint --deny-warnings`: Oxlint, configured by `lint.config.ts`
+(pure data, handed to `vite.config.ts` as `lint:`). Every default category is off
+(`categories: { correctness: "off" }`) and an explicit rule list is on, so
+adding a rule is a visible diff. `--deny-warnings` makes the warning tier fail,
+the same effect as ESLint's `--max-warnings=0`. Plugin `react-hooks` is native in
+Oxlint: `rules-of-hooks`, `purity`, `globals` are errors; `set-state-in-effect`,
+`refs`, `immutability`, `preserve-manual-memoization`, `exhaustive-deps`,
+`static-components` are warnings.
+
+Rule names in `lint.config.ts`: bare = a native core rule, `typescript/` and
+`react-hooks/` = native plugins, `eslint-js/` = the real ESLint rule run through
+`oxlint-plugin-eslint` (pinned to the bundled Oxlint version). `eslint-js/` is
+how the AST-selector gates (`no-restricted-syntax`) keep working unchanged, and
+the four complexity ceilings plus `no-useless-return`, `no-unsafe-optional-chaining`
+and `prefer-object-spread` use it because the native versions diverge from ESLint
+on this tree. An override replaces a rule's options wholesale, as a later ESLint
+flat-config block did, so each override restates its full selector list. The
+ESLint block `ignores` became `excludeFiles`.
+
+Known divergences from the ESLint setup: `no-octal` has no native rule (a legacy
+octal is already a syntax error in a module), `react-hooks/globals` is off in test
+files because the native rule flags harness components that reassign a captured
+variable, and the native `react-hooks/refs` flags the lazy `if (ref.current ===
+null)` initialiser that the compiler-based ESLint rule allowed — one
+`oxlint-disable` in `createScopedStore.tsx`. Two gaps were carried over rather than
+fixed: the client effect-seal override replaces the `Bun` global ban on non-exempt
+client files, and the server seal has no AST selectors.
 
 # No Code Comments (MANDATORY — `bun run lint:comments`)
 
@@ -256,7 +278,7 @@ behavior change rather than a cleanup:
 
 | Kept | Why |
 | --- | --- |
-| `eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line`, `eslint-enable` | Suppression is ESLint's own syntax; removing it fails `bun run lint` |
+| `eslint-disable`, `eslint-disable-next-line`, `eslint-disable-line`, `eslint-enable`, `oxlint-disable`, `oxlint-disable-next-line`, `oxlint-disable-line`, `oxlint-enable` | Suppression syntax Oxlint reads (it honours both spellings); removing one fails `bun run lint` |
 | `/// <reference ... />` | A TS triple-slash directive — part of the program's type graph |
 | `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck` | Read by `tsc`; none exist today and none should be added, but the stripper must never eat one |
 | `@vite-ignore`, `webpackChunkName` | Bundler magic comments inside `import()`; they steer chunking and dynamic resolution |
@@ -264,9 +286,9 @@ behavior change rather than a cleanup:
 | `@license`, `@preserve`, `SPDX-` | Legal text a minifier is required to keep |
 | A `#!` shebang on line 1 | Not a comment — it is how the kernel picks the interpreter |
 
-An `eslint-disable` still needs its rationale. Put it on the same line after
-`--`, which is ESLint's own description syntax and therefore part of the
-directive rather than a second comment:
+An `eslint-disable` or `oxlint-disable` still needs its rationale. Put it on the same
+line after `--`, which is the directive's own description syntax and therefore part of
+it rather than a second comment:
 
 ```ts
 // eslint-disable-next-line react-hooks/refs -- render-time sync write so an
@@ -276,7 +298,7 @@ directive rather than a second comment:
 **Out of scope, deliberately:** `wiki/` (its own package, and a docs site is
 prose by definition), `rules/*.yml` and `rule-tests/` (ast-grep fixtures —
 several PIN a comment as the thing under test), `.c3/`, `.github/`, and root
-config files including `eslint.config.js`, whose comments are the only record of
+config files including `lint.config.ts`, whose comments are the only record of
 why each design gate exists.
 
 **Enforced.** `bun run lint:comments` (`scripts/check-no-comments.ts`) parses
@@ -294,9 +316,9 @@ of this rule and not a bug to route around by reintroducing JSDoc.
 
 # Type Strictness — an untyped value has no legal spelling
 
-`bun run lint` bans `any` (`@typescript-eslint/no-explicit-any`), BOTH cast
+`bun run lint` bans `any` (`typescript/no-explicit-any`), BOTH cast
 spellings, and `unknown` in **every** position. There is no escape valve; do not
-add `eslint-disable` comments.
+add `eslint-disable` or `oxlint-disable` comments.
 
 **The rule counts the CONCEPT, not one keyword** — the same lesson
 `deps-bundles` records below. The predecessor selected
@@ -333,7 +355,7 @@ system. **When a parameter is `JsonValue`, use `isJsonObject`, not `isRecord`.**
 `errors.ts` and `dynamic-module.ts` are the only files exempt from the unknown
 ban, and each names ONE kind of untyped value rather than "anything at all".
 `LoadedModule`/`HostBag` are themselves banned outside a short enumerated file
-list in `eslint.config.js` — that list is what makes them not a second
+list in `lint.config.ts` — that list is what makes them not a second
 `AnyValue`, because spreading them costs a visible diff to the lint config.
 
 **Two facts that will bite you.** A TypeScript `interface` never satisfies an
@@ -385,15 +407,15 @@ Two budgets, deliberately shaped differently:
   `issue` it regresses and a `rationale`, so a breach message says which filed
   issue this PR just made worse rather than printing a bare number.
 
-**ESLint owns the complexity measurement; the budget owns the direction.**
-`eslint.config.js` sets four production ceilings — `complexity` 127,
+**Oxlint owns the complexity measurement; the budget owns the direction.**
+`lint.config.ts` sets four production ceilings — `eslint-js/complexity` 127,
 `max-params` 11, `max-depth` 7, `max-nested-callbacks` 4 — at today's maxima, so
-they are unbreached but hard. `ESLINT_LIMIT_PINS` must **equal** each configured
+they are unbreached but hard. `LINT_LIMIT_PINS` must **equal** each configured
 value: raising the ceiling fails `check:arch` as `limit_raised`, and lowering it
 without lowering the pin fails as `limit_slack`. The adapter reads the real
-`eslint.config.js` rather than a transcription, so pin and enforced value cannot
-agree on paper while disagreeing in fact. A pin whose rule ESLint no longer
-configures fails as `limit_unconfigured` rather than passing vacuously.
+`lint.config.ts` object rather than a transcription, so pin and enforced value
+cannot agree on paper while disagreeing in fact. A pin whose rule the config no longer
+sets fails as `limit_unconfigured` rather than passing vacuously.
 
 The peaks are the audit's own findings, which is why these are defect counts and
 not style knobs: `complexity` 127 is the `SettingsPage` component (`runClaudeSession`,
@@ -403,8 +425,8 @@ deleted; `handleCommand` in `ws-router.ts` is 116), `max-depth` 7 is
 
 **`bun run lint:limits` proves a ceiling is still TIGHT.** A ceiling nothing
 reaches gates nothing — pinned at 141 while the worst function is 90 leaves 50
-points of free regression. The script runs ESLint once with every ceiling lowered
-by one and requires each rule to report at least one production violation. It is
+points of free regression. The script writes a temporary Oxlint config (every
+ceiling lowered by one, every other rule off), runs `vp lint -c` on it and requires each rule to report at least one production violation. It is
 the analog of `pattern_shrank` for a measurement a regex cannot make, and it
 reuses `PRODUCTION_EXCLUDES` so "production" means one thing.
 
@@ -459,11 +481,11 @@ Side effects (`node:fs`, `chokidar`, `bun:sqlite`/`better-sqlite3`/`pg`,
 across both `src/shared/**` + `src/client/**` AND `src/server/**`
 production code**.
 
-`no-restricted-imports` + `no-restricted-globals` + `no-restricted-syntax`
-in `eslint.config.js` make every flagged import / global / call fail
+`no-restricted-imports` + `no-restricted-globals` + `eslint-js/no-restricted-syntax`
+in `lint.config.ts` make every flagged import / global / call fail
 `bun run lint`. Browser-native `fetch` is intentionally allowed in
-shared/client. There is no escape valve; do not add `eslint-disable`
-comments.
+shared/client. There is no escape valve; do not add `eslint-disable` or
+`oxlint-disable` comments.
 
 **Server layer exempt globs** (where direct IO is allowed):
 `src/server/**/*.test.ts(x)`, `src/server/__fixtures__/**`,
@@ -557,9 +579,9 @@ defined in `src/index.css` and consumed as Tailwind theme vars
 (`bg-background`, `text-foreground`, `text-destructive`, `bg-warning`, …).
 **Load `DESIGN.md` before any `src/client/**` UI work.**
 
-**Hard gate (enforced, `bun run lint --max-warnings=0`).** `eslint.config.js`
+**Hard gate (enforced, `bun run lint`).** `lint.config.ts`
 `DESIGN_GATE_SYNTAX` (applied to `src/shared/** + src/client/**` via
-`no-restricted-syntax`) bans:
+`eslint-js/no-restricted-syntax`) bans:
 
 1. **Arbitrary hex Tailwind utilities** (`bg-[#…]`, `text-[#…]`, `border-[#…]`,
    …) — use a token class instead.
@@ -577,7 +599,7 @@ defined in `src/index.css` and consumed as Tailwind theme vars
 
 **Sanctioned chokepoint:** `src/client/components/chat-ui/TerminalPane.tsx` is
 exempt from rule 2 only (xterm's `ITheme` API takes hex strings, not CSS vars).
-No other exemptions; do not add `eslint-disable` comments.
+No other exemptions; do not add `eslint-disable` or `oxlint-disable` comments.
 
 **Contrast gate (enforced, two layers).** Semantic tinted pill surfaces
 (`bg-{color}/10`) must use a `-text` token, not the raw color or `-foreground`.
@@ -662,7 +684,7 @@ Two rule pairs in `rules/` (tsx + `-ts` typescript variants, tests in
 - `no-unstable-selector-fallback` — a `use*Store` selector returning
   inline `?? []` / `?? {}` (or `|| []` / `|| {}`) without `useShallow`.
 
-A third pair bans a concurrency anti-pattern ESLint does not cover:
+A third pair bans a concurrency anti-pattern the lint config does not cover:
 
 - `no-await-in-promise-all` — an `await` inside a `Promise.all([...])` array.
   Every awaited element settles before `Promise.all` ever sees a pending
@@ -671,9 +693,9 @@ A third pair bans a concurrency anti-pattern ESLint does not cover:
   Adopted from the ast-grep TypeScript catalog; zero violations at adoption, so
   it is a true hard ban rather than a ratchet.
 
-The catalog's `no-console-except-error` was deliberately NOT adopted: ESLint
-already enforces `no-console` as an error with `src/shared/log.ts` as the
-sanctioned chokepoint (`eslint.config.js:211,346-349`), and a second rule
+The catalog's `no-console-except-error` was deliberately NOT adopted: the lint
+config already enforces `no-console` as an error with `src/shared/log.ts` as the
+sanctioned chokepoint (the `no-console` entries in `lint.config.ts`), and a second rule
 stating the same decision is exactly the duplication this repo is removing.
 
 Two further rules keep state TRANSITIONS in the store (ADR
@@ -744,13 +766,13 @@ spinner), or for a non-Button trigger `disabled` + `aria-busy` + `<Spinner />`
 (`components/ui/spinner.tsx`). A trigger inside a menu that closes on click shows
 the pending state on the row it acts on, because the menu item is gone.
 
-**Hard gate** (`eslint.config.js`, type-aware, `src/client/**` minus tests):
+**Hard gate** (`lint.config.ts`, type-aware, `src/client/**` minus tests):
 
 | Rule | Rejects |
 | --- | --- |
-| `@typescript-eslint/no-floating-promises` with `ignoreVoid: false` | a promise nobody settles, including `void promise` — the exact spelling of every silent button. `navigate()` is allowlisted |
-| `@typescript-eslint/no-misused-promises` (`checksVoidReturn.attributes`) | an async function handed to a JSX prop typed to return void — the child cannot know it should show pending |
-| `SILENT_CATCH_BAN` (`no-restricted-syntax`) | `.catch(() => {})`, `.catch(() => undefined)`, `.catch(() => null)` — these satisfy the promise rules while hiding both the wait and the failure |
+| `typescript/no-floating-promises` with `ignoreVoid: false` | a promise nobody settles, including `void promise` — the exact spelling of every silent button. `navigate()` is allowlisted |
+| `typescript/no-misused-promises` (`checksVoidReturn.attributes`) | an async function handed to a JSX prop typed to return void — the child cannot know it should show pending |
+| `SILENT_CATCH_BAN` (`eslint-js/no-restricted-syntax`) | `.catch(() => {})`, `.catch(() => undefined)`, `.catch(() => null)` — these satisfy the promise rules while hiding both the wait and the failure |
 
 **Soft rules the gate cannot check** (review them by hand):
 
@@ -768,7 +790,7 @@ the pending state on the row it acts on, because the menu item is gone.
   `() => void` to satisfy `no-misused-promises` hides the promise from the one
   component that should render it.
 
-Never silence these rules with `eslint-disable`. See
+Never silence these rules with `eslint-disable` or `oxlint-disable`. See
 `adr-20260925-client-pending-action-state`.
 
 # Compaction preservation requirements
