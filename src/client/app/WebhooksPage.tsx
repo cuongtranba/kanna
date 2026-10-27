@@ -4,7 +4,7 @@ import type { WebhookInput } from "../../shared/webhooks/types"
 import { domAdapter } from "../adapters/dom.adapter"
 import { Button } from "../components/ui/button"
 import { SHELL_PAGE_SCROLL_CLASS } from "../lib/shellChrome"
-import { listWebhookTargets } from "../lib/webhookTargets"
+import { listInboundTargets } from "../lib/webhookTargets"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -20,7 +20,7 @@ export function WebhooksPage() {
   const hooks = useWebhooksStore((state) => state.hooks)
   const openCreate = useWebhooksStore((state) => state.openCreate)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
   const catalog = useProviderCatalog()
   const origin = domAdapter.getOrigin()
 

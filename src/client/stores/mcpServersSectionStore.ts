@@ -1,21 +1,9 @@
 import { create } from "zustand"
-import type { McpServerConfig, McpServerTransport } from "../../shared/types"
+import type { McpServerConfig } from "../../shared/types"
+import { mcpServerToDraft, type McpServerDraft } from "../lib/mcpServerDraft"
+import { LIST_EDITING, type SectionEditing } from "../lib/sectionEditing"
 
-
-export type EditingState =
-  | { kind: "list" }
-  | { kind: "create" }
-  | { kind: "edit"; id: string }
-
-export interface EditorFormState {
-  name: string
-  transport: McpServerTransport
-  command: string
-  argsText: string
-  envText: string
-  cwd: string
-  url: string
-  headersText: string
+export interface EditorFormState extends McpServerDraft {
   error: string | null
   oauthEnabled: boolean
   authFlowUrl: string | null
@@ -27,24 +15,7 @@ export interface EditorFormState {
 
 function createEditorFormFromInitial(initial: McpServerConfig | null): EditorFormState {
   return {
-    name: initial?.name ?? "",
-    transport: initial?.transport ?? "stdio",
-    command: initial?.transport === "stdio" ? initial.command : "",
-    argsText: initial?.transport === "stdio" ? initial.args.join("\n") : "",
-    envText:
-      initial?.transport === "stdio"
-        ? Object.entries(initial.env)
-            .map(([k, v]) => `${k}=${v}`)
-            .join("\n")
-        : "",
-    cwd: initial?.transport === "stdio" ? (initial.cwd ?? "") : "",
-    url: initial !== null && initial.transport !== "stdio" ? initial.url : "",
-    headersText:
-      initial !== null && initial.transport !== "stdio"
-        ? Object.entries(initial.headers)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join("\n")
-        : "",
+    ...mcpServerToDraft(initial),
     error: null,
     oauthEnabled:
       initial !== null && initial.transport !== "stdio"
@@ -59,17 +30,17 @@ function createEditorFormFromInitial(initial: McpServerConfig | null): EditorFor
 }
 
 interface McpServersSectionState {
-  editing: EditingState
+  editing: SectionEditing
 
   editorForm: EditorFormState
 
-  setEditing: (editing: EditingState) => void
+  setEditing: (editing: SectionEditing) => void
   resetEditorForm: (initial: McpServerConfig | null) => void
   patchEditorForm: (patch: Partial<EditorFormState>) => void
 }
 
 export const useMcpServersSectionStore = create<McpServersSectionState>()((set) => ({
-  editing: { kind: "list" },
+  editing: LIST_EDITING,
   editorForm: createEditorFormFromInitial(null),
 
   setEditing: (editing) => set({ editing }),

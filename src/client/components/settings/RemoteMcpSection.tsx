@@ -13,7 +13,7 @@ import { selectRemoteMcpSettings, useAppSettingsStore } from "../../stores/appSe
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useRemoteMcpSectionStore } from "../../stores/remoteMcpSectionStore"
 import { copyWithFeedback, useCopied } from "../../stores/copyFeedbackStore"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { useAuthStatusStore } from "../../stores/authStatusStore"
 import { errorMessage } from "../../../shared/errors"
 import { buildRemoteMcpSetupSnippets, type RemoteMcpSetupSnippet } from "../../../shared/remote-mcp/setup-snippets"
 import { normalizeRemoteMcpPublicUrl } from "../../../shared/settings/remote-mcp"
@@ -67,7 +67,7 @@ function SnippetCard({ snippet }: { snippet: RemoteMcpSetupSnippet }) {
 
 export function RemoteMcpSection({ state, dom = domAdapter }: { state: Pick<KannaState, "handleWriteAppSettings">; dom?: DomPort }) {
   const settings = useAppSettingsStore(selectRemoteMcpSettings)
-  const authEnabled = useSettingsPageStore((s) => s.authEnabled)
+  const authEnabled = useAuthStatusStore((s) => s.authEnabled)
   const draft = useRemoteMcpSectionStore((s) => s.publicUrlDraft)
   const setDraft = useRemoteMcpSectionStore((s) => s.setPublicUrlDraft)
   const error = useRemoteMcpSectionStore((s) => s.error)

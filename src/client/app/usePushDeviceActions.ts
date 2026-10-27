@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { useSettingsPageStore } from "../stores/settingsPageStore"
+import { usePushSettingsStore } from "../stores/pushSettingsStore"
 import type { KannaState } from "./useKannaState"
 import {
   clearStoredPushDeviceId,
@@ -11,9 +11,9 @@ import {
 
 export function usePushDeviceActions(state: Pick<KannaState, "pushConfig" | "socket">) {
   const { pushConfig, socket } = state
-  const pushDeviceId = useSettingsPageStore((s) => s.pushDeviceId)
-  const setPushDeviceId = useSettingsPageStore((s) => s.setPushDeviceId)
-  const setPushPermissionState = useSettingsPageStore((s) => s.setPushPermissionState)
+  const pushDeviceId = usePushSettingsStore((s) => s.deviceId)
+  const setPushDeviceId = usePushSettingsStore((s) => s.setDeviceId)
+  const setPushPermissionState = usePushSettingsStore((s) => s.setPermissionState)
 
   const handleEnablePush = useCallback(async () => {
     if (!pushConfig) return

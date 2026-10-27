@@ -2,16 +2,10 @@ import { errorMessage } from "../../shared/errors"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import { pushAdapter } from "../adapters/push.adapter"
 import { notificationAdapter } from "../adapters/notification.adapter"
+import type { PushPermissionState } from "../lib/pushPermissionState"
 import type { StoragePort } from "../ports/storagePort"
 import type { PushPort } from "../ports/pushPort"
 import type { NotificationPort } from "../ports/notificationPort"
-
-export type PushPermissionState =
-  | "unsupported"
-  | "insecure-context"
-  | "default"
-  | "granted"
-  | "denied"
 
 export interface PushSupportSnapshot {
   state: PushPermissionState

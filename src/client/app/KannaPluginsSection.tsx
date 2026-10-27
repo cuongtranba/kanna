@@ -8,11 +8,11 @@ import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 
-export interface PluginsSectionHandlers {
+export interface KannaPluginsSectionHandlers {
   readonly onReload: (id: string) => Promise<void>
 }
 
-export function buildPluginsSectionHandlers(commands: CommandPort | null): PluginsSectionHandlers {
+export function buildKannaPluginsSectionHandlers(commands: CommandPort | null): KannaPluginsSectionHandlers {
   return {
     async onReload(id) {
       await sendCommandWithFeedback(commands, { type: "plugins.reload", pluginId: id })
@@ -20,12 +20,12 @@ export function buildPluginsSectionHandlers(commands: CommandPort | null): Plugi
   }
 }
 
-export interface PluginsSectionProps {
+export interface KannaPluginsSectionProps {
   readonly plugins: readonly InstalledPluginConfig[]
-  readonly handlers: PluginsSectionHandlers
+  readonly handlers: KannaPluginsSectionHandlers
 }
 
-export function PluginsSection({ plugins, handlers }: PluginsSectionProps) {
+export function KannaPluginsSection({ plugins, handlers }: KannaPluginsSectionProps) {
   if (plugins.length === 0) {
     return <SettingsEmptyState icon={Blocks} message="No plugins installed yet." />
   }

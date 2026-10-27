@@ -1,14 +1,13 @@
 import { type ReactNode, useCallback, useEffect } from "react"
 import { ExternalLink, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "../ui/button"
-import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
+import { AvailabilityPill, UpdateActionButton, updateActionLabel } from "./PackageUpdateBadge"
 import { errorMessage } from "../../../shared/errors"
-import type { InstalledPackage, PackageKind, PackageUpdateEntry, UpdateAvailability } from "../../../shared/packages/types"
-import { cn } from "../../lib/utils"
+import type { InstalledPackage, PackageKind, PackageUpdateEntry } from "../../../shared/packages/types"
 import { runDetached } from "../../lib/runDetached"
 import { sendCommandWithFeedback } from "../../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { usePackageInventoryStore } from "../../stores/packageInventoryStore"
 import type { KannaState } from "../../app/useKannaState"
 
 const CHECK_UPDATES_KEY = pendingActionKey("packages.checkUpdates")
@@ -21,13 +20,6 @@ const EMPTY_PACKAGES: InstalledPackage[] = []
 const EMPTY_ERRORS: Array<{ kind: PackageKind; message: string }> = []
 const EMPTY_UPDATE_ENTRIES: PackageUpdateEntry[] = []
 const EMPTY_APPLYING: string[] = []
-
-const AVAILABILITY_LABEL: Record<UpdateAvailability, string> = {
-  up_to_date: "Up to date",
-  outdated: "Outdated",
-  partial: "Partial",
-  unknown: "Unknown",
-}
 
 function PluginRow({
   pkg,
@@ -42,9 +34,8 @@ function PluginRow({
 }) {
   const updatePending = usePendingAction(packageUpdateKey(pkg.id))
   const updating = applying || updatePending
-  const avail = packageEntry?.update.availability
   const version = pkg.versionLabel ?? pkg.version ?? pkg.revision?.slice(0, 7) ?? null
-  const pillClass = avail && avail !== "up_to_date" ? STATUS_PILL_CLASS[avail] : null
+  const action = updateActionLabel(packageEntry)
 
   return (
     <div className="flex min-w-0 items-start justify-between gap-3 rounded-lg border border-border bg-card/30 p-3">
@@ -53,24 +44,8 @@ function PluginRow({
         {version ? <div className="font-mono tabular-nums text-xs text-muted-foreground/70">{version}</div> : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        {pillClass ? (
-          <span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", pillClass)}>
-            {AVAILABILITY_LABEL[avail!]}
-          </span>
-        ) : null}
-        {avail === "outdated" || avail === "partial" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={updating}
-            aria-busy={updating || undefined}
-            onClick={onUpdate}
-            className="h-6 rounded-full px-2 text-xs"
-          >
-            {updating ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}Update
-          </Button>
-        ) : null}
+        <AvailabilityPill availability={packageEntry?.update.availability} />
+        {action ? <UpdateActionButton label={action} updating={updating} onClick={onUpdate} /> : null}
         {pkg.sourceUrl ? (
           <a
             href={pkg.sourceUrl}
@@ -212,38 +187,37 @@ export function PluginKindSection({
   )
 }
 
-export function PluginsSection({
+export function CliPluginPackagesSection({
   state,
 }: {
   state: Pick<KannaState, "connectionStatus" | "socket">
 }) {
   const { socket, connectionStatus } = state
 
-  const pluginInventory = useSettingsPageStore((s) => s.pluginInventory)
-  const pluginInventoryLoading = useSettingsPageStore((s) => s.pluginInventoryLoading)
-  const pluginInventoryError = useSettingsPageStore((s) => s.pluginInventoryError)
-  const setPluginInventory = useSettingsPageStore((s) => s.setPluginInventory)
-  const setPluginInventoryLoading = useSettingsPageStore((s) => s.setPluginInventoryLoading)
-  const setPluginInventoryError = useSettingsPageStore((s) => s.setPluginInventoryError)
-  const packageUpdateSnapshot = useSettingsPageStore((s) => s.packageUpdateSnapshot)
+  const pluginInventory = usePackageInventoryStore((s) => s.inventory)
+  const pluginInventoryLoading = usePackageInventoryStore((s) => s.loading)
+  const pluginInventoryError = usePackageInventoryStore((s) => s.error)
+  const inventoryCleared = usePackageInventoryStore((s) => s.inventoryCleared)
+  const inventoryLoadStarted = usePackageInventoryStore((s) => s.inventoryLoadStarted)
+  const inventoryLoaded = usePackageInventoryStore((s) => s.inventoryLoaded)
+  const inventoryLoadFailed = usePackageInventoryStore((s) => s.inventoryLoadFailed)
+  const inventoryLoadFinished = usePackageInventoryStore((s) => s.inventoryLoadFinished)
+  const packageUpdateSnapshot = usePackageInventoryStore((s) => s.updateSnapshot)
 
   const loadPlugins = useCallback(async () => {
     if (connectionStatus !== "connected") {
-      setPluginInventory(null)
-      setPluginInventoryError(null)
-      setPluginInventoryLoading(false)
+      inventoryCleared()
       return
     }
     try {
-      setPluginInventoryLoading(true)
-      setPluginInventoryError(null)
-      setPluginInventory(await socket.command({ type: "packages.listInstalled" }))
+      inventoryLoadStarted()
+      inventoryLoaded(await socket.command({ type: "packages.listInstalled" }))
     } catch (err) {
-      setPluginInventoryError(errorMessage(err))
+      inventoryLoadFailed(errorMessage(err))
     } finally {
-      setPluginInventoryLoading(false)
+      inventoryLoadFinished()
     }
-  }, [connectionStatus, socket, setPluginInventory, setPluginInventoryLoading, setPluginInventoryError])
+  }, [connectionStatus, socket, inventoryCleared, inventoryLoadStarted, inventoryLoaded, inventoryLoadFailed, inventoryLoadFinished])
 
   useEffect(() => {
     runDetached("packages.listInstalled", loadPlugins())

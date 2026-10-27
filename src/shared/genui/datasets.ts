@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { isJsonObject, type JsonObject, type JsonValue } from "../json"
+import { MCP_SERVER_NAME_PATTERN } from "../settings/validation"
 import { jsonByteLength, jsonObjectSchema, jsonValueSchema } from "./json-schema"
 
 export const GENUI_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/
@@ -81,7 +82,7 @@ const datasetDeclShape = z.discriminatedUnion("source", [
   }),
   z.strictObject({
     source: z.literal("mcp"),
-    server: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/, "is the name of a configured MCP server"),
+    server: z.string().regex(MCP_SERVER_NAME_PATTERN, "is the name of a configured MCP server"),
     tool: z.string().min(1).max(128),
     arguments: jsonObjectSchema.optional(),
     rowsPath: rowsPath.optional(),

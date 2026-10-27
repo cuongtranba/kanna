@@ -5,13 +5,13 @@ import { errorMessage } from "../../shared/errors"
 import { SHA256SUMS_ASSET, parseSha256Sums } from "../../shared/release-sums"
 import {
   NATS_RELEASE_BASE,
-  NATS_SERVER_VERSION,
   installedBinaryPath,
   natsAssetUrl,
   natsServerTarget,
   unsupportedTargetMessage,
 } from "./nats-server-release"
 import { extractTarGzFile } from "./tar-gz"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/nats-server-version"
 
 export type ReleaseFetch = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>
 

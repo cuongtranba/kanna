@@ -5,13 +5,7 @@ import {
   isCodexReasoningEffort,
   type ClaudeModelOptions,
   type CodexModelOptions,
-  type DefaultProviderPreference,
 } from "../../shared/types"
-
-export function normalizeDefaultProvider(value?: string): DefaultProviderPreference {
-  if (value === "claude" || value === "codex" || value === "openrouter" || value === "custom") return value
-  return "last_used"
-}
 
 export interface ProviderModelOptionsPatch {
   reasoningEffort?: string

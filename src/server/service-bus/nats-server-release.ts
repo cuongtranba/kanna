@@ -1,7 +1,7 @@
 import { join } from "node:path"
 import { releaseAssetUrl } from "../../shared/release-sums"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/nats-server-version"
 
-export const NATS_SERVER_VERSION = "2.15.1"
 export const NATS_RELEASE_BASE = "https://github.com/nats-io/nats-server/releases/download"
 
 export interface NatsServerTarget {

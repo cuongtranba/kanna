@@ -1,4 +1,4 @@
-import { useCallback, type ChangeEvent } from "react"
+import type { ChangeEvent } from "react"
 import type { WebhookSummary } from "../../shared/webhooks/types"
 import { Input } from "../components/ui/input"
 import { describeSavedSecret, KEEP_SAVED_SECRET_PLACEHOLDER } from "../lib/webhookPresentation"
@@ -38,24 +38,10 @@ function SecretField({ id, label, value, savedHint, placeholder, onChange }: Sec
 }
 
 export function WebhookSlackFields({ editing, origin }: Props) {
-  const signingSecret = WebhookCreateStore.useScopedStore((state) => state.signingSecret)
-  const botToken = WebhookCreateStore.useScopedStore((state) => state.botToken)
-  const allowedUserIds = WebhookCreateStore.useScopedStore((state) => state.allowedUserIds)
-  const setSigningSecret = WebhookCreateStore.useScopedStore((state) => state.setSigningSecret)
-  const setBotToken = WebhookCreateStore.useScopedStore((state) => state.setBotToken)
-  const setAllowedUserIds = WebhookCreateStore.useScopedStore((state) => state.setAllowedUserIds)
-  const handleSigningSecretChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setSigningSecret(event.target.value),
-    [setSigningSecret],
-  )
-  const handleBotTokenChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setBotToken(event.target.value),
-    [setBotToken],
-  )
-  const handleAllowedUserIdsChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setAllowedUserIds(event.target.value),
-    [setAllowedUserIds],
-  )
+  const signingSecret = WebhookCreateStore.useScopedStore((state) => state.draft.signingSecret)
+  const botToken = WebhookCreateStore.useScopedStore((state) => state.draft.botToken)
+  const allowedUserIds = WebhookCreateStore.useScopedStore((state) => state.draft.allowedUserIds)
+  const patchDraft = WebhookCreateStore.useScopedStore((state) => state.patchDraft)
   return (
     <div className="space-y-4">
       <div className="space-y-4">
@@ -65,7 +51,7 @@ export function WebhookSlackFields({ editing, origin }: Props) {
           value={signingSecret}
           savedHint={editing?.secretHint}
           placeholder="From Basic Information"
-          onChange={handleSigningSecretChange}
+          onChange={(event) => patchDraft({ signingSecret: event.target.value })}
         />
         <SecretField
           id="webhook-slack-bot-token"
@@ -73,7 +59,7 @@ export function WebhookSlackFields({ editing, origin }: Props) {
           value={botToken}
           savedHint={editing?.slack?.botTokenHint}
           placeholder="xoxb-…"
-          onChange={handleBotTokenChange}
+          onChange={(event) => patchDraft({ botToken: event.target.value })}
         />
       </div>
       <div className="space-y-1.5">
@@ -82,7 +68,7 @@ export function WebhookSlackFields({ editing, origin }: Props) {
           id="webhook-slack-members"
           className="font-mono"
           value={allowedUserIds}
-          onChange={handleAllowedUserIdsChange}
+          onChange={(event) => patchDraft({ allowedUserIds: event.target.value })}
           placeholder="U01ABCDEF, U02GHIJKL"
         />
         <p className="text-xs text-muted-foreground">

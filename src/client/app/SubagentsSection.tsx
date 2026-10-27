@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo } from "react"
 import { Bot, Plus } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
-import { SegmentedControl } from "../components/ui/segmented-control"
+import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
 import {
   Select,
@@ -20,11 +20,9 @@ import {
   CODEX_REASONING_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
   getProviderCatalog,
   isClaudeContextWindow,
   isClaudeReasoningEffort,
-  isEndpointProvider,
   isCodexReasoningEffort,
   isAgentProvider,
   isSubagentContextScope,
@@ -43,12 +41,20 @@ import {
   type ProviderCatalogEntry,
   type Subagent,
   type SubagentInput,
-  type SubagentValidationError,
-  type SubagentValidationErrorCode,
 } from "../../shared/types"
-import { isRecord } from "../../shared/errors"
 import { withCustomProviders } from "../../shared/custom-providers"
 import type { SubagentCommandResult } from "../../shared/protocol"
+import { SUBAGENT_NAME_MAX } from "../../shared/settings/validation"
+import type { SectionEditing } from "../lib/sectionEditing"
+import {
+  createDefaultSubagentDraft,
+  effectiveTriggerMode,
+  isSubagentDraftDirty,
+  mapSubagentValidationError,
+  sanitizeSubagentNameInput,
+  toSubagentInput,
+  toSubagentPatch,
+} from "../lib/subagentDraft"
 import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useShallow } from "zustand/react/shallow"
@@ -68,16 +74,11 @@ export interface SubagentsSectionHandlers {
   onDelete: (id: string) => Promise<void>
 }
 
-export type SubagentsEditingState =
-  | { kind: "list" }
-  | { kind: "create" }
-  | { kind: "edit"; id: string }
-
 interface SubagentsSectionProps {
   subagents: Subagent[]
-  providerDefaults: ChatProviderPreferences
+  providerDefaults: ChatProviderPreferences | undefined
   availableProviders: ProviderCatalogEntry[]
-  editing: SubagentsEditingState
+  editing: SectionEditing
   onSelect: (id: string) => void
   onStartCreate: () => void
   onCancelEditing: () => void
@@ -153,7 +154,7 @@ function SubagentDetailPlaceholder() {
 
 function SubagentList(props: {
   subagents: Subagent[]
-  editing: SubagentsEditingState
+  editing: SectionEditing
   onSelect: (id: string) => void
   onStartCreate: () => void
 }) {
@@ -225,22 +226,21 @@ function ProviderChip({ provider }: { provider: AgentProvider }) {
 interface SubagentFormProps {
   mode: "create" | "edit"
   subject: Subagent | null
-  providerDefaults: ChatProviderPreferences
+  providerDefaults: ChatProviderPreferences | undefined
   availableProviders: ProviderCatalogEntry[]
   handlers: SubagentsSectionHandlers
   onCancelEditing: () => void
 }
 
-const PROVIDER_OPTIONS = [
-  { value: "claude" as const, label: "Claude" },
-  { value: "codex" as const, label: "Codex" },
-  { value: "openrouter" as const, label: "OpenRouter" },
-]
-
-const PROVIDER_OPTIONS_WITH_CUSTOM = [
-  ...PROVIDER_OPTIONS,
-  { value: "custom" as const, label: "Custom endpoints" },
-]
+function providerOptionsOf(
+  availableProviders: readonly ProviderCatalogEntry[],
+  current: AgentProvider,
+): SegmentedOption<AgentProvider>[] {
+  const entries = availableProviders.some((entry) => entry.id === current)
+    ? availableProviders
+    : [...availableProviders, getProviderCatalog(current)]
+  return entries.map((entry) => ({ value: entry.id, label: entry.label }))
+}
 
 function mergeOpenRouterModelsIntoProviders(
   providers: ProviderCatalogEntry[],
@@ -285,8 +285,7 @@ function SubagentForm(props: SubagentFormProps) {
   const savePending = usePendingAction(saveKey)
   const deletePending = usePendingAction(deleteKey)
   const pending = savePending || deletePending
-  const offersCustom = draft.provider === "custom" || props.availableProviders.some((entry) => entry.id === "custom")
-  const providerOptions = offersCustom ? PROVIDER_OPTIONS_WITH_CUSTOM : PROVIDER_OPTIONS
+  const providerOptions = providerOptionsOf(props.availableProviders, draft.provider)
 
   const nameError = error?.field === "name" ? error.message : null
   const generalError = error?.field === "general" ? error.message : null
@@ -483,7 +482,7 @@ function SubagentForm(props: SubagentFormProps) {
         hint="Auto: the main agent may delegate on its own. Manual: only runs when you @-mention it."
       >
         <SegmentedControl
-          value={draft.triggerMode ?? "auto"}
+          value={effectiveTriggerMode(draft)}
           onValueChange={(value) => { if (isSubagentTriggerMode(value)) patchDraft({ triggerMode: value }) }}
           options={TRIGGER_MODE_OPTIONS}
           size="sm"
@@ -558,38 +557,13 @@ import { useAppSettingsStore, selectCustomModels, selectCustomProviders } from "
 
 const EMPTY_SUBAGENTS: Subagent[] = []
 
-const FALLBACK_PROVIDER_PREFS: ChatProviderPreferences = {
-  claude: {
-    model: getProviderCatalog("claude").defaultModel,
-    modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-    planMode: false,
-  },
-  codex: {
-    model: getProviderCatalog("codex").defaultModel,
-    modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
-    planMode: false,
-  },
-  openrouter: {
-    model: DEFAULT_OPENROUTER_SDK_MODEL,
-    modelOptions: {},
-    planMode: false,
-  },
-  custom: {
-    model: "",
-    modelOptions: {},
-    planMode: false,
-  },
-}
-
 export function SubagentsSettingsBranch(props: {
   state: Pick<KannaState, "socket" | "handleWriteAppSettings">
 }) {
   const subagents = useAppSettingsStore(
     (store) => store.settings?.subagents ?? EMPTY_SUBAGENTS,
   )
-  const providerDefaults = useAppSettingsStore(
-    (store) => store.settings?.providerDefaults ?? FALLBACK_PROVIDER_PREFS,
-  )
+  const providerDefaults = useAppSettingsStore((store) => store.settings?.providerDefaults)
   const customModels = useAppSettingsStore(selectCustomModels)
   const customProviders = useAppSettingsStore(selectCustomProviders)
   const openrouterModels = useOpenRouterModelsStore(useShallow((s) => s.models))
@@ -618,7 +592,7 @@ export function SubagentsSettingsBranch(props: {
         const result = await props.state.socket.command({
           type: "subagent.update",
           id,
-          patch: { ...input, maxTurns: input.maxTurns ?? null },
+          patch: toSubagentPatch(input),
         })
         return result
       },
@@ -759,144 +733,4 @@ function LoopRuntimePanel(props: {
       </FormRow>
     </section>
   )
-}
-
-export const SUBAGENT_NAME_MAX = 64
-
-const NAME_FIELD_CODES = new Set<SubagentValidationErrorCode>([
-  "EMPTY_NAME",
-  "INVALID_CHAR",
-  "RESERVED_NAME",
-  "DUPLICATE_NAME",
-  "TOO_LONG",
-])
-
-export type SubagentFieldKey = "name" | "general"
-
-export interface SubagentFieldError {
-  field: SubagentFieldKey
-  message: string
-}
-
-export function createDefaultSubagentDraft(
-  provider: AgentProvider,
-  providerDefaults: ChatProviderPreferences | undefined,
-  availableProviders?: ProviderCatalogEntry[],
-): SubagentInput {
-  if (provider === "claude") {
-    const preference = providerDefaults?.claude
-    const model =
-      preference?.model
-      ?? availableProviders?.find((entry) => entry.id === "claude")?.defaultModel
-      ?? getProviderCatalog("claude").defaultModel
-    const modelOptions: ClaudeModelOptions =
-      preference?.modelOptions ?? { ...DEFAULT_CLAUDE_MODEL_OPTIONS }
-    return {
-      name: "",
-      provider,
-      model,
-      modelOptions: { ...modelOptions },
-      systemPrompt: "",
-      contextScope: "previous-assistant-reply",
-      triggerMode: "auto",
-    }
-  }
-  if (isEndpointProvider(provider)) {
-    const preference = providerDefaults?.[provider]
-    const model =
-      preference?.model
-      || availableProviders?.find((entry) => entry.id === provider)?.defaultModel
-      || getProviderCatalog(provider).defaultModel
-    return {
-      name: "",
-      provider,
-      model,
-      modelOptions: {},
-      systemPrompt: "",
-      contextScope: "previous-assistant-reply",
-      triggerMode: "auto",
-    }
-  }
-  const preference = providerDefaults?.codex
-  const model =
-    preference?.model
-    ?? availableProviders?.find((entry) => entry.id === "codex")?.defaultModel
-    ?? getProviderCatalog("codex").defaultModel
-  const modelOptions: CodexModelOptions =
-    preference?.modelOptions ?? { ...DEFAULT_CODEX_MODEL_OPTIONS }
-  return {
-    name: "",
-    provider,
-    model,
-    modelOptions: { ...modelOptions },
-    systemPrompt: "",
-    contextScope: "previous-assistant-reply",
-    triggerMode: "auto",
-  }
-}
-
-export function toSubagentInput(subagent: Subagent): SubagentInput {
-  return {
-    name: subagent.name,
-    description: subagent.description,
-    provider: subagent.provider,
-    model: subagent.model,
-    modelOptions: subagent.modelOptions,
-    systemPrompt: subagent.systemPrompt,
-    contextScope: subagent.contextScope,
-    triggerMode: subagent.triggerMode,
-    workingDir: subagent.workingDir,
-    allowedPaths: subagent.allowedPaths,
-    maxTurns: subagent.maxTurns,
-    allowBeaconTools: subagent.allowBeaconTools,
-  }
-}
-
-const stringArrayEqual = (a: string[] | undefined, b: string[] | undefined): boolean => {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
-  return true
-}
-
-export function isSubagentDraftDirty(draft: SubagentInput, baseline: SubagentInput): boolean {
-  if (draft.name !== baseline.name) return true
-  if ((draft.description ?? "") !== (baseline.description ?? "")) return true
-  if (draft.provider !== baseline.provider) return true
-  if (draft.model !== baseline.model) return true
-  if (draft.systemPrompt !== baseline.systemPrompt) return true
-  if (draft.contextScope !== baseline.contextScope) return true
-  if ((draft.triggerMode ?? "auto") !== (baseline.triggerMode ?? "auto")) return true
-  if ((draft.workingDir ?? "") !== (baseline.workingDir ?? "")) return true
-  if (!stringArrayEqual(draft.allowedPaths, baseline.allowedPaths)) return true
-  if ((draft.maxTurns ?? null) !== (baseline.maxTurns ?? null)) return true
-  if ((draft.allowBeaconTools ?? false) !== (baseline.allowBeaconTools ?? false)) return true
-  return !shallowEqualModelOptions(draft.modelOptions, baseline.modelOptions)
-}
-
-function shallowEqualModelOptions(
-  a: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
-  b: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
-): boolean {
-  if (!isRecord(a) || !isRecord(b)) return false
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-  for (const key of keys) {
-    if (a[key] !== b[key]) return false
-  }
-  return true
-}
-
-export function mapSubagentValidationError(error: SubagentValidationError): SubagentFieldError {
-  if (NAME_FIELD_CODES.has(error.code)) {
-    return { field: "name", message: error.message }
-  }
-  return { field: "general", message: error.message }
-}
-
-export function sanitizeSubagentNameInput(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .slice(0, SUBAGENT_NAME_MAX)
 }

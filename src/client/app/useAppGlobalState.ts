@@ -36,7 +36,7 @@ import { useWebhooksStore } from "../stores/webhooksStore"
 import { useMcpSourcesStore } from "../stores/mcpSourcesStore"
 import { useServiceBusStore } from "../stores/serviceBusStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
-import { useSettingsPageStore } from "../stores/settingsPageStore"
+import { usePackageInventoryStore } from "../stores/packageInventoryStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
@@ -60,6 +60,7 @@ import { useStackCommands, type StackCommands } from "./useStackCommands"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { HTTP_ROUTES } from "../../shared/http-routes"
+import type { McpOAuthCompleteResult, McpOAuthStartResult } from "../../shared/mcp-types.schema"
 
 
 export { getNewestRemainingChatId }
@@ -311,8 +312,8 @@ export interface AppGlobalState extends StackCommands {
   handleTestMcpServer: (id: string) => Promise<void>
   handleMintBeaconPairingCode: () => Promise<BeaconMintResult>
   handleUpdateBeacon: (beaconId: string) => Promise<BeaconUpdateResult>
-  handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
-  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
+  handleStartMcpOAuth: (id: string) => Promise<McpOAuthStartResult>
+  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<McpOAuthCompleteResult>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
@@ -550,7 +551,7 @@ export function useAppGlobalState(
 
   useEffect(() => {
     return socket.subscribe<PackageUpdateSnapshot>({ type: "package-updates" }, (snapshot) => {
-      useSettingsPageStore.getState().setPackageUpdateSnapshot(snapshot)
+      usePackageInventoryStore.getState().setUpdateSnapshot(snapshot)
     })
   }, [socket])
 
@@ -731,7 +732,7 @@ export function useAppGlobalState(
     }
   }, [socket])
 
-  const handleStartMcpOAuth = useCallback(async (id: string) => {
+  const handleStartMcpOAuth = useCallback(async (id: string): Promise<McpOAuthStartResult> => {
     try {
       return await withCommandFeedback(() => socket.command({ type: "settings.startMcpOAuth", id }))
     } catch (error) {
@@ -739,7 +740,7 @@ export function useAppGlobalState(
     }
   }, [socket])
 
-  const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string) => {
+  const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string): Promise<McpOAuthCompleteResult> => {
     try {
       return await withCommandFeedback(() => socket.command({ type: "settings.completeMcpOAuth", id, callbackUrl }))
     } catch (error) {

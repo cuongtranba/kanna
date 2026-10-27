@@ -109,6 +109,9 @@ export const mcpOAuthCompleteResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), error: z.string() }),
 ])
 
+export type McpOAuthStartResult = z.output<typeof mcpOAuthStartResultSchema>
+export type McpOAuthCompleteResult = z.output<typeof mcpOAuthCompleteResultSchema>
+
 assertParity<z.output<typeof mcpServerTestResultSchema>, McpServerTestResult>()
 assertParity<z.output<typeof mcpOAuthStateSchema>, McpOAuthState>()
 assertParity<z.output<typeof mcpServerInputSchema>, McpServerInput>()

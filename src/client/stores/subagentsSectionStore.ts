@@ -1,12 +1,7 @@
 import { create } from "zustand"
-import {
-  DEFAULT_CLAUDE_MODEL_OPTIONS,
-  getProviderCatalog,
-  type SubagentInput,
-} from "../../shared/types"
-import type { SubagentFieldError, SubagentsEditingState } from "../app/SubagentsSection"
-
-export type { SubagentsEditingState }
+import type { SubagentInput } from "../../shared/types"
+import { LIST_EDITING, type SectionEditing } from "../lib/sectionEditing"
+import { createDefaultSubagentDraft, type SubagentFieldError } from "../lib/subagentDraft"
 
 export interface SubagentFormState {
   draft: SubagentInput
@@ -14,35 +9,23 @@ export interface SubagentFormState {
   confirmDelete: boolean
 }
 
-function createDefaultDraft(): SubagentInput {
-  return {
-    name: "",
-    provider: "claude",
-    model: getProviderCatalog("claude").defaultModel,
-    modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-    systemPrompt: "",
-    contextScope: "previous-assistant-reply",
-    triggerMode: "auto",
-  }
-}
-
 function createDefaultFormState(): SubagentFormState {
   return {
-    draft: createDefaultDraft(),
+    draft: createDefaultSubagentDraft("claude", undefined),
     error: null,
     confirmDelete: false,
   }
 }
 
 interface SubagentsSectionState {
-  editing: SubagentsEditingState
+  editing: SectionEditing
 
   form: SubagentFormState
 
   timeoutDraft: string
   loopError: string | null
 
-  setEditing: (editing: SubagentsEditingState) => void
+  setEditing: (editing: SectionEditing) => void
 
   resetForm: (draft: SubagentInput) => void
   patchForm: (patch: Partial<SubagentFormState>) => void
@@ -53,7 +36,7 @@ interface SubagentsSectionState {
 }
 
 export const useSubagentsSectionStore = create<SubagentsSectionState>()((set) => ({
-  editing: { kind: "list" },
+  editing: LIST_EDITING,
   form: createDefaultFormState(),
   timeoutDraft: "",
   loopError: null,

@@ -13,7 +13,7 @@ import {
 import { handleTextInputKeyDown } from "../lib/settings-input"
 import { surfaceErrorIn } from "../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
-import { useSettingsPageStore } from "../stores/settingsPageStore"
+import { useKeybindingsSectionStore } from "../stores/keybindingsSectionStore"
 import type { KannaState } from "./useKannaState"
 
 function buildKeybindingPayload(source: Record<string, string>): Record<KeybindingAction, string[]> {
@@ -89,11 +89,11 @@ function KeybindingRow({ action, currentValue, bordered, onDraftChange, onCommit
 }
 
 export function KeybindingsSection({ state }: { state: KannaState }) {
-  const keybindingDrafts = useSettingsPageStore((s) => s.keybindingDrafts)
-  const setKeybindingDrafts = useSettingsPageStore((s) => s.setKeybindingDrafts)
-  const setKeybindingDraft = useSettingsPageStore((s) => s.setKeybindingDraft)
-  const keybindingsError = useSettingsPageStore((s) => s.keybindingsError)
-  const setKeybindingsError = useSettingsPageStore((s) => s.setKeybindingsError)
+  const keybindingDrafts = useKeybindingsSectionStore((s) => s.drafts)
+  const setKeybindingDrafts = useKeybindingsSectionStore((s) => s.setDrafts)
+  const setKeybindingDraft = useKeybindingsSectionStore((s) => s.setDraft)
+  const keybindingsError = useKeybindingsSectionStore((s) => s.error)
+  const setKeybindingsError = useKeybindingsSectionStore((s) => s.setError)
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
 
   useEffect(() => {

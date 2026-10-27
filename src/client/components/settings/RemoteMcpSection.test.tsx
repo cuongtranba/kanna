@@ -5,23 +5,23 @@ import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useRemoteMcpSectionStore } from "../../stores/remoteMcpSectionStore"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { useAuthStatusStore } from "../../stores/authStatusStore"
 import { RemoteMcpSection } from "./RemoteMcpSection"
 
 const APP_SETTINGS_INITIAL = useAppSettingsStore.getInitialState()
 const SECTION_INITIAL = useRemoteMcpSectionStore.getInitialState()
-const SETTINGS_PAGE_INITIAL = useSettingsPageStore.getInitialState()
+const AUTH_STATUS_INITIAL = useAuthStatusStore.getInitialState()
 const STATE = { handleWriteAppSettings: async () => {} }
 
 afterEach(() => {
   useAppSettingsStore.setState(APP_SETTINGS_INITIAL)
   useRemoteMcpSectionStore.setState(SECTION_INITIAL)
-  useSettingsPageStore.setState(SETTINGS_PAGE_INITIAL)
+  useAuthStatusStore.setState(AUTH_STATUS_INITIAL)
 })
 
 function seed(remoteMcp: RemoteMcpSettings, authEnabled: boolean) {
   useAppSettingsStore.getState().setFromServer({ ...buildInitialAppSettingsSnapshot(), remoteMcp })
-  useSettingsPageStore.setState({ authEnabled })
+  useAuthStatusStore.setState({ authEnabled })
 }
 
 describe("RemoteMcpSection", () => {

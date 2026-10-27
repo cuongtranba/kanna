@@ -1,12 +1,10 @@
 import { useCallback, useMemo, type ChangeEvent } from "react"
-import { useShallow } from "zustand/react/shallow"
 import type { InboundHandling } from "../../shared/inbound/handler"
 import type { SidebarData } from "../../shared/types"
 import type { WebhookInput, WebhookKind, WebhookMode, WebhookSummary } from "../../shared/webhooks/types"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
-import { SearchableSelect } from "../components/ui/searchable-select"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
 import {
@@ -19,19 +17,17 @@ import {
 import {
   webhookHandlingConsequence,
   webhookHandlingLabel,
-  webhookModeConsequence,
-  webhookModeLabel,
 } from "../lib/webhookPresentation"
-import { listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
+import { listInboundModelOptions, listInboundTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import { useProviderCatalog } from "./useProviderCatalog"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { selectWebhookDraftFields, WebhookCreateStore } from "./WebhookCreateDialog.store"
+import { WebhookCreateStore } from "./WebhookCreateDialog.store"
+import { InboundHandlerFields } from "./InboundHandlerFields"
 import { WebhookGenericFields } from "./WebhookGenericFields"
 import { WebhookSlackFields } from "./WebhookSlackFields"
-import { WebhookTargetSelect } from "./WebhookTargetSelect"
 
 interface Props {
   sidebarData: SidebarData
@@ -44,11 +40,6 @@ interface FormProps extends Props {
 }
 
 const CREATE_KEY = pendingActionKey("webhooks.create")
-
-const MODE_OPTIONS: SegmentedOption<WebhookMode>[] = (["notify", "inline", "spawn"] as const).map((mode) => ({
-  value: mode,
-  label: webhookModeLabel(mode),
-}))
 
 const KIND_OPTIONS: SegmentedOption<WebhookKind>[] = [
   { value: "generic", label: "Generic" },
@@ -69,17 +60,11 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
   const submitKey = editing ? pendingActionKey("webhooks.update", editing.id) : CREATE_KEY
   const pending = usePendingAction(submitKey)
   const closeEditor = useWebhooksStore((state) => state.closeEditor)
-  const draft = WebhookCreateStore.useScopedStore(useShallow(selectWebhookDraftFields))
-  const setName = WebhookCreateStore.useScopedStore((state) => state.setName)
+  const draft = WebhookCreateStore.useScopedStore((state) => state.draft)
+  const patchDraft = WebhookCreateStore.useScopedStore((state) => state.patchDraft)
   const setKind = WebhookCreateStore.useScopedStore((state) => state.setKind)
-  const setMode = WebhookCreateStore.useScopedStore((state) => state.setMode)
-  const setHandling = WebhookCreateStore.useScopedStore((state) => state.setHandling)
-  const setChatId = WebhookCreateStore.useScopedStore((state) => state.setChatId)
-  const setProjectId = WebhookCreateStore.useScopedStore((state) => state.setProjectId)
-  const setModelValue = WebhookCreateStore.useScopedStore((state) => state.setModelValue)
-  const setTemplate = WebhookCreateStore.useScopedStore((state) => state.setTemplate)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
-  const modelOptions = useMemo(() => listWebhookModelOptions(catalog), [catalog])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
+  const modelOptions = useMemo(() => listInboundModelOptions(catalog), [catalog])
   const isSlack = draft.kind === "slack"
   const mode = effectiveWebhookMode(draft)
   const startsTurn = webhookDraftStartsTurn(draft)
@@ -91,11 +76,19 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
     if (!open) closeEditor()
   }, [closeEditor])
   const handleCancel = useCallback(() => closeEditor(), [closeEditor])
-  const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => setName(event.target.value), [setName])
-  const handleTemplateChange = useCallback(
-    (event: ChangeEvent<HTMLTextAreaElement>) => setTemplate(event.target.value),
-    [setTemplate],
+  const handleNameChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => patchDraft({ name: event.target.value }),
+    [patchDraft],
   )
+  const handleTemplateChange = useCallback(
+    (event: ChangeEvent<HTMLTextAreaElement>) => patchDraft({ template: event.target.value }),
+    [patchDraft],
+  )
+  const handleModeChange = useCallback((value: WebhookMode) => patchDraft({ mode: value }), [patchDraft])
+  const handleHandlingChange = useCallback((value: InboundHandling) => patchDraft({ handling: value }), [patchDraft])
+  const handleChatChange = useCallback((chatId: string) => patchDraft({ chatId }), [patchDraft])
+  const handleProjectChange = useCallback((projectId: string) => patchDraft({ projectId }), [patchDraft])
+  const handleModelChange = useCallback((modelValue: string) => patchDraft({ modelValue }), [patchDraft])
   const handleSubmit = useCallback(() => {
     if (errors.length > 0) return
     runPendingAction(submitKey, async () => {
@@ -132,50 +125,35 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
             />
           </div>
 
-          {isSlack ? null : (
-            <div className="space-y-1.5">
-              <span className="block text-sm font-medium text-foreground">Action</span>
-              <SegmentedControl value={mode} onValueChange={setMode} options={MODE_OPTIONS} size="sm" />
-              <p className="text-xs text-muted-foreground">{webhookModeConsequence(mode)}</p>
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <label htmlFor="webhook-target" className="text-sm font-medium text-foreground">
-              {mode === "spawn" ? "Project" : "Chat"}
-            </label>
-            {mode === "spawn" ? (
-              <WebhookTargetSelect id="webhook-target" value={draft.projectId} options={targets.projects} placeholder="Choose a project" searchPlaceholder="Search projects..." onValueChange={setProjectId} />
-            ) : (
-              <WebhookTargetSelect id="webhook-target" value={draft.chatId} options={targets.chats} placeholder="Choose a chat" searchPlaceholder="Search chats..." onValueChange={setChatId} />
-            )}
-            {isSlack ? <p className="text-xs text-muted-foreground">Each Slack thread gets its own chat in this project.</p> : null}
-          </div>
-
-          {isSlack ? <WebhookSlackFields editing={editing} origin={origin} /> : null}
-
-          {startsTurn && !isSlack ? (
-            <div className="space-y-1.5">
-              <span className="block text-sm font-medium text-foreground">Handling</span>
-              <SegmentedControl value={draft.handling} onValueChange={setHandling} options={HANDLING_OPTIONS} size="sm" />
-              <p className="text-xs text-muted-foreground">{webhookHandlingConsequence(draft.handling)}</p>
-            </div>
-          ) : null}
-
-          {startsTurn ? (
-            <div className="space-y-1.5">
-              <label htmlFor="webhook-model" className="text-sm font-medium text-foreground">Model</label>
-              <SearchableSelect
-                id="webhook-model"
-                value={draft.modelValue}
-                options={modelOptions}
-                placeholder="Choose a model"
-                searchPlaceholder="Search models..."
-                onValueChange={setModelValue}
-              />
-              <p className="text-xs text-muted-foreground">The model the turn started by this webhook runs with.</p>
-            </div>
-          ) : null}
+          <InboundHandlerFields
+            idPrefix="webhook"
+            mode={mode}
+            chatId={draft.chatId}
+            projectId={draft.projectId}
+            modelValue={draft.modelValue}
+            targets={targets}
+            modelOptions={modelOptions}
+            modelHint="The model the turn started by this webhook runs with."
+            showModeControl={!isSlack}
+            startsTurn={startsTurn}
+            targetNote={isSlack ? <p className="text-xs text-muted-foreground">Each Slack thread gets its own chat in this project.</p> : null}
+            beforeModel={
+              <>
+                {isSlack ? <WebhookSlackFields editing={editing} origin={origin} /> : null}
+                {startsTurn && !isSlack ? (
+                  <div className="space-y-1.5">
+                    <span className="block text-sm font-medium text-foreground">Handling</span>
+                    <SegmentedControl value={draft.handling} onValueChange={handleHandlingChange} options={HANDLING_OPTIONS} size="sm" />
+                    <p className="text-xs text-muted-foreground">{webhookHandlingConsequence(draft.handling)}</p>
+                  </div>
+                ) : null}
+              </>
+            }
+            onModeChange={handleModeChange}
+            onChatChange={handleChatChange}
+            onProjectChange={handleProjectChange}
+            onModelChange={handleModelChange}
+          />
 
           <div className="space-y-1.5">
             <label htmlFor="webhook-template" className="text-sm font-medium text-foreground">
