@@ -6,14 +6,16 @@ import {
   CLAUDE_IDLE_TIMEOUT_MS_MIN,
   CLAUDE_MAX_CONCURRENT_MAX,
   CLAUDE_MAX_CONCURRENT_MIN,
+  GLOBAL_PROMPT_APPEND_MAX_CHARS,
+  OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   UPLOAD_DEFAULTS,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AuthSettings,
   type UploadSettings,
-} from "../shared/types"
-import { clampRounded } from "../shared/numeric"
-import { readSettingsSection } from "../shared/settings/read-fields"
+} from "../types"
+import { clampRounded } from "../numeric"
+import { readSettingsSection } from "./read-fields"
 
 export interface NumericBound {
   readonly path: string
@@ -66,8 +68,31 @@ export const CLAUDE_MAX_CONCURRENT_BOUND = {
   integer: false,
 } as const satisfies NumericBound
 
+export const OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND = {
+  path: "claudeAuth.concurrencyDefault",
+  min: OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+  max: Number.POSITIVE_INFINITY,
+  integer: false,
+} as const satisfies NumericBound
+
+export const OAUTH_TOKEN_MAX_CONCURRENT_BOUND = {
+  path: "claudeAuth.tokens entry maxConcurrent",
+  min: OAUTH_TOKEN_MAX_CONCURRENT_MIN,
+  max: Number.POSITIVE_INFINITY,
+  integer: false,
+} as const satisfies NumericBound
+
+export function globalPromptAppendViolation<T>(text: T): string | null {
+  if (typeof text !== "string") return "globalPromptAppend must be a string"
+  return text.length > GLOBAL_PROMPT_APPEND_MAX_CHARS
+    ? `globalPromptAppend must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} chars or fewer`
+    : null
+}
+
 function requirement(bound: NumericBound): string {
-  if (!Number.isFinite(bound.max)) return `${bound.path} must be an integer >= ${bound.min}`
+  if (!Number.isFinite(bound.max)) {
+    return bound.integer ? `${bound.path} must be an integer >= ${bound.min}` : `${bound.path} must be at least ${bound.min}`
+  }
   if (bound.integer) return `${bound.path} must be an integer between ${bound.min} and ${bound.max}`
   return `${bound.path} must be between ${bound.min} and ${bound.max}`
 }

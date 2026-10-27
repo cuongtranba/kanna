@@ -1,20 +1,7 @@
 import { randomUUID } from "node:crypto"
+import { DEFAULT_OPENAI_SDK_MODEL } from "../shared/core-types"
 import { isClaudeReasoningEffort, isCodexReasoningEffort } from "../shared/provider-model-types"
-import {
-  AUTH_DEFAULTS,
-  CLAUDE_AUTH_DEFAULTS,
-  CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_LIFECYCLE_DEFAULTS,
-  CLOUDFLARE_TUNNEL_DEFAULTS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
-  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
-  PLUGIN_SETTINGS_DEFAULTS,
-  REMOTE_MCP_SETTINGS_DEFAULTS,
-  PUSH_DEFAULTS,
-  TELEMETRY_DEFAULTS,
-  TYPOGRAPHY_DEFAULTS,
-  UPLOAD_DEFAULTS,
-} from "../shared/types"
+import { mergeAppSettingsPatch } from "../shared/settings/merge-settings-sections"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -23,10 +10,7 @@ import type {
   Subagent,
   SubagentPatch,
 } from "../shared/types"
-import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
-import { SERVICE_BUS_PUBLIC_DEFAULTS, applyServiceBusPatchToPublic } from "../shared/service-bus/jetstream-config"
-import type { AppSettingsManager } from "./app-settings"
-
+import { defaultAppSettingsSnapshot, type AppSettingsManager } from "./app-settings"
 
 function mergeSubagentModelOptions(
   current: Subagent["modelOptions"],
@@ -51,7 +35,7 @@ function mergeSubagentModelOptions(
   return current
 }
 
-export function mergeAppSettingsPatch(
+export function applyFallbackSettingsPatch(
   snapshot: AppSettingsSnapshot,
   patch: AppSettingsPatch,
 ): AppSettingsSnapshot {
@@ -92,187 +76,7 @@ export function mergeAppSettingsPatch(
     subagents = subagents.filter((subagent) => subagent.id !== patch.subagents?.delete?.id)
   }
 
-  return {
-    ...snapshot,
-    ...patch,
-    terminal: {
-      ...snapshot.terminal,
-      ...patch.terminal,
-    },
-    panes: {
-      ...snapshot.panes,
-      ...patch.panes,
-    },
-    editor: {
-      ...snapshot.editor,
-      ...patch.editor,
-    },
-    typography: {
-      ...snapshot.typography,
-      ...patch.typography,
-    },
-    providerDefaults: {
-      claude: {
-        ...snapshot.providerDefaults.claude,
-        ...patch.providerDefaults?.claude,
-        modelOptions: {
-          ...snapshot.providerDefaults.claude.modelOptions,
-          ...patch.providerDefaults?.claude?.modelOptions,
-        },
-      },
-      codex: {
-        ...snapshot.providerDefaults.codex,
-        ...patch.providerDefaults?.codex,
-        modelOptions: {
-          ...snapshot.providerDefaults.codex.modelOptions,
-          ...patch.providerDefaults?.codex?.modelOptions,
-        },
-      },
-      openrouter: {
-        ...snapshot.providerDefaults.openrouter,
-        ...patch.providerDefaults?.openrouter,
-        modelOptions: {},
-      },
-      custom: {
-        ...snapshot.providerDefaults.custom,
-        ...patch.providerDefaults?.custom,
-        modelOptions: {},
-      },
-    },
-    cloudflareTunnel: {
-      ...snapshot.cloudflareTunnel,
-      ...patch.cloudflareTunnel,
-    },
-    push: {
-      ...snapshot.push,
-      ...patch.push,
-    },
-    telemetry: {
-      ...snapshot.telemetry,
-      ...patch.telemetry,
-    },
-    auth: {
-      ...snapshot.auth,
-      ...patch.auth,
-    },
-    claudeAuth: {
-      tokens: patch.claudeAuth?.tokens ?? snapshot.claudeAuth.tokens,
-      concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? snapshot.claudeAuth.concurrencyDefault,
-    },
-    uploads: {
-      ...snapshot.uploads,
-      ...patch.uploads,
-    },
-    subagents,
-    customMcpServers: snapshot.customMcpServers,
-    customBeacons: snapshot.customBeacons,
-    customModels: snapshot.customModels,
-    mcpSources: snapshot.mcpSources,
-    customProviders: snapshot.customProviders,
-    textSnippets: snapshot.textSnippets,
-    plugins: {
-      ...snapshot.plugins,
-      ...patch.plugins,
-    },
-    installedPlugins: snapshot.installedPlugins,
-    remoteMcp: {
-      ...snapshot.remoteMcp,
-      ...patch.remoteMcp,
-    },
-    serviceBus: applyServiceBusPatchToPublic(snapshot.serviceBus, patch.serviceBus),
-    claudeDriver: {
-      lifecycle: {
-        ...snapshot.claudeDriver.lifecycle,
-        ...patch.claudeDriver?.lifecycle,
-      },
-    },
-    subagentRuntime: {
-      runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? snapshot.subagentRuntime.runTimeoutMs,
-      defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
-        ? patch.subagentRuntime.defaultLoopSubagentId
-        : snapshot.subagentRuntime.defaultLoopSubagentId,
-    },
-    packageUpdates: {
-      ...snapshot.packageUpdates,
-      ...patch.packageUpdates,
-    },
-  }
-}
-
-
-export function buildInitialAppSettingsSnapshot(): AppSettingsSnapshot {
-  return {
-    analyticsEnabled: true,
-    browserSettingsMigrated: false,
-    theme: "system",
-    typography: TYPOGRAPHY_DEFAULTS,
-    chatSoundPreference: "always",
-    chatSoundId: "funk",
-    terminal: {
-      scrollbackLines: 1_000,
-      minColumnWidth: 450,
-    },
-    panes: {
-      tabMinWidth: DEFAULT_TAB_MIN_WIDTH,
-    },
-    editor: {
-      preset: "cursor",
-      commandTemplate: "cursor {path}",
-    },
-    defaultProvider: "last_used",
-    providerDefaults: {
-      claude: {
-        model: "claude-opus-4-7",
-        modelOptions: {
-          reasoningEffort: "high",
-          contextWindow: "200k",
-        },
-        planMode: false,
-      },
-      codex: {
-        model: "gpt-5.5",
-        modelOptions: {
-          reasoningEffort: "high",
-          fastMode: false,
-        },
-        planMode: false,
-      },
-      openrouter: {
-        model: DEFAULT_OPENROUTER_SDK_MODEL,
-        modelOptions: {},
-        planMode: false,
-      },
-      custom: {
-        model: "",
-        modelOptions: {},
-        planMode: false,
-      },
-    },
-    warning: null,
-    filePathDisplay: "~/.kanna/data/settings.json",
-    cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-    push: PUSH_DEFAULTS,
-    telemetry: TELEMETRY_DEFAULTS,
-    auth: AUTH_DEFAULTS,
-    claudeAuth: CLAUDE_AUTH_DEFAULTS,
-    uploads: UPLOAD_DEFAULTS,
-    subagents: [],
-    customMcpServers: [],
-    customBeacons: [],
-    customModels: [],
-    mcpSources: [],
-    customProviders: [],
-    textSnippets: [],
-    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
-    globalPromptAppend: "",
-    shareDefaultTtlHours: 24,
-    subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
-    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
-    plugins: PLUGIN_SETTINGS_DEFAULTS,
-    installedPlugins: [],
-    remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
-    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
-  }
+  return { ...mergeAppSettingsPatch(snapshot, patch), subagents }
 }
 
 
@@ -362,7 +166,7 @@ export function buildFallbackLlmProvider() {
     read: async (): Promise<LlmProviderSnapshot> => ({
       provider: "openai" as const,
       apiKey: "",
-      model: "gpt-5.4-mini",
+      model: DEFAULT_OPENAI_SDK_MODEL,
       baseUrl: "",
       resolvedBaseUrl: "https://api.openai.com/v1",
       enabled: false,
@@ -417,7 +221,7 @@ type AppSettingsManagerSubset = Pick<AppSettingsManager,
 export function buildResolvedAppSettings(
   appSettings: AppSettingsManagerSubset | null | undefined,
 ) {
-  let fallbackSnapshot: AppSettingsSnapshot = buildInitialAppSettingsSnapshot()
+  let fallbackSnapshot: AppSettingsSnapshot = defaultAppSettingsSnapshot()
 
   const self = {
     getSnapshot: (): AppSettingsSnapshot =>
@@ -434,7 +238,7 @@ export function buildResolvedAppSettings(
       if (appSettings && patch.analyticsEnabled !== undefined && Object.keys(patch).length === 1) {
         return await appSettings.write({ analyticsEnabled: patch.analyticsEnabled })
       }
-      fallbackSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackSnapshot, patch)
+      fallbackSnapshot = applyFallbackSettingsPatch(appSettings?.getSnapshot() ?? fallbackSnapshot, patch)
       return fallbackSnapshot
     },
 
@@ -442,7 +246,7 @@ export function buildResolvedAppSettings(
       patch: Partial<AppSettingsSnapshot["cloudflareTunnel"]>,
     ): Promise<AppSettingsSnapshot> => {
       if (appSettings?.setCloudflareTunnel) return await appSettings.setCloudflareTunnel(patch)
-      fallbackSnapshot = mergeAppSettingsPatch(appSettings?.getSnapshot() ?? fallbackSnapshot, { cloudflareTunnel: patch })
+      fallbackSnapshot = applyFallbackSettingsPatch(appSettings?.getSnapshot() ?? fallbackSnapshot, { cloudflareTunnel: patch })
       return fallbackSnapshot
     },
 
@@ -450,7 +254,7 @@ export function buildResolvedAppSettings(
       patch: Partial<AppSettingsSnapshot["claudeAuth"]>,
     ): Promise<AppSettingsSnapshot> => {
       if (appSettings?.setClaudeAuth) return await appSettings.setClaudeAuth(patch)
-      fallbackSnapshot = mergeAppSettingsPatch(
+      fallbackSnapshot = applyFallbackSettingsPatch(
         appSettings?.getSnapshot() ?? fallbackSnapshot,
         { claudeAuth: patch },
       )

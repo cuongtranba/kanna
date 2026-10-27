@@ -113,14 +113,11 @@ export function normalizePluginState<T>(
   }
 }
 
-export function mergePluginPatch(
-  state: { plugins: PluginSettings; installedPlugins: readonly InstalledPluginConfig[] },
-  patch: { plugins?: Partial<PluginSettings>; installedPlugins?: InstalledPluginsPatch },
-): { plugins: PluginSettings; installedPlugins: InstalledPluginConfig[] } {
-  return {
-    plugins: { ...state.plugins, ...patch.plugins },
-    installedPlugins: patch.installedPlugins
-      ? applyAppSettingsPatchForTest(state.installedPlugins, patch.installedPlugins)
-      : [...state.installedPlugins],
-  }
+export function mergeInstalledPluginsPatch(
+  state: { installedPlugins: readonly InstalledPluginConfig[] },
+  patch: { installedPlugins?: InstalledPluginsPatch },
+): InstalledPluginConfig[] {
+  return patch.installedPlugins
+    ? applyAppSettingsPatchForTest(state.installedPlugins, patch.installedPlugins)
+    : [...state.installedPlugins]
 }

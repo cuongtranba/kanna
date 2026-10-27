@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { resolveModelPrice } from "../shared/token-pricing"
+import { DEFAULT_CODEX_CHAT_MODEL } from "../shared/provider-model-types"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
@@ -419,14 +420,14 @@ export class CodexAppServerManager {
       await this.startSession({
         chatId,
         cwd: args.cwd,
-        model: args.model ?? "gpt-5.5",
+        model: args.model ?? DEFAULT_CODEX_CHAT_MODEL,
         serviceTier: args.serviceTier ?? "fast",
         sessionToken: null,
       })
 
       turn = await this.startTurn({
         chatId,
-        model: args.model ?? "gpt-5.5",
+        model: args.model ?? DEFAULT_CODEX_CHAT_MODEL,
         effort: args.effort,
         serviceTier: args.serviceTier ?? "fast",
         content: args.prompt,

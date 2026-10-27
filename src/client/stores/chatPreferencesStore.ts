@@ -1,15 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
-  DEFAULT_CLAUDE_MODEL_OPTIONS,
-  DEFAULT_CODEX_MODEL_OPTIONS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
-  normalizeClaudeContextWindow,
-  normalizeClaudeModelId,
-  normalizeCodexModelId,
-  isClaudeReasoningEffort,
-  isCodexReasoningEffort,
-  normalizeClaudeReasoningEffort,
   type AgentProvider,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
@@ -21,6 +12,7 @@ import {
   isEndpointProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
+import { createDefaultProviderDefaults, normalizeClaudePreference, normalizeCodexPreference } from "../../shared/settings/provider-defaults"
 import { claudeOptionsPatch, codexOptionsPatch } from "./providerOptionsPatch"
 import { providerDefaultsEqual } from "./providerDefaultsEqual"
 import { log } from "../../shared/log"
@@ -52,82 +44,6 @@ export type ComposerState =
   }
 
 export const NEW_CHAT_COMPOSER_ID = "__new__"
-
-export function normalizeClaudePreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<ClaudeModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
-  if (isClaudeReasoningEffort(reasoningEffort)) {
-    normalizedEffort = reasoningEffort
-  } else if (isClaudeReasoningEffort(value?.effort)) {
-    normalizedEffort = value.effort
-  } else {
-    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
-  }
-  const model = normalizeClaudeModelId(value?.model, undefined, customModels)
-  const contextWindow = normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels)
-
-  return {
-    model,
-    modelOptions: {
-      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
-      contextWindow,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
-export function normalizeCodexPreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<CodexModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
-  if (isCodexReasoningEffort(reasoningEffort)) {
-    normalizedCodexEffort = reasoningEffort
-  } else if (isCodexReasoningEffort(value?.effort)) {
-    normalizedCodexEffort = value.effort
-  } else {
-    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
-  }
-  return {
-    model: normalizeCodexModelId(value?.model, undefined, customModels),
-    modelOptions: {
-      reasoningEffort: normalizedCodexEffort,
-      fastMode: typeof value?.modelOptions?.fastMode === "boolean"
-        ? value.modelOptions.fastMode
-        : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
-export function createDefaultProviderDefaults(): ChatProviderPreferences {
-  return {
-    claude: {
-      model: "claude-opus-4-7",
-      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-      planMode: false,
-    },
-    codex: {
-      model: "gpt-5.5",
-      modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
-      planMode: false,
-    },
-    openrouter: {
-      model: DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: false,
-    },
-    custom: { model: "", modelOptions: {}, planMode: false },
-  }
-}
 
 function logChatPreferences(message: string, details?: object) {
   if (details === undefined) {

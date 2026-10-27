@@ -6,6 +6,9 @@ export type CustomModelProvider = (typeof CUSTOM_MODEL_PROVIDERS)[number]
 export const isCustomModelProvider = oneOf(CUSTOM_MODEL_PROVIDERS)
 
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
+export const DEFAULT_CLAUDE_CHAT_MODEL = "claude-opus-4-7"
+export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.5"
+export const QUICK_RESPONSE_CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api"
 export const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
@@ -187,7 +190,7 @@ const PROVIDER_CATALOG: Readonly<Record<AgentProvider, ProviderCatalogEntry>> = 
         contextWindowOptions: [...CLAUDE_CONTEXT_WINDOW_OPTIONS],
       },
       {
-        id: "claude-haiku-4-5-20251001",
+        id: QUICK_RESPONSE_CLAUDE_MODEL,
         label: "Haiku 4.5",
         supportedEfforts: ["low", "medium", "high"],
         aliases: ["haiku"],
@@ -198,7 +201,7 @@ const PROVIDER_CATALOG: Readonly<Record<AgentProvider, ProviderCatalogEntry>> = 
   codex: {
     id: "codex",
     label: "Codex",
-    defaultModel: "gpt-5.5",
+    defaultModel: DEFAULT_CODEX_CHAT_MODEL,
     supportsPlanMode: true,
     models: [
       { id: "gpt-5.5", label: "GPT-5.5", requirementHint: "codex-cli >= 0.124" },
@@ -367,7 +370,7 @@ export function normalizeProviderModelId(
 
 export function normalizeClaudeModelId(
   modelId?: string,
-  fallbackModelId = "claude-opus-4-7",
+  fallbackModelId = DEFAULT_CLAUDE_CHAT_MODEL,
   customModels?: readonly CustomModelEntry[],
 ): string {
   return normalizeProviderModelId("claude", modelId, fallbackModelId, customModels)
@@ -375,7 +378,7 @@ export function normalizeClaudeModelId(
 
 export function normalizeCodexModelId(
   modelId?: string,
-  fallbackModelId = "gpt-5.5",
+  fallbackModelId = DEFAULT_CODEX_CHAT_MODEL,
   customModels?: readonly CustomModelEntry[],
 ): string {
   return normalizeProviderModelId("codex", modelId, fallbackModelId, customModels)

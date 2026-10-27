@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { buildInitialAppSettingsSnapshot } from "../../../server/ws-router-defaults"
+import { defaultAppSettingsSnapshot } from "../../../server/app-settings"
 import type { RemoteMcpSettings } from "../../../shared/settings/remote-mcp"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
@@ -20,7 +20,7 @@ afterEach(() => {
 })
 
 function seed(remoteMcp: RemoteMcpSettings, authEnabled: boolean) {
-  useAppSettingsStore.getState().setFromServer({ ...buildInitialAppSettingsSnapshot(), remoteMcp })
+  useAppSettingsStore.getState().setFromServer({ ...defaultAppSettingsSnapshot(), remoteMcp })
   useAuthStatusStore.setState({ authEnabled })
 }
 

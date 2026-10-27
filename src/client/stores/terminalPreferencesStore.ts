@@ -1,6 +1,13 @@
 import { create } from "zustand"
 import type { EditorPreset } from "../../shared/protocol"
-import { clampRounded } from "../../shared/numeric"
+import {
+  DEFAULT_EDITOR_PRESET,
+  getDefaultEditorCommandTemplate,
+  getEditorPresetLabel,
+  normalizeEditorCommandTemplate,
+  normalizeEditorPreset,
+} from "../../shared/settings/editor"
+import { clampTerminalMinColumnWidth, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH } from "../../shared/terminal-column-width"
 import { clampScrollback, DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 
 export {
@@ -8,66 +15,12 @@ export {
   MIN_TERMINAL_SCROLLBACK,
   MAX_TERMINAL_SCROLLBACK,
 } from "../../shared/terminal-scrollback"
-export const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
-export const MIN_TERMINAL_MIN_COLUMN_WIDTH = 250
-export const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
-export const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
-
-export function getDefaultEditorCommandTemplate(preset: EditorPreset) {
-  switch (preset) {
-    case "vscode":
-      return "code {path}"
-    case "xcode":
-      return "xed {path}"
-    case "windsurf":
-      return "windsurf {path}"
-    case "custom":
-      return "cursor {path}"
-    case "cursor":
-    default:
-      return "cursor {path}"
-  }
-}
-
-export function getEditorPresetLabel(preset: EditorPreset) {
-  switch (preset) {
-    case "vscode":
-      return "VS Code"
-    case "xcode":
-      return "Xcode"
-    case "windsurf":
-      return "Windsurf"
-    case "custom":
-      return "Custom"
-    case "cursor":
-    default:
-      return "Cursor"
-  }
-}
-
-const MIN_COLUMN_WIDTH_RANGE = { min: MIN_TERMINAL_MIN_COLUMN_WIDTH, max: MAX_TERMINAL_MIN_COLUMN_WIDTH }
-
-function clampMinColumnWidth(value: number) {
-  return clampRounded(value, MIN_COLUMN_WIDTH_RANGE, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH)
-}
-
-function normalizeEditorPreset(value?: string): EditorPreset {
-  switch (value) {
-    case "vscode":
-    case "xcode":
-    case "windsurf":
-    case "custom":
-    case "cursor":
-      return value
-    default:
-      return DEFAULT_EDITOR_PRESET
-  }
-}
-
-function normalizeEditorCommandTemplate(value: string | undefined, preset: EditorPreset) {
-  const trimmed = value?.trim()
-  return trimmed && trimmed.length > 0 ? trimmed : getDefaultEditorCommandTemplate(preset)
-}
+export {
+  DEFAULT_TERMINAL_MIN_COLUMN_WIDTH,
+  MAX_TERMINAL_MIN_COLUMN_WIDTH,
+  MIN_TERMINAL_MIN_COLUMN_WIDTH,
+} from "../../shared/terminal-column-width"
+export { DEFAULT_EDITOR_PRESET, getDefaultEditorCommandTemplate, getEditorPresetLabel }
 
 interface TerminalPreferencesState {
   scrollbackLines: number
@@ -87,7 +40,7 @@ export const useTerminalPreferencesStore = create<TerminalPreferencesState>()(
     editorPreset: DEFAULT_EDITOR_PRESET,
     editorCommandTemplate: getDefaultEditorCommandTemplate(DEFAULT_EDITOR_PRESET),
     setScrollbackLines: (scrollbackLines) => set({ scrollbackLines: clampScrollback(scrollbackLines) }),
-    setMinColumnWidth: (minColumnWidth) => set({ minColumnWidth: clampMinColumnWidth(minColumnWidth) }),
+    setMinColumnWidth: (minColumnWidth) => set({ minColumnWidth: clampTerminalMinColumnWidth(minColumnWidth) }),
     setEditorPreset: (editorPreset) =>
       set((state) => {
         const normalizedPreset = normalizeEditorPreset(editorPreset)
