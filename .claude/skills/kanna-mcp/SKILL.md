@@ -5,8 +5,6 @@ description: MCP in Kanna — user-registered custom MCP servers (transports, co
 
 # Kanna MCP — custom servers and the remote /mcp endpoint
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist

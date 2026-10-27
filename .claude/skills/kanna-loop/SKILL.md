@@ -11,16 +11,15 @@ on the main agent's Claude session. There is no timer-based `schedule_wakeup`
 anymore — it was removed when this pattern landed, superseding
 `adr-20260603-agent-self-scheduled-wake`.
 
-**The plan is the chat's durable task list, not a markdown file
-(adr-20260918-loop-tasks-replace-tracking-file).** A loop no longer creates,
+**The plan is the chat's durable task list, not a markdown file.** A loop no longer creates,
 reads, or writes `PROGRESS.md`. Its plan lives in event-sourced per-chat task
 state (`src/shared/chat-tasks/**`, folded at `event-store-tasks.ts`, on the
 `chat-tasks` log), read and written through the `mcp__kanna__task_*` tools. That
 state survives `/clear`, a server restart, and the transcript tail window — the
 three ways the old client-derived task card lost its rows. The markdown
 tracking tools (`query_tracking_file` / `append_tracking_row` /
-`replace_tracking_section`) remain for the NON-loop durable-document use in
-CLAUDE.md; the loop simply does not use them.
+`replace_tracking_section`) remain for the NON-loop durable-document use
+described in kanna-sessions; the loop simply does not use them.
 
 **Roles:**
 - **Main agent = orchestrator; stateless-in-context, stateful-in-tasks.**
@@ -392,7 +391,7 @@ armed and "Tasks" otherwise, showing a `completed/total` tally in the latter.
 ## Structured tracking-file access — kept for NON-loop use only
 
 The loop no longer reads or writes a tracking file, but the structured
-tracking-document tools remain for the durable-document use CLAUDE.md documents
+tracking-document tools remain for the durable-document use kanna-sessions documents
 (a repo-resident file the user reads, commits and diffs):
 
 - **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
@@ -461,7 +460,7 @@ either; CC hardcodes 200 only for its fork agent). Enforcement:
 An ARMED loop always holds exactly one pending wake: a running subagent, a
 queued message, or an active turn. Three ways that invariant broke, each fixed
 by a different pass. The general queued-message durability rules live in
-`CLAUDE.md` ("Queued messages are released on commit, not on dequeue"); what
+kanna-sessions ("Queued messages are released on commit, not on dequeue"); what
 follows is the loop-specific half.
 
 **`recoverArmedLoopWakes` — the wake that died WITH the server.** The loop's
@@ -571,5 +570,5 @@ The historical bug this section recorded — a bare `PROGRESS.md` resolving
 against the wrong checkout across 26 sibling worktrees — is deleted by
 construction: the task store is keyed on `chatId` and has no path.
 
-See `adr-20260830-unarmed-delivery-names-plan` (superseded by
-`adr-20260918-loop-tasks-replace-tracking-file`).
+See `adr-20260830-unarmed-delivery-names-plan`, superseded by the move to the
+task store.

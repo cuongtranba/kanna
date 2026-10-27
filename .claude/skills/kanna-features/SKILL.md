@@ -5,8 +5,6 @@ description: Assorted Kanna product features and their load-bearing invariants â
 
 # Kanna features â€” boards, projects, uploads, packages, plugins
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Single-Session Import Live-Tail (KANNA_IMPORT_FOLLOW_*)
 
 `FollowedSessionRegistry` (`src/server/followed-session-registry.ts`) stat-polls

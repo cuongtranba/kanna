@@ -198,8 +198,6 @@ password only reaches the container because the compose file declares
 
 ## Server-side observability and perf alerts
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ### Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 
 Three independent concerns, one adapter (`src/server/otel.adapter.ts` — the

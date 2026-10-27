@@ -214,5 +214,4 @@ whole-transfer timeout**. Go: do NOT reuse `transport.HTTPClient` (its 60 s
 
 `wiki/src/content/docs/guides/user/beacons.md` (write folders + moving files),
 `c3-241` contract table, an ADR `adr-20261009-beacon-file-transfer` (via
-`c3x add adr`), eval bindings for new files, `PROGRESS-beacon.md`, and a short
-CLAUDE.md section.
+`c3x add adr`), eval bindings for new files, and a short CLAUDE.md section.

@@ -5,7 +5,7 @@ description: Claude session and turn lifecycle in Kanna — the Agent SDK driver
 
 # Kanna sessions — turns, compaction, queue, keep-alive
 
-Moved verbatim from the root `CLAUDE.md`. These invariants are each backed by a measured incident; read the relevant section before editing the code it names.
+These invariants are each backed by a measured incident; read the relevant section before editing the code it names.
 
 ## Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
 
@@ -353,7 +353,7 @@ reason to call the shims there. **A restricted subagent is different:**
 toolset whenever `restrictedAllowedPaths` is set, and the shims — registered
 with those paths — become its only file tools, each call checked by
 `permission-gate.ts`. With the flag off, such a subagent has no file tools at
-all; PR 4 of `PLAN-agent-sdk-builtins.md` replaces this with a PreToolUse hook
+all; PR 4 of #1382 replaces this with a PreToolUse hook
 that keeps the native tools. The removed PTY driver also routed through the
 shims, via `--tools "mcp__kanna__*"`.
 

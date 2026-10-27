@@ -5,8 +5,6 @@ description: Model and provider catalog in Kanna — customModels and mergeCusto
 
 # Kanna providers and models
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Configurable Model Catalog (customModels)
 
 Claude + Codex models are user-configurable from Settings → "Models" instead

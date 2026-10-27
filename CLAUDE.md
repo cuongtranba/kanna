@@ -12,7 +12,7 @@ bun install
 bun run dev            # vite client :5174 + server :5175
 bun run start          # single-process server, production shape
 bun run check          # typecheck → lint → lint:comments → build:client → check:bundle
-bun run test [file]    # NEVER bare `bun test`: it needs --conditions production
+bun run test [file]    # always this, never bare `bun test`: it carries CI's flags
 bun run typecheck      # TS7 by explicit path; never bare tsc or bunx tsc (two tsc bins installed)
 bun run check:arch     # architecture and test-style ratchets
 ```

@@ -5,7 +5,7 @@ description: Kanna beacons — beacon_pull / beacon_push file transfer (tickets,
 
 # Kanna beacons
 
-Moved verbatim from the root `CLAUDE.md`. Any protocol change must update the Go port and its conformance fixtures in the same PR.
+Any protocol change must update the Go port and its conformance fixtures in the same PR.
 
 ## Beacon file transfer (`beacon_pull`, `beacon_push`)
 

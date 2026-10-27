@@ -6,7 +6,7 @@ user-invocable: false
 
 # Kanna React style
 
-Patterns the Kanna client follows. Match them when adding or editing UI code so the codebase stays coherent.
+Patterns the Kanna client follows. Match them when adding or editing UI code so the codebase stays coherent. Read `DESIGN.md` (repo root) before any UI work; live tokens are in `src/index.css`.
 
 ## File layout
 
@@ -22,9 +22,9 @@ src/client/app/<Page>.tsx     # page-level composition
 
 Prefer co-located tests (`Foo.tsx` next to `Foo.test.tsx`). Helpers separate from components — components import helpers, never the inverse.
 
-## Strong typing — no `any`, no `unknown`
+## Strong typing — no `any`, no casts, no `unknown`
 
-The repo's TS strictness is non-negotiable. Concrete types or interfaces, never `any`. `unknown` is acceptable only when narrowed within the same scope. Test files may use `as any` to reach private members or fixture mocks; production code may not.
+`bun run lint` bans `any`, both cast spellings (`x as T`, `<T>x`), and `unknown` in every position of production code. Parsed JSON is `JsonValue` / `JsonObject` (`src/shared/json.ts`), narrowed with `isJsonObject`; a caught error goes through `toError()`. Tests are lint-exempt, but the test-style ratchet counts `as unknown as`, so build real fixtures.
 
 If a type doesn't exist yet, add it. Co-locate single-use types with the component; lift to `shared/types.ts` only when crossing the WS boundary.
 
@@ -176,11 +176,18 @@ Use Tailwind's `hidden md:flex` / `flex md:hidden` to render two markups one of 
 
 ## `tabular-nums` for live numerics
 
-Any element where digits change in place (timers, counters, durations, monospace stamps) gets `tabular-nums`. Without it the row jitters horizontally as glyph widths change.
+Any element where digits change in place (timers, counters, durations, ages, pids, monospace stamps) gets `tabular-nums`. Without it the row jitters horizontally as glyph widths change.
 
 ```tsx
 <span className="text-xs text-muted-foreground tabular-nums">{formatLiveDuration(elapsed)}</span>
 ```
+
+## Design rules no linter checks
+
+- No pulse or glow on a status dot (`animate-pulse` is fine on skeletons).
+- Kanna Coral covers at most 10% of a screen, and only for the brand mark and destructive intent.
+- Flat by default: depth comes from contrast and a 1px soft edge, not shadow.
+- Color never communicates alone; pair it with an icon, a label, or weight.
 
 ## Project Tooltip over native `title`
 
@@ -222,15 +229,6 @@ Match the repo's existing convention:
 
 Scope is the most specific subdir or component name (`chat-navbar`, `read-models`, `event-store`, `result-message`). Subject ≤ 50 chars, present tense, no period.
 
-## Don't over-comment
-
-Default: zero comments. Only annotate **why** when:
-- A subtle invariant exists that the code can't express
-- A workaround for a specific bug or constraint
-- An intentional `Math.max(0, ...)` guarding against clock skew
-
-Don't restate the code, don't reference the PR, don't add `// added for issue #28` — those rot. Prefer renaming the variable or extracting a helper over writing a comment.
-
 ## Every side effect shows it is in flight
 
 A control that sends a WS command or an HTTP request renders a pending state
@@ -250,9 +248,16 @@ const handleArchive = useCallback(() => runPendingAction(key, () => onArchive(ch
 socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
 ```
 
-- **Per-row actions key on the entity id**, so only that row reads as busy.
-- **A non-Button trigger** gets `disabled={pending}`,
-  `aria-busy={pending || undefined}`, and `<Spinner />` in place of its icon.
+- **`runPendingAction` ignores a second trigger** while the first is in flight,
+  clears the flag on settle, and logs a rejection. It returns `void`, so it is
+  legal in any handler.
+- **Keys** come from `pendingActionKey(scope, ...ids)`: the scope is the WS
+  command type (`"chat.archive"`), plus the entity id for a per-row action so
+  only that row reads as busy.
+- **`<Button pending={pending}>`** disables, sets `aria-busy`, and adds a spinner.
+  A non-Button trigger gets `disabled={pending}`,
+  `aria-busy={pending || undefined}`, and `<Spinner />`
+  (`components/ui/spinner.tsx`) in place of its icon.
   Toggles and selects are disabled while their write is in flight.
 - **A menu item that closes on click** has nowhere to show pending, so render it
   on the row the action targets.
@@ -260,15 +265,19 @@ socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
   owns the trigger launches it. Typing it `() => void` hides the promise from the
   one component that can show it. `no-misused-promises` rejects that mismatch.
 - **Failures are shown**, through the component's error state or
-  `setCommandError` for a WS command, never swallowed.
-- **`runDetached(label, promise)`** is only for background work nobody waits on:
-  reconnects, polling, a probe on mount, best-effort cleanup.
+  `setCommandError` (`kannaStateStore`) for a WS command, never only logged.
+- **`runDetached(label, promise)`** (`src/client/lib/runDetached.ts`) is only for
+  background work nobody waits on: reconnects, polling, a probe on mount, scroll,
+  best-effort cleanup. Using it for a click is the one way around the gate.
+- **No new per-component `saving`/`busy` boolean** for an action; use the store.
 - **A loading view** renders a loading indicator, never an empty panel.
 
-`bun run lint` enforces the launch side with type-aware
-`no-floating-promises` (`ignoreVoid: false`) and `no-misused-promises`, and bans
-`.catch(() => {})`. Whether the flag is actually rendered is on you. See CLAUDE.md
-**Pending state for side effects**.
+`bun run lint` enforces the launch side under `src/client/**`:
+`no-floating-promises` with `ignoreVoid: false` (`void promise` fails;
+`navigate()` is allowlisted), `no-misused-promises` on JSX attributes, and a ban
+on `.catch(() => {})` / `() => undefined` / `() => null`. Never silence them with
+`eslint-disable`. Whether the flag is actually rendered is on you
+(`adr-20260925-client-pending-action-state`).
 
 ## Live state vs idle state styling
 

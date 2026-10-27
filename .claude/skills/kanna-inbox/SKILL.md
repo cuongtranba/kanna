@@ -5,8 +5,6 @@ description: The inbound side of Kanna — the in-process service bus and EventS
 
 # Kanna service bus, Inbox, MCP sources, webhooks
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Service bus — every durable fact is published once, after it is on disk
 
 `src/server/service-bus/` (component `c3-246`, ADR
