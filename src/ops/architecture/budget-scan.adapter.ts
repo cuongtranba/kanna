@@ -11,6 +11,7 @@ import {
   type PatternBudget,
   type PatternMeasurement,
 } from "./budget"
+import { countCloneBlocks, findLeakedLiterals, type SourceText } from "./duplication"
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx"]
 
@@ -108,4 +109,19 @@ export async function readEslintLimits(
   }
 
   return found
+}
+
+const SELF_QUOTING_PREFIX = "src/ops/architecture/"
+
+export function measureDuplication(root: string, sources: readonly ModuleMeasurement[]): PatternMeasurement[] {
+  const texts: SourceText[] = sources.map(({ path: relativePath }) => ({
+    path: relativePath,
+    text: readFileSync(path.join(root, relativePath), "utf8"),
+  }))
+  const clones = countCloneBlocks(texts)
+  const leaked = findLeakedLiterals(texts.filter((source) => !source.path.startsWith(SELF_QUOTING_PREFIX)))
+  return [
+    { id: "leaked-protocol-literals", count: leaked.count, sites: leaked.sites, filesScanned: texts.length },
+    { id: "code-clones", count: clones.count, sites: clones.sites, filesScanned: texts.length },
+  ]
 }

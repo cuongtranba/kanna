@@ -16,8 +16,8 @@ updates:
     ignore:
       # typescript must stay <6.1.0: typescript-eslint's parser loads the
       # legacy JS API via require('typescript'), peer range <6.1.0. TS7 is
-      # installed separately as the "typescript-7" alias. See CLAUDE.md
-      # "TypeScript (dual install)".
+      # installed separately as the "typescript-7" alias. See the
+      # kanna-test skill.
       - dependency-name: "typescript"
         versions: [">=6.1.0"]
 

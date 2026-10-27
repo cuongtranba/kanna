@@ -9,7 +9,7 @@ const REMEDY =
   "so a factory that omits an export can kill an unrelated suite's import in " +
   "filesystem-dependent order — the class that intermittently failed CI and blocked " +
   "the v1.58.0 publish. Inject the dependency as a parameter with the production " +
-  'default instead; see CLAUDE.md "Module mocks are banned".'
+  'default instead; see the kanna-test skill.'
 
 const LEGACY_MODULE_MOCKS = new Set([
   "src/client/components/messages/MermaidDiagram.test.tsx",

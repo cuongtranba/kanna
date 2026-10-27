@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { measureModules, measurePatterns, measureTestSources, readEslintLimits } from "./budget-scan.adapter"
+import { measureDuplication, measureModules, measurePatterns, measureTestSources, readEslintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
   checkEslintLimits,
   checkPatternBudget,
+  COUNT_BUDGETS,
   ESLINT_LIMIT_PINS,
   formatBreach,
   MODULE_ALLOWANCES,
@@ -16,6 +17,7 @@ import {
   type ModuleMeasurement,
   type PatternMeasurement,
 } from "./budget"
+import { CLONE_WINDOW_LINES, countCloneBlocks, findLeakedLiterals } from "./duplication"
 
 const measuredModules = (entries: Record<string, number>): ModuleMeasurement[] =>
   Object.entries(entries).map(([path, lines]) => ({ path, lines }))
@@ -189,6 +191,11 @@ describe("the repository satisfies its architecture budget", () => {
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
+  test("no protocol literal leaked into a second module and no copied block appeared, and neither population shrank unpinned", () => {
+    const breaches = checkPatternBudget(measureDuplication(root, modules), COUNT_BUDGETS)
+    expect(breaches.map(formatBreach).join("\n\n")).toBe("")
+  })
+
   test("the scan reaches real source, so a silently-empty gate cannot pass", () => {
     expect(modules.length).toBeGreaterThan(400)
     expect(modules.some((m) => m.path === "src/server/agent-coordinator.ts")).toBe(true)
@@ -204,16 +211,37 @@ describe("the manifest itself", () => {
     }
   })
 
-  test("every pattern budget cites a rationale and a driving issue", () => {
-    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
+  test("every budget cites a rationale and a driving issue", () => {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS]) {
       expect(budget.rationale.length).toBeGreaterThan(20)
       expect(budget.issue).toBeGreaterThan(0)
+    }
+  })
+
+  test("every pattern budget names the paths it scans", () => {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
       expect(budget.include.length).toBeGreaterThan(0)
     }
   })
 
+  test("a block copied into a second module counts as a clone, and the same block once does not", () => {
+    const block = Array.from({ length: CLONE_WINDOW_LINES }, (_, i) => `const value${i} = compute(${i})`).join("\n")
+    const once = countCloneBlocks([{ path: "a.ts", text: block }, { path: "b.ts", text: "const other = 1" }])
+    const twice = countCloneBlocks([{ path: "a.ts", text: block }, { path: "b.ts", text: `  ${block.replaceAll("\n", "\n   ")}` }])
+    expect(once.count).toBe(0)
+    expect(twice.count).toBe(2)
+  })
+
+  test("a protocol literal is leaked only once a second module hard-codes it", () => {
+    const owner = { path: "routes.ts", text: 'export const SHARE_ROUTE = "/api/share"' }
+    const importer = { path: "page.ts", text: "fetch(SHARE_ROUTE)" }
+    const copier = { path: "other.ts", text: 'fetch("/api/share")' }
+    expect(findLeakedLiterals([owner, importer]).count).toBe(0)
+    expect(findLeakedLiterals([owner, importer, copier]).count).toBe(1)
+  })
+
   test("pattern ids are unique across both manifests", () => {
-    const ids = [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS].map((b) => b.id)
+    const ids = [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS].map((b) => b.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 

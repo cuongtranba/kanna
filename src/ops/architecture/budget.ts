@@ -29,13 +29,16 @@ export const PRODUCTION_EXCLUDES: readonly string[] = [
   "/testing/",
 ]
 
-export interface PatternBudget {
+export interface CountBudget {
   readonly id: string
-  readonly include: readonly string[]
-  readonly pattern: string
   readonly max: number
   readonly issue: number
   readonly rationale: string
+}
+
+export interface PatternBudget extends CountBudget {
+  readonly include: readonly string[]
+  readonly pattern: string
 }
 
 export const PATTERN_BUDGETS: readonly PatternBudget[] = [
@@ -211,6 +214,23 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
   },
 ]
 
+export const COUNT_BUDGETS: readonly CountBudget[] = [
+  {
+    id: "leaked-protocol-literals",
+    max: 26,
+    issue: 1379,
+    rationale:
+      "Distinct env-var names, HTTP routes, bus subjects and storage keys hard-coded in two or more production modules. Each is one protocol decision known by several modules, so a rename has to find every copy and a missed one fails only at runtime. Export it from the module that owns the protocol and import it everywhere else.",
+  },
+  {
+    id: "code-clones",
+    max: 237,
+    issue: 1379,
+    rationale:
+      "Maximal runs of duplicated 8-line windows (whitespace-normalized, structural lines skipped) across production modules. A copied block is a rule with several owners: a fix lands in one copy and the others drift. Give the rule one home and call it.",
+  },
+]
+
 export interface EslintLimitPin {
   readonly rule: string
   readonly max: number
@@ -331,7 +351,7 @@ export function checkModuleBudget(
 
 export function checkPatternBudget(
   measured: readonly PatternMeasurement[],
-  budgets: readonly PatternBudget[] = PATTERN_BUDGETS,
+  budgets: readonly CountBudget[] = PATTERN_BUDGETS,
 ): BudgetBreach[] {
   const breaches: BudgetBreach[] = []
   const byId = new Map(budgets.map((b) => [b.id, b]))
@@ -375,7 +395,7 @@ export function formatBreach(breach: BudgetBreach): string {
       return `"${breach.id}" dropped to ${breach.actual} (pinned at ${breach.max}) — lower the pin in this PR.\n`
         + `  Set max: ${breach.actual} in ${manifestOf(breach.id)} so the population cannot creep back up.`
     case "pattern_unknown":
-      return `Measured "${breach.id}" has no PATTERN_BUDGETS or TEST_PATTERN_BUDGETS entry.`
+      return `Measured "${breach.id}" has no PATTERN_BUDGETS, TEST_PATTERN_BUDGETS or COUNT_BUDGETS entry.`
     case "limit_raised":
       return `eslint.config.js raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
         + `  ${eslintRationaleOf(breach.rule)}`
@@ -396,10 +416,11 @@ export function formatBreach(breach: BudgetBreach): string {
 }
 
 function rationaleOf(id: string): string {
-  return [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS].find((b) => b.id === id)?.rationale ?? ""
+  return [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS].find((b) => b.id === id)?.rationale ?? ""
 }
 
 function manifestOf(id: string): string {
+  if (COUNT_BUDGETS.some((b) => b.id === id)) return "COUNT_BUDGETS"
   return TEST_PATTERN_BUDGETS.some((b) => b.id === id) ? "TEST_PATTERN_BUDGETS" : "PATTERN_BUDGETS"
 }
 

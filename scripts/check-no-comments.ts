@@ -28,6 +28,6 @@ console.error(report.join("\n"))
 console.error(
   `\nno-comments: ${total} comment(s) in ${offending} file(s). ` +
     `Run \`bun run strip:comments\`, or keep it only if a tool executes it ` +
-    `(see "No Code Comments" in CLAUDE.md).`,
+    `(see "Hard rules" in CLAUDE.md).`,
 )
 process.exit(1)
