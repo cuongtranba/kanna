@@ -31,7 +31,7 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
+    const sidebar = deriveSidebarData(state, { nowMs: 1_000_000 })
     expect(sidebar.projectGroups[0]?.chats[0]?.provider).toBe("codex")
     expect(sidebar.projectGroups[0]?.chats[0]?.unread).toBe(true)
     expect(sidebar.projectGroups[0]?.chats[0]?.canFork).toBe(true)
@@ -78,7 +78,7 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
+    const sidebar = deriveSidebarData(state, { nowMs: 1_000_000 })
 
     expect(sidebar.projectGroups[0]?.chats.map((chat) => chat.chatId)).toEqual(["chat-active"])
     expect(sidebar.projectGroups[0]?.archivedChats?.map((chat) => chat.chatId)).toEqual(["chat-archived"])
@@ -117,12 +117,8 @@ describe("read models", () => {
       planMode: true,
     }])
 
-    const chat = deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      "chat-1",
-      () => ({
+    const chat = deriveChatSnapshot(state, "chat-1", {
+      getMessages: () => ({
         messages: [],
         history: {
           hasOlder: false,
@@ -130,8 +126,8 @@ describe("read models", () => {
           recentLimit: 200,
         },
       }),
-      () => []
-    )
+      getTunnelEvents: () => [],
+    })
     expect(chat?.runtime.provider).toBe("claude")
     expect(chat?.queuedMessages.map((message) => message.content)).toEqual(["follow up"])
     expect(chat?.history.recentLimit).toBe(200)
@@ -173,19 +169,15 @@ describe("read models", () => {
     ]
     const chat = deriveChatSnapshot(
       state,
-      new Map(),
-      new Set(),
       "chat-1",
-      () => ({
-        messages: [],
-        history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
-      }),
-      () => [],
-      new Map(),
-      Date.now(),
-      new Map(),
-      { customModels: [], customProviders: [] },
-      new Map([["chat-1", tasks]]),
+      {
+        getMessages: () => ({
+          messages: [],
+          history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
+        }),
+        getTunnelEvents: () => [],
+      },
+      { backgroundTasksByChatId: new Map([["chat-1", tasks]]) },
     )
     expect(chat?.runtime.backgroundTasks).toEqual(tasks)
   })
@@ -214,19 +206,7 @@ describe("read models", () => {
     }
 
     function snapshotOf(state: ReturnType<typeof stateWithRuns>, sdkTasks: { id: string; taskType: string; description: string; startedAt: number; hasOutput: boolean }[]) {
-      return deriveChatSnapshot(
-        state,
-        new Map(),
-        new Set(),
-        "chat-1",
-        () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
-        () => [],
-        new Map(),
-        Date.now(),
-        new Map(),
-        { customModels: [], customProviders: [] },
-        new Map([["chat-1", sdkTasks]]),
-      )
+      return deriveChatSnapshot(state, "chat-1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] }, { backgroundTasksByChatId: new Map([["chat-1", sdkTasks]]) })
     }
 
     test("runtime.backgroundTasks lists a running top-level subagent run after the SDK tasks", () => {
@@ -332,7 +312,7 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.projectGroups[0]?.chats.map((chat) => chat.chatId)).toEqual(["chat-new", "chat-old"])
   })
 
@@ -359,7 +339,7 @@ describe("read models", () => {
       createdAt: 3,
       updatedAt: 15,
     })
-    const sidebar = deriveSidebarData(state, new Map(), { sidebarProjectOrder: ["project-1"] })
+    const sidebar = deriveSidebarData(state, {}, { sidebarProjectOrder: ["project-1"] })
 
     expect(sidebar.projectGroups.map((group) => group.groupKey)).toEqual(["project-1", "project-2", "project-3"])
   })
@@ -403,7 +383,7 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
+    const sidebar = deriveSidebarData(state, { nowMs: 1_000_000 })
 
     expect(sidebar.projectGroups[0]?.previewChats.map((chat) => chat.chatId)).toEqual(["chat-1"])
     expect(sidebar.projectGroups[0]?.olderChats.map((chat) => chat.chatId)).toEqual(["chat-2"])
@@ -427,7 +407,7 @@ describe("read models", () => {
     state.chatsById.set("chat-new", { ...baseChat, id: "chat-new", title: "New", createdAt: 20, updatedAt: 20, lastMessageAt: 1_000_000 - 60 * 1_000 })
     state.chatsById.set("chat-old", { ...baseChat, id: "chat-old", title: "Old", createdAt: 30, updatedAt: 30, lastMessageAt: 1_000_000 - 26 * 60 * 60 * 1_000 })
 
-    const group = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]
+    const group = deriveSidebarData(state, { nowMs: 1_000_000 }).projectGroups[0]
 
     expect(group?.chats.map((chat) => chat.chatId)).toEqual(["chat-pinned", "chat-new", "chat-old"])
     expect(group?.chats[0]?.pinnedAt).toBe(5_000)
@@ -454,10 +434,10 @@ describe("read models", () => {
       lastTurnOutcome: null,
     }
     state.chatsById.set("chat-1", oldChat)
-    expect(deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(true)
+    expect(deriveSidebarData(state, { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(true)
 
     state.chatsById.set("chat-1", { ...oldChat, pinnedAt: 5_000 })
-    expect(deriveSidebarData(state, new Map(), { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(false)
+    expect(deriveSidebarData(state, { nowMs: 1_000_000 }).projectGroups[0]?.defaultCollapsed).toBe(false)
   })
 
   test("shows all recent chats in the preview before folding older chats", () => {
@@ -489,7 +469,7 @@ describe("read models", () => {
       })
     }
 
-    const sidebar = deriveSidebarData(state, new Map(), { nowMs: 1_000_000 })
+    const sidebar = deriveSidebarData(state, { nowMs: 1_000_000 })
 
     expect(sidebar.projectGroups[0]?.previewChats.map((chat) => chat.chatId)).toEqual([
       "chat-1",
@@ -553,11 +533,7 @@ describe("read models", () => {
       lastTurnOutcome: null,
     })
 
-    const sidebar = deriveSidebarData(
-      state,
-      new Map([["chat-active", "running"]]),
-      { drainingChatIds: new Set(["chat-draining"]) }
-    )
+    const sidebar = deriveSidebarData(state, { activeStatuses: new Map([["chat-active", "running"]]), drainingChatIds: new Set(["chat-draining"]) })
 
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-active")?.canFork).toBeUndefined()
     expect(sidebar.projectGroups[0]?.chats.find((chat) => chat.chatId === "chat-pending")?.canFork).toBe(true)
@@ -590,7 +566,7 @@ describe("read models", () => {
       starredAt: 2000,
     })
 
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.starredProjectGroups.map((g) => g.groupKey)).toEqual(["p3", "p1"])
     expect(sidebar.projectGroups.map((g) => g.groupKey)).toEqual(["p2"])
   })
@@ -614,7 +590,7 @@ describe("read models", () => {
       starredAt: 1000,
     })
 
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.starredProjectGroups.map((g) => g.groupKey)).toEqual(["p1", "p2"])
   })
 
@@ -635,7 +611,7 @@ describe("read models", () => {
       updatedAt: 2,
     })
 
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.starredProjectGroups).toEqual([])
     expect(sidebar.projectGroups.map((g) => g.groupKey)).toContain("p1")
     expect(sidebar.projectGroups.map((g) => g.groupKey)).toContain("p2")
@@ -650,7 +626,7 @@ describe("read models", () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.stacks).toHaveLength(1)
     expect(sidebar.stacks[0]?.title).toBe("Integration")
   })
@@ -663,7 +639,7 @@ describe("read models", () => {
       unread: false, provider: "codex" as AgentProvider, planMode: false,
       sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.projectGroups[0]?.sourceProvider).toBe("codex")
   })
 
@@ -673,7 +649,7 @@ describe("read models", () => {
     const discoveredProvidersByPath = new Map([
       ["/tmp/p1", ["codex" as AgentProvider]],
     ])
-    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    const sidebar = deriveSidebarData(state, {}, { discoveredProvidersByPath })
     expect(sidebar.projectGroups[0]?.sourceProvider).toBe("codex")
   })
 
@@ -683,14 +659,14 @@ describe("read models", () => {
     const discoveredProvidersByPath = new Map([
       ["/tmp/p1", ["claude" as AgentProvider, "codex" as AgentProvider]],
     ])
-    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    const sidebar = deriveSidebarData(state, {}, { discoveredProvidersByPath })
     expect(sidebar.projectGroups[0]?.sourceProvider).toBeUndefined()
   })
 
   test("sourceProvider is absent when project has no chats and no discovery info", () => {
     const state = createEmptyState()
     state.projectsById.set("p1", { id: "p1", localPath: "/tmp/p1", title: "P1", createdAt: 1, updatedAt: 1 })
-    const sidebar = deriveSidebarData(state, new Map())
+    const sidebar = deriveSidebarData(state)
     expect(sidebar.projectGroups[0]?.sourceProvider).toBeUndefined()
   })
 
@@ -705,7 +681,7 @@ describe("read models", () => {
     const discoveredProvidersByPath = new Map([
       ["/tmp/p1", ["codex" as AgentProvider]],
     ])
-    const sidebar = deriveSidebarData(state, new Map(), { discoveredProvidersByPath })
+    const sidebar = deriveSidebarData(state, {}, { discoveredProvidersByPath })
     expect(sidebar.projectGroups[0]?.sourceProvider).toBe("claude")
   })
 
@@ -736,18 +712,7 @@ describe("read models", () => {
     const custom = [
       { id: "claude-plan-only", label: "Plan Only", provider: "claude" as const, createdAt: 1, updatedAt: 1 },
     ]
-    const snap = deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      "chat-1",
-      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
-      () => [],
-      new Map(),
-      Date.now(),
-      new Map(),
-      { customModels: custom, customProviders: [] },
-    )
+    const snap = deriveChatSnapshot(state, "chat-1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [], catalogSources: { customModels: custom, customProviders: [] } })
     const claude = snap!.availableProviders.find((p) => p.id === "claude")!
     expect(claude.models.some((m) => m.id === "claude-plan-only")).toBe(true)
   })
@@ -780,11 +745,7 @@ describe("deriveChatSnapshot subagent immutability", () => {
     const runMap = new Map<string, SubagentRunSnapshot>([["r1", run]])
     state.subagentRunsByChatId.set("c1", runMap)
 
-    const snap1 = deriveChatSnapshot(
-      state, new Map(), new Set(), "c1",
-      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
-      () => []
-    )
+    const snap1 = deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] })
     const capturedEntries = snap1!.subagentRuns.r1!.entries
     expect(capturedEntries).toHaveLength(1)
 
@@ -806,14 +767,7 @@ describe("deriveChatSnapshot schedules", () => {
       unread: false, provider: null, planMode: false, sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
 
-    const snapshot = deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      "c1",
-      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
-      () => []
-    )
+    const snapshot = deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }), getTunnelEvents: () => [] })
     expect(snapshot!.schedules).toEqual({})
     expect(snapshot!.liveScheduleId).toBeNull()
   })
@@ -832,14 +786,7 @@ describe("deriveChatSnapshot schedules", () => {
       detectedAt: 1, resetAt: 2_000, tz: "Asia/Saigon",
     }])
 
-    const snapshot = deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      "c1",
-      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }),
-      () => []
-    )
+    const snapshot = deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 0 } }), getTunnelEvents: () => [] })
     expect(snapshot!.schedules.s1.state).toBe("proposed")
     expect(snapshot!.liveScheduleId).toBe("s1")
   })
@@ -940,14 +887,7 @@ describe("stackSummaries", () => {
 
 describe("deriveChatSnapshot resolvedBindings", () => {
   function buildSnapshot(state: ReturnType<typeof createEmptyState>, chatId: string) {
-    return deriveChatSnapshot(
-      state,
-      new Map(),
-      new Set(),
-      chatId,
-      () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }),
-      () => [],
-    )
+    return deriveChatSnapshot(state, chatId, { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] })
   }
 
   function seedStackChat(opts: { p2Deleted?: boolean } = {}) {
@@ -1111,7 +1051,7 @@ describe("deriveChatSnapshot loopProgress", () => {
   const noMessages = () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } })
 
   test("an armed loop with no tasks yet reports an empty, armed panel", () => {
-    const snap = deriveChatSnapshot(seedArmedLoopChat(), new Map(), new Set(), "c1", noMessages, () => [])
+    const snap = deriveChatSnapshot(seedArmedLoopChat(), "c1", { getMessages: noMessages, getTunnelEvents: () => [] })
     expect(snap?.loopProgress).toEqual({ chatId: "c1", armed: true, rows: [], rateLimit: null, completed: 0, total: 0 })
   })
 
@@ -1123,7 +1063,7 @@ describe("deriveChatSnapshot loopProgress", () => {
       { v: 3, timestamp: 103, chatId: "c1", type: "chat_task_claimed", taskId: "k:1", claimId: "c1a" },
       { v: 3, timestamp: 104, chatId: "c1", type: "chat_task_settled", taskId: "k:1", claimId: "c1a", outcome: "done" },
     ] as never)
-    const snap = deriveChatSnapshot(state, new Map(), new Set(), "c1", noMessages, () => [])
+    const snap = deriveChatSnapshot(state, "c1", { getMessages: noMessages, getTunnelEvents: () => [] })
     expect(snap?.loopProgress.rows.map((r) => [r.status, r.label])).toEqual([
       ["done", "chunk one"],
       ["pending", "chunk two"],
@@ -1336,7 +1276,7 @@ describe("computeChatActivity", () => {
       sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
     const activeStatuses = new Map([["c1", "waiting_for_user" as const]])
-    const sidebar = deriveSidebarData(state, activeStatuses, { nowMs: 1_000_000 })
+    const sidebar = deriveSidebarData(state, { activeStatuses, nowMs: 1_000_000 })
     const row = sidebar.projectGroups[0]?.chats[0]
     expect(row?.activity.awaitingAnswer).toBe(true)
     expect(row?.activity.agents).toBe(0)

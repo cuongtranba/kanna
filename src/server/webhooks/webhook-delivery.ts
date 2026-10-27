@@ -4,7 +4,6 @@ import { jsonText, resolveJsonPath, type JsonValue } from "../../shared/json"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import {
   deliverInbound,
-  inboundScheduleId,
   type InboundDeliveryAgent,
   type InboundDeliveryStore,
 } from "../inbound/deliver-inbound"
@@ -14,10 +13,6 @@ export type WebhookDeliveryStore = InboundDeliveryStore
 export type WebhookDeliveryAgent = InboundDeliveryAgent
 
 export type WebhookDeliveryResult = { ok: true; chatId: string } | { ok: false; detail: string }
-
-export function webhookScheduleId(hookId: string, deliveryId: string): string {
-  return inboundScheduleId({ kind: "webhook", hookId, hookName: "" }, deliveryId)
-}
 
 export function webhookHandler(hook: WebhookConfig): InboundHandler {
   return {

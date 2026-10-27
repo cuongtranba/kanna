@@ -42,6 +42,10 @@ const REGISTERED_BY_TYPE: ReadonlyMap<string, RegisteredCommand> = new Map(
   COMMAND_REGISTRY.map((definition): [string, RegisteredCommand] => [definition.type, definition]),
 )
 
+export function commandsReturning(schema: z.ZodType): ReadonlySet<CommandType> {
+  return new Set(COMMAND_REGISTRY.filter((definition) => definition.result === schema).map((definition) => definition.type))
+}
+
 export function isCommandType(type: string): type is CommandType {
   return REGISTERED_BY_TYPE.has(type)
 }

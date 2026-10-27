@@ -105,29 +105,32 @@ export function buildInstallSkillCommand(
   skillId: string,
   agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
 ) {
-  return [
-    NPX,
-    "skills",
-    "add",
-    assertSafeSkillSource(source),
-    "--skill",
-    assertSafeSkillId(skillId),
-    "--global",
-    "--agent",
-    ...assertSafeSkillAgents([...agents]),
-    "--yes",
-  ]
+  const safeSource = assertSafeSkillSource(source)
+  const safeSkillId = assertSafeSkillId(skillId)
+  return {
+    source: safeSource,
+    skillId: safeSkillId,
+    argv: [
+      NPX,
+      "skills",
+      "add",
+      safeSource,
+      "--skill",
+      safeSkillId,
+      "--global",
+      "--agent",
+      ...assertSafeSkillAgents([...agents]),
+      "--yes",
+    ],
+  }
 }
 
 export function buildUninstallSkillCommand(skillId: string) {
-  return [
-    NPX,
-    "skills",
-    "remove",
-    assertSafeSkillId(skillId),
-    "--global",
-    "--yes",
-  ]
+  const safeSkillId = assertSafeSkillId(skillId)
+  return {
+    skillId: safeSkillId,
+    argv: [NPX, "skills", "remove", safeSkillId, "--global", "--yes"],
+  }
 }
 
 async function runSkillCommand(command: string[]) {
@@ -146,12 +149,12 @@ export async function installSkill(
   skillId: string,
   agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
 ): Promise<SkillInstallResult> {
-  const command = buildInstallSkillCommand(source, skillId, agents)
-  const { cwd, stdout, stderr } = await runSkillCommand(command)
+  const built = buildInstallSkillCommand(source, skillId, agents)
+  const { cwd, stdout, stderr } = await runSkillCommand(built.argv)
   return {
-    source: command[3],
-    skillId: command[5],
-    command,
+    source: built.source,
+    skillId: built.skillId,
+    command: built.argv,
     cwd,
     stdout,
     stderr,
@@ -159,15 +162,15 @@ export async function installSkill(
 }
 
 export async function uninstallSkill(skillId: string): Promise<SkillUninstallResult> {
-  const command = buildUninstallSkillCommand(skillId)
-  const { cwd, stdout, stderr } = await runSkillCommand(command)
+  const built = buildUninstallSkillCommand(skillId)
+  const { cwd, stdout, stderr } = await runSkillCommand(built.argv)
   const remaining = await listInstalledSkills()
-  if (remaining.skills.some((skill) => skill.name === command[3])) {
-    throw new Error(`skills CLI exited without removing ${command[3]}; it is still in ${remaining.lockFilePath}.`)
+  if (remaining.skills.some((skill) => skill.name === built.skillId)) {
+    throw new Error(`skills CLI exited without removing ${built.skillId}; it is still in ${remaining.lockFilePath}.`)
   }
   return {
-    skillId: command[3],
-    command,
+    skillId: built.skillId,
+    command: built.argv,
     cwd,
     stdout,
     stderr,

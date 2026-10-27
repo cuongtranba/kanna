@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { APP_VERSION } from "../../shared/branding"
-import { envelopeToToolResult } from "./remote-mcp-envelope"
+import { envelopeToToolResult } from "./remote-mcp-views"
 import { mcpOnlyTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 import { jsonResult } from "./remote-mcp-views"
 

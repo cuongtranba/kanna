@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { boardOwnerKindSchema } from "../../shared/boards/types.schema"
 import { fail } from "../kanna-mcp-tool"
-import { envelopeToToolResult } from "./remote-mcp-envelope"
+import { envelopeToToolResult } from "./remote-mcp-views"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 
 const OWNER_CHOICE_MESSAGE = "Give ownerId (with an optional ownerKind), or the legacy projectId on its own. Not both, and not neither."

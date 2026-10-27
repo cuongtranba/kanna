@@ -117,7 +117,7 @@ describe("ws-router-skills", () => {
   describe("buildInstallSkillCommand", () => {
     test("builds global install command with default agents (universal, claude-code, codex)", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill")
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "add",
         "owner/repo",
@@ -134,7 +134,7 @@ describe("ws-router-skills", () => {
 
     test("builds install command with a custom single-agent override", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill", ["codex"])
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "add",
         "owner/repo",
@@ -162,7 +162,7 @@ describe("ws-router-skills", () => {
   describe("buildUninstallSkillCommand", () => {
     test("removes from every agent, so a detected agent sharing ~/.agents/skills cannot keep the skill installed", () => {
       const cmd = buildUninstallSkillCommand("my-skill")
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "remove",
         "my-skill",

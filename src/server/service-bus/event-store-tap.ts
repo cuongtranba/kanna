@@ -8,7 +8,6 @@ import {
   storeEventChatId,
   storeEventEntityId,
   storeEventSubject,
-  storeEventTimestamp,
   TRANSCRIPT_BUS_KINDS,
 } from "./store-event-subjects"
 
@@ -37,7 +36,7 @@ export function createBusTap(
         ts: now(),
         source: { kind: "store", log: LOG_OF_EVENT[kind] },
         direction: "internal",
-        idempotencyKey: `store:${kind}:${storeEventEntityId(event)}:${storeEventTimestamp(event)}`,
+        idempotencyKey: `store:${kind}:${storeEventEntityId(event)}:${event.timestamp}`,
         payload: toJsonValue(event),
         ...(chatId === undefined ? {} : { chatId }),
         ...(projectId === undefined ? {} : { projectId }),
