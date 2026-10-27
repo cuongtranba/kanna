@@ -5,7 +5,7 @@ import {
   columnColorTokenSchema,
   columnSemanticSchema,
   conflictResolutionSchema,
-  fieldKindSchema,
+  fieldDefSchema,
   remoteKindSchema,
   syncDirectionSchema,
 } from "../../boards/types.schema"
@@ -20,20 +20,6 @@ import type {
   SyncBinding,
 } from "../../boards/types"
 import { assertParity } from "../../type-parity"
-
-const fieldOptionSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  colorToken: columnColorTokenSchema.nullable(),
-})
-
-const fieldDefSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  kind: fieldKindSchema,
-  options: z.array(fieldOptionSchema).readonly().nullable(),
-  required: z.boolean(),
-})
 
 const fieldValueSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("text"), value: z.string() }),

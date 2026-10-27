@@ -5,7 +5,7 @@ import { cardActorOfOrigin } from "../shared/boards/actor"
 import type { CommandOrigin } from "../shared/command-origin"
 import type { BoardColumn, CardActor } from "../shared/boards/types"
 import { columnForRemoteState } from "../shared/boards/types"
-import { decodeContentForFields, decodeFieldDefsForWrite } from "../shared/boards/decode"
+import { decodeContentForFields, validateFieldDefsForWrite } from "../shared/boards/decode"
 import type { BoardSyncStatus, RepoSuggestion, SyncColumnRef } from "../shared/boards/sync-types"
 import { BoardStoreError, type UpdateBoardPatch, type UpdateCardPatch } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
@@ -142,7 +142,6 @@ async function dispatchSync(
   if (command.type === "board.sync.bind") {
     const binding = registry.bindSync({
       boardId: command.boardId,
-      providerId: "github-issues",
       sourceRef: { provider: "github-issues", owner: command.owner, repo: command.repo },
       direction: command.direction,
       allowAgentPush: command.allowAgentPush,
@@ -221,7 +220,7 @@ function dispatch(
       }
 
       if (command.cardFields !== undefined) {
-        const cardFields = decodeFieldDefsForWrite(command.cardFields)
+        const cardFields = validateFieldDefsForWrite(command.cardFields)
         if (!cardFields) {
           send({
             v: PROTOCOL_VERSION,

@@ -1,6 +1,6 @@
 
 import { basename, join } from "node:path"
-import { cardBranchName, BoardStoreError } from "./board-store"
+import { BoardStoreError } from "./board-store"
 import type { BoardRegistry } from "./board-registry"
 import {
   buildStartWorkPrompt,
@@ -33,6 +33,17 @@ export interface StartWorkDeps {
   addWorktree(repoRoot: string, opts: AddWorktreeOpts): Promise<GitWorktree>
   createChat(projectId: string, options: { stackBindings: StackBinding[] }): Promise<{ id: string }>
   sendPrompt(chatId: string, content: string): Promise<void>
+}
+
+export function cardBranchName(cardId: string, title: string, externalRef: string | null): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48)
+    .replace(/-+$/g, "")
+  const reference = externalRef ?? cardId.slice(0, 8)
+  return slug ? `card/${reference}-${slug}` : `card/${reference}`
 }
 
 export function cardWorktreeDir(repoRoot: string): string {

@@ -3,9 +3,9 @@ import { ChevronDown, ChevronUp, Trash2, X } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { ColorChoice } from "./ColorChoice"
-import { useCardSchemaStore } from "./CardSchemaPanel.store"
+import { CardSchemaStore } from "./CardSchemaPanel.store"
 import { FIELD_KIND_LABELS, missingLoadBearingIds } from "../../lib/boards/cardSchemaDraft"
-import { loadBearingFieldNote } from "../../../shared/boards/cardSchema"
+import { loadBearingFieldNote } from "../../../shared/boards/well-known-fields"
 import {
   COLUMN_COLOR_TOKENS,
   FIELD_KINDS,
@@ -13,66 +13,59 @@ import {
   type FieldOption,
 } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
-import type { JsonArray } from "../../../shared/json"
 import type { CommandPort } from "../../ports/commandPort"
-
-function encodeFieldDefs(fields: readonly FieldDef[]): JsonArray {
-  return fields.map((field) => ({
-    id: field.id,
-    label: field.label,
-    kind: field.kind,
-    options: field.options
-      ? field.options.map((option) => ({ id: option.id, label: option.label, colorToken: option.colorToken }))
-      : null,
-    required: field.required,
-  }))
-}
 
 
 export type CardSchemaPanelSocket = CommandPort
 
 export interface CardSchemaPanelProps {
   boardId: string
+  fields: readonly FieldDef[]
   socket: CardSchemaPanelSocket
   onClose: () => void
 }
 
-function store() {
-  return useCardSchemaStore.getState()
+export function CardSchemaPanel({ fields, ...rest }: CardSchemaPanelProps) {
+  return (
+    <CardSchemaStore.Provider init={fields}>
+      <CardSchemaPanelBody {...rest} />
+    </CardSchemaStore.Provider>
+  )
 }
 
-export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelProps) {
-  const draft = useCardSchemaStore((state) => state.draft)
-  const newLabel = useCardSchemaStore((state) => state.newLabel)
-  const newKind = useCardSchemaStore((state) => state.newKind)
-  const saving = useCardSchemaStore((state) => state.saving)
-  const error = useCardSchemaStore((state) => state.error)
+function CardSchemaPanelBody({ boardId, socket, onClose }: Omit<CardSchemaPanelProps, "fields">) {
+  const schema = CardSchemaStore.useScopedStoreApi()
+  const draft = CardSchemaStore.useScopedStore((state) => state.draft)
+  const newLabel = CardSchemaStore.useScopedStore((state) => state.newLabel)
+  const newKind = CardSchemaStore.useScopedStore((state) => state.newKind)
+  const saving = CardSchemaStore.useScopedStore((state) => state.saving)
+  const error = CardSchemaStore.useScopedStore((state) => state.error)
 
   const handleNewLabel = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    store().setNewLabel(event.currentTarget.value)
-  }, [])
+    schema.getState().setNewLabel(event.currentTarget.value)
+  }, [schema])
 
   const handleNewKind = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
-    store().setNewKind(event.currentTarget.value)
-  }, [])
+    schema.getState().setNewKind(event.currentTarget.value)
+  }, [schema])
 
   const handleAddField = useCallback(() => {
-    store().addField()
-  }, [])
+    schema.getState().addField()
+  }, [schema])
 
   const handleSave = useCallback(() => {
-    const state = store()
+    const state = schema.getState()
     state.beginSave()
     void socket
-      .command({ type: "board.update", boardId, cardFields: encodeFieldDefs(state.draft) })
+      .command({ type: "board.update", boardId, cardFields: state.draft })
       .then(() => {
-        store().endSave(null)
+        schema.getState().endSave(null)
         onClose()
       })
       .catch(onRejected((error) => {
-        store().endSave(error.message)
+        schema.getState().endSave(error.message)
       }))
-  }, [boardId, onClose, socket])
+  }, [boardId, onClose, socket, schema])
 
   const missing = missingLoadBearingIds(draft)
 
@@ -159,43 +152,44 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
 }
 
 function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; last: boolean }) {
-  const pendingRemoval = useCardSchemaStore((state) => state.pendingRemovalFieldId === field.id)
-  const optionDraft = useCardSchemaStore((state) => state.optionDraftByField[field.id] ?? "")
+  const schema = CardSchemaStore.useScopedStoreApi()
+  const pendingRemoval = CardSchemaStore.useScopedStore((state) => state.pendingRemovalFieldId === field.id)
+  const optionDraft = CardSchemaStore.useScopedStore((state) => state.optionDraftByField[field.id] ?? "")
 
   const fieldId = field.id
   const handleRename = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      store().renameField(fieldId, event.currentTarget.value)
+      schema.getState().renameField(fieldId, event.currentTarget.value)
     },
-    [fieldId],
+    [fieldId, schema],
   )
   const handleUp = useCallback(() => {
-    store().moveField(fieldId, -1)
-  }, [fieldId])
+    schema.getState().moveField(fieldId, -1)
+  }, [fieldId, schema])
   const handleDown = useCallback(() => {
-    store().moveField(fieldId, 1)
-  }, [fieldId])
+    schema.getState().moveField(fieldId, 1)
+  }, [fieldId, schema])
   const handleRequired = useCallback(() => {
-    store().toggleRequired(fieldId)
-  }, [fieldId])
+    schema.getState().toggleRequired(fieldId)
+  }, [fieldId, schema])
   const handleAskRemove = useCallback(() => {
-    store().askRemoveField(fieldId)
-  }, [fieldId])
+    schema.getState().askRemoveField(fieldId)
+  }, [fieldId, schema])
   const handleKeep = useCallback(() => {
-    store().cancelRemoveField()
-  }, [])
+    schema.getState().cancelRemoveField()
+  }, [schema])
   const handleRemove = useCallback(() => {
-    store().removeField(fieldId)
-  }, [fieldId])
+    schema.getState().removeField(fieldId)
+  }, [fieldId, schema])
   const handleOptionDraft = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      store().setOptionDraft(fieldId, event.currentTarget.value)
+      schema.getState().setOptionDraft(fieldId, event.currentTarget.value)
     },
-    [fieldId],
+    [fieldId, schema],
   )
   const handleAddOption = useCallback(() => {
-    store().addOption(fieldId)
-  }, [fieldId])
+    schema.getState().addOption(fieldId)
+  }, [fieldId, schema])
 
   const note = loadBearingFieldNote(field.id)
 
@@ -289,22 +283,23 @@ function FieldRow({ field, first, last }: { field: FieldDef; first: boolean; las
 }
 
 function OptionRow({ fieldId, option }: { fieldId: string; option: FieldOption }) {
+  const schema = CardSchemaStore.useScopedStoreApi()
   const optionId = option.id
   const handleRename = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      store().renameOption(fieldId, optionId, event.currentTarget.value)
+      schema.getState().renameOption(fieldId, optionId, event.currentTarget.value)
     },
-    [fieldId, optionId],
+    [fieldId, optionId, schema],
   )
   const handleColor = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
-      store().setOptionColor(fieldId, optionId, event.currentTarget.value)
+      schema.getState().setOptionColor(fieldId, optionId, event.currentTarget.value)
     },
-    [fieldId, optionId],
+    [fieldId, optionId, schema],
   )
   const handleRemove = useCallback(() => {
-    store().removeOption(fieldId, optionId)
-  }, [fieldId, optionId])
+    schema.getState().removeOption(fieldId, optionId)
+  }, [fieldId, optionId, schema])
 
   return (
     <li className="space-y-1.5">

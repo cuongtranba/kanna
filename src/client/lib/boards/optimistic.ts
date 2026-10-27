@@ -1,16 +1,11 @@
 
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
+import { findCardColumn, type CardMoveRequest } from "./dnd"
 
-export interface OptimisticMove {
-  cardId: string
-  toColumnId: string
-  aboveCardId: string | null
-  belowCardId: string | null
-}
 
-export function moveCardInView(view: BoardViewSnapshot, move: OptimisticMove): BoardViewSnapshot {
-  const fromColumnId = findCardColumn(view, move.cardId)
-  if (fromColumnId === null) return view
+export function moveCardInView(view: BoardViewSnapshot, move: CardMoveRequest): BoardViewSnapshot {
+  const fromColumnId = findCardColumn(view, move.cardId)?.columnId
+  if (fromColumnId === undefined) return view
   if (!(move.toColumnId in view.cards)) return view
 
   const card = (view.cards[fromColumnId] ?? []).find((candidate) => candidate.id === move.cardId)
@@ -35,14 +30,7 @@ export function moveCardInView(view: BoardViewSnapshot, move: OptimisticMove): B
   return { ...view, cards, counts }
 }
 
-function findCardColumn(view: BoardViewSnapshot, cardId: string): string | null {
-  for (const [columnId, cards] of Object.entries(view.cards)) {
-    if (cards.some((card) => card.id === cardId)) return columnId
-  }
-  return null
-}
-
-function insertionIndex(destination: readonly Card[], move: OptimisticMove): number {
+function insertionIndex(destination: readonly Card[], move: CardMoveRequest): number {
   if (move.aboveCardId !== null) {
     const index = destination.findIndex((card) => card.id === move.aboveCardId)
     if (index !== -1) return index + 1

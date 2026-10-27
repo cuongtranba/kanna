@@ -2,15 +2,14 @@ import { useCallback, useEffect, useMemo } from "react"
 import { ListChecks, RefreshCw, Settings2 } from "lucide-react"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
-import { useBoardSyncStore } from "./BoardPane.store"
+import { BoardPaneStore } from "./BoardPane.store"
 import { CardDrawer } from "./CardDrawer"
 import type { BlockerCandidate } from "./CardDependencies"
 import { BoardSyncPanel } from "./BoardSyncPanel"
 import { CardSchemaPanel } from "./CardSchemaPanel"
-import { useCardSchemaStore } from "./CardSchemaPanel.store"
 import { useBoardsStore, selectBoardPageSize, selectBoardView } from "../../stores/boardsStore"
 import type { BoardChatFacts } from "../../lib/boards/boardChatFacts"
-import { KannaBoard, type CardMoveRequest } from "./KannaBoard"
+import { KannaBoard } from "./KannaBoard"
 import { moveCardInView, moveColumnInView } from "../../lib/boards/optimistic"
 import type { ColumnSettingsValue } from "./ColumnSettings"
 import type { BoardSnapshot, SubscriptionTopic } from "../../../shared/protocol"
@@ -18,6 +17,8 @@ import type { CommandPort } from "../../ports/commandPort"
 import { errorMessage, onRejected } from "../../../shared/errors"
 import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
+import type { CardMoveRequest } from "../../lib/boards/dnd"
+import type { ClientCommand } from "../../../shared/protocol"
 
 
 export interface BoardPaneSocket extends CommandPort {
@@ -44,7 +45,16 @@ export interface BoardPaneProps {
   onOpenBoards?: (projectId: string) => void
 }
 
-export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards }: BoardPaneProps) {
+export function BoardPane(props: BoardPaneProps) {
+  return (
+    <BoardPaneStore.Provider key={props.boardId} init={undefined}>
+      <BoardPaneBody {...props} />
+    </BoardPaneStore.Provider>
+  )
+}
+
+function BoardPaneBody({ boardId, socket, chatFacts, onOpenCard, onOpenBoards }: BoardPaneProps) {
+  const pane = BoardPaneStore.useScopedStoreApi()
   const view = useBoardsStore(selectBoardView(boardId))
   const pageSize = useBoardsStore(selectBoardPageSize(boardId))
 
@@ -54,70 +64,77 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
     })
   }, [boardId, pageSize, socket])
 
+  const runBoardCommand = useCallback(
+    <C extends ClientCommand>(command: C, onFailure?: () => void) => {
+      void socket.command(command).catch(onRejected((error) => {
+        onFailure?.()
+        pane.getState().reportMessage(error.message)
+      }))
+    },
+    [pane, socket],
+  )
+
   const handleCardMove = useCallback(
     (move: CardMoveRequest) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       const optimistic = current ? moveCardInView(current, move) : undefined
       if (optimistic) useBoardsStore.getState().setBoardView(boardId, optimistic)
-      void socket
-        .command({
+      runBoardCommand(
+        {
           type: "board.card.move",
           cardId: move.cardId,
           toColumnId: move.toColumnId,
           aboveCardId: move.aboveCardId,
           belowCardId: move.belowCardId,
-        })
-        .catch(onRejected((error) => {
+        },
+        () => {
           revertOptimisticView(boardId, current, optimistic)
-          useBoardSyncStore.getState().finishSync(boardId, error.message)
-        }))
+        },
+      )
     },
-    [boardId, socket],
+    [boardId, runBoardCommand],
   )
 
-  const openCardId = useBoardSyncStore((state) => state.openCardId)
+  const openCardId = BoardPaneStore.useScopedStore((state) => state.openCardId)
 
   const handleOpenCard = useCallback(
     (cardId: string) => {
-      useBoardSyncStore.getState().openCard(cardId)
+      pane.getState().openCard(cardId)
       onOpenCard?.(cardId)
     },
-    [onOpenCard],
+    [onOpenCard, pane],
   )
 
   const handleCloseCard = useCallback(() => {
-    useBoardSyncStore.getState().closeCard()
-  }, [])
+    pane.getState().closeCard()
+  }, [pane])
 
-  const syncPanelOpen = useBoardSyncStore((state) => state.syncPanelOpen)
+  const syncPanelOpen = BoardPaneStore.useScopedStore((state) => state.syncPanelOpen)
 
   const handleOpenSyncPanel = useCallback(() => {
-    useBoardSyncStore.getState().openSyncPanel()
-  }, [])
+    pane.getState().openSyncPanel()
+  }, [pane])
 
   const handleCloseSyncPanel = useCallback(() => {
-    useBoardSyncStore.getState().closeSyncPanel()
-  }, [])
+    pane.getState().closeSyncPanel()
+  }, [pane])
 
-  const schemaPanelOpen = useBoardSyncStore((state) => state.schemaPanelOpen)
+  const schemaPanelOpen = BoardPaneStore.useScopedStore((state) => state.schemaPanelOpen)
 
   const handleOpenSchemaPanel = useCallback(() => {
-    const current = useBoardsStore.getState().viewByBoard[boardId]
-    if (!current) return
-    useCardSchemaStore.getState().open(current.board.cardFields)
-    useBoardSyncStore.getState().openSchemaPanel()
-  }, [boardId])
+    pane.getState().openSchemaPanel()
+  }, [pane])
 
   const handleCloseSchemaPanel = useCallback(() => {
-    useBoardSyncStore.getState().closeSchemaPanel()
-  }, [])
+    pane.getState().closeSchemaPanel()
+  }, [pane])
 
-  const syncing = useBoardSyncStore((state) => state.syncingBoardId === boardId)
-  const syncMessage = useBoardSyncStore((state) => state.messageByBoard[boardId] ?? null)
+  const syncing = BoardPaneStore.useScopedStore((state) => state.syncing)
+  const syncMessage = BoardPaneStore.useScopedStore((state) => state.message)
 
   const handleSync = useCallback(() => {
-    const sync = useBoardSyncStore.getState()
-    sync.startSync(boardId)
+    const sync = pane.getState()
+    sync.startSync()
     void socket
       .command({
         type: "board.sync.pull",
@@ -125,65 +142,53 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
       })
       .then((summary) => {
         const conflicts = summary.conflicts > 0 ? `, ${String(summary.conflicts)} conflicts` : ""
-        sync.finishSync(
-          boardId,
-          `Synced · ${String(summary.created)} new, ${String(summary.updated)} updated${conflicts}`,
-        )
+        sync.finishSync(`Synced · ${String(summary.created)} new, ${String(summary.updated)} updated${conflicts}`)
       })
       .catch(onRejected((error) => {
-        sync.finishSync(boardId, error.message)
+        sync.finishSync(error.message)
       }))
-  }, [boardId, socket])
+  }, [boardId, pane, socket])
 
   const handleColumnMove = useCallback(
     (columnId: string, afterColumnId: string | null) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       const optimistic = current ? moveColumnInView(current, columnId, afterColumnId) : undefined
       if (optimistic) useBoardsStore.getState().setBoardView(boardId, optimistic)
-      void socket.command({ type: "board.column.move", columnId, afterColumnId }).catch(onRejected((error) => {
+      runBoardCommand({ type: "board.column.move", columnId, afterColumnId }, () => {
         revertOptimisticView(boardId, current, optimistic)
-        useBoardSyncStore.getState().finishSync(boardId, error.message)
-      }))
+      })
     },
-    [boardId, socket],
+    [boardId, runBoardCommand],
   )
 
   const handleColumnSave = useCallback(
     (columnId: string, patch: ColumnSettingsValue) => {
-      void socket
-        .command({
-          type: "board.column.update",
-          columnId,
-          title: patch.title,
-          semantic: patch.semantic,
-          colorToken: patch.colorToken,
-          wipLimit: patch.wipLimit,
-        })
-        .catch(onRejected((error) => {
-          useBoardSyncStore.getState().finishSync(boardId, error.message)
-        }))
+      runBoardCommand({
+        type: "board.column.update",
+        columnId,
+        title: patch.title,
+        semantic: patch.semantic,
+        colorToken: patch.colorToken,
+        wipLimit: patch.wipLimit,
+      })
     },
-    [boardId, socket],
+    [runBoardCommand],
   )
 
   const handleColumnDelete = useCallback(
     (columnId: string) => {
-      void socket.command({ type: "board.column.delete", columnId }).catch(onRejected((error) => {
-        useBoardSyncStore.getState().finishSync(boardId, error.message)
-      }))
+      runBoardCommand({ type: "board.column.delete", columnId })
     },
-    [boardId, socket],
+    [runBoardCommand],
   )
 
   const handleColumnAdd = useCallback(
     (title: string) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       const afterColumnId = current?.columns.at(-1)?.id ?? null
-      void socket.command({ type: "board.column.create", boardId, title, afterColumnId }).catch(onRejected((error) => {
-        useBoardSyncStore.getState().finishSync(boardId, error.message)
-      }))
+      runBoardCommand({ type: "board.column.create", boardId, title, afterColumnId })
     },
-    [boardId, socket],
+    [boardId, runBoardCommand],
   )
 
   const handleMoveToTop = useCallback(
@@ -205,55 +210,49 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
             belowCardId: topCard?.id ?? null,
           })
         } catch (error) {
-          useBoardSyncStore.getState().finishSync(boardId, errorMessage(error))
+          pane.getState().reportMessage(errorMessage(error))
         }
       })
     },
-    [boardId, socket],
+    [boardId, pane, socket],
   )
 
   const handleCardAdd = useCallback(
     (columnId: string, title: string) => {
       const current = useBoardsStore.getState().viewByBoard[boardId]
       const afterCardId = current?.cards[columnId]?.at(-1)?.id ?? null
-      void socket
-        .command({ type: "board.card.create", boardId, columnId, title, afterCardId })
-        .catch(onRejected((error) => {
-          useBoardSyncStore.getState().finishSync(boardId, error.message)
-        }))
+      runBoardCommand({ type: "board.card.create", boardId, columnId, title, afterCardId })
     },
-    [boardId, socket],
+    [boardId, runBoardCommand],
   )
 
-  const renaming = useBoardSyncStore((state) => state.renamingBoardId === boardId)
-  const titleDraft = useBoardSyncStore((state) => state.titleDraft)
+  const renaming = BoardPaneStore.useScopedStore((state) => state.renaming)
+  const titleDraft = BoardPaneStore.useScopedStore((state) => state.titleDraft)
 
   const handleStartRename = useCallback(() => {
     const current = useBoardsStore.getState().viewByBoard[boardId]
-    if (current) useBoardSyncStore.getState().startRenameBoard(boardId, current.board.title)
-  }, [boardId])
+    if (current) pane.getState().startRename(current.board.title)
+  }, [boardId, pane])
 
   const handleTitleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    useBoardSyncStore.getState().setTitleDraft(event.currentTarget.value)
-  }, [])
+    pane.getState().setTitleDraft(event.currentTarget.value)
+  }, [pane])
 
   const handleCommitRename = useCallback(() => {
-    const { titleDraft: draft } = useBoardSyncStore.getState()
+    const { titleDraft: draft } = pane.getState()
     const current = useBoardsStore.getState().viewByBoard[boardId]
-    useBoardSyncStore.getState().stopRenameBoard()
+    pane.getState().stopRename()
     const title = draft.trim()
     if (title === "" || title === current?.board.title) return
-    void socket.command({ type: "board.update", boardId, title }).catch(onRejected((error) => {
-      useBoardSyncStore.getState().finishSync(boardId, error.message)
-    }))
-  }, [boardId, socket])
+    runBoardCommand({ type: "board.update", boardId, title })
+  }, [boardId, pane, runBoardCommand])
 
   const handleTitleKey = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") handleCommitRename()
-      if (event.key === "Escape") useBoardSyncStore.getState().stopRenameBoard()
+      if (event.key === "Escape") pane.getState().stopRename()
     },
-    [handleCommitRename],
+    [handleCommitRename, pane],
   )
 
   const focusTitle = useCallback((element: HTMLInputElement | null) => {
@@ -347,7 +346,12 @@ export function BoardPane({ boardId, socket, chatFacts, onOpenCard, onOpenBoards
           <BoardSyncPanel boardId={boardId} socket={socket} onClose={handleCloseSyncPanel} />
         ) : null}
         {schemaPanelOpen ? (
-          <CardSchemaPanel boardId={boardId} socket={socket} onClose={handleCloseSchemaPanel} />
+          <CardSchemaPanel
+            boardId={boardId}
+            fields={view.board.cardFields}
+            socket={socket}
+            onClose={handleCloseSchemaPanel}
+          />
         ) : null}
         {openCardId ? (
           <CardDrawer

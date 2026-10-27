@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { moveCardInView, moveColumnInView, type OptimisticMove } from "./optimistic"
+import { moveCardInView, moveColumnInView } from "./optimistic"
+import type { CardMoveRequest } from "./dnd"
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
 function card(id: string, columnId: string, rank: string): Card {
@@ -51,7 +52,7 @@ function ids(snapshot: BoardViewSnapshot, columnId: string): string[] {
   return (snapshot.cards[columnId] ?? []).map((entry) => entry.id)
 }
 
-const move = (partial: Partial<OptimisticMove> & { cardId: string; toColumnId: string }): OptimisticMove => ({
+const move = (partial: Partial<CardMoveRequest> & { cardId: string; toColumnId: string }): CardMoveRequest => ({
   aboveCardId: null,
   belowCardId: null,
   ...partial,

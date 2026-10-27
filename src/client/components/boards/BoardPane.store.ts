@@ -1,12 +1,13 @@
-import { create } from "zustand"
+import type { StateCreator } from "zustand"
+import { createScopedStore } from "../../lib/createScopedStore"
 
-interface BoardSyncState {
-  syncingBoardId: string | null
+export interface BoardPaneUiState {
+  syncing: boolean
+  message: string | null
   openCardId: string | null
   syncPanelOpen: boolean
   schemaPanelOpen: boolean
-  messageByBoard: Record<string, string>
-  renamingBoardId: string | null
+  renaming: boolean
   titleDraft: string
   openCard(cardId: string): void
   closeCard(): void
@@ -14,20 +15,21 @@ interface BoardSyncState {
   closeSyncPanel(): void
   openSchemaPanel(): void
   closeSchemaPanel(): void
-  startRenameBoard(boardId: string, currentTitle: string): void
+  startRename(currentTitle: string): void
   setTitleDraft(titleDraft: string): void
-  stopRenameBoard(): void
-  startSync(boardId: string): void
-  finishSync(boardId: string, message: string): void
+  stopRename(): void
+  startSync(): void
+  finishSync(summary: string): void
+  reportMessage(message: string): void
 }
 
-export const useBoardSyncStore = create<BoardSyncState>()((set) => ({
-  syncingBoardId: null,
+export const createBoardPaneUiState: StateCreator<BoardPaneUiState> = (set) => ({
+  syncing: false,
+  message: null,
   openCardId: null,
   syncPanelOpen: false,
   schemaPanelOpen: false,
-  messageByBoard: {},
-  renamingBoardId: null,
+  renaming: false,
   titleDraft: "",
   openCard: (openCardId) => set({ openCardId, syncPanelOpen: false, schemaPanelOpen: false }),
   closeCard: () => set({ openCardId: null }),
@@ -35,13 +37,15 @@ export const useBoardSyncStore = create<BoardSyncState>()((set) => ({
   closeSyncPanel: () => set({ syncPanelOpen: false }),
   openSchemaPanel: () => set({ schemaPanelOpen: true, openCardId: null, syncPanelOpen: false }),
   closeSchemaPanel: () => set({ schemaPanelOpen: false }),
-  startRenameBoard: (renamingBoardId, currentTitle) => set({ renamingBoardId, titleDraft: currentTitle }),
+  startRename: (currentTitle) => set({ renaming: true, titleDraft: currentTitle }),
   setTitleDraft: (titleDraft) => set({ titleDraft }),
-  stopRenameBoard: () => set({ renamingBoardId: null, titleDraft: "" }),
-  startSync: (syncingBoardId) => set({ syncingBoardId }),
-  finishSync: (boardId, message) =>
-    set((state) => ({
-      syncingBoardId: state.syncingBoardId === boardId ? null : state.syncingBoardId,
-      messageByBoard: { ...state.messageByBoard, [boardId]: message },
-    })),
-}))
+  stopRename: () => set({ renaming: false, titleDraft: "" }),
+  startSync: () => set({ syncing: true }),
+  finishSync: (summary) => set({ syncing: false, message: summary }),
+  reportMessage: (message) => set({ message }),
+})
+
+export const BoardPaneStore = createScopedStore<void, BoardPaneUiState>(
+  "BoardPane",
+  () => createBoardPaneUiState,
+)

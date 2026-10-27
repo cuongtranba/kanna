@@ -1,6 +1,6 @@
 import { realpathSync, existsSync } from "node:fs"
 import { join } from "node:path"
-import type { GitWorktree } from "../shared/types"
+import { DETACHED_BRANCH, type GitWorktree } from "../shared/types"
 import { runGit, formatGitFailure } from "./diff-store"
 
 function normalizePath(p: string): string {
@@ -13,7 +13,7 @@ export function parseWorktreeList(porcelain: string): GitWorktree[] {
     const lines = block.split(/\r?\n/u)
     let path = ""
     let head = ""
-    let branch = "(detached)"
+    let branch = DETACHED_BRANCH
     let isLocked = false
     let isBare = false
     for (const line of lines) {
@@ -22,7 +22,7 @@ export function parseWorktreeList(porcelain: string): GitWorktree[] {
       else if (line.startsWith("branch ")) {
         const ref = line.slice("branch ".length).trim()
         branch = ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref
-      } else if (line === "detached") branch = "(detached)"
+      } else if (line === "detached") branch = DETACHED_BRANCH
       else if (line === "locked" || line.startsWith("locked ")) isLocked = true
       else if (line === "bare") isBare = true
     }

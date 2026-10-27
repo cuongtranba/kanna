@@ -470,11 +470,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
           projectName: project.title,
           repo: named,
           boundTo: named
-            ? boardRegistry.repoBindingOwner(
-                "github-issues",
-                { provider: "github-issues", ...named },
-                boardId,
-              )
+            ? boardRegistry.repoBindingOwner({ provider: "github-issues", ...named }, boardId)
             : null,
         }
       }),

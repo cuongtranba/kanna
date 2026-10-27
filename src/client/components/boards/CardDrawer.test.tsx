@@ -1,9 +1,8 @@
-import { describe, expect, test, beforeEach } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
 import { CardDrawer, type CardDrawerSocket } from "./CardDrawer"
-import { useCardDrawerStore } from "./CardDrawer.store"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { collectPanes, createDefaultLayout } from "../../lib/paneTree"
 import { EMPTY_CHAT_ACTIVITY } from "../../../shared/types"
@@ -101,10 +100,6 @@ const RESULT: StartWorkResult = {
   movedToColumnId: "col-2",
   reused: false,
 }
-
-beforeEach(() => {
-  useCardDrawerStore.getState().reset()
-})
 
 describe("CardDrawer start work", () => {
   test("the label carries the state, and the branch is shown rather than asked", async () => {

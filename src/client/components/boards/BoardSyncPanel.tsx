@@ -3,8 +3,14 @@ import { X } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { SegmentedControl, type SegmentedOption } from "../ui/segmented-control"
-import { bindingSlug, useBoardSyncPanelStore } from "./BoardSyncPanel.store"
-import { parseRepoSlug } from "../../../shared/boards/repo-slug"
+import { BoardSyncPanelStore } from "./BoardSyncPanel.store"
+import {
+  formatRepoSlug,
+  parseRepoSlug,
+  sameRepoSlug,
+  sourceRefRepoSlug,
+  type RepoSlug,
+} from "../../../shared/boards/repo-slug"
 import type { RepoSuggestion, SyncColumnRouting } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict, SyncDirection } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
@@ -64,10 +70,8 @@ function RoutingRow({ label, column, absent }: { label: string; column: { title:
 
 function isAlreadyConnected(suggestion: RepoSuggestion, bindings: readonly SyncBinding[]): boolean {
   if (!suggestion.repo) return false
-  const { owner, repo } = suggestion.repo
-  return bindings.some(
-    (b) => b.sourceRef.provider === "github-issues" && b.sourceRef.owner === owner && b.sourceRef.repo === repo,
-  )
+  const slug = suggestion.repo
+  return bindings.some((b) => b.sourceRef.provider === "github-issues" && sameRepoSlug(b.sourceRef, slug))
 }
 
 function offerLabel(isBoundElsewhere: boolean, isSaving: boolean): string {
@@ -99,7 +103,7 @@ function SuggestionRow({
   )
   const handleCancel = useCallback(() => onCancelDetach(), [onCancelDetach])
 
-  const slug = suggestion.repo ? `${suggestion.repo.owner}/${suggestion.repo.repo}` : null
+  const slug = suggestion.repo ? formatRepoSlug(suggestion.repo) : null
 
   return (
     <li className="space-y-2 rounded-md border border-border px-3 py-2.5">
@@ -165,18 +169,26 @@ function routingWarning(routing: SyncColumnRouting, direction: SyncDirection): s
   return null
 }
 
-export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps) {
-  const status = useBoardSyncPanelStore((state) => state.status)
-  const error = useBoardSyncPanelStore((state) => state.error)
-  const saving = useBoardSyncPanelStore((state) => state.saving)
-  const repoDraft = useBoardSyncPanelStore((state) => state.repoDraft)
-  const direction = useBoardSyncPanelStore((state) => state.direction)
-  const allowAgentPush = useBoardSyncPanelStore((state) => state.allowAgentPush)
-  const rowDirections = useBoardSyncPanelStore((state) => state.rowDirections)
-  const savingRow = useBoardSyncPanelStore((state) => state.savingRow)
-  const confirmingDetach = useBoardSyncPanelStore((state) => state.confirmingDetach)
-  const { setStatus, setError, setRepoDraft, setDirection, setAllowAgentPush, reset } =
-    useBoardSyncPanelStore.getState()
+export function BoardSyncPanel(props: BoardSyncPanelProps) {
+  return (
+    <BoardSyncPanelStore.Provider init={undefined}>
+      <BoardSyncPanelBody {...props} />
+    </BoardSyncPanelStore.Provider>
+  )
+}
+
+function BoardSyncPanelBody({ boardId, socket, onClose }: BoardSyncPanelProps) {
+  const panel = BoardSyncPanelStore.useScopedStoreApi()
+  const status = BoardSyncPanelStore.useScopedStore((state) => state.status)
+  const error = BoardSyncPanelStore.useScopedStore((state) => state.error)
+  const saving = BoardSyncPanelStore.useScopedStore((state) => state.saving)
+  const repoDraft = BoardSyncPanelStore.useScopedStore((state) => state.repoDraft)
+  const direction = BoardSyncPanelStore.useScopedStore((state) => state.direction)
+  const allowAgentPush = BoardSyncPanelStore.useScopedStore((state) => state.allowAgentPush)
+  const rowDirections = BoardSyncPanelStore.useScopedStore((state) => state.rowDirections)
+  const savingRow = BoardSyncPanelStore.useScopedStore((state) => state.savingRow)
+  const confirmingDetach = BoardSyncPanelStore.useScopedStore((state) => state.confirmingDetach)
+  const { setStatus, setError, setRepoDraft, setDirection, setAllowAgentPush } = panel.getState()
 
   const load = useCallback(() => {
     void socket
@@ -188,9 +200,26 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
   }, [boardId, setError, setStatus, socket])
 
   useEffect(() => {
-    reset()
     load()
-  }, [load, reset])
+  }, [load])
+
+  const bindRepo = useCallback(
+    (repo: RepoSlug, projectId: string | null, detachFromBoardId: string | null) => {
+      const state = panel.getState()
+      const rowDirection = projectId === null ? undefined : state.rowDirections[projectId]
+      return socket.command({
+        type: "board.sync.bind",
+        boardId,
+        owner: repo.owner,
+        repo: repo.repo,
+        direction: rowDirection ?? state.direction,
+        allowAgentPush: state.allowAgentPush,
+        projectId,
+        detachFromBoardId,
+      })
+    },
+    [boardId, socket, panel],
+  )
 
   const handleRepo = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,35 +236,24 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
   )
 
   const handleSave = useCallback(() => {
-    const state = useBoardSyncPanelStore.getState()
+    const state = panel.getState()
     const slug = parseRepoSlug(state.repoDraft)
     if (!slug) {
       setError("That is not a repository. Use owner/repo, or paste its GitHub URL.")
       return
     }
-    const matchingSuggestion = state.status?.suggestedRepos.find(
-      (s) => s.repo?.owner === slug.owner && s.repo?.repo === slug.repo,
-    )
+    const matchingSuggestion = state.status?.suggestedRepos.find((s) => s.repo && sameRepoSlug(s.repo, slug))
     state.beginSave()
-    void socket
-      .command({
-        type: "board.sync.bind",
-        boardId,
-        owner: slug.owner,
-        repo: slug.repo,
-        direction: state.direction,
-        allowAgentPush: state.allowAgentPush,
-        projectId: matchingSuggestion?.projectId ?? null,
-      })
+    void bindRepo(slug, matchingSuggestion?.projectId ?? null, null)
       .then(() => {
-        useBoardSyncPanelStore.getState().endSave()
+        panel.getState().endSave()
         load()
       })
       .catch(onRejected((error) => {
-        useBoardSyncPanelStore.getState().endSave()
+        panel.getState().endSave()
         setError(error.message)
       }))
-  }, [boardId, load, setError, socket])
+  }, [bindRepo, load, setError, panel])
 
   const handleDisconnect = useCallback(
     (bindingId: string) => {
@@ -252,76 +270,53 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
   const handleConnectSuggestion = useCallback(
     (suggestion: RepoSuggestion) => {
       if (!suggestion.repo) return
-      const state = useBoardSyncPanelStore.getState()
+      const state = panel.getState()
       if (suggestion.boundTo && state.confirmingDetach !== suggestion.projectId) {
         state.setConfirmingDetach(suggestion.projectId)
         return
       }
       state.setSavingRow(suggestion.projectId)
       state.setConfirmingDetach(null)
-      void socket
-        .command({
-          type: "board.sync.bind",
-          boardId,
-          owner: suggestion.repo.owner,
-          repo: suggestion.repo.repo,
-          direction: state.rowDirections[suggestion.projectId] ?? state.direction,
-          allowAgentPush: state.allowAgentPush,
-          projectId: suggestion.projectId,
-          detachFromBoardId: suggestion.boundTo?.boardId ?? null,
-        })
+      void bindRepo(suggestion.repo, suggestion.projectId, suggestion.boundTo?.boardId ?? null)
         .then(() => {
-          useBoardSyncPanelStore.getState().setSavingRow(null)
+          panel.getState().setSavingRow(null)
           load()
         })
         .catch(onRejected((error) => {
-          useBoardSyncPanelStore.getState().setSavingRow(null)
+          panel.getState().setSavingRow(null)
           setError(error.message)
         }))
     },
-    [boardId, load, setError, socket],
+    [bindRepo, load, setError, panel],
   )
 
   const handleConnectAll = useCallback(() => {
-    const state = useBoardSyncPanelStore.getState()
+    const state = panel.getState()
     if (!state.status) return
     const bindings = state.status.bindings
-    const toConnect = state.status.suggestedRepos.filter(
-      (s) => s.repo && !s.boundTo && !isAlreadyConnected(s, bindings),
+    const toConnect = state.status.suggestedRepos.flatMap((s) =>
+      s.repo && !s.boundTo && !isAlreadyConnected(s, bindings) ? [{ repo: s.repo, projectId: s.projectId }] : [],
     )
     if (toConnect.length === 0) return
     state.beginSave()
-    void Promise.all(
-      toConnect.map((s) =>
-        socket.command({
-          type: "board.sync.bind",
-          boardId,
-          owner: s.repo!.owner,
-          repo: s.repo!.repo,
-          direction: state.rowDirections[s.projectId] ?? state.direction,
-          allowAgentPush: state.allowAgentPush,
-          projectId: s.projectId,
-          detachFromBoardId: null,
-        }),
-      ),
-    )
+    void Promise.all(toConnect.map((s) => bindRepo(s.repo, s.projectId, null)))
       .then(() => {
-        useBoardSyncPanelStore.getState().endSave()
+        panel.getState().endSave()
         load()
       })
       .catch(onRejected((error) => {
-        useBoardSyncPanelStore.getState().endSave()
+        panel.getState().endSave()
         setError(error.message)
       }))
-  }, [boardId, load, setError, socket])
+  }, [bindRepo, load, setError, panel])
 
   const handleSetRowDirection = useCallback((projectId: string, dir: SyncDirection) => {
-    useBoardSyncPanelStore.getState().setRowDirection(projectId, dir)
-  }, [])
+    panel.getState().setRowDirection(projectId, dir)
+  }, [panel])
 
   const handleCancelDetach = useCallback(() => {
-    useBoardSyncPanelStore.getState().setConfirmingDetach(null)
-  }, [])
+    panel.getState().setConfirmingDetach(null)
+  }, [panel])
 
   const warning = status ? routingWarning(status.routing, direction) : null
 
@@ -433,7 +428,7 @@ export function BoardSyncPanel({ boardId, socket, onClose }: BoardSyncPanelProps
                     className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5"
                   >
                     <span className="min-w-0 flex-1 truncate font-mono text-13 text-foreground">
-                      {bindingSlug(binding) ?? binding.providerId}
+                      {sourceRefRepoSlug(binding.sourceRef) ?? binding.providerId}
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">{binding.direction}</span>
                     <BindingDisconnect bindingId={binding.id} onDisconnect={handleDisconnect} />

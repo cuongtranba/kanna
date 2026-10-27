@@ -1,8 +1,8 @@
-import { create } from "zustand"
+import { createScopedStore } from "../../lib/createScopedStore"
 import type { BoardSyncStatus } from "../../../shared/boards/sync-types"
 import type { SyncDirection } from "../../../shared/boards/types"
 
-interface BoardSyncPanelState {
+export interface BoardSyncPanelState {
   status: BoardSyncStatus | null
   error: string | null
   saving: boolean
@@ -22,13 +22,6 @@ interface BoardSyncPanelState {
   setError(error: string | null): void
   beginSave(): void
   endSave(): void
-  reset(): void
-}
-
-export function bindingSlug(binding: BoardSyncStatus["bindings"][number]): string | null {
-  return binding.sourceRef.provider === "github-issues"
-    ? `${binding.sourceRef.owner}/${binding.sourceRef.repo}`
-    : null
 }
 
 const SEEDED: Pick<BoardSyncPanelState, "repoDraft" | "direction" | "allowAgentPush" | "rowDirections"> = {
@@ -38,16 +31,13 @@ const SEEDED: Pick<BoardSyncPanelState, "repoDraft" | "direction" | "allowAgentP
   rowDirections: {},
 }
 
-export const useBoardSyncPanelStore = create<BoardSyncPanelState>()((set) => ({
+export const BoardSyncPanelStore = createScopedStore<void, BoardSyncPanelState>("BoardSyncPanel", () => (set) => ({
   status: null,
   error: null,
   saving: false,
-  repoDraft: "",
-  direction: "pull",
-  allowAgentPush: false,
-  rowDirections: {},
   savingRow: null,
   confirmingDetach: null,
+  ...SEEDED,
   setStatus: (status) => set({ status, error: null, savingRow: null, confirmingDetach: null, ...SEEDED }),
   setRepoDraft: (repoDraft) => set({ repoDraft }),
   setDirection: (direction) => set({ direction }),
@@ -59,5 +49,4 @@ export const useBoardSyncPanelStore = create<BoardSyncPanelState>()((set) => ({
   setError: (error) => set({ error }),
   beginSave: () => set({ saving: true, error: null }),
   endSave: () => set({ saving: false }),
-  reset: () => set({ status: null, error: null, saving: false, savingRow: null, confirmingDetach: null, ...SEEDED }),
 }))

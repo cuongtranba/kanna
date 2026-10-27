@@ -1,4 +1,4 @@
-import { create } from "zustand"
+import { createScopedStore } from "../../lib/createScopedStore"
 
 interface ColumnAdderState {
   draft: string
@@ -6,7 +6,7 @@ interface ColumnAdderState {
   clear(): void
 }
 
-export const useColumnAdderStore = create<ColumnAdderState>()((set) => ({
+export const ColumnAdderStore = createScopedStore<void, ColumnAdderState>("ColumnAdder", () => (set) => ({
   draft: "",
   setDraft: (draft) => set({ draft }),
   clear: () => set({ draft: "" }),

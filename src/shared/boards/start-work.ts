@@ -1,7 +1,8 @@
 
-import type { Board, BoardColumn, Card, CardDetail, CardLink, FieldValue } from "./types"
+import type { Board, BoardColumn, Card, CardDetail, CardLink } from "./types"
 import type { WorktreeCleanupView } from "./worktree-cleanup"
 import { CARD_MOVE_TOOL_NAME } from "../tools"
+import { cardLabels, cardText, type WellKnownField } from "./well-known-fields"
 
 export type StartWorkStatus =
   | { kind: "idle" }
@@ -72,17 +73,9 @@ export function resolveStartWorkProjectId(card: Card, board: Board): string | nu
   return board.ownerKind === "project" ? board.ownerId : null
 }
 
-function textOf(value: FieldValue | undefined): string | null {
-  if (!value) return null
-  if (value.kind === "text" || value.kind === "longtext" || value.kind === "url") {
-    const trimmed = value.value.trim()
-    return trimmed === "" ? null : trimmed
-  }
-  return null
-}
-
-function labelsOf(value: FieldValue | undefined): readonly string[] {
-  return value?.kind === "label" ? value.values : []
+function promptText(card: Card, field: WellKnownField): string | null {
+  const trimmed = cardText(card.content, field)?.trim()
+  return trimmed ? trimmed : null
 }
 
 export function findAdvanceColumn(
@@ -105,16 +98,16 @@ export interface CardAdvance {
 export function buildStartWorkPrompt(card: Card, branch: string, advance: CardAdvance | null): string {
   const lines: string[] = [`Work on this card: ${card.title}`, "", `Branch: ${branch}`]
 
-  const description = textOf(card.content.description)
+  const description = promptText(card, "description")
   if (description) lines.push("", "Description:", description)
 
-  const acceptance = textOf(card.content.acceptanceCriteria)
+  const acceptance = promptText(card, "acceptanceCriteria")
   if (acceptance) lines.push("", "Acceptance criteria:", acceptance)
 
-  const labels = labelsOf(card.content.labels)
+  const labels = cardLabels(card.content)
   if (labels.length > 0) lines.push("", `Labels: ${labels.join(", ")}`)
 
-  const externalUrl = textOf(card.content.externalUrl)
+  const externalUrl = promptText(card, "externalUrl")
   if (externalUrl) lines.push("", `Source: ${externalUrl}`)
 
   if (advance) {

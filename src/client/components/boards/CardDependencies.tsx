@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react"
 import { Check, X } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { cn } from "../../lib/utils"
+import { prefixedSelectValue } from "../../lib/selectValue"
 import type { CardBlocker } from "../../../shared/boards/dependencies"
 import { onRejected } from "../../../shared/errors"
 import type { CommandPort } from "../../ports/commandPort"
@@ -25,9 +26,7 @@ export interface CardDependenciesProps {
 
 const NO_SELECTION = "add"
 
-function candidateValue(cardId: string): string {
-  return `c:${cardId}`
-}
+const CANDIDATE_VALUE = prefixedSelectValue("c")
 
 export function CardDependencies({
   cardId,
@@ -46,9 +45,10 @@ export function CardDependencies({
 
   const handleAdd = useCallback(
     (chosen: string) => {
-      if (chosen === NO_SELECTION) return
+      const blockedByCardId = CANDIDATE_VALUE.decode(chosen)
+      if (blockedByCardId === null) return
       void socket
-        .command({ type: "board.card.block", cardId, blockedByCardId: chosen.slice(2) })
+        .command({ type: "board.card.block", cardId, blockedByCardId })
         .then(onChanged)
         .catch(onRejected((error) => {
           onError(error.message)
@@ -89,7 +89,7 @@ export function CardDependencies({
           <SelectContent>
             <SelectItem value={NO_SELECTION}>Add a blocker…</SelectItem>
             {offered.map((candidate) => (
-              <SelectItem key={candidate.id} value={candidateValue(candidate.id)}>
+              <SelectItem key={candidate.id} value={CANDIDATE_VALUE.encode(candidate.id)}>
                 {candidate.title}
               </SelectItem>
             ))}
