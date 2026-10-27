@@ -2,7 +2,7 @@ import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../
 import { isAgentProvider } from "../../shared/types"
 import { isInboundHandlerMode } from "../../shared/inbound/handler"
 import { createSecretJsonStore } from "../secret-json-store.adapter"
-import type { StoredWebhook, WebhookStorePort } from "./webhook-registry"
+import { optionalHookFields, type StoredWebhook, type WebhookStorePort } from "./webhook-registry"
 
 const FILE_NAME = "webhooks.json"
 
@@ -25,15 +25,18 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   if (kind !== "generic" && kind !== "slack") return null
   const slackBotToken = optionalString(value.slackBotToken)
   if (kind === "slack" && !slackBotToken) return null
-  const chatId = optionalString(value.chatId)
-  const projectId = optionalString(value.projectId)
-  const provider = typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined
-  const model = optionalString(value.model)
-  const threadKeyPath = optionalString(value.threadKeyPath)
-  const senderPath = optionalString(value.senderPath)
-  const replyHint = optionalString(value.replyHint)
-  const filter = optionalString(value.filter)
-  const handling = value.handling === "task" ? value.handling : undefined
+  const optional = optionalHookFields({
+    kind,
+    handling: value.handling === "task" ? value.handling : undefined,
+    chatId: optionalString(value.chatId),
+    projectId: optionalString(value.projectId),
+    provider: typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined,
+    model: optionalString(value.model),
+    threadKeyPath: optionalString(value.threadKeyPath),
+    senderPath: optionalString(value.senderPath),
+    replyHint: optionalString(value.replyHint),
+    filter: optionalString(value.filter),
+  })
   return {
     id,
     name,
@@ -47,14 +50,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     ...(kind === "slack" && slackBotToken
       ? { slack: { allowedUserIds: parseSlackIds(value.slack) }, slackBotToken }
       : {}),
-    ...(kind === "generic" && handling ? { handling } : {}),
-    ...(chatId ? { chatId } : {}),
-    ...(projectId ? { projectId } : {}),
-    ...(provider && model ? { provider, model } : {}),
-    ...(threadKeyPath ? { threadKeyPath } : {}),
-    ...(senderPath ? { senderPath } : {}),
-    ...(replyHint ? { replyHint } : {}),
-    ...(filter ? { filter } : {}),
+    ...optional,
   }
 }
 

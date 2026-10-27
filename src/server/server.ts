@@ -64,7 +64,6 @@ import { isAutoContinueScheduleEvent } from "./auto-continue/events"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import { setQuickResponseOAuthPool } from "./quick-response"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
@@ -159,7 +158,6 @@ interface ApplicationServices {
 async function createApplicationServices(options: StartKannaServerOptions): Promise<ApplicationServices> {
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
-  const diffStore = new DiffStore()
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
   const lifetime = new Lifetime()
@@ -308,7 +306,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     checkers: [
       createSkillUpdateChecker({ fetchFn: fetch, token: null }),
       createClaudePluginUpdateChecker(
-        buildClaudePluginCheckerDeps(findClaudeBinary()),
+        buildClaudePluginCheckerDeps(),
       ),
       createCodexPluginUpdateChecker(buildCodexPluginCheckerDepsForEnv()),
     ],
@@ -346,7 +344,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     Date.now,
     () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
-  setQuickResponseOAuthPool(oauthPool)
+  const diffStore = new DiffStore(undefined, oauthPool)
   const localCatalog = new LocalCatalogService({
     scan: scanLocalCatalog,
     statMtimes,

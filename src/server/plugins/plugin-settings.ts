@@ -38,7 +38,7 @@ function createInstalledPlugin(
   return { id: input.id, sourceDir: input.sourceDir, enabled: false }
 }
 
-export function applyAppSettingsPatchForTest(
+export function applyInstalledPluginsPatch(
   current: readonly InstalledPluginConfig[],
   patch: InstalledPluginsPatch | undefined,
 ): InstalledPluginConfig[] {
@@ -118,6 +118,6 @@ export function mergeInstalledPluginsPatch(
   patch: { installedPlugins?: InstalledPluginsPatch },
 ): InstalledPluginConfig[] {
   return patch.installedPlugins
-    ? applyAppSettingsPatchForTest(state.installedPlugins, patch.installedPlugins)
+    ? applyInstalledPluginsPatch(state.installedPlugins, patch.installedPlugins)
     : [...state.installedPlugins]
 }

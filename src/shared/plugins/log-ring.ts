@@ -1,10 +1,15 @@
 export const PLUGIN_LOG_MAX_ENTRIES = 500
 export const PLUGIN_LOG_MAX_LINE_BYTES = 16 * 1024
+export const PLUGIN_LOG_DEFAULT_TAIL = 100
 
 export type PluginLogEntry = {
   stream: "out" | "err"
   text: string
   at: number
+}
+
+export function tailLogEntries(entries: readonly PluginLogEntry[], count: number): PluginLogEntry[] {
+  return count <= 0 ? [] : entries.slice(-count)
 }
 
 const LOG_TEXT_ENCODER = new TextEncoder()
@@ -27,8 +32,8 @@ export function createPluginLogRing() {
     }
   }
 
-  function tail(): PluginLogEntry[] {
-    return entries.slice()
+  function tail(count = entries.length): PluginLogEntry[] {
+    return tailLogEntries(entries, count)
   }
 
   return { append, tail }

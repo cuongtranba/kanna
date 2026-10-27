@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fallbackTitleFromMessage, generateTitleForChat, generateTitleForChatDetailed } from "./generate-title"
-import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter, runClaudeStructured, setQuickResponseOAuthPool } from "./quick-response"
+import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter, runClaudeStructured } from "./quick-response"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { OAuthTokenEntry } from "../shared/types"
 
@@ -492,20 +492,15 @@ describe("runClaudeStructured pool guard", () => {
       addedAt: 0,
     }
     const pool = new OAuthTokenPool(() => [erroredToken], () => {}, () => 1000)
-    setQuickResponseOAuthPool(pool)
-    try {
-      const start = Date.now()
-      const result = await runClaudeStructured({
-        cwd: "/tmp",
-        task: "test",
-        prompt: "hi",
-        schema: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
-      })
-      expect(result).toBe(null)
-      expect(Date.now() - start).toBeLessThan(500)
-    } finally {
-      setQuickResponseOAuthPool(null)
-    }
+    const start = Date.now()
+    const result = await runClaudeStructured(pool, {
+      cwd: "/tmp",
+      task: "test",
+      prompt: "hi",
+      schema: { type: "object", properties: { x: { type: "string" } }, required: ["x"], additionalProperties: false },
+    })
+    expect(result).toBe(null)
+    expect(Date.now() - start).toBeLessThan(500)
   })
 })
 

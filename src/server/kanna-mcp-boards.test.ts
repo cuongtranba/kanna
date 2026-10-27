@@ -5,6 +5,8 @@ import { createBoardStore } from "./board-store.adapter"
 import type { BoardStore } from "./board-store"
 import type { BoardTemplateDefinition } from "../shared/boards/types"
 import type { JsonObject } from "../shared/json"
+import type { KannaSdkTool } from "./kanna-mcp-tool"
+import { invokeTool, sdkToolFactory, toolText } from "./test-helpers/sdk-tool"
 
 const DEFINITION: BoardTemplateDefinition = {
   columns: [
@@ -15,29 +17,21 @@ const DEFINITION: BoardTemplateDefinition = {
   mappingDefaults: [],
 }
 
-interface CapturedTool {
-  name: string
-  run: (input: JsonObject) => Promise<{ content: { text: string }[]; isError?: true }>
-}
-
 let store: BoardStore
 let registry: BoardRegistry
-let tools: Map<string, CapturedTool>
+let tools: Map<string, KannaSdkTool>
 let boardId: string
 let columnIds: string[]
 
 function build(projectId: string | null, chatId: string | null = "chat-1") {
-  const list = buildBoardToolList({ boardRegistry: registry, chatId, projectId }, (name, _description, _schema, handler) => ({
-    name,
-    run: handler,
-  }))
+  const list = buildBoardToolList({ boardRegistry: registry, chatId, projectId }, sdkToolFactory)
   tools = new Map(list.map((entry) => [entry.name, entry]))
 }
 
 async function call(name: string, input: JsonObject = {}) {
   const entry = tools.get(name)
   if (!entry) throw new Error(`no tool ${name}`)
-  return entry.run(input)
+  return invokeTool(entry, input)
 }
 
 beforeEach(() => {
@@ -75,7 +69,7 @@ describe("project scoping", () => {
     const foreign = registry.createBoard({ owner: { kind: "project", id: "project-2" }, title: "Theirs" })
     const result = await call("board_get", { board_id: foreign.id })
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toContain("another project")
+    expect(toolText(result)).toContain("another project")
   })
 
   test("moving a card on another project's board is refused", async () => {
@@ -98,8 +92,8 @@ describe("project scoping", () => {
   test("board_list only shows this project's boards", async () => {
     registry.createBoard({ owner: { kind: "project", id: "project-2" }, title: "Theirs" })
     const result = await call("board_list")
-    expect(result.content[0]?.text).toContain("Sprint")
-    expect(result.content[0]?.text).not.toContain("Theirs")
+    expect(toolText(result)).toContain("Sprint")
+    expect(toolText(result)).not.toContain("Theirs")
   })
 })
 
@@ -116,14 +110,14 @@ describe("context bounding", () => {
       }).id
     }
 
-    const text = (await call("board_get", { board_id: boardId })).content[0]?.text ?? ""
+    const text = toolText(await call("board_get", { board_id: boardId }))
     expect(text).toContain("55 cards")
     expect(text).toContain("… 35 more")
     expect(text.split("Card ").length - 1).toBe(20)
   })
 
   test("board_get can focus a single column", async () => {
-    const text = (await call("board_get", { board_id: boardId, column_id: columnIds[1] })).content[0]?.text ?? ""
+    const text = toolText(await call("board_get", { board_id: boardId, column_id: columnIds[1] }))
     expect(text).toContain("Doing")
     expect(text).not.toContain("Todo")
   })
@@ -173,7 +167,7 @@ describe("writes", () => {
   test("a store refusal comes back as a tool error, not a thrown exception", async () => {
     const result = await call("card_move", { card_id: "missing", to_column_id: columnIds[0] })
     expect(result.isError).toBe(true)
-    expect(result.content[0]?.text).toContain("does not exist")
+    expect(toolText(result)).toContain("does not exist")
   })
 })
 

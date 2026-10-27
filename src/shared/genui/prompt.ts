@@ -1,5 +1,17 @@
 import { VALIDATE_UI_TOOL_NAME } from "../tools"
-import { GENUI_ACTIONS, GENUI_COMPONENTS } from "./catalog"
+import { alternatives, GENUI_ACTIONS, GENUI_COMPONENTS } from "./catalog"
+import {
+  DERIVED_OPS,
+  DIMENSION_KINDS,
+  INLINE_DATASET_MAX_BYTES,
+  INLINE_DATASET_MAX_ROWS,
+  METRIC_AGGREGATES,
+  METRIC_DIRECTIONS,
+  METRIC_FORMATS,
+  TIME_GRAINS,
+} from "./datasets"
+import { COMPARE_MODES } from "./period"
+import { DATASET_FILTER_OPS } from "./query"
 import { KANNA_UI_FENCE_LANGUAGE } from "./fences"
 
 const EXAMPLE = JSON.stringify({
@@ -57,14 +69,14 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
     "Rules:",
     "- Only the components and actions listed here. Never JavaScript, JSX, HTML, colours, pixel sizes, or chart-library options.",
     "- Data lives in datasets and is referenced by id; never put rows into component props. Sources:",
-    "  - inline — the default for any data you already hold: a tool or query result, numbers you computed, rows the user gave you. Write it as a table, {\"source\":\"inline\",\"columns\":[\"month\",\"revenue\"],\"rows\":[[\"2026-07\",42000],…]} (rows as objects also work). A tool result already shaped {columns, rows} can be pasted as is. At most 500 rows and 64 KB, so aggregate before you embed.",
+    `  - inline — the default for any data you already hold: a tool or query result, numbers you computed, rows the user gave you. Write it as a table, {"source":"inline","columns":["month","revenue"],"rows":[["2026-07",42000],…]} (rows as objects also work). A tool result already shaped {columns, rows} can be pasted as is. At most ${INLINE_DATASET_MAX_ROWS} rows and ${INLINE_DATASET_MAX_BYTES / 1024} KB, so aggregate before you embed.`,
     "  - file — {\"source\":\"file\",\"path\":\"relative/to/cwd.csv\",\"format\"?:\"csv\"|\"json\",\"rowsPath\"?} — only for a data file that already exists in the workspace. Never write a file just to feed a view.",
     "  - mcp — {\"source\":\"mcp\",\"server\":\"<configured MCP server>\",\"tool\":\"<read-only tool>\",\"arguments\"?:{…},\"rowsPath\"?} — when the view should re-query the tool live instead of showing a snapshot.",
-    "- Every dataset declares its semantics: \"metrics\": {id: {\"column\"?, \"label\"?, \"format\": currency|percent|number, \"currency\"?, \"aggregate\"?: sum|avg|min|max|last|count, \"derived\"?: {\"op\": ratio|sum|difference, \"of\": [metric ids]}, \"direction\"?: higher-is-better|lower-is-better}} and \"dimensions\": {id: {\"column\"?, \"label\"?, \"kind\"?: time|category, \"grain\"?: day|month|quarter|year, \"order\"?, \"parent\"?}}; optionally \"scenario\": {\"column\", \"actual\", \"budget\"?, \"forecast\"?}, \"fiscalYearStartMonth\", \"refreshSeconds\". Percent values are ratios (0.142 means 14.2%). Balances (cash, receivables) aggregate with \"last\".",
+    `- Every dataset declares its semantics: "metrics": {id: {"column"?, "label"?, "format": ${alternatives(METRIC_FORMATS)}, "currency"?, "aggregate"?: ${alternatives(METRIC_AGGREGATES)}, "derived"?: {"op": ${alternatives(DERIVED_OPS)}, "of": [metric ids]}, "direction"?: ${alternatives(METRIC_DIRECTIONS)}}} and "dimensions": {id: {"column"?, "label"?, "kind"?: ${alternatives(DIMENSION_KINDS)}, "grain"?: ${alternatives(TIME_GRAINS)}, "order"?, "parent"?}}; optionally "scenario": {"column", "actual", "budget"?, "forecast"?}, "fiscalYearStartMonth", "refreshSeconds". Percent values are ratios (0.142 means 14.2%). Balances (cash, receivables) aggregate with "last".`,
     "- Periods: all, last-N-days|months|quarters|years, ytd, qtd, mtd, fy2026, 2026, 2026-Q3, 2026-08, 2026-08-15, or {\"from\",\"to\"}. Relative periods count back from the latest date in the data.",
-    "- compareWith: previous-period, previous-year, budget, forecast (the last two need the scenario column), or none.",
+    `- compareWith: ${COMPARE_MODES.join(", ")} (the last two need the scenario column), or none.`,
     "- Selectors bind with {\"$bindState\":\"/path\"}; other props read the value with {\"$state\":\"/path\"}. Seed defaults in \"state\". {\"$template\":\"text ${/path}\"} and {\"$cond\":…,\"$then\":…,\"$else\":…} are also allowed.",
-    "- \"filters\" is always an array, [{\"dimension\", \"op\"?: eq|neq|in|not-in, \"value\"}], never an object. To filter by a selector's choice, write [{\"dimension\":\"currency\",\"value\":{\"$state\":\"/currency\"}}]. \"totals\" on a table or statement is an array, [{\"label\",\"groups\":[…]}], never true.",
+    `- "filters" is always an array, [{"dimension", "op"?: ${alternatives(DATASET_FILTER_OPS)}, "value"}], never an object. To filter by a selector's choice, write [{"dimension":"currency","value":{"$state":"/currency"}}]. "totals" on a table or statement is an array, [{"label","groups":[…]}], never true.`,
     "- FlowDiagram nodes and edges are the diagram itself, so they go in props, not a dataset. Never give positions or sizes; Kanna lays the diagram out and picks the direction unless you set one.",
     "- FlowDiagram edge type states intent. \"static\" (the default) is a relationship that simply exists — architecture, a dependency, a decision branch, a run that already finished or has not started. \"flow\" is a path work is moving along RIGHT NOW — a live run, a request in flight, a job streaming — and Kanna animates it; use it only for those edges. style \"dashed\" means optional or conditional, never in progress.",
     "- Exploration — changing the period or comparison, drilling into a chart, sorting — runs inside Kanna without you. Only [agent] actions come back to you, as a message carrying a ```kanna-ui-intent block of structured context.",

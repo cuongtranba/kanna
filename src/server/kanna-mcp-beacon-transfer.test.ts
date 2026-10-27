@@ -3,18 +3,20 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { createBeaconTransfer } from "../beacon/transfer.adapter"
 import type { BeaconConfig } from "../shared/beacon-config"
 import type { BeaconFrame, BeaconResponseFrame } from "../shared/beacon-protocol"
+import type { JsonObject } from "../shared/json"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
 import { TRANSFER_PROTOCOL, type BeaconTransferResult } from "../shared/beacon-transfer"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { createBeaconRegistry, type BeaconRegistry, type BeaconSocket } from "./beacon-registry"
 import { createBeaconTransferTickets, type BeaconTransferTickets } from "./beacon-transfer-tickets"
 import { buildBeaconToolList } from "./kanna-mcp-beacon"
-import type { ToolArgs, ToolResult } from "./kanna-mcp-tool"
 import { startKannaServer } from "./server"
 import { createTestEventStore } from "./storage/test-helpers"
+import { invokeTool, sdkToolFactory, toolText } from "./test-helpers/sdk-tool"
 import { createToolCallbackService, type ToolCallbackService } from "./tool-callback"
 
 type SendPayload = Parameters<BeaconSocket["send"]>[0]
@@ -25,7 +27,7 @@ interface ToolExtra {
 
 interface FakeTool {
   name: string
-  handler: (input: ToolArgs, extra?: ToolExtra) => Promise<ToolResult>
+  handler: (input: JsonObject, extra?: ToolExtra) => Promise<CallToolResult>
 }
 
 const BEACON_ID = "beacon-1"
@@ -84,10 +86,6 @@ function patternBytes(size: number): Uint8Array<ArrayBuffer> {
 
 function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
-}
-
-function recordingTool(name: string, _description: string, _schema: object, handler: FakeTool["handler"]): FakeTool {
-  return { name, handler }
 }
 
 function connectBeacon(
@@ -155,13 +153,21 @@ function toolsFor(
       approval: { toolCallback, sessionId: "session-1", cwd: projectDir, chatPolicy: POLICY_DEFAULT },
       projectRoot: options.withProject === false ? undefined : projectDir,
     },
-    recordingTool,
+    sdkToolFactory,
   )
-  return new Map(list.map((entry) => [entry.name, entry]))
+  return new Map(
+    list.map((entry): [string, FakeTool] => [
+      entry.name,
+      {
+        name: entry.name,
+        handler: (input, extra) => invokeTool(entry, input, extra),
+      },
+    ]),
+  )
 }
 
-function textOf(result: ToolResult): string {
-  return result.content[0].text
+function textOf(result: CallToolResult): string {
+  return toolText(result)
 }
 
 async function until(condition: () => boolean): Promise<void> {

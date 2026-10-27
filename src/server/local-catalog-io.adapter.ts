@@ -2,6 +2,7 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, s
 import { homedir } from "node:os"
 import path from "node:path"
 import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
+import { catalogLocations, parseFrontmatter } from "./local-catalog"
 
 export type CatalogKind = "skill" | "command"
 export type CatalogScope = "project" | "personal" | "plugin"
@@ -24,13 +25,6 @@ export interface ScanLocalCatalogArgs {
   homeDir?: string
 }
 
-interface ParsedFrontmatter {
-  name: string | null
-  description: string
-  argumentHint: string
-  userInvocable: boolean
-}
-
 const FRONTMATTER_BUDGET_BYTES = 8 * 1024
 
 function readFrontmatterPrefix(filePath: string): string {
@@ -46,51 +40,6 @@ function readFrontmatterPrefix(filePath: string): string {
   } catch {
     return ""
   }
-}
-
-function parseFrontmatter(filePath: string): ParsedFrontmatter {
-  const empty: ParsedFrontmatter = { name: null, description: "", argumentHint: "", userInvocable: true }
-  const head = readFrontmatterPrefix(filePath)
-  if (!head.startsWith("---")) return empty
-  const closingIdx = head.indexOf("\n---", 3)
-  if (closingIdx < 0) return empty
-  const body = head.slice(3, closingIdx).replace(/^\r?\n/, "")
-  let name: string | null = null
-  let description = ""
-  let argumentHint = ""
-  let userInvocable = true
-  for (const rawLine of body.split(/\r?\n/)) {
-    const line = rawLine.trimEnd()
-    if (!line || line.startsWith("#")) continue
-    const colon = line.indexOf(":")
-    if (colon < 0) continue
-    const key = line.slice(0, colon).trim().toLowerCase()
-    let value = line.slice(colon + 1).trim()
-    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
-      value = value.slice(1, -1)
-    } else if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
-      value = value.slice(1, -1)
-    }
-    switch (key) {
-      case "name":
-        name = value || null
-        break
-      case "description":
-        description = value
-        break
-      case "argument-hint":
-      case "argument_hint":
-      case "argumenthint":
-        argumentHint = value
-        break
-      case "user-invocable":
-      case "user_invocable":
-      case "userinvocable":
-        userInvocable = !/^(false|no|0)$/i.test(value)
-        break
-    }
-  }
-  return { name, description, argumentHint, userInvocable }
 }
 
 export const CATALOG_FILE_MAX_BYTES = 256 * 1024
@@ -128,41 +77,22 @@ function safeReaddir(dir: string): string[] {
   }
 }
 
-function buildEntryFromSkill(args: {
+function buildEntry(args: {
+  kind: CatalogKind
   filePath: string
-  commandName: string
+  commandName: string | ((frontmatterName: string | null) => string)
   scope: CatalogScope
   pluginName: string | null
 }): RawCatalogEntry {
-  const fm = parseFrontmatter(args.filePath)
+  const fm = parseFrontmatter(readFrontmatterPrefix(args.filePath))
+  const commandName = typeof args.commandName === "function" ? args.commandName(fm.name) : args.commandName
   return {
-    name: args.commandName,
-    displayName: fm.name ?? args.commandName,
+    name: commandName,
+    displayName: fm.name ?? commandName,
     description: fm.description,
     argumentHint: fm.argumentHint,
     userInvocable: fm.userInvocable,
-    kind: "skill",
-    scope: args.scope,
-    pluginName: args.pluginName,
-    filePath: args.filePath,
-    mtimeMs: safeStatMtime(args.filePath),
-  }
-}
-
-function buildEntryFromCommand(args: {
-  filePath: string
-  commandName: string
-  scope: CatalogScope
-  pluginName: string | null
-}): RawCatalogEntry {
-  const fm = parseFrontmatter(args.filePath)
-  return {
-    name: args.commandName,
-    displayName: fm.name ?? args.commandName,
-    description: fm.description,
-    argumentHint: fm.argumentHint,
-    userInvocable: fm.userInvocable,
-    kind: "command",
+    kind: args.kind,
     scope: args.scope,
     pluginName: args.pluginName,
     filePath: args.filePath,
@@ -192,7 +122,8 @@ function scanSkillsDir(args: {
     const baseName = child
     const commandName = args.namespace ? `${args.namespace}:${baseName}` : baseName
     entries.push(
-      buildEntryFromSkill({
+      buildEntry({
+        kind: "skill",
         filePath: skillFile,
         commandName,
         scope: args.scope,
@@ -231,7 +162,8 @@ function scanCommandsDir(args: {
       const stem = relPath.slice(0, -3).split(path.sep).join("/")
       const commandName = args.namespace ? `${args.namespace}:${path.basename(stem)}` : stem
       entries.push(
-        buildEntryFromCommand({
+        buildEntry({
+          kind: "command",
           filePath: childPath,
           commandName,
           scope: args.scope,
@@ -255,11 +187,8 @@ function readJsonFile(filePath: string): JsonValue | null {
 
 function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<string> {
   const enabled = new Set<string>()
-  const sources = [
-    path.join(args.homeDir, ".claude", "settings.json"),
-    path.join(args.cwd, ".claude", "settings.json"),
-    path.join(args.cwd, ".claude", "settings.local.json"),
-  ]
+  const locations = catalogLocations(args)
+  const sources = [locations.personalSettings, locations.projectSettings, locations.projectLocalSettings]
   for (const source of sources) {
     const parsed = readJsonFile(source)
     if (parsed === null || !isJsonObject(parsed) || !isJsonObject(parsed.enabledPlugins)) continue
@@ -271,8 +200,8 @@ function readEnabledPluginKeys(args: { cwd: string; homeDir: string }): Set<stri
   return enabled
 }
 
-function readInstalledPluginPaths(homeDir: string): Map<string, string> {
-  const parsed = readJsonFile(path.join(homeDir, ".claude", "plugins", "installed_plugins.json"))
+function readInstalledPluginPaths(args: { cwd: string; homeDir: string }): Map<string, string> {
+  const parsed = readJsonFile(catalogLocations(args).installedPlugins)
   const out = new Map<string, string>()
   if (parsed === null || !isJsonObject(parsed) || !isJsonObject(parsed.plugins)) return out
   for (const [key, installs] of Object.entries(parsed.plugins)) {
@@ -314,20 +243,13 @@ function readDeclaredSkillDirs(args: {
 }
 
 function buildPluginSkillEntry(skillFile: string, pluginName: string, fallbackSegment: string): RawCatalogEntry {
-  const fm = parseFrontmatter(skillFile)
-  const commandName = `${pluginName}:${fm.name ?? fallbackSegment}`
-  return {
-    name: commandName,
-    displayName: fm.name ?? commandName,
-    description: fm.description,
-    argumentHint: fm.argumentHint,
-    userInvocable: fm.userInvocable,
+  return buildEntry({
     kind: "skill",
+    filePath: skillFile,
+    commandName: (frontmatterName) => `${pluginName}:${frontmatterName ?? fallbackSegment}`,
     scope: "plugin",
     pluginName,
-    filePath: skillFile,
-    mtimeMs: safeStatMtime(skillFile),
-  }
+  })
 }
 
 function scanPluginSkillDirs(skillDirs: readonly string[], pluginName: string): RawCatalogEntry[] {
@@ -357,7 +279,7 @@ function childDirectories(baseDir: string): string[] {
 function scanEnabledPlugins(args: { cwd: string; homeDir: string }): RawCatalogEntry[] {
   const enabled = readEnabledPluginKeys(args)
   if (enabled.size === 0) return []
-  const installPaths = readInstalledPluginPaths(args.homeDir)
+  const installPaths = readInstalledPluginPaths(args)
   const entries: RawCatalogEntry[] = []
 
   for (const key of enabled) {
@@ -389,40 +311,13 @@ function scanEnabledPlugins(args: { cwd: string; homeDir: string }): RawCatalogE
 }
 
 export function scanLocalCatalog(args: ScanLocalCatalogArgs): RawCatalogEntry[] {
-  const home = args.homeDir ?? homedir()
-  const entries: RawCatalogEntry[] = []
-  entries.push(
-    ...scanSkillsDir({
-      baseDir: path.join(args.cwd, ".claude", "skills"),
-      scope: "project",
-      pluginName: null,
-      namespace: null,
-    }),
-  )
-  entries.push(
-    ...scanCommandsDir({
-      baseDir: path.join(args.cwd, ".claude", "commands"),
-      scope: "project",
-      pluginName: null,
-      namespace: null,
-    }),
-  )
-  entries.push(
-    ...scanSkillsDir({
-      baseDir: path.join(home, ".claude", "skills"),
-      scope: "personal",
-      pluginName: null,
-      namespace: null,
-    }),
-  )
-  entries.push(
-    ...scanCommandsDir({
-      baseDir: path.join(home, ".claude", "commands"),
-      scope: "personal",
-      pluginName: null,
-      namespace: null,
-    }),
-  )
-  entries.push(...scanEnabledPlugins({ cwd: args.cwd, homeDir: home }))
-  return entries
+  const homeDir = args.homeDir ?? homedir()
+  const locations = catalogLocations({ cwd: args.cwd, homeDir })
+  return [
+    ...scanSkillsDir({ baseDir: locations.projectSkills, scope: "project", pluginName: null, namespace: null }),
+    ...scanCommandsDir({ baseDir: locations.projectCommands, scope: "project", pluginName: null, namespace: null }),
+    ...scanSkillsDir({ baseDir: locations.personalSkills, scope: "personal", pluginName: null, namespace: null }),
+    ...scanCommandsDir({ baseDir: locations.personalCommands, scope: "personal", pluginName: null, namespace: null }),
+    ...scanEnabledPlugins({ cwd: args.cwd, homeDir }),
+  ]
 }

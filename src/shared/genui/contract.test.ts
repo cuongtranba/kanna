@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { z } from "zod"
 import {
+  AGENT_INTENT_ACTIONS,
   GENUI_ACTIONS,
   GENUI_COMPONENTS,
   extractKannaUiFences,
@@ -9,6 +10,16 @@ import {
   parseIntentMessage,
   renderGenUIPromptSection,
 } from "./index"
+import {
+  DERIVED_OPS,
+  INLINE_DATASET_MAX_BYTES,
+  INLINE_DATASET_MAX_ROWS,
+  METRIC_AGGREGATES,
+  METRIC_FORMATS,
+  TIME_GRAINS,
+} from "./datasets"
+import { COMPARE_MODES } from "./period"
+import { DATASET_FILTER_OPS } from "./query"
 
 test("a fence still being streamed is reported open, a finished one closed", () => {
   const streaming = "Here is the report:\n```kanna-ui\n{\"version\":1,"
@@ -51,4 +62,45 @@ test("every component's prompt signature names each prop its schema accepts", ()
     return shape.filter((prop) => !def.signature.includes(prop)).map((prop) => `${name}.${prop}`)
   })
   expect(drift).toEqual([])
+})
+
+function enumOptionSets(schema: z.core.$ZodType): string[][] {
+  if (schema instanceof z.ZodEnum) return [schema.options.map(String)]
+  if (schema instanceof z.ZodOptional) return enumOptionSets(schema.unwrap())
+  if (schema instanceof z.ZodArray) return enumOptionSets(schema.element)
+  if (schema instanceof z.ZodUnion) return schema.options.flatMap(enumOptionSets)
+  if (schema instanceof z.ZodObject) return Object.values(schema.shape).flatMap(enumOptionSets)
+  if (schema instanceof z.ZodPipe) return enumOptionSets(schema.in)
+  return []
+}
+
+test("a component signature that spells out an enum spells out every member of it", () => {
+  const drift = Object.entries(GENUI_COMPONENTS).flatMap(([name, def]) =>
+    enumOptionSets(def.props).flatMap((options) => {
+      const tokens = new Set(def.signature.split(/[^\w-]+/))
+      const spelled = options.filter((option) => tokens.has(option))
+      if (spelled.length === 0 || spelled.length === options.length) return []
+      return options.filter((option) => !spelled.includes(option)).map((option) => `${name}: ${option}`)
+    }))
+  expect(drift).toEqual([])
+})
+
+test("the prompt states every enum member and limit the validator enforces", () => {
+  const prompt = renderGenUIPromptSection({ canValidate: true })
+  const expected = [
+    ...METRIC_FORMATS,
+    ...METRIC_AGGREGATES,
+    ...DERIVED_OPS,
+    ...TIME_GRAINS,
+    ...DATASET_FILTER_OPS,
+    ...COMPARE_MODES,
+    `${INLINE_DATASET_MAX_ROWS} rows and ${INLINE_DATASET_MAX_BYTES / 1024} KB`,
+  ]
+  expect(expected.filter((entry) => !prompt.includes(entry))).toEqual([])
+})
+
+test("the agent intent actions are exactly the catalog's agent-class actions", () => {
+  const agentActions = Object.entries(GENUI_ACTIONS).filter(([, def]) => def.class === "agent").map(([name]) => name)
+  const intentActions: string[] = [...AGENT_INTENT_ACTIONS]
+  expect(intentActions.sort()).toEqual(agentActions.sort())
 })

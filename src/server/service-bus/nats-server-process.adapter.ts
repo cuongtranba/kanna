@@ -6,6 +6,7 @@ import { log } from "../../shared/log"
 import { embeddedStoreBytes, renderNatsConfig, type EmbeddedServerSettings } from "../../shared/service-bus/jetstream-config"
 import { addCounter, NATS_SERVER_RESTARTS_TOTAL } from "../observability"
 import { natsRuntimePaths } from "./nats-server-release"
+import { defaultSchedule, type NatsScheduler } from "./scheduler"
 
 export interface NatsChild {
   pid: number
@@ -15,8 +16,6 @@ export interface NatsChild {
 }
 
 export type NatsSpawn = (command: string, args: string[]) => NatsChild
-export type NatsScheduler = (run: () => void, delayMs: number) => () => void
-
 export type NatsProcessState = "stopped" | "starting" | "ready" | "restarting"
 
 export interface NatsProcessStatus {
@@ -74,13 +73,6 @@ function defaultSpawn(command: string, args: string[]): NatsChild {
       child.on("exit", (code: number | null) => listener(code))
       child.on("error", () => listener(null))
     },
-  }
-}
-
-function defaultSchedule(run: () => void, delayMs: number): () => void {
-  const timer = setTimeout(run, delayMs)
-  return () => {
-    clearTimeout(timer)
   }
 }
 

@@ -27,3 +27,7 @@ export interface GenUIDataScope {
   cwd: string
   policy: ChatPermissionPolicy
 }
+
+export function mcpServerKey(server: McpServerConfig): string {
+  return `${server.id}\u0001${server.updatedAt}`
+}

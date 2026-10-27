@@ -1,5 +1,6 @@
 import type { ComponentType } from "react"
 import type { JsonValue } from "../../shared/json"
+import type { PluginClientContributionMethod } from "../../shared/plugins/host-modules"
 
 export interface PluginTheme {
   readonly colors: {
@@ -91,7 +92,7 @@ export function createPluginContributionRegistry(): PluginContributionRegistry {
   }
 }
 
-export interface PluginContext {
+export interface PluginContext extends Record<PluginClientContributionMethod, (...args: never[]) => void> {
   addSurface(id: string, component: PluginSurfaceComponent): void
   addSidebarItem(item: PluginSidebarItemInput): void
   addCommandCenterItem(item: PluginCommandCenterItemInput): void

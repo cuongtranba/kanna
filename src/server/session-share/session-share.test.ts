@@ -50,6 +50,20 @@ describe("SessionShareService", () => {
     if (r.ok) expect(r.data.summary.url.startsWith("/share/")).toBe(true)
   })
 
+  test("mintToken for a chat the snapshot source does not know is chat_not_found", async () => {
+    const unknown = new SessionShareService({
+      events,
+      snapshotStore: store,
+      buildSnapshot: () => Promise.resolve(null),
+      getDefaultTtlHours: () => 24,
+      now: () => 1_000_000,
+      owner: () => "owner",
+    })
+    const r = await unknown.mintToken({ chatId: "missing" }, BASE)
+    expect(r).toEqual({ ok: false, error: { kind: "chat_not_found", chatId: "missing" } })
+    expect(events.events).toEqual([])
+  })
+
   test("mintToken success appends event and writes snapshot", async () => {
     const r = await service.mintToken({ chatId: "c1" }, BASE)
     expect(r.ok).toBe(true)

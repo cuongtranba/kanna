@@ -1,10 +1,10 @@
-import { readdirSync, readFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { type LoadedModule } from "../../shared/dynamic-module"
 import { isRecord } from "../../shared/errors"
 import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
-import { PRODUCTION_EXCLUDES } from "./budget"
+import { listProductionSources } from "./budget-scan.adapter"
 import {
   BUNDLED_ROOTS,
   findDefaultImports,
@@ -13,22 +13,6 @@ import {
   type DefaultImportSite,
   type PackageInterop,
 } from "./cjs-interop"
-
-const SOURCE_EXTENSIONS = [".ts", ".tsx"]
-
-const isProductionSource = (relativePath: string): boolean =>
-  SOURCE_EXTENSIONS.some((ext) => relativePath.endsWith(ext))
-  && !PRODUCTION_EXCLUDES.some((excluded) => relativePath.includes(excluded))
-
-function listSources(root: string, directory: string): string[] {
-  const found: string[] = []
-  for (const entry of readdirSync(path.join(root, directory), { withFileTypes: true })) {
-    const relativePath = path.posix.join(directory, entry.name)
-    if (entry.isDirectory()) found.push(...listSources(root, relativePath))
-    else if (isProductionSource(relativePath)) found.push(relativePath)
-  }
-  return found
-}
 
 export interface ScanResult {
   readonly imports: readonly ClassifiedImport[]
@@ -115,7 +99,7 @@ export function scanCjsInterop(root: string, roots: readonly string[] = BUNDLED_
   let filesScanned = 0
 
   for (const directory of roots) {
-    for (const relativePath of listSources(root, directory.replace(/\/$/, ""))) {
+    for (const relativePath of listProductionSources(root, directory.replace(/\/$/, ""))) {
       filesScanned += 1
       const source = readFileSync(path.join(root, relativePath), "utf8")
       for (const site of findDefaultImports(relativePath, source)) {

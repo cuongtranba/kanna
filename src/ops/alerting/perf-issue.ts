@@ -1,17 +1,9 @@
+import type { TicketScope } from "./rules"
+import type { AlertAnnotationKey } from "./webhook-payload"
 
 export interface PerfAlertPayload {
   status: string
-  alert: {
-    alertname: string
-    service_version?: string
-    summary?: string
-    description?: string
-    runbook?: string
-    code_hints?: string
-    promql?: string
-    threshold?: string
-    ticket_scope?: string
-  }
+  alert: { alertname: string; service_version?: string } & Partial<Record<AlertAnnotationKey, string>>
   instances: Array<{
     host?: string
     service?: string
@@ -52,7 +44,7 @@ export const QUIET_PERIOD_MS = 6 * 60 * 60 * 1000
 
 export const REOPEN_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 
-function scopeOf(payload: PerfAlertPayload): "release" | "condition" {
+function scopeOf(payload: PerfAlertPayload): TicketScope {
   return payload.alert.ticket_scope === "condition" ? "condition" : "release"
 }
 
@@ -76,7 +68,7 @@ function codeHintList(payload: PerfAlertPayload): string {
   return hints.length > 0 ? hints.map((h) => `- ${h}`).join("\n") : "_None recorded on the rule._"
 }
 
-function footer(scope: "release" | "condition"): string {
+function footer(scope: TicketScope): string {
   if (scope === "condition") {
     return "_Filed automatically from a Grafana alert. This rule tracks an ongoing"
       + " condition rather than one release, so it stays open until a human closes"

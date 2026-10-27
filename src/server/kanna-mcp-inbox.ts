@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { errorMessage } from "../shared/errors"
-import { INBOX_DRAFT_MAX_CHARS, INBOX_SUMMARY_MAX_CHARS, isInboxVerdict } from "../shared/inbox/types"
+import { INBOX_DRAFT_MAX_CHARS, INBOX_SUMMARY_MAX_CHARS, INBOX_VERDICTS } from "../shared/inbox/types"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import { fail, ok, type KannaToolFactory } from "./kanna-mcp-tool"
 
@@ -24,17 +24,14 @@ export function buildInboxToolList<TTool>(
       INBOX_REPORT_DESCRIPTION,
       {
         thread_id: z.string().describe("The thread id named in your instructions."),
-        verdict: z.enum(["needs_you", "fyi", "handled"]).describe("needs_you, fyi or handled."),
+        verdict: z.enum(INBOX_VERDICTS).describe("needs_you, fyi or handled."),
         summary: z.string().max(INBOX_SUMMARY_MAX_CHARS).describe("What the message says and what you found."),
         draft_reply: z.string().max(INBOX_DRAFT_MAX_CHARS).optional().describe("Optional reply for the user to review."),
       },
       async (input) => {
         const { thread_id: threadId, verdict, summary, draft_reply: draftReply } = input
-        if (typeof threadId !== "string" || typeof verdict !== "string" || !isInboxVerdict(verdict) || typeof summary !== "string") {
-          return fail("thread_id, verdict and summary are required")
-        }
         try {
-          const result = await registry.report(threadId, chatId, verdict, summary, typeof draftReply === "string" ? draftReply : undefined)
+          const result = await registry.report(threadId, chatId, verdict, summary, draftReply)
           return result.ok ? ok(`Reported ${verdict} on thread ${threadId}`) : fail(result.error)
         } catch (error) {
           return fail(errorMessage(error))

@@ -16,7 +16,7 @@ import {
   parseStatusPaths,
 } from "./diff-store-parse"
 import type { DirtyPathEntry } from "./diff-store-parse"
-import { inferProjectFileContentType } from "./uploads"
+import { inferAttachmentContentType } from "./uploads"
 import type { ChatDiffFile } from "../shared/types"
 
 export type { DirtyPathEntry }
@@ -143,7 +143,7 @@ export async function computeCurrentFiles(repoRoot: string, baseCommit: string |
     const absolutePath = path.join(repoRoot, relativePath)
     const fileInfo = await statOrNull(absolutePath)
     const file = fileInfo?.isFile() ? getDiffFile(absolutePath) : null
-    const mimeType = file ? inferProjectFileContentType(relativePath, file.type) : undefined
+    const mimeType = file ? inferAttachmentContentType(relativePath, file.type) : undefined
     const size = fileInfo?.isFile() ? fileInfo.size : undefined
 
     if (beforeText === afterText && entry.changeType !== "renamed") {

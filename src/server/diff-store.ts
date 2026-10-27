@@ -66,6 +66,8 @@ import {
   generateCommitMessage,
   ignoreFile,
 } from "./diff-store-commit-ops"
+import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops"
+import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
 export { appendGitIgnoreEntry } from "./diff-store-parse"
@@ -73,12 +75,16 @@ export { appendGitIgnoreEntry } from "./diff-store-parse"
 export class DiffStore {
   private readonly states = new Map<string, StoredChatDiffState>()
 
-  private readonly opsDeps: DiffStoreBranchOpsDeps
+  private readonly opsDeps: DiffStoreBranchOpsDeps & DiffStoreCommitOpsDeps
 
-  constructor(fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests) {
+  constructor(
+    fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests,
+    oauthPool: OAuthTokenPool | null = null,
+  ) {
     this.opsDeps = {
       refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
       fetchPullRequests,
+      oauthPool,
     }
   }
 
@@ -404,7 +410,7 @@ export class DiffStore {
     projectPath: string
     paths: string[]
   }) {
-    return generateCommitMessage(args)
+    return generateCommitMessage(this.opsDeps, args)
   }
 
   async commitFiles(args: {

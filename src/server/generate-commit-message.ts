@@ -22,11 +22,6 @@ const COMMIT_MESSAGE_SCHEMA = {
 
 export type GenerateCommitMessageResult = z.output<typeof generateCommitMessageResultSchema>
 
-function summarizeFailures(failures: Array<{ provider: "openai" | "claude" | "codex"; reason: string }>) {
-  if (failures.length === 0) return null
-  return failures.map((failure) => failure.reason).join("; ")
-}
-
 function limitText(value: string, maxLength: number) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength).trimEnd()}\n...[truncated]`
 }
@@ -90,7 +85,7 @@ export async function generateCommitMessageDetailed(
   },
   adapter = new QuickResponseAdapter()
 ): Promise<GenerateCommitMessageResult> {
-  const result = await adapter.generateStructuredWithDiagnostics<{ subject: string; body: string }>({
+  const result = await adapter.generateStructuredOrFallback<{ subject: string; body: string }>({
     cwd: args.cwd,
     task: "commit message generation",
     prompt: buildCommitMessagePrompt(args),
@@ -104,21 +99,12 @@ export async function generateCommitMessageDetailed(
         body: sanitizeBody(output.body),
       }
     },
-  })
-
-  if (result.value) {
-    return {
-      subject: result.value.subject,
-      body: result.value.body,
-      usedFallback: false,
-      failureMessage: null,
-    }
-  }
+  }, () => ({ subject: fallbackSubject(args.files), body: "" }))
 
   return {
-    subject: fallbackSubject(args.files),
-    body: "",
-    usedFallback: true,
-    failureMessage: summarizeFailures(result.failures),
+    subject: result.value.subject,
+    body: result.value.body,
+    usedFallback: result.usedFallback,
+    failureMessage: result.failureMessage,
   }
 }

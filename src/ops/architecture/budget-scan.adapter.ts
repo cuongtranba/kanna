@@ -39,6 +39,9 @@ function listSources(root: string, directory: string, accepts: (relativePath: st
   return found
 }
 
+export const listProductionSources = (root: string, directory: string): string[] =>
+  listSources(root, directory, isProductionSource)
+
 const measureSources = (root: string, directory: string, accepts: (relativePath: string) => boolean): ModuleMeasurement[] =>
   listSources(root, directory, accepts)
     .map((relativePath) => ({

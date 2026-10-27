@@ -1,6 +1,7 @@
 import { projectNotFound } from "../shared/errors"
 import type { ProjectPathEntry } from "../shared/commands/results/project"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
+import { isSafeStoredName } from "./uploads"
 import { ackResult } from "./ws-router-ack"
 
 export type { ProjectPathEntry }
@@ -17,14 +18,6 @@ export type ListProjectPaths = (args: {
 }) => Promise<ProjectPathEntry[]>
 
 export type DeleteProjectUpload = (args: { localPath: string; storedName: string }) => Promise<boolean>
-
-function isSingleFileName(storedName: string): boolean {
-  return storedName !== ""
-    && storedName !== "."
-    && storedName !== ".."
-    && !storedName.includes("/")
-    && !storedName.includes("\\")
-}
 
 export async function handleProjectPathsCommand(
   store: ProjectLookup,
@@ -56,7 +49,7 @@ export async function handleUploadDeleteCommand(
   if (command.type !== "upload.delete") return false
   const project = store.getProject(command.projectId)
   if (!project) throw projectNotFound()
-  if (!isSingleFileName(command.storedName)) throw new Error("Invalid attachment path")
+  if (!isSafeStoredName(command.storedName)) throw new Error("Invalid attachment path")
   const deleted = await deleteProjectUpload({ localPath: project.localPath, storedName: command.storedName })
   send(ackResult(id, command, { deleted }))
   return true

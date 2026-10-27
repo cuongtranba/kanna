@@ -1,5 +1,16 @@
 
-const DEFAULT_LOGS_TAIL = 100
+import { PLUGIN_LOG_DEFAULT_TAIL } from "../shared/plugins/log-ring"
+
+export const PLUGIN_COMMAND_USAGE = {
+  install: "plugin install <sourceDir>",
+  ls: "plugin ls",
+  reload: "plugin reload <id>",
+  logs: "plugin logs <id> [--tail <n>]",
+} as const
+
+function usageError(command: keyof typeof PLUGIN_COMMAND_USAGE): PluginCliCommand {
+  return { kind: "error", message: `Usage: ${PLUGIN_COMMAND_USAGE[command]}` }
+}
 
 export type PluginCliCommand =
   | { kind: "install"; sourceDir: string }
@@ -32,7 +43,7 @@ export function parsePluginCommand(argv: string[]): PluginCliCommand {
 function parseInstallCommand(args: string[]): PluginCliCommand {
   const sourceDir = args[0]
   if (!sourceDir) {
-    return { kind: "error", message: "Usage: plugin install <sourceDir>" }
+    return usageError("install")
   }
   return { kind: "install", sourceDir }
 }
@@ -40,7 +51,7 @@ function parseInstallCommand(args: string[]): PluginCliCommand {
 function parseReloadCommand(args: string[]): PluginCliCommand {
   const id = args[0]
   if (!id) {
-    return { kind: "error", message: "Usage: plugin reload <id>" }
+    return usageError("reload")
   }
   return { kind: "reload", id }
 }
@@ -48,7 +59,7 @@ function parseReloadCommand(args: string[]): PluginCliCommand {
 function parseLogsCommand(args: string[]): PluginCliCommand {
   const id = args[0]
   if (!id) {
-    return { kind: "error", message: "Usage: plugin logs <id> [--tail <n>]" }
+    return usageError("logs")
   }
   const tail = parseTailOption(args.slice(1))
   if (tail === null) {
@@ -59,16 +70,12 @@ function parseLogsCommand(args: string[]): PluginCliCommand {
 
 function parseTailOption(args: string[]): number | null {
   const index = args.indexOf("--tail")
-  if (index === -1) {
-    return DEFAULT_LOGS_TAIL
-  }
-  const value = args[index + 1]
-  if (!value) {
-    return null
-  }
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    return null
-  }
-  return parsed
+  return parseLogTail(index === -1 ? undefined : (args[index + 1] ?? ""))
+}
+
+export function parseLogTail(raw: string | undefined): number | null {
+  if (raw === undefined) return PLUGIN_LOG_DEFAULT_TAIL
+  if (!raw) return null
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }

@@ -7,17 +7,25 @@ export const TICKET_SCOPE_ANNOTATION = "ticket_scope"
 
 export const MAX_ALERTS_PER_NOTIFICATION = 20
 
+export const PERF_ALERT_LABEL = { kanna_alert: "perf" } as const
+
+export const ALERT_ANNOTATION_KEYS = [
+  "summary",
+  "description",
+  "runbook",
+  "code_hints",
+  "promql",
+  "threshold",
+  TICKET_SCOPE_ANNOTATION,
+] as const
+
+export type AlertAnnotationKey = (typeof ALERT_ANNOTATION_KEYS)[number]
+
 export const TEMPLATED_FIELDS: readonly string[] = [
   ".Status",
   ".CommonLabels.alertname",
   ".CommonLabels.service_version",
-  ".CommonAnnotations.summary",
-  ".CommonAnnotations.description",
-  ".CommonAnnotations.runbook",
-  ".CommonAnnotations.code_hints",
-  ".CommonAnnotations.promql",
-  ".CommonAnnotations.threshold",
-  `.CommonAnnotations.${TICKET_SCOPE_ANNOTATION}`,
+  ...ALERT_ANNOTATION_KEYS.map((key) => `.CommonAnnotations.${key}`),
   ".Labels.host_name",
   ".Labels.service_name",
   ".ValueString",
@@ -42,6 +50,10 @@ export function buildWebhookPayloadTemplate(): string {
     `"status": ${q("$alert.Status")}}`,
   ].join(", ")
 
+  const annotationFields = ALERT_ANNOTATION_KEYS
+    .map((key) => `      "${key}": ${q(`.CommonAnnotations.${key}`)}`)
+    .join(",\n")
+
   return `{
   "event_type": "${PERF_ALERT_EVENT_TYPE}",
   "client_payload": {
@@ -49,13 +61,7 @@ export function buildWebhookPayloadTemplate(): string {
     "alert": {
       "alertname": ${q(".CommonLabels.alertname")},
       "service_version": ${q(".CommonLabels.service_version")},
-      "summary": ${q(".CommonAnnotations.summary")},
-      "description": ${q(".CommonAnnotations.description")},
-      "runbook": ${q(".CommonAnnotations.runbook")},
-      "code_hints": ${q(".CommonAnnotations.code_hints")},
-      "promql": ${q(".CommonAnnotations.promql")},
-      "threshold": ${q(".CommonAnnotations.threshold")},
-      "${TICKET_SCOPE_ANNOTATION}": ${q(`.CommonAnnotations.${TICKET_SCOPE_ANNOTATION}`)}
+${annotationFields}
     },
     "instances": [{{ range $i, $alert := .Alerts }}{{ if $i }},{{ end }}${instance}{{ end }}],
     "grafana_url": ${q(".ExternalURL")}
@@ -105,7 +111,7 @@ export interface NotificationPolicy {
 export function perfRoute(): NotificationRoute {
   return {
     receiver: CONTACT_POINT_NAME,
-    object_matchers: [["kanna_alert", "=", "perf"]],
+    object_matchers: Object.entries(PERF_ALERT_LABEL).map(([label, value]) => [label, "=", value]),
     group_by: ["alertname", "service_version"],
     group_wait: "5m",
     group_interval: "10m",

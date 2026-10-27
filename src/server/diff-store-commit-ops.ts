@@ -32,12 +32,16 @@ import type {
   DiffCommitResult,
 } from "../shared/types"
 import { generateCommitMessageDetailed } from "./generate-commit-message"
+import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { QuickResponseAdapter } from "./quick-response"
 
 export interface DiffStoreCommitOpsDeps {
   readonly refreshSnapshot: (repoPath: string) => Promise<boolean>
+  readonly oauthPool?: OAuthTokenPool | null
 }
 
 export async function generateCommitMessage(
+  deps: DiffStoreCommitOpsDeps,
   args: { projectPath: string; paths: string[] }
 ) {
   const normalizedPaths = [...new Set(args.paths.map(normalizeRepoRelativePath))]
@@ -67,11 +71,14 @@ export async function generateCommitMessage(
   }))
 
   const branchName = await getBranchName(repo.repoRoot)
-  return await generateCommitMessageDetailed({
-    cwd: repo.repoRoot,
-    branchName,
-    files: selectedFiles,
-  })
+  return await generateCommitMessageDetailed(
+    {
+      cwd: repo.repoRoot,
+      branchName,
+      files: selectedFiles,
+    },
+    new QuickResponseAdapter({ oauthPool: deps.oauthPool }),
+  )
 }
 
 export async function commitFiles(

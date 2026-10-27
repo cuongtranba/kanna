@@ -38,7 +38,7 @@ import {
   TURN_DURATION_MS,
   TURN_TOKENS,
 } from "../../server/observability"
-import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
+import { PERF_ALERT_LABEL, TICKET_SCOPE_ANNOTATION, type AlertAnnotationKey } from "./webhook-payload"
 
 export function promMetricName(otelName: string): string {
   return otelName.replaceAll(".", "_")
@@ -315,7 +315,7 @@ export interface GrafanaAlertRule {
   execErrState: "OK"
   for: string
   labels: Record<string, string>
-  annotations: Record<string, string>
+  annotations: Record<AlertAnnotationKey, string>
   isPaused: boolean
   orgID: number
   folderUID: string
@@ -367,7 +367,7 @@ export function buildRuleGroup(
       noDataState: "OK",
       execErrState: "OK",
       for: spec.forDuration,
-      labels: { kanna_alert: "perf", severity: spec.severity },
+      labels: { ...PERF_ALERT_LABEL, severity: spec.severity },
       annotations: {
         summary: spec.summary,
         description: spec.description,

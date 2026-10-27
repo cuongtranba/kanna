@@ -1,6 +1,18 @@
 import { isJsonObject, type JsonValue } from "../json"
 
 
+export interface ClaudePluginName {
+  plugin: string
+  marketplace: string | null
+}
+
+export function parseClaudePluginName(name: string): ClaudePluginName {
+  const separator = name.indexOf("@")
+  return separator >= 0
+    ? { plugin: name.slice(0, separator), marketplace: name.slice(separator + 1) }
+    : { plugin: name, marketplace: null }
+}
+
 export interface MarketplaceEntry {
   name: string
   installLocation: string

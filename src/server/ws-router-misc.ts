@@ -5,7 +5,8 @@ import { ackResult } from "./ws-router-ack"
 import type { GitWorktree } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { TerminalSnapshot } from "../shared/protocol"
-import type { MintRequest, MintResponse, RevokeRequest, ShareError, ShareSummary } from "../shared/session-share/types"
+import type { MintRequest, MintResponse, RevokeRequest, ShareSummary } from "../shared/session-share/types"
+import type { ShareResult } from "./session-share"
 
 
 export interface MiscStoreDep {
@@ -40,8 +41,6 @@ export interface MiscAgentDep {
 export interface MiscAnalyticsDep {
   track(event: string, props?: JsonObject): void
 }
-
-export type ShareResult<T> = { ok: true; data: T } | { ok: false; error: ShareError }
 
 export interface MiscSessionShareDep {
   mintToken(req: MintRequest, baseUrl: string): Promise<ShareResult<MintResponse>>

@@ -57,9 +57,15 @@ function sources(frozen: FrozenDataset = { status: "ok", rows: [{ region: "north
   }
 }
 
+async function builtSnapshot(src: SnapshotSources, chatId: string) {
+  const snap = await buildChatSnapshot(src, chatId)
+  if (snap === null) throw new Error(`no snapshot for ${chatId}`)
+  return snap
+}
+
 describe("buildChatSnapshot", () => {
   test("publishes the conversation the chat renders and withholds account details, attachments and raw provider payloads beyond what a tool card reads", async () => {
-    const snap = await buildChatSnapshot(sources(), "c1")
+    const snap = await builtSnapshot(sources(), "c1")
     expect(snap.version).toBe(CHAT_SNAPSHOT_VERSION)
     expect(snap.entries.map((entry) => entry._id)).toEqual(["e2", "e3", "e4", "q1", "q2", "e5"])
     const published = JSON.stringify(snap)
@@ -75,21 +81,14 @@ describe("buildChatSnapshot", () => {
 
   test("freezes the rows of every non-inline dataset a view declares, keyed so the viewer can find them", async () => {
     const src = sources()
-    const snap = await buildChatSnapshot(src, "c1")
+    const snap = await builtSnapshot(src, "c1")
     expect(src.frozenDecls.map((decl) => decl.source)).toEqual(["file"])
     const key = datasetFreezeKey(datasetDeclSchema.parse(SALES_DATASET))
     expect(snap.datasets[key]).toEqual({ status: "ok", rows: [{ region: "north", revenue: 10 }] })
   })
 
-  test("rejects when the chat is unknown", async () => {
+  test("returns null when the chat is unknown", async () => {
     const src: SnapshotSources = { ...sources(), getChatMeta: () => null }
-    let failure: Error | null = null
-    try {
-      await buildChatSnapshot(src, "missing")
-    } catch (error) {
-      if (!(error instanceof Error)) throw error
-      failure = error
-    }
-    expect(failure?.message).toMatch(/chat_not_found/)
+    expect(await buildChatSnapshot(src, "missing")).toBeNull()
   })
 })

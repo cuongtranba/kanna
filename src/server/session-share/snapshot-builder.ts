@@ -42,11 +42,9 @@ async function freezeDatasets(
   return Object.fromEntries(frozen)
 }
 
-export async function buildChatSnapshot(sources: SnapshotSources, chatId: string): Promise<ChatSnapshotV2> {
+export async function buildChatSnapshot(sources: SnapshotSources, chatId: string): Promise<ChatSnapshotV2 | null> {
   const meta = sources.getChatMeta(chatId)
-  if (!meta) {
-    throw new Error(`chat_not_found:${chatId}`)
-  }
+  if (!meta) return null
   const entries = shareableEntries(sources.getTranscript(chatId))
   return {
     version: CHAT_SNAPSHOT_VERSION,

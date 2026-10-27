@@ -1,5 +1,6 @@
 import { isJsonObject, nonEmptyStringField, stringField, type JsonObject, type JsonValue } from "../json"
 import { installedPackage } from "./installed-package"
+import { parseClaudePluginName } from "./parse-claude-plugin-marketplace"
 import type { InstalledPackage } from "./types"
 
 function claudeVersionLabel(version: string | null): string | null {
@@ -69,9 +70,7 @@ function parseClaudePluginsFileV2(raw: JsonObject): InstalledPackage[] {
   for (const [pluginKey, scopedEntries] of Object.entries(raw)) {
     if (!pluginKey || !Array.isArray(scopedEntries)) continue
 
-    const atIdx = pluginKey.indexOf("@")
-    const pluginName = atIdx >= 0 ? pluginKey.slice(0, atIdx) : pluginKey
-    const marketplaceName = atIdx >= 0 ? pluginKey.slice(atIdx + 1) : null
+    const { plugin: pluginName, marketplace: marketplaceName } = parseClaudePluginName(pluginKey)
     if (!pluginName) continue
 
     const userEntry = scopedEntries.find((entry) => isJsonObject(entry) && isUserScoped(entry))

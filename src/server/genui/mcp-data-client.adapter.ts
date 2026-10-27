@@ -6,7 +6,7 @@ import type { JsonObject } from "../../shared/json"
 import { log } from "../../shared/log"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import { buildTransport } from "../mcp-validator"
-import type { McpDataClient, McpToolDescriptor, McpToolResult } from "./dataset-ports"
+import { mcpServerKey, type McpDataClient, type McpToolDescriptor, type McpToolResult } from "./dataset-ports"
 
 const CALL_TIMEOUT_MS = 20_000
 const IDLE_CLOSE_MS = 60_000
@@ -29,8 +29,6 @@ function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
 export function createMcpDataClient(bearerFor: (server: McpServerConfig) => Promise<string | undefined>): McpDataClient {
   const pool = new Map<string, Promise<PooledClient>>()
 
-  const keyOf = (server: McpServerConfig) => `${server.id}\u0001${server.updatedAt}`
-
   const drop = (key: string) => {
     const entry = pool.get(key)
     pool.delete(key)
@@ -52,7 +50,7 @@ export function createMcpDataClient(bearerFor: (server: McpServerConfig) => Prom
   }
 
   const withClient = async <T>(server: McpServerConfig, run: (client: Client) => Promise<T>): Promise<T> => {
-    const key = keyOf(server)
+    const key = mcpServerKey(server)
     let pending = pool.get(key)
     if (!pending) {
       pending = connect(server)

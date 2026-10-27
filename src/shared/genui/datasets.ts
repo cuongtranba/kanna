@@ -17,6 +17,8 @@ export const METRIC_FORMATS = ["currency", "percent", "number"] as const
 export const METRIC_AGGREGATES = ["sum", "avg", "min", "max", "last", "count"] as const
 export const DERIVED_OPS = ["ratio", "sum", "difference"] as const
 export const TIME_GRAINS = ["day", "month", "quarter", "year"] as const
+export const METRIC_DIRECTIONS = ["higher-is-better", "lower-is-better"] as const
+export const DIMENSION_KINDS = ["time", "category"] as const
 
 export type MetricFormat = (typeof METRIC_FORMATS)[number]
 export type MetricAggregate = (typeof METRIC_AGGREGATES)[number]
@@ -29,14 +31,14 @@ const metricDefSchema = z.strictObject({
   currency: z.string().regex(/^[A-Z]{3}$/, "is an ISO 4217 code such as USD").optional(),
   aggregate: z.enum(METRIC_AGGREGATES).optional(),
   derived: z.strictObject({ op: z.enum(DERIVED_OPS), of: z.array(identifier).min(2).max(8) }).optional(),
-  direction: z.enum(["higher-is-better", "lower-is-better"]).optional(),
+  direction: z.enum(METRIC_DIRECTIONS).optional(),
   decimals: z.number().int().min(0).max(6).optional(),
 })
 
 const dimensionDefSchema = z.strictObject({
   column: columnName.optional(),
   label: label.optional(),
-  kind: z.enum(["time", "category"]).optional(),
+  kind: z.enum(DIMENSION_KINDS).optional(),
   grain: z.enum(TIME_GRAINS).optional(),
   order: z.array(z.string().max(120)).max(200).optional(),
   parent: identifier.optional(),

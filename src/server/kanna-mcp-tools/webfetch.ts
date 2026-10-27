@@ -1,18 +1,11 @@
 import { z } from "zod"
+import { errorMessage } from "../../shared/errors"
+import { fail, ok } from "../kanna-mcp-tool"
 import type { ToolCallbackService } from "../tool-callback"
-import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
-import { gatedToolCall } from "./tool-callback-shim"
+import { defineGatedTool } from "./tool-callback-shim"
 
-const InputSchema = z.object({
+const SHAPE = {
   url: z.string(),
-})
-
-export type WebFetchInput = z.infer<typeof InputSchema>
-
-export interface WebFetchTool {
-  name: "webfetch"
-  schema: typeof InputSchema
-  handler: (input: WebFetchInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
 }
 
 const BLOCKED_HOST_PATTERNS = [
@@ -37,43 +30,20 @@ function isSafeUrl(rawUrl: string): { ok: true; url: URL } | { ok: false; reason
   return { ok: true, url }
 }
 
-export function createWebFetchTool(deps: { toolCallback: ToolCallbackService }): WebFetchTool {
-  return {
+export function createWebFetchTool(deps: { toolCallback: ToolCallbackService }) {
+  return defineGatedTool(deps, {
     name: "webfetch",
-    schema: InputSchema,
-    async handler(input, ctx) {
-      return gatedToolCall({
-        toolCallback: deps.toolCallback,
-        toolName: "mcp__kanna__webfetch",
-        ctx,
-        args: input,
-        formatAnswer: async () => {
-          const check = isSafeUrl(input.url)
-          if (!check.ok) {
-            return {
-              content: [{ type: "text" as const, text: `Error: ${check.reason}` }],
-              isError: true,
-            }
-          }
-          try {
-            const res = await fetch(input.url)
-            const text = await res.text()
-            return {
-              content: [{ type: "text" as const, text: `Status: ${res.status}\n\n${text}` }],
-            }
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            return {
-              content: [{ type: "text" as const, text: `Error fetching URL: ${msg}` }],
-              isError: true,
-            }
-          }
-        },
-        formatDeny: (reason) => ({
-          content: [{ type: "text" as const, text: `Denied: ${reason}` }],
-          isError: true,
-        }),
-      })
+    shape: SHAPE,
+    async run(input) {
+      const check = isSafeUrl(input.url)
+      if (!check.ok) return fail(`Error: ${check.reason}`)
+      try {
+        const res = await fetch(input.url)
+        const text = await res.text()
+        return ok(`Status: ${res.status}\n\n${text}`)
+      } catch (err) {
+        return fail(`Error fetching URL: ${errorMessage(err)}`)
+      }
     },
-  }
+  })
 }

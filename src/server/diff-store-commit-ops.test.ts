@@ -299,7 +299,7 @@ describe("generateCommitMessage", () => {
   test("throws when not a git repo", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
-      generateCommitMessage({
+      generateCommitMessage(makeDeps(), {
         projectPath: dir,
         paths: ["README.md"],
       })
@@ -309,7 +309,7 @@ describe("generateCommitMessage", () => {
   test("throws when no paths provided", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage({
+      generateCommitMessage(makeDeps(), {
         projectPath: repo,
         paths: [],
       })
@@ -319,7 +319,7 @@ describe("generateCommitMessage", () => {
   test("throws when file is no longer changed", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage({
+      generateCommitMessage(makeDeps(), {
         projectPath: repo,
         paths: ["README.md"],
       })
@@ -329,7 +329,7 @@ describe("generateCommitMessage", () => {
   test("deduplicates paths before processing", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage({
+      generateCommitMessage(makeDeps(), {
         projectPath: repo,
         paths: ["README.md", "README.md"],
       })

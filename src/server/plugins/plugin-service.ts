@@ -5,7 +5,7 @@ import type { pluginRuntimeStateSchema, pluginSummarySchema } from "../../shared
 import { errorMessage } from "../../shared/errors"
 import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
-import { createPluginLogRing, type PluginLogEntry } from "../../shared/plugins/log-ring"
+import { createPluginLogRing, PLUGIN_LOG_DEFAULT_TAIL, type PluginLogEntry } from "../../shared/plugins/log-ring"
 import { parseKannaPluginManifest, resolvePluginEntry } from "../../shared/plugins/manifest"
 import { getPluginBuildDir } from "../../shared/plugins/paths"
 import { buildPluginBundles } from "./plugin-build.adapter"
@@ -14,8 +14,7 @@ import {
   listenForPluginChild,
   readPluginManifestText,
   spawnPluginChild,
-  writePluginServerBundle,
-  writePluginClientBundle,
+  writePluginBundle,
   readPluginClientBundle,
   type PluginHostConnection,
   type SpawnedPluginChild,
@@ -69,7 +68,7 @@ export interface PluginService {
   status(id: string): { readonly state: PluginRuntimeState } | undefined
   call(id: string, method: string, params: JsonValue): Promise<PluginCallResult>
   stop(id: string): Promise<void>
-  logs(id: string): readonly PluginLogEntry[]
+  logs(id: string, tail?: number): readonly PluginLogEntry[]
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -121,26 +120,12 @@ export function createPluginService(
     if (!built.ok) {
       throw new Error(`plugin "${id}" failed to compile: ${built.errors.join("; ")}`)
     }
-    const buildDir = getPluginBuildDir(homeDir, id)
-    const bundlePath = join(buildDir, SERVER_BUNDLE_FILENAME)
-    const clientBundlePath = join(buildDir, CLIENT_BUNDLE_FILENAME)
-    await writePluginServerBundle(bundlePath, built.server)
-    await writePluginClientBundle(clientBundlePath, built.client)
+    const paths = buildPaths(id)
+    await writePluginBundle(paths.bundlePath, built.server)
+    await writePluginBundle(paths.clientBundlePath, built.client)
 
     const existing = registry.get(id)
-    registry.set(id, {
-      id,
-      sourceDir,
-      bundlePath,
-      clientBundlePath,
-      logRing: existing?.logRing ?? createPluginLogRing(),
-      pendingCalls: new Map(),
-      enabled: existing?.enabled ?? false,
-      state: "stopped",
-      process: null,
-      connection: null,
-      nextCallId: 1,
-    })
+    registry.set(id, newRecord(id, sourceDir, existing?.enabled ?? false, existing?.logRing))
     await installed?.upsert({ id, sourceDir, enabled: existing?.enabled ?? false })
   }
 
@@ -152,21 +137,30 @@ export function createPluginService(
     }
   }
 
+  function newRecord(
+    id: string,
+    sourceDir: string,
+    enabled: boolean,
+    logRing: PluginRuntimeRecord["logRing"] = createPluginLogRing(),
+  ): PluginRuntimeRecord {
+    return {
+      id,
+      sourceDir,
+      ...buildPaths(id),
+      logRing,
+      pendingCalls: new Map(),
+      enabled,
+      state: "stopped",
+      process: null,
+      connection: null,
+      nextCallId: 1,
+    }
+  }
+
   function restore(): void {
     for (const entry of installed?.list() ?? []) {
       if (registry.has(entry.id)) continue
-      registry.set(entry.id, {
-        id: entry.id,
-        sourceDir: entry.sourceDir,
-        ...buildPaths(entry.id),
-        logRing: createPluginLogRing(),
-        pendingCalls: new Map(),
-        enabled: entry.enabled,
-        state: "stopped",
-        process: null,
-        connection: null,
-        nextCallId: 1,
-      })
+      registry.set(entry.id, newRecord(entry.id, entry.sourceDir, entry.enabled))
     }
   }
 
@@ -272,8 +266,8 @@ export function createPluginService(
     settlePendingCalls(record, { ok: false, error: `plugin "${id}" was stopped` })
   }
 
-  function logs(id: string): readonly PluginLogEntry[] {
-    return registry.get(id)?.logRing.tail() ?? []
+  function logs(id: string, tail = PLUGIN_LOG_DEFAULT_TAIL): readonly PluginLogEntry[] {
+    return registry.get(id)?.logRing.tail(tail) ?? []
   }
 
   function list(): readonly PluginSummary[] {
