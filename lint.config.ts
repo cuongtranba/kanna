@@ -255,8 +255,8 @@ const PRODUCTION_TEST_EXCLUDES = [
 // src/ops/architecture/budget.ts pins them and they may only ever be lowered.
 // `bun run lint:limits` proves each is still tight rather than slack.
 export const COMPLEXITY_CEILINGS = {
-  "eslint-js/complexity": 127,
-  "eslint-js/max-params": 11,
+  "eslint-js/complexity": 96,
+  "eslint-js/max-params": 9,
   "eslint-js/max-depth": 7,
   "eslint-js/max-nested-callbacks": 4,
 } as const

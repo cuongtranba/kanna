@@ -276,8 +276,10 @@ describe("the manifest itself", () => {
     const expression = new RegExp(budget?.pattern ?? "")
     expect(expression.test("  const onSave = vi.fn(async () => {})")).toBe(true)
     expect(expression.test("  const spy = vi.spyOn(console, \"error\")")).toBe(true)
+    expect(expression.test("  const closeFn = vi.fn<(chatId: string) => void>(() => undefined)")).toBe(true)
     expect(expression.test(`${"vi"}.mock("./x", () => ({}))`)).toBe(false)
     expect(expression.test("  expect(onSave.mock.calls).toHaveLength(1)")).toBe(false)
+    expect(expression.test("  let recorder: ReturnType<typeof vi.fn>")).toBe(false)
   })
 
   test("no test-style budget scans src/ops, whose gates quote every pattern as a literal", () => {
