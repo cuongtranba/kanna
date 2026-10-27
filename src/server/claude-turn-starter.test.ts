@@ -1,15 +1,58 @@
 import { describe, test, expect, mock } from "bun:test"
 import { startTurnForChat, type StartClaudeTurnArgs, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
-import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { ClaudeSessionState, type ActiveTurn, type StartingTurn } from "./claude-session-state"
 import { PendingToolSlots } from "./pending-tool-slot"
-import type { HarnessTurn } from "./harness-types"
+import type { ClaudeSessionHandle, HarnessTurn } from "./harness-types"
 import type { TranscriptEntry } from "../shared/types"
 import { renderGenUIPromptSection } from "../shared/genui"
 import { CODEX_PLAN_PROGRESS_SECTION } from "../shared/kanna-system-prompt"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 
+
+function makeSdkSession(handle: Partial<ClaudeSessionHandle>): ClaudeSessionState {
+  return new ClaudeSessionState({
+    id: "sess-1",
+    chatId: "chat-1",
+    session: {
+      provider: "claude",
+      stream: (async function* () {})(),
+      interrupt: async () => {},
+      close: () => {},
+      closed: Promise.resolve(),
+      sendPrompt: async () => {},
+      setModel: async () => {},
+      setPermissionMode: async () => {},
+      ...handle,
+    },
+    localPath: "/tmp/project",
+    additionalDirectories: [],
+    model: "claude-opus-4-5",
+    planMode: false,
+    sessionToken: null,
+    accountInfoLoaded: false,
+    nextPromptSeq: 0,
+    pendingPromptSeqs: [],
+    activeTokenId: null,
+    oauthKeyMasked: null,
+    oauthLabel: null,
+    endpointKeyMasked: null,
+    endpointModel: null,
+    lastUsedAt: Date.now(),
+    backgroundTasks: new Map(),
+    backgroundTaskDeadlineAt: 0,
+    backgroundTaskWakeCount: 0,
+    backgroundTasksLevelSourced: false,
+    selfWakeActive: false,
+    recentToolDescriptions: new Map(),
+    backgroundLaunchToolIds: new Set(),
+    loopArmedAtSpawn: false,
+    cancelledResultPending: 0,
+    suppressSessionTokenPersist: false,
+    backgroundTaskWakeSuppressed: false,
+  })
+}
 
 function makeFakeTurn(): HarnessTurn {
   return {
@@ -287,33 +330,7 @@ describe("startTurnForChat", () => {
     const deps = makeDeps()
     const fakeTurn = makeFakeTurn()
     deps.startClaudeTurn = mock(async () => {
-      deps.claudeSessions.set("chat-1", {
-        id: "sess-1",
-        chatId: "chat-1",
-        session: { sendPrompt: mock(async () => {}), getAccountInfo: undefined },
-        localPath: "/tmp/project",
-        additionalDirectories: [],
-        model: "claude-opus-4-5",
-        effort: undefined,
-        planMode: false,
-        sessionToken: null,
-        accountInfoLoaded: false,
-        nextPromptSeq: 0,
-        pendingPromptSeqs: [],
-        activeTokenId: null,
-        oauthKeyMasked: null,
-        oauthLabel: null,
-        endpointKeyMasked: null,
-        endpointModel: null,
-        lastUsedAt: Date.now(),
-        backgroundTasks: new Map(),
-        backgroundTaskDeadlineAt: 0,
-    backgroundTaskWakeCount: 0,
-    backgroundTasksLevelSourced: false,
-        loopArmedAtSpawn: false,
-        cancelledResultPending: 0,
-        suppressSessionTokenPersist: false,
-      } as unknown as ClaudeSessionState)
+      deps.claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: mock(async () => {}), getAccountInfo: undefined }))
       return fakeTurn
     })
 
@@ -334,6 +351,13 @@ describe("startTurnForChat", () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex" }))
     expect(deps.runTurn as ReturnType<typeof mock>).toHaveBeenCalledTimes(1)
+  })
+
+  test("a codex /compact turn carries its compactionTurn tag when runTurn first sees it", async () => {
+    const seen: Array<ActiveTurn["compactionTurn"]> = []
+    const deps = makeDeps({ runTurn: (active) => { seen.push(active.compactionTurn) } })
+    await startTurnForChat(deps, makeArgs({ provider: "codex", compactionTurn: "codex_summary" }))
+    expect(seen).toEqual(["codex_summary"])
   })
 })
 
@@ -450,15 +474,7 @@ describe("startTurnForChat — starting-turn marker", () => {
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
     })
-    deps.claudeSessions.set("chat-1", {
-      id: "sess-1",
-      chatId: "chat-1",
-      nextPromptSeq: 0,
-      pendingPromptSeqs: [],
-      cancelledResultPending: 0,
-      lastUsedAt: 0,
-      session: { sendPrompt: async () => {} },
-    } as unknown as ClaudeSessionState)
+    deps.claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: async () => {} }))
 
     await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
     expect(captured).not.toBeNull()
@@ -487,15 +503,7 @@ describe("startTurnForChat — starting-turn marker", () => {
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
     })
-    deps.claudeSessions.set("chat-1", {
-      id: "sess-1",
-      chatId: "chat-1",
-      nextPromptSeq: 0,
-      pendingPromptSeqs: [],
-      cancelledResultPending: 0,
-      lastUsedAt: 0,
-      session: { sendPrompt: async () => {} },
-    } as unknown as ClaudeSessionState)
+    deps.claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: async () => {} }))
 
     await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
     expect(captured).not.toBeNull()
@@ -613,14 +621,7 @@ describe("@project mentions", () => {
     })
     const claudeSessions = new Map<string, ClaudeSessionState>()
     const startClaudeTurn = mock(async (_spawn: StartClaudeTurnArgs) => {
-      claudeSessions.set("chat-1", {
-        id: "session-1",
-        nextPromptSeq: 0,
-        pendingPromptSeqs: [],
-        cancelledResultPending: 0,
-        lastUsedAt: Date.now(),
-        session: { sendPrompt: async () => {} },
-      } as unknown as ClaudeSessionState)
+      claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: async () => {} }))
       return makeFakeTurn()
     })
     const deps = makeDeps({
@@ -732,14 +733,7 @@ describe("@beacon mentions", () => {
         setPendingForkSessionToken: async () => {},
       } as unknown as StartTurnDeps["store"],
       startClaudeTurn: async () => {
-        claudeSessions.set("chat-1", {
-          id: "session-1",
-          nextPromptSeq: 0,
-          pendingPromptSeqs: [],
-          cancelledResultPending: 0,
-          lastUsedAt: Date.now(),
-          session: { sendPrompt: async (prompt: string) => { sentPrompts.push(prompt) } },
-        } as unknown as ClaudeSessionState)
+        claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: async (prompt: string) => { sentPrompts.push(prompt) } }))
         return makeFakeTurn()
       },
     })

@@ -1,3 +1,5 @@
+import { chatNotFound, projectNotFound, StaleStateError } from "../shared/errors"
+
 interface Tombstoned {
   deletedAt?: number
 }
@@ -10,16 +12,15 @@ export function liveRecord<T extends Tombstoned>(records: ReadonlyMap<string, T>
 function requireLive<T extends Tombstoned>(
   records: ReadonlyMap<string, T>,
   id: string,
-  kind: string,
-  detail: string | undefined,
+  fail: () => Error,
 ): T {
   const record = liveRecord(records, id)
-  if (!record) throw new Error(detail === undefined ? `${kind} not found` : `${kind} not found: ${detail}`)
+  if (!record) throw fail()
   return record
 }
 
 export function requireLiveChat<T extends Tombstoned>(chats: ReadonlyMap<string, T>, chatId: string): T {
-  return requireLive(chats, chatId, "Chat", undefined)
+  return requireLive(chats, chatId, chatNotFound)
 }
 
 export function requireLiveProject<T extends Tombstoned>(
@@ -27,9 +28,13 @@ export function requireLiveProject<T extends Tombstoned>(
   projectId: string,
   options?: { namedInError: boolean },
 ): T {
-  return requireLive(projects, projectId, "Project", options?.namedInError ? projectId : undefined)
+  return requireLive(
+    projects,
+    projectId,
+    options?.namedInError ? () => new StaleStateError(`Project not found: ${projectId}`) : projectNotFound,
+  )
 }
 
 export function requireLiveStack<T extends Tombstoned>(stacks: ReadonlyMap<string, T>, stackId: string): T {
-  return requireLive(stacks, stackId, "Stack", undefined)
+  return requireLive(stacks, stackId, () => new Error("Stack not found"))
 }

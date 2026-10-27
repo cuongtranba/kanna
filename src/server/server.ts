@@ -14,6 +14,8 @@ import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
 import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent"
+import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
+import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import { KannaAnalyticsReporter } from "./analytics"
@@ -129,7 +131,7 @@ export interface StartKannaServerOptions {
   agentOverrides?: {
     claudeLimitDetector?: LimitDetector
     codexLimitDetector?: LimitDetector
-    throwOnClaudeSessionStart?: boolean
+    startClaudeSession?: AgentCoordinatorArgs["startClaudeSession"]
   }
 }
 
@@ -367,13 +369,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     store,
     scheduleManager,
     cronScheduler,
-    openrouterFirstEntryTimeoutMs: readIntEnv(
-      process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
-      2 * 60 * 1000,
-    ),
+    runtimeConfig: resolveAgentRuntimeConfig(process.env),
     claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
     codexLimitDetector: options.agentOverrides?.codexLimitDetector,
-    throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
+    startClaudeSession: options.agentOverrides?.startClaudeSession,
     analytics,
     tunnelGateway,
     oauthPool,

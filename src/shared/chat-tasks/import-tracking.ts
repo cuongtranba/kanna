@@ -1,10 +1,10 @@
+import { LOOP_SECTIONS } from "../loop-progress"
+
 export interface ImportedTask {
   readonly subject: string
   readonly completed: boolean
-  readonly needs: readonly string[]
   readonly worktree: string | null
   readonly branch: string | null
-  readonly sourceId: string | null
 }
 
 export interface ImportedPlan {
@@ -34,12 +34,10 @@ function sectionBody(content: string, heading: string): string[] {
 }
 
 function parseMeta(segments: readonly string[]): {
-  needs: string[]
   worktree: string | null
   branch: string | null
 } {
-  const meta: { needs: string[]; worktree: string | null; branch: string | null } = {
-    needs: [],
+  const meta: { worktree: string | null; branch: string | null } = {
     worktree: null,
     branch: null,
   }
@@ -49,8 +47,7 @@ function parseMeta(segments: readonly string[]): {
     if (colon < 0) continue
     const key = trimmed.slice(0, colon).trim().toLowerCase()
     const value = trimmed.slice(colon + 1).trim()
-    if (key === "needs") meta.needs = value.split(",").map((n) => n.trim()).filter((n) => n.length > 0)
-    else if (key === "worktree") meta.worktree = value.length > 0 ? value : null
+    if (key === "worktree") meta.worktree = value.length > 0 ? value : null
     else if (key === "branch") meta.branch = value.length > 0 ? value : null
   }
   return meta
@@ -65,15 +62,12 @@ function parseQueueLine(body: string): ImportedTask | null {
   if (head.length === 0) return null
   const meta = parseMeta(segments.slice(1))
   const space = head.search(/\s/)
-  const sourceId = space < 0 ? head : head.slice(0, space)
   const subject = space < 0 ? head : head.slice(space + 1).trim()
   return {
     subject: subject.length > 0 ? subject : head,
     completed,
-    needs: meta.needs,
     worktree: meta.worktree,
     branch: meta.branch,
-    sourceId: space < 0 ? null : sourceId,
   }
 }
 
@@ -87,14 +81,14 @@ function bulletTexts(lines: readonly string[]): string[] {
 }
 
 export function importTrackingFileAsPlan(content: string): ImportedPlan {
-  const queue = bulletTexts(sectionBody(content, "Task queue"))
+  const queue = bulletTexts(sectionBody(content, LOOP_SECTIONS.taskQueue))
     .map(parseQueueLine)
     .filter((task): task is ImportedTask => task !== null)
 
   const tasks: ImportedTask[] = [...queue]
 
   if (tasks.length === 0) {
-    const nextChunk = sectionBody(content, "Next chunk")
+    const nextChunk = sectionBody(content, LOOP_SECTIONS.nextChunk)
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
     const first = nextChunk[0]
@@ -103,16 +97,14 @@ export function importTrackingFileAsPlan(content: string): ImportedPlan {
       tasks.push({
         subject: stripped.length > 0 ? stripped : first,
         completed: false,
-        needs: [],
         worktree: null,
         branch: null,
-        sourceId: null,
       })
     }
   }
 
   return {
     tasks,
-    failedApproaches: bulletTexts(sectionBody(content, "Failed approaches")),
+    failedApproaches: bulletTexts(sectionBody(content, LOOP_SECTIONS.failedApproaches)),
   }
 }

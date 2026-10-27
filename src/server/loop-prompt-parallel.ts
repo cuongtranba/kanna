@@ -12,7 +12,6 @@ import {
 export interface ParallelPromptArgs {
   goal: string
   verifyCommand: string
-  trackingFileRel: string
   subagentId: string
   parallelism: number
   workdirRel: string

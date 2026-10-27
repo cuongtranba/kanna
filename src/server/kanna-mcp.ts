@@ -125,10 +125,7 @@ export interface ChatTaskStorePort {
 export type SetupLoopHandlerResult =
   | {
       ok: true
-      trackingFileRel: string
-      created: boolean
-      reconciled: boolean
-      reconcileActions: string[]
+      imported: { trackingFileRel: string; taskCount: number } | null
       oracleWarnings: string[]
       prompt: string
     }
@@ -431,15 +428,15 @@ function buildDelegateSubagentToolList(args: {
 export const SETUP_LOOP_DESCRIPTION =
   "Set up an autonomous loop bound to a measurable goal. Kanna renders a "
   + "deterministic recurring prompt from your input, VALIDATES it (rejects "
-  + "vague goals / unparseable verify commands / paths outside cwd), ensures "
-  + "the tracking file exists (writes a skeleton if absent), then wipes this "
-  + "chat's main-agent context and enqueues the templated prompt so the loop "
-  + "starts on the next turn. Every iteration the main agent will: (1) read the "
-  + "tracking file, (2) run the verify command, (3) if verify exits 0 print "
-  + "'GOAL MET' and END the turn (loop terminates by absence of delegation), "
-  + "otherwise (4) delegate the next chunk to a background subagent that "
-  + "updates the tracking file. Use this instead of writing loop prompts by "
-  + "hand — free-form prompts drift and lose the invariants."
+  + "vague goals / unparseable verify commands / paths outside cwd), seeds the "
+  + "chat's task list, then wipes this chat's main-agent context and enqueues "
+  + "the templated prompt so the loop starts on the next turn. Every iteration "
+  + "the main agent will: (1) read the task list, (2) run the verify command, "
+  + "(3) if verify exits 0 print 'GOAL MET' and END the turn (loop terminates "
+  + "by absence of delegation), otherwise (4) delegate the next chunk to a "
+  + "background subagent that records progress in the task list. Use this "
+  + "instead of writing loop prompts by hand — free-form prompts drift and lose "
+  + "the invariants."
 
 const STOP_LOOP_DESCRIPTION =
   "Disarm the autonomous loop armed by setup_loop on this chat. Call this "
@@ -487,13 +484,13 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Path (relative to cwd or absolute-inside-cwd). Default PROGRESS.md at cwd root. Skeleton is auto-created if missing.",
+            "Optional path (relative to cwd or absolute-inside-cwd) of an existing tracking file whose Task queue and Failed approaches are imported once into the task list. Nothing is written to it.",
           ),
         chunk_hint: z
           .string()
           .optional()
           .describe(
-            "Optional starter description for the first chunk written into the tracking-file skeleton. Ignored if the file already exists.",
+            "Optional starter description, seeded as the first task when no tracking file is imported.",
           ),
         subagent_id: z
           .string()
@@ -505,7 +502,7 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Absolute directory the loop works in — where the verify command runs and where tracking_file is rooted. Defaults to this chat's working directory, which is already the card's worktree on a chat started from a board. Pass it only to point the loop at a DIFFERENT tree; it must be the project checkout or a worktree of the same repo.",
+            "Absolute directory the loop works in — where the verify command runs and where tracking_file is resolved. Defaults to this chat's working directory, which is already the card's worktree on a chat started from a board. Pass it only to point the loop at a DIFFERENT tree; it must be the project checkout or a worktree of the same repo.",
           ),
         parallelism: z
           .number()
@@ -518,7 +515,7 @@ function buildSetupLoopToolList(args: {
           .boolean()
           .optional()
           .describe(
-            "Override two safety refusals: overwriting a git-tracked tracking file that records a different goal, and arming when the verify command already exits 0. Use only when you are sure.",
+            "Override the arm-time refusals: unfinished tasks already in the list, and a verify command that already exits 0. Use only when you are sure.",
           ),
       },
       async (input) => {
@@ -535,17 +532,14 @@ function buildSetupLoopToolList(args: {
         if (!result.ok) {
           return fail(`setup_loop rejected:\n- ${result.errors.join("\n- ")}`)
         }
-        let fileNote = " (existing file already conforms to the loop schema)"
-        if (result.created) {
-          fileNote = " (created skeleton)"
-        } else if (result.reconciled) {
-          fileNote = ` (existing file reconciled to the loop schema: ${result.reconcileActions.join("; ")})`
-        }
+        const importNote = result.imported !== null
+          ? ` Imported ${String(result.imported.taskCount)} task(s) from ${result.imported.trackingFileRel} into the task list.`
+          : ""
         const auditNote = result.oracleWarnings.length > 0
           ? `\nOracle audit:\n- ${result.oracleWarnings.join("\n- ")}`
           : ""
         return ok(
-          `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
+          `Loop armed.${importNote}`
           + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
         )
       },

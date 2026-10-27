@@ -18,7 +18,6 @@ export interface ClearClaudeContextDeps {
   startingTurns: { has(chatId: string): boolean }
   pendingTools: { has(chatId: string): boolean }
   hasLiveWorkflow: (chatId: string) => boolean
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 }
 

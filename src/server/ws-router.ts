@@ -1,3 +1,4 @@
+import { chatNotFound, errorMessage, projectNotFound, StaleStateError } from "../shared/errors"
 import { randomUUID } from "node:crypto"
 import type { CommandOrigin } from "../shared/command-origin"
 import { safeJsonParse, type JsonValue } from "../shared/json"
@@ -77,7 +78,6 @@ import { removeProjectKannaFiles } from "./project-kanna-files.adapter"
 import { removeWorktree } from "./worktree-store.adapter"
 import {
   ensureSnapshotSignatures,
-  isBenignStaleStateMessage,
   logSendToStartingProfile,
   send,
   silentCommandMessage,
@@ -230,7 +230,7 @@ export function createWsRouter({
   function resolveChatRepoPath(chatId: string): string {
     const cwd = resolveChatCwd(store, chatId)
     if (cwd !== undefined) return cwd
-    throw new Error(store.getChat(chatId) ? "Project not found" : "Chat not found")
+    throw store.getChat(chatId) ? projectNotFound() : chatNotFound()
   }
 
   function buildChatDeps(ws: CommandConnection): ChatCommandDeps {
@@ -447,9 +447,8 @@ export function createWsRouter({
   }
 
   function describeCommandFailure(command: ClientCommand, id: string, error: Error | string): ServerEnvelope {
-    const messageText = error instanceof Error ? error.message : String(error)
-    const benign = isBenignStaleStateMessage(messageText)
-    const logFn = benign ? log.info : log.error
+    const messageText = errorMessage(error)
+    const logFn = error instanceof StaleStateError ? log.info : log.error
     logFn("[ws-router] command failed", {
       id,
       type: command.type,

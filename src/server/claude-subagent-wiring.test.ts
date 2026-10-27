@@ -65,7 +65,6 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
     getAppSettingsSnapshot: () => ({}),
     readLlmProvider: async () => ({ provider: "claude", apiKey: null } as never),
     getCustomProviderCredential: () => null,
-    subagentPendingKey: (chatId, runId, toolUseId) => `${chatId}::${runId}::${toolUseId}`,
     ...overrides,
   }
 }
@@ -212,28 +211,6 @@ describe("buildSubagentProviderRunForChat", () => {
     }
     const result = buildSubagentProviderRunForChat(makeDeps(), args)
     expect(typeof result.start).toBe("function")
-  })
-
-  test("subagentPendingKey is called when onToolRequest receives ask_user_question", async () => {
-    let keyBuilt: string | null = null
-    const deps = makeDeps({
-      subagentPendingKey: (chatId, runId, toolUseId) => {
-        keyBuilt = `${chatId}::${runId}::${toolUseId}`
-        return keyBuilt
-      },
-      store: {
-        requireChat: (_chatId) =>
-          ({ id: _chatId, projectId: "proj-1", stackProjectIds: [] } as never),
-        getProject: (_id) =>
-          ({ id: "proj-1", localPath: "/tmp/test-project", title: "Test" } as never),
-        getStack: () => null,
-        appendSubagentEvent: async () => {},
-      },
-    })
-
-    const result = buildSubagentProviderRunForChat(deps, BASE_ARGS)
-    expect(typeof result.start).toBe("function")
-    expect(keyBuilt).toBeNull()
   })
 })
 

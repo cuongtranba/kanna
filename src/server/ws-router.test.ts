@@ -19,7 +19,6 @@ import {
   parseInstalledSkillsLock,
 } from "./ws-router-skills"
 import { resolveMcpTestBearer } from "./ws-router-settings"
-import { isBenignStaleStateMessage } from "./ws-router-utils"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
 import { createBoardRegistry } from "./board-registry"
@@ -166,21 +165,6 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
   installedPlugins: [],
 }
-
-describe("isBenignStaleStateMessage", () => {
-  test("matches known stale-state errors", () => {
-    expect(isBenignStaleStateMessage("Chat not found")).toBe(true)
-    expect(isBenignStaleStateMessage("Queued message not found")).toBe(true)
-    expect(isBenignStaleStateMessage("File is no longer changed: foo/bar.ts")).toBe(true)
-    expect(isBenignStaleStateMessage("Project not found")).toBe(true)
-  })
-
-  test("does not match unrelated errors", () => {
-    expect(isBenignStaleStateMessage("Exactly one primary binding required")).toBe(false)
-    expect(isBenignStaleStateMessage("")).toBe(false)
-    expect(isBenignStaleStateMessage("Chat not found, plus extra")).toBe(false)
-  })
-})
 
 describe("skills helpers", () => {
   test("parses installed global skills from a lock payload", () => {

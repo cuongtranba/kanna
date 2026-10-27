@@ -407,10 +407,7 @@ describe("setup_loop tool", () => {
       chatId: undefined,
       setupLoop: async () => ({
         ok: true,
-        trackingFileRel: "PROGRESS.md",
-        created: false,
-        reconciled: false,
-        reconcileActions: [],
+        imported: null,
         oracleWarnings: [],
         prompt: "x",
       }),
@@ -426,10 +423,7 @@ describe("setup_loop tool", () => {
         calls.push({ ...input })
         return {
           ok: true,
-          trackingFileRel: "PROGRESS.md",
-          created: true,
-          reconciled: false,
-          reconcileActions: [],
+          imported: null,
           oracleWarnings: [],
           prompt: "the rendered loop prompt",
         }
@@ -448,20 +442,17 @@ describe("setup_loop tool", () => {
       trackingFile: undefined,
       chunkHint: "start with src/client",
     })
-    expect(res.content[0].text).toContain("PROGRESS.md")
-    expect(res.content[0].text).toContain("created skeleton")
+    expect(res.content[0].text).toContain("Loop armed")
     expect(res.content[0].text).toContain("cleared")
+    expect(res.content[0].text).not.toContain("Imported")
   })
 
-  test("existing conformant tracking file: message reports it already conforms", async () => {
+  test("an imported tracking file: message reports how many tasks entered the task list", async () => {
     const tools = toolMap(buildKannaMcpTools({
       ...baseArgs,
       setupLoop: async () => ({
         ok: true,
-        trackingFileRel: "PROGRESS.md",
-        created: false,
-        reconciled: false,
-        reconcileActions: [],
+        imported: { trackingFileRel: "docs/PROGRESS.md", taskCount: 3 },
         oracleWarnings: [],
         prompt: "p",
       }),
@@ -471,30 +462,7 @@ describe("setup_loop tool", () => {
       verify_command: "true",
     })
     expect(res.isError).toBeUndefined()
-    expect(res.content[0].text).toContain("existing file already conforms to the loop schema")
-  })
-
-  test("existing reconciled tracking file: message lists the deterministic actions taken", async () => {
-    const tools = toolMap(buildKannaMcpTools({
-      ...baseArgs,
-      setupLoop: async () => ({
-        ok: true,
-        trackingFileRel: "PROGRESS.md",
-        created: false,
-        reconciled: true,
-        reconcileActions: ['rewrote "## Goal"', 'inserted "## Next chunk"'],
-        oracleWarnings: [],
-        prompt: "p",
-      }),
-    }))
-    const res = await tools.get("setup_loop")!.handler({
-      goal: "g",
-      verify_command: "true",
-    })
-    expect(res.isError).toBeUndefined()
-    expect(res.content[0].text).toContain("existing file reconciled to the loop schema")
-    expect(res.content[0].text).toContain('rewrote "## Goal"')
-    expect(res.content[0].text).toContain('inserted "## Next chunk"')
+    expect(res.content[0].text).toContain("Imported 3 task(s) from docs/PROGRESS.md into the task list")
   })
 
   test("oracle audit warnings are appended to the success text", async () => {
@@ -502,10 +470,7 @@ describe("setup_loop tool", () => {
       ...baseArgs,
       setupLoop: async () => ({
         ok: true,
-        trackingFileRel: "PROGRESS.md",
-        created: true,
-        reconciled: false,
-        reconcileActions: [],
+        imported: null,
         oracleWarnings: ["the oracle contains 3 file-existence/grep check(s), tighten it"],
         prompt: "p",
       }),
@@ -524,10 +489,7 @@ describe("setup_loop tool", () => {
       ...baseArgs,
       setupLoop: async () => ({
         ok: true,
-        trackingFileRel: "PROGRESS.md",
-        created: true,
-        reconciled: false,
-        reconcileActions: [],
+        imported: null,
         oracleWarnings: [],
         prompt: "p",
       }),

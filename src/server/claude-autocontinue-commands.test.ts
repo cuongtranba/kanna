@@ -70,8 +70,7 @@ function makeDeps(overrides: Partial<AutoContinueCommandDeps> = {}): AutoContinu
     store,
     scheduleManager: null,
     emitStateChange: () => {},
-    enqueueMessage: async () => makeQueuedMessage(),
-    maybeStartNextQueuedMessage: async () => false,
+    deliverPrompt: async () => makeQueuedMessage(),
     ...overrides,
   }
 }
@@ -191,7 +190,7 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(enqueued).toHaveLength(0)
@@ -203,7 +202,7 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(store.events).toHaveLength(1)
@@ -239,17 +238,17 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(enqueued).toContain("Read PROGRESS.md and decide next step")
   })
 
-  test("appends error message when enqueueMessage throws", async () => {
+  test("appends error message when delivering the prompt throws", async () => {
     const store = makeStore()
     const deps = makeDeps({
       store,
-      enqueueMessage: async () => { throw new Error("queue full") },
+      deliverPrompt: async () => { throw new Error("queue full") },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(store.messages).toHaveLength(1)

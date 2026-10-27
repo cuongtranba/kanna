@@ -102,11 +102,7 @@ export async function cancelChat(
 
     const session = deps.claudeSessions.get(chatId)
     if (session?.selfWakeActive) {
-      session.selfWakeActive = false
-      if (session.hasBackgroundTasks()) {
-        session.backgroundTaskWakeSuppressed = true
-      }
-      session.cancelledResultPending += 1
+      session.cancelSelfWake()
       await deps.store.appendMessage(
         chatId,
         timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }),
@@ -137,19 +133,12 @@ export async function cancelChat(
   deps.activeTurns.delete(chatId)
 
   if (active.provider === "claude") {
-    const sessionForWakeGate = deps.claudeSessions.get(chatId)
-    if (sessionForWakeGate && sessionForWakeGate.hasBackgroundTasks()) {
-      sessionForWakeGate.backgroundTaskWakeSuppressed = true
-    }
+    deps.claudeSessions.get(chatId)?.suppressBackgroundWake()
   }
 
   if (active.provider === "claude" && active.claudePromptSeq != null) {
     const session = deps.claudeSessions.get(chatId)
-    if (session) {
-      const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
-      if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
-      session.cancelledResultPending += 1
-    }
+    session?.cancelPrompt(active.claudePromptSeq)
   }
 
   deps.emitStateChange(chatId)

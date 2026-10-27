@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "../shared/task-doc"
+import { LOOP_SECTIONS } from "../shared/loop-progress"
 import {
   TASK_CLAIM_TOOL_NAME,
   TASK_INTEGRATE_TOOL_NAME,
@@ -9,11 +9,8 @@ import {
   TASK_UPDATE_TOOL_NAME,
 } from "../shared/tools"
 import {
-  assertTrackingFileSafe,
   auditOracle,
   extractOracleScriptPath,
-  LOOP_SECTIONS,
-  reconcileTrackingFile,
   validateLoopSetup,
   __testing,
   type LoopSetupContext,
@@ -30,7 +27,7 @@ const CTX: LoopSetupContext = {
 describe("validateLoopSetup — happy path", () => {
   const cwd = "/tmp/kanna-loop-test-project"
 
-  test("returns ok with fully-resolved template + skeleton when inputs are valid", () => {
+  test("returns ok with fully-resolved template when inputs are valid", () => {
     const result = validateLoopSetup(
       {
         goal: "eslint --max-warnings=0 passes",
@@ -59,9 +56,6 @@ describe("validateLoopSetup — happy path", () => {
     expect(result.resolved.prompt).toContain("NEVER edit code yourself")
     expect(result.resolved.prompt).toContain("git add -A")
     expect(result.resolved.prompt).toContain("loop-end summary")
-    expect(result.resolved.skeleton).toContain("eslint --max-warnings=0 passes")
-    expect(result.resolved.skeleton).toContain("bun run lint")
-    expect(result.resolved.skeleton).toContain("start with warnings in src/client/**")
   })
 
   test("explicit subagentId overrides the configured default", () => {
@@ -117,7 +111,6 @@ describe("validateLoopSetup — happy path", () => {
     )
     if (!result.ok) throw new Error(result.errors.join(", "))
     expect(result.resolved.chunkHint).toBeNull()
-    expect(result.resolved.skeleton).toContain("Describe the first chunk")
   })
 })
 
@@ -260,150 +253,10 @@ describe("resolveTrackingFile edge cases", () => {
   })
 })
 
-describe("reconcileTrackingFile — deterministic schema reconcile", () => {
-  const ARGS = {
-    goal: "eslint --max-warnings=0 passes",
-    verifyCommand: "bun run lint",
-    chunkHint: "start with src/client/**" as string | null,
-  }
-
-  test("a skeleton generated from the same inputs round-trips unchanged", () => {
-    const skeleton = __testing.renderSkeleton(ARGS)
-    const result = reconcileTrackingFile(skeleton, ARGS)
-    expect(result.changed).toBe(false)
-    expect(result.content).toBe(skeleton)
-    expect(result.actions).toEqual([])
-  })
-
-  test("an empty file becomes exactly the canonical skeleton", () => {
-    const result = reconcileTrackingFile("", ARGS)
-    expect(result.changed).toBe(true)
-    expect(result.content).toBe(__testing.renderSkeleton(ARGS))
-    expect(result.actions).toContain('inserted "## Goal"')
-    expect(result.actions).toContain('inserted "## Verify command"')
-    expect(result.actions).toContain('inserted "## Progress (latest first)"')
-    expect(result.actions).toContain('inserted "## Failed approaches"')
-    expect(result.actions).toContain('inserted "## Next chunk"')
-  })
-
-  test("a whitespace-only file becomes exactly the canonical skeleton", () => {
-    const result = reconcileTrackingFile("   \n\n  ", ARGS)
-    expect(result.changed).toBe(true)
-    expect(result.content).toBe(__testing.renderSkeleton(ARGS))
-  })
-
-  test("missing '## Next chunk' is inserted; other sections preserved verbatim", () => {
-    const existing = [
-      "# Loop tracking file",
-      "",
-      "## Goal",
-      ARGS.goal,
-      "",
-      "## Verify command",
-      "```",
-      ARGS.verifyCommand,
-      "```",
-      "",
-      "## Progress (latest first)",
-      "",
-      "- 2026-07-13 chunk 1 DONE (run-abc)",
-      "",
-      "## Failed approaches",
-      "",
-      "- naive regex broke on nested quotes",
-      "",
-    ].join("\n")
-    const result = reconcileTrackingFile(existing, ARGS)
-    expect(result.changed).toBe(true)
-    expect(result.actions).toEqual(['inserted "## Next chunk"'])
-    expect(result.content).toContain("- 2026-07-13 chunk 1 DONE (run-abc)")
-    expect(result.content).toContain("- naive regex broke on nested quotes")
-    expect(result.content).toContain("## Next chunk")
-    expect(result.content).toContain("start with src/client/**")
-  })
-
-  test("mismatched goal is rewritten to the input; progress rows preserved", () => {
-    const skeleton = __testing.renderSkeleton({ ...ARGS, goal: "OLD STALE GOAL" })
-    const withHistory = skeleton.replace(
-      "_Subagent appends one row per completed chunk here._",
-      "- 2026-07-12 chunk 0 DONE",
-    )
-    const result = reconcileTrackingFile(withHistory, ARGS)
-    expect(result.changed).toBe(true)
-    expect(result.actions).toEqual(['rewrote "## Goal"'])
-    expect(result.content).toContain(ARGS.goal)
-    expect(result.content).not.toContain("OLD STALE GOAL")
-    expect(result.content).toContain("- 2026-07-12 chunk 0 DONE")
-  })
-
-  test("mismatched verify command is rewritten to the input", () => {
-    const skeleton = __testing.renderSkeleton({ ...ARGS, verifyCommand: "make old-check" })
-    const result = reconcileTrackingFile(skeleton, ARGS)
-    expect(result.changed).toBe(true)
-    expect(result.actions).toEqual(['rewrote "## Verify command"'])
-    expect(result.content).toContain("bun run lint")
-    expect(result.content).not.toContain("make old-check")
-  })
-
-  test("unknown extra sections are preserved after the canonical ones", () => {
-    const skeleton = __testing.renderSkeleton(ARGS)
-    const existing = `${skeleton}## Notes\n\nkeep me around\n`
-    const result = reconcileTrackingFile(existing, ARGS)
-    expect(result.content).toContain("## Notes")
-    expect(result.content).toContain("keep me around")
-    expect(result.content.indexOf("## Next chunk")).toBeLessThan(result.content.indexOf("## Notes"))
-  })
-
-  test("a custom preamble above the first section is preserved", () => {
-    const skeleton = __testing.renderSkeleton(ARGS)
-    const existing = skeleton.replace("# Loop tracking file", "# My custom loop title\n\nsome intro prose")
-    const result = reconcileTrackingFile(existing, ARGS)
-    expect(result.content).toContain("# My custom loop title")
-    expect(result.content).toContain("some intro prose")
-  })
-
-  test("heading match is case-insensitive and tolerant of suffix text", () => {
-    const existing = [
-      "# t",
-      "",
-      "## goal",
-      ARGS.goal,
-      "",
-      "## VERIFY COMMAND",
-      "```",
-      ARGS.verifyCommand,
-      "```",
-      "",
-      "## Progress",
-      "",
-      "- row",
-      "",
-      "## Failed Approaches (dead ends)",
-      "",
-      "- x",
-      "",
-      "## next chunk",
-      "",
-      "do the thing",
-      "",
-    ].join("\n")
-    const result = reconcileTrackingFile(existing, ARGS)
-    expect(result.actions).toEqual([])
-    expect(result.changed).toBe(false)
-    expect(result.content).toBe(existing)
-  })
-
-  test("null chunkHint inserts the default placeholder for a missing Next chunk", () => {
-    const result = reconcileTrackingFile("", { ...ARGS, chunkHint: null })
-    expect(result.content).toContain("_Describe the first chunk the subagent should do._")
-  })
-})
-
 describe("renderLoopPrompt structural invariants", () => {
   const BASE = {
     goal: "green build",
     verifyCommand: "make check",
-    trackingFileRel: "PROGRESS.md",
     subagentId: "sub-1",
     parallelism: 1,
     workdirRel: ".",
@@ -417,7 +270,7 @@ describe("renderLoopPrompt structural invariants", () => {
   })
 
   test("the prompt names no tracking file at all — the task list is the plan", () => {
-    const prompt = __testing.renderLoopPrompt({ ...BASE, trackingFileRel: "docs/PROGRESS-panes.md" })
+    const prompt = __testing.renderLoopPrompt(BASE)
     expect(prompt).not.toContain("PROGRESS")
     expect(prompt).not.toContain("query_tracking_file")
     expect(prompt).not.toContain("append_tracking_row")
@@ -684,52 +537,6 @@ describe("auditOracle", () => {
   })
 })
 
-describe("assertTrackingFileSafe", () => {
-  const committed = "# Old loop\n\n## Goal\nship the old thing\n\n## Verify command\n```\nmake old\n```\n"
-
-  test("refuses to rewrite the goal of a git-tracked file", () => {
-    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: true, force: false })
-    expect(result.ok).toBe(false)
-    if (result.ok) throw new Error("expected reject")
-    expect(result.error).toContain("ship the old thing")
-    expect(result.error).toContain("force")
-  })
-
-  test("force: true overrides the refusal", () => {
-    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: true, force: true })
-    expect(result.ok).toBe(true)
-  })
-
-  test("an untracked file is fair game — nothing committed is at risk", () => {
-    const result = assertTrackingFileSafe(committed, { goal: "ship the NEW thing", gitTracked: false, force: false })
-    expect(result.ok).toBe(true)
-  })
-
-  test("a committed task document does not block a later setup_loop", () => {
-    const seeded = renderTaskDocSkeleton()
-    const withContent = seeded.replace(
-      `## ${TASK_DOC_SECTIONS.objective}`,
-      `## ${TASK_DOC_SECTIONS.objective}\n\nfix the auth refresh race`,
-    )
-    const result = assertTrackingFileSafe(withContent, {
-      goal: "eslint passes",
-      gitTracked: true,
-      force: false,
-    })
-    expect(result.ok).toBe(true)
-  })
-
-  test("re-arming the SAME goal on a tracked file is allowed (idempotent re-setup)", () => {
-    const result = assertTrackingFileSafe(committed, { goal: "ship the old thing", gitTracked: true, force: false })
-    expect(result.ok).toBe(true)
-  })
-
-  test("a tracked file with no Goal section yet is allowed", () => {
-    const result = assertTrackingFileSafe("# notes\n\nfree text\n", { goal: "g", gitTracked: true, force: false })
-    expect(result.ok).toBe(true)
-  })
-})
-
 describe("LOOP_SECTIONS constants", () => {
   test("section names are stable string values consumed by the prompt", () => {
     expect(LOOP_SECTIONS.nextChunk).toBe("Next chunk")
@@ -741,7 +548,6 @@ describe("LOOP_SECTIONS constants", () => {
     const prompt = __testing.renderLoopPrompt({
       goal: "green build",
       verifyCommand: "make check",
-      trackingFileRel: "PROGRESS.md",
       subagentId: "sub-1",
       parallelism: 1,
       workdirRel: ".",

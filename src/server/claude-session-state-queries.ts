@@ -11,7 +11,6 @@ export interface SessionStateQueryDeps {
   claudeSessions: Map<string, ClaudeSessionState>
   drainingStreams: { keys(): IterableIterator<string> }
   isClaudeSdkProvider: (provider: AgentProvider) => boolean
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
   resolveClaudeIdleMs: () => number
   resolveBackgroundTaskMaxMs: () => number
   resolveBackgroundTaskMaxWakes: () => number
@@ -40,6 +39,21 @@ export function isChatBusy(deps: ChatBusyDeps, chatId: string): boolean {
     || deps.startingTurns.has(chatId)
     || deps.pendingTools.has(chatId)
     || deps.claudeSessions.get(chatId)?.selfWakeActive === true
+}
+
+export function isAnyChatBusy(
+  deps: Pick<SessionStateQueryDeps, "activeTurns" | "startingTurns" | "pendingTools" | "claudeSessions">,
+): boolean {
+  const chatIds = new Set([
+    ...deps.activeTurns.keys(),
+    ...deps.startingTurns.keys(),
+    ...deps.pendingTools.chatIds(),
+    ...deps.claudeSessions.keys(),
+  ])
+  for (const chatId of chatIds) {
+    if (isChatBusy(deps, chatId)) return true
+  }
+  return false
 }
 
 export function getActiveStatuses(deps: SessionStateQueryDeps): Map<string, KannaStatus> {
@@ -119,7 +133,7 @@ export function getClaudeSessionStates(
       out.set(chatId, "active")
     } else if (session.selfWakeActive) {
       out.set(chatId, "active")
-    } else if (deps.hasPendingBackgroundTask(session, now)) {
+    } else if (session.isHoldingWork(now)) {
       out.set(chatId, "warming")
     } else if (now - session.lastUsedAt >= deps.resolveClaudeIdleMs()) {
       out.set(chatId, "idle")
@@ -131,21 +145,11 @@ export function getClaudeSessionStates(
 }
 
 
-export function hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-  return session.isHoldingWork(now)
-}
-
-export function backgroundTaskGuardExpired(session: ClaudeSessionState, now: number): boolean {
-  return session.guardExpired(now)
-}
-
-
 export interface SessionInUseDeps {
   activeTurns: { has(chatId: string): boolean }
   startingTurns: { has(chatId: string): boolean }
   pendingTools: { has(chatId: string): boolean }
   hasLiveWorkflow: (chatId: string) => boolean
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
 }
 
 export function isSessionInUse(
@@ -159,7 +163,7 @@ export function isSessionInUse(
   if (deps.pendingTools.has(chatId)) return true
   if (session.pendingPromptSeqs.length > 0) return true
   if (deps.hasLiveWorkflow(chatId)) return true
-  if (deps.hasPendingBackgroundTask(session, now)) return true
+  if (session.isHoldingWork(now)) return true
   if (session.selfWakeActive) return true
   return false
 }
@@ -216,7 +220,7 @@ export function sweepIdleClaudeSessions(
   now = Date.now(),
 ): void {
   for (const [chatId, session] of [...deps.claudeSessions.entries()]) {
-    if (backgroundTaskGuardExpired(session, now)) {
+    if (session.guardExpired(now)) {
       escalateExpiredBackgroundTaskGuard(deps, chatId, session, now)
       continue
     }

@@ -1,10 +1,9 @@
-
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
+
 import { deriveChatSchedules, deriveLastLoopSpec } from "./auto-continue/read-model"
-import { clearClaudeSessionContext } from "./claude-context-commands"
-import { timestamped } from "./claude-message-normalizer"
 import {
   disarmFailingLoop,
+  enqueueSystemWake,
   type LoopCommandDeps,
 } from "./claude-loop-commands"
 import { loopFailureBudget } from "../shared/loop-progress"
@@ -29,11 +28,11 @@ const REARM_NOTICE: Record<RearmReason, string> = {
   server_restart:
     "The server was restarted while your loop's wake was in flight, so the"
     + " previous background run's outcome may be missing from the plan."
-    + " Re-read the tracking file and continue from what it records.",
+    + " Re-read the task list and continue from what it records.",
   orchestrator_turn_failed:
     "Your previous loop turn ended in an error before it could delegate any"
     + " work, so the loop was left with nothing to wake it. The plan is"
-    + " unchanged. Re-read the tracking file and continue from what it records.",
+    + " unchanged. Re-read the task list and continue from what it records.",
 }
 
 async function rearmLoopWakeIfLost(
@@ -53,22 +52,7 @@ async function rearmLoopWakeIfLost(
     return false
   }
 
-  await clearClaudeSessionContext(deps, chatId)
-  await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
-  const now = Date.now()
-  await deps.emitAutoContinueEvent({
-    v: AUTO_CONTINUE_EVENT_VERSION,
-    kind: "auto_continue_accepted",
-    timestamp: now,
-    chatId,
-    scheduleId: crypto.randomUUID(),
-    scheduledAt: now,
-    tz: "system",
-    source: "subagent_background",
-    resetAt: now,
-    detectedAt: now,
-    prompt: `${REARM_NOTICE[reason]}\n\n${armed.prompt}`,
-  })
+  await enqueueSystemWake(deps, chatId, `${REARM_NOTICE[reason]}\n\n${armed.prompt}`, { clearContext: true })
   addCounter(LOOP_WAKE_RECOVERED, 1, { reason })
   return true
 }

@@ -8,7 +8,7 @@ import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
 import { importTrackingFileAsPlan, type ImportedPlan } from "../shared/chat-tasks/import-tracking"
 import type { ChatTaskRecord } from "../shared/chat-tasks/types"
-import type { LoopSeedTask } from "./loop-template"
+import type { SeedTaskInput } from "../shared/chat-tasks/seed"
 import { composeLoopWakePrompt } from "./loop-wake-prompt"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { buildTaskNotification, resolveSpawnPaths } from "./claude-session-config"
@@ -18,11 +18,6 @@ import {
   validateLoopSetup,
   type LoopSetupInput,
 } from "./loop-template"
-import type {
-  EnsureTrackingFileArgs,
-  EnsureTrackingFileResult,
-  TrackingFileInspection,
-} from "./loop-template-io.adapter"
 import type { RunVerifyArgs, RunVerifyResult } from "./loop-verify-io.adapter"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
 import type { ClaudeSessionState } from "./claude-session-state"
@@ -57,8 +52,6 @@ export interface LoopCommandDeps {
 
   hasLiveWorkflow: (chatId: string) => boolean
 
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
-
   getSubagents(): Subagent[]
 
   getAppSettingsSnapshot(): {
@@ -70,10 +63,6 @@ export interface LoopCommandDeps {
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 
   emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-
-  ensureTrackingFile(args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult>
-
-  inspectTrackingFile(absPath: string): Promise<TrackingFileInspection>
 
   isWorktreeOfSameRepo(projectCwd: string, workdir: string): Promise<boolean>
 
@@ -93,7 +82,7 @@ export interface LoopCommandDeps {
 
   seedChatTasks(
     chatId: string,
-    tasks: readonly LoopSeedTask[],
+    tasks: readonly SeedTaskInput[],
     failedApproaches: readonly string[],
   ): Promise<void>
 
@@ -124,7 +113,7 @@ async function importSeedPlan(
 function seedsFromImportOrHint(
   imported: ImportedPlan | null,
   chunkHint: string | null,
-): readonly LoopSeedTask[] {
+): readonly SeedTaskInput[] {
   const fromFile = (imported?.tasks ?? [])
     .filter((task) => !task.completed)
     .map((task) => ({
@@ -136,6 +125,49 @@ function seedsFromImportOrHint(
   return chunkHint !== null && chunkHint.trim().length > 0 ? [{ subject: chunkHint.trim() }] : []
 }
 
+async function clearMainContext(deps: LoopCommandDeps, chatId: string): Promise<void> {
+  await clearClaudeSessionContext(deps, chatId)
+  await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
+}
+
+export async function enqueueSystemWake(
+  deps: LoopCommandDeps,
+  chatId: string,
+  prompt: string,
+  options: { clearContext: boolean },
+): Promise<void> {
+  if (options.clearContext) await clearMainContext(deps, chatId)
+  const now = Date.now()
+  await deps.emitAutoContinueEvent({
+    v: AUTO_CONTINUE_EVENT_VERSION,
+    kind: "auto_continue_accepted",
+    timestamp: now,
+    chatId,
+    scheduleId: crypto.randomUUID(),
+    scheduledAt: now,
+    tz: "system",
+    source: "subagent_background",
+    resetAt: now,
+    detectedAt: now,
+    prompt,
+  })
+}
+
+async function appendLoopDisarmedCard(
+  deps: LoopCommandDeps,
+  chatId: string,
+  reason: "goal_met" | "user_send" | "repeated_failures",
+  armed: Pick<LoopState, "trackingFileRel" | "workdirAbs"> | null,
+): Promise<void> {
+  await deps.store.appendMessage(chatId, timestamped({
+    kind: "loop_disarmed",
+    reason,
+    resumable: true,
+    ...(armed?.trackingFileRel != null ? { trackingFileRel: armed.trackingFileRel } : {}),
+    ...(armed?.workdirAbs != null ? { workdirAbs: armed.workdirAbs } : {}),
+  }))
+}
+
 export async function disarmFailingLoop(
   deps: LoopCommandDeps,
   chatId: string,
@@ -144,41 +176,24 @@ export async function disarmFailingLoop(
   notification: string,
 ): Promise<void> {
   try {
-    const now = Date.now()
     const armed = isLoopArmed(deps, chatId)
     await deps.emitAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_disarmed",
-      timestamp: now,
+      timestamp: Date.now(),
       chatId,
       scheduleId: crypto.randomUUID(),
       reason: "repeated_failures",
     })
-    await deps.store.appendMessage(chatId, timestamped({
-      kind: "loop_disarmed",
-      reason: "repeated_failures",
-      resumable: true,
-      ...(armed?.trackingFileRel ? { trackingFileRel: armed.trackingFileRel } : {}),
-      ...(armed?.workdirAbs ? { workdirAbs: armed.workdirAbs } : {}),
-    }))
-    await clearClaudeSessionContext(deps, chatId)
-    await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
-    await deps.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_accepted",
-      timestamp: now,
+    await appendLoopDisarmedCard(deps, chatId, "repeated_failures", armed)
+    await enqueueSystemWake(
+      deps,
       chatId,
-      scheduleId: crypto.randomUUID(),
-      scheduledAt: now,
-      tz: "system",
-      source: "subagent_background",
-      resetAt: now,
-      detectedAt: now,
-      prompt:
-        `${notification}\n\nThe loop has been DISARMED automatically after ${failures}`
+      `${notification}\n\nThe loop has been DISARMED automatically after ${failures}`
         + " consecutive failed iterations. Do not re-arm it blindly: report the failure"
         + " reason above to the user and say what needs fixing first.",
-    })
+      { clearContext: true },
+    )
   } catch (err) {
     log.warn(`[kanna] disarmFailingLoop failed`, { chatId, runId, err })
   }
@@ -262,26 +277,7 @@ async function deliverSubagentToMainInner(
   }
 
   try {
-    if (armed) {
-      await clearClaudeSessionContext(deps, chatId)
-      await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
-    }
-
-    const now = Date.now()
-    const scheduleId = crypto.randomUUID()
-    await deps.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_accepted",
-      timestamp: now,
-      chatId,
-      scheduleId,
-      scheduledAt: now,
-      tz: "system",
-      source: "subagent_background",
-      resetAt: now,
-      detectedAt: now,
-      prompt,
-    })
+    await enqueueSystemWake(deps, chatId, prompt, { clearContext: armed !== null })
   } catch (err) {
     log.warn(`[kanna] deliverSubagentToMain failed`, { chatId, runId, err })
   }
@@ -375,7 +371,7 @@ export async function setupLoop(
     scriptContent,
   })
   const imported = await importSeedPlan(deps, resolved.trackingFileAbs)
-  const seeds: readonly LoopSeedTask[] = args.input.tasks && args.input.tasks.length > 0
+  const seeds: readonly SeedTaskInput[] = args.input.tasks && args.input.tasks.length > 0
     ? args.input.tasks
     : seedsFromImportOrHint(imported, resolved.chunkHint)
   try {
@@ -388,14 +384,11 @@ export async function setupLoop(
   }
 
   try {
-    await clearClaudeSessionContext(deps, args.chatId)
-    await deps.store.appendMessage(args.chatId, timestamped({ kind: "context_cleared" }))
-
-    const now = Date.now()
+    await clearMainContext(deps, args.chatId)
     await deps.emitAutoContinueEvent({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
-      timestamp: now,
+      timestamp: Date.now(),
       chatId: args.chatId,
       scheduleId: crypto.randomUUID(),
       subagentId: resolved.subagentId,
@@ -405,21 +398,7 @@ export async function setupLoop(
       trackingFileRel: resolved.trackingFileRel,
       parallelism: resolved.parallelism,
     })
-
-    const scheduleId = crypto.randomUUID()
-    await deps.emitAutoContinueEvent({
-      v: AUTO_CONTINUE_EVENT_VERSION,
-      kind: "auto_continue_accepted",
-      timestamp: now,
-      chatId: args.chatId,
-      scheduleId,
-      scheduledAt: now,
-      tz: "system",
-      source: "subagent_background",
-      resetAt: now,
-      detectedAt: now,
-      prompt: resolved.prompt,
-    })
+    await enqueueSystemWake(deps, args.chatId, resolved.prompt, { clearContext: false })
   } catch (err) {
     return {
       ok: false,
@@ -429,10 +408,7 @@ export async function setupLoop(
 
   return {
     ok: true,
-    trackingFileRel: resolved.trackingFileRel,
-    created: false,
-    reconciled: false,
-    reconcileActions: imported === null ? [] : [`imported ${String(seeds.length)} task(s) from ${resolved.trackingFileRel}`],
+    imported: imported === null ? null : { trackingFileRel: resolved.trackingFileRel, taskCount: seeds.length },
     oracleWarnings,
     prompt: resolved.prompt,
   }
@@ -470,13 +446,7 @@ export async function stopLoop(
 
   if (reason === "chat_deleted") return
   try {
-    await deps.store.appendMessage(chatId, timestamped({
-      kind: "loop_disarmed",
-      reason,
-      resumable: true,
-      ...(armed.trackingFileRel !== null ? { trackingFileRel: armed.trackingFileRel } : {}),
-      ...(armed.workdirAbs !== null ? { workdirAbs: armed.workdirAbs } : {}),
-    }))
+    await appendLoopDisarmedCard(deps, chatId, reason, armed)
   } catch (err) {
     log.warn("[kanna] loop_disarmed card append failed", { chatId, err })
   }

@@ -7,6 +7,7 @@ import type { ActiveTurn } from "./claude-session-state"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { timestamped } from "./claude-message-normalizer"
+import { recordTurnError } from "./claude-turn-outcome"
 import type { TurnEndGuard } from "./turn-end-guard"
 
 
@@ -132,17 +133,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
       const handled = await deps.handleLimitError(active.chatId, deps.codexLimitDetector, error)
       if (!handled) {
         const message = error.message
-        await deps.store.appendMessage(
-          active.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await deps.store.recordTurnFailed(active.chatId, message)
+        await recordTurnError(deps.store, active.chatId, message)
       } else {
         await deps.store.recordTurnFailed(active.chatId, "rate_limit")
       }
@@ -174,17 +165,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
         })
       } catch (error) {
         const message = errorMessage(error)
-        await deps.store.appendMessage(
-          active.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await deps.store.recordTurnFailed(active.chatId, message)
+        await recordTurnError(deps.store, active.chatId, message)
         deps.emitStateChange(active.chatId)
       }
     } else if (!active.cancelRequested) {
@@ -192,17 +173,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
         await deps.maybeStartNextQueuedMessage(active.chatId)
       } catch (error) {
         const message = errorMessage(error)
-        await deps.store.appendMessage(
-          active.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await deps.store.recordTurnFailed(active.chatId, message)
+        await recordTurnError(deps.store, active.chatId, message)
         deps.emitStateChange(active.chatId)
       }
     }

@@ -1,4 +1,4 @@
-import { errorMessage } from "../shared/errors"
+import { errorMessage, projectNotFound } from "../shared/errors"
 import { resolveChatCwd } from "./claude-session-config"
 import { UPDATE_MANAGER_UNAVAILABLE, unavailableUpdateSnapshot } from "./update-manager"
 import type { ChatRecord } from "./events"
@@ -186,7 +186,7 @@ export async function handleProjectCommand(
     case "project.readDiffPatch": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
       const chatCwd = command.chatId === undefined ? undefined : resolveChatCwd(store, command.chatId)
       const result = await diffStore.readPatch({
@@ -231,7 +231,7 @@ export async function handleProjectCommand(
 
 async function deleteProjectData(deps: ProjectCommandDeps, projectId: string): Promise<ProjectDeleteResult> {
   const project = deps.store.getProject(projectId)
-  if (!project) throw new Error("Project not found")
+  if (!project) throw projectNotFound()
   const chatIds = [...deps.store.state.chatsById.values()]
     .filter((chat) => chat.projectId === projectId && !chat.deletedAt)
     .map((chat) => chat.id)

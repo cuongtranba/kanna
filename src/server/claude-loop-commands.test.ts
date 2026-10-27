@@ -23,6 +23,7 @@ describe("module surface", () => {
       "clearClaudeSessionContext",
       "deliverSubagentToMain",
       "disarmFailingLoop",
+    "enqueueSystemWake",
       "isLoopArmed",
       "listLiveSchedules",
       "setupLoop",
@@ -131,6 +132,7 @@ describe("clearClaudeSessionContext", () => {
       backgroundTasks: new Map(),
       backgroundTasksLevelSourced: false,
       backgroundTaskDeadlineAt: 0,
+      isHoldingWork: () => false,
     } as unknown as ClaudeSessionState
     const claudeSessions = new Map<string, ClaudeSessionState>([["chat-1", fakeSession]])
     const activeTurns = new Map<string, unknown>()
@@ -159,6 +161,7 @@ describe("clearClaudeSessionContext", () => {
       backgroundTasks: new Map(),
       backgroundTasksLevelSourced: false,
       backgroundTaskDeadlineAt: 0,
+      isHoldingWork: () => false,
     } as unknown as ClaudeSessionState
     const claudeSessions = new Map<string, ClaudeSessionState>([["chat-1", fakeSession]])
     const activeTurns = new Map<string, unknown>([["chat-1", {}]])
@@ -190,7 +193,6 @@ describe("setupLoop — arms in the chat's own tree", () => {
     const store = makeStore()
     store.chats.set(chat.id, chat as never)
     const verifyCalls: { cwd: string }[] = []
-    const ensured: { absPath: string }[] = []
     const seeded: string[] = []
     const emitted: AutoContinueEvent[] = []
     const deps = makeDeps({
@@ -204,15 +206,11 @@ describe("setupLoop — arms in the chat's own tree", () => {
         verifyCalls.push({ cwd: args.cwd })
         return { exitCode: 1, output: "not done", timedOut: false, durationMs: 1 }
       },
-      ensureTrackingFile: async (args) => {
-        ensured.push({ absPath: args.absPath })
-        return { created: true, reconciled: false, actions: [], absPath: args.absPath }
-      },
       seedChatTasks: async (_chatId, tasks) => {
         seeded.push(...tasks.map((task) => task.subject))
       },
     })
-    return { deps, store, emitted, verifyCalls, ensured, seeded }
+    return { deps, store, emitted, verifyCalls, seeded }
   }
 
   const worktreeChat = {
@@ -234,25 +232,23 @@ describe("setupLoop — arms in the chat's own tree", () => {
     expect(verifyCalls).toEqual([{ cwd: "/repo/.worktrees/feat" }])
   })
 
-  test("arming writes no tracking file — the chunk hint is seeded into the task list", async () => {
-    const { deps, ensured, seeded } = depsForChat(worktreeChat)
+  test("the chunk hint is seeded into the task list", async () => {
+    const { deps, seeded } = depsForChat(worktreeChat)
     await setupLoop(deps, {
       chatId: "chat-1",
       input: { ...validInput, chunkHint: "start with src/client" },
     })
-    expect(ensured).toEqual([])
     expect(seeded).toEqual(["start with src/client"])
   })
 
   test("a solo chat with no bindings is unchanged", async () => {
-    const { deps, emitted, verifyCalls, ensured } = depsForChat({ id: "chat-1", projectId: "proj-1" })
+    const { deps, emitted, verifyCalls } = depsForChat({ id: "chat-1", projectId: "proj-1" })
     const result = await setupLoop(deps, { chatId: "chat-1", input: validInput })
 
     expect(result.ok).toBe(true)
     const armed = emitted.find((e) => e.kind === "loop_armed")
     expect((armed as { workdirAbs?: string }).workdirAbs).toBe("/repo")
     expect(verifyCalls).toEqual([{ cwd: "/repo" }])
-    expect(ensured).toEqual([])
   })
 
   test("an explicit workdir outside the repo is still refused", async () => {

@@ -27,3 +27,21 @@ export function onRejected(handle: (error: Error) => void): (reason: unknown) =>
   }
 }
 
+
+export class StaleStateError extends Error {}
+
+export function chatNotFound(): StaleStateError {
+  return new StaleStateError("Chat not found")
+}
+
+export function projectNotFound(): StaleStateError {
+  return new StaleStateError("Project not found")
+}
+
+export function queuedMessageNotFound(): StaleStateError {
+  return new StaleStateError("Queued message not found")
+}
+
+export function fileNoLongerChanged(path: string): StaleStateError {
+  return new StaleStateError(`File is no longer changed: ${path}`)
+}

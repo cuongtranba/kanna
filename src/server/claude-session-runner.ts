@@ -5,13 +5,16 @@ import { toError } from "../shared/errors"
 import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
+import { backgroundTaskLaunchesFromToolResult, toolCallDescription } from "./claude-prompt-helpers"
 import {
-  isPromptTooLongMessage,
-  isNoConversationFoundMessage,
-  backgroundTaskLaunchesFromToolResult,
-  toolCallDescription,
-} from "./claude-prompt-helpers"
-import { timestamped } from "./claude-message-normalizer"
+  classifyResultFailure,
+  classifyThrownFailure,
+  handledFailureLabel,
+  handleDetectedFailure,
+  type AuthErrorDetectable,
+  type FailureDetectors,
+} from "./claude-turn-failure"
+import { recordTurnError } from "./claude-turn-outcome"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import { isProactiveCompactTurn } from "./claude-session-state"
@@ -27,12 +30,6 @@ const SELF_WAKE_ARMING_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Set([
   "tool_call",
   "tool_result",
 ])
-
-
-interface AuthErrorDetectable {
-  detect(chatId: string, error: Error): AuthErrorDetection | null
-  detectFromResultText(chatId: string, text: string): AuthErrorDetection | null
-}
 
 
 interface RunClaudeSessionStore {
@@ -56,21 +53,19 @@ interface OAuthPoolReleaseable {
 
 
 export interface RunClaudeSessionDeps {
-  openrouterFirstEntryTimeoutMs: number
+  endpointFirstEntryTimeoutMs: number
   claudeSessions: Map<string, ClaudeSessionState>
   activeTurns: Map<string, ActiveTurn>
   pendingTools: PendingToolSlots
   oauthPool: OAuthPoolReleaseable | null
   claudeLimitDetector: LimitDetector
   claudeAuthErrorDetector: AuthErrorDetectable
-  throwOnClaudeSessionStart: boolean
   store: RunClaudeSessionStore
   emitStateChange(chatId?: string): void
   handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean>
   maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void
   getSubagents(): Subagent[]
   resolveBackgroundTaskMaxMs(): number
-  handleLimitError(chatId: string, detector: LimitDetector, error: Error): Promise<boolean>
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
@@ -80,6 +75,15 @@ export interface RunClaudeSessionDeps {
   onBackgroundTaskSettle?(chatId: string, taskId: string): void
 }
 
+
+function failureDetectors(deps: RunClaudeSessionDeps): FailureDetectors {
+  return { limit: deps.claudeLimitDetector, auth: deps.claudeAuthErrorDetector }
+}
+
+async function discardInvalidSession(deps: RunClaudeSessionDeps, session: ClaudeSessionState): Promise<void> {
+  deps.closeClaudeSession(session.chatId, session)
+  await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
+}
 
 function firstEntryTimeoutMessage(session: ClaudeSessionState, timeoutMs: number): string {
   const label = session.endpointLabel ?? "The endpoint"
@@ -114,50 +118,31 @@ export async function runClaudeSession(
       if (firstEntrySeen) return
       if (deps.claudeSessions.get(session.chatId) !== session) return
       firstEntrySeen = true
-      const message = firstEntryTimeoutMessage(session, deps.openrouterFirstEntryTimeoutMs)
+      const message = firstEntryTimeoutMessage(session, deps.endpointFirstEntryTimeoutMs)
       log.warn("[kanna/agent] endpoint stream produced no entry within watchdog window — failing turn", {
         chatId: session.chatId,
         sessionId: session.id,
         endpoint: session.endpointKey,
         model: session.endpointModel,
-        timeoutMs: deps.openrouterFirstEntryTimeoutMs,
+        timeoutMs: deps.endpointFirstEntryTimeoutMs,
       })
       void (async () => {
-        await deps.store.appendMessage(
-          session.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: deps.openrouterFirstEntryTimeoutMs,
-            result: message,
-          }),
-        )
-        await deps.store.recordTurnFailed(session.chatId, message)
+        await recordTurnError(deps.store, session.chatId, message, deps.endpointFirstEntryTimeoutMs)
         const active = deps.activeTurns.get(session.chatId)
         if (active) deps.activeTurns.delete(session.chatId)
         deps.emitStateChange(session.chatId)
         void session.session.interrupt().catch(() => {})
         session.session.close()
       })()
-    }, deps.openrouterFirstEntryTimeoutMs)
+    }, deps.endpointFirstEntryTimeoutMs)
   }
   try {
-    let simulateLimit = deps.throwOnClaudeSessionStart
     loop: for await (const event of session.session.stream) {
-      if (simulateLimit) {
-        simulateLimit = false
-        throw new Error("simulated rate limit")
-      }
       switch (event.type) {
         case "session_token": {
           session.sessionToken = event.sessionToken
           const isCurrentSession = deps.claudeSessions.get(session.chatId) === session
-          if (
-            isCurrentSession
-            && session.cancelledResultPending === 0
-            && !session.suppressSessionTokenPersist
-          ) {
+          if (isCurrentSession && session.persistsSessionToken()) {
             await deps.store.setSessionTokenForProvider(session.chatId, "claude", event.sessionToken)
           }
           deps.maybeRegisterSdkWorkflowsDir(session)
@@ -187,13 +172,7 @@ export async function runClaudeSession(
           markStreamAlive()
           livePublisher.settle(event.entry.kind)
           if (deps.claudeSessions.get(session.chatId) !== session) break loop
-      if (
-        event.entry.kind === "result" &&
-        event.entry.isError &&
-        session.cancelledResultPending > 0
-      ) {
-        session.cancelledResultPending -= 1
-        session.selfWakeActive = false
+      if (event.entry.kind === "result" && event.entry.isError && session.swallowCancelledErrorResult()) {
         continue
       }
       if (event.entry.kind === "system_init") {
@@ -240,7 +219,7 @@ export async function runClaudeSession(
             await deps.maybeStartNextQueuedMessage(session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
-          if (!session.backgroundTaskWakeSuppressed && session.cancelledResultPending === 0) {
+          if (session.canArmSelfWake()) {
             session.selfWakeActive = true
             deps.emitStateChange(session.chatId)
           }
@@ -295,7 +274,7 @@ export async function runClaudeSession(
       }
 
       const completedClaudePromptSeq = event.entry.kind === "result" || event.entry.kind === "interrupted"
-        ? (session.pendingPromptSeqs.shift() ?? null)
+        ? session.completePrompt()
         : null
       if (completedClaudePromptSeq !== null) {
         session.lastUsedAt = Date.now()
@@ -322,29 +301,18 @@ export async function runClaudeSession(
         let failureHandled = false
         if (event.entry.isError) {
           const resultText = event.entry.result || "Turn failed"
-          const debugRaw = event.entry.debugRaw ?? ""
-          const detection = deps.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
-          const authDetection = deps.claudeAuthErrorDetector.detectFromResultText(session.chatId, resultText)
-            ?? deps.claudeAuthErrorDetector.detectFromResultText(session.chatId, debugRaw)
-          let handled = false
-          if (detection) {
-            handled = await deps.handleLimitDetection(session.chatId, detection)
-          } else if (authDetection) {
-            handled = await deps.handleAuthFailure(session, authDetection)
-          }
-          failureHandled = handled
-          if (handled) {
-            await deps.store.recordTurnFailed(session.chatId, detection ? "rate_limit" : "auth_error")
-          } else if (
-            isPromptTooLongMessage(resultText)
-            || isNoConversationFoundMessage(resultText)
-            || isNoConversationFoundMessage(debugRaw)
-          ) {
-            await deps.store.recordTurnFailed(session.chatId, resultText)
-            deps.closeClaudeSession(session.chatId, session)
-            await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
+          const failure = classifyResultFailure(
+            failureDetectors(deps),
+            session.chatId,
+            resultText,
+            event.entry.debugRaw ?? "",
+          )
+          failureHandled = await handleDetectedFailure(deps, session, failure)
+          if (failureHandled) {
+            await deps.store.recordTurnFailed(session.chatId, handledFailureLabel(failure))
           } else {
             await deps.store.recordTurnFailed(session.chatId, resultText)
+            if (failure.sessionInvalid) await discardInvalidSession(deps, session)
           }
           if (isProactiveCompactTurn(active)) {
             const prev = deps.store.getChat(session.chatId)?.compactFailureCount ?? 0
@@ -366,18 +334,16 @@ export async function runClaudeSession(
           await deps.maybeStartNextQueuedMessage(session.chatId)
         }
       } else if (event.entry.kind === "result" && event.entry.isError) {
-        const resultText = event.entry.result || ""
-        const debugRaw = event.entry.debugRaw ?? ""
-        const detection = deps.claudeLimitDetector.detectFromResultText?.(session.chatId, resultText) ?? null
-        const authDetection = detection
-          ? null
-          : deps.claudeAuthErrorDetector.detectFromResultText(session.chatId, resultText)
-            ?? deps.claudeAuthErrorDetector.detectFromResultText(session.chatId, debugRaw)
-        if (detection) {
-          await deps.handleLimitDetection(session.chatId, detection)
-        } else if (authDetection) {
-          await deps.handleAuthFailure(session, authDetection)
-        }
+        await handleDetectedFailure(
+          deps,
+          session,
+          classifyResultFailure(
+            failureDetectors(deps),
+            session.chatId,
+            event.entry.result || "",
+            event.entry.debugRaw ?? "",
+          ),
+        )
       }
 
           if (event.entry.kind === "result") turnAssistantText = []
@@ -396,33 +362,12 @@ export async function runClaudeSession(
     const error = toError(caught)
     const active = deps.activeTurns.get(session.chatId)
     if (active && !active.cancelRequested) {
-      const limitHandled = await deps.handleLimitError(session.chatId, deps.claudeLimitDetector, error)
-      const authDetection = limitHandled
-        ? null
-        : deps.claudeAuthErrorDetector.detect(session.chatId, error)
-      const authHandled = authDetection
-        ? await deps.handleAuthFailure(session, authDetection)
-        : false
-      const handled = limitHandled || authHandled
-      if (!handled) {
-        const message = error.message
-        await deps.store.appendMessage(
-          session.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
-        await deps.store.recordTurnFailed(session.chatId, message)
-        if (isPromptTooLongMessage(message) || isNoConversationFoundMessage(message)) {
-          deps.closeClaudeSession(session.chatId, session)
-          await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
-        }
+      const failure = classifyThrownFailure(failureDetectors(deps), session.chatId, error)
+      if (await handleDetectedFailure(deps, session, failure)) {
+        await deps.store.recordTurnFailed(session.chatId, handledFailureLabel(failure))
       } else {
-        await deps.store.recordTurnFailed(session.chatId, limitHandled ? "rate_limit" : "auth_error")
+        await recordTurnError(deps.store, session.chatId, error.message)
+        if (failure.sessionInvalid) await discardInvalidSession(deps, session)
       }
     }
   } finally {

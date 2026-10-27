@@ -1,3 +1,4 @@
+import { fileNoLongerChanged } from "../shared/errors"
 import path from "node:path"
 import {
   formatGitFailure,
@@ -54,7 +55,7 @@ export async function generateCommitMessage(
   const selectedFiles = await Promise.all(normalizedPaths.map(async (selectedPath) => {
     const entry = currentDirtyPaths.find((candidate) => candidate.path === selectedPath)
     if (!entry) {
-      throw new Error(`File is no longer changed: ${selectedPath}`)
+      throw fileNoLongerChanged(selectedPath)
     }
 
     const beforePath = entry.previousPath ?? selectedPath
@@ -112,7 +113,7 @@ export async function commitFiles(
   const currentDirtyPathsByPath = new Map(currentDirtyEntries.map((entry) => [entry.path, entry]))
   const missingPaths = normalizedPaths.filter((relativePath) => !currentDirtyPathsByPath.has(relativePath))
   if (missingPaths.length > 0) {
-    throw new Error(`File is no longer changed: ${missingPaths[0]}`)
+    throw fileNoLongerChanged(missingPaths[0])
   }
 
   const trackedPaths = normalizedPaths.filter((relativePath) => !currentDirtyPathsByPath.get(relativePath)?.isUntracked)
@@ -195,7 +196,7 @@ export async function discardFile(
 
   const entry = await findDirtyPath(repo.repoRoot, relativePath)
   if (!entry) {
-    throw new Error(`File is no longer changed: ${relativePath}`)
+    throw fileNoLongerChanged(relativePath)
   }
 
   if (entry.isUntracked) {
@@ -241,7 +242,7 @@ export async function ignoreFile(
 
   const entry = dirtyPaths.find((candidate) => candidate.isUntracked && (candidate.path === ignoreEntry || candidate.path.startsWith(ignoreEntry)))
   if (!entry) {
-    throw new Error(`File is no longer changed: ${ignoreEntry}`)
+    throw fileNoLongerChanged(ignoreEntry)
   }
 
   const gitignorePath = path.join(repo.repoRoot, ".gitignore")

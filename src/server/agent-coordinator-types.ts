@@ -23,6 +23,7 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { JsonValue } from "../shared/json"
 import type { ModelPrice } from "../shared/token-pricing"
+import type { AgentRuntimeConfig } from "./agent-runtime-config"
 
 export interface AppSettingsSnapshot {
   claudeDriver?: {
@@ -90,10 +91,9 @@ export interface AgentCoordinatorArgs {
   scheduleManager?: ScheduleManager
   cronScheduler?: import("./cron/scheduler").CronScheduler
   getAutoResumePreference?: () => boolean
-  openrouterFirstEntryTimeoutMs?: number
+  runtimeConfig?: AgentRuntimeConfig
   getSubagents?: () => Subagent[]
   getAppSettingsSnapshot?: () => AppSettingsSnapshot
-  throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy

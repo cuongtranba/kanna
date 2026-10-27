@@ -1,4 +1,5 @@
 
+import { projectNotFound, queuedMessageNotFound } from "../shared/errors"
 import path from "node:path"
 import type { AgentProvider, ModelOptions, QueuedChatMessage, StackBinding } from "../shared/types"
 import { STORE_VERSION, DEFAULT_CHAT_TITLE } from "../shared/types"
@@ -63,7 +64,7 @@ export function buildDeleteProjectEvents(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   projectId: string,
 ): Array<ProjectEvent | StackEvent> {
-  if (!state.projectsById.has(projectId)) throw new Error("Project not found")
+  if (!state.projectsById.has(projectId)) throw projectNotFound()
   const timestamp = Date.now()
   const stackEvents: StackEvent[] = [...state.stacksById.values()]
     .filter((stack) => !stack.deletedAt && stack.projectIds.includes(projectId))
@@ -436,7 +437,7 @@ export function buildRemoveQueuedMessageEvent(
 ): QueuedMessageEvent {
   requireLiveChat(chatsById, chatId)
   const existing = queuedMessagesByChatId.get(chatId) ?? []
-  if (!existing.some((e) => e.id === queuedMessageId)) throw new Error("Queued message not found")
+  if (!existing.some((e) => e.id === queuedMessageId)) throw queuedMessageNotFound()
   return {
     v: STORE_VERSION, type: "queued_message_removed",
     timestamp: Date.now(), chatId, queuedMessageId,

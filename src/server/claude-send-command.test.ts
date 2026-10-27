@@ -8,6 +8,7 @@ import {
   enqueueMessage,
   dequeueAndStartQueuedMessage,
   maybeStartNextQueuedMessage,
+  deliverPrompt,
   sendCommand,
   type SendCommandDeps,
 } from "./claude-send-command"
@@ -15,7 +16,7 @@ import type { CommandOrigin } from "../shared/command-origin"
 import type { QueuedChatMessage, ChatAttachment, CustomModelEntry, TranscriptEntry } from "../shared/types"
 import type { ChatProviderPreferences, ModelOptions } from "../shared/provider-model-types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
-import { ClaudeSessionState, type CompactionTurnKind } from "./claude-session-state"
+import { ClaudeSessionState } from "./claude-session-state"
 import { buildCodexCompactPrompt } from "../shared/builtin-commands"
 
 
@@ -101,7 +102,6 @@ type DepsOptions = {
   session?: ClaudeSessionState | null
   customModels?: readonly CustomModelEntry[]
   clearedChatIds?: string[]
-  activeTurn?: { compactionTurn?: CompactionTurnKind }
   turnReachesCommit?: boolean
   transcript?: TranscriptEntry[]
   cronCalls?: Array<{ chatId: string; ok: boolean }>
@@ -167,7 +167,6 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
     },
     activeTurns: {
       has: (chatId: string) => activeChatIds.has(chatId),
-      get: (_chatId: string) => opts.activeTurn,
     },
     startingTurns: {
       has: (chatId: string) => startingChatIds.has(chatId),
@@ -505,6 +504,41 @@ describe("maybeStartNextQueuedMessage", () => {
 })
 
 
+describe("deliverPrompt", () => {
+  function depsThatQueue(opts: DepsOptions) {
+    const queuedMessages: QueuedChatMessage[] = []
+    const base = makeDeps({ ...opts, queuedMessages })
+    const deps: SendCommandDeps & { startTurnCalled: StartTurnForChatArgs[] } = {
+      ...base,
+      store: {
+        ...base.store,
+        enqueueMessage: async (_chatId, message) => {
+          const queued = makeQueuedMessage({ content: message.content })
+          queuedMessages.push(queued)
+          return queued
+        },
+      },
+    }
+    return { deps, queuedMessages }
+  }
+
+  test("queues the prompt and starts its turn when the chat is idle", async () => {
+    const { deps } = depsThatQueue({})
+    const queued = await deliverPrompt(deps, "chat-1", "wake up", [], { autoContinue: { scheduleId: "s-1" } })
+    expect(queued.content).toBe("wake up")
+    expect(deps.startTurnCalled).toHaveLength(1)
+    expect(deps.startTurnCalled[0]?.content).toBe("wake up")
+  })
+
+  test("leaves the prompt queued while the chat is busy", async () => {
+    const { deps, queuedMessages } = depsThatQueue({ activeChatIds: ["chat-1"] })
+    await deliverPrompt(deps, "chat-1", "wake up", [])
+    expect(queuedMessages).toHaveLength(1)
+    expect(deps.startTurnCalled).toHaveLength(0)
+  })
+})
+
+
 describe("sendCommand", () => {
   let stopLoopCalled: string[]
   let analyticsEvents: string[]
@@ -802,8 +836,7 @@ describe("builtin /cron", () => {
 
 describe("builtin /compact", () => {
   test("on claude passes the CLI command through verbatim", async () => {
-    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
-    const deps = makeDeps({ chatProvider: "claude", activeTurn })
+    const deps = makeDeps({ chatProvider: "claude" })
 
     await sendCommand(deps, {
       type: "chat.send",
@@ -814,11 +847,11 @@ describe("builtin /compact", () => {
     expect(deps.startTurnCalled).toHaveLength(1)
     expect(deps.startTurnCalled[0].content).toBe("/compact focus on auth")
     expect(deps.startTurnCalled[0].appendUserPrompt).toBe(false)
-    expect(activeTurn.compactionTurn).toBe("user")
+    expect(deps.startTurnCalled[0].compactionTurn).toBe("user")
   })
 
   test("with no instructions sends the bare command", async () => {
-    const deps = makeDeps({ chatProvider: "claude", activeTurn: {} })
+    const deps = makeDeps({ chatProvider: "claude" })
 
     await sendCommand(deps, {
       type: "chat.send",
@@ -830,8 +863,7 @@ describe("builtin /compact", () => {
   })
 
   test("on openrouter takes the same CLI passthrough", async () => {
-    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
-    const deps = makeDeps({ chatProvider: "openrouter", activeTurn })
+    const deps = makeDeps({ chatProvider: "openrouter" })
 
     await sendCommand(deps, {
       type: "chat.send",
@@ -840,12 +872,11 @@ describe("builtin /compact", () => {
     } as Parameters<typeof sendCommand>[1])
 
     expect(deps.startTurnCalled[0].content).toBe("/compact")
-    expect(activeTurn.compactionTurn).toBe("user")
+    expect(deps.startTurnCalled[0].compactionTurn).toBe("user")
   })
 
   test("on codex starts a Kanna summarize turn", async () => {
-    const activeTurn: { compactionTurn?: CompactionTurnKind } = {}
-    const deps = makeDeps({ chatProvider: "codex", activeTurn })
+    const deps = makeDeps({ chatProvider: "codex" })
 
     await sendCommand(deps, {
       type: "chat.send",
@@ -857,7 +888,7 @@ describe("builtin /compact", () => {
     expect(deps.startTurnCalled[0].content).toBe(buildCodexCompactPrompt("focus on auth"))
     expect(deps.startTurnCalled[0].appendUserPrompt).toBe(false)
     expect(deps.startTurnCalled[0].planMode).toBe(false)
-    expect(activeTurn.compactionTurn).toBe("codex_summary")
+    expect(deps.startTurnCalled[0].compactionTurn).toBe("codex_summary")
   })
 })
 

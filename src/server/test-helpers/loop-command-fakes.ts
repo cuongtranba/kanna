@@ -3,7 +3,6 @@ import { EMPTY_CHAT_TASK_PROJECTION } from "../../shared/chat-tasks/read-model"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import type { TranscriptEntry } from "../../shared/types"
 import type { ClaudeSessionState } from "../claude-session-state"
-import type { EnsureTrackingFileArgs, EnsureTrackingFileResult } from "../loop-template-io.adapter"
 import type { LoopCommandDeps } from "../claude-loop-commands"
 
 
@@ -87,18 +86,11 @@ export function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandD
       emittedEvents.push(event)
       store.events.push(event)
     },
-    ensureTrackingFile: async (_args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult> => {
-      return { created: true, reconciled: false, actions: [], absPath: _args.absPath }
-    },
     ...overrides,
     pendingTools: overrides.pendingTools ?? { has: () => false },
     hasLiveWorkflow: overrides.hasLiveWorkflow ?? (() => false),
-    hasPendingBackgroundTask: overrides.hasPendingBackgroundTask ?? (() => false),
     isLoopArmed: overrides.isLoopArmed ?? ((_chatId: string) => null),
     isChatBusy: overrides.isChatBusy ?? ((_chatId: string) => false),
-    inspectTrackingFile:
-      overrides.inspectTrackingFile
-      ?? (async () => ({ exists: false, content: null, gitTracked: false })),
     isWorktreeOfSameRepo: overrides.isWorktreeOfSameRepo ?? (async () => true),
     currentBranchName: overrides.currentBranchName ?? (async () => "main"),
     runVerifyCommand:

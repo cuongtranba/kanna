@@ -1,3 +1,4 @@
+import { projectNotFound } from "../shared/errors"
 import type { JsonObject } from "../shared/json"
 
 import { ackResult } from "./ws-router-ack"
@@ -93,7 +94,7 @@ export async function handleMiscCommand(
     case "terminal.create": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
       const snapshot = terminals.createTerminal({
         projectPath: project.localPath,
@@ -166,7 +167,7 @@ export async function handleMiscCommand(
     case "stack.listWorktrees": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
       const worktrees = await listWorktrees(project.localPath)
       send(ackResult(id, command, { worktrees }))

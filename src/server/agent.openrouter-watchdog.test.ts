@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { AgentCoordinator } from "./agent"
+import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
 import type { HarnessEvent } from "./harness-types"
 import type { LlmProviderSnapshot, SlashCommand, TranscriptEntry } from "../shared/types"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -121,7 +122,7 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
         store: store as never,
         onStateChange: () => {},
         readLlmProvider: async () => openrouterSnapshot(),
-        openrouterFirstEntryTimeoutMs: 200,
+        runtimeConfig: { ...DEFAULT_AGENT_RUNTIME_CONFIG, endpointFirstEntryTimeoutMs: 200 },
         startClaudeSession: async () => {
           return {
             provider: "claude",
@@ -170,7 +171,7 @@ describe("AgentCoordinator OpenRouter first-entry watchdog", () => {
         store: store as never,
         onStateChange: () => {},
         readLlmProvider: async () => openrouterSnapshot(),
-        openrouterFirstEntryTimeoutMs: 200,
+        runtimeConfig: { ...DEFAULT_AGENT_RUNTIME_CONFIG, endpointFirstEntryTimeoutMs: 200 },
         startClaudeSession: async () => {
           events.push({
             type: "transcript",
@@ -229,7 +230,7 @@ describe("AgentCoordinator OpenRouter SDK-session prompt delivery", () => {
         store: store as never,
         onStateChange: () => {},
         readLlmProvider: async () => openrouterSnapshot(),
-        openrouterFirstEntryTimeoutMs: 5000,
+        runtimeConfig: { ...DEFAULT_AGENT_RUNTIME_CONFIG, endpointFirstEntryTimeoutMs: 5000 },
         startClaudeSession: async () => {
           return {
             provider: "claude",
