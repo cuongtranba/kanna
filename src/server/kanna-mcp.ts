@@ -7,7 +7,7 @@ import type { BeaconRegistry } from "./beacon-registry"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { getPluginService } from "./plugins/plugin-service-host"
-import { bindChatTaskRun, buildChatTaskToolList, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
+import { bindChatTaskRun, buildChatTaskToolList, newShortId, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
@@ -111,11 +111,11 @@ export interface ArmedLoopInfo {
 export interface ChatTaskStorePort {
   appendEvents: (events: readonly ChatTaskEvent[]) => Promise<void>
   project: (chatId: string, ctx: ChatTaskScheduleContext) => ChatTaskProjection
-  decide: (
+  decide: <R>(
     chatId: string,
     ctx: ChatTaskScheduleContext,
-    fn: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
-  ) => Promise<readonly ChatTaskEvent[]>
+    fn: (projection: ChatTaskProjection) => { events: readonly ChatTaskEvent[]; result: R },
+  ) => Promise<R>
   mergeBranch: (
     workdir: string,
     branch: string,
@@ -976,6 +976,8 @@ function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTas
     requireWorktree: () => (getArmedLoop?.(chatId)?.parallelism ?? 1) > 1,
     integrationWorkdir: () => getArmedLoop?.(chatId)?.workdirAbs ?? null,
     mergeBranch: (workdir, branch) => store.mergeBranch(workdir, branch),
+    now: Date.now,
+    newId: newShortId,
   }
 }
 

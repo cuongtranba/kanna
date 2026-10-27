@@ -6,12 +6,8 @@ import { log } from "../shared/log"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import { STORE_VERSION } from "../shared/types"
 import type { StorageBackend } from "./storage/backend"
-import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
-import type { PushEvent } from "./push/events"
-import type { ShareEvent } from "./session-share/share-projection"
-import { compactCronRunEvents } from "./cron/compact"
 import { compactChatTaskEvents } from "../shared/chat-tasks/compact"
-import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
+import { compactAutoContinueEvents } from "./auto-continue/compact"
 import {
   type ChatRecord,
   type ProjectRecord,
@@ -20,10 +16,10 @@ import {
   type StoreState,
   cloneTranscriptEntries,
 } from "./events"
-import {
-  getReplayEventPriority,
-  normalizeSidebarProjectOrder,
-} from "./event-store-helpers"
+import { getReplayEventPriority } from "./event-routes"
+import { REPLAYED_LOGS, replaySourceOf, type StoreLayout } from "./event-logs"
+import { normalizeSidebarProjectOrder } from "./event-store-chat-lifecycle"
+import { readJsonl, type JsonlCorruption } from "./jsonl-log"
 
 
 export interface LegacyTranscriptStats {
@@ -31,19 +27,6 @@ export interface LegacyTranscriptStats {
   sources: Array<"snapshot" | "messages_log">
   chatCount: number
   entryCount: number
-}
-
-export interface SnapshotLogPaths {
-  snapshotPath: string
-  projectsLogPath: string
-  chatsLogPath: string
-  messagesLogPath: string
-  queuedMessagesLogPath: string
-  turnsLogPath: string
-  schedulesLogPath: string
-  stacksLogPath: string
-  toolRequestsLogPath: string
-  chatTasksLogPath: string
 }
 
 export interface LoadSnapshotResult {
@@ -151,7 +134,7 @@ export async function loadSnapshotIntoState(
       for (const entry of parsed.autoContinueEvents) {
         state.autoContinueEventsByChatId.set(
           entry.chatId,
-          compactLoopWakeEvents(compactCronRunEvents([...entry.events])),
+          compactAutoContinueEvents([...entry.events]),
         )
       }
     }
@@ -209,43 +192,27 @@ export function buildSnapshotFile(
 
 export async function truncateLogsAfterSnapshot(
   storage: StorageBackend,
-  paths: SnapshotLogPaths,
+  layout: StoreLayout,
   snapshotJson: string,
 ): Promise<void> {
-  await storage.writeText(paths.snapshotPath, snapshotJson)
-  await Promise.all([
-    storage.writeText(paths.projectsLogPath, ""),
-    storage.writeText(paths.chatsLogPath, ""),
-    storage.writeText(paths.messagesLogPath, ""),
-    storage.writeText(paths.queuedMessagesLogPath, ""),
-    storage.writeText(paths.turnsLogPath, ""),
-    storage.writeText(paths.schedulesLogPath, ""),
-    storage.writeText(paths.stacksLogPath, ""),
-    storage.writeText(paths.toolRequestsLogPath, ""),
-    storage.writeText(paths.chatTasksLogPath, ""),
-  ])
+  await storage.writeText(layout.snapshotPath, snapshotJson)
+  await Promise.all(REPLAYED_LOGS.map((name) => storage.writeText(layout.logPath(name), "")))
 }
 
 const SNAPSHOT_THRESHOLD_BYTES = 2 * 1024 * 1024
 
 export async function calcShouldTruncateLogs(
   storage: StorageBackend,
-  paths: SnapshotLogPaths,
+  layout: StoreLayout,
 ): Promise<boolean> {
-  const sizes = await Promise.all([
-    storage.size(paths.projectsLogPath),
-    storage.size(paths.chatsLogPath),
-    storage.size(paths.messagesLogPath),
-    storage.size(paths.queuedMessagesLogPath),
-    storage.size(paths.turnsLogPath),
-    storage.size(paths.schedulesLogPath),
-    storage.size(paths.stacksLogPath),
-    storage.size(paths.toolRequestsLogPath),
-    storage.size(paths.chatTasksLogPath),
-  ])
+  const sizes = await Promise.all(REPLAYED_LOGS.map((name) => storage.size(layout.logPath(name))))
   return sizes.reduce((total, size) => total + size, 0) >= SNAPSHOT_THRESHOLD_BYTES
 }
 
+
+function firstMidFileCorruption(corruptions: readonly JsonlCorruption[]): JsonlCorruption | undefined {
+  return corruptions.find((corruption) => !corruption.trailing)
+}
 
 export async function loadReplayEventsFromFile(
   storage: StorageBackend,
@@ -253,55 +220,37 @@ export async function loadReplayEventsFromFile(
   sourceIndex: number,
   clearStorage: () => Promise<void>,
 ): Promise<ParsedReplayEvent[]> {
-  if (!(await storage.exists(filePath))) return []
+  const { records, corruptions } = await readJsonl<StoreEvent & { v?: number; type?: string }>(storage, filePath)
 
-  const text = await storage.readText(filePath)
-  if (!text.trim()) return []
-
-  const parsedEvents: ParsedReplayEvent[] = []
-  const lines = text.split("\n")
-  let lastNonEmpty = -1
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (lines[index].trim()) {
-      lastNonEmpty = index
-      break
-    }
+  const midFileCorruption = firstMidFileCorruption(corruptions)
+  if (midFileCorruption) {
+    log.warn(
+      `${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`,
+      midFileCorruption.error,
+    )
+    await clearStorage()
+    return []
+  }
+  if (corruptions.length > 0) {
+    log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
   }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim()
-    if (!line) continue
-    try {
-      const event: StoreEvent & { v?: number; type?: string } = JSON.parse(line)
-      if (event.v !== STORE_VERSION) {
-        log.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
-        await clearStorage()
-        return []
-      }
-      if (event.type === "sidebar_project_order_set") {
-        continue
-      }
-      parsedEvents.push({ event, sourceIndex, lineIndex: index })
-    } catch (error) {
-      if (index === lastNonEmpty) {
-        log.warn(`${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(filePath)}`)
-        return parsedEvents
-      }
-      log.warn(
-        `${LOG_PREFIX} Failed to replay ${path.basename(filePath)}, resetting local history:`,
-        String(error),
-      )
+  const parsedEvents: ParsedReplayEvent[] = []
+  for (const { value: event, lineIndex } of records) {
+    if (event.v !== STORE_VERSION) {
+      log.warn(`${LOG_PREFIX} Resetting local history from incompatible event log`)
       await clearStorage()
       return []
     }
+    if (event.type === "sidebar_project_order_set") continue
+    parsedEvents.push({ event, sourceIndex, lineIndex })
   }
-
   return parsedEvents
 }
 
 export async function loadAndReplayLogs(
   storage: StorageBackend,
-  paths: SnapshotLogPaths,
+  layout: StoreLayout,
   isStorageReset: () => boolean,
   applyEvent: (event: StoreEvent) => void,
   clearStorage: () => Promise<void>,
@@ -309,17 +258,12 @@ export async function loadAndReplayLogs(
 ): Promise<void> {
   if (isStorageReset()) return
 
-  const replayEvents = [
-    ...await loadReplayEventsFromFile(storage, paths.projectsLogPath, 0, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.stacksLogPath, 1, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.chatsLogPath, 2, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.messagesLogPath, 3, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.queuedMessagesLogPath, 4, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.turnsLogPath, 5, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.schedulesLogPath, 6, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.toolRequestsLogPath, 7, clearStorage),
-    ...await loadReplayEventsFromFile(storage, paths.chatTasksLogPath, 8, clearStorage),
-  ]
+  const replayEvents: ParsedReplayEvent[] = []
+  for (const name of REPLAYED_LOGS) {
+    replayEvents.push(
+      ...await loadReplayEventsFromFile(storage, layout.logPath(name), replaySourceOf(name), clearStorage),
+    )
+  }
 
   if (isStorageReset()) return
 
@@ -339,70 +283,53 @@ export async function loadAndReplayLogs(
 
 export async function writeSidebarOrderFile(
   storage: StorageBackend,
-  dataDir: string,
-  sidebarProjectOrderPath: string,
+  layout: StoreLayout,
   projectIds: string[],
 ): Promise<void> {
-  await storage.mkdir(dataDir)
-  await storage.writeText(sidebarProjectOrderPath, `${JSON.stringify(projectIds, null, 2)}\n`)
+  await storage.mkdir(layout.dataDir)
+  await storage.writeText(layout.sidebarOrderPath, `${JSON.stringify(projectIds, null, 2)}\n`)
 }
 
 export async function readSidebarOrderFromProjectsLog(
   storage: StorageBackend,
-  projectsLogPath: string,
+  layout: StoreLayout,
 ): Promise<string[]> {
-  if (!(await storage.exists(projectsLogPath))) return []
+  const projectsLog = layout.logPath("projects")
+  const { records, corruptions } = await readJsonl<{ v?: number; type?: string; projectIds?: JsonValue }>(
+    storage,
+    projectsLog,
+  )
 
-  const text = await storage.readText(projectsLogPath)
-  if (!text.trim()) return []
-
-  const lines = text.split("\n")
-  let lastNonEmpty = -1
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    if (lines[index].trim()) {
-      lastNonEmpty = index
-      break
-    }
+  const midFileCorruption = firstMidFileCorruption(corruptions)
+  if (midFileCorruption) {
+    log.warn(
+      `${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(projectsLog)}:`,
+      midFileCorruption.error,
+    )
+    return []
+  }
+  if (corruptions.length > 0) {
+    log.warn(
+      `${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(projectsLog)} while migrating sidebar order`,
+    )
   }
 
   let projectIds: string[] = []
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim()
-    if (!line) continue
-    try {
-      const event: { v?: number; type?: string; projectIds?: JsonValue } = JSON.parse(line)
-      if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") {
-        continue
-      }
-      projectIds = normalizeSidebarProjectOrder(event.projectIds)
-    } catch (error) {
-      if (index === lastNonEmpty) {
-        log.warn(
-          `${LOG_PREFIX} Ignoring corrupt trailing line in ${path.basename(projectsLogPath)} while migrating sidebar order`,
-        )
-        return projectIds
-      }
-      log.warn(
-        `${LOG_PREFIX} Failed to migrate sidebar order from ${path.basename(projectsLogPath)}:`,
-        String(error),
-      )
-      return []
-    }
+  for (const { value: event } of records) {
+    if (event.v !== STORE_VERSION || event.type !== "sidebar_project_order_set") continue
+    projectIds = normalizeSidebarProjectOrder(event.projectIds)
   }
-
   return projectIds
 }
 
 export async function loadSidebarOrder(
   storage: StorageBackend,
-  sidebarProjectOrderPath: string,
-  projectsLogPath: string,
-  dataDir: string,
+  layout: StoreLayout,
   legacySidebarProjectOrder: string[],
 ): Promise<string[]> {
-  if (await storage.exists(sidebarProjectOrderPath)) {
+  if (await storage.exists(layout.sidebarOrderPath)) {
     try {
-      const text = await storage.readText(sidebarProjectOrderPath)
+      const text = await storage.readText(layout.sidebarOrderPath)
       if (!text.trim()) return []
       return normalizeSidebarProjectOrder(JSON.parse(text))
     } catch (error) {
@@ -414,11 +341,11 @@ export async function loadSidebarOrder(
     }
   }
 
-  const fromProjectsLog = await readSidebarOrderFromProjectsLog(storage, projectsLogPath)
+  const fromProjectsLog = await readSidebarOrderFromProjectsLog(storage, layout)
   const order = fromProjectsLog.length > 0 ? fromProjectsLog : [...legacySidebarProjectOrder]
 
   if (order.length > 0) {
-    await writeSidebarOrderFile(storage, dataDir, sidebarProjectOrderPath, order)
+    await writeSidebarOrderFile(storage, layout, order)
   }
   return order
 }
@@ -426,11 +353,11 @@ export async function loadSidebarOrder(
 
 export async function computeLegacyTranscriptStats(
   storage: StorageBackend,
-  messagesLogPath: string,
+  layout: StoreLayout,
   snapshotHasLegacyMessages: boolean,
   legacyMessagesByChatId: Map<string, TranscriptEntry[]>,
 ): Promise<LegacyTranscriptStats> {
-  const messagesLogSize = await storage.size(messagesLogPath)
+  const messagesLogSize = await storage.size(layout.logPath("messages"))
   const sources: LegacyTranscriptStats["sources"] = []
   if (snapshotHasLegacyMessages) {
     sources.push("snapshot")
@@ -454,10 +381,9 @@ export async function computeLegacyTranscriptStats(
 
 export async function migrateLegacyTranscripts(
   storage: StorageBackend,
-  transcriptsDir: string,
+  layout: StoreLayout,
   legacyStats: LegacyTranscriptStats,
   legacyMessagesByChatId: Map<string, TranscriptEntry[]>,
-  transcriptPath: (chatId: string) => string,
   onClearLegacyState: () => void,
   onSnapshotAndTruncate: () => Promise<void>,
   onCacheInvalidate: () => void,
@@ -477,11 +403,11 @@ export async function migrateLegacyTranscripts(
     `${LOG_PREFIX} transcript migration: writing ${messageSets.length} per-chat transcript files`,
   )
 
-  await storage.mkdir(transcriptsDir)
+  await storage.mkdir(layout.transcriptsDir)
   const logEveryChat = messageSets.length <= 10
   for (let index = 0; index < messageSets.length; index += 1) {
     const [chatId, entries] = messageSets[index]
-    const chatTranscriptPath = transcriptPath(chatId)
+    const chatTranscriptPath = layout.transcriptPath(chatId)
     const tempPath = `${chatTranscriptPath}.tmp`
     const payload = entries.map((entry) => JSON.stringify(entry)).join("\n")
     await storage.writeText(tempPath, payload ? `${payload}\n` : "")
@@ -496,77 +422,4 @@ export async function migrateLegacyTranscripts(
   onCacheInvalidate()
   onProgress?.(`${LOG_PREFIX} transcript migration complete`)
   return true
-}
-
-
-export function applyTunnelEventToMap(
-  tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>,
-  event: CloudflareTunnelEvent,
-): void {
-  const existing = tunnelEventsByChatId.get(event.chatId) ?? []
-  existing.push(event)
-  tunnelEventsByChatId.set(event.chatId, existing)
-}
-
-export async function loadTunnelEventsFromLog(
-  storage: StorageBackend,
-  tunnelLogPath: string,
-  tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>,
-): Promise<void> {
-  if (!(await storage.exists(tunnelLogPath))) return
-  const text = await storage.readText(tunnelLogPath)
-  if (!text.trim()) return
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim()
-    if (!line) continue
-    try {
-      const event: CloudflareTunnelEvent = JSON.parse(line)
-      applyTunnelEventToMap(tunnelEventsByChatId, event)
-    } catch {
-      log.warn(`${LOG_PREFIX} Ignoring malformed line in tunnels.jsonl`)
-    }
-  }
-}
-
-
-export async function loadShareEventsFromLog(
-  storage: StorageBackend,
-  sharesLogPath: string,
-  shareEventsAll: ShareEvent[],
-): Promise<void> {
-  if (!(await storage.exists(sharesLogPath))) return
-  const text = await storage.readText(sharesLogPath)
-  if (!text.trim()) return
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim()
-    if (!line) continue
-    try {
-      const event: ShareEvent = JSON.parse(line)
-      shareEventsAll.push(event)
-    } catch {
-      log.warn(`${LOG_PREFIX} Ignoring malformed line in shares.jsonl`)
-    }
-  }
-}
-
-
-export async function loadPushEventsFromLog(
-  storage: StorageBackend,
-  pushLogPath: string,
-): Promise<PushEvent[]> {
-  if (!(await storage.exists(pushLogPath))) return []
-  const text = await storage.readText(pushLogPath)
-  if (!text.trim()) return []
-  const events: PushEvent[] = []
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim()
-    if (!line) continue
-    try {
-      const pushEvent: PushEvent = JSON.parse(line)
-      events.push(pushEvent)
-    } catch {
-      log.warn(`${LOG_PREFIX} Ignoring malformed line in push.jsonl`)
-    }
-  }
-  return events
 }

@@ -112,6 +112,7 @@ function createFakeStore() {
     async removeQueuedMessage(_chatId: string, queuedMessageId: string) {
       this.queuedMessages = this.queuedMessages.filter((entry) => entry.id !== queuedMessageId)
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {},
   }
 }

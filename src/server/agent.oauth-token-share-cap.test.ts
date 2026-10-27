@@ -158,6 +158,7 @@ function createMultiChatStore(chatIds: string[]) {
     async removeQueuedMessage(_chatId: string, id: string) {
       this.queuedMessages = this.queuedMessages.filter((m) => m.id !== id)
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

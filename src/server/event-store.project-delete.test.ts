@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { EventStore } from "./event-store"
-import { LOG_FILES } from "./events"
+import { ALL_LOGS, storeLayoutFor } from "./event-logs"
 import { InMemoryStorageBackend } from "./storage/in-memory-storage"
 
 const DATA_DIR = "/virtual-project-delete"
@@ -14,9 +14,9 @@ async function bootStore(storage: InMemoryStorageBackend): Promise<EventStore> {
 }
 
 async function persistedText(storage: InMemoryStorageBackend): Promise<string> {
-  const names = [...Object.values(LOG_FILES), "snapshot.json", "tunnels.jsonl", "shares.jsonl", "push.jsonl"]
-  const texts = await Promise.all(names.map(async (name) => {
-    const file = path.join(DATA_DIR, name)
+  const layout = storeLayoutFor(DATA_DIR)
+  const files = [...ALL_LOGS.map((name) => layout.logPath(name)), layout.snapshotPath]
+  const texts = await Promise.all(files.map(async (file) => {
     return (await storage.exists(file)) ? storage.readText(file) : ""
   }))
   return texts.join("\n")

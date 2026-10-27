@@ -29,6 +29,7 @@ async function captureCompactionObserver(): Promise<CapturedCompaction> {
   let observe: ((event: CompactionEvent) => void) | undefined
 
   const store = {
+    subscribeTurnTerminal: () => () => {},
     runningSubagentRuns: () => [],
     getAutoContinueEvents: () => [],
     getChat: () => ({ id: "chat-1", provider: "claude" }),
@@ -119,6 +120,7 @@ describe("AgentCoordinator compaction handling", () => {
     const appended: { chatId: string; entry: TranscriptEntry }[] = []
     let observe: ((event: CompactionEvent) => void) | undefined
     const store = {
+      subscribeTurnTerminal: () => () => {},
       runningSubagentRuns: () => [],
       getAutoContinueEvents: () => [],
       getChat: () => ({ id: "chat-1", provider: "claude" }),

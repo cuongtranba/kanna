@@ -84,6 +84,7 @@ function createLoopStore() {
     async createChat() { return chat },
     async forkChat() { return chat },
     async recordSessionCommandsLoaded() {},
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { LOG_OF_EVENT } from "../events"
+import { EVENT_ROUTES } from "../event-routes"
 import { STORE_EVENT_SUBJECT } from "./store-event-subjects"
 
 describe("store event subjects", () => {
   test("every persisted event kind has an explicit subject decision", () => {
-    expect(new Set(Object.keys(STORE_EVENT_SUBJECT))).toEqual(new Set(Object.keys(LOG_OF_EVENT)))
+    expect(new Set(Object.keys(STORE_EVENT_SUBJECT))).toEqual(new Set(Object.keys(EVENT_ROUTES)))
   })
 
   test("kinds that carry session secrets or per-token noise are not published", () => {

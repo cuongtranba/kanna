@@ -35,6 +35,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
+import { liveRecord } from "./event-store-lookup"
 
 export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
@@ -449,10 +450,10 @@ export function deriveChatSnapshot(
   catalogSources: ProviderCatalogSources = EMPTY_CATALOG_SOURCES,
   backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
 ): ChatSnapshot | null {
-  const chat = state.chatsById.get(chatId)
-  if (!chat || chat.deletedAt) return null
-  const project = state.projectsById.get(chat.projectId)
-  if (!project || project.deletedAt) return null
+  const chat = liveRecord(state.chatsById, chatId)
+  if (!chat) return null
+  const project = liveRecord(state.projectsById, chat.projectId)
+  if (!project) return null
 
   const runtime: ChatRuntime = {
     chatId: chat.id,

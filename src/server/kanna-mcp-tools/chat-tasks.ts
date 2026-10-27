@@ -50,10 +50,10 @@ export interface ChatTaskToolDeps {
   readonly chatId: string
   readonly appendEvents: (events: readonly ChatTaskEvent[]) => Promise<void>
   readonly project: (ctx: ChatTaskScheduleContext) => ChatTaskProjection
-  readonly decide: (
+  readonly decide: <R>(
     ctx: ChatTaskScheduleContext,
-    fn: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
-  ) => Promise<readonly ChatTaskEvent[]>
+    fn: (projection: ChatTaskProjection) => { events: readonly ChatTaskEvent[]; result: R },
+  ) => Promise<R>
   readonly isRunAlive: (runId: string) => boolean
   readonly requireWorktree: () => boolean
   readonly integrationWorkdir: () => string | null
@@ -61,8 +61,12 @@ export interface ChatTaskToolDeps {
     workdir: string,
     branch: string,
   ) => Promise<{ ok: boolean; conflicts: readonly string[]; detail: string }>
-  readonly now?: () => number
-  readonly newId?: () => string
+  readonly now: () => number
+  readonly newId: () => string
+}
+
+export function newShortId(): string {
+  return crypto.randomUUID().slice(0, 8)
 }
 
 export interface ChatTaskView {
@@ -86,7 +90,7 @@ function clamp(text: string, max: number): string {
 
 export function scheduleContext(deps: ChatTaskToolDeps): ChatTaskScheduleContext {
   return {
-    now: (deps.now ?? Date.now)(),
+    now: deps.now(),
     isRunAlive: (runId: string) => deps.isRunAlive(runId),
   }
 }
@@ -127,13 +131,13 @@ function baseEvent(deps: ChatTaskToolDeps): {
 } {
   return {
     v: CHAT_TASK_EVENT_VERSION,
-    timestamp: (deps.now ?? Date.now)(),
+    timestamp: deps.now(),
     chatId: deps.chatId,
   }
 }
 
 function mintId(deps: ChatTaskToolDeps): string {
-  return kannaTaskId((deps.newId ?? (() => crypto.randomUUID().slice(0, 8)))())
+  return kannaTaskId(deps.newId())
 }
 
 const NEEDS_ID_GUIDANCE = "needs takes the id values task_create returned (form k:xxxxxxxx), not positions. Create a task before another task's needs can name it, so create dependencies one at a time, not in one parallel batch."
@@ -275,7 +279,7 @@ export async function noteChatTask(
   await deps.appendEvents([{
     ...baseEvent(deps),
     type: "chat_task_note",
-    noteId: (deps.newId ?? (() => crypto.randomUUID().slice(0, 8)))(),
+    noteId: deps.newId(),
     taskId: input.taskId ?? null,
     noteKind: input.kind,
     text,
@@ -289,16 +293,18 @@ export type ClaimResult =
   | { kind: "blocked"; detail: string }
   | { kind: "exhausted" }
 
+type ClaimDecision =
+  | { kind: "claimed"; taskId: string }
+  | { kind: "waiting"; leased: readonly ChatTaskRecord[] }
+  | { kind: "blocked"; detail: string }
+  | { kind: "exhausted" }
+
 export async function claimChatTask(deps: ChatTaskToolDeps): Promise<ClaimResult> {
   const ctx = scheduleContext(deps)
   const requireWorktree = deps.requireWorktree()
-  const claimId = (deps.newId ?? (() => crypto.randomUUID().slice(0, 8)))()
-  const decided: ClaimResult["kind"][] = []
-  const claimedIds: string[] = []
-  const waitingRows: ChatTaskRecord[][] = []
-  const blockedDetails: string[] = []
+  const claimId = deps.newId()
 
-  await deps.decide(ctx, (projection) => {
+  const decision = await deps.decide<ClaimDecision>(ctx, (projection) => {
     const events: ChatTaskEvent[] = []
     const reclaimable = projection.tasks.filter(
       (task) => task.status === "in_progress" && leaseIsStale(task, ctx) && task.claimId !== null,
@@ -320,29 +326,29 @@ export async function claimChatTask(deps: ChatTaskToolDeps): Promise<ClaimResult
         : task,
     )
     const outcome = selectClaimableTask(live, ctx, { requireWorktree })
-    decided.push(outcome.kind === "claimable" ? "claimed" : outcome.kind)
-    if (outcome.kind === "waiting") waitingRows.push([...outcome.leased])
+    if (outcome.kind === "claimable") {
+      events.push({ ...baseEvent(deps), type: "chat_task_claimed", taskId: outcome.task.id, claimId })
+      return { events, result: { kind: "claimed", taskId: outcome.task.id } }
+    }
+    if (outcome.kind === "waiting") return { events, result: { kind: "waiting", leased: outcome.leased } }
     if (outcome.kind === "blocked") {
       const detail = describeProblems(outcome.problems)
-      blockedDetails.push(detail.length > 0 ? detail : `blocked: ${outcome.blockedIds.join(", ")}`)
+      return {
+        events,
+        result: { kind: "blocked", detail: detail.length > 0 ? detail : `blocked: ${outcome.blockedIds.join(", ")}` },
+      }
     }
-    if (outcome.kind === "claimable") {
-      claimedIds.push(outcome.task.id)
-      events.push({ ...baseEvent(deps), type: "chat_task_claimed", taskId: outcome.task.id, claimId })
-    }
-    return events
+    return { events, result: { kind: "exhausted" } }
   })
 
-  const outcomeKind = decided[0] ?? "exhausted"
-  if (outcomeKind === "waiting") {
-    const after = deps.project(scheduleContext(deps))
-    return { kind: "waiting", leased: (waitingRows[0] ?? []).map((task) => viewOf(task, after.tasks, after)) }
-  }
-  if (outcomeKind === "blocked") return { kind: "blocked", detail: blockedDetails[0] ?? "" }
-  if (outcomeKind !== "claimed") return { kind: "exhausted" }
+  if (decision.kind === "blocked") return { kind: "blocked", detail: decision.detail }
+  if (decision.kind === "exhausted") return { kind: "exhausted" }
 
   const after = deps.project(scheduleContext(deps))
-  const claimed = after.tasks.find((task) => task.id === (claimedIds[0] ?? ""))
+  if (decision.kind === "waiting") {
+    return { kind: "waiting", leased: decision.leased.map((task) => viewOf(task, after.tasks, after)) }
+  }
+  const claimed = after.tasks.find((task) => task.id === decision.taskId)
   if (!claimed) return { kind: "exhausted" }
   return { kind: "claimed", task: viewOf(claimed, after.tasks, after), claimId }
 }

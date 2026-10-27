@@ -131,6 +131,7 @@ function createFakeStore() {
       return null
     },
     async removeQueuedMessage() {},
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {},
   }
 }

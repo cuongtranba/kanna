@@ -6,10 +6,9 @@ import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 
 export interface AppendSubagentDeps {
   readonly chatsById: Map<string, ChatRecord>
-  readonly turnsLogPath: string
   readonly dataDir: string
   applyEvent: (event: SubagentRunEvent) => void
-  enqueueDiskAppend: (filePath: string, payload: string) => void
+  persistDetached: (event: SubagentRunEvent) => void
 }
 
 export type SubagentRunMap = Map<string, SubagentRunSnapshot>
@@ -194,5 +193,5 @@ export async function appendSubagentEvent(
     }
   }
   deps.applyEvent(effectiveEvent)
-  deps.enqueueDiskAppend(deps.turnsLogPath, `${JSON.stringify(effectiveEvent)}\n`)
+  deps.persistDetached(effectiveEvent)
 }

@@ -1,4 +1,3 @@
-import path from "node:path"
 import type {
   ChatHistoryPage,
   ContextWindowUsageSnapshot,
@@ -12,13 +11,16 @@ import type { ChatRecord, StoreState } from "./events"
 import { cloneTranscriptEntries } from "./events"
 import {
   coalesceContextWindowUpdates,
-  decodeCursor,
+  decodeHistoryCursor,
+  encodeHistoryCursor,
   fitLimitToByteBudget,
   getHistorySnapshot,
   getMessagesPageFromEntries,
   MIN_RECENT_PAGE_ENTRIES,
   RECENT_PAGE_BYTE_BUDGET,
-} from "./event-store-helpers"
+} from "./history-paging"
+import type { StoreLayout } from "./event-logs"
+import type { SeenMessageIds } from "./seen-message-ids"
 
 
 export function estimateTranscriptBytes(entries: readonly TranscriptEntry[]): number {
@@ -141,18 +143,13 @@ interface CachedTail {
 
 export interface MessageReadDeps {
   readonly storage: StorageBackend
-  readonly transcriptsDir: string
+  readonly layout: StoreLayout
   readonly transcriptCache: TranscriptCache
   readonly legacyMessagesByChatId: Map<string, TranscriptEntry[]>
-  readonly seenMessageIdsByChatId: Map<string, Set<string>>
+  readonly seenMessageIds: SeenMessageIds
   readonly queuedMessagesByChatId: StoreState["queuedMessagesByChatId"]
   readonly chatsById: Map<string, ChatRecord>
   listPendingToolRequests: (chatId: string) => ToolRequest[]
-}
-
-
-function transcriptPath(deps: MessageReadDeps, chatId: string): string {
-  return path.join(deps.transcriptsDir, `${chatId}.jsonl`)
 }
 
 
@@ -210,7 +207,7 @@ export function readTranscriptTail(
   byteBudget?: number,
 ): TranscriptTailResult {
   const { storage } = deps
-  const tPath = transcriptPath(deps, chatId)
+  const tPath = deps.layout.transcriptPath(chatId)
   if (!storage.existsSync(tPath)) {
     return { entries: [], lineOffsets: [], reachedStart: true }
   }
@@ -236,23 +233,12 @@ export function readTranscriptTail(
   }
 }
 
-function decodeByteCursor(cursor: string): number | null {
-  if (!cursor.startsWith("byte:")) return null
-  const value = Number.parseInt(cursor.slice("byte:".length), 10)
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error("Invalid history cursor")
-  }
-  return value
+export function ensureSeenIdsSeeded(deps: MessageReadDeps, chatId: string): void {
+  if (!deps.transcriptCache.isSeeded(chatId)) seedSeenMessageIdsFromTail(deps, chatId)
 }
 
 function seedFullTranscript(deps: MessageReadDeps, chatId: string, entries: TranscriptEntry[]): void {
-  const seen = getSeenMessageIds(deps, chatId)
-  for (const entry of entries) {
-    const mid = entry.messageId
-    if (typeof mid === "string" && mid.length > 0) {
-      seen.add(mid)
-    }
-  }
+  for (const entry of entries) deps.seenMessageIds.record(chatId, entry)
   deps.transcriptCache.set(chatId, entries)
   deps.transcriptCache.markSeeded(chatId)
 }
@@ -263,17 +249,13 @@ export function seedSeenMessageIdsFromTail(deps: MessageReadDeps, chatId: string
     seedFullTranscript(deps, chatId, tail.entries)
     return
   }
-  const seen = getSeenMessageIds(deps, chatId)
-  for (const entry of tail.entries) {
-    const mid = entry.messageId
-    if (typeof mid === "string" && mid.length > 0) seen.add(mid)
-  }
+  for (const entry of tail.entries) deps.seenMessageIds.record(chatId, entry)
   deps.transcriptCache.markSeeded(chatId)
 }
 
 function readEntryAtOffset(deps: MessageReadDeps, chatId: string, offset: number): TranscriptEntry | null {
   const { storage } = deps
-  const tPath = transcriptPath(deps, chatId)
+  const tPath = deps.layout.transcriptPath(chatId)
   const fileSize = storage.sizeSync(tPath)
   const end = Math.min(offset + 1024 * 1024, fileSize)
   const buf = storage.readSliceSync(tPath, offset, end)
@@ -302,15 +284,14 @@ function pageFromTail(
   const startIdx = Math.max(0, coalesced.length - effectiveLimit)
   const pageEntries = coalesced.slice(startIdx)
   const hasOlder = !tail.reachedStart || startIdx > 0
-  let olderCursor: string | null = null
+  let olderOffset: number | undefined
   const first = pageEntries[0]
   if (hasOlder && first) {
-    const rawIdx = tail.entries.indexOf(first)
-    const offset = tail.lineOffsets[rawIdx]
-    olderCursor = offset === undefined ? null : `byte:${offset}`
-  } else if (hasOlder && tail.lineOffsets.length > 0) {
-    olderCursor = `byte:${tail.lineOffsets[0]}`
+    olderOffset = tail.lineOffsets[tail.entries.indexOf(first)]
+  } else if (hasOlder) {
+    olderOffset = tail.lineOffsets[0]
   }
+  const olderCursor = olderOffset === undefined ? null : encodeHistoryCursor({ kind: "byte", offset: olderOffset })
   return {
     messages: cloneTranscriptEntries(pageEntries),
     hasOlder,
@@ -325,7 +306,7 @@ export function getRecentMessagesPageTail(
   chunkBytes?: number,
 ): ChatHistoryPage {
   const { storage } = deps
-  const tPath = transcriptPath(deps, chatId)
+  const tPath = deps.layout.transcriptPath(chatId)
   const fileSize = storage.existsSync(tPath) ? storage.sizeSync(tPath) : null
 
   const cached = fileSize === null ? undefined : deps.transcriptCache.getTail(chatId, fileSize, limit)
@@ -364,7 +345,7 @@ function scanTranscriptBackward<T>(
     return fromEntries(getMessagesView(deps, chatId))
   }
 
-  const fileSize = deps.storage.sizeSync(transcriptPath(deps, chatId))
+  const fileSize = deps.storage.sizeSync(deps.layout.transcriptPath(chatId))
   let windowEnd = fileSize
   let chunkBytes = USAGE_SCAN_FIRST_CHUNK_BYTES
   for (;;) {
@@ -411,16 +392,6 @@ export function getLatestClaudeCumulativeCostUsd(
 }
 
 
-export const MAX_SEEN_MESSAGE_IDS = 2000
-export function getSeenMessageIds(deps: MessageReadDeps, chatId: string): Set<string> {
-  let set = deps.seenMessageIdsByChatId.get(chatId)
-  if (!set) {
-    set = new Set<string>()
-    deps.seenMessageIdsByChatId.set(chatId, set)
-  }
-  return set
-}
-
 export function loadTranscriptFromDisk(
   deps: MessageReadDeps,
   chatId: string,
@@ -432,7 +403,7 @@ export function loadTranscriptWithBytes(
   deps: MessageReadDeps,
   chatId: string,
 ): { entries: TranscriptEntry[]; bytes: number } {
-  const tPath = transcriptPath(deps, chatId)
+  const tPath = deps.layout.transcriptPath(chatId)
   if (!deps.storage.existsSync(tPath)) {
     return { entries: [], bytes: 0 }
   }
@@ -441,16 +412,12 @@ export function loadTranscriptWithBytes(
   if (!text.trim()) return { entries: [], bytes: 0 }
 
   const entries: TranscriptEntry[] = []
-  const seen = getSeenMessageIds(deps, chatId)
   for (const rawLine of text.split("\n")) {
     const line = rawLine.trim()
     if (!line) continue
-    const entry: TranscriptEntry & { messageId?: string } = JSON.parse(line)
+    const entry: TranscriptEntry = JSON.parse(line)
     entries.push(entry)
-    const mid = entry.messageId
-    if (typeof mid === "string" && mid.length > 0) {
-      seen.add(mid)
-    }
+    deps.seenMessageIds.record(chatId, entry)
   }
   return { entries, bytes: text.length }
 }
@@ -523,13 +490,7 @@ export function getRecentMessagesPage(
   }
 
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
-  const page = getMessagesPageFromEntries(entries, fitLimitToByteBudget(entries, limit))
-
-  return {
-    messages: page.entries,
-    hasOlder: page.hasOlder,
-    olderCursor: page.olderCursor,
-  }
+  return getMessagesPageFromEntries(entries, fitLimitToByteBudget(entries, limit))
 }
 
 export function getMessagesPageBefore(
@@ -542,21 +503,14 @@ export function getMessagesPageBefore(
     return { messages: [], hasOlder: false, olderCursor: null }
   }
 
-  const byteOffset = decodeByteCursor(beforeCursor)
-  if (byteOffset !== null) {
-    const tail = readTranscriptTail(deps, chatId, limit, byteOffset)
-    return pageFromTail(tail, limit, readEntryAtOffset(deps, chatId, byteOffset))
+  const cursor = decodeHistoryCursor(beforeCursor)
+  if (cursor.kind === "byte") {
+    const tail = readTranscriptTail(deps, chatId, limit, cursor.offset)
+    return pageFromTail(tail, limit, readEntryAtOffset(deps, chatId, cursor.offset))
   }
 
-  const beforeIndex = decodeCursor(beforeCursor)
   const entries = coalesceContextWindowUpdates(getMessagesView(deps, chatId))
-  const page = getMessagesPageFromEntries(entries, limit, beforeIndex)
-
-  return {
-    messages: page.entries,
-    hasOlder: page.hasOlder,
-    olderCursor: page.olderCursor,
-  }
+  return getMessagesPageFromEntries(entries, limit, cursor.index)
 }
 
 export function getRecentChatHistory(
@@ -577,14 +531,7 @@ export function getRecentChatHistory(
   const merged = [...page.messages, ...pendingEntries]
   return {
     messages: merged,
-    history: getHistorySnapshot(
-      {
-        entries: merged,
-        hasOlder: page.hasOlder,
-        olderCursor: page.olderCursor,
-      },
-      recentLimit,
-    ),
+    history: getHistorySnapshot(page, recentLimit),
   }
 }
 

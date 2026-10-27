@@ -16,7 +16,7 @@ import type {
   Subagent,
 } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
-import { EventStore } from "./event-store"
+import { EventStore, type TurnOutcome } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
@@ -242,6 +242,7 @@ export class AgentCoordinator {
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly cronSkipCoalescer = new CronSkipCoalescer()
   private readonly pendingCronOutcomes = new Set<Promise<void>>()
+  private readonly unsubscribeTurnTerminal: () => void
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
   private readonly _turnEndGuard: TurnEndGuard
@@ -331,26 +332,9 @@ export class AgentCoordinator {
       createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
     )
     const onTurnOutcome = args.onTurnOutcome
-    this.store.onTurnTerminal = (chatId, outcome) => {
-      onTurnOutcome?.(chatId, outcome)
-      const active = this.activeTurns.get(chatId)
-      if (active) {
-        recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
-          provider: active.provider,
-          model: active.model,
-          outcome,
-        })
-        recordTurnSpend(active)
-      }
-      if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
-      const tag = active?.cronRun
-      if (!tag) return
-      const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
-        log.error("[kanna/cron] failed to record run outcome:", String(error))
-      })
-      this.pendingCronOutcomes.add(p)
-      p.finally(() => this.pendingCronOutcomes.delete(p))
-    }
+    this.unsubscribeTurnTerminal = this.store.subscribeTurnTerminal((chatId, outcome) => {
+      this.handleTurnTerminal(chatId, outcome, onTurnOutcome)
+    })
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
     this.openrouterFirstEntryTimeoutMs =
       args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
@@ -455,7 +439,33 @@ export class AgentCoordinator {
     this.reportBackgroundError = report
   }
 
+  private handleTurnTerminal(
+    chatId: string,
+    outcome: TurnOutcome,
+    onTurnOutcome: AgentCoordinatorArgs["onTurnOutcome"],
+  ): void {
+    onTurnOutcome?.(chatId, outcome)
+    const active = this.activeTurns.get(chatId)
+    if (active) {
+      recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
+        provider: active.provider,
+        model: active.model,
+        outcome,
+      })
+      recordTurnSpend(active)
+    }
+    if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
+    const tag = active?.cronRun
+    if (!tag) return
+    const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
+      log.error("[kanna/cron] failed to record run outcome:", String(error))
+    })
+    this.pendingCronOutcomes.add(p)
+    p.finally(() => this.pendingCronOutcomes.delete(p))
+  }
+
   async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
+    this.unsubscribeTurnTerminal()
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
     const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
       const closed = session.session.closed
@@ -975,9 +985,9 @@ export class AgentCoordinator {
       },
       project: (chatId, ctx) => this.store.getChatTasks(chatId, ctx),
       decide: async (chatId, ctx, fn) => {
-        const decided = await this.store.decideChatTaskEvents(chatId, ctx, fn)
-        if (decided.length > 0) this.emitStateChange(chatId)
-        return decided
+        const { events, result } = await this.store.decideChatTaskEvents(chatId, ctx, fn)
+        if (events.length > 0) this.emitStateChange(chatId)
+        return result
       },
       mergeBranch: (workdir, branch) => mergeLoopBranch(workdir, branch),
     }
