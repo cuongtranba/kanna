@@ -15,6 +15,7 @@ import {
   type FieldOption,
   type FieldValue,
 } from "./types"
+import type { FieldDefInput, FieldOptionInput } from "./types.schema"
 
 function decodeStringArray(value: JsonValue): string[] {
   if (!Array.isArray(value)) return []
@@ -72,52 +73,42 @@ export function decodeFieldDefs(value: JsonValue): FieldDef[] {
 }
 
 
-export function decodeFieldDefsForWrite(value: JsonValue): FieldDef[] | null {
-  if (!Array.isArray(value)) return null
-  const fields: FieldDef[] = []
-  const ids = new Set<string>()
-  for (const entry of value) {
-    const field = decodeFieldDefForWrite(entry)
-    if (!field || ids.has(field.id)) return null
-    ids.add(field.id)
-    fields.push(field)
-  }
-  return fields
-}
-
-function hasValue(value: JsonValue | undefined): boolean {
-  return value !== undefined && value !== null
-}
-
 function offersOptions(kind: FieldKind): boolean {
   return kind === "select" || kind === "multiselect"
 }
 
-function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
-  const field = decodeFieldDef(value)
-  if (!field || !isJsonObject(value)) return null
-  if (field.id === "" || field.label.trim() === "") return null
-  if (value.required !== undefined && typeof value.required !== "boolean") return null
-  if (!offersOptions(field.kind)) return hasValue(value.options) ? null : { ...field, options: null }
-  if (!Array.isArray(value.options)) return null
-
-  const options: FieldOption[] = []
-  const optionIds = new Set<string>()
-  for (const entry of value.options) {
-    const option = decodeFieldOptionForWrite(entry)
-    if (!option || optionIds.has(option.id)) return null
-    optionIds.add(option.id)
-    options.push(option)
+function validateFieldOptionsForWrite(options: readonly FieldOptionInput[]): FieldOption[] | null {
+  const checked: FieldOption[] = []
+  const ids = new Set<string>()
+  for (const option of options) {
+    if (option.id === "" || option.label.trim() === "" || ids.has(option.id)) return null
+    ids.add(option.id)
+    checked.push({ id: option.id, label: option.label, colorToken: option.colorToken ?? null })
   }
-  return { ...field, options }
+  return checked
 }
 
-function decodeFieldOptionForWrite(value: JsonValue): FieldOption | null {
-  const option = decodeFieldOption(value)
-  if (!option || !isJsonObject(value)) return null
-  if (option.id === "" || option.label.trim() === "") return null
-  if (option.colorToken === null && hasValue(value.colorToken)) return null
-  return option
+function validateFieldDefForWrite(field: FieldDefInput): FieldDef | null {
+  if (field.id === "" || field.label.trim() === "") return null
+  const required = field.required === true
+  if (!offersOptions(field.kind)) {
+    return field.options == null ? { id: field.id, label: field.label, kind: field.kind, options: null, required } : null
+  }
+  if (!field.options) return null
+  const options = validateFieldOptionsForWrite(field.options)
+  return options ? { id: field.id, label: field.label, kind: field.kind, options, required } : null
+}
+
+export function validateFieldDefsForWrite(fields: readonly FieldDefInput[]): FieldDef[] | null {
+  const checked: FieldDef[] = []
+  const ids = new Set<string>()
+  for (const entry of fields) {
+    const field = validateFieldDefForWrite(entry)
+    if (!field || ids.has(field.id)) return null
+    ids.add(field.id)
+    checked.push(field)
+  }
+  return checked
 }
 
 type DecodeStrictness = "lenient" | "strict"

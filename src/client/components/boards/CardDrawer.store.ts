@@ -1,7 +1,7 @@
-import { create } from "zustand"
+import { createScopedStore } from "../../lib/createScopedStore"
 import type { CardDetailView } from "../../../shared/boards/start-work"
 
-interface CardDrawerState {
+export interface CardDrawerState {
   detail: CardDetailView | null
   error: string | null
   draft: string
@@ -21,10 +21,9 @@ interface CardDrawerState {
   endStartWork(note: string | null): void
   beginCleanup(): void
   endCleanup(): void
-  reset(): void
 }
 
-export const useCardDrawerStore = create<CardDrawerState>()((set, get) => ({
+export const CardDrawerStore = createScopedStore<void, CardDrawerState>("CardDrawer", () => (set, get) => ({
   detail: null,
   error: null,
   draft: "",
@@ -49,15 +48,4 @@ export const useCardDrawerStore = create<CardDrawerState>()((set, get) => ({
   endStartWork: (note) => set({ startingWork: false, startWorkNote: note }),
   beginCleanup: () => set({ resolvingCleanup: true, error: null }),
   endCleanup: () => set({ resolvingCleanup: false }),
-  reset: () =>
-    set({
-      detail: null,
-      error: null,
-      draft: "",
-      editingFieldId: null,
-      fieldDraft: "",
-      startingWork: false,
-      startWorkNote: null,
-      resolvingCleanup: false,
-    }),
 }))

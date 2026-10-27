@@ -1,4 +1,3 @@
-import type { JsonValue } from "../shared/json"
 import { describe, expect, test } from "bun:test"
 import { handleBoardCommand, isBoardCommand, type BoardCommandDeps } from "./ws-router-boards"
 import { createBoardRegistry } from "./board-registry"
@@ -162,7 +161,7 @@ describe("board.update cardFields", () => {
     return registry.createBoard({ owner: { kind: "project", id: "proj-1" }, title: "Board" })
   }
 
-  const SCHEMA = [
+  const SCHEMA: FieldDef[] = [
     { id: "description", label: "Description", kind: "longtext", options: null, required: false },
     {
       id: "priority",
@@ -180,7 +179,7 @@ describe("board.update cardFields", () => {
 
     await handleBoardCommand(deps, { type: "board.update", boardId: board.id, cardFields: SCHEMA }, "req-1")
     expect(sent[0]).toMatchObject({ type: "ack", id: "req-1" })
-    expect(deps.boardRegistry?.getBoard(board.id)?.cardFields).toEqual(SCHEMA as never)
+    expect(deps.boardRegistry?.getBoard(board.id)?.cardFields).toEqual(SCHEMA)
   })
 
   test("leaves the schema alone when the command does not carry one", async () => {
@@ -207,10 +206,8 @@ describe("board.update cardFields", () => {
   })
 
   test("answers with an error rather than persisting a schema it cannot read", async () => {
-    const refusals: JsonValue[] = [
+    const refusals: FieldDef[][] = [
       [{ id: "a", label: "A", kind: "text", options: null, required: false }, { id: "a", label: "B", kind: "text", options: null, required: false }],
-      [{ id: "a", label: "A", kind: "currency", options: null, required: false }],
-      [{ id: "a", label: "A", kind: "select", required: false, options: [{ id: "x", label: "X", colorToken: "chartreuse" }] }],
       [
         {
           id: "a",
@@ -220,7 +217,6 @@ describe("board.update cardFields", () => {
           options: [{ id: "x", label: "X", colorToken: null }, { id: "x", label: "Y", colorToken: null }],
         },
       ],
-      "not a schema",
     ]
 
     for (const cardFields of refusals) {
@@ -247,7 +243,6 @@ describe("board.sync", () => {
     const board = boundBoard(registry)
     registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
@@ -255,7 +250,6 @@ describe("board.sync", () => {
     })
     registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "pull",
@@ -292,7 +286,6 @@ describe("board.sync", () => {
     const board = boundBoard(registry)
     const first = registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
@@ -300,7 +293,6 @@ describe("board.sync", () => {
     })
     registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "both",

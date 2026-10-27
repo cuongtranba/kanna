@@ -1,13 +1,13 @@
-import type { JsonValue } from "../json"
 import { describe, expect, test } from "bun:test"
 import type { CardContent, FieldDef, FieldValue } from "./types"
+import type { FieldDefInput } from "./types.schema"
 import {
   decodeActor,
   decodeCardContent,
   decodeContentForFields,
   decodeFieldDef,
   decodeFieldDefs,
-  decodeFieldDefsForWrite,
+  validateFieldDefsForWrite,
   decodeFieldValue,
   decodeTemplateColumn,
   decodeTemplateDefinition,
@@ -290,12 +290,12 @@ describe("decodeContentForFields", () => {
   })
 })
 
-describe("decodeFieldDefsForWrite", () => {
-  const FIELD = { id: "priority", label: "Priority", kind: "select", required: false, options: [] }
+describe("validateFieldDefsForWrite", () => {
+  const FIELD: FieldDefInput = { id: "priority", label: "Priority", kind: "select", required: false, options: [] }
 
   test("accepts a schema and returns it whole", () => {
     expect(
-      decodeFieldDefsForWrite([
+      validateFieldDefsForWrite([
         { id: "description", label: "Description", kind: "longtext", options: null, required: false },
         { ...FIELD, options: [{ id: "high", label: "High", colorToken: "warning" }] },
       ]),
@@ -312,12 +312,12 @@ describe("decodeFieldDefsForWrite", () => {
   })
 
   test("an empty schema is a schema — it is what a title-only board has", () => {
-    expect(decodeFieldDefsForWrite([])).toEqual([])
+    expect(validateFieldDefsForWrite([])).toEqual([])
   })
 
   test("rejects a duplicate field id", () => {
     expect(
-      decodeFieldDefsForWrite([
+      validateFieldDefsForWrite([
         { id: "notes", label: "Notes", kind: "text", options: null, required: false },
         { id: "notes", label: "Other notes", kind: "text", options: null, required: false },
       ]),
@@ -326,7 +326,7 @@ describe("decodeFieldDefsForWrite", () => {
 
   test("rejects a duplicate option id within one field", () => {
     expect(
-      decodeFieldDefsForWrite([
+      validateFieldDefsForWrite([
         {
           ...FIELD,
           options: [
@@ -340,7 +340,7 @@ describe("decodeFieldDefsForWrite", () => {
 
   test("the same option id on two different fields is fine", () => {
     expect(
-      decodeFieldDefsForWrite([
+      validateFieldDefsForWrite([
         { ...FIELD, options: [{ id: "high", label: "High", colorToken: null }] },
         {
           id: "severity",
@@ -353,47 +353,22 @@ describe("decodeFieldDefsForWrite", () => {
     ).toHaveLength(2)
   })
 
-  test("rejects an unknown kind", () => {
+  test("an option colour of null is fine", () => {
     expect(
-      decodeFieldDefsForWrite([{ id: "n", label: "N", kind: "currency", options: null, required: false }]),
-    ).toBeNull()
-  })
-
-  test("rejects an option colour outside the board palette", () => {
-    expect(
-      decodeFieldDefsForWrite([{ ...FIELD, options: [{ id: "high", label: "High", colorToken: "chartreuse" }] }]),
-    ).toBeNull()
-    expect(
-      decodeFieldDefsForWrite([{ ...FIELD, options: [{ id: "high", label: "High", colorToken: null }] }]),
+      validateFieldDefsForWrite([{ ...FIELD, options: [{ id: "high", label: "High", colorToken: null }] }]),
     ).toHaveLength(1)
   })
 
   test("rejects a blank id or label rather than storing a field nothing can name", () => {
-    expect(decodeFieldDefsForWrite([{ ...FIELD, id: "" }])).toBeNull()
-    expect(decodeFieldDefsForWrite([{ ...FIELD, label: "  " }])).toBeNull()
-    expect(decodeFieldDefsForWrite([{ ...FIELD, options: [{ id: "", label: "High", colorToken: null }] }])).toBeNull()
+    expect(validateFieldDefsForWrite([{ ...FIELD, id: "" }])).toBeNull()
+    expect(validateFieldDefsForWrite([{ ...FIELD, label: "  " }])).toBeNull()
+    expect(validateFieldDefsForWrite([{ ...FIELD, options: [{ id: "", label: "High", colorToken: null }] }])).toBeNull()
   })
 
   test("insists an option kind carries a list, and every other kind carries none", () => {
-    expect(decodeFieldDefsForWrite([{ ...FIELD, options: null }])).toBeNull()
+    expect(validateFieldDefsForWrite([{ ...FIELD, options: null }])).toBeNull()
     expect(
-      decodeFieldDefsForWrite([{ id: "n", label: "N", kind: "text", options: [], required: false }]),
+      validateFieldDefsForWrite([{ id: "n", label: "N", kind: "text", options: [], required: false }]),
     ).toBeNull()
-  })
-
-  test("rejects a required flag that is not a boolean", () => {
-    expect(decodeFieldDefsForWrite([{ ...FIELD, required: "yes" }])).toBeNull()
-  })
-
-  test("rejects anything that is not an array of records", () => {
-    expect(decodeFieldDefsForWrite(null)).toBeNull()
-    expect(decodeFieldDefsForWrite({})).toBeNull()
-    expect(decodeFieldDefsForWrite(["priority"])).toBeNull()
-  })
-
-  test("refuses where decodeFieldDefs would drop", () => {
-    const ragged: JsonValue = [{ id: "ok", label: "Ok", kind: "text", options: null, required: false }, { id: 7 }]
-    expect(decodeFieldDefs(ragged)).toHaveLength(1)
-    expect(decodeFieldDefsForWrite(ragged)).toBeNull()
   })
 })

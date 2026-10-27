@@ -4,11 +4,12 @@ import { Button } from "../ui/button"
 import { Textarea } from "../ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { cn } from "../../lib/utils"
-import { useCardDrawerStore } from "./CardDrawer.store"
+import { CardDrawerStore } from "./CardDrawer.store"
 import { CardDependencies, type BlockerCandidate } from "./CardDependencies"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { chatDotBgClass, chatStatusIndicator } from "../../lib/chatStatusIndicator"
 import { statusLabel } from "../../lib/statusLabel"
+import { prefixedSelectValue } from "../../lib/selectValue"
 import { NO_BOARD_CHAT_FACTS, type BoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { COLUMN_DOT_CLASS } from "../../lib/boards/columnStyle"
 import { authorLabel, describeStartWork, workDetailRows } from "../../lib/boards/cardDrawerText"
@@ -30,6 +31,7 @@ import type {
   FieldValue,
 } from "../../../shared/boards/types"
 import { startWorkLabel } from "../../../shared/boards/start-work"
+import { cardText, isGithubMirroredField } from "../../../shared/boards/well-known-fields"
 import {
   describeWorktreeContents,
   discardBlockedReason,
@@ -64,15 +66,12 @@ const NO_FIELDS: readonly FieldDef[] = []
 const NO_CONTENT: CardContent = {}
 const NO_BLOCKERS: readonly CardBlocker[] = []
 
-const GITHUB_SYNCED_FIELDS = new Set(["labels", "assignee"])
-
 function chatLinksOf(links: readonly CardLink[]): CardLink[] {
   return links.filter((entry) => entry.kind === "chat").sort((a, b) => b.createdAt - a.createdAt)
 }
 
 function IssueIdentityRow({ externalRef, content }: { externalRef: string; content: CardContent }) {
-  const urlEntry = content.externalUrl
-  const url = urlEntry?.kind === "url" ? urlEntry.value : null
+  const url = cardText(content, "externalUrl")
   return (
     <div className="mt-1 flex items-center gap-1.5">
       <span className="font-mono text-xs tabular-nums text-muted-foreground">#{externalRef}</span>
@@ -91,7 +90,15 @@ function IssueIdentityRow({ externalRef, content }: { externalRef: string; conte
   )
 }
 
-export function CardDrawer({
+export function CardDrawer(props: CardDrawerProps) {
+  return (
+    <CardDrawerStore.Provider key={props.cardId} init={undefined}>
+      <CardDrawerBody {...props} />
+    </CardDrawerStore.Provider>
+  )
+}
+
+function CardDrawerBody({
   cardId,
   socket,
   chatFacts,
@@ -100,10 +107,11 @@ export function CardDrawer({
   onClose,
   onChanged,
 }: CardDrawerProps) {
-  const detail = useCardDrawerStore((state) => state.detail)
-  const error = useCardDrawerStore((state) => state.error)
-  const draft = useCardDrawerStore((state) => state.draft)
-  const { setDetail, setError, setDraft, reset } = useCardDrawerStore.getState()
+  const drawer = CardDrawerStore.useScopedStoreApi()
+  const detail = CardDrawerStore.useScopedStore((state) => state.detail)
+  const error = CardDrawerStore.useScopedStore((state) => state.error)
+  const draft = CardDrawerStore.useScopedStore((state) => state.draft)
+  const { setDetail, setError, setDraft } = drawer.getState()
 
   const load = useCallback(() => {
     void socket
@@ -115,12 +123,11 @@ export function CardDrawer({
   }, [cardId, setDetail, setError, socket])
 
   useEffect(() => {
-    reset()
     load()
-  }, [load, reset])
+  }, [load])
 
   const handleComment = useCallback(() => {
-    const body = useCardDrawerStore.getState().draft.trim()
+    const body = drawer.getState().draft.trim()
     if (body === "") return
     setDraft("")
     void socket
@@ -132,7 +139,7 @@ export function CardDrawer({
       .catch(onRejected((error) => {
         setError(error.message)
       }))
-  }, [cardId, load, onChanged, setDraft, setError, socket])
+  }, [cardId, load, onChanged, setDraft, setError, socket, drawer])
 
   const handleDependencyChanged = useCallback(() => {
     load()
@@ -152,37 +159,37 @@ export function CardDrawer({
   }, [cardId, onChanged, onClose, setError, socket])
 
   const handleStartWork = useCallback(() => {
-    useCardDrawerStore.getState().beginStartWork()
+    drawer.getState().beginStartWork()
     void socket
       .command({ type: "board.card.startWork", cardId })
       .then((result) => {
         openChatTab(result.chatId)
-        useCardDrawerStore.getState().endStartWork(describeStartWork(result))
+        drawer.getState().endStartWork(describeStartWork(result))
         load()
         onChanged?.()
       })
       .catch(onRejected((error) => {
-        useCardDrawerStore.getState().endStartWork(null)
+        drawer.getState().endStartWork(null)
         setError(error.message)
       }))
-  }, [cardId, load, onChanged, setError, socket])
+  }, [cardId, load, onChanged, setError, socket, drawer])
 
   const handleCleanup = useCallback(
     (decision: CleanupDecision) => {
-      useCardDrawerStore.getState().beginCleanup()
+      drawer.getState().beginCleanup()
       void socket
         .command({ type: "board.card.resolveWorktree", cardId, decision })
         .then(() => {
-          useCardDrawerStore.getState().endCleanup()
+          drawer.getState().endCleanup()
           load()
           onChanged?.()
         })
         .catch(onRejected((error) => {
-          useCardDrawerStore.getState().endCleanup()
+          drawer.getState().endCleanup()
           setError(error.message)
         }))
     },
-    [cardId, load, onChanged, setError, socket],
+    [cardId, load, onChanged, setError, socket, drawer],
   )
 
   const handleMerge = useCallback(() => {
@@ -204,7 +211,7 @@ export function CardDrawer({
 
   const handleFieldCommit = useCallback(
     (fieldId: string, value: FieldValue | null) => {
-      const content = useCardDrawerStore.getState().detail?.card.content
+      const content = drawer.getState().detail?.card.content
       if (!content) return
       void socket
         .command({ type: "board.card.update", cardId, content: nextCardContent(content, fieldId, value) })
@@ -216,12 +223,12 @@ export function CardDrawer({
           setError(error.message)
         }))
     },
-    [cardId, load, onChanged, setError, socket],
+    [cardId, load, onChanged, setError, socket, drawer],
   )
 
-  const startingWork = useCardDrawerStore((state) => state.startingWork)
-  const startWorkNote = useCardDrawerStore((state) => state.startWorkNote)
-  const resolvingCleanup = useCardDrawerStore((state) => state.resolvingCleanup)
+  const startingWork = CardDrawerStore.useScopedStore((state) => state.startingWork)
+  const startWorkNote = CardDrawerStore.useScopedStore((state) => state.startWorkNote)
+  const resolvingCleanup = CardDrawerStore.useScopedStore((state) => state.resolvingCleanup)
 
   const card = detail?.card ?? null
   const startWork = detail?.startWork ?? null
@@ -235,7 +242,7 @@ export function CardDrawer({
   const githubCard =
     detail?.externalRef != null &&
     fields.length > 0 &&
-    fields.every((f) => GITHUB_SYNCED_FIELDS.has(f.id))
+    fields.every((f) => isGithubMirroredField(f.id))
 
   return (
     <aside
@@ -460,32 +467,33 @@ function OptionDot({ token }: { token: ColumnColorToken | null }) {
 const TEXT_INPUT_TYPE: Readonly<Record<string, string>> = { url: "url", number: "number", date: "date" }
 
 function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
-  const editing = useCardDrawerStore((state) => state.editingFieldId === field.id)
-  const draft = useCardDrawerStore((state) => state.fieldDraft)
+  const drawer = CardDrawerStore.useScopedStoreApi()
+  const editing = CardDrawerStore.useScopedStore((state) => state.editingFieldId === field.id)
+  const draft = CardDrawerStore.useScopedStore((state) => state.fieldDraft)
 
   const handleBegin = useCallback(() => {
-    useCardDrawerStore.getState().beginFieldEdit(field.id, fieldDraftText(field, value))
-  }, [field, value])
+    drawer.getState().beginFieldEdit(field.id, fieldDraftText(field, value))
+  }, [field, value, drawer])
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      useCardDrawerStore.getState().setFieldDraft(event.currentTarget.value)
+      drawer.getState().setFieldDraft(event.currentTarget.value)
     },
-    [],
+    [drawer],
   )
 
   const handleCommit = useCallback(() => {
-    const taken = useCardDrawerStore.getState().takeFieldDraft(field.id)
+    const taken = drawer.getState().takeFieldDraft(field.id)
     if (taken === null) return
     onCommit(field.id, parseFieldDraft(field, taken))
-  }, [field, onCommit])
+  }, [field, onCommit, drawer])
 
   const handleKey = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (event.key === "Escape") useCardDrawerStore.getState().cancelFieldEdit()
+      if (event.key === "Escape") drawer.getState().cancelFieldEdit()
       else if (event.key === "Enter" && field.kind !== "longtext") handleCommit()
     },
-    [field.kind, handleCommit],
+    [field.kind, handleCommit, drawer],
   )
 
   const focusControl = useCallback((element: HTMLInputElement | HTMLTextAreaElement | null) => {
@@ -571,22 +579,21 @@ function InlineFieldValue({ field, value, onCommit }: CardFieldProps) {
 
 const CLEAR_SELECTION = "c"
 
-function optionValue(optionId: string): string {
-  return `o:${optionId}`
-}
+const OPTION_VALUE = prefixedSelectValue("o")
 
 function SelectFieldValue({ field, value, onCommit }: CardFieldProps) {
   const optionId = selectedOptionId(value)
 
   const handleChange = useCallback(
     (chosen: string) => {
-      onCommit(field.id, chosen === CLEAR_SELECTION ? null : parseFieldDraft(field, chosen.slice(2)))
+      const picked = OPTION_VALUE.decode(chosen)
+      onCommit(field.id, picked === null ? null : parseFieldDraft(field, picked))
     },
     [field, onCommit],
   )
 
   return (
-    <Select value={optionId === null ? CLEAR_SELECTION : optionValue(optionId)} onValueChange={handleChange}>
+    <Select value={optionId === null ? CLEAR_SELECTION : OPTION_VALUE.encode(optionId)} onValueChange={handleChange}>
       <SelectTrigger
         aria-label={field.label}
         className="h-8 px-2 text-13 [&>span]:flex [&>span]:min-w-0 [&>span]:items-center [&>span]:gap-2"
@@ -596,7 +603,7 @@ function SelectFieldValue({ field, value, onCommit }: CardFieldProps) {
       <SelectContent>
         <SelectItem value={CLEAR_SELECTION}>{emptyHint(field)}</SelectItem>
         {optionsOf(field).map((option) => (
-          <SelectItem key={option.id} value={optionValue(option.id)}>
+          <SelectItem key={option.id} value={OPTION_VALUE.encode(option.id)}>
             <span className="flex items-center gap-2">
               <OptionDot token={option.colorToken} />
               {option.label}

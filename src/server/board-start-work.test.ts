@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { createBoardRegistry, type BoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import type { BoardStore } from "./board-store"
-import { cardWorktreeDir, startWork, startWorkView, type StartWorkDeps } from "./board-start-work"
+import { cardBranchName, cardWorktreeDir, startWork, startWorkView, type StartWorkDeps } from "./board-start-work"
 import type { BoardTemplateDefinition } from "../shared/boards/types"
 import type { GitWorktree, StackBinding } from "../shared/types"
 import type { AddWorktreeOpts } from "./worktree-store.adapter"
@@ -103,6 +103,35 @@ function seed(definition = DEFINITION) {
 
 beforeEach(() => {
   seed()
+})
+
+describe("cardBranchName", () => {
+  test("derives a readable branch from an external reference", () => {
+    expect(cardBranchName("abcd1234-ef", "Fix: login redirect loop", "412")).toBe(
+      "card/412-fix-login-redirect-loop",
+    )
+  })
+
+  test("falls back to a short card id when there is no external reference", () => {
+    expect(cardBranchName("abcd1234-efgh", "Add telemetry", null)).toBe("card/abcd1234-add-telemetry")
+  })
+
+  test("never emits a trailing or doubled separator", () => {
+    const branch = cardBranchName("abcd1234", "  Weird   ***  title!!  ", "7")
+    expect(branch).toBe("card/7-weird-title")
+    expect(branch.endsWith("-")).toBe(false)
+    expect(branch).not.toContain("--")
+  })
+
+  test("truncates a very long title without leaving a dangling separator", () => {
+    const branch = cardBranchName("abcd1234", "a".repeat(200), "9")
+    expect(branch.length).toBeLessThanOrEqual("card/9-".length + 48)
+    expect(branch.endsWith("-")).toBe(false)
+  })
+
+  test("survives a title with no usable characters", () => {
+    expect(cardBranchName("abcd1234", "***", "5")).toBe("card/5")
+  })
 })
 
 describe("cardWorktreeDir", () => {
@@ -217,7 +246,6 @@ describe("startWork", () => {
     const { board, card } = seed()
     const binding = registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",

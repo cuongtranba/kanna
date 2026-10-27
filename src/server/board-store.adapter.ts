@@ -32,15 +32,16 @@ import {
   type CardLink,
   type CardLinkKind,
   type FieldValue,
-  type ProviderId,
   type RemoteSourceRef,
   type SyncBinding,
   type SyncConflict,
   type SyncLink,
   type SyncOutboxEntry,
 } from "../shared/boards/types"
+import { sourceRefKey } from "../shared/boards/repo-slug"
 import {
   BoardStoreError,
+  requireText,
   validateCardContent,
   type BoardOwnerRef,
   type BoardStore,
@@ -312,6 +313,11 @@ const MIGRATIONS: readonly string[] = [
   `,
 ]
 
+
+function written<Row>(row: Row | null): Row {
+  if (row === null) throw new Error("INSERT ... RETURNING produced no row")
+  return row
+}
 
 function parseJson(text: string, label: string): JsonValue {
   try {
@@ -728,18 +734,14 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     createBoard(input: CreateBoardInput): Board {
-      if (input.title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a board needs a title")
-      }
+      requireText("board", "title", input.title)
       return toBoard(requireBoard(createBoardTx(input)))
     },
 
     updateBoard(boardId: string, patch: UpdateBoardPatch): Board {
       const existing = requireBoard(boardId)
       const title = patch.title ?? existing.title
-      if (title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a board needs a title")
-      }
+      requireText("board", "title", title)
       db.run("UPDATE board SET title = ?, description = ?, card_fields = ?, updated_at = ? WHERE id = ?", [
         title,
         patch.description === undefined ? existing.description : patch.description,
@@ -798,9 +800,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
 
     createColumn(input: CreateColumnInput): BoardColumn {
       requireBoard(input.boardId)
-      if (input.title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a column needs a title")
-      }
+      requireText("column", "title", input.title)
       const afterRank = input.afterColumnId === null || input.afterColumnId === undefined
         ? null
         : requireColumn(input.afterColumnId).rank
@@ -823,9 +823,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     updateColumn(columnId: string, patch: UpdateColumnPatch): BoardColumn {
       const existing = requireColumn(columnId)
       const title = patch.title ?? existing.title
-      if (title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a column needs a title")
-      }
+      requireText("column", "title", title)
       db.run("UPDATE board_column SET title = ?, semantic = ?, color_token = ?, wip_limit = ? WHERE id = ?", [
         title,
         patch.semantic === undefined ? existing.semantic : patch.semantic,
@@ -923,18 +921,14 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     createCard(input: CreateCardInput): Card {
-      if (input.title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a card needs a title")
-      }
+      requireText("card", "title", input.title)
       return toCard(requireCard(createCardTx(input)))
     },
 
     updateCard(cardId: string, patch: UpdateCardPatch, actor: CardActor): Card {
       const existing = requireCard(cardId)
       const title = patch.title ?? existing.title
-      if (title.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a card needs a title")
-      }
+      requireText("card", "title", title)
       if (patch.content !== undefined) requireContentMatchesSchema(existing.board_id, patch.content)
       db.run(
         "UPDATE card SET title = ?, project_id = ?, content = ?, updated_by = ?, updated_at = ? WHERE id = ?",
@@ -983,17 +977,13 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     addCardLink(cardId: string, kind: CardLinkKind, targetId: string): CardLink {
       requireCard(cardId)
       const timestamp = now()
-      db.run(
-        `INSERT INTO card_link (card_id, kind, target_id, created_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT (card_id, kind, target_id) DO NOTHING`,
-        [cardId, kind, targetId, timestamp],
-      )
-      const row = db
-        .query<CardLinkRow, [string, string, string]>(
-          "SELECT * FROM card_link WHERE card_id = ? AND kind = ? AND target_id = ?",
+      const row = written(db
+        .query<CardLinkRow, [string, string, string, number]>(
+          `INSERT INTO card_link (card_id, kind, target_id, created_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (card_id, kind, target_id) DO UPDATE SET created_at = created_at
+           RETURNING *`,
         )
-        .get(cardId, kind, targetId)
-      if (!row) throw new BoardStoreError("conflict", "card link disappeared immediately after insert")
+        .get(cardId, kind, targetId, timestamp))
       return toCardLink(row)
     },
 
@@ -1033,19 +1023,13 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
 
     addComment(cardId: string, author: CardActor, body: string): CardComment {
       requireCard(cardId)
-      if (body.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a comment needs a body")
-      }
+      requireText("comment", "body", body)
       const id = newId()
-      db.run("INSERT INTO card_comment (id, card_id, author, body, created_at) VALUES (?, ?, ?, ?, ?)", [
-        id,
-        cardId,
-        JSON.stringify(author),
-        body,
-        now(),
-      ])
-      const row = db.query<CardCommentRow, [string]>("SELECT * FROM card_comment WHERE id = ?").get(id)
-      if (!row) throw new BoardStoreError("conflict", "comment disappeared immediately after insert")
+      const row = written(db
+        .query<CardCommentRow, [string, string, string, string, number]>(
+          "INSERT INTO card_comment (id, card_id, author, body, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *",
+        )
+        .get(id, cardId, JSON.stringify(author), body, now()))
       return toComment(row)
     },
 
@@ -1062,18 +1046,15 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
     },
 
     createTemplate(input: CreateTemplateInput): BoardTemplate {
-      if (input.name.trim() === "") {
-        throw new BoardStoreError("invalid_input", "a template needs a name")
-      }
+      requireText("template", "name", input.name)
       const id = newId()
       const timestamp = now()
-      db.run(
-        `INSERT INTO board_template (id, name, description, builtin, definition, created_at, updated_at)
-         VALUES (?, ?, ?, 0, ?, ?, ?)`,
-        [id, input.name, input.description ?? null, JSON.stringify(input.definition), timestamp, timestamp],
-      )
-      const row = db.query<TemplateRow, [string]>("SELECT * FROM board_template WHERE id = ?").get(id)
-      if (!row) throw new BoardStoreError("conflict", "template disappeared immediately after insert")
+      const row = written(db
+        .query<TemplateRow, [string, string, string | null, string, number, number]>(
+          `INSERT INTO board_template (id, name, description, builtin, definition, created_at, updated_at)
+           VALUES (?, ?, ?, 0, ?, ?, ?) RETURNING *`,
+        )
+        .get(id, input.name, input.description ?? null, JSON.stringify(input.definition), timestamp, timestamp))
       return toTemplate(row)
     },
 
@@ -1095,45 +1076,50 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
         .map(toBinding)
     },
 
-    findBindingsBySource(providerId: ProviderId, sourceRef: RemoteSourceRef): SyncBinding[] {
+    findBindingsBySource(sourceRef: RemoteSourceRef): SyncBinding[] {
       return db
         .query<BindingRow, [string, string]>(
           "SELECT * FROM sync_binding WHERE provider_id = ? AND source_ref = ?",
         )
-        .all(providerId, JSON.stringify(sourceRef))
+        .all(sourceRef.provider, sourceRefKey(sourceRef))
         .map(toBinding)
     },
 
     upsertBinding(input: UpsertBindingInput): SyncBinding {
-      const sourceRefJson = JSON.stringify(input.sourceRef)
+      const sourceRefJson = sourceRefKey(input.sourceRef)
       const existing = db
         .query<BindingRow, [string, string]>("SELECT * FROM sync_binding WHERE board_id = ? AND source_ref = ?")
         .get(input.boardId, sourceRefJson)
+      const allowAgentPush = input.allowAgentPush ? 1 : 0
       if (existing) {
-        db.run(
-          "UPDATE sync_binding SET direction = ?, allow_agent_push = ?, project_id = ? WHERE id = ?",
-          [input.direction, input.allowAgentPush ? 1 : 0, input.projectId, existing.id],
-        )
-      } else {
-        db.run(
-          `INSERT INTO sync_binding (id, board_id, project_id, provider_id, source_ref, direction, allow_agent_push, cursor, last_pulled_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
-          [
-            newId(),
-            input.boardId,
-            input.projectId,
-            input.providerId,
-            sourceRefJson,
-            input.direction,
-            input.allowAgentPush ? 1 : 0,
-          ],
+        return toBinding(
+          written(
+            db
+              .query<BindingRow, [string, number, string | null, string]>(
+                "UPDATE sync_binding SET direction = ?, allow_agent_push = ?, project_id = ? WHERE id = ? RETURNING *",
+              )
+              .get(input.direction, allowAgentPush, input.projectId, existing.id),
+          ),
         )
       }
-      const row = db
-        .query<BindingRow, [string, string]>("SELECT * FROM sync_binding WHERE board_id = ? AND source_ref = ?")
-        .get(input.boardId, sourceRefJson)
-      if (!row) throw new BoardStoreError("conflict", "binding disappeared immediately after write")
-      return toBinding(row)
+      return toBinding(
+        written(
+          db
+            .query<BindingRow, [string, string, string | null, string, string, string, number]>(
+              `INSERT INTO sync_binding (id, board_id, project_id, provider_id, source_ref, direction, allow_agent_push, cursor, last_pulled_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL) RETURNING *`,
+            )
+            .get(
+              newId(),
+              input.boardId,
+              input.projectId,
+              input.sourceRef.provider,
+              sourceRefJson,
+              input.direction,
+              allowAgentPush,
+            ),
+        ),
+      )
     },
 
     deleteBinding(bindingId: string): void {
@@ -1182,10 +1168,12 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
 
     enqueueOutbox(entry: EnqueueOutboxInput): SyncOutboxEntry {
       const id = newId()
-      db.run(
-        `INSERT INTO sync_outbox (id, card_id, binding_id, op, payload, origin, attempts, next_attempt_at, last_error, held_reason)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?)`,
-        [
+      const row = written(db
+        .query<OutboxRow, [string, string, string, string, string, string, number, string | null]>(
+          `INSERT INTO sync_outbox (id, card_id, binding_id, op, payload, origin, attempts, next_attempt_at, last_error, held_reason)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, NULL, ?) RETURNING *`,
+        )
+        .get(
           id,
           entry.cardId,
           entry.bindingId,
@@ -1194,10 +1182,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
           JSON.stringify(entry.origin),
           entry.nextAttemptAt,
           entry.heldReason,
-        ],
-      )
-      const row = db.query<OutboxRow, [string]>("SELECT * FROM sync_outbox WHERE id = ?").get(id)
-      if (!row) throw new BoardStoreError("conflict", "outbox entry disappeared immediately after insert")
+        ))
       return toOutbox(row)
     },
 
@@ -1234,10 +1219,12 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
 
     recordConflict(conflict: RecordConflictInput): SyncConflict {
       const id = newId()
-      db.run(
-        `INSERT INTO sync_conflict (id, card_id, binding_id, field, local_value, remote_value, resolved_as, detected_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
+      const row = written(db
+        .query<ConflictRow, [string, string, string, string, string | null, string | null, string, number]>(
+          `INSERT INTO sync_conflict (id, card_id, binding_id, field, local_value, remote_value, resolved_as, detected_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+        )
+        .get(
           id,
           conflict.cardId,
           conflict.bindingId,
@@ -1246,10 +1233,7 @@ export function createBoardStore(options: CreateBoardStoreOptions): BoardStore {
           conflict.remoteValue === null ? null : JSON.stringify(conflict.remoteValue),
           conflict.resolvedAs,
           conflict.detectedAt,
-        ],
-      )
-      const row = db.query<ConflictRow, [string]>("SELECT * FROM sync_conflict WHERE id = ?").get(id)
-      if (!row) throw new BoardStoreError("conflict", "conflict row disappeared immediately after insert")
+        ))
       return toConflict(row)
     },
 

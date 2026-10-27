@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { LOAD_BEARING_FIELD_NOTES, loadBearingFieldNote } from "./cardSchema"
+import { WELL_KNOWN_FIELD_NOTES, cardLabels, cardText, loadBearingFieldNote } from "./well-known-fields"
 import { buildStartWorkPrompt } from "./start-work"
 import type { Card, CardContent, FieldValue } from "./types"
 
@@ -47,9 +47,27 @@ describe("loadBearingFieldNote", () => {
   })
 
   test("every note says what stops working", () => {
-    for (const note of Object.values(LOAD_BEARING_FIELD_NOTES)) {
+    for (const note of Object.values(WELL_KNOWN_FIELD_NOTES)) {
       expect(note.length).toBeGreaterThan(0)
       expect(/sync|Start work/i.test(note)).toBe(true)
     }
+  })
+})
+
+describe("card readers", () => {
+  test("cardText reads text-like values raw and nothing else", () => {
+    expect(cardText({ description: { kind: "longtext", value: "  hi \n" } }, "description")).toBe("  hi \n")
+    expect(cardText({ assignee: { kind: "number", value: 3 } }, "assignee")).toBeNull()
+    expect(cardText({}, "externalUrl")).toBeNull()
+  })
+
+  test("cardLabels reads only label values", () => {
+    expect(cardLabels({ labels: { kind: "label", values: ["a", "b"] } })).toEqual(["a", "b"])
+    expect(cardLabels({ labels: { kind: "multiselect", optionIds: ["a"] } })).toEqual([])
+    expect(cardLabels({})).toEqual([])
+  })
+
+  test("a prototype key is not a well-known field", () => {
+    expect(loadBearingFieldNote("toString")).toBeNull()
   })
 })

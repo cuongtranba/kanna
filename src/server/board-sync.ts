@@ -1,18 +1,17 @@
 import type { BindingPullResult, DrainSummary, PullSummary } from "../shared/commands/results/board"
 
-import type { BoardColumn, Card, CardActor, FieldValue, ProviderId, SyncBinding } from "../shared/boards/types"
-import { columnForRemoteState, remoteStateOfColumn } from "../shared/boards/types"
-import type { BoardSyncProvider, PushChange, RemoteItem } from "../shared/boards/sync-types"
+import type { CardActor, ProviderId, SyncBinding } from "../shared/boards/types"
+import { columnForRemoteState } from "../shared/boards/types"
+import type { BoardSyncProvider, PushChange } from "../shared/boards/sync-types"
 import type { BoardRegistry } from "./board-registry"
-import type { BoardStore } from "./board-store"
 import { toError } from "../shared/errors"
-import { BoardStoreError } from "./board-store"
+import { BoardStoreError, type BoardSyncStore } from "./board-store"
 import {
   advanceWatermarks,
+  contentFromRemote,
+  localStateOf,
   reconcileItem,
-  watermarksAfterPush,
-  type LocalCardState,
-  type SyncedField,
+  SYNCED_FIELDS,
 } from "./board-sync-reconcile"
 
 const SYNC_ACTOR: CardActor = { kind: "sync", providerId: "github-issues" }
@@ -28,49 +27,13 @@ export interface SyncTokenResult {
 
 export interface BoardSyncDeps {
   registry: BoardRegistry
-  store: BoardStore
+  store: BoardSyncStore
   providers: ReadonlyMap<ProviderId, BoardSyncProvider>
   readToken: () => Promise<SyncTokenResult>
   now: () => number
 }
 
 export type { BindingPullResult, DrainSummary, PullSummary }
-
-function textOf(value: FieldValue | undefined): string | null {
-  if (!value) return null
-  if (value.kind === "text" || value.kind === "longtext" || value.kind === "url") return value.value
-  return null
-}
-
-function labelsOf(value: FieldValue | undefined): string[] {
-  if (value?.kind === "label") return [...value.values]
-  if (value?.kind === "multiselect") return [...value.optionIds]
-  return []
-}
-
-
-function toLocalState(card: Card, columns: readonly BoardColumn[]): LocalCardState {
-  return {
-    cardId: card.id,
-    title: card.title,
-    body: textOf(card.content.description),
-    state: remoteStateOfColumn(columns, card.columnId),
-    labels: labelsOf(card.content.labels),
-    assignee: textOf(card.content.assignee),
-    updatedAt: card.updatedAt,
-  }
-}
-
-function contentWithTaken(card: Card, remote: RemoteItem, taken: readonly SyncedField[]) {
-  const content: Record<string, FieldValue> = { ...card.content }
-  for (const field of taken) {
-    if (field === "body") content.description = { kind: "longtext", value: remote.body ?? "" }
-    if (field === "labels") content.labels = { kind: "label", values: [...remote.labels] }
-    if (field === "assignee") content.assignee = { kind: "text", value: remote.assignee ?? "" }
-  }
-  content.externalUrl = { kind: "url", value: remote.url }
-  return content
-}
 
 export function createBoardSync(deps: BoardSyncDeps) {
   const { registry, store, providers, readToken, now } = deps
@@ -141,7 +104,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
     for (const remote of result.items) {
       const link = store.getSyncLinkByExternal(binding.id, remote.externalId)
       const card = link ? store.getCard(link.cardId) : null
-      const local = card && card.archivedAt === null ? toLocalState(card, columns) : null
+      const local = card && card.archivedAt === null ? localStateOf(card, columns) : null
 
       const decision = reconcileItem({ remote, local, link: local ? link : null })
 
@@ -160,19 +123,14 @@ export function createBoardSync(deps: BoardSyncDeps) {
           actor: SYNC_ACTOR,
           projectId: binding.projectId,
           afterCardId: lastCreatedIn.get(column.id) ?? lastCardIdIn(column.id),
-          content: {
-            description: { kind: "longtext", value: remote.body ?? "" },
-            labels: { kind: "label", values: [...remote.labels] },
-            assignee: { kind: "text", value: remote.assignee ?? "" },
-            externalUrl: { kind: "url", value: remote.url },
-          },
+          content: contentFromRemote(remote, SYNCED_FIELDS),
         })
         store.upsertSyncLink({
           cardId: created.id,
           bindingId: binding.id,
           externalId: remote.externalId,
           externalUrl: remote.url,
-          fieldWatermarks: advanceWatermarks({}, remote, ["title", "body", "state", "labels", "assignee"]),
+          fieldWatermarks: advanceWatermarks({}, remote.updatedAt, SYNCED_FIELDS),
           lastSyncedAt: now(),
         })
         lastCreatedIn.set(column.id, created.id)
@@ -186,7 +144,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
           card.id,
           {
             ...(decision.take.includes("title") ? { title: remote.title } : {}),
-            content: contentWithTaken(card, remote, decision.take),
+            content: { ...card.content, ...contentFromRemote(remote, decision.take) },
           },
           SYNC_ACTOR,
         )
@@ -210,7 +168,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
           cardId: card.id,
           bindingId: binding.id,
           field: conflict.field,
-          localValue: { kind: "text", value: String(toLocalState(card, columns)[conflict.field] ?? "") },
+          localValue: { kind: "text", value: String(localStateOf(card, columns)[conflict.field] ?? "") },
           remoteValue: { kind: "text", value: String(remote[conflict.field] ?? "") },
           resolvedAs: conflict.resolvedAs,
           detectedAt: now(),
@@ -237,7 +195,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
         bindingId: binding.id,
         externalId: remote.externalId,
         externalUrl: remote.url,
-        fieldWatermarks: advanceWatermarks(link?.fieldWatermarks ?? {}, remote, decision.take),
+        fieldWatermarks: advanceWatermarks(link?.fieldWatermarks ?? {}, remote.updatedAt, decision.take),
         lastSyncedAt: now(),
       })
     }
@@ -264,7 +222,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
         store.settleOutbox(entry.id)
         continue
       }
-      const local = toLocalState(card, columns)
+      const local = localStateOf(card, columns)
       const change: PushChange = {
         externalId: link?.externalId ?? null,
         title: local.title,
@@ -280,13 +238,7 @@ export function createBoardSync(deps: BoardSyncDeps) {
           bindingId: binding.id,
           externalId: outcome.externalId,
           externalUrl: outcome.url,
-          fieldWatermarks: watermarksAfterPush(link?.fieldWatermarks ?? {}, outcome.remoteUpdatedAt, [
-            "title",
-            "body",
-            "state",
-            "labels",
-            "assignee",
-          ]),
+          fieldWatermarks: advanceWatermarks(link?.fieldWatermarks ?? {}, outcome.remoteUpdatedAt, SYNCED_FIELDS),
           lastSyncedAt: now(),
         })
         store.settleOutbox(entry.id)

@@ -156,6 +156,8 @@ export type DiffCommitFailure = BranchActionFailure & {
 
 export type DiffCommitResult = DiffCommitSuccess | DiffCommitFailure
 
+export const DETACHED_BRANCH = "(detached)"
+
 export interface GitWorktree {
   path: string
   branch: string

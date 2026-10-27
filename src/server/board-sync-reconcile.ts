@@ -1,5 +1,7 @@
 
 import type { RemoteItem } from "../shared/boards/sync-types"
+import { remoteStateOfColumn, type BoardColumn, type Card, type FieldValue } from "../shared/boards/types"
+import { cardLabels, cardText, type WellKnownField } from "../shared/boards/well-known-fields"
 
 const LABEL_KEY_SEPARATOR = "\u0000"
 
@@ -44,34 +46,59 @@ export type ReconcileDecision =
       conflicts: readonly FieldConflict[]
     }
 
-function remoteValueOf(remote: RemoteItem, field: SyncedField): string {
-  switch (field) {
-    case "title":
-      return remote.title
-    case "body":
-      return remote.body ?? ""
-    case "state":
-      return remote.state
-    case "labels":
-      return [...remote.labels].sort().join(LABEL_KEY_SEPARATOR)
-    case "assignee":
-      return remote.assignee ?? ""
+interface SyncedFieldSpec {
+  remote(remote: RemoteItem): string
+  local(local: LocalCardState): string
+  content: ((remote: RemoteItem) => { field: WellKnownField; value: FieldValue }) | null
+}
+
+function labelKey(labels: readonly string[]): string {
+  return [...labels].sort().join(LABEL_KEY_SEPARATOR)
+}
+
+const SYNCED_FIELD_SPEC: Readonly<Record<SyncedField, SyncedFieldSpec>> = {
+  title: { remote: (remote) => remote.title, local: (local) => local.title, content: null },
+  body: {
+    remote: (remote) => remote.body ?? "",
+    local: (local) => local.body ?? "",
+    content: (remote) => ({ field: "description", value: { kind: "longtext", value: remote.body ?? "" } }),
+  },
+  state: { remote: (remote) => remote.state, local: (local) => local.state, content: null },
+  labels: {
+    remote: (remote) => labelKey(remote.labels),
+    local: (local) => labelKey(local.labels),
+    content: (remote) => ({ field: "labels", value: { kind: "label", values: [...remote.labels] } }),
+  },
+  assignee: {
+    remote: (remote) => remote.assignee ?? "",
+    local: (local) => local.assignee ?? "",
+    content: (remote) => ({ field: "assignee", value: { kind: "text", value: remote.assignee ?? "" } }),
+  },
+}
+
+export function localStateOf(card: Card, columns: readonly BoardColumn[]): LocalCardState {
+  return {
+    cardId: card.id,
+    title: card.title,
+    body: cardText(card.content, "description"),
+    state: remoteStateOfColumn(columns, card.columnId),
+    labels: cardLabels(card.content),
+    assignee: cardText(card.content, "assignee"),
+    updatedAt: card.updatedAt,
   }
 }
 
-function localValueOf(local: LocalCardState, field: SyncedField): string {
-  switch (field) {
-    case "title":
-      return local.title
-    case "body":
-      return local.body ?? ""
-    case "state":
-      return local.state
-    case "labels":
-      return [...local.labels].sort().join(LABEL_KEY_SEPARATOR)
-    case "assignee":
-      return local.assignee ?? ""
+export function contentFromRemote(
+  remote: RemoteItem,
+  fields: readonly SyncedField[],
+): Record<string, FieldValue> {
+  const content: Record<string, FieldValue> = {}
+  for (const field of fields) {
+    const written = SYNCED_FIELD_SPEC[field].content?.(remote)
+    if (written) content[written.field] = written.value
   }
+  content.externalUrl = { kind: "url", value: remote.url }
+  return content
 }
 
 export function reconcileItem(input: ReconcileInput): ReconcileDecision {
@@ -86,10 +113,10 @@ export function reconcileItem(input: ReconcileInput): ReconcileDecision {
 
   for (const field of SYNCED_FIELDS) {
     const watermark = link?.fieldWatermarks[field] ?? 0
-    const remoteChanged = remote.updatedAt > watermark && remoteValueOf(remote, field) !== localValueOf(local, field)
+    const remoteChanged = remote.updatedAt > watermark && SYNCED_FIELD_SPEC[field].remote(remote) !== SYNCED_FIELD_SPEC[field].local(local)
 
     if (!remoteChanged) {
-      if (localDirty && localValueOf(local, field) !== remoteValueOf(remote, field)) keep.push(field)
+      if (localDirty && SYNCED_FIELD_SPEC[field].local(local) !== SYNCED_FIELD_SPEC[field].remote(remote)) keep.push(field)
       continue
     }
 
@@ -113,20 +140,10 @@ export function reconcileItem(input: ReconcileInput): ReconcileDecision {
 
 export function advanceWatermarks(
   current: Readonly<Partial<Record<SyncedField, number>>>,
-  remote: RemoteItem,
-  taken: readonly SyncedField[],
+  at: number,
+  fields: readonly SyncedField[],
 ): Partial<Record<SyncedField, number>> {
   const next: Partial<Record<SyncedField, number>> = { ...current }
-  for (const field of taken) next[field] = remote.updatedAt
-  return next
-}
-
-export function watermarksAfterPush(
-  current: Readonly<Partial<Record<SyncedField, number>>>,
-  remoteUpdatedAt: number,
-  pushed: readonly SyncedField[],
-): Partial<Record<SyncedField, number>> {
-  const next: Partial<Record<SyncedField, number>> = { ...current }
-  for (const field of pushed) next[field] = remoteUpdatedAt
+  for (const field of fields) next[field] = at
   return next
 }

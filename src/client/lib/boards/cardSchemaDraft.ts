@@ -1,5 +1,5 @@
 
-import { LOAD_BEARING_FIELD_NOTES } from "../../../shared/boards/cardSchema"
+import { WELL_KNOWN_FIELDS } from "../../../shared/boards/well-known-fields"
 import { isColumnColorToken, type FieldDef, type FieldKind, type FieldOption } from "../../../shared/boards/types"
 
 export const FIELD_KIND_LABELS: Readonly<Record<FieldKind, string>> = {
@@ -118,7 +118,7 @@ export function setOptionColor(
 
 export function missingLoadBearingIds(fields: readonly FieldDef[]): string[] {
   const declared = new Set(fields.map((field) => field.id))
-  return Object.keys(LOAD_BEARING_FIELD_NOTES).filter((fieldId) => !declared.has(fieldId))
+  return WELL_KNOWN_FIELDS.filter((fieldId) => !declared.has(fieldId))
 }
 
 function uniqueId(base: string, taken: ReadonlySet<string>): string {
