@@ -1,6 +1,6 @@
 ---
 id: c3-236
-c3-seal: 492699c991e180f12ad4afe74a278fbc0c4958428e653a618f73ddba302eacd5
+c3-seal: b6e4c32fc0d697fccda40c8b324325da863a390fbe8484a6cb0f65d135fb4c83
 title: architecture-budget
 type: component
 category: feature
@@ -44,6 +44,7 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | MODULE_ALLOWANCES | IN | Per-file ceiling for every module above MODULE_LINE_THRESHOLD. A module may shrink freely, may never exceed its pin, and must be delisted once it falls under the threshold. | Production TypeScript under src only. Tests, fixtures, test-helpers and testing directories are excluded. | src/ops/architecture/budget.ts |
 | PATTERN_BUDGETS | IN | Exact ratchet per counted population. Growth and shrinkage both fail, so a pin can never sit above the real count. | Each entry names the issue it regresses and a rationale explaining why the count is a defect. | src/ops/architecture/budget.ts |
 | TEST_PATTERN_BUDGETS | IN | Exact ratchet with PATTERN_BUDGETS semantics over test-policy defects in test files: function mocks and spies, global patches, sleeps, focused and skipped tests, double casts, and nested describes. | Test files under src/beacon, src/client, src/server and src/shared only. src/ops is excluded because its gates quote every pattern as a literal. | src/ops/architecture/budget.ts |
+| COUNT\_BUDGETS | IN | Exact ratchet with PATTERN_BUDGETS semantics over two concept-level populations a line regex cannot count: leaked-protocol-literals (an env-var name, HTTP route, bus subject or storage key hard-coded in two or more production modules) and code-clones (maximal runs of duplicated 8-line windows, whitespace-normalized, structural lines skipped). | Production sources only; src/ops/architecture is excluded from the literal scan because it quotes the families. Measured by the pure duplication.ts with no dependency. | src/ops/architecture/duplication.ts |
 | checkModuleBudget and checkPatternBudget | OUT | Pure functions returning every BudgetBreach rather than stopping at the first, so one run reports the whole regression. | No IO. Measurements are supplied by the caller. | src/ops/architecture/budget.test.ts |
 | measureModules, measureTestSources and measurePatterns | OUT | Module lines match wc -l as a newline count; pattern counts match grep -c as matching lines, so any pin is checkable by hand. | The only filesystem reader in the component. | src/ops/architecture/budget-scan.adapter.ts |
 | filesScanned | OUT | A budget whose include paths reach zero files reports pattern_unmeasured, never a shrink. | Prevents a renamed target from reading as a vanished population and being pinned at zero. | src/ops/architecture/budget.test.ts |
