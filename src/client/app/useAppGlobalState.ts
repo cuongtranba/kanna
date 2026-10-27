@@ -9,7 +9,7 @@ import {
   isDefaultProviderPreference,
   isEditorPreset,
   type AppSettingsPatch,
-  type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateSnapshot } from "../../shared/types"
+  type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useNewSessionStore } from "../stores/newSessionStore"
@@ -45,8 +45,9 @@ import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { errorMessage, onRejected } from "../../shared/errors"
 import { reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
 import { fileNameOfPath } from "../lib/pathUtils"
+import type { ProjectRequest } from "../lib/projectRequest"
 import { forgetDeletedLocally } from "./forgetDeletedLocally"
-import { getNewestRemainingChatId, useBulkArchiveChats } from "./bulkChatRemoval"
+import { adoptNewChat, leaveRemovedChats, useBulkArchiveChats } from "./chatLifecycle"
 import { runDetached } from "../lib/runDetached"
 import { runPendingAction } from "../stores/pendingActionsStore"
 import { decodeLegacyProviderDefaults, readPersistedZustandState } from "./legacyProviderDefaults"
@@ -55,15 +56,13 @@ import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { postAuthLogout, fetchAuthStatus } from "../api/auth"
+import { bindNotificationNavigation, bindPushDeviceIdentity } from "./pushClient"
 import type { KannaSocket, SocketStatus } from "./socket"
 import { useStackCommands, type StackCommands } from "./useStackCommands"
-import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
+import { deriveUpdateRestartActivity, sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
-import { HTTP_ROUTES } from "../../shared/http-routes"
 import type { McpOAuthCompleteResult, McpOAuthStartResult } from "../../shared/mcp-types.schema"
 
-
-export { getNewestRemainingChatId }
 
 export const LLM_PROVIDER_READ_KEY = "settings.readLlmProvider"
 export const COMPOSE_CHAT_KEY = "chat.compose"
@@ -202,53 +201,6 @@ export function getMostRecentProjectProvider(
   if (!group) return null
   const providerFromHistory = group.chats.find((c) => c.provider != null)?.provider ?? null
   return providerFromHistory ?? group.sourceProvider ?? null
-}
-
-export function getUiUpdateRestartReconnectAction(
-  phase: string | null,
-  connectionStatus: SocketStatus
-): "none" | "awaiting_server_ready" {
-  if (phase === "awaiting_disconnect" && connectionStatus === "disconnected") {
-    return "awaiting_server_ready"
-  }
-
-  return "none"
-}
-
-export interface UiRestartActivity {
-  active: boolean
-  label: string
-}
-
-export function deriveUiRestartActivity(
-  phase: string | null,
-  updateStatus: UpdateSnapshot["status"] | null | undefined
-): UiRestartActivity {
-  if (updateStatus === "updating" || updateStatus === "restart_pending") {
-    return { active: true, label: "Installing update" }
-  }
-  if (phase === "awaiting_disconnect" || phase === "awaiting_server_ready") {
-    return { active: true, label: "Re-deploying Kanna" }
-  }
-  return { active: false, label: "" }
-}
-
-export function shouldHandleUiUpdateReloadRequest(
-  reloadRequestedAt: number | null | undefined,
-  lastHandledReloadRequest: string | null
-) {
-  if (!reloadRequestedAt) return false
-  return String(reloadRequestedAt) !== lastHandledReloadRequest
-}
-
-export function getUiUpdateReadinessPath() {
-  return HTTP_ROUTES.authStatus.path
-}
-
-export interface ProjectRequest {
-  mode: "new" | "existing"
-  localPath: string
-  title: string
 }
 
 export type StartChatIntent =
@@ -397,7 +349,7 @@ export function useAppGlobalState(
         dom,
         timer,
         onSnapshot: (snap) => {
-          useKannaStateStore.getState().setUiRestartPhase(snap.phase === "idle" ? null : snap.phase)
+          useKannaStateStore.getState().setUiRestartPhase(snap.phase)
         },
       },
       {
@@ -435,13 +387,24 @@ export function useAppGlobalState(
     })
   }, [connectionStatus])
 
-  const markUiRestartPhase = useCallback((_phase: "awaiting_disconnect" | "awaiting_server_ready") => {
+  const runRestartCommand = useCallback(async (
+    send: () => Promise<UpdateInstallResult>,
+    failure: { title: string; description: string },
+  ) => {
     updateRestartRuntimeRef.current?.dispatch({ kind: "update_initiated" })
-  }, [])
-
-  const clearUiRestartPhase = useCallback(() => {
-    updateRestartRuntimeRef.current?.dispatch({ kind: "aborted" })
-  }, [])
+    const result = await surfaceCommandError(send)
+    if (!result?.ok) updateRestartRuntimeRef.current?.dispatch({ kind: "aborted" })
+    if (!result) return
+    if (!result.ok) {
+      await dialog.alert({
+        title: result.userTitle ?? failure.title,
+        description: result.userMessage ?? failure.description,
+        closeLabel: "OK",
+      })
+      return
+    }
+    if (result.action === "reload") dom.reload()
+  }, [dialog, dom])
 
   const sidebarProjectGroups = useMemo(
     () => applySidebarProjectOrder(sidebarData.projectGroups, optimisticSidebarProjectOrder),
@@ -464,6 +427,8 @@ export function useAppGlobalState(
 
 
   useEffect(() => socket.onStatus((status) => useKannaStateStore.getState().setConnectionStatus(status)), [socket])
+  useEffect(() => bindPushDeviceIdentity(socket, { storage: localStore }), [socket, localStore])
+  useEffect(() => bindNotificationNavigation(dom), [dom])
 
   useEffect(() => {
     return socket.subscribe<SidebarData>({ type: "sidebar" }, (snapshot) => {
@@ -813,43 +778,21 @@ export function useAppGlobalState(
     await surfaceCommandError(() => socket.command({ type: "update.check", force: options?.force }))
   }, [socket])
 
-  const handleInstallUpdate = useCallback(async (version?: string) => {
-    markUiRestartPhase("awaiting_disconnect")
-    const result = await surfaceCommandError(() => socket.command({ type: "update.install", version }))
-    if (!result) {
-      clearUiRestartPhase()
-      return
-    }
-    if (!result.ok) {
-      clearUiRestartPhase()
-      await dialog.alert({
-        title: result.userTitle ?? "Update failed",
-        description: result.userMessage ?? "Kanna could not install the update. Try again later.",
-        closeLabel: "OK",
-      })
-      return
-    }
-    if (result.action === "reload") dom.reload()
-  }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
+  const handleInstallUpdate = useCallback(
+    (version?: string) => runRestartCommand(
+      () => socket.command({ type: "update.install", version }),
+      { title: "Update failed", description: "Kanna could not install the update. Try again later." },
+    ),
+    [runRestartCommand, socket],
+  )
 
-  const handleForceReload = useCallback(async () => {
-    markUiRestartPhase("awaiting_disconnect")
-    const result = await surfaceCommandError(() => socket.command({ type: "update.reload" }))
-    if (!result) {
-      clearUiRestartPhase()
-      return
-    }
-    if (!result.ok) {
-      clearUiRestartPhase()
-      await dialog.alert({
-        title: result.userTitle ?? "Re-deploy failed",
-        description: result.userMessage ?? "Kanna could not re-deploy. Try again later.",
-        closeLabel: "OK",
-      })
-      return
-    }
-    if (result.action === "reload") dom.reload()
-  }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
+  const handleForceReload = useCallback(
+    () => runRestartCommand(
+      () => socket.command({ type: "update.reload" }),
+      { title: "Re-deploy failed", description: "Kanna could not re-deploy. Try again later." },
+    ),
+    [runRestartCommand, socket],
+  )
 
 
   const createChatForProject = useCallback(async (projectId: string) => {
@@ -864,15 +807,9 @@ export function useAppGlobalState(
         : null
 
     const result = await socket.command({ type: "chat.create", projectId })
-    chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState, providerHint })
     useNewSessionStore.getState().markSpawned(result.chatId)
     runDetached("fly chat title to tab", flyChatTitleToTab(result.chatId))
-    const store = useKannaStateStore.getState()
-    store.setSelectedProjectId(projectId)
-    store.setPendingChatId(result.chatId)
-    chatNavigator.openChat(result.chatId)
-    store.setSidebarOpen(false)
-    store.setCommandError(null)
+    adoptNewChat(chatNavigator, { chatId: result.chatId, projectId, sourceState: sourceComposerState, providerHint })
   }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 
   const resolveProjectIdForStartChat = useCallback(async (intent: StartChatIntent): Promise<{ projectId: string; localPath?: string }> => {
@@ -922,14 +859,10 @@ export function useAppGlobalState(
         type: "chat.fork",
         chatId: chat.chatId,
       })
-      const chatPreferences = useChatPreferencesStore.getState()
-      chatPreferences.initializeComposerForChat(result.chatId, {
-        sourceState: chatPreferences.getComposerState(chat.chatId),
+      adoptNewChat(chatNavigator, {
+        chatId: result.chatId,
+        sourceState: useChatPreferencesStore.getState().getComposerState(chat.chatId),
       })
-      const store = useKannaStateStore.getState()
-      store.setPendingChatId(result.chatId)
-      chatNavigator.openChat(result.chatId)
-      store.setSidebarOpen(false)
     })
   }, [chatNavigator, socket])
 
@@ -962,14 +895,7 @@ export function useAppGlobalState(
     await surfaceCommandError(async () => {
       await socket.command({ type: "chat.delete", chatId: chat.chatId })
       forgetDeletedLocally({ chatIds: [chat.chatId] })
-      if (chat.chatId === activeChatId) {
-        const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
-        if (nextChatId) {
-          chatNavigator.openChat(nextChatId)
-        } else {
-          chatNavigator.closeChat()
-        }
-      }
+      leaveRemovedChats([chat.chatId], activeChatId, sidebarProjectGroups, chatNavigator)
     })
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
@@ -978,27 +904,19 @@ export function useAppGlobalState(
     const n = chatIds.length
     const ok = await dialog.confirm({ title: "Delete Chats", description: `Delete ${n} chat${n === 1 ? "" : "s"}? This cannot be undone.`, confirmLabel: "Delete", confirmVariant: "destructive" })
     if (!ok) return
-    const deletingActive = activeChatId != null && chatIds.includes(activeChatId)
     await surfaceCommandError(async () => {
       for (const chatId of chatIds) {
         await socket.command({ type: "chat.delete", chatId })
         forgetDeletedLocally({ chatIds: [chatId] })
       }
-      if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId, chatIds); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
+      leaveRemovedChats(chatIds, activeChatId, sidebarProjectGroups, chatNavigator)
     })
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
   const handleArchiveChat = useCallback(async (chat: SidebarChatRow) => {
     await surfaceCommandError(async () => {
       await socket.command({ type: "chat.archive", chatId: chat.chatId })
-      if (chat.chatId === activeChatId) {
-        const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
-        if (nextChatId) {
-          chatNavigator.openChat(nextChatId)
-        } else {
-          chatNavigator.closeChat()
-        }
-      }
+      leaveRemovedChats([chat.chatId], activeChatId, sidebarProjectGroups, chatNavigator)
     })
   }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 
@@ -1085,12 +1003,7 @@ export function useAppGlobalState(
         stackId,
         stackBindings,
       })
-      chatPreferences.initializeComposerForChat(result.chatId, { sourceState: sourceComposerState })
-      const store = useKannaStateStore.getState()
-      store.setSelectedProjectId(primaryProjectId)
-      store.setPendingChatId(result.chatId)
-      chatNavigator.openChat(result.chatId)
-      store.setSidebarOpen(false)
+      adoptNewChat(chatNavigator, { chatId: result.chatId, projectId: primaryProjectId, sourceState: sourceComposerState })
     })
   }, [activeChatId, chatNavigator, socket])
 
@@ -1183,7 +1096,7 @@ export function useAppGlobalState(
   }, [chatNavigator, fallbackLocalProjectPath, selectedProjectId, sidebarProjectGroups, startChatFromIntent])
 
 
-  const uiRestart = deriveUiRestartActivity(uiRestartPhase, updateSnapshot?.status)
+  const uiRestart = deriveUpdateRestartActivity(uiRestartPhase, updateSnapshot?.status)
 
 
   return {

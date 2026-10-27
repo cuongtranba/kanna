@@ -1,4 +1,4 @@
-import type { HydratedTranscriptMessage } from "../../shared/types"
+import type { HydratedTranscriptMessage, KannaStatus } from "../../shared/types"
 import type { ProcessedToolCall } from "../components/messages/types"
 
 function isProcessedToolCall(m: HydratedTranscriptMessage): m is ProcessedToolCall {
@@ -44,10 +44,6 @@ export function isPrimaryChatInstance(chatId: string | null, activeChatId: strin
   return chatId !== null && chatId === activeChatId
 }
 
-export function canCancelStatus(status?: string) {
-  return status === "starting" || status === "running" || status === "waiting_for_user"
-}
-
-export function isProcessingStatus(status?: string) {
+export function isActiveChatStatus(status: KannaStatus | null): boolean {
   return status === "starting" || status === "running" || status === "waiting_for_user"
 }

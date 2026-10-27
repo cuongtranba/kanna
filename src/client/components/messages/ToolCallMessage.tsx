@@ -283,10 +283,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
           })()}
         </div>
         <MetaLabel className="text-left transition-opacity duration-200 truncate">
-          <AnimatedShinyText
-            animate={showLoadingState}
-            shimmerWidth={Math.max(20, ((description || name)?.length ?? 33) * 3)}
-          >
+          <AnimatedShinyText animate={showLoadingState}>
             {description || name}
           </AnimatedShinyText>
         </MetaLabel>

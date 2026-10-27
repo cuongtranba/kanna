@@ -5,17 +5,12 @@ import {
   countMatchingUserPrompts,
   getActiveChatSnapshot,
   getNextMeasuredInputHeight,
-  getNewestRemainingChatId,
   getPreviousPrompt,
   getTranscriptPaddingBottom,
-  deriveUiRestartActivity,
-  getUiUpdateReadinessPath,
   getUserPromptSignature,
-  getUiUpdateRestartReconnectAction,
   pruneOptimisticOnQueuedAck,
   reconcileOptimisticUserPrompts,
   resolveComposeIntent,
-  shouldHandleUiUpdateReloadRequest,
   shouldMarkActiveChatRead,
   shouldAutoFollowTranscript,
 } from "./useKannaState"
@@ -106,26 +101,6 @@ function createSidebarData(): SidebarData {
   }
 }
 
-describe("getNewestRemainingChatId", () => {
-  test("returns the next newest chat from the same project", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "chat-3")).toBe("chat-2")
-  })
-
-  test("returns null when no other chats remain in the project", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "chat-4")).toBeNull()
-  })
-
-  test("returns null when the chat is not found", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "missing")).toBeNull()
-  })
-})
-
 describe("applySidebarProjectOrder", () => {
   test("reorders project groups immediately using the optimistic order", () => {
     const sidebarData = createSidebarData()
@@ -204,60 +179,6 @@ describe("shouldMarkActiveChatRead", () => {
       getVisibilityState: () => "visible" as DocumentVisibilityState,
       hasFocus: () => false,
     })).toBe(false)
-  })
-})
-
-describe("getUiUpdateRestartReconnectAction", () => {
-  test("waits for server readiness after the socket disconnects", () => {
-    expect(getUiUpdateRestartReconnectAction("awaiting_disconnect", "disconnected")).toBe("awaiting_server_ready")
-  })
-
-  test("does nothing for unrelated phase and connection combinations", () => {
-    expect(getUiUpdateRestartReconnectAction(null, "connected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_disconnect", "connected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_server_ready", "disconnected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_server_ready", "connected")).toBe("none")
-  })
-})
-
-describe("deriveUiRestartActivity", () => {
-  test("update install/restart status drives the overlay regardless of phase", () => {
-    expect(deriveUiRestartActivity(null, "updating")).toEqual({ active: true, label: "Installing update" })
-    expect(deriveUiRestartActivity(null, "restart_pending")).toEqual({ active: true, label: "Installing update" })
-  })
-
-  test("restart phase drives the overlay when update status is idle", () => {
-    expect(deriveUiRestartActivity("awaiting_disconnect", "idle")).toEqual({ active: true, label: "Re-deploying Kanna" })
-    expect(deriveUiRestartActivity("awaiting_server_ready", undefined)).toEqual({ active: true, label: "Re-deploying Kanna" })
-  })
-
-  test("inactive when neither phase nor update status indicates a restart", () => {
-    expect(deriveUiRestartActivity(null, "idle")).toEqual({ active: false, label: "" })
-    expect(deriveUiRestartActivity(null, "up_to_date")).toEqual({ active: false, label: "" })
-    expect(deriveUiRestartActivity(null, undefined)).toEqual({ active: false, label: "" })
-  })
-
-  test("update status takes precedence over an active restart phase", () => {
-    expect(deriveUiRestartActivity("awaiting_disconnect", "updating")).toEqual({ active: true, label: "Installing update" })
-  })
-})
-
-describe("shouldHandleUiUpdateReloadRequest", () => {
-  test("handles a new backend reload request", () => {
-    expect(shouldHandleUiUpdateReloadRequest(123, null)).toBe(true)
-    expect(shouldHandleUiUpdateReloadRequest(123, "122")).toBe(true)
-  })
-
-  test("ignores missing or already handled reload requests", () => {
-    expect(shouldHandleUiUpdateReloadRequest(null, null)).toBe(false)
-    expect(shouldHandleUiUpdateReloadRequest(undefined, null)).toBe(false)
-    expect(shouldHandleUiUpdateReloadRequest(123, "123")).toBe(false)
-  })
-})
-
-describe("getUiUpdateReadinessPath", () => {
-  test("uses a public auth endpoint so password-protected restarts can reload", () => {
-    expect(getUiUpdateReadinessPath()).toBe("/auth/status")
   })
 })
 

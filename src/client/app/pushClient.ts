@@ -4,6 +4,8 @@ import { pushAdapter } from "../adapters/push.adapter"
 import { notificationAdapter } from "../adapters/notification.adapter"
 import type { PushPermissionState } from "../lib/pushPermissionState"
 import type { StoragePort } from "../ports/storagePort"
+import type { DomPort } from "../ports/domPort"
+import type { KannaSocket } from "./socket"
 import type { PushPort } from "../ports/pushPort"
 import type { NotificationPort } from "../ports/notificationPort"
 
@@ -22,6 +24,26 @@ const PUSH_DEVICE_ID_STORAGE_KEY = "pushDeviceId"
 export function getStoredPushDeviceId(ports: PushClientPorts = {}): string | null {
   const storage = ports.storage ?? localStorageAdapter
   return storage.getItem(PUSH_DEVICE_ID_STORAGE_KEY)
+}
+
+export function bindPushDeviceIdentity(
+  socket: Pick<KannaSocket, "onStatus" | "notify">,
+  ports: PushClientPorts = {},
+): () => void {
+  return socket.onStatus((status) => {
+    if (status !== "connected") return
+    const pushDeviceId = getStoredPushDeviceId(ports)
+    if (pushDeviceId) socket.notify({ type: "push.identifyDevice", pushDeviceId })
+  })
+}
+
+export function bindNotificationNavigation(dom: Pick<DomPort, "addServiceWorkerMessageListener" | "setHref">): () => void {
+  return dom.addServiceWorkerMessageListener((event: MessageEvent) => {
+    const data: { type?: string; url?: string } = event.data
+    if (data?.type === "kanna.navigate" && typeof data.url === "string") {
+      dom.setHref(data.url)
+    }
+  })
 }
 
 export function setStoredPushDeviceId(id: string, ports: PushClientPorts = {}): void {
@@ -66,9 +88,6 @@ export interface PushSubscribeServerCall {
 }
 
 export function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  if (typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(base64String, "base64url"))
-  }
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
   const raw = atob(base64)

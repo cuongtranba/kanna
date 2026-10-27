@@ -29,6 +29,10 @@ interface InboxState {
   appendPage(page: InboxPage): void
   setTab(tab: InboxTabId): void
   setFilter(filter: InboxFilter): void
+  toggleAttentionOnly(): void
+  toggleSourceKind(kind: NonNullable<InboxFilter["sourceKind"]>): void
+  setProjectFilter(projectId: string | null): void
+  setChatFilter(chatId: string | null): void
   select(threadId: string | null): void
   setReplyDraft(threadId: string, text: string): void
   clearReplyDraft(threadId: string): void
@@ -54,6 +58,10 @@ function mergeById<T extends { id: string }>(existing: readonly T[], page: reado
   if (page.length === 0) return existing
   const pageIds = new Set(page.map((entry) => entry.id))
   return [...existing.filter((entry) => !pageIds.has(entry.id)), ...page]
+}
+
+function refined(state: InboxState, change: Partial<InboxFilter>): Pick<InboxState, "filter" | "olderExhausted"> {
+  return { filter: { ...state.filter, ...change }, olderExhausted: false }
 }
 
 const threadTs = (thread: InboxThread) => thread.lastMessageAt
@@ -87,6 +95,12 @@ export const useInboxStore = create<InboxState>()((set) => ({
     })),
   setTab: (tab) => set({ tab }),
   setFilter: (filter) => set({ filter, olderExhausted: false }),
+  toggleAttentionOnly: () =>
+    set((state) => refined(state, { attentionOnly: state.filter.attentionOnly === true ? undefined : true })),
+  toggleSourceKind: (kind) =>
+    set((state) => refined(state, { sourceKind: state.filter.sourceKind === kind ? undefined : kind })),
+  setProjectFilter: (projectId) => set((state) => refined(state, { projectId: projectId ?? undefined })),
+  setChatFilter: (chatId) => set((state) => refined(state, { chatId: chatId ?? undefined })),
   select: (selectedThreadId) => set({ selectedThreadId }),
   setReplyDraft: (threadId, text) =>
     set((state) => ({ replyDrafts: { ...state.replyDrafts, [threadId]: text } })),

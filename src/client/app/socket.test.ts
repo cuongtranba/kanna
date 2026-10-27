@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { KannaSocket } from "./socket"
 import type { ComputedStyleLike, DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
-import type { StoragePort } from "../ports/storagePort"
 import type { WebSocketPort, WebSocketLike, WsEventPayload } from "../ports/webSocketPort"
 
 
@@ -247,24 +246,11 @@ class FakeDomPort implements DomPort {
 }
 
 
-function makeFakeStoragePort(): StoragePort {
-  const store = new Map<string, string>()
-  return {
-    getItem(key: string): string | null { return store.get(key) ?? null },
-    setItem(key: string, value: string): void { store.set(key, value) },
-    removeItem(key: string): void { store.delete(key) },
-    clear(): void { store.clear() },
-  }
-}
-
-
 function makePorts() {
   const dom = new FakeDomPort()
   const timer = new FakeTimers()
   const webSocket = makeFakeWebSocketPort()
-  const localStorage = makeFakeStoragePort()
-  const sessionStorage = makeFakeStoragePort()
-  return { dom, timer, webSocket, localStorage, sessionStorage }
+  return { dom, timer, webSocket }
 }
 
 
@@ -380,6 +366,52 @@ describe("KannaSocket", () => {
 
     await expect(pingPromise).resolves.toBeUndefined()
     expect(ws.sent).toHaveLength(1)
+    socket.dispose()
+  })
+
+  test("notify sends a command without waiting for or tracking an ack", () => {
+    const ports = makePorts()
+    const socket = new KannaSocket("ws://localhost/ws", ports)
+    socket.start()
+    const ws = FakeWebSocket.instances[0]!
+    ws.open()
+
+    socket.notify({ type: "push.setFocusedChat", chatId: "chat-1" })
+
+    expect(ws.sent).toHaveLength(1)
+    expect(ws.sent[0]?.command).toEqual({ type: "push.setFocusedChat", chatId: "chat-1" })
+    ws.receive({ v: 1, type: "ack", id: ws.sent[0]?.id })
+    socket.dispose()
+  })
+
+  test("notify sent before the socket opens is flushed on open", () => {
+    const ports = makePorts()
+    const socket = new KannaSocket("ws://localhost/ws", ports)
+    socket.start()
+    const ws = FakeWebSocket.instances[0]!
+
+    socket.notify({ type: "push.setFocusedChat", chatId: null })
+    expect(ws.sent).toHaveLength(0)
+
+    ws.open()
+    expect(ws.sent[0]?.command).toEqual({ type: "push.setFocusedChat", chatId: null })
+    socket.dispose()
+  })
+
+  test("reports every received frame with its size to the frame observer", () => {
+    const ports = makePorts()
+    const frames: Array<{ type: string; bytes: number }> = []
+    const socket = new KannaSocket("ws://localhost/ws", {
+      ...ports,
+      onFrame: (frame, receipt) => frames.push({ type: frame.type, bytes: receipt.bytes }),
+    })
+    socket.start()
+    const ws = FakeWebSocket.instances[0]!
+    ws.open()
+
+    ws.receive({ v: 1, type: "ack", id: "unknown" })
+
+    expect(frames).toEqual([{ type: "ack", bytes: JSON.stringify({ v: 1, type: "ack", id: "unknown" }).length }])
     socket.dispose()
   })
 

@@ -3,8 +3,8 @@ import type { ChatDiffSnapshot, KeybindingsSnapshot, LlmProviderSnapshot, PushCo
 import type { LocalProjectsSnapshot, SidebarData } from "../../shared/types"
 import { sessionStorageAdapter } from "../adapters/storage.adapter"
 import type { SocketStatus } from "../app/socket"
+import { readPersistedUpdateRestartPhase, type UpdateRestartPhase } from "../app/appRuntime"
 import type { OptimisticUserPrompt } from "../app/useKannaState"
-import type { StoragePort } from "../ports/storagePort"
 
 export const EMPTY_OPTIMISTIC_PROMPTS: OptimisticUserPrompt[] = []
 export const EMPTY_DIFF_SNAPSHOTS: Record<string, ChatDiffSnapshot | null> = {}
@@ -19,7 +19,7 @@ interface KannaStateStoreState {
   optimisticSidebarProjectOrder: string[] | null
   localProjects: LocalProjectsSnapshot | null
   updateSnapshot: UpdateSnapshot | null
-  uiRestartPhase: string | null
+  uiRestartPhase: UpdateRestartPhase
   diffSnapshotsByKey: Record<string, ChatDiffSnapshot | null>
   keybindings: KeybindingsSnapshot | null
   pushConfig: PushConfigSnapshot | null
@@ -41,7 +41,7 @@ interface KannaStateStoreState {
   setOptimisticSidebarProjectOrder: (value: string[] | null | ((current: string[] | null) => string[] | null)) => void
   setLocalProjects: (value: LocalProjectsSnapshot | null) => void
   setUpdateSnapshot: (value: UpdateSnapshot | null) => void
-  setUiRestartPhase: (value: string | null) => void
+  setUiRestartPhase: (value: UpdateRestartPhase) => void
   setDiffSnapshotsByKey: (value: Record<string, ChatDiffSnapshot | null> | ((current: Record<string, ChatDiffSnapshot | null>) => Record<string, ChatDiffSnapshot | null>)) => void
   setKeybindings: (value: KeybindingsSnapshot | null) => void
   setPushConfig: (value: PushConfigSnapshot | null) => void
@@ -60,21 +60,12 @@ interface KannaStateStoreState {
   incrementFocusEpoch: () => void
 }
 
-export interface KannaStateStorePorts {
-  storage?: StoragePort
-}
-
-function readInitialUiRestartPhase(ports: KannaStateStorePorts = {}): string | null {
-  const storage = ports.storage ?? sessionStorageAdapter
-  return storage.getItem("kanna:ui-update-restart")
-}
-
 export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
   sidebarData: EMPTY_SIDEBAR_DATA,
   optimisticSidebarProjectOrder: null,
   localProjects: null,
   updateSnapshot: null,
-  uiRestartPhase: readInitialUiRestartPhase(),
+  uiRestartPhase: readPersistedUpdateRestartPhase(sessionStorageAdapter),
   diffSnapshotsByKey: EMPTY_DIFF_SNAPSHOTS,
   keybindings: null,
   pushConfig: null,

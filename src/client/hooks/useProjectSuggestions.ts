@@ -4,6 +4,7 @@ import { buildProjectMentionIndex } from "../../shared/project-mention"
 import { matchNamespacedQuery } from "../lib/mentionNamespaces"
 import { fileNameOfPath } from "../lib/pathUtils"
 import { useKannaStateStore } from "../stores/kannaStateStore"
+import { allProjectGroups } from "../../shared/sidebar-data"
 
 export interface ProjectSuggestion {
   kind: "project"
@@ -21,7 +22,7 @@ export interface MentionableProjectRow {
 const EMPTY_SUGGESTIONS: ProjectSuggestion[] = []
 
 export function projectRowsFromSidebar(sidebarData: SidebarData): MentionableProjectRow[] {
-  return [...sidebarData.starredProjectGroups, ...sidebarData.projectGroups].map((group) => ({
+  return allProjectGroups(sidebarData).map((group) => ({
     id: group.groupKey,
     localPath: group.localPath,
   }))

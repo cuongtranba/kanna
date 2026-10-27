@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, type ComponentProps } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type {
   BranchActionFailure,
   BranchActionSuccess,
   ChatBranchListEntry,
   ChatBranchListResult,
+  ChatDiffSnapshot,
   ChatMergePreviewResult,
   DiffCommitMode,
   GitHubPublishInfo,
@@ -14,13 +15,8 @@ import type {
 } from "../../../shared/types"
 import { useAppDialog } from "../../components/ui/app-dialog"
 import type { KannaState } from "../useKannaState"
-import {
-  DIFF_REFRESH_INTERVAL_MS,
-  EMPTY_DIFF_SNAPSHOT,
-  getIgnoreFolderEntryFromDiffPath,
-  resolveDiffFilePath,
-  serializeBranchSelection,
-} from "./utils"
+import { RightSidebar, type DiffFileActions } from "../../components/chat-ui/RightSidebar"
+import { getIgnoreFolderEntryFromDiffPath, resolveDiffFilePath, serializeBranchSelection } from "./gitSidebarPaths"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -38,26 +34,27 @@ function describeGitFailure(failure: GitActionFailure): string {
     : `${failure.message}${detail}`
 }
 
-export interface ChatPageSidebarActionsPorts {
+const DIFF_REFRESH_INTERVAL_MS = 5_000
+const EMPTY_DIFF_SNAPSHOT: ChatDiffSnapshot = { status: "unknown", files: [] }
+
+export interface RightSidebarPropsPorts {
   dom?: DomPort
   timer?: TimerPort
 }
 
-export { EMPTY_DIFF_SNAPSHOT }
-
-interface UseChatPageSidebarActionsArgs {
+interface UseRightSidebarPropsArgs {
   state: KannaState
   projectId: string | null
   showRightSidebar: boolean
-  ports?: ChatPageSidebarActionsPorts
+  ports?: RightSidebarPropsPorts
 }
 
-export function useChatPageSidebarActions({
+export function useRightSidebarProps({
   state,
   projectId,
   showRightSidebar,
   ports,
-}: UseChatPageSidebarActionsArgs) {
+}: UseRightSidebarPropsArgs) {
   const dom = ports?.dom ?? domAdapter
   const timer = ports?.timer ?? timerAdapter
   const dialog = useAppDialog()
@@ -531,31 +528,72 @@ export function useChatPageSidebarActions({
     }
   }, [projectId, showRightSidebar, timer])
 
-  return {
-    diffRenderMode,
-    wrapDiffLines,
-    setDiffRenderMode,
-    setWrapDiffLines,
-    scheduleTerminalDiffRefresh,
-    handleOpenDiffFile,
+  const fileActions = useMemo<DiffFileActions>(() => ({
+    onOpenFile: handleOpenDiffFile,
+    onOpenInFinder: handleOpenDiffInFinder,
+    onDiscardFile: handleDiscardDiffFile,
+    onIgnoreFile: handleIgnoreDiffFile,
+    onIgnoreFolder: handleIgnoreDiffFolder,
+    onCopyFilePath: handleCopyDiffFilePath,
+    onCopyRelativePath: handleCopyDiffRelativePath,
+  }), [
     handleCopyDiffFilePath,
     handleCopyDiffRelativePath,
-    handleLoadDiffPatch,
     handleDiscardDiffFile,
     handleIgnoreDiffFile,
     handleIgnoreDiffFolder,
+    handleOpenDiffFile,
     handleOpenDiffInFinder,
-    handleCommitDiffs,
-    handleSyncBranch,
-    handleGenerateCommitMessage,
-    handleInitializeGit,
-    handleGetGitHubPublishInfo,
+  ])
+
+  const props = useMemo<ComponentProps<typeof RightSidebar> | null>(() => {
+    if (!projectId) return null
+    return {
+      projectId,
+      diffs: state.chatDiffSnapshot ?? EMPTY_DIFF_SNAPSHOT,
+      editorLabel: state.editorLabel,
+      diffRenderMode,
+      wrapLines: wrapDiffLines,
+      fileActions,
+      onLoadPatch: handleLoadDiffPatch,
+      onListBranches: handleListBranches,
+      onPreviewMergeBranch: handlePreviewMergeBranch,
+      onMergeBranch: handleMergeBranch,
+      onCheckoutBranch: handleCheckoutBranch,
+      onCreateBranch: handleCreateBranch,
+      onGenerateCommitMessage: handleGenerateCommitMessage,
+      onInitializeGit: handleInitializeGit,
+      onGetGitHubPublishInfo: handleGetGitHubPublishInfo,
+      onCheckGitHubRepoAvailability: handleCheckGitHubRepoAvailability,
+      onSetupGitHub: handleSetupGitHub,
+      onCommit: handleCommitDiffs,
+      onSyncWithRemote: handleSyncBranch,
+      onDiffRenderModeChange: setDiffRenderMode,
+      onWrapLinesChange: setWrapDiffLines,
+    }
+  }, [
+    diffRenderMode,
+    fileActions,
     handleCheckGitHubRepoAvailability,
-    handleSetupGitHub,
-    handleListBranches,
     handleCheckoutBranch,
-    handlePreviewMergeBranch,
-    handleMergeBranch,
+    handleCommitDiffs,
     handleCreateBranch,
-  }
+    handleGenerateCommitMessage,
+    handleGetGitHubPublishInfo,
+    handleInitializeGit,
+    handleListBranches,
+    handleLoadDiffPatch,
+    handleMergeBranch,
+    handlePreviewMergeBranch,
+    handleSetupGitHub,
+    handleSyncBranch,
+    projectId,
+    setDiffRenderMode,
+    setWrapDiffLines,
+    state.chatDiffSnapshot,
+    state.editorLabel,
+    wrapDiffLines,
+  ])
+
+  return { props, scheduleTerminalDiffRefresh, initializeGit: handleInitializeGit }
 }

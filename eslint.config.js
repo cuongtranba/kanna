@@ -54,7 +54,6 @@ const TYPE_STRICT_SYNTAX = [AS_CAST_BAN, ANGLE_CAST_BAN, UNKNOWN_BAN, UNTYPED_AL
 const SHARED_CLIENT_DYNAMIC_MODULE_FILES = [
   "src/client/plugins/evaluatePlugin.ts",
   "src/client/plugins/hostModuleRegistry.ts",
-  "src/client/lib/useWebSocket.ts",
 ]
 const SERVER_OPS_DYNAMIC_MODULE_FILES = [
   "src/server/mermaid-parse.adapter.ts",
@@ -84,13 +83,13 @@ const SHARED_CLIENT_SEAL_SYNTAX = [
 
 // Client-only effect seal (adr-20260715-client-state-effect-architecture):
 // raw WebSocket/fetch/storage/timers/DOM globals are banned in src/client so
-// react-use-websocket / React Query / the typed ports+adapters own every
+// KannaSocket / React Query / the typed ports+adapters own every
 // primitive. Reuses the Bun-ban `no-restricted-globals` pattern already
 // established for shared/client + server above. Escape valve is file-scoped
 // (see the ignores list on the block below), not per-rule — *.adapter.ts is
 // the only place these globals may appear directly.
 const CLIENT_EFFECT_SEAL_GLOBALS = [
-  { name: "WebSocket", message: "Raw WebSocket is banned in src/client — use react-use-websocket via SocketBridge/socketStore instead." },
+  { name: "WebSocket", message: "Raw WebSocket is banned in src/client — use KannaSocket (src/client/app/socket.ts) instead." },
   { name: "fetch", message: "Raw fetch is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
   { name: "XMLHttpRequest", message: "Raw XMLHttpRequest is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
   { name: "localStorage", message: "Raw localStorage is banned in src/client — reach it through storage.adapter.ts via StoragePort." },

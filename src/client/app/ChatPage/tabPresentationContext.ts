@@ -2,6 +2,7 @@ import type { TabPresentationContext } from "../../components/panes/tabPresentat
 import type { ProjectTerminalLayout } from "../../stores/terminalLayoutStore"
 import type { BoardSummary, BoardViewSnapshot } from "../../../shared/boards/types"
 import type { SidebarData } from "../../../shared/types"
+import { allChatRows } from "../../../shared/sidebar-data"
 
 
 export interface TabPresentationSources {
@@ -14,10 +15,7 @@ export interface TabPresentationSources {
 export function buildTabPresentationContext(
   sources: TabPresentationSources,
 ): TabPresentationContext {
-  const chatRows = [
-    ...sources.sidebarData.starredProjectGroups,
-    ...sources.sidebarData.projectGroups,
-  ].flatMap((group) => [...group.chats, ...group.previewChats, ...group.olderChats])
+  const chatRows = allChatRows(sources.sidebarData)
 
   return {
     terminalTitles: Object.fromEntries(

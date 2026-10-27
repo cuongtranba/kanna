@@ -8,13 +8,8 @@ import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { Card, CardContent } from "../../components/ui/card"
 import { computeSessionTotals, deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
 import { getResolvedKeybindings } from "../../lib/keybindings"
-import {
-  DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
-  useRightSidebarStore,
-} from "../../stores/rightSidebarStore"
-import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
+import { useProjectPanelVisibility } from "../../stores/projectPanelVisibility"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../../stores/appSettingsStore"
-import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
 import { useComposerFocusRequest } from "./useComposerFocusRequest"
@@ -30,10 +25,10 @@ import {
   hasFileDragTypes,
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
-  gitInitializeKey,
-  projectOpenExternalKey,
+  PANEL_TOGGLE_SETTLE_MS,
   scrollTranscriptListToEnd,
-} from "./utils"
+} from "./transcriptViewport"
+import { gitInitializeKey, projectOpenExternalKey } from "./projectActionKeys"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
@@ -47,6 +42,7 @@ import { describeShareFailure } from "../../components/share/describeShareFailur
 import { surfaceCommandError, withCommandFeedback } from "../../lib/commandFeedback"
 import { cronActionKey } from "../../lib/cronActions"
 import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
+import { isUntitledChat } from "../../../shared/core-types"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
@@ -209,16 +205,10 @@ export function ChatTabContent({
   }, [setToolGroupExpanded])
 
   const projectId = state.activeProjectId
-  const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
-  const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
-  const projectRightSidebarVisibility = useRightSidebarStore((store) => (projectId ? store.projects[projectId] : undefined))
-  const rightSidebarVisibility = projectRightSidebarVisibility ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
+  const { showTerminalPane, showRightSidebar } = useProjectPanelVisibility(projectId)
   const editorPreset = useAppSettingsStore(selectEditorPreset)
   const editorCommandTemplate = useAppSettingsStore(selectEditorCommandTemplate)
 
-  const hasTerminals = terminalLayout.terminals.length > 0
-  const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
-  const showRightSidebar = Boolean(projectId && rightSidebarVisibility.isVisible)
 
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
   const contextWindowSnapshot = useMemo(
@@ -238,7 +228,8 @@ export function ChatTabContent({
     [state.messages],
   )
 
-  const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
+  const runtimeTitle = state.runtime?.title
+  const showEmptyState = state.messages.length === 0 && runtimeTitle !== undefined && isUntitledChat(runtimeTitle)
 
 
   const clearShowScrollTimeout = useCallback(() => {
@@ -540,7 +531,7 @@ export function ChatTabContent({
     })
     const timeoutId = timer.setTimeout(() => {
       syncIsAtEndFromList()
-    }, TERMINAL_TOGGLE_ANIMATION_DURATION_MS)
+    }, PANEL_TOGGLE_SETTLE_MS)
 
     return () => {
       timer.cancelAnimationFrame(frameId)
@@ -604,11 +595,6 @@ export function ChatTabContent({
           rightSidebarPending={rightSidebarPending}
           onOpenExternal={handleOpenExternal}
           openExternalPending={openExternalPending}
-          editorPreset={editorPreset}
-          editorCommandTemplate={editorCommandTemplate}
-          platform={state.localProjects?.machine.platform}
-          finderShortcut={resolvedKeybindings.bindings.openInFinder}
-          editorShortcut={resolvedKeybindings.bindings.openInEditor}
           terminalShortcut={resolvedKeybindings.bindings.toggleEmbeddedTerminal}
           rightSidebarShortcut={resolvedKeybindings.bindings.toggleRightSidebar}
           branchName={state.chatDiffSnapshot?.branchName}

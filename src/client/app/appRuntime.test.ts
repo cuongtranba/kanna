@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import {
+  deriveUpdateRestartActivity,
   sameDiffs,
   shouldPreserveExistingProjectDiffs,
   transitionUpdateRestart,
@@ -369,5 +370,27 @@ describe("UpdateRestartRuntime", () => {
     runtime.dispatch({ kind: "update_status_changed", updateStatus: null })
     runtime.dispatch({ kind: "update_status_changed", updateStatus: null })
     expect(snapshots).toHaveLength(0)
+  })
+})
+
+describe("deriveUpdateRestartActivity", () => {
+  test("update install/restart status drives the overlay regardless of phase", () => {
+    expect(deriveUpdateRestartActivity("idle", "updating")).toEqual({ active: true, label: "Installing update" })
+    expect(deriveUpdateRestartActivity("idle", "restart_pending")).toEqual({ active: true, label: "Installing update" })
+  })
+
+  test("restart phase drives the overlay when update status is idle", () => {
+    expect(deriveUpdateRestartActivity("awaiting_disconnect", "idle")).toEqual({ active: true, label: "Re-deploying Kanna" })
+    expect(deriveUpdateRestartActivity("awaiting_server_ready", undefined)).toEqual({ active: true, label: "Re-deploying Kanna" })
+  })
+
+  test("inactive when neither phase nor update status indicates a restart", () => {
+    expect(deriveUpdateRestartActivity("idle", "idle")).toEqual({ active: false, label: "" })
+    expect(deriveUpdateRestartActivity("idle", "up_to_date")).toEqual({ active: false, label: "" })
+    expect(deriveUpdateRestartActivity("idle", undefined)).toEqual({ active: false, label: "" })
+  })
+
+  test("update status takes precedence over an active restart phase", () => {
+    expect(deriveUpdateRestartActivity("awaiting_disconnect", "updating")).toEqual({ active: true, label: "Installing update" })
   })
 })

@@ -3,7 +3,6 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { MotionConfig } from "motion/react"
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { queryClient } from "../query/queryClient"
-import { SocketBridge } from "./SocketBridge"
 import { Flower } from "lucide-react"
 import { ChatPolicyDialog } from "../components/chat-ui/ChatPolicyDialog"
 import { POLICY_DEFAULT } from "../../shared/permission-policy"
@@ -25,6 +24,7 @@ import { cn } from "../lib/utils"
 import { SHELL_CONTENT_CARD_CLASS } from "../lib/shellChrome"
 import { selectIsAnySpawning, useNewSessionStore } from "../stores/newSessionStore"
 import { KannaSidebar } from "./KannaSidebar"
+import { useSidebarActions } from "./useSidebarActions"
 import { QuickSwitcher } from "../components/quick-switcher/QuickSwitcher"
 import { useQuickSwitcherHotkey } from "../hooks/useQuickSwitcherHotkey"
 import { AppBootstrap } from "./AppBootstrap"
@@ -59,6 +59,20 @@ const EMPTY_LOCAL_PROJECTS: LocalProjectSummary[] = []
 const VERSION_SEEN_STORAGE_KEY = "kanna:last-seen-version"
 const AUTH_STATUS_RETRY_DELAY_MS = 500
 const AUTH_LOGIN_KEY = pendingActionKey("auth.login")
+const WORKSPACE_PATHS = [
+  "/",
+  "/settings/:sectionId",
+  CHAT_ROUTE_PATTERN,
+  "/workflows/:chatId",
+  "/cron",
+  "/webhooks",
+  "/inbox",
+  "/inbox/:threadId",
+  "/boards/:projectId",
+  "/boards/:projectId/:boardId",
+  "/boards/stack/:stackId",
+  "/boards/stack/:stackId/:boardId",
+] as const
 const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
 
 function DeferredRoute({ children }: { children: ReactNode }) {
@@ -273,27 +287,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     visual: drawerVisual,
   })
   const previousSidebarDataRef = useRef<ReturnType<typeof useKannaState>["sidebarData"] | null>(null)
-  const {
-    handleCreateChat,
-    handleForkChat,
-    handleRenameChat,
-    handleArchiveChat,
-    handleOpenArchivedChat: stateHandleOpenArchivedChat,
-    openAddProjectModal,
-    handleDeleteChat,
-    handleArchiveBulkChats,
-    handleDeleteBulkChats,
-    handleCopyPath,
-    handleOpenExternalPath,
-    handleHideProject,
-    handleDeleteProject,
-    handleToggleProjectStar,
-    handleToggleChatPin,
-    handleSetProjectInstructions,
-    handleReorderProjectGroups,
-    importClaudeSessions,
-    importClaudeSession,
-  } = state
+  const { handleCreateChat, importClaudeSessions, importClaudeSession } = state
   const handleImportClaudeSessions = useCallback(async () => {
     try {
       const result = await importClaudeSessions()
@@ -370,6 +364,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   }, [quickSwitcherOpenProjectPath])
   const quickSwitcherLocalProjects = state.localProjects?.projects ?? EMPTY_LOCAL_PROJECTS
 
+  const sidebarActions = useSidebarActions(state)
   const sidebarElement = useMemo(() => (
     <KannaSidebar
       data={state.sidebarData}
@@ -382,78 +377,34 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
       onClose={state.closeSidebar}
       onCollapse={state.collapseSidebar}
       onExpand={state.expandSidebar}
-      onCreateChat={handleCreateChat}
-      onForkChat={handleForkChat}
       currentProjectId={state.activeProjectId}
       keybindings={state.keybindings}
-      onRenameChat={handleRenameChat}
-      onArchiveChat={handleArchiveChat}
-      onOpenArchivedChat={stateHandleOpenArchivedChat}
-      onDeleteChat={handleDeleteChat}
-      onArchiveBulkChats={handleArchiveBulkChats}
-      onDeleteBulkChats={handleDeleteBulkChats}
+      actions={sidebarActions}
       onEditChatPermissions={handleSidebarEditPermissions}
-      onOpenAddProjectModal={openAddProjectModal}
       onImportClaudeSessions={handleImportClaudeSessions}
       onImportClaudeSessionIds={handleImportClaudeSessionIds}
-      onCopyPath={handleCopyPath}
-      onOpenExternalPath={handleOpenExternalPath}
-      onHideProject={handleHideProject}
-      onDeleteProject={handleDeleteProject}
-      onToggleStar={handleToggleProjectStar}
-      onTogglePinChat={handleToggleChatPin}
-      onSetProjectInstructions={handleSetProjectInstructions}
-      onReorderProjectGroups={handleReorderProjectGroups}
-      onCreateStack={state.handleCreateStack}
-      onRenameStack={state.handleRenameStack}
-      onSetStackInstructions={state.handleSetStackInstructions}
-      onRemoveStack={state.handleRemoveStack}
-      onCreateStackChat={state.handleCreateStackChat}
-      onListStackWorktrees={state.handleListStackWorktrees}
       editorLabel={state.editorLabel}
       updateSnapshot={state.updateSnapshot}
     />
   ), [
-    openAddProjectModal,
     handleImportClaudeSessions,
     handleImportClaudeSessionIds,
-    handleCopyPath,
-    handleCreateChat,
-    handleArchiveChat,
-    handleDeleteChat,
-    handleArchiveBulkChats,
-    handleDeleteBulkChats,
-    stateHandleOpenArchivedChat,
-    handleForkChat,
-    handleOpenExternalPath,
-    handleRenameChat,
     handleSidebarEditPermissions,
-    handleReorderProjectGroups,
-    handleHideProject,
-    handleDeleteProject,
-    handleToggleProjectStar,
-    handleToggleChatPin,
-    handleSetProjectInstructions,
-    state.handleSetStackInstructions,
     showMobileOpenButton,
+    sidebarActions,
     state.activeChatId,
     state.activeProjectId,
-    state.keybindings,
     state.closeSidebar,
     state.collapseSidebar,
     state.connectionStatus,
     state.editorLabel,
     state.expandSidebar,
+    state.keybindings,
     state.openSidebar,
     state.sidebarCollapsed,
     state.sidebarData,
     state.sidebarOpen,
     state.updateSnapshot,
-    state.handleCreateStack,
-    state.handleRenameStack,
-    state.handleRemoveStack,
-    state.handleCreateStackChat,
-    state.handleListStackWorktrees,
   ])
 
   useEffect(() => {
@@ -581,19 +532,10 @@ function AuthedApp() {
     <KannaSocketProvider>
       <Routes>
         <Route element={<KannaLayout />}>
-          <Route path="/" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          <Route path="/settings/:sectionId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path={CHAT_ROUTE_PATTERN} element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/workflows/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/cron" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/webhooks" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/inbox" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/inbox/:threadId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/boards/:projectId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/boards/:projectId/:boardId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/boards/stack/:stackId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/boards/stack/:stackId/:boardId" element={<WorkspacePage />} />
+          {WORKSPACE_PATHS.map((path) => (
+            <Route key={path} path={path} element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          ))}
         </Route>
       </Routes>
     </KannaSocketProvider>
@@ -604,7 +546,6 @@ export function App() {
   return (
     <MotionConfig reducedMotion="user">
       <QueryClientProvider client={queryClient}>
-        <SocketBridge />
         <TooltipProvider>
           <AppDialogProvider>
             <Routes>

@@ -2,6 +2,7 @@ import { startTransition, useCallback, useEffect, useRef } from "react"
 import type { ChatAttachment, UploadedAttachment } from "../../../shared/types"
 import { errorMessage } from "../../../shared/errors"
 import { deleteUploadedFile } from "../../api/files"
+import { MAX_CONCURRENT_UPLOADS, MAX_FILES_PER_DROP } from "../../lib/composerLimits"
 import { runDetached } from "../../lib/runDetached"
 import { UploadAbortedError, uploadFile } from "../../lib/uploadFile.adapter"
 import type { CommandPort } from "../../ports/commandPort"
@@ -12,9 +13,6 @@ import {
   toWireAttachment,
   type ComposerAttachment,
 } from "../../stores/chatTabScopedStore"
-
-const MAX_FILES_PER_DROP = 50
-const MAX_CONCURRENT_UPLOADS = 3
 
 export function willExceedAttachmentLimit(args: {
   currentAttachmentCount: number

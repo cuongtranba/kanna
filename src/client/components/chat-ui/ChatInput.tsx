@@ -56,6 +56,7 @@ import {
 import { useComposerArrival } from "./ComposerArrival"
 import { useComposerUploads } from "./useComposerUploads"
 import { CHAT_INPUT_ATTRIBUTE } from "../../app/chatFocusPolicy"
+import { toSendOptions } from "../../lib/composerSendOptions"
 import { ChatPreferenceControls, type ModelLock } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
 import { SessionTokenPill } from "./SessionTokenPill"
@@ -398,20 +399,10 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     [enqueueFiles],
   )
 
-  const buildSubmitOptions = useCallback(() => {
-    let modelOptions: ModelOptions = {}
-    if (providerPrefs.provider === "claude") {
-      modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else if (providerPrefs.provider === "codex") {
-      modelOptions = { codex: { ...providerPrefs.modelOptions } }
-    }
-    return {
-      provider: selectedProvider,
-      model: providerPrefs.model,
-      modelOptions,
-      planMode: showPlanMode ? providerPrefs.planMode : false,
-    }
-  }, [providerPrefs, selectedProvider, showPlanMode])
+  const buildSubmitOptions = useCallback(
+    () => toSendOptions(providerPrefs, showPlanMode),
+    [providerPrefs, showPlanMode],
+  )
 
   const doSubmit = useCallback(
     async (text: string, pluginAttachments: ChatAttachment[]) => {
@@ -842,7 +833,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               </Button>
               <DialogContent
                 size="sm"
-                restoreFocus="trigger"
                 onCloseAutoFocus={(event) => {
                   event.preventDefault()
                   chatSettingsTriggerRef.current?.focus({ preventScroll: true })

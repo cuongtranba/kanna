@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { Blocks } from "lucide-react"
 import { Button } from "../components/ui/button"
-import { StatusPill } from "../components/ui/status-pill"
+import { StateMarkLabel } from "../components/ui/state-mark"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
 import type { CommandPort } from "../ports/commandPort"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
@@ -60,7 +60,7 @@ function PluginRow({
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-medium text-foreground">{plugin.id}</span>
-          <StatusPill tone={plugin.enabled ? "active" : "muted"} label={plugin.enabled ? "Enabled" : "Disabled"} />
+          <StateMarkLabel tone={plugin.enabled ? "active" : "muted"} label={plugin.enabled ? "Enabled" : "Disabled"} />
         </span>
         <span className="truncate text-xs text-muted-foreground">{plugin.sourceDir}</span>
       </div>

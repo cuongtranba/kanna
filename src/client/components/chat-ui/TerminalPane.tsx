@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "
 import { SerializeAddon } from "@xterm/addon-serialize"
 import { WebLinksAddon } from "@xterm/addon-web-links"
 import { Terminal, type ITheme, type ITerminalOptions } from "@xterm/xterm"
-import type { TerminalSnapshot } from "../../../shared/protocol"
+import type { TerminalEvent, TerminalSnapshot } from "../../../shared/protocol"
 import type { KannaSocket, SocketStatus } from "../../app/socket"
 import { useTheme } from "../../hooks/useTheme"
 import { TerminalPaneStore } from "./TerminalPane.store"
@@ -544,8 +544,9 @@ function TerminalPaneInner({
 
     scheduleSessionCreate()
 
-    return socket.subscribeTerminal(terminalId, {
-      onSnapshot: (snapshot) => {
+    return socket.subscribe<TerminalSnapshot | null, TerminalEvent>(
+      { type: "terminal", terminalId },
+      (snapshot) => {
         if (!snapshot) {
           hasCreatedRef.current = false
           lastAppliedSnapshotKeyRef.current = null
@@ -560,7 +561,7 @@ function TerminalPaneInner({
           scheduleResizeSync()
         }
       },
-      onEvent: (event) => {
+      (event) => {
         const terminal = terminalRef.current
         if (!terminal) return
         if (event.type === "terminal.output") {
@@ -571,7 +572,7 @@ function TerminalPaneInner({
           setMetadataFromExit(event.exitCode)
         }
       },
-    })
+    )
   }, [connectionStatus, dom, projectId, scheduleResizeSync, scrollback, socket, terminalId, timer, setMetadataConditional, setMetadataFromExit, storeSetError])
 
   return (

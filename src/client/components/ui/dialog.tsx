@@ -2,9 +2,7 @@ import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE, RESTORE_CHAT_INPUT_FOCUS_EVENT } from "../../app/chatFocusPolicy"
-import type { DomPort } from "../../ports/domPort"
-import { domAdapter } from "../../adapters/dom.adapter"
+import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE } from "../../lib/focusOverlay"
 import { Button, type ButtonProps } from "./button"
 
 const Dialog = DialogPrimitive.Root
@@ -37,24 +35,14 @@ const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     size?: "sm" | "md" | "lg"
-    ports?: { dom?: DomPort }
-    restoreFocus?: "chat-input" | "trigger"
   }
->(({ className, children, size = "md", ports = {}, restoreFocus = "chat-input", ...props }, ref) => {
-  const dom = ports.dom ?? domAdapter
+>(({ className, children, size = "md", ...props }, ref) => {
   return (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
       ref={ref}
       {...{ [FOCUS_FALLBACK_IGNORE_ATTRIBUTE]: "" }}
-      onCloseAutoFocus={(event) => {
-        if (restoreFocus === "chat-input") {
-          event.preventDefault()
-          dom.dispatchCustomWindowEvent(RESTORE_CHAT_INPUT_FOCUS_EVENT)
-        }
-        props.onCloseAutoFocus?.(event)
-      }}
       className={cn(
         "fixed left-1/2 bottom-0 z-50 w-full -translate-x-1/2 rounded-t-lg bg-card duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none max-md:max-h-[calc(100dvh-1rem)] max-md:pb-[env(safe-area-inset-bottom)] md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:border-border",
         "max-md:data-[state=open]:slide-in-from-bottom-full max-md:data-[state=closed]:slide-out-to-bottom-full",

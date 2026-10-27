@@ -45,7 +45,14 @@ export type UpdateRestartIntent =
 const STORAGE_PHASE_KEY = "kanna:ui-update-restart"
 const STORAGE_LAST_RELOAD_KEY = "kanna:last-update-reload-request"
 
-function deriveActivity(phase: UpdateRestartPhase, updateStatus: UpdateSnapshot["status"] | null | undefined): { active: boolean; label: string } {
+export function readPersistedUpdateRestartPhase(storage: StoragePort): UpdateRestartPhase {
+  const persisted = storage.getItem(STORAGE_PHASE_KEY)
+  return persisted === "awaiting_disconnect" || persisted === "awaiting_server_ready"
+    ? persisted
+    : "idle"
+}
+
+export function deriveUpdateRestartActivity(phase: UpdateRestartPhase, updateStatus: UpdateSnapshot["status"] | null | undefined): UpdateRestartSnapshot["activity"] {
   if (updateStatus === "updating" || updateStatus === "restart_pending") {
     return { active: true, label: "Installing update" }
   }
@@ -103,17 +110,14 @@ export class UpdateRestartRuntime {
     opts: { isServerReady: () => Promise<boolean> },
   ) {
     this.isServerReady = opts.isServerReady
-    const persisted = deps.storage.getItem(STORAGE_PHASE_KEY)
-    this.phase = persisted === "awaiting_disconnect" || persisted === "awaiting_server_ready"
-      ? persisted
-      : "idle"
+    this.phase = readPersistedUpdateRestartPhase(deps.storage)
     if (this.phase === "awaiting_server_ready") {
       this.startPolling()
     }
   }
 
   getSnapshot(): UpdateRestartSnapshot {
-    return { phase: this.phase, activity: deriveActivity(this.phase, this.updateStatus) }
+    return { phase: this.phase, activity: deriveUpdateRestartActivity(this.phase, this.updateStatus) }
   }
 
   private emit(): void {

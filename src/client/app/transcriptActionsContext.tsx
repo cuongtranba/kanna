@@ -9,6 +9,7 @@ import type { CloudflareTunnelRecord } from "../../shared/settings/cloudflare-tu
 import type { WorkflowRunSummary, WorkflowRun } from "../../shared/workflow-types"
 import type { GetSubagentTranscript } from "../components/messages/subagent-fetch-context"
 import type { KannaState } from "./useKannaState"
+import { DEFAULT_EDITOR_PRESET } from "../stores/terminalPreferencesStore"
 
 export interface TranscriptActionsContextValue {
   onAskUserQuestionSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void | Promise<void>
@@ -69,7 +70,7 @@ export const DEFAULT_TRANSCRIPT_ACTIONS: TranscriptActionsContextValue = {
   chatId: undefined,
   onToolGroupExpandedChange: NOOP,
   subagentRuns: {},
-  editorPreset: "cursor",
+  editorPreset: DEFAULT_EDITOR_PRESET,
   editorCommandTemplate: undefined,
   platform: "darwin",
   queuedMessages: [],

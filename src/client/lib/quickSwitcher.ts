@@ -7,6 +7,7 @@ import type {
 } from "../../shared/types"
 import { actionMatchesEvent } from "./keybindings"
 import { fileNameOfPath } from "./pathUtils"
+import { allProjectGroups } from "../../shared/sidebar-data"
 
 export const TERMINAL_CONTAINER_SELECTOR = ".kanna-terminal"
 
@@ -69,7 +70,7 @@ export function toQuickSwitcherProjects(
   data: SidebarData,
   localProjects: readonly LocalProjectSummary[] = [],
 ): QuickSwitcherProject[] {
-  const groups = [...data.starredProjectGroups, ...data.projectGroups]
+  const groups = allProjectGroups(data)
   const seenIds = new Set<string>()
   const seenPaths = new Set<string>()
   const projects: QuickSwitcherProject[] = []
@@ -106,7 +107,7 @@ export function toQuickSwitcherProjects(
 }
 
 export function toQuickSwitcherSessions(data: SidebarData, projectId: string): QuickSwitcherSession[] {
-  const groups = [...data.starredProjectGroups, ...data.projectGroups]
+  const groups = allProjectGroups(data)
   const group = groups.find((candidate) => candidate.groupKey === projectId)
   if (!group) return []
 

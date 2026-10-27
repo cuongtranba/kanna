@@ -37,8 +37,9 @@ import {
   CHAT_NAVBAR_OFFSET_PX,
   EMPTY_STATE_TEXT,
   scrollTranscriptListToEnd,
-} from "./utils"
+} from "./transcriptViewport"
 import { runDetached } from "../../lib/runDetached"
+import { MAX_FILES_PER_DROP } from "../../lib/composerLimits"
 import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -408,12 +409,7 @@ export const ChatTranscriptViewport = memo(({
       {isHistoryLoading ? (
         <div className="flex justify-center pb-4">
           <span className="text-sm translate-y-[-0.5px]">
-            <AnimatedShinyText
-              animate
-              shimmerWidth={Math.max(20, "Loading more messages...".length * 3)}
-            >
-              Loading more messages...
-            </AnimatedShinyText>
+            <AnimatedShinyText animate>Loading more messages...</AnimatedShinyText>
           </span>
         </div>
       ) : null}
@@ -627,7 +623,7 @@ export const ChatTranscriptViewport = memo(({
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center justify-center gap-3 text-center">
                 <Upload className="mx-auto size-14 text-foreground" strokeWidth={1.75} />
-                <div className="text-xl font-medium text-foreground">Drop up to 10 files</div>
+                <div className="text-xl font-medium text-foreground">Drop up to {MAX_FILES_PER_DROP} files</div>
               </div>
             </div>
           </div>

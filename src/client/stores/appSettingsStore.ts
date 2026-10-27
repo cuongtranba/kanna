@@ -4,6 +4,7 @@ import type { BeaconConfig } from "../../shared/beacon-config"
 import type { CustomProviderPublic } from "../../shared/custom-providers"
 import type { McpSource } from "../../shared/mcp-sources/types"
 import { DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
+import { DEFAULT_EDITOR_PRESET, getDefaultEditorCommandTemplate } from "./terminalPreferencesStore"
 import type { ChatSoundId, ChatSoundPreference, EditorPreset } from "../../shared/core-types"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { REMOTE_MCP_SETTINGS_DEFAULTS, type RemoteMcpSettings } from "../../shared/settings/remote-mcp"
@@ -187,14 +188,6 @@ export const selectServiceBusSettings = (state: AppSettingsStoreState): ServiceB
   state.settings?.serviceBus ?? SERVICE_BUS_PUBLIC_DEFAULTS
 
 const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
-const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
-
-function defaultEditorCommandTemplate(preset: EditorPreset): string {
-  if (preset === "vscode") return "code {path}"
-  if (preset === "xcode") return "xed {path}"
-  if (preset === "windsurf") return "windsurf {path}"
-  return "cursor {path}"
-}
 
 export const selectScrollbackLines = (state: AppSettingsStoreState): number =>
   state.settings?.terminal.scrollbackLines ?? DEFAULT_TERMINAL_SCROLLBACK
@@ -209,7 +202,7 @@ export const selectEditorCommandTemplate = (state: AppSettingsStoreState): strin
   const preset = state.settings?.editor.preset ?? DEFAULT_EDITOR_PRESET
   const template = state.settings?.editor.commandTemplate
   const trimmed = template?.trim()
-  return trimmed && trimmed.length > 0 ? trimmed : defaultEditorCommandTemplate(preset)
+  return trimmed && trimmed.length > 0 ? trimmed : getDefaultEditorCommandTemplate(preset)
 }
 
 export const selectChatSoundPreference = (state: AppSettingsStoreState): ChatSoundPreference =>

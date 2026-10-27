@@ -20,6 +20,7 @@ import {
   type NewProjectModalTab,
 } from "../stores/newProjectModalStore"
 import { fileNameOfPath } from "../lib/pathUtils"
+import type { ProjectRequest } from "../lib/projectRequest"
 
 export interface NewProjectModalPorts {
   timer?: TimerPort
@@ -28,7 +29,7 @@ export interface NewProjectModalPorts {
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (project: { mode: NewProjectModalTab; localPath: string; title: string }) => void
+  onConfirm: (project: ProjectRequest) => void
   ports?: NewProjectModalPorts
 }
 

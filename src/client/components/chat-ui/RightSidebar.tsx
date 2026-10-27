@@ -96,12 +96,13 @@ export interface DiffFileActions {
   onCopyRelativePath: (path: string) => Promise<void>
 }
 
-interface RightSidebarProps extends DiffFileActions {
+interface RightSidebarProps {
   projectId: string | null
   diffs: ChatDiffSnapshot
   editorLabel: string
   diffRenderMode: DiffRenderMode
   wrapLines: boolean
+  fileActions: DiffFileActions
   onLoadPatch: (path: string) => Promise<string>
   onListBranches: () => Promise<ChatBranchListResult>
   onPreviewMergeBranch: (branch: ChatBranchListEntry) => Promise<ChatMergePreviewResult>
@@ -1333,13 +1334,7 @@ function RightSidebarImpl({
   editorLabel,
   diffRenderMode,
   wrapLines,
-  onOpenFile,
-  onOpenInFinder,
-  onDiscardFile,
-  onIgnoreFile,
-  onIgnoreFolder,
-  onCopyFilePath,
-  onCopyRelativePath,
+  fileActions,
   onListBranches,
   onPreviewMergeBranch,
   onMergeBranch,
@@ -1358,15 +1353,6 @@ function RightSidebarImpl({
   ports,
 }: RightSidebarProps) {
   const dom = ports?.dom ?? domAdapter
-  const fileActions: DiffFileActions = useMemo(() => ({
-    onOpenFile,
-    onOpenInFinder,
-    onDiscardFile,
-    onIgnoreFile,
-    onIgnoreFolder,
-    onCopyFilePath,
-    onCopyRelativePath,
-  }), [onOpenFile, onOpenInFinder, onDiscardFile, onIgnoreFile, onIgnoreFolder, onCopyFilePath, onCopyRelativePath])
   const hasChanges = diffs.files.length > 0
   const gitActionScope = projectId ?? ""
   const generateKey = pendingActionKey("chat.generateCommitMessage", gitActionScope)
