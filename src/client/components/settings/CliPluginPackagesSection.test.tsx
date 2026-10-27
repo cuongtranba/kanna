@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
-import { PluginKindSection } from "./PluginsSection"
+import { PluginKindSection } from "./CliPluginPackagesSection"
 import type { InstalledPackage, PackageUpdateEntry } from "../../../shared/packages/types"
 
 const noop = () => undefined

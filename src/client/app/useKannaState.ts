@@ -51,6 +51,7 @@ export {
   getUiUpdateReadinessPath,
   resolveComposeIntent,
 } from "./useAppGlobalState"
+import type { McpOAuthCompleteResult, McpOAuthStartResult } from "../../shared/mcp-types.schema"
 export type { UiRestartActivity, ProjectRequest, StartChatIntent } from "./useAppGlobalState"
 
 function mergeOpenRouterModels(
@@ -401,8 +402,8 @@ export interface KannaState {
   handleTestMcpServer: (id: string) => Promise<void>
   handleMintBeaconPairingCode: () => Promise<BeaconMintResult>
   handleUpdateBeacon: (beaconId: string) => Promise<BeaconUpdateResult>
-  handleStartMcpOAuth: (id: string) => Promise<{ ok: boolean; authorizationUrl?: string; alreadyAuthenticated?: boolean; error?: string }>
-  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
+  handleStartMcpOAuth: (id: string) => Promise<McpOAuthStartResult>
+  handleCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<McpOAuthCompleteResult>
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>

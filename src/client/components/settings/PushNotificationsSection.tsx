@@ -2,10 +2,10 @@ import type { ReactNode } from "react"
 import type { LocalProjectsSnapshot, PushConfigSnapshot } from "../../../shared/types"
 import { isValidVapidSubject } from "../../../shared/vapid-subject"
 import { errorMessage } from "../../../shared/errors"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { usePushSettingsStore } from "../../stores/pushSettingsStore"
 import { cn } from "../../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
-import type { PushPermissionState } from "../../app/pushClient"
+import type { PushPermissionState } from "../../lib/pushPermissionState"
 import { Input } from "../ui/input"
 import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
@@ -42,9 +42,9 @@ const PUSH_CONTACT_KEY = "push.contactSubject"
 async function reportFailure(action: () => Promise<void>): Promise<void> {
   try {
     await action()
-    useSettingsPageStore.getState().setPushError(null)
+    usePushSettingsStore.getState().setError(null)
   } catch (error) {
-    useSettingsPageStore.getState().setPushError(errorMessage(error))
+    usePushSettingsStore.getState().setError(errorMessage(error))
   }
 }
 
@@ -53,7 +53,7 @@ function runPushAction(key: string, action: () => Promise<void>): void {
 }
 
 function PushErrorNotice() {
-  const pushError = useSettingsPageStore((s) => s.pushError)
+  const pushError = usePushSettingsStore((s) => s.error)
   if (!pushError) return null
   return (
     <p

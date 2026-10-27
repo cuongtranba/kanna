@@ -12,7 +12,7 @@ import { selectCustomMcpServers, selectMcpSources, useAppSettingsStore } from ".
 import { useMcpSourcesSectionStore } from "../stores/mcpSourcesSectionStore"
 import { useMcpSourcesStore } from "../stores/mcpSourcesStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
-import { useAppSettingsCrudHandlers, type AppSettingsCrudHandlers, type AppSettingsPatchWrapper } from "./appSettingsCrud"
+import { useAppSettingsCrudHandlers, useAppSettingsSetEnabled, type AppSettingsCrudHandlers } from "./appSettingsCrud"
 import { McpSourceForm } from "./McpSourceForm"
 import type { KannaState } from "./useKannaState"
 
@@ -20,7 +20,6 @@ export interface McpSourcesSectionHandlers extends AppSettingsCrudHandlers<McpSo
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
 }
 
-const wrapMcpSourcesPatch: AppSettingsPatchWrapper<McpSourceInput, McpSourcePatch> = (mcpSources) => ({ mcpSources })
 
 interface RowProps {
   source: McpSource
@@ -142,16 +141,8 @@ export function McpSourcesSettingsBranch({ state }: { state: Pick<KannaState, "h
   const sources = useAppSettingsStore(selectMcpSources)
   const servers = useAppSettingsStore(selectCustomMcpServers)
   const statuses = useMcpSourcesStore((store) => store.statuses)
-  const crud = useAppSettingsCrudHandlers(wrapMcpSourcesPatch, state)
-  const { handleWriteAppSettings } = state
-  const handlers = useMemo<McpSourcesSectionHandlers>(
-    () => ({
-      ...crud,
-      onSetEnabled: async (id, enabled) => {
-        await handleWriteAppSettings({ mcpSources: { setEnabled: { id, enabled } } })
-      },
-    }),
-    [crud, handleWriteAppSettings],
-  )
+  const crud = useAppSettingsCrudHandlers("mcpSources", state)
+  const onSetEnabled = useAppSettingsSetEnabled("mcpSources", state)
+  const handlers = useMemo<McpSourcesSectionHandlers>(() => ({ ...crud, onSetEnabled }), [crud, onSetEnabled])
   return <McpSourcesSection sources={sources} statuses={statuses} servers={servers} sidebarData={state.sidebarData} handlers={handlers} />
 }

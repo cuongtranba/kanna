@@ -11,12 +11,12 @@ export interface WebhookTargetOption {
   hint?: string
 }
 
-export interface WebhookTargets {
+export interface InboundTargets {
   chats: WebhookTargetOption[]
   projects: WebhookTargetOption[]
 }
 
-export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
+export function listInboundTargets(sidebar: SidebarData): InboundTargets {
   const chats: WebhookTargetOption[] = []
   const projects: WebhookTargetOption[] = []
   for (const group of [...sidebar.starredProjectGroups, ...sidebar.projectGroups]) {
@@ -29,7 +29,7 @@ export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
   return { chats, projects }
 }
 
-export function describeWebhookTarget(hook: WebhookConfig, targets: WebhookTargets): string {
+export function describeWebhookTarget(hook: WebhookConfig, targets: InboundTargets): string {
   if (hook.mode === "spawn") {
     const project = targets.projects.find((option) => option.value === hook.projectId)
     return project ? `New chat in ${project.label}` : "Project no longer available"
@@ -38,7 +38,7 @@ export function describeWebhookTarget(hook: WebhookConfig, targets: WebhookTarge
   return chat ? chat.label : "Chat no longer available"
 }
 
-export function listWebhookModelOptions(catalog: readonly ProviderCatalogEntry[]): SearchableOption[] {
+export function listInboundModelOptions(catalog: readonly ProviderCatalogEntry[]): SearchableOption[] {
   const options: SearchableOption[] = [
     {
       value: "",

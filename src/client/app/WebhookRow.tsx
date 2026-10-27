@@ -6,7 +6,7 @@ import { useAppDialog } from "../components/ui/app-dialog"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
 import { describeLastDelivery, webhookActionLabel, webhookUrl } from "../lib/webhookPresentation"
-import { describeWebhookModel, describeWebhookTarget, type WebhookTargets } from "../lib/webhookTargets"
+import { describeWebhookModel, describeWebhookTarget, type InboundTargets } from "../lib/webhookTargets"
 import { cn } from "../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
@@ -16,7 +16,7 @@ import { WebhookCopyButton } from "./WebhookCopyButton"
 
 interface Props {
   hook: WebhookSummary
-  targets: WebhookTargets
+  targets: InboundTargets
   catalog: readonly ProviderCatalogEntry[]
   origin: string
   divider: boolean

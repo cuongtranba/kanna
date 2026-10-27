@@ -12,6 +12,7 @@ import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
 import { surfaceErrorIn } from "../lib/commandFeedback"
 import { problemsOf } from "../lib/serviceBusDraft"
 import { SERVICE_BUS_MODES, type ServiceBusMode } from "../../shared/service-bus/jetstream-config"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/nats-server-version"
 import type { KannaState } from "./useKannaState"
 import { SettingsRow } from "../components/settings/SettingsList"
 import { Fact, Field, Problems } from "./ServiceBusFields"
@@ -145,7 +146,7 @@ export function ServiceBusSection({ state }: { state: ServiceBusSectionState }) 
           Mirror every durable event Kanna records into a NATS JetStream stream, so other programs can read them with the nats CLI or any NATS client. Kanna&apos;s own history is not affected, and a bus outage never blocks a chat.
         </p>
         <p className="max-w-[65ch] text-13 text-muted-foreground">
-          Embedded mode downloads nats-server v2.15.1 (~7 MB) from GitHub on first start and runs it on loopback with a private token.
+          {`Embedded mode downloads nats-server v${NATS_SERVER_VERSION} from GitHub on first start and runs it on loopback with a private token.`}
         </p>
       </div>
 

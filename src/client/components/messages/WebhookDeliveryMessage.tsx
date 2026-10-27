@@ -1,6 +1,6 @@
 import { Webhook } from "lucide-react"
 import { formatStartedClock } from "../../lib/formatters"
-import { webhookModeLabel } from "../../lib/webhookPresentation"
+import { inboundModeLabel } from "../../lib/webhookPresentation"
 import type { ProcessedWebhookDeliveryMessage } from "./types"
 
 interface Props {
@@ -15,7 +15,7 @@ export function WebhookDeliveryMessage({ message }: Props) {
         <span className="text-sm font-medium text-foreground">Webhook</span>
         <span className="truncate text-sm text-foreground/90">{message.hookName}</span>
         <span className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
-          <span>{webhookModeLabel(message.mode)}</span>
+          <span>{inboundModeLabel(message.mode)}</span>
           <span className="tabular-nums">{formatStartedClock(Date.parse(message.timestamp))}</span>
         </span>
       </div>

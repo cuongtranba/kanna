@@ -416,17 +416,17 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
 
 describe("P9a — Settings → Plugins page", () => {
   test("lists installed plugins and its reload action sends the plugins.reload command", async () => {
-    const { PluginsSection, buildPluginsSectionHandlers } = await import("../client/app/PluginsSection")
+    const { KannaPluginsSection, buildKannaPluginsSectionHandlers } = await import("../client/app/KannaPluginsSection")
     const { renderToStaticMarkup } = await import("react-dom/server")
     const { makeFakeCommandPort } = await import("../client/adapters/testing/makeFakePorts")
 
     const commands = makeFakeCommandPort(() => undefined)
-    const handlers = buildPluginsSectionHandlers(commands)
+    const handlers = buildKannaPluginsSectionHandlers(commands)
     await handlers.onReload("hello")
     expect(commands.calls).toEqual([{ type: "plugins.reload", pluginId: "hello" }])
 
     const plugin = { id: "hello", sourceDir: HELLO, enabled: false }
-    const html = renderToStaticMarkup(<PluginsSection plugins={[plugin]} handlers={handlers} />)
+    const html = renderToStaticMarkup(<KannaPluginsSection plugins={[plugin]} handlers={handlers} />)
     expect(html).toContain("hello")
   }, 30_000)
 })

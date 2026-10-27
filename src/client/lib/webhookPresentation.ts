@@ -35,11 +35,11 @@ export function webhookActionLabel(mode: WebhookMode, handling: InboundHandling 
   return handling === "task" && mode !== "notify" ? `${MODE_LABEL[mode]} · task` : MODE_LABEL[mode]
 }
 
-export function webhookModeLabel(mode: WebhookMode): string {
+export function inboundModeLabel(mode: WebhookMode): string {
   return MODE_LABEL[mode]
 }
 
-export function webhookModeConsequence(mode: WebhookMode): string {
+export function inboundModeConsequence(mode: WebhookMode): string {
   return MODE_CONSEQUENCE[mode]
 }
 

@@ -1,17 +1,13 @@
 import { create } from "zustand"
-import type { ClaudeReasoningEffort } from "../../shared/types"
+import type { ClaudeReasoningEffort, CustomModelProvider } from "../../shared/types"
+import { LIST_EDITING, type SectionEditing } from "../lib/sectionEditing"
 
-export type ModelProvider = "claude" | "codex"
-
-export type ModelsEditingState =
-  | { kind: "list" }
-  | { kind: "create"; provider: ModelProvider }
-  | { kind: "edit"; id: string }
+export type ModelsEditingState = SectionEditing<{ provider: CustomModelProvider }>
 
 export interface ModelEditorDraft {
   id: string
   label: string
-  modelProvider: ModelProvider
+  modelProvider: CustomModelProvider
   supportedEfforts: readonly ClaudeReasoningEffort[]
   offersOneMillionContext: boolean
 }
@@ -45,7 +41,7 @@ interface ModelsSectionState {
 }
 
 export const useModelsSectionStore = create<ModelsSectionState>()((set) => ({
-  editing: { kind: "list" },
+  editing: LIST_EDITING,
   editorForm: createEditorFormFromInitial(EMPTY_DRAFT),
 
   setEditing: (editing) => set({ editing }),

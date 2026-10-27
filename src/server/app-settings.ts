@@ -94,6 +94,13 @@ import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput
 import { applyServiceBusPatch, normalizeServiceBusSettings, toPublicServiceBus, type ServiceBusSettingsStored } from "./service-bus-settings"
 import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
 import { isRecord } from "../shared/errors"
+import {
+  MCP_SERVER_NAME_PATTERN,
+  SNIPPET_SHORTCUT_PATTERN,
+  SUBAGENT_NAME_MAX,
+  SUBAGENT_NAME_PATTERN,
+  mcpServerNameIssue,
+} from "../shared/settings/validation"
 import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
 import {
   assertWithinBound,
@@ -201,14 +208,9 @@ const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
 const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
 const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
-const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
-const SUBAGENT_NAME_MAX = 64
-const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
-const MCP_RESERVED_NAMES = new Set(["kanna"])
 const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const MODEL_LABEL_MAX = 64
-const SNIPPET_SHORTCUT_REGEX = /^\S{1,32}$/
 const SNIPPET_EXPANSION_MAX = 4_000
 
 interface ValidationErrorOf<Code extends string> {
@@ -451,7 +453,7 @@ function validateSubagentName(
       return { code: "DUPLICATE_NAME", message: `Name '${name}' already in use` }
     }
   }
-  if (!SUBAGENT_NAME_REGEX.test(name)) {
+  if (!SUBAGENT_NAME_PATTERN.test(name)) {
     return { code: "INVALID_CHAR", message: "Name must match [a-z0-9_-]+" }
   }
   return null
@@ -951,10 +953,11 @@ function validateMcpName(
   others: Array<{ id: string; name: string }>,
   ignoreId?: string,
 ): McpValidationError | null {
-  if (!MCP_NAME_REGEX.test(name)) {
-    return { code: "INVALID_NAME", field: "name", message: `name must match ${MCP_NAME_REGEX}` }
+  const issue = mcpServerNameIssue(name)
+  if (issue === "INVALID_NAME") {
+    return { code: "INVALID_NAME", field: "name", message: `name must match ${MCP_SERVER_NAME_PATTERN}` }
   }
-  if (MCP_RESERVED_NAMES.has(name)) {
+  if (issue === "RESERVED_NAME") {
     return { code: "RESERVED_NAME", field: "name", message: `name '${name}' is reserved` }
   }
   for (const other of others) {
@@ -1124,7 +1127,7 @@ function validateTextSnippetShape(
   entry: TextSnippet,
   others: Array<{ id: string; shortcut: string }>,
 ): TextSnippetValidationError | null {
-  if (!SNIPPET_SHORTCUT_REGEX.test(entry.shortcut)) {
+  if (!SNIPPET_SHORTCUT_PATTERN.test(entry.shortcut)) {
     return { code: "INVALID_SHORTCUT", field: "shortcut", message: "shortcut must be 1-32 characters with no whitespace" }
   }
   if (entry.expansion.length === 0 || entry.expansion.length > SNIPPET_EXPANSION_MAX) {

@@ -11,7 +11,8 @@ import { Button } from "../components/ui/button"
 import { InstalledSkillCard } from "../components/settings/SkillCard"
 import { runDetached } from "../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction, usePendingActionsStore } from "../stores/pendingActionsStore"
-import { useSettingsPageStore } from "../stores/settingsPageStore"
+import { usePackageInventoryStore } from "../stores/packageInventoryStore"
+import { useSkillsSectionStore } from "../stores/skillsSectionStore"
 import { timerAdapter } from "../adapters/timer.adapter"
 import type { TimerPort } from "../ports/timerPort"
 import type { KannaState } from "./useKannaState"
@@ -134,32 +135,32 @@ export function SkillsSection({
   const timer = ports?.timer ?? timerAdapter
   const socket = state.socket
   const connectionStatus = state.connectionStatus
-  const query = useSettingsPageStore((s) => s.skillQuery)
-  const setQuery = useSettingsPageStore((s) => s.setSkillQuery)
-  const results = useSettingsPageStore((s) => s.skillResults)
-  const setResults = useSettingsPageStore((s) => s.setSkillResults)
-  const searchLoading = useSettingsPageStore((s) => s.skillSearchLoading)
-  const setSearchLoading = useSettingsPageStore((s) => s.setSkillSearchLoading)
-  const searchError = useSettingsPageStore((s) => s.skillSearchError)
-  const setSearchError = useSettingsPageStore((s) => s.setSkillSearchError)
-  const installedSkills = useSettingsPageStore((s) => s.installedSkills)
-  const setInstalledSkills = useSettingsPageStore((s) => s.setInstalledSkills)
-  const installedSkillIds = useSettingsPageStore((s) => s.installedSkillIds)
-  const setInstalledSkillIds = useSettingsPageStore((s) => s.setInstalledSkillIds)
-  const addInstalledSkillId = useSettingsPageStore((s) => s.addInstalledSkillId)
-  const removeInstalledSkillId = useSettingsPageStore((s) => s.removeInstalledSkillId)
-  const installedLoading = useSettingsPageStore((s) => s.installedLoading)
-  const setInstalledLoading = useSettingsPageStore((s) => s.setInstalledLoading)
-  const installedError = useSettingsPageStore((s) => s.installedError)
-  const setInstalledError = useSettingsPageStore((s) => s.setInstalledError)
-  const operationError = useSettingsPageStore((s) => s.skillOperationError)
-  const setOperationError = useSettingsPageStore((s) => s.setSkillOperationError)
+  const query = useSkillsSectionStore((s) => s.query)
+  const setQuery = useSkillsSectionStore((s) => s.setQuery)
+  const results = useSkillsSectionStore((s) => s.results)
+  const searchLoading = useSkillsSectionStore((s) => s.searchLoading)
+  const searchError = useSkillsSectionStore((s) => s.searchError)
+  const searchCleared = useSkillsSectionStore((s) => s.searchCleared)
+  const searchStarted = useSkillsSectionStore((s) => s.searchStarted)
+  const searchSucceeded = useSkillsSectionStore((s) => s.searchSucceeded)
+  const searchFailed = useSkillsSectionStore((s) => s.searchFailed)
+  const installedSkills = useSkillsSectionStore((s) => s.installedSkills)
+  const installedSkillIds = useSkillsSectionStore((s) => s.installedSkillIds)
+  const installedLoading = useSkillsSectionStore((s) => s.installedLoading)
+  const installedError = useSkillsSectionStore((s) => s.installedError)
+  const installedCleared = useSkillsSectionStore((s) => s.installedCleared)
+  const installedLoadStarted = useSkillsSectionStore((s) => s.installedLoadStarted)
+  const installedLoaded = useSkillsSectionStore((s) => s.installedLoaded)
+  const installedLoadFailed = useSkillsSectionStore((s) => s.installedLoadFailed)
+  const installedLoadFinished = useSkillsSectionStore((s) => s.installedLoadFinished)
+  const operationError = useSkillsSectionStore((s) => s.operationError)
+  const setOperationError = useSkillsSectionStore((s) => s.setOperationError)
   const pendingActions = usePendingActionsStore((s) => s.inFlight)
-  const installMessages = useSettingsPageStore((s) => s.installMessages)
-  const setInstallMessage = useSettingsPageStore((s) => s.setInstallMessage)
-  const clearInstallMessage = useSettingsPageStore((s) => s.clearInstallMessage)
-  const clearInstallMessagesForSkill = useSettingsPageStore((s) => s.clearInstallMessagesForSkill)
-  const packageUpdateSnapshot = useSettingsPageStore((s) => s.packageUpdateSnapshot)
+  const installMessages = useSkillsSectionStore((s) => s.installMessages)
+  const installStarted = useSkillsSectionStore((s) => s.installStarted)
+  const installSucceeded = useSkillsSectionStore((s) => s.installSucceeded)
+  const uninstallSucceeded = useSkillsSectionStore((s) => s.uninstallSucceeded)
+  const packageUpdateSnapshot = usePackageInventoryStore((s) => s.updateSnapshot)
 
   const isChecking = packageUpdateSnapshot?.status === "checking"
   const bulkUpdatableIds = packageUpdateSnapshot?.packages
@@ -208,27 +209,20 @@ export function SkillsSection({
 
   const loadInstalledSkills = useCallback(async () => {
     if (connectionStatus !== "connected") {
-      setInstalledSkills([])
-      setInstalledSkillIds(new Set())
-      setInstalledError(null)
-      setInstalledLoading(false)
+      installedCleared()
       return
     }
 
     try {
-      setInstalledLoading(true)
-      setInstalledError(null)
+      installedLoadStarted()
       const snapshot = await socket.command({ type: "skills.listInstalled" })
-      setInstalledSkills(snapshot.skills)
-      setInstalledSkillIds(new Set(snapshot.skills.map((skill) => skill.name)))
+      installedLoaded(snapshot.skills)
     } catch (error) {
-      setInstalledSkills([])
-      setInstalledSkillIds(new Set())
-      setInstalledError(errorMessage(error))
+      installedLoadFailed(errorMessage(error))
     } finally {
-      setInstalledLoading(false)
+      installedLoadFinished()
     }
-  }, [connectionStatus, socket, setInstalledSkills, setInstalledSkillIds, setInstalledError, setInstalledLoading])
+  }, [connectionStatus, socket, installedCleared, installedLoadStarted, installedLoaded, installedLoadFailed, installedLoadFinished])
 
   useEffect(() => {
     runDetached("skills.listInstalled", loadInstalledSkills())
@@ -237,22 +231,17 @@ export function SkillsSection({
   useEffect(() => {
     const normalizedQuery = query.trim()
     if (normalizedQuery.length < 2) {
-      setResults([])
-      setSearchError(null)
-      setSearchLoading(false)
+      searchCleared(null)
       return
     }
 
     if (connectionStatus !== "connected") {
-      setResults([])
-      setSearchLoading(false)
-      setSearchError("Backend connection required.")
+      searchCleared("Backend connection required.")
       return
     }
 
     let cancelled = false
-    setSearchLoading(true)
-    setSearchError(null)
+    searchStarted()
 
     const timeout = timer.setTimeout(() => {
       void socket.command({
@@ -262,16 +251,11 @@ export function SkillsSection({
       })
         .then((snapshot) => {
           if (cancelled) return
-          setResults(snapshot.skills)
+          searchSucceeded(snapshot.skills)
         })
         .catch((error) => {
           if (cancelled) return
-          setResults([])
-          setSearchError(errorMessage(error))
-        })
-        .finally(() => {
-          if (cancelled) return
-          setSearchLoading(false)
+          searchFailed(errorMessage(error))
         })
     }, 250)
 
@@ -279,7 +263,7 @@ export function SkillsSection({
       cancelled = true
       timer.clearTimeout(timeout)
     }
-  }, [connectionStatus, query, socket, setResults, setSearchError, setSearchLoading, timer])
+  }, [connectionStatus, query, socket, searchCleared, searchStarted, searchSucceeded, searchFailed, timer])
 
   async function installSkill(skill: SkillSearchResult) {
     if (connectionStatus !== "connected") {
@@ -288,15 +272,13 @@ export function SkillsSection({
     }
 
     try {
-      setOperationError(null)
-      clearInstallMessage(skill.id)
+      installStarted(skill.skillId)
       await socket.command({
         type: "skills.install",
         source: skill.source,
         skillId: skill.skillId,
       })
-      addInstalledSkillId(skill.skillId)
-      setInstallMessage(skill.id, "Installed globally")
+      installSucceeded(skill.skillId)
       runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
       setOperationError(errorMessage(error))
@@ -315,9 +297,7 @@ export function SkillsSection({
         type: "skills.uninstall",
         skillId: skill.name,
       })
-      setInstalledSkills(installedSkills.filter((installedSkill) => installedSkill.name !== skill.name))
-      removeInstalledSkillId(skill.name)
-      clearInstallMessagesForSkill(skill.name)
+      uninstallSucceeded(skill.name)
       runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
       setOperationError(errorMessage(error))
@@ -402,7 +382,7 @@ export function SkillsSection({
               skill={skill}
               installing={pendingActions[installSkillKey(skill.id)] === true}
               installed={installedSkillIds.has(skill.skillId)}
-              message={installMessages[skill.id]}
+              message={installMessages[skill.skillId]}
               onInstall={() => { launchInstallSkill(skill) }}
             />
           ))}

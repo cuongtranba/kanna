@@ -1,4 +1,9 @@
 import { AGENT_PROVIDERS, type AgentProvider } from "./core-types"
+import { oneOf } from "./vocab"
+
+export const CUSTOM_MODEL_PROVIDERS = ["claude", "codex"] as const
+export type CustomModelProvider = (typeof CUSTOM_MODEL_PROVIDERS)[number]
+export const isCustomModelProvider = oneOf(CUSTOM_MODEL_PROVIDERS)
 
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
@@ -230,7 +235,7 @@ export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntr
 export interface CustomModelEntry {
   id: string
   label: string
-  provider: "claude" | "codex"
+  provider: CustomModelProvider
   supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
@@ -241,7 +246,7 @@ export interface CustomModelEntry {
 export interface CustomModelInput {
   id: string
   label: string
-  provider: "claude" | "codex"
+  provider: CustomModelProvider
   supportedEfforts?: readonly ClaudeReasoningEffort[]
   aliases?: readonly string[]
   contextWindowOptions?: readonly ProviderContextWindowOption[]
@@ -439,7 +444,7 @@ export function normalizeClaudeContextWindow(
 }
 
 export function effectiveContextWindowOptions(
-  provider: "claude" | "codex",
+  provider: CustomModelProvider,
   modelId: string,
   declared?: readonly ProviderContextWindowOption[],
 ): readonly ProviderContextWindowOption[] {

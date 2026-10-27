@@ -13,7 +13,7 @@ import { SegmentedControl } from "../components/ui/segmented-control"
 import { consumerToDraft, draftToConsumer, newConsumerDraft, problemsOf } from "../lib/serviceBusDraft"
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
-import { selectServiceBusStatus, useServiceBusStore } from "../stores/serviceBusStore"
+import { useServiceBusStore } from "../stores/serviceBusStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
 import { surfaceErrorIn } from "../lib/commandFeedback"
 import type { KannaState } from "./useKannaState"
@@ -54,7 +54,6 @@ function ConsumerRow({ consumer, onEdit, onRemove }: { consumer: JetStreamConsum
 
 export function ServiceBusConsumersGroup({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
   const settings = useAppSettingsStore(selectServiceBusSettings)
-  useServiceBusStore(selectServiceBusStatus)
   const editor = useServiceBusSectionStore((s) => s.consumerEditor)
   const openConsumerEditor = useServiceBusSectionStore((s) => s.openConsumerEditor)
   const editConsumer = useServiceBusSectionStore((s) => s.editConsumer)

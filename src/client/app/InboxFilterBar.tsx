@@ -2,13 +2,13 @@ import { useCallback, useMemo } from "react"
 import type { InboxFilter } from "../../shared/inbox/types"
 import { SearchableSelect, type SearchableOption } from "../components/ui/searchable-select"
 import { INBOX_SOURCE_FILTERS } from "../lib/inboxPresentation"
-import type { WebhookTargets } from "../lib/webhookTargets"
+import type { InboundTargets } from "../lib/webhookTargets"
 import { cn } from "../lib/utils"
 import { useInboxStore } from "../stores/inboxStore"
 
 interface Props {
   filter: InboxFilter
-  targets: WebhookTargets
+  targets: InboundTargets
 }
 
 const ALL = "all"

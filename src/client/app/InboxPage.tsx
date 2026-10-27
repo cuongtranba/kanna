@@ -13,7 +13,7 @@ import {
   type InboxTabId,
 } from "../lib/inboxFilter"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { listWebhookTargets } from "../lib/webhookTargets"
+import { listInboundTargets } from "../lib/webhookTargets"
 import {
   selectInboxFilter,
   selectInboxItems,
@@ -81,7 +81,7 @@ export function InboxPage({ threadId }: Props) {
   const snapshotAt = useInboxStore(selectSnapshotAt)
   const selected = useInboxStore(selectSelectedThread)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
   const markAllPending = usePendingAction(MARK_ALL_KEY)
   const olderPending = usePendingAction(LOAD_OLDER_KEY)
 

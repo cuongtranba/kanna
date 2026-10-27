@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useRef } from "react"
-import { WorkflowsSectionDetailStore } from "./WorkflowsSection.store"
+import { useCallback } from "react"
 import { Activity, FileText } from "lucide-react"
 import { cn } from "../lib/utils"
-import { runDetached } from "../lib/runDetached"
 import { Spinner } from "../components/ui/spinner"
-import { LOG_PREFIX } from "../../shared/branding"
-import { onRejected } from "../../shared/errors"
-import { log } from "../../shared/log"
 import { formatCompactDuration } from "../lib/formatDuration"
 import { statusToneClass, workflowStatusTone, type StatusTone } from "../lib/statusLabel"
+import { useWorkflowRunSelection } from "./useWorkflowRunSelection"
+import { WorkflowRunSelectionStore, type WorkflowRunSelection } from "./WorkflowRunSelection.store"
 import { StateMark } from "../components/ui/state-mark"
 import { WorkflowStatusPill } from "../components/ui/status-pill"
 import { groupWorkflowAgentsByPhase } from "../lib/workflowGrouping"
@@ -129,14 +126,16 @@ function WorkflowRunRow(props: {
 
 
 interface WorkflowRunDetailDialogProps {
-  run: WorkflowRun | null
-  failed?: boolean
-  open: boolean
+  selection: WorkflowRunSelection
   onClose: () => void
 }
 
+export function isAgentLive(state: string): boolean {
+  return state === "running" || state === "progress"
+}
+
 export function agentStateTone(state: string): StatusTone {
-  if (state === "running" || state === "progress") return "active"
+  if (isAgentLive(state)) return "active"
   if (state === "failed" || state === "error") return "destructive"
   if (state === "killed") return "attention"
   return "muted"
@@ -152,10 +151,13 @@ export function formatWorkflowResult(result: string): string {
   }
 }
 
-function WorkflowRunDetailDialogBody({ run, failed }: { run: WorkflowRun | null; failed: boolean }) {
-  if (run) return <WorkflowRunDetail run={run} />
-  if (failed) {
+function WorkflowRunDetailDialogBody({ selection }: { selection: WorkflowRunSelection }) {
+  if (selection.kind === "loaded") return <WorkflowRunDetail run={selection.run} />
+  if (selection.kind === "failed") {
     return <p className="text-sm text-muted-foreground">Couldn't load this run. Close and select it again to retry.</p>
+  }
+  if (selection.kind === "not-found") {
+    return <p className="text-sm text-muted-foreground">Run not found or no longer available.</p>
   }
   return (
     <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -165,17 +167,16 @@ function WorkflowRunDetailDialogBody({ run, failed }: { run: WorkflowRun | null;
   )
 }
 
-export function WorkflowRunDetailDialog({ run, failed = false, open, onClose }: WorkflowRunDetailDialogProps) {
+export function WorkflowRunDetailDialog({ selection, onClose }: WorkflowRunDetailDialogProps) {
+  const title = selection.kind === "loaded" ? (selection.run.workflowName ?? selection.run.runId) : "Workflow run"
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+    <Dialog open={selection.kind !== "none"} onOpenChange={(v) => { if (!v) onClose() }}>
       <DialogContent size="lg" aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>
-            {run ? (run.workflowName ?? run.runId) : "Workflow run"}
-          </DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <WorkflowRunDetailDialogBody run={run} failed={failed} />
+          <WorkflowRunDetailDialogBody selection={selection} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -368,71 +369,23 @@ export interface WorkflowsSectionWithDetailProps {
 }
 
 function WorkflowsSectionWithDetailInner({ runs, getRunDetail }: WorkflowsSectionWithDetailProps) {
-  const selectedRun = WorkflowsSectionDetailStore.useScopedStore((s) => s.selectedRun)
-  const selectedRunId = WorkflowsSectionDetailStore.useScopedStore((s) => s.selectedRunId)
-  const setSelectedRun = WorkflowsSectionDetailStore.useScopedStore((s) => s.setSelectedRun)
-  const setSelectedRunId = WorkflowsSectionDetailStore.useScopedStore((s) => s.setSelectedRunId)
-  const clearSelection = WorkflowsSectionDetailStore.useScopedStore((s) => s.clearSelection)
-  const isOpen = selectedRun !== null
-  const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
-  const fetchSeqRef = useRef(0)
-
-  const handleSelectRun = useCallback((runId: string) => {
-    runsAtSelectionRef.current = runs
-    setSelectedRunId(runId)
-    setSelectedRun("loading")
-    const seq = ++fetchSeqRef.current
-    const isCurrent = () => fetchSeqRef.current === seq
-    getRunDetail(runId).then(
-      (detail) => {
-        if (isCurrent()) setSelectedRun(detail)
-      },
-      onRejected((error) => {
-        log.error(LOG_PREFIX, "workflows.getRun failed", error)
-        if (isCurrent()) setSelectedRun("failed")
-      }),
-    )
-  }, [getRunDetail, runs, setSelectedRun, setSelectedRunId])
-
-  const handleClose = useCallback(() => {
-    clearSelection()
-    runsAtSelectionRef.current = null
-  }, [clearSelection])
-
-  useEffect(() => {
-    if (selectedRunId === null) return
-    if (runs === runsAtSelectionRef.current) return
-    const row = runs.find((r) => r.runId === selectedRunId)
-    if (!row || row.status !== "running") return
-    let stale = false
-    const seq = ++fetchSeqRef.current
-    runDetached("workflows.getRun refresh", getRunDetail(selectedRunId).then((detail) => {
-      if (stale || fetchSeqRef.current !== seq || detail === null) return
-      setSelectedRun(detail)
-    }))
-    return () => { stale = true }
-  }, [runs, selectedRunId, getRunDetail, setSelectedRun])
+  const { selection, selectRun, clearSelection } = useWorkflowRunSelection(runs, getRunDetail, null)
 
   return (
     <>
       <WorkflowsSection
         runs={runs}
-        onSelectRun={handleSelectRun}
+        onSelectRun={selectRun}
       />
-      <WorkflowRunDetailDialog
-        run={selectedRun === "loading" || selectedRun === "failed" ? null : selectedRun}
-        failed={selectedRun === "failed"}
-        open={isOpen}
-        onClose={handleClose}
-      />
+      <WorkflowRunDetailDialog selection={selection} onClose={clearSelection} />
     </>
   )
 }
 
 export function WorkflowsSectionWithDetail(props: WorkflowsSectionWithDetailProps) {
   return (
-    <WorkflowsSectionDetailStore.Provider init={undefined}>
+    <WorkflowRunSelectionStore.Provider init={undefined}>
       <WorkflowsSectionWithDetailInner {...props} />
-    </WorkflowsSectionDetailStore.Provider>
+    </WorkflowRunSelectionStore.Provider>
   )
 }
