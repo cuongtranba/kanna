@@ -1,6 +1,7 @@
 import path from "node:path"
 import { onRejected } from "../../shared/errors"
 import { log } from "../../shared/log"
+import { createSerialQueue } from "../serial-lane"
 import type { StorageBackend } from "../storage/backend"
 import type { RemoteMcpAuditSink } from "./remote-mcp-audit"
 
@@ -19,7 +20,7 @@ export interface RemoteMcpAuditLogOptions {
 
 export function createRemoteMcpAuditLog({ storage, dataDir, maxBytes = AUDIT_ROTATE_BYTES }: RemoteMcpAuditLogOptions): RemoteMcpAuditLog {
   const file = path.join(dataDir, AUDIT_FILE_NAME)
-  let queue: Promise<void> = Promise.resolve()
+  const queue = createSerialQueue()
 
   async function append(line: string): Promise<void> {
     await storage.mkdir(dataDir)
@@ -30,10 +31,10 @@ export function createRemoteMcpAuditLog({ storage, dataDir, maxBytes = AUDIT_ROT
   return {
     record(entry) {
       const line = `${JSON.stringify(entry)}\n`
-      queue = queue.then(() => append(line)).catch(onRejected((error) => {
+      queue.run(() => append(line)).catch(onRejected((error) => {
         log.warn("[remote-mcp] audit write failed", error.message)
       }))
     },
-    flush: () => queue,
+    flush: () => queue.run(async () => {}),
   }
 }

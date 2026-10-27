@@ -4,6 +4,7 @@ import { PROD_SERVER_PORT } from "../shared/ports"
 import type { ShareMode } from "../shared/share"
 import { isTokenShareMode } from "../shared/share"
 import { log } from "../shared/log"
+import { createSerialQueue } from "./serial-lane"
 interface AnalyticsRequestBody {
   userId: string
   environment: AnalyticsEnvironment
@@ -51,7 +52,7 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
   private readonly environment: AnalyticsEnvironment
   private readonly logger: AnalyticsLogger
   private readonly isLoggingEnabled: () => boolean
-  private queue = Promise.resolve()
+  private readonly queue = createSerialQueue()
 
   constructor(args: {
     settings: AnalyticsSettings
@@ -86,8 +87,8 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
       },
     }
 
-    this.queue = this.queue
-      .then(async () => {
+    this.queue
+      .run(async () => {
         const response = await this.fetchImpl(this.endpoint, {
           method: "POST",
           headers: {
@@ -107,6 +108,10 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
           this.logger.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
         }
       })
+  }
+
+  flush(): Promise<void> {
+    return this.queue.run(async () => {})
   }
 
   trackLaunch(options: LaunchAnalyticsOptions) {

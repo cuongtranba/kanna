@@ -1,5 +1,5 @@
 import { join } from "node:path"
-import { NATS_SERVER_VERSION } from "../../shared/service-bus/nats-server-version"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/jetstream-config"
 
 export const NATS_RELEASE_BASE = "https://github.com/nats-io/nats-server/releases/download"
 

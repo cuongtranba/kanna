@@ -1,7 +1,7 @@
 
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import type { HarnessToolRequest } from "./harness-types"
-import { normalizeToolCall } from "../shared/tools"
+import { CLAUDE_ASK_USER_QUESTION_TOOL_NAME, normalizeToolCall } from "../shared/tools"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import { toJsonObject } from "./json-boundary"
 import type { ToolCallbackService } from "./tool-callback"
@@ -54,11 +54,12 @@ function permissionResultFor(
 ): PermissionResult {
   const record: JsonObject = payload !== undefined && isJsonObject(payload) ? payload : {}
   if (tool.toolKind === "ask_user_question") {
+    const sentQuestions = tool.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME ? tool.rawInput?.questions : undefined
     return {
       behavior: "allow",
       updatedInput: {
         ...(tool.rawInput ?? {}),
-        questions: record.questions ?? tool.input.questions,
+        questions: record.questions ?? sentQuestions ?? tool.input.questions,
         answers: record.answers ?? payload,
       },
     }

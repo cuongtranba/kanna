@@ -1,10 +1,7 @@
 import { useEffect } from "react"
+import { CLAUDE_IDLE_TIMEOUT_MS_BOUND, CLAUDE_MAX_CONCURRENT_BOUND } from "../../shared/settings/bounds"
 import {
-  CLAUDE_IDLE_TIMEOUT_MS_MAX,
-  CLAUDE_IDLE_TIMEOUT_MS_MIN,
   CLAUDE_LIFECYCLE_DEFAULTS,
-  CLAUDE_MAX_CONCURRENT_MAX,
-  CLAUDE_MAX_CONCURRENT_MIN,
   isAgentProvider,
   type AgentProvider,
 } from "../../shared/types"
@@ -24,8 +21,9 @@ import type { KannaState } from "./useKannaState"
 import { useAppSettingsWriter } from "./useAppSettingsWriter"
 import { useProviderCatalog } from "./useProviderCatalog"
 
-const MIN_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_MIN / 60_000)
-const MAX_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_MAX / 60_000)
+const MIN_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_BOUND.min / 60_000)
+const MAX_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_BOUND.max / 60_000)
+const IDLE_MINUTES_RANGE = { min: MIN_IDLE_MINUTES, max: MAX_IDLE_MINUTES } as const
 const DEFAULT_IDLE_MINUTES = Math.round(CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs / 60_000)
 
 function ClaudeLifecycleRows({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
@@ -48,7 +46,7 @@ function ClaudeLifecycleRows({ state }: { state: Pick<KannaState, "handleWriteAp
   }, [maxConcurrent, setMaxConcurrentDraft])
 
   function commitIdleMinutes() {
-    const result = resolveNumberCommit(idleDraft, idleMinutes, { min: MIN_IDLE_MINUTES, max: MAX_IDLE_MINUTES, whole: "round" })
+    const result = resolveNumberCommit(idleDraft, idleMinutes, IDLE_MINUTES_RANGE)
     if (result.kind !== "write") {
       setIdleDraft(String(idleMinutes))
       if (result.kind === "invalid") {
@@ -60,15 +58,11 @@ function ClaudeLifecycleRows({ state }: { state: Pick<KannaState, "handleWriteAp
   }
 
   function commitMaxConcurrent() {
-    const result = resolveNumberCommit(maxConcurrentDraft, maxConcurrent, {
-      min: CLAUDE_MAX_CONCURRENT_MIN,
-      max: CLAUDE_MAX_CONCURRENT_MAX,
-      whole: "round",
-    })
+    const result = resolveNumberCommit(maxConcurrentDraft, maxConcurrent, CLAUDE_MAX_CONCURRENT_BOUND)
     if (result.kind !== "write") {
       setMaxConcurrentDraft(String(maxConcurrent))
       if (result.kind === "invalid") {
-        setAppSettingsError(`Max concurrent sessions must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}.`)
+        setAppSettingsError(`Max concurrent sessions must be between ${CLAUDE_MAX_CONCURRENT_BOUND.min} and ${CLAUDE_MAX_CONCURRENT_BOUND.max}.`)
       }
       return
     }
@@ -91,13 +85,13 @@ function ClaudeLifecycleRows({ state }: { state: Pick<KannaState, "handleWriteAp
       <SettingsNumberRow
         title="Max concurrent Claude sessions"
         description="Hard cap on resident Claude processes. Excess sessions are evicted LRU; their next activation cold-starts."
-        min={CLAUDE_MAX_CONCURRENT_MIN}
-        max={CLAUDE_MAX_CONCURRENT_MAX}
+        min={CLAUDE_MAX_CONCURRENT_BOUND.min}
+        max={CLAUDE_MAX_CONCURRENT_BOUND.max}
         step={1}
         value={maxConcurrentDraft}
         onValueChange={setMaxConcurrentDraft}
         onCommit={commitMaxConcurrent}
-        hint={`${CLAUDE_MAX_CONCURRENT_MIN}–${CLAUDE_MAX_CONCURRENT_MAX} · default ${CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent}`}
+        hint={`${CLAUDE_MAX_CONCURRENT_BOUND.min}–${CLAUDE_MAX_CONCURRENT_BOUND.max} · default ${CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent}`}
       />
     </>
   )

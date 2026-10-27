@@ -81,7 +81,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(calls).toHaveLength(1)
     expect(calls[0]?.url).toBe("https://kanna.sh/api/t")
@@ -131,7 +131,7 @@ describe("KannaAnalyticsReporter", () => {
       password: null,
       strictPort: true,
     })
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
       userId: "anon_123",
@@ -175,7 +175,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(called).toBe(false)
   })
@@ -190,7 +190,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(warnings).toHaveLength(0)
   })
@@ -205,7 +205,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(warnings).toHaveLength(1)
     expect(warnings[0]?.[0]).toBe("[kanna/analytics] Failed to send analytics event:")
@@ -223,7 +223,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(infos).toHaveLength(1)
     expect(infos[0]).toEqual([
@@ -243,7 +243,7 @@ describe("KannaAnalyticsReporter", () => {
     })
 
     reporter.track("message_sent")
-    await (reporter as any).queue
+    await reporter.flush()
 
     expect(infos).toHaveLength(0)
   })

@@ -40,7 +40,6 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../../stor
 import { runDetached } from "../../lib/runDetached"
 import { describeShareFailure } from "../../components/share/describeShareFailure"
 import { surfaceCommandError, withCommandFeedback } from "../../lib/commandFeedback"
-import { cronActionKey } from "../../lib/cronActions"
 import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
 import { isUntitledChat } from "../../../shared/core-types"
 
@@ -306,7 +305,7 @@ export function ChatTabContent({
   const handleCronRemove = useCallback((jobId: string) => {
     if (!activeChatId) return
     runPendingAction(
-      cronActionKey("cron.remove", activeChatId, jobId),
+      pendingActionKey("cron.remove", activeChatId, jobId),
       () => surfaceCommandError(() => socket.command({ type: "cron.remove", chatId: activeChatId, jobId })),
     )
   }, [activeChatId, socket])

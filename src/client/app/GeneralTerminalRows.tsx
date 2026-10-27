@@ -1,9 +1,6 @@
 import { useEffect } from "react"
-import {
-  UPLOAD_DEFAULTS,
-  UPLOAD_MAX_FILE_SIZE_MB_MAX,
-  UPLOAD_MAX_FILE_SIZE_MB_MIN,
-} from "../../shared/types"
+import { UPLOAD_MAX_FILE_SIZE_MB_BOUND } from "../../shared/settings/uploads"
+import { UPLOAD_DEFAULTS } from "../../shared/types"
 import { DEFAULT_TAB_MIN_WIDTH, MAX_TAB_WIDTH, MIN_TAB_WIDTH, clampTabMinWidth } from "../../shared/pane-tab-width"
 import { SettingsRow } from "../components/settings/SettingsList"
 import { resolveNumberCommit } from "../lib/numberDraft"
@@ -161,15 +158,11 @@ function UploadMaxFileSizeRow({ state }: { state: Pick<KannaState, "handleWriteA
   }, [uploadMaxFileSizeMb, patchDrafts])
 
   function commit() {
-    const result = resolveNumberCommit(draft, uploadMaxFileSizeMb, {
-      min: UPLOAD_MAX_FILE_SIZE_MB_MIN,
-      max: UPLOAD_MAX_FILE_SIZE_MB_MAX,
-      whole: "round",
-    })
+    const result = resolveNumberCommit(draft, uploadMaxFileSizeMb, UPLOAD_MAX_FILE_SIZE_MB_BOUND)
     if (result.kind !== "write") {
       patchDrafts({ uploadMaxFileSize: String(uploadMaxFileSizeMb) })
       if (result.kind === "invalid") {
-        setAppSettingsError(`Max file size must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX} MB.`)
+        setAppSettingsError(`Max file size must be between ${UPLOAD_MAX_FILE_SIZE_MB_BOUND.min} and ${UPLOAD_MAX_FILE_SIZE_MB_BOUND.max} MB.`)
       }
       return
     }
@@ -180,15 +173,15 @@ function UploadMaxFileSizeRow({ state }: { state: Pick<KannaState, "handleWriteA
     <SettingsNumberRow
       title="Max upload file size"
       description="Largest single file the chat upload endpoint accepts."
-      min={UPLOAD_MAX_FILE_SIZE_MB_MIN}
-      max={UPLOAD_MAX_FILE_SIZE_MB_MAX}
+      min={UPLOAD_MAX_FILE_SIZE_MB_BOUND.min}
+      max={UPLOAD_MAX_FILE_SIZE_MB_BOUND.max}
       step={1}
       value={draft}
       onValueChange={(value) => patchDrafts({ uploadMaxFileSize: value })}
       onCommit={commit}
       unit="MB"
       ariaLabel="Max upload file size in megabytes"
-      hint={`${UPLOAD_MAX_FILE_SIZE_MB_MIN}–${UPLOAD_MAX_FILE_SIZE_MB_MAX} MB · default ${UPLOAD_DEFAULTS.maxFileSizeMb}`}
+      hint={`${UPLOAD_MAX_FILE_SIZE_MB_BOUND.min}–${UPLOAD_MAX_FILE_SIZE_MB_BOUND.max} MB · default ${UPLOAD_DEFAULTS.maxFileSizeMb}`}
     />
   )
 }

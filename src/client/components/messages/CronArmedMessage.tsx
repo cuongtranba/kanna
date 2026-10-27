@@ -2,8 +2,7 @@ import { useCallback } from "react"
 import { CalendarClock, Check, Copy, Trash2 } from "lucide-react"
 import { useCopyFeedback } from "../../stores/copyFeedbackStore"
 import { runDetached } from "../../lib/runDetached"
-import { usePendingAction } from "../../stores/pendingActionsStore"
-import { cronActionKey } from "../../lib/cronActions"
+import { pendingActionKey, usePendingAction } from "../../stores/pendingActionsStore"
 import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
 import { formatCronCommand } from "../../../shared/cron/parse-command"
@@ -22,7 +21,7 @@ export function CronArmedMessage({ message, chatId, onRemove }: Props) {
 
   const handleCopyEdit = useCallback(() => { runDetached("copy cron edit command", copy(editCommand)) }, [copy, editCommand])
 
-  const disarming = usePendingAction(cronActionKey("cron.remove", chatId ?? "", message.jobId))
+  const disarming = usePendingAction(pendingActionKey("cron.remove", chatId ?? "", message.jobId))
 
   const fires = message.upcomingFires ?? (message.nextFireAt !== null ? [message.nextFireAt] : [])
 

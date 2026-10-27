@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vite-plus/test"
 
-import { withKeyedLane } from "./serial-lane"
+import { createKeyedLanes, createSerialQueue } from "./serial-lane"
 
-describe("withKeyedLane", () => {
+const lanes = createKeyedLanes()
+const withKeyedLane = lanes.run
+
+describe("createKeyedLanes", () => {
   test("serializes read-modify-write on one path so a concurrent update is not lost", async () => {
     let shared = 0
     const bump = async (): Promise<void> => {
@@ -55,5 +58,37 @@ describe("withKeyedLane", () => {
     })
     await Promise.all([slow, fast])
     expect(order).toEqual(["first", "second"])
+  })
+})
+
+describe("createSerialQueue", () => {
+  test("runs tasks one at a time in submission order and survives a rejection", async () => {
+    const queue = createSerialQueue()
+    const order: string[] = []
+    const first = queue.run(async () => {
+      await Promise.resolve()
+      order.push("first")
+    })
+    const failing = queue.run(async () => {
+      throw new Error("boom")
+    })
+    const last = queue.run(async () => {
+      order.push("last")
+      return "done"
+    })
+    await expect(failing).rejects.toThrow("boom")
+    expect(await last).toBe("done")
+    await first
+    expect(order).toEqual(["first", "last"])
+  })
+
+  test("a queue built from separate instances does not share ordering", async () => {
+    const a = createKeyedLanes()
+    const b = createKeyedLanes()
+    let release: () => void = () => {}
+    const held = a.run("k", () => new Promise<void>((resolve) => { release = resolve }))
+    expect(await b.run("k", async () => "independent")).toBe("independent")
+    release()
+    await held
   })
 })

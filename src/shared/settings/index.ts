@@ -1,8 +1,10 @@
 export type { AuthSettings } from "./auth"
 export {
   AUTH_DEFAULTS,
+  AUTH_SESSION_MAX_AGE_DAYS_BOUND,
   AUTH_SESSION_MAX_AGE_DAYS_MAX,
   AUTH_SESSION_MAX_AGE_DAYS_MIN,
+  normalizeAuthSettings,
 } from "./auth"
 
 export type {
@@ -34,7 +36,9 @@ export { TYPOGRAPHY_DEFAULTS, normalizeTypographySettings } from "./typography"
 
 export type { UploadSettings } from "./uploads"
 export {
+  normalizeUploadSettings,
   UPLOAD_DEFAULTS,
+  UPLOAD_MAX_FILE_SIZE_MB_BOUND,
   UPLOAD_MAX_FILE_SIZE_MB_MAX,
   UPLOAD_MAX_FILE_SIZE_MB_MIN,
 } from "./uploads"

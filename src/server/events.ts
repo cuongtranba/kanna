@@ -484,10 +484,9 @@ export function createEmptyState(): StoreState {
 }
 
 export function resetStoreState(state: StoreState): void {
-  for (const value of Object.values(state)) {
-    if (value instanceof Map) value.clear()
-    else value.length = 0
-  }
+  const { sidebarProjectOrder: _order, ...maps } = state
+  for (const map of Object.values(maps)) map.clear()
+  state.sidebarProjectOrder = []
 }
 
 export function cloneTranscriptEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {

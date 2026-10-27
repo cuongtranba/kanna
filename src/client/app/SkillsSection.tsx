@@ -9,6 +9,7 @@ import type { ClientCommand } from "../../shared/protocol"
 import { errorMessage } from "../../shared/errors"
 import { Button } from "../components/ui/button"
 import { InstalledSkillCard } from "../components/settings/SkillCard"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { runDetached } from "../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction, usePendingActionsStore } from "../stores/pendingActionsStore"
 import { usePackageInventoryStore } from "../stores/packageInventoryStore"
@@ -177,13 +178,7 @@ export function SkillsSection({
   const checking = isChecking || checkPending
 
   async function sendPackageCommand(command: ClientCommand) {
-    try {
-      setOperationError(null)
-      await socket.command(command)
-    } catch (error) {
-      setOperationError(errorMessage(error))
-      throw error
-    }
+    await surfaceErrorIn(setOperationError, () => socket.command(command))
   }
 
   function checkUpdates() {
@@ -291,17 +286,14 @@ export function SkillsSection({
       return
     }
 
-    try {
-      setOperationError(null)
+    await surfaceErrorIn(setOperationError, async () => {
       await socket.command({
         type: "skills.uninstall",
         skillId: skill.name,
       })
       uninstallSucceeded(skill.name)
       runDetached("skills.listInstalled", loadInstalledSkills())
-    } catch (error) {
-      setOperationError(errorMessage(error))
-    }
+    })
   }
 
   let installedContent: ReactNode

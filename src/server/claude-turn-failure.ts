@@ -19,16 +19,17 @@ export interface TurnFailure {
   sessionInvalid: boolean
 }
 
-export interface FailureHandlers {
-  handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean>
-  handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
-}
+type FailedTurn =
+  | { kind: "result"; text: string; debugRaw: string }
+  | { kind: "thrown"; error: Error }
+
+type HandledFailureLabel = "rate_limit" | "auth_error"
 
 function isSessionInvalid(...texts: readonly string[]): boolean {
   return texts.some((text) => isPromptTooLongMessage(text) || isNoConversationFoundMessage(text))
 }
 
-export function classifyResultFailure(
+function classifyResultFailure(
   detectors: FailureDetectors,
   chatId: string,
   resultText: string,
@@ -42,7 +43,7 @@ export function classifyResultFailure(
   return { limit, auth, sessionInvalid: isSessionInvalid(resultText, debugRaw) }
 }
 
-export function classifyThrownFailure(
+function classifyThrownFailure(
   detectors: FailureDetectors,
   chatId: string,
   error: Error,
@@ -52,16 +53,44 @@ export function classifyThrownFailure(
   return { limit, auth, sessionInvalid: isSessionInvalid(error.message) }
 }
 
-export async function handleDetectedFailure(
+export interface FailureHandlers {
+  handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean>
+  handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
+}
+
+export interface FailureSettlement extends FailureDetectors, FailureHandlers {
+  recordTurnFailed(chatId: string, reason: string): Promise<void>
+  recordTurnError(chatId: string, message: string): Promise<void>
+  discardInvalidSession(session: ClaudeSessionState): Promise<void>
+}
+
+async function handleDetectedFailure(
   handlers: FailureHandlers,
   session: ClaudeSessionState,
   failure: TurnFailure,
-): Promise<boolean> {
-  if (failure.limit) return handlers.handleLimitDetection(session.chatId, failure.limit)
-  if (failure.auth) return handlers.handleAuthFailure(session, failure.auth)
-  return false
+): Promise<HandledFailureLabel | null> {
+  if (failure.limit) return (await handlers.handleLimitDetection(session.chatId, failure.limit)) ? "rate_limit" : null
+  if (failure.auth) return (await handlers.handleAuthFailure(session, failure.auth)) ? "auth_error" : null
+  return null
 }
 
-export function handledFailureLabel(failure: TurnFailure): "rate_limit" | "auth_error" {
-  return failure.limit ? "rate_limit" : "auth_error"
+export async function settleFailedTurn(
+  settlement: FailureSettlement,
+  session: ClaudeSessionState,
+  failed: FailedTurn,
+  recordOutcome: boolean,
+): Promise<boolean> {
+  const failure = failed.kind === "result"
+    ? classifyResultFailure(settlement, session.chatId, failed.text, failed.debugRaw)
+    : classifyThrownFailure(settlement, session.chatId, failed.error)
+  const label = await handleDetectedFailure(settlement, session, failure)
+  if (!recordOutcome) return label !== null
+  if (label !== null) {
+    await settlement.recordTurnFailed(session.chatId, label)
+    return true
+  }
+  if (failed.kind === "result") await settlement.recordTurnFailed(session.chatId, failed.text)
+  else await settlement.recordTurnError(session.chatId, failed.error.message)
+  if (failure.sessionInvalid) await settlement.discardInvalidSession(session)
+  return false
 }

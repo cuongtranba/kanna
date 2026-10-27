@@ -55,6 +55,19 @@ describe("buildCanUseTool", () => {
     expect(onToolRequest).toHaveBeenCalledTimes(1)
   })
 
+  test("hands the CLI back the questions it sent, not the normalized view, when the answer carries none", async () => {
+    const sent = [
+      { question: "Continue?", header: "Confirm", options: [{ label: "Yes", description: "go", preview: "keep me" }], multiSelect: false, extra: "kept" },
+      { text: "no question key", options: [{ label: "A" }] },
+    ]
+    const canUseTool = buildCanUseTool(makeArgs({ onToolRequest: async () => ({ answers: { q1: "yes" } }) }))
+    const result = await canUseTool("AskUserQuestion", { questions: sent }, TOOL_OPTIONS)
+    expect(result.behavior).toBe("allow")
+    if (result.behavior === "allow") {
+      expect(result.updatedInput?.questions).toEqual(sent)
+    }
+  })
+
   test("routes ExitPlanMode through legacy path — deny when confirmed is false", async () => {
     const canUseTool = buildCanUseTool(
       makeArgs({ onToolRequest: async () => ({ confirmed: false, message: "revise please" }) }),

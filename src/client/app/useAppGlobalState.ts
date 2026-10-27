@@ -43,7 +43,7 @@ import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { errorMessage, onRejected } from "../../shared/errors"
-import { reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
+import { clearCommandError, reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
 import { fileNameOfPath } from "../lib/pathUtils"
 import type { ProjectRequest } from "../lib/projectRequest"
 import { forgetDeletedLocally } from "./forgetDeletedLocally"
@@ -75,7 +75,7 @@ const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
 function applyAppSettingsSnapshot(snapshot: AppSettingsSnapshot) {
   useAppSettingsStore.getState().setFromServer(snapshot)
   useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-  useKannaStateStore.getState().setCommandError(null)
+  clearCommandError()
 }
 
 function applyProjectCommandsSnapshotLocal(
@@ -440,7 +440,7 @@ export function useAppGlobalState(
           : current
       ))
       store.setSidebarReady(true)
-      store.setCommandError(null)
+      clearCommandError()
     })
   }, [socket])
 
@@ -449,7 +449,7 @@ export function useAppGlobalState(
       const store = useKannaStateStore.getState()
       store.setLocalProjects(snapshot)
       store.setLocalProjectsReady(true)
-      store.setCommandError(null)
+      clearCommandError()
     })
   }, [socket])
 
@@ -457,7 +457,7 @@ export function useAppGlobalState(
     return socket.subscribe<UpdateSnapshot>({ type: "update" }, (snapshot) => {
       const store = useKannaStateStore.getState()
       store.setUpdateSnapshot(snapshot)
-      store.setCommandError(null)
+      clearCommandError()
     })
   }, [socket])
 
@@ -465,7 +465,7 @@ export function useAppGlobalState(
     return socket.subscribe<KeybindingsSnapshot>({ type: "keybindings" }, (snapshot) => {
       const store = useKannaStateStore.getState()
       store.setKeybindings(snapshot)
-      store.setCommandError(null)
+      clearCommandError()
     })
   }, [socket])
 
@@ -551,7 +551,7 @@ export function useAppGlobalState(
               if (sameDiffs(current[key] ?? null, nextDiffs)) return current
               return { ...current, [key]: nextDiffs }
             })
-            useKannaStateStore.getState().setCommandError(null)
+            clearCommandError()
           },
         ),
       )
@@ -1031,7 +1031,7 @@ export function useAppGlobalState(
     editor?: EditorOpenSettings
   }) => {
     const appSettingsState = useAppSettingsStore.getState()
-    useKannaStateStore.getState().setCommandError(null)
+    clearCommandError()
     await socket.command({
       type: "system.openExternal",
       ...command,

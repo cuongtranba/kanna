@@ -8,9 +8,8 @@ import { HoverHint } from "../components/ui/truncated-text"
 import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { useNow } from "../hooks/useNow"
 import { cn } from "../lib/utils"
-import { runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { cronActionKey, type CronJobActionType } from "../lib/cronActions"
 import { CronJobEditDialog } from "./CronJobEditDialog"
 import { CronJobRowStore } from "./CronJobRow.store"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -21,6 +20,8 @@ interface Props {
   trailing?: ReactNode
   divider: boolean
 }
+
+type CronJobActionType = "cron.pause" | "cron.resume" | "cron.remove"
 
 const ICON_BUTTON_CLASS = "rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
 
@@ -34,16 +35,16 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const openEditor = CronJobRowStore.useScopedStore((state) => state.openEditor)
   const setEditing = CronJobRowStore.useScopedStore((state) => state.setEditing)
 
-  const pauseKey = cronActionKey("cron.pause", chatId, job.jobId)
-  const resumeKey = cronActionKey("cron.resume", chatId, job.jobId)
-  const removeKey = cronActionKey("cron.remove", chatId, job.jobId)
+  const pauseKey = pendingActionKey("cron.pause", chatId, job.jobId)
+  const resumeKey = pendingActionKey("cron.resume", chatId, job.jobId)
+  const removeKey = pendingActionKey("cron.remove", chatId, job.jobId)
   const pausePending = usePendingAction(pauseKey)
   const resumePending = usePendingAction(resumeKey)
   const removePending = usePendingAction(removeKey)
 
   const send = useCallback(
     (command: { type: CronJobActionType; chatId: string; jobId: string }) => {
-      runPendingAction(cronActionKey(command.type, command.chatId, command.jobId), () => sendCommandWithFeedback(socket, command))
+      runPendingAction(pendingActionKey(command.type, command.chatId, command.jobId), () => sendCommandWithFeedback(socket, command))
     },
     [socket],
   )

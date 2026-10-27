@@ -46,6 +46,18 @@ describe("readJsonl", () => {
   })
 })
 
+describe("readJsonl null lines", () => {
+  test("a literal null line is a corruption, not a record", async () => {
+    const mid = await readJsonl(await storageWith('{"a":1}\nnull\n{"a":3}\n'), FILE)
+    expect(mid.records).toHaveLength(2)
+    expect(mid.corruptions).toEqual([expect.objectContaining({ lineIndex: 1, trailing: false })])
+
+    const trailing = await readJsonl(await storageWith('{"a":1}\nnull\n'), FILE)
+    expect(trailing.records).toHaveLength(1)
+    expect(trailing.corruptions).toEqual([expect.objectContaining({ lineIndex: 1, trailing: true })])
+  })
+})
+
 describe("readJsonlSkippingCorrupt", () => {
   test("keeps every parsable record and drops every malformed line", async () => {
     const storage = await storageWith('{"a":1}\nnope\n{"a":3}\n{bad\n')

@@ -23,6 +23,7 @@ import { deriveChunkLabel } from "../shared/loop-progress"
 import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
+import { SUBAGENT_RUN_TIMEOUT_MS_DEFAULT } from "../shared/settings/bounds"
 
 export class PausableTimeout {
   remainingMs: number
@@ -189,7 +190,7 @@ function recordSubagentSpend(provider: AgentProvider, usage: ProviderUsage | und
   }
 }
 
-const DEFAULT_RUN_TIMEOUT_MS = 600_000
+const DEFAULT_RUN_TIMEOUT_MS = SUBAGENT_RUN_TIMEOUT_MS_DEFAULT
 const SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT = 1000
 const CHUNK_PROGRESS_THROTTLE_MS = 100
 

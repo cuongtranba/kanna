@@ -16,6 +16,7 @@ import {
   type InboxVerdict,
 } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
+import { createSerialQueue } from "../serial-lane"
 import { createBusEnvelope, inboundSourceId, type BusEnvelope } from "../../shared/service-bus/envelope"
 import { ALL_BUS_SUBJECTS, inboxBusSubject, isInboxSubject, namedBusSubject } from "../../shared/service-bus/subjects"
 import type { ServiceBus } from "../service-bus/service-bus"
@@ -77,7 +78,7 @@ function itemMatches(item: InboxActivityItem, filter: InboxFilter): boolean {
 
 export class InboxRegistry {
   private state: InboxState = createInboxState()
-  private writeChain: Promise<void> = Promise.resolve()
+  private readonly writes = createSerialQueue()
   private readonly listeners = new Set<() => void>()
   private readonly needsYouListeners = new Set<(thread: InboxThread) => void>()
   private unsubscribe: (() => void) | null = null
@@ -101,7 +102,7 @@ export class InboxRegistry {
   }
 
   async flush(): Promise<void> {
-    await this.writeChain
+    await this.writes.run(async () => {})
   }
 
   subscribe(listener: () => void): () => void {
@@ -302,11 +303,9 @@ export class InboxRegistry {
   private record(event: InboxEvent): void {
     applyInboxEvent(this.state, event)
     trimInboxState(this.state, this.now())
-    this.writeChain = this.writeChain
-      .then(() => this.logPort.append(event))
-      .catch((error) => {
-        log.warn("[inbox] append failed:", toError(error))
-      })
+    this.writes.run(() => this.logPort.append(event)).catch((error) => {
+      log.warn("[inbox] append failed:", toError(error))
+    })
     this.notify()
   }
 

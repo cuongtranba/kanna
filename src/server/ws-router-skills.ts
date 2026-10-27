@@ -4,7 +4,7 @@ import { DEFAULT_SKILL_AGENTS, assertSafeSkillAgents } from "../shared/skill-age
 import type { SkillAgent } from "../shared/skill-agents"
 import { spawnCapture } from "./process-utils.adapter"
 import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath, NPX, skillsCliEnv } from "./skills-cli"
-import { readTextFileOrThrow } from "./text-file-io.adapter"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import type { InstalledSkillsSnapshot, SkillInstallResult, SkillSearchSnapshot, SkillUninstallResult } from "../shared/types"
 
 function asString(value: JsonValue | undefined) {

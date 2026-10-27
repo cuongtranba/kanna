@@ -1,5 +1,5 @@
 import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath, NPX, skillsCliEnv } from "./skills-cli"
-import { readTextFileOrThrow } from "./text-file-io.adapter"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import { isJsonObject, type JsonValue } from "../shared/json"
 import { deriveSkillFolder, repinTarget } from "../shared/packages/skill-update-classifier"
 import type { PackageUpdateApplier, PackageApplyResult, PackageUpdateEntry } from "../shared/packages/types"

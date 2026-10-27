@@ -33,6 +33,7 @@ export async function readJsonl<T>(storage: StorageBackend, filePath: string): P
     if (!line) return
     try {
       const value: T = JSON.parse(line)
+      if (value === null) throw new TypeError("log line is null")
       read.records.push({ value, lineIndex })
     } catch (error) {
       read.corruptions.push({ lineIndex, error: String(error), trailing: lineIndex === lastNonEmpty })

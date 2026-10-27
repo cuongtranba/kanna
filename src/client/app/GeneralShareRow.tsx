@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { SHARE_DEFAULT_TTL_HOURS_BOUND } from "../../shared/settings/bounds"
 import { resolveNumberCommit } from "../lib/numberDraft"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useGeneralSettingsStore } from "../stores/generalSettingsStore"
@@ -18,7 +19,7 @@ export function GeneralShareRow({ state }: { state: Pick<KannaState, "handleWrit
   }, [shareDefaultTtlHours, patchDrafts])
 
   function commit() {
-    const result = resolveNumberCommit(draft, shareDefaultTtlHours, { min: 1, max: Number.POSITIVE_INFINITY, whole: "strict" })
+    const result = resolveNumberCommit(draft, shareDefaultTtlHours, SHARE_DEFAULT_TTL_HOURS_BOUND)
     if (result.kind !== "write") {
       patchDrafts({ shareDefaultTtl: String(shareDefaultTtlHours) })
       if (result.kind === "invalid") {
@@ -34,7 +35,7 @@ export function GeneralShareRow({ state }: { state: Pick<KannaState, "handleWrit
       <SettingsNumberRow
         title="Public share links"
         description="Default expiry for read-only chat share links. Owners can revoke any link manually at any time."
-        min={1}
+        min={SHARE_DEFAULT_TTL_HOURS_BOUND.min}
         step={1}
         value={draft}
         onValueChange={(value) => patchDrafts({ shareDefaultTtl: value })}

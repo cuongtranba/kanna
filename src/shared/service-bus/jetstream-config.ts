@@ -1,6 +1,8 @@
 import type { NumericRange } from "../numeric"
 import { BUS_SUBJECT_PREFIX } from "./envelope"
 
+export const NATS_SERVER_VERSION = "2.15.1"
+
 export const STREAM_RETENTIONS = ["limits", "interest", "workqueue"] as const
 export type StreamRetention = (typeof STREAM_RETENTIONS)[number]
 export const STREAM_STORAGES = ["file", "memory"] as const

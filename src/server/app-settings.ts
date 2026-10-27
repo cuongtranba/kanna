@@ -69,7 +69,7 @@ import {
   type McpServerInput,
   type McpServerPatch,
   type McpServerTestResult,
-  type McpServerTransport,
+  MCP_SERVER_TRANSPORTS,
   type McpValidationError,
   type OAuthTokenEntry,
   type OAuthTokenStatus,
@@ -95,20 +95,19 @@ import {
   mcpServerNameIssue,
 } from "../shared/settings/validation"
 import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
+import { assertWithinBound, normalizeBounded } from "../shared/numeric"
+import { oneOf } from "../shared/vocab"
+import { AUTH_SESSION_MAX_AGE_DAYS_BOUND, normalizeAuthSettings } from "../shared/settings/auth"
+import { normalizeUploadSettings, UPLOAD_MAX_FILE_SIZE_MB_BOUND } from "../shared/settings/uploads"
 import {
-  assertWithinBound,
-  AUTH_SESSION_MAX_AGE_DAYS_BOUND,
   CLAUDE_IDLE_TIMEOUT_MS_BOUND,
   CLAUDE_MAX_CONCURRENT_BOUND,
   globalPromptAppendViolation,
-  normalizeAuthSettings,
-  normalizeBounded,
-  normalizeUploadSettings,
   OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND,
   OAUTH_TOKEN_MAX_CONCURRENT_BOUND,
   SHARE_DEFAULT_TTL_HOURS_BOUND,
   SUBAGENT_RUN_TIMEOUT_MS_BOUND,
-  UPLOAD_MAX_FILE_SIZE_MB_BOUND,
+  SUBAGENT_RUN_TIMEOUT_MS_DEFAULT,
 } from "../shared/settings/bounds"
 import type { JsonArray, JsonObject } from "../shared/json"
 
@@ -173,9 +172,7 @@ function isMcpOAuthState<T>(value: T): value is T & McpOAuthState {
   return isRecord(value)
 }
 
-function isMcpTransport<T>(value: T): value is T & McpServerTransport {
-  return value === "stdio" || value === "http" || value === "sse" || value === "ws"
-}
+const isMcpTransport = oneOf(MCP_SERVER_TRANSPORTS)
 
 interface AppSettingsState extends Omit<AppSettingsSnapshot, "customProviders" | "serviceBus"> {
   analyticsUserId: string
@@ -191,7 +188,6 @@ interface NormalizedAppSettings {
 }
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
-const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
 const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const MODEL_LABEL_MAX = 64
@@ -612,7 +608,7 @@ function normalizeSubagentRuntime<T>(
   const runTimeoutMs = normalizeBounded(
     SUBAGENT_RUN_TIMEOUT_MS_BOUND,
     src?.runTimeoutMs,
-    DEFAULT_SUBAGENT_RUN_TIMEOUT_MS,
+    SUBAGENT_RUN_TIMEOUT_MS_DEFAULT,
     "fallback",
     warnings,
   )

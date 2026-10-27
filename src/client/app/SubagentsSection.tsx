@@ -43,6 +43,8 @@ import {
   type SubagentInput,
 } from "../../shared/types"
 import { withCustomProviders } from "../../shared/custom-providers"
+import { isWithinRange } from "../../shared/numeric"
+import { SUBAGENT_RUN_TIMEOUT_MS_BOUND, SUBAGENT_RUN_TIMEOUT_MS_DEFAULT } from "../../shared/settings/bounds"
 import type { SubagentCommandResult } from "../../shared/protocol"
 import { SUBAGENT_NAME_MAX } from "../../shared/settings/validation"
 import type { SectionEditing } from "../lib/sectionEditing"
@@ -637,9 +639,10 @@ export function SubagentsSettingsBranch(props: {
 }
 
 const DEFAULT_LOOP_SUBAGENT_NONE = "__none__"
-const SUBAGENT_RUN_TIMEOUT_MIN_S = 30
-const SUBAGENT_RUN_TIMEOUT_MAX_S = 86_400
-const DEFAULT_SUBAGENT_RUN_TIMEOUT_S = 600
+const SUBAGENT_RUN_TIMEOUT_MIN_S = SUBAGENT_RUN_TIMEOUT_MS_BOUND.min / 1000
+const SUBAGENT_RUN_TIMEOUT_MAX_S = SUBAGENT_RUN_TIMEOUT_MS_BOUND.max / 1000
+const SUBAGENT_RUN_TIMEOUT_RANGE_S = { min: SUBAGENT_RUN_TIMEOUT_MIN_S, max: SUBAGENT_RUN_TIMEOUT_MAX_S, integer: true } as const
+const DEFAULT_SUBAGENT_RUN_TIMEOUT_S = SUBAGENT_RUN_TIMEOUT_MS_DEFAULT / 1000
 
 function LoopRuntimePanel(props: {
   subagents: Subagent[]
@@ -661,7 +664,7 @@ function LoopRuntimePanel(props: {
 
   function commitTimeout() {
     const seconds = Number(timeoutDraft)
-    if (!Number.isInteger(seconds) || seconds < SUBAGENT_RUN_TIMEOUT_MIN_S || seconds > SUBAGENT_RUN_TIMEOUT_MAX_S) {
+    if (!isWithinRange(SUBAGENT_RUN_TIMEOUT_RANGE_S, seconds)) {
       setTimeoutDraft(String(timeoutSeconds))
       setError(`Timeout must be a whole number of seconds between ${SUBAGENT_RUN_TIMEOUT_MIN_S} and ${SUBAGENT_RUN_TIMEOUT_MAX_S}.`)
       return

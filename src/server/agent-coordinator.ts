@@ -5,7 +5,6 @@ import { readDoc } from "./structured-doc-io.adapter"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
-  AgentProvider,
   ChatAttachment,
   ChatBackgroundTask,
   LlmProviderSnapshot,
@@ -55,7 +54,7 @@ import {
 import { appendTurnError } from "./claude-turn-outcome"
 import { log } from "../shared/log"
 import type { SendToStartingProfile } from "./claude-steer-log"
-import type { SendMessageOptions } from "./claude-turn-starter-types"
+import type { SendMessageOptions, StartTurnForChatArgs } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
@@ -903,21 +902,7 @@ export class AgentCoordinator {
     }
   }
 
-  async startTurnForChat(args: {
-    chatId: string
-    provider: AgentProvider
-    content: string
-    attachments: ChatAttachment[]
-    model: string
-    effort?: string
-    serviceTier?: "fast"
-    planMode: boolean
-    appendUserPrompt: boolean
-    steered?: boolean
-    autoContinue?: { scheduleId: string }
-    userClearedContext?: boolean
-    profile?: SendToStartingProfile | null
-  }) {
+  async startTurnForChat(args: StartTurnForChatArgs) {
     return startTurnForChatFn(this.startTurnDeps(), args)
   }
 

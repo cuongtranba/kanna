@@ -33,4 +33,11 @@ describe("normalizeProviderDefaults", () => {
     expect(normalizeCodexPreference({ planMode: false }).planMode).toBe(false)
     expect(normalizeProviderDefaults({ openrouter: { planMode: true } }).openrouter.planMode).toBe(true)
   })
+
+  test("openrouter and custom coerce a truthy settings.json value with Boolean semantics", () => {
+    const stored = JSON.parse('{"openrouter":{"planMode":1},"custom":{"planMode":"yes"}}')
+    const normalized = normalizeProviderDefaults(stored)
+    expect(normalized.openrouter.planMode).toBe(true)
+    expect(normalized.custom.planMode).toBe(true)
+  })
 })

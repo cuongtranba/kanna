@@ -1,5 +1,11 @@
 import { create } from "zustand"
-import type { PushPermissionState } from "../lib/pushPermissionState"
+
+export type PushPermissionState =
+  | "unsupported"
+  | "insecure-context"
+  | "default"
+  | "granted"
+  | "denied"
 
 interface PushSettingsState {
   permissionState: PushPermissionState

@@ -112,8 +112,8 @@ export function normalizeProviderDefaults(
     openrouter: {
       model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
       modelOptions: {},
-      planMode: value?.openrouter?.planMode === true,
+      planMode: Boolean(value?.openrouter?.planMode),
     },
-    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: value?.custom?.planMode === true },
+    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
   }
 }

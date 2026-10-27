@@ -1,25 +1,23 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { LimitDetection } from "./auto-continue/limit-detector"
-import {
-  classifyResultFailure,
-  classifyThrownFailure,
-  handleDetectedFailure,
-  handledFailureLabel,
-  type FailureDetectors,
-} from "./claude-turn-failure"
-import type { ClaudeSessionState } from "./claude-session-state"
+import { settleFailedTurn, type FailureSettlement } from "./claude-turn-failure"
+import { ClaudeSessionState } from "./claude-session-state"
 
 const LIMIT: LimitDetection = { chatId: "chat-1", resetAt: 1, tz: "system", raw: null }
 const AUTH: AuthErrorDetection = { chatId: "chat-1", reason: "401", raw: "401" }
 
-function detectors(options: {
+interface Options {
   limitText?: LimitDetection | null
   limitError?: LimitDetection | null
   authText?: (text: string) => AuthErrorDetection | null
   authError?: AuthErrorDetection | null
-}): FailureDetectors {
-  return {
+  handled?: boolean
+}
+
+function harness(options: Options = {}) {
+  const calls: string[] = []
+  const settlement: FailureSettlement = {
     limit: {
       detect: () => options.limitError ?? null,
       detectFromResultText: () => options.limitText ?? null,
@@ -28,87 +26,119 @@ function detectors(options: {
       detect: () => options.authError ?? null,
       detectFromResultText: (_chatId, text) => options.authText?.(text) ?? null,
     },
+    handleLimitDetection: async () => { calls.push("handleLimit"); return options.handled ?? true },
+    handleAuthFailure: async () => { calls.push("handleAuth"); return options.handled ?? true },
+    recordTurnFailed: async (_chatId, reason) => { calls.push(`failed:${reason}`) },
+    recordTurnError: async (_chatId, message) => { calls.push(`error:${message}`) },
+    discardInvalidSession: async () => { calls.push("discard") },
   }
+  return { calls, settlement }
 }
 
-describe("classifyResultFailure", () => {
-  test("a rate limit wins over an auth match and suppresses it", () => {
-    const failure = classifyResultFailure(
-      detectors({ limitText: LIMIT, authText: () => AUTH }),
-      "chat-1",
-      "limit reached",
-      "",
-    )
-    expect(failure.limit).toBe(LIMIT)
-    expect(failure.auth).toBeNull()
+const session = new ClaudeSessionState({
+  id: "sess-1",
+  chatId: "chat-1",
+  session: {
+    provider: "claude",
+    stream: (async function* () {})(),
+    interrupt: async () => {},
+    close: () => {},
+    closed: Promise.resolve(),
+    sendPrompt: async () => {},
+    setModel: async () => {},
+    setPermissionMode: async () => {},
+    pushChannelPrompt: async () => {},
+  },
+  localPath: "/tmp/project",
+  additionalDirectories: [],
+  model: "claude-opus-4",
+  planMode: false,
+  sessionToken: null,
+  accountInfoLoaded: false,
+  nextPromptSeq: 1,
+  pendingPromptSeqs: [],
+  activeTokenId: null,
+  oauthKeyMasked: null,
+  oauthLabel: null,
+  endpointKeyMasked: null,
+  endpointModel: null,
+  lastUsedAt: 0,
+  backgroundTasks: new Map(),
+  selfWakeActive: false,
+  recentToolDescriptions: new Map(),
+  backgroundLaunchToolIds: new Set<string>(),
+  backgroundTaskDeadlineAt: 0,
+  backgroundTaskWakeCount: 0,
+  backgroundTasksLevelSourced: false,
+  loopArmedAtSpawn: false,
+  cancelledResultPending: 0,
+  suppressSessionTokenPersist: false,
+  backgroundTaskWakeSuppressed: false,
+})
+
+describe("settleFailedTurn with a result", () => {
+  test("a rate limit wins over an auth match and is recorded under the rate_limit label", async () => {
+    const { calls, settlement } = harness({ limitText: LIMIT, authText: () => AUTH })
+    const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "limit reached", debugRaw: "" }, true)
+    expect(handled).toBe(true)
+    expect(calls).toEqual(["handleLimit", "failed:rate_limit"])
   })
 
-  test("auth is read from the result text first and the debug dump second", () => {
-    const fromDebug = classifyResultFailure(
-      detectors({ authText: (text) => (text === "raw dump" ? AUTH : null) }),
-      "chat-1",
-      "boom",
-      "raw dump",
-    )
-    expect(fromDebug.auth).toBe(AUTH)
+  test("auth is read from the result text first and the debug dump second, recorded as auth_error", async () => {
+    const { calls, settlement } = harness({ authText: (text) => (text === "raw dump" ? AUTH : null) })
+    const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "boom", debugRaw: "raw dump" }, true)
+    expect(handled).toBe(true)
+    expect(calls).toEqual(["handleAuth", "failed:auth_error"])
   })
 
-  test("prompt-too-long and no-conversation (also in the debug dump) mark the session invalid", () => {
-    expect(classifyResultFailure(detectors({}), "chat-1", "Prompt is too long", "").sessionInvalid).toBe(true)
-    expect(
-      classifyResultFailure(detectors({}), "chat-1", "boom", "No conversation found with session ID: x").sessionInvalid,
-    ).toBe(true)
-    expect(classifyResultFailure(detectors({}), "chat-1", "boom", "").sessionInvalid).toBe(false)
+  test("an unclassified failure records the raw text and discards an invalid session", async () => {
+    const { calls, settlement } = harness()
+    const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "Prompt is too long", debugRaw: "" }, true)
+    expect(handled).toBe(false)
+    expect(calls).toEqual(["failed:Prompt is too long", "discard"])
+  })
+
+  test("a no-conversation dump marks the session invalid even when the text is generic", async () => {
+    const { calls, settlement } = harness()
+    await settleFailedTurn(settlement, session, { kind: "result", text: "boom", debugRaw: "No conversation found with session ID: x" }, true)
+    expect(calls).toEqual(["failed:boom", "discard"])
+  })
+
+  test("a detection the handler declines is recorded as a plain failure", async () => {
+    const { calls, settlement } = harness({ limitText: LIMIT, handled: false })
+    const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "limit reached", debugRaw: "" }, true)
+    expect(handled).toBe(false)
+    expect(calls).toEqual(["handleLimit", "failed:limit reached"])
+  })
+
+  test("without an active turn it handles the detection but records nothing", async () => {
+    const { calls, settlement } = harness({ authText: () => AUTH })
+    const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "401", debugRaw: "" }, false)
+    expect(handled).toBe(true)
+    expect(calls).toEqual(["handleAuth"])
   })
 })
 
-describe("classifyThrownFailure", () => {
-  test("uses the error-level detectors and only checks auth when no limit matched", () => {
-    const limited = classifyThrownFailure(
-      detectors({ limitError: LIMIT, authError: AUTH }),
-      "chat-1",
-      new Error("x"),
+describe("settleFailedTurn with a thrown error", () => {
+  test("uses the error-level detectors and only checks auth when no limit matched", async () => {
+    const limited = harness({ limitError: LIMIT, authError: AUTH })
+    await settleFailedTurn(limited.settlement, session, { kind: "thrown", error: new Error("x") }, true)
+    expect(limited.calls).toEqual(["handleLimit", "failed:rate_limit"])
+
+    const authed = harness({ authError: AUTH })
+    await settleFailedTurn(authed.settlement, session, { kind: "thrown", error: new Error("x") }, true)
+    expect(authed.calls).toEqual(["handleAuth", "failed:auth_error"])
+  })
+
+  test("an unclassified error is recorded as a turn error and a no-conversation message discards the session", async () => {
+    const { calls, settlement } = harness()
+    const handled = await settleFailedTurn(
+      settlement,
+      session,
+      { kind: "thrown", error: new Error("No conversation found with session ID: abc") },
+      true,
     )
-    expect(limited.limit).toBe(LIMIT)
-    expect(limited.auth).toBeNull()
-    const authed = classifyThrownFailure(detectors({ authError: AUTH }), "chat-1", new Error("x"))
-    expect(authed.auth).toBe(AUTH)
-  })
-
-  test("a no-conversation error message marks the session invalid", () => {
-    const failure = classifyThrownFailure(
-      detectors({}),
-      "chat-1",
-      new Error("No conversation found with session ID: abc"),
-    )
-    expect(failure.sessionInvalid).toBe(true)
-  })
-})
-
-describe("handleDetectedFailure", () => {
-  const session = { chatId: "chat-1" } as ClaudeSessionState
-
-  test("routes a limit to the limit handler and an auth failure to the auth handler", async () => {
-    const calls: string[] = []
-    const handlers = {
-      handleLimitDetection: async () => { calls.push("limit"); return true },
-      handleAuthFailure: async () => { calls.push("auth"); return true },
-    }
-    expect(await handleDetectedFailure(handlers, session, { limit: LIMIT, auth: null, sessionInvalid: false })).toBe(true)
-    expect(await handleDetectedFailure(handlers, session, { limit: null, auth: AUTH, sessionInvalid: false })).toBe(true)
-    expect(calls).toEqual(["limit", "auth"])
-  })
-
-  test("an unclassified failure is not handled", async () => {
-    const handlers = {
-      handleLimitDetection: async () => true,
-      handleAuthFailure: async () => true,
-    }
-    expect(await handleDetectedFailure(handlers, session, { limit: null, auth: null, sessionInvalid: true })).toBe(false)
-  })
-
-  test("the recorded label names the handled class", () => {
-    expect(handledFailureLabel({ limit: LIMIT, auth: null, sessionInvalid: false })).toBe("rate_limit")
-    expect(handledFailureLabel({ limit: null, auth: AUTH, sessionInvalid: false })).toBe("auth_error")
+    expect(handled).toBe(false)
+    expect(calls).toEqual(["error:No conversation found with session ID: abc", "discard"])
   })
 })

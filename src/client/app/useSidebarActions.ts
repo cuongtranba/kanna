@@ -1,34 +1,8 @@
-import { useShallowStable } from "../hooks/useShallowStable"
+import { useShallow } from "zustand/react/shallow"
 import type { KannaState } from "./useKannaState"
 
-export type SidebarActions = {
-  onCreateChat: KannaState["handleCreateChat"]
-  onForkChat: KannaState["handleForkChat"]
-  onRenameChat: KannaState["handleRenameChat"]
-  onArchiveChat: KannaState["handleArchiveChat"]
-  onOpenArchivedChat: KannaState["handleOpenArchivedChat"]
-  onDeleteChat: KannaState["handleDeleteChat"]
-  onArchiveBulkChats: KannaState["handleArchiveBulkChats"]
-  onDeleteBulkChats: KannaState["handleDeleteBulkChats"]
-  onOpenAddProjectModal: KannaState["openAddProjectModal"]
-  onCopyPath: KannaState["handleCopyPath"]
-  onOpenExternalPath: KannaState["handleOpenExternalPath"]
-  onHideProject: KannaState["handleHideProject"]
-  onDeleteProject: KannaState["handleDeleteProject"]
-  onToggleStar: KannaState["handleToggleProjectStar"]
-  onTogglePinChat: KannaState["handleToggleChatPin"]
-  onSetProjectInstructions: KannaState["handleSetProjectInstructions"]
-  onReorderProjectGroups: KannaState["handleReorderProjectGroups"]
-  onCreateStack: KannaState["handleCreateStack"]
-  onRenameStack: KannaState["handleRenameStack"]
-  onSetStackInstructions: KannaState["handleSetStackInstructions"]
-  onRemoveStack: KannaState["handleRemoveStack"]
-  onCreateStackChat: KannaState["handleCreateStackChat"]
-  onListStackWorktrees: KannaState["handleListStackWorktrees"]
-}
-
-export function useSidebarActions(state: KannaState): SidebarActions {
-  return useShallowStable<SidebarActions>({
+function pickSidebarActions(state: KannaState) {
+  return {
     onCreateChat: state.handleCreateChat,
     onForkChat: state.handleForkChat,
     onRenameChat: state.handleRenameChat,
@@ -52,5 +26,15 @@ export function useSidebarActions(state: KannaState): SidebarActions {
     onRemoveStack: state.handleRemoveStack,
     onCreateStackChat: state.handleCreateStackChat,
     onListStackWorktrees: state.handleListStackWorktrees,
-  })
+  }
+}
+
+export type SidebarActions = ReturnType<typeof pickSidebarActions>
+
+function keepActions(actions: SidebarActions): SidebarActions {
+  return actions
+}
+
+export function useSidebarActions(state: KannaState): SidebarActions {
+  return useShallow(keepActions)(pickSidebarActions(state))
 }

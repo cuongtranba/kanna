@@ -1,7 +1,7 @@
 import path from "node:path"
 import { stat } from "node:fs/promises"
 import { spawnCapture } from "./process-utils.adapter"
-import { readTextFileOrThrow } from "./text-file-io.adapter"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import type { InstalledPackage, PackageInventorySnapshot, PackageKind } from "../shared/packages/types"
 import { parseSkillLock } from "../shared/packages/parse-skill-lock"
 import { parseClaudePluginList, parseClaudePluginsFile } from "../shared/packages/parse-claude-plugins"

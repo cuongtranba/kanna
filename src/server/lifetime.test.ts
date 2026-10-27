@@ -26,4 +26,19 @@ describe("Lifetime", () => {
 
     expect(stops).toBe(1)
   })
+
+  test("a throwing or rejecting stop does not skip the stops after it, in any phase", async () => {
+    const lifetime = new Lifetime()
+    const order: string[] = []
+    lifetime.defer("teardown", () => { order.push("store.flush") })
+    lifetime.defer("teardown", () => { throw new Error("router exploded") })
+    lifetime.defer("teardown", async () => { throw new Error("agent rejected") })
+    lifetime.defer("settle", () => { order.push("settle") })
+    lifetime.defer("quiesce", () => { throw new Error("timers exploded") })
+    lifetime.defer("quiesce", () => { order.push("quiesce") })
+
+    await expect(lifetime.disposeAll()).resolves.toBeUndefined()
+
+    expect(order).toEqual(["quiesce", "settle", "store.flush"])
+  })
 })

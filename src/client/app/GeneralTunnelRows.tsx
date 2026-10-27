@@ -1,8 +1,8 @@
 import { useEffect } from "react"
 import { CLOUDFLARE_TUNNEL_DEFAULTS, type CloudflareTunnelMode, type CloudflareTunnelSettings } from "../../shared/types"
-import { errorMessage } from "../../shared/errors"
 import { SettingsRow } from "../components/settings/SettingsList"
 import { Input } from "../components/ui/input"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useGeneralSettingsStore } from "../stores/generalSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -39,12 +39,7 @@ export function GeneralTunnelRows({ state }: { state: Pick<KannaState, "handleWr
   }, [persistedCloudflaredPath, patchDrafts])
 
   async function handleTunnelPatch(patch: Partial<CloudflareTunnelSettings>) {
-    try {
-      setTunnelError(null)
-      await state.handleWriteCloudflareTunnel(patch)
-    } catch (error) {
-      setTunnelError(errorMessage(error))
-    }
+    await surfaceErrorIn(setTunnelError, () => state.handleWriteCloudflareTunnel(patch))
   }
 
   return (

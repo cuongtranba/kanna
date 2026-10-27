@@ -6,14 +6,7 @@ import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import { backgroundTaskLaunchesFromToolResult, toolCallDescription } from "./claude-prompt-helpers"
-import {
-  classifyResultFailure,
-  classifyThrownFailure,
-  handledFailureLabel,
-  handleDetectedFailure,
-  type AuthErrorDetectable,
-  type FailureDetectors,
-} from "./claude-turn-failure"
+import { settleFailedTurn, type AuthErrorDetectable, type FailureSettlement } from "./claude-turn-failure"
 import { recordTurnError } from "./claude-turn-outcome"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
@@ -76,13 +69,21 @@ export interface RunClaudeSessionDeps {
 }
 
 
-function failureDetectors(deps: RunClaudeSessionDeps): FailureDetectors {
-  return { limit: deps.claudeLimitDetector, auth: deps.claudeAuthErrorDetector }
-}
-
 async function discardInvalidSession(deps: RunClaudeSessionDeps, session: ClaudeSessionState): Promise<void> {
   deps.closeClaudeSession(session.chatId, session)
   await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
+}
+
+function failureSettlement(deps: RunClaudeSessionDeps): FailureSettlement {
+  return {
+    limit: deps.claudeLimitDetector,
+    auth: deps.claudeAuthErrorDetector,
+    handleLimitDetection: (chatId, detection) => deps.handleLimitDetection(chatId, detection),
+    handleAuthFailure: (session, detection) => deps.handleAuthFailure(session, detection),
+    recordTurnFailed: (chatId, reason) => deps.store.recordTurnFailed(chatId, reason),
+    recordTurnError: (chatId, message) => recordTurnError(deps.store, chatId, message),
+    discardInvalidSession: (session) => discardInvalidSession(deps, session),
+  }
 }
 
 function firstEntryTimeoutMessage(session: ClaudeSessionState, timeoutMs: number): string {
@@ -301,19 +302,12 @@ export async function runClaudeSession(
         let failureHandled = false
         if (event.entry.isError) {
           const resultText = event.entry.result || "Turn failed"
-          const failure = classifyResultFailure(
-            failureDetectors(deps),
-            session.chatId,
-            resultText,
-            event.entry.debugRaw ?? "",
+          failureHandled = await settleFailedTurn(
+            failureSettlement(deps),
+            session,
+            { kind: "result", text: resultText, debugRaw: event.entry.debugRaw ?? "" },
+            true,
           )
-          failureHandled = await handleDetectedFailure(deps, session, failure)
-          if (failureHandled) {
-            await deps.store.recordTurnFailed(session.chatId, handledFailureLabel(failure))
-          } else {
-            await deps.store.recordTurnFailed(session.chatId, resultText)
-            if (failure.sessionInvalid) await discardInvalidSession(deps, session)
-          }
           if (isProactiveCompactTurn(active)) {
             const prev = deps.store.getChat(session.chatId)?.compactFailureCount ?? 0
             await deps.store.setCompactFailureCount(session.chatId, prev + 1)
@@ -334,15 +328,11 @@ export async function runClaudeSession(
           await deps.maybeStartNextQueuedMessage(session.chatId)
         }
       } else if (event.entry.kind === "result" && event.entry.isError) {
-        await handleDetectedFailure(
-          deps,
+        await settleFailedTurn(
+          failureSettlement(deps),
           session,
-          classifyResultFailure(
-            failureDetectors(deps),
-            session.chatId,
-            event.entry.result || "",
-            event.entry.debugRaw ?? "",
-          ),
+          { kind: "result", text: event.entry.result || "", debugRaw: event.entry.debugRaw ?? "" },
+          false,
         )
       }
 
@@ -362,13 +352,7 @@ export async function runClaudeSession(
     const error = toError(caught)
     const active = deps.activeTurns.get(session.chatId)
     if (active && !active.cancelRequested) {
-      const failure = classifyThrownFailure(failureDetectors(deps), session.chatId, error)
-      if (await handleDetectedFailure(deps, session, failure)) {
-        await deps.store.recordTurnFailed(session.chatId, handledFailureLabel(failure))
-      } else {
-        await recordTurnError(deps.store, session.chatId, error.message)
-        if (failure.sessionInvalid) await discardInvalidSession(deps, session)
-      }
+      await settleFailedTurn(failureSettlement(deps), session, { kind: "thrown", error }, true)
     }
   } finally {
     clearFirstEntryWatchdog()

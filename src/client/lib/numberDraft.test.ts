@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test"
 import { resolveNumberCommit } from "./numberDraft"
 
-const ROUNDING = { min: 1, max: 100, whole: "round" } as const
-const STRICT = { min: 1, max: Number.POSITIVE_INFINITY, whole: "strict" } as const
+const ROUNDING = { min: 1, max: 100 } as const
+const STRICT = { min: 1, max: Number.POSITIVE_INFINITY, integer: true } as const
 
 describe("resolveNumberCommit", () => {
   test("rejects text that is not a number or is outside the range", () => {

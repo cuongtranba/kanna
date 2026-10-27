@@ -10,7 +10,7 @@ import {
   unsupportedTargetMessage,
 } from "./nats-server-release"
 import { extractTarGzFile } from "./tar-gz"
-import { NATS_SERVER_VERSION } from "../../shared/service-bus/nats-server-version"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/jetstream-config"
 
 export type ReleaseFetch = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>
 

@@ -11,7 +11,7 @@ import type { ChatSnapshot, ProjectCommandsSnapshot, AskUserQuestionItem } from 
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
-import { reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
+import { clearCommandError, reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
 import { onRejected, toError } from "../../shared/errors"
 import { getLatestToolIds, isActiveChatStatus, isPrimaryChatInstance } from "./derived"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
@@ -396,7 +396,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         hasOlder: snapshot?.history.hasOlder ?? false,
       })
       chatStore.setChatReady(activeChatId, true)
-      useKannaStateStore.getState().setCommandError(null)
+      clearCommandError()
     }, (event) => {
       if (event.type === "chat.live") {
         if (event.chatId === activeChatId) useLiveBlockStore.getState().setLiveBlock(activeChatId, event.block)
@@ -644,7 +644,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
         useKannaStateStore.getState().setPendingChatId(result.chatId)
         appGlobal.chatNavigator.openChat(result.chatId)
       }
-      useKannaStateStore.getState().setCommandError(null)
+      clearCommandError()
     } catch (error) {
       useKannaStateStore.getState().setOptimisticUserPrompts((current) => current.filter((prompt) => prompt.id !== optimisticId))
       useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)

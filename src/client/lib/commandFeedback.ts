@@ -1,4 +1,4 @@
-import { errorMessage } from "../../shared/errors"
+import { errorMessage, toError } from "../../shared/errors"
 import type { ClientCommand } from "../../shared/protocol"
 import type { CommandPort, CommandReply } from "../ports/commandPort"
 import { useKannaStateStore } from "../stores/kannaStateStore"
@@ -13,26 +13,29 @@ export function reportCommandFailure(error: Error): void {
   useKannaStateStore.getState().setCommandError(error.message)
 }
 
-export async function withCommandFeedback<T>(run: () => Promise<T>): Promise<T> {
+type CommandOutcome<T> = { ok: true; value: T } | { ok: false; error: Error }
+
+async function settleWithFeedback<T>(run: () => Promise<T>): Promise<CommandOutcome<T>> {
   try {
-    const result = await run()
+    const value = await run()
     clearCommandError()
-    return result
+    return { ok: true, value }
   } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
-    throw error
+    const failure = toError(error)
+    reportCommandFailure(failure)
+    return { ok: false, error: failure }
   }
 }
 
+export async function withCommandFeedback<T>(run: () => Promise<T>): Promise<T> {
+  const outcome = await settleWithFeedback(run)
+  if (!outcome.ok) throw outcome.error
+  return outcome.value
+}
+
 export async function surfaceCommandError<T>(run: () => Promise<T>): Promise<T | undefined> {
-  try {
-    const result = await run()
-    clearCommandError()
-    return result
-  } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
-    return undefined
-  }
+  const outcome = await settleWithFeedback(run)
+  return outcome.ok ? outcome.value : undefined
 }
 
 export async function sendCommandWithFeedback<C extends ClientCommand>(
@@ -45,7 +48,7 @@ export async function sendCommandWithFeedback<C extends ClientCommand>(
   })
 }
 
-export async function surfaceErrorIn(setError: (message: string | null) => void, run: () => Promise<void>): Promise<void> {
+export async function surfaceErrorIn<T>(setError: (message: string | null) => void, run: () => Promise<T>): Promise<void> {
   setError(null)
   try {
     await run()

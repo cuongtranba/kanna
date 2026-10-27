@@ -408,8 +408,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   const webhooks = await createWebhookService(store.dataDir, store, agent, bus, inbox, process.env.KANNA_WEBHOOKS !== "disabled")
-  const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox)
-  lifetime.defer("teardown", () => mcpSources.stop())
+  const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox, lifetime)
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {

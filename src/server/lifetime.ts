@@ -1,3 +1,5 @@
+import { log } from "../shared/log"
+
 export type DisposePhase = "quiesce" | "settle" | "teardown"
 
 const PHASE_ORDER: readonly DisposePhase[] = ["quiesce", "settle", "teardown"]
@@ -14,7 +16,13 @@ export class Lifetime {
   async disposeAll(): Promise<void> {
     for (const phase of PHASE_ORDER) {
       const pending = this.stops[phase].splice(0).reverse()
-      for (const stop of pending) await stop()
+      for (const stop of pending) {
+        try {
+          await stop()
+        } catch (error) {
+          log.error("[kanna] shutdown step failed:", String(error))
+        }
+      }
     }
   }
 }

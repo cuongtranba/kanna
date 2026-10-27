@@ -40,10 +40,12 @@ export const inboundMessageSchema = z.object({
   preview: z.string(),
 })
 
+const tolerantOptionalString = z.string().optional().catch(undefined)
+
 export const inboxReportSchema = z.object({
   verdict: z.enum(INBOX_VERDICTS),
   summary: z.string(),
-  draftReply: z.string().optional(),
+  draftReply: tolerantOptionalString,
   at: z.number(),
   chatId: z.string(),
 })
@@ -79,8 +81,8 @@ export const inboxActivityItemSchema = z.object({
   ts: z.number(),
   subject: z.string(),
   source: busSourceSchema,
-  chatId: z.string().optional(),
-  projectId: z.string().optional(),
+  chatId: tolerantOptionalString,
+  projectId: tolerantOptionalString,
   title: z.string(),
   preview: z.string(),
   payload: jsonValueSchema,

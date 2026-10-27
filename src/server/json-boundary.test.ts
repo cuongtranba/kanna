@@ -6,9 +6,19 @@ class ApiFailure extends Error {
 }
 
 describe("toJsonValue", () => {
-  test("keeps an Error's non-enumerable message alongside its own fields", () => {
+  test("encodes an Error as its name and message only, never its stack or own fields", () => {
     const encoded = toJsonValue(new ApiFailure("invalid api key"))
-    expect(encoded).toMatchObject({ message: "invalid api key", status: 401 })
+    expect(encoded).toEqual({ name: "Error", message: "invalid api key" })
+  })
+
+  test("never leaks a stack when an Error is nested in a payload", () => {
+    const encoded = toJsonValue({ error: new ApiFailure("boom"), list: [new TypeError("bad")] })
+    expect(JSON.stringify(encoded)).not.toContain("stack")
+    expect(JSON.stringify(encoded)).not.toContain(" at ")
+    expect(encoded).toEqual({
+      error: { name: "Error", message: "boom" },
+      list: [{ name: "TypeError", message: "bad" }],
+    })
   })
 
   test("drops undefined fields and functions and maps non-finite numbers to null", () => {

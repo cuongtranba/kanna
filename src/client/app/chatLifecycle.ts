@@ -1,6 +1,6 @@
 import { useCallback } from "react"
 import type { AgentProvider, SidebarData } from "../../shared/types"
-import { surfaceCommandError } from "../lib/commandFeedback"
+import { clearCommandError, surfaceCommandError } from "../lib/commandFeedback"
 import { useChatPreferencesStore, type ComposerState } from "../stores/chatPreferencesStore"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import type { ChatNavigatorPort } from "./chatNavigator"
@@ -49,7 +49,7 @@ export function adoptNewChat(chatNavigator: ChatNavigatorPort, chat: AdoptedChat
   store.setPendingChatId(chat.chatId)
   chatNavigator.openChat(chat.chatId)
   store.setSidebarOpen(false)
-  store.setCommandError(null)
+  clearCommandError()
 }
 
 export function useBulkArchiveChats(

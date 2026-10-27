@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { toError } from "../../shared/errors"
 import { isJsonArray, jsonText, resolveJsonPath, type JsonObject, type JsonValue } from "../../shared/json"
 import { log } from "../../shared/log"
+import { createSerialQueue } from "../serial-lane"
 import {
   MCP_SOURCE_DEDUPE_KEYS,
   type McpPollSource,
@@ -115,8 +116,8 @@ export class McpSourceRunner {
   private readonly listeners = new Set<() => void>()
   private cursors: McpSourceCursors = {}
   private cursorsLoaded = false
-  private saving: Promise<void> = Promise.resolve()
-  private reconciling: Promise<void> = Promise.resolve()
+  private readonly saving = createSerialQueue()
+  private readonly reconciling = createSerialQueue()
 
   constructor(
     private readonly connector: McpSourceConnector,
@@ -127,16 +128,15 @@ export class McpSourceRunner {
   ) {}
 
   reconcile(sources: readonly McpSource[], servers: readonly McpServerConfig[]): Promise<void> {
-    this.reconciling = this.reconciling.then(() => this.apply(sources, servers))
-    return this.reconciling
+    return this.reconciling.run(() => this.apply(sources, servers))
   }
 
   async stop(): Promise<void> {
-    await this.reconciling
+    await this.reconciling.run(async () => {})
     const entries = [...this.entries.values()]
     this.entries.clear()
     await Promise.all(entries.map((entry) => this.halt(entry)))
-    await this.saving
+    await this.saving.run(async () => {})
   }
 
   statuses(): McpSourceStatus[] {
@@ -192,11 +192,9 @@ export class McpSourceRunner {
 
   private persist(): void {
     const snapshot = this.cursors
-    this.saving = this.saving
-      .then(() => this.cursorStore.save(snapshot))
-      .catch((error: Error) => {
-        log.warn("[kanna/mcp-source] cursor save failed:", error.message)
-      })
+    this.saving.run(() => this.cursorStore.save(snapshot)).catch((error: Error) => {
+      log.warn("[kanna/mcp-source] cursor save failed:", error.message)
+    })
   }
 
   private async halt(entry: Entry): Promise<void> {

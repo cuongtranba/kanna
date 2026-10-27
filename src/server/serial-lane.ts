@@ -28,9 +28,3 @@ export function createSerialQueue(): SerialQueue {
   const lanes = createKeyedLanes()
   return { run: (task) => lanes.run("", task) }
 }
-
-const processLanes = createKeyedLanes()
-
-export function withKeyedLane<T>(key: string, task: () => Promise<T>): Promise<T> {
-  return processLanes.run(key, task)
-}

@@ -387,6 +387,14 @@ describe("readSidebarOrderFromProjectsLog", () => {
     expect(result).toEqual(["p2", "p1"])
   })
 
+  test("a literal null line never throws out of the migration", async () => {
+    const sidebarEvent = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 2, projectIds: ["p1"] })
+    const trailing = makeStorage({ "/data/projects.jsonl": `${sidebarEvent}\nnull\n` })
+    expect(await readSidebarOrderFromProjectsLog(trailing, LAYOUT)).toEqual(["p1"])
+    const mid = makeStorage({ "/data/projects.jsonl": `null\n${sidebarEvent}\n` })
+    expect(await readSidebarOrderFromProjectsLog(mid, LAYOUT)).toEqual([])
+  })
+
   test("skips non-sidebar events", async () => {
     const projectEvent = JSON.stringify({ v: STORE_VERSION, type: "project_opened", timestamp: 1, projectId: "p1", localPath: "/", title: "t" })
     const sidebarEvent = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 2, projectIds: ["p1"] })

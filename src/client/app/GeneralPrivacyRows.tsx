@@ -9,10 +9,10 @@ import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useGeneralSettingsStore } from "../stores/generalSettingsStore"
 import { usePushSettingsStore } from "../stores/pushSettingsStore"
 import { PendingSegmentedControl } from "./PendingSegmentedControl"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { detectPushSupport, getStoredPushDeviceId } from "./pushClient"
 import { usePushDeviceActions } from "./usePushDeviceActions"
 import type { KannaState } from "./useKannaState"
-import { errorMessage } from "../../shared/errors"
 
 const analyticsOptions = [
   { value: "disabled" as const, label: "Off" },
@@ -90,12 +90,7 @@ function AnalyticsRows({ state }: { state: Pick<KannaState, "handleWriteAppSetti
   const telemetrySettingValue = appSettings?.telemetry?.enabled === false ? "disabled" : "enabled"
 
   async function writeReportingError(patch: Parameters<KannaState["handleWriteAppSettings"]>[0]) {
-    try {
-      setAppSettingsError(null)
-      await state.handleWriteAppSettings(patch)
-    } catch (error) {
-      setAppSettingsError(errorMessage(error))
-    }
+    await surfaceErrorIn(setAppSettingsError, () => state.handleWriteAppSettings(patch))
   }
 
   return (
