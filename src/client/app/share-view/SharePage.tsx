@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
 import type { ShareError } from "../../../shared/session-share/types"
 import { shareQueryOptions } from "../../api/share"
+import type { HttpPort } from "../../ports/httpPort"
 import { ShareViewPage } from "./ShareViewPage"
 import { SharePageStore } from "./SharePage.store"
 
@@ -26,10 +27,10 @@ function errorMessage(error: ShareError): string {
   }
 }
 
-function SharePageInner({ token }: { token: string }) {
+function SharePageInner({ token, http }: { token: string; http?: HttpPort }) {
   const loadState = SharePageStore.useScopedStore((s) => s.loadState)
   const setLoadState = SharePageStore.useScopedStore((s) => s.setLoadState)
-  const query = useQuery(shareQueryOptions(token))
+  const query = useQuery(shareQueryOptions(token, http))
 
   useEffect(() => {
     if (query.isPending) return
@@ -68,12 +69,12 @@ function SharePageInner({ token }: { token: string }) {
   return <ShareViewPage snapshot={loadState.snapshot} />
 }
 
-export function SharePage() {
+export function SharePage({ http }: { http?: HttpPort }) {
   const params = useParams<{ token: string }>()
   const token = params.token ?? ""
   return (
     <SharePageStore.Provider init={{}}>
-      <SharePageInner token={token} />
+      <SharePageInner token={token} http={http} />
     </SharePageStore.Provider>
   )
 }

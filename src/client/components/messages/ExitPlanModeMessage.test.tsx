@@ -1,12 +1,8 @@
 
-import { describe, expect, test, mock } from "bun:test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test } from "bun:test"
+import { renderThemed } from "../../lib/testing/renderThemed"
 
-mock.module("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { ExitPlanModeMessage } = await import("./ExitPlanModeMessage")
+import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
 import type { ProcessedToolCall } from "./types"
 
 function planMessage(plan: string): Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }> {
@@ -20,7 +16,7 @@ function planMessage(plan: string): Extract<ProcessedToolCall, { toolKind: "exit
 }
 
 function render(plan: string): string {
-  return renderToStaticMarkup(
+  return renderThemed(
     <ExitPlanModeMessage message={planMessage(plan)} onConfirm={() => Promise.resolve()} isLatest={false} />,
   )
 }

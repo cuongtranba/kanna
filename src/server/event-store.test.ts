@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import type { ToolRequest } from "../shared/permission-policy"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
@@ -691,22 +691,16 @@ describe("EventStore", () => {
     const dataDir = await createTempDataDir()
     await writeFile(join(dataDir, "sidebar-order.json"), "{not-json", "utf8")
 
-    const originalWarn = console.warn
-    console.warn = () => {}
-    try {
-      const store = new EventStore(dataDir)
-      await store.initialize()
+    const store = new EventStore(dataDir)
+    await store.initialize()
 
-      const project = await store.openProject("/tmp/project")
+    const project = await store.openProject("/tmp/project")
 
-      const reloaded = new EventStore(dataDir)
-      await reloaded.initialize()
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
 
-      expect(reloaded.getProject(project.id)?.localPath).toBe("/tmp/project")
-      expect(reloaded.getSidebarProjectOrder()).toEqual([])
-    } finally {
-      console.warn = originalWarn
-    }
+    expect(reloaded.getProject(project.id)?.localPath).toBe("/tmp/project")
+    expect(reloaded.getSidebarProjectOrder()).toEqual([])
   })
 
   test("prunes stale empty chats after thirty minutes", async () => {
@@ -1324,24 +1318,18 @@ describe("EventStore subagent runs", () => {
     await rm(turnsLogPath, { force: true })
     await mkdir(turnsLogPath)
 
-    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
-    try {
-      await store.appendSubagentEvent({
-        v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
-        entry: {
-          _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
-          text: "will this appear?", messageId: "m-fail",
-        } as unknown as TranscriptEntry,
-      }).catch(() => {})
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+      entry: {
+        _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
+        text: "will this appear?", messageId: "m-fail",
+      },
+    })
+    await store.flush()
 
-      await new Promise<void>((resolve) => setTimeout(resolve, 20))
-
-      const run = store.getSubagentRuns(chatId)[runId]
-      expect(run.entries).toHaveLength(1)
-      expect(run.entries[0]._id).toBe("e-fail")
-    } finally {
-      errorSpy.mockRestore()
-    }
+    const run = store.getSubagentRuns(chatId)[runId]
+    expect(run.entries).toHaveLength(1)
+    expect(run.entries[0]._id).toBe("e-fail")
   })
 
   test("subagent_entry_appended caps tool_result over threshold", async () => {

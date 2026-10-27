@@ -255,13 +255,13 @@ export interface RolloutMapper {
   getMissCount(): number
 }
 
-export function createRolloutMapper(): RolloutMapper {
+export function createRolloutMapper(warn: (message: string) => void = (message) => log.warn(message)): RolloutMapper {
   let missCount = 0
 
   function onRegexMiss(): void {
     missCount += 1
     if (missCount === 1) {
-      log.warn(
+      warn(
         "[kanna/codex] exec-snippet regex miss — falling back to raw snippet as command." +
           " Codex may have changed the snippet shape.",
       )

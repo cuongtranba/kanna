@@ -76,28 +76,16 @@ describe("loadChangelog", () => {
 
 describe("changelog cache", () => {
   test("reuses cached releases inside the ttl window", () => {
-    const originalNow = Date.now
-    Date.now = () => 1_000
+    setCachedChangelog([SAMPLE_RELEASES[0]], () => 1_000)
 
-    setCachedChangelog([SAMPLE_RELEASES[0]])
-    expect(getCachedChangelog()).toEqual([SAMPLE_RELEASES[0]])
-
-    Date.now = () => 1_000 + 4 * 60 * 1000
-    expect(getCachedChangelog()).toEqual([SAMPLE_RELEASES[0]])
-
-    Date.now = originalNow
+    expect(getCachedChangelog(() => 1_000)).toEqual([SAMPLE_RELEASES[0]])
+    expect(getCachedChangelog(() => 1_000 + 4 * 60 * 1000)).toEqual([SAMPLE_RELEASES[0]])
   })
 
   test("expires cached releases after the ttl window", () => {
-    const originalNow = Date.now
-    Date.now = () => 2_000
+    setCachedChangelog([SAMPLE_RELEASES[0]], () => 2_000)
 
-    setCachedChangelog([SAMPLE_RELEASES[0]])
-    Date.now = () => 2_000 + 5 * 60 * 1000 + 1
-
-    expect(getCachedChangelog()).toBeNull()
-
-    Date.now = originalNow
+    expect(getCachedChangelog(() => 2_000 + 5 * 60 * 1000 + 1)).toBeNull()
   })
 
   test("force refresh bypasses the in-memory cache", async () => {

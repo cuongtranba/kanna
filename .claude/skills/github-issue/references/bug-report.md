@@ -1,5 +1,11 @@
 # Bug report
 
+## Contents
+
+- Template
+- Why each section earns its place
+- Annotated example — issue #806
+
 ## Template
 
 ```markdown

@@ -140,6 +140,77 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   },
 ]
 
+export const TEST_SOURCE_SUFFIXES: readonly string[] = [".test.ts", ".test.tsx"]
+
+const TEST_SCOPE: readonly string[] = ["src/beacon/", "src/client/", "src/server/", "src/shared/"]
+
+export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
+  {
+    id: "test-mock-functions",
+    include: TEST_SCOPE,
+    pattern: "(^|[^.\\w])mock\\(|\\bspyOn\\(|\\bjest\\.fn\\b|\\bvi\\.(fn|mock|spyOn)\\b",
+    max: 516,
+    issue: 1375,
+    rationale:
+      "A mock function or spy asserts that a call happened, not that the user-visible result did, so it keeps passing when the real collaborator breaks and fails when an equivalent refactor reorders calls. Hand the code a real, in-memory, or deterministic fake through a parameter and assert the public outcome; a callback recorder is a plain array the fake pushes into.",
+  },
+  {
+    id: "test-global-patches",
+    include: TEST_SCOPE,
+    pattern:
+      "^\\s*(globalThis|window|console|Date|Math)\\.[A-Za-z_$]+\\s*=[^=]|process\\.env(\\.[A-Za-z_$]+|\\[[^\\]]+\\])\\s*=[^=]|delete process\\.env",
+    max: 95,
+    issue: 1375,
+    rationale:
+      "Reassigning Date.now, fetch, window.confirm, console, or process.env changes state shared by every test in the one bun process. A failing assertion before the restore line leaks the patch into whichever test runs next, in filesystem order. Inject the clock, the dialog, the logger, the fetch, or the environment as a parameter with the production default instead.",
+  },
+  {
+    id: "test-sleeps",
+    include: TEST_SCOPE,
+    pattern: "\\bBun\\.sleep\\(|new Promise.*\\bsetTimeout\\b",
+    max: 104,
+    issue: 1375,
+    rationale:
+      "A fixed delay is either too short on a slow CI runner, which makes the test flaky, or too long everywhere else, which makes the suite slow. Wait for the public state the test actually expects, by awaiting the promise that produces it or polling for it.",
+  },
+  {
+    id: "test-focused",
+    include: TEST_SCOPE,
+    pattern: "\\b(test|it|describe)\\.only\\(",
+    max: 0,
+    issue: 1375,
+    rationale:
+      "A committed .only silently turns every other test in the file off, and CI stays green while checking almost nothing.",
+  },
+  {
+    id: "test-skips",
+    include: TEST_SCOPE,
+    pattern: "\\b(test|it|describe)\\.(skip|skipIf|todo)\\(",
+    max: 3,
+    issue: 1375,
+    rationale:
+      "A skipped test is a promise the suite no longer checks. Delete a test that is wrong, fix one that is broken, and mark a documented known bug with test.failing so it reports when the bug is fixed.",
+  },
+  {
+    id: "test-double-casts",
+    include: TEST_SCOPE,
+    pattern: "\\bas unknown as\\b",
+    max: 315,
+    issue: 1375,
+    rationale:
+      "A double cast builds a value the type system says cannot exist, so the test exercises a state production never reaches and keeps compiling when the real type changes underneath it. Build the fixture through the public constructor or a complete literal.",
+  },
+  {
+    id: "test-nested-describes",
+    include: TEST_SCOPE,
+    pattern: "^\\s+describe(\\.[a-zA-Z]+)?\\(",
+    max: 48,
+    issue: 1375,
+    rationale:
+      "Tests stay flat, with at most one describe per file. A nested describe spreads a test's setup across scopes the reader has to assemble by hand, and usually marks a file that tests several public seams at once and should be split.",
+  },
+]
+
 export interface EslintLimitPin {
   readonly rule: string
   readonly max: number
@@ -302,9 +373,9 @@ export function formatBreach(breach: BudgetBreach): string {
         + `  ${rationaleOf(breach.id)}`
     case "pattern_shrank":
       return `"${breach.id}" dropped to ${breach.actual} (pinned at ${breach.max}) — lower the pin in this PR.\n`
-        + `  Set max: ${breach.actual} in PATTERN_BUDGETS so the population cannot creep back up.`
+        + `  Set max: ${breach.actual} in ${manifestOf(breach.id)} so the population cannot creep back up.`
     case "pattern_unknown":
-      return `Measured "${breach.id}" has no PATTERN_BUDGETS entry.`
+      return `Measured "${breach.id}" has no PATTERN_BUDGETS or TEST_PATTERN_BUDGETS entry.`
     case "limit_raised":
       return `eslint.config.js raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
         + `  ${eslintRationaleOf(breach.rule)}`
@@ -319,13 +390,17 @@ export function formatBreach(breach: BudgetBreach): string {
         + `  Restore the rule, or drop the pin deliberately. Do NOT leave a pin with no enforcement behind it.`
     case "pattern_unmeasured":
       return `"${breach.id}" scanned no files — its include paths are stale, so this gate is currently inert.\n`
-        + `  Repoint include in PATTERN_BUDGETS. Do NOT pin it at 0: a renamed target reads as a population\n`
+        + `  Repoint include in ${manifestOf(breach.id)}. Do NOT pin it at 0: a renamed target reads as a population\n`
         + `  that vanished, and pinning that in would retire the check instead of the defect.`
   }
 }
 
 function rationaleOf(id: string): string {
-  return PATTERN_BUDGETS.find((b) => b.id === id)?.rationale ?? ""
+  return [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS].find((b) => b.id === id)?.rationale ?? ""
+}
+
+function manifestOf(id: string): string {
+  return TEST_PATTERN_BUDGETS.some((b) => b.id === id) ? "TEST_PATTERN_BUDGETS" : "PATTERN_BUDGETS"
 }
 
 function eslintRationaleOf(rule: string): string {

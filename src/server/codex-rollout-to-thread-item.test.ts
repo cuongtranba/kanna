@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from "bun:test"
+import { describe, test, expect } from "bun:test"
 import {
   parseApplyPatch,
   parsePlanSteps,
@@ -334,17 +334,9 @@ describe("unrecognized function_call names fall through to dynamicToolCall", () 
 })
 
 describe("createRolloutMapper — exec regex miss tracking (issue #880)", () => {
-  let warnCalls: unknown[][] = []
-  const originalWarn = console.warn
-
-  afterEach(() => {
-    warnCalls = []
-    console.warn = originalWarn
-  })
-
-  function captureWarn() {
-    warnCalls = []
-    console.warn = (...args: unknown[]) => { warnCalls.push(args) }
+  function mapperWithWarnings() {
+    const warnings: string[] = []
+    return { mapper: createRolloutMapper((message) => { warnings.push(message) }), warnings }
   }
 
   test("getMissCount starts at zero", () => {
@@ -359,8 +351,7 @@ describe("createRolloutMapper — exec regex miss tracking (issue #880)", () => 
   })
 
   test("a regex miss increments miss count and preserves fallback", () => {
-    captureWarn()
-    const mapper = createRolloutMapper()
+    const { mapper } = mapperWithWarnings()
     const result = mapper.rolloutToolCallToThreadItem(
       call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }),
     )
@@ -372,26 +363,24 @@ describe("createRolloutMapper — exec regex miss tracking (issue #880)", () => 
   })
 
   test("first miss logs once, second miss only counts", () => {
-    captureWarn()
-    const mapper = createRolloutMapper()
+    const { mapper, warnings } = mapperWithWarnings()
     mapper.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
-    expect(warnCalls).toHaveLength(1)
+    expect(warnings).toHaveLength(1)
     mapper.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
-    expect(warnCalls).toHaveLength(1)
+    expect(warnings).toHaveLength(1)
     expect(mapper.getMissCount()).toBe(2)
   })
 
   test("two separate mapper instances have independent miss counts", () => {
-    const mapperA = createRolloutMapper()
-    const mapperB = createRolloutMapper()
+    const { mapper: mapperA } = mapperWithWarnings()
+    const { mapper: mapperB } = mapperWithWarnings()
     mapperA.rolloutToolCallToThreadItem(call({ name: "exec", family: "custom", input: REGEX_MISS_SNIPPET }))
     expect(mapperA.getMissCount()).toBe(1)
     expect(mapperB.getMissCount()).toBe(0)
   })
 
   test("rolloutToolOutputToThreadItem also counts exec output regex misses", () => {
-    captureWarn()
-    const mapper = createRolloutMapper()
+    const { mapper } = mapperWithWarnings()
     const callRecord = call({ callId: "c1", name: "exec", family: "custom", input: REGEX_MISS_SNIPPET })
     mapper.rolloutToolOutputToThreadItem(output("c1", "{}"), callRecord)
     expect(mapper.getMissCount()).toBe(1)

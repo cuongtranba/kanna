@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { probeFileUrl } from "../../api/files"
 import { runDetached } from "../../lib/runDetached"
+import type { HttpPort } from "../../ports/httpPort"
 import type { ChatAttachment, HydratedOfferDownloadToolCall } from "../../../shared/types"
 import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
@@ -10,9 +11,10 @@ import { OfferDownloadMessageStore } from "./OfferDownloadMessage.store"
 
 interface Props {
   message: HydratedOfferDownloadToolCall
+  http?: HttpPort
 }
 
-function OfferDownloadMessageInner({ message }: Props) {
+function OfferDownloadMessageInner({ message, http }: Props) {
   const result = message.result
   const contentUrl = result?.contentUrl
   const probeState = OfferDownloadMessageStore.useScopedStore((s) => s.probeState)
@@ -23,13 +25,13 @@ function OfferDownloadMessageInner({ message }: Props) {
   useEffect(() => {
     if (!contentUrl) return
     const controller = new AbortController()
-    runDetached("probe offer download", probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
+    runDetached("probe offer download", probeFileUrl(contentUrl, { signal: controller.signal, http }).then((probe) => {
       if (controller.signal.aborted) return
       if (probe.kind === "ready") setProbeState("ready")
       else if (probe.kind === "missing") setProbeState("missing")
     }))
     return () => controller.abort()
-  }, [contentUrl, setProbeState])
+  }, [contentUrl, http, setProbeState])
 
   if (!result || !contentUrl) return null
 
@@ -100,10 +102,10 @@ function OfferDownloadMessageInner({ message }: Props) {
   )
 }
 
-export function OfferDownloadMessage({ message }: Props) {
+export function OfferDownloadMessage({ message, http }: Props) {
   return (
     <OfferDownloadMessageStore.Provider init={undefined}>
-      <OfferDownloadMessageInner message={message} />
+      <OfferDownloadMessageInner message={message} http={http} />
     </OfferDownloadMessageStore.Provider>
   )
 }

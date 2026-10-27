@@ -1,15 +1,12 @@
-import { expect, test, mock } from "bun:test"
+import { expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 
-mock.module("../../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { MessageCodeBlock } = await import("./MessageCodeBlock")
+import { MessageCodeBlock } from "./MessageCodeBlock"
+import { TestThemeProvider } from "../../../lib/testing/TestThemeProvider"
 
 test("renders a copy button and the code text for a fenced block with a language", () => {
   const html = renderToStaticMarkup(
-    <MessageCodeBlock source={"const x = 1\n"} lang="js" />,
+    <TestThemeProvider><MessageCodeBlock source={"const x = 1\n"} lang="js" /></TestThemeProvider>,
   )
   expect(html).toContain('aria-label="Copy code"')
   expect(html).toContain("group/pre")
@@ -18,7 +15,7 @@ test("renders a copy button and the code text for a fenced block with a language
 
 test("renders plain code (no HighlightedCode) when no language is given", () => {
   const html = renderToStaticMarkup(
-    <MessageCodeBlock source={"plain text"} lang="" />,
+    <TestThemeProvider><MessageCodeBlock source={"plain text"} lang="" /></TestThemeProvider>,
   )
   expect(html).toContain('aria-label="Copy code"')
   expect(html).toContain("plain text")

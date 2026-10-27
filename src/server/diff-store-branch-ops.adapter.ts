@@ -38,10 +38,11 @@ import type {
 
 export interface DiffStoreBranchOpsDeps {
   readonly refreshSnapshot: (repoPath: string) => Promise<boolean>
+  readonly fetchPullRequests: typeof fetchGitHubPullRequests
 }
 
 export async function listBranches(
-  _deps: DiffStoreBranchOpsDeps,
+  deps: DiffStoreBranchOpsDeps,
   args: { projectPath: string }
 ): Promise<ChatBranchListResult> {
   const repo = await resolveRepo(args.projectPath)
@@ -116,7 +117,7 @@ export async function listBranches(
 
   if (repoSlug) {
     try {
-      const prs = await fetchGitHubPullRequests(repoSlug)
+      const prs = await deps.fetchPullRequests(repoSlug)
       pullRequests = prs.flatMap<ChatBranchListEntry>((pr) => {
         const headRefName = pr.head?.ref?.trim()
         if (!headRefName) return []

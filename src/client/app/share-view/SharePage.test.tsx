@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { createElement } from "react"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
@@ -6,6 +6,10 @@ import { MemoryRouter, Routes, Route } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import "../../lib/testing/setupHappyDom"
 import { SharePage } from "./SharePage"
+import { makeFakeHttpPort } from "../../adapters/testing/makeFakePorts"
+import { waitFor } from "../../lib/testing/waitFor"
+import type { ShareApiResponse } from "../../api/share"
+import type { HttpPort } from "../../ports/httpPort"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../../shared/session-share/types"
 
 const snap: ChatSnapshot = {
@@ -16,32 +20,19 @@ const snap: ChatSnapshot = {
   attachmentsManifest: [],
 }
 
-const originalFetch = globalThis.fetch
-let fetchCalls: string[] = []
-
-function installFetch(handler: (url: string) => Promise<Response>) {
-  fetchCalls = []
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
-    let url: string
-    if (typeof input === "string") {
-      url = input
-    } else if (input instanceof URL) {
-      url = input.toString()
-    } else {
-      url = input.url
-    }
-    fetchCalls.push(url)
-    return handler(url)
-  }) as typeof fetch
+function shareHttp(status: number, body: ShareApiResponse) {
+  const http = makeFakeHttpPort()
+  http.routes.push({ method: "GET", url: "/api/share/", response: { ok: status < 400, status, body } })
+  return http
 }
 
-async function flush() {
+async function settled(container: HTMLElement) {
   await act(async () => {
-    await new Promise((r) => setTimeout(r, 0))
+    await waitFor(() => container.querySelector("[data-state='loading']") === null, 2000, "share to load")
   })
 }
 
-async function mount(token: string): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
+async function mount(token: string, http: HttpPort): Promise<{ container: HTMLDivElement; cleanup: () => void }> {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -51,7 +42,7 @@ async function mount(token: string): Promise<{ container: HTMLDivElement; cleanu
       createElement(QueryClientProvider, { client: queryClient },
         createElement(MemoryRouter, { initialEntries: [`/share/${token}`] },
           createElement(Routes, null,
-            createElement(Route, { path: "/share/:token", element: createElement(SharePage) }),
+            createElement(Route, { path: "/share/:token", element: createElement(SharePage, { http }) }),
           ),
         ),
       ),
@@ -64,16 +55,13 @@ describe("SharePage", () => {
   beforeEach(() => {
     document.body.innerHTML = ""
   })
-  afterEach(() => {
-    globalThis.fetch = originalFetch
-  })
 
   test("fetches /api/share/:token and renders snapshot", async () => {
-    installFetch(async () => Response.json({ ok: true, snapshot: snap }))
-    const { container, cleanup } = await mount("tok-1")
+    const http = shareHttp(200, { ok: true, snapshot: snap })
+    const { container, cleanup } = await mount("tok-1", http)
     try {
-      await flush()
-      expect(fetchCalls).toEqual(["/api/share/tok-1"])
+      await settled(container)
+      expect(http.calls).toEqual([{ method: "GET", url: "/api/share/tok-1" }])
       expect(container.innerHTML).toContain("Hello world")
       expect(container.innerHTML).toContain("ping")
     } finally {
@@ -82,10 +70,9 @@ describe("SharePage", () => {
   })
 
   test("renders not_found error for 404", async () => {
-    installFetch(async () => Response.json({ ok: false, error: { kind: "not_found" } }, { status: 404 }))
-    const { container, cleanup } = await mount("tok-2")
+    const { container, cleanup } = await mount("tok-2", shareHttp(404, { ok: false, error: { kind: "not_found" } }))
     try {
-      await flush()
+      await settled(container)
       expect(container.innerHTML).toContain("Share not found")
       expect(container.querySelector("[data-state='error']")).not.toBeNull()
     } finally {
@@ -94,10 +81,9 @@ describe("SharePage", () => {
   })
 
   test("renders revoked error for 410", async () => {
-    installFetch(async () => Response.json({ ok: false, error: { kind: "revoked" } }, { status: 410 }))
-    const { container, cleanup } = await mount("tok-3")
+    const { container, cleanup } = await mount("tok-3", shareHttp(410, { ok: false, error: { kind: "revoked" } }))
     try {
-      await flush()
+      await settled(container)
       expect(container.innerHTML).toContain("Share revoked")
     } finally {
       cleanup()
