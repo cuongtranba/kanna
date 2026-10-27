@@ -1,7 +1,6 @@
-
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
-import { isAutoContinueEvent, type StoreEvent, type StoreState } from "./events"
+import type { StoreEvent, StoreState } from "./events"
+import { isEventOf } from "./event-routes"
 import {
   applyChatLifecycleEvent,
   applyChatMessageMetadata,
@@ -19,93 +18,24 @@ export function applyStoreEvent(
   legacyMessagesByChatId: Map<string, TranscriptEntry[]>,
   replayChatProvider: Map<string, AgentProvider | null>,
 ): void {
-  if (isAutoContinueEvent(event)) {
+  if (isEventOf("autoContinue", event)) {
     applyAutoContinueToState(state.autoContinueEventsByChatId, event)
-    return
-  }
-  const e: Exclude<StoreEvent, AutoContinueEvent> = event
-  switch (e.type) {
-    case "project_opened":
-    case "project_removed":
-    case "project_deleted":
-    case "sidebar_project_order_set":
-    case "project_star_set":
-    case "project_instructions_set": {
-      applyProjectEvent(state, e)
-      break
-    }
-    case "chat_created":
-    case "chat_projects_attached":
-    case "chat_renamed":
-    case "chat_deleted":
-    case "chat_archived":
-    case "chat_unarchived":
-    case "chat_pin_set":
-    case "chat_provider_set":
-    case "chat_model_set":
-    case "chat_plan_mode_set":
-    case "chat_read_state_set":
-    case "chat_source_hash_set":
-    case "chat_policy_override_set":
-    case "chat_compact_failures_set": {
-      applyChatLifecycleEvent(state, replayChatProvider, e)
-      break
-    }
-    case "message_appended": {
-      applyChatMessageMetadata(state.chatsById, e.chatId, e.entry)
-      const existing = legacyMessagesByChatId.get(e.chatId) ?? []
-      existing.push({ ...e.entry })
-      legacyMessagesByChatId.set(e.chatId, existing)
-      break
-    }
-    case "queued_message_enqueued":
-    case "queued_message_removed":
-    case "turn_started":
-    case "turn_finished":
-    case "turn_failed":
-    case "turn_cancelled":
-    case "session_token_set":
-    case "pending_fork_session_token_set": {
-      applyChatLifecycleEvent(state, replayChatProvider, e)
-      break
-    }
-    case "stack_added":
-    case "stack_removed":
-    case "stack_renamed":
-    case "stack_project_added":
-    case "stack_project_removed":
-    case "stack_instructions_set": {
-      applyStackEvent(state.stacksById, e)
-      break
-    }
-    case "subagent_run_started":
-    case "subagent_message_delta":
-    case "subagent_entry_appended":
-    case "subagent_run_completed":
-    case "subagent_run_failed":
-    case "subagent_run_cancelled":
-    case "subagent_tool_pending":
-    case "subagent_tool_resolved": {
-      applySubagentEvent(state.subagentRunsByChatId, e)
-      break
-    }
-    case "tool_request_put":
-    case "tool_request_resolved": {
-      applyToolRequestEvent(state.toolRequestsById, e)
-      break
-    }
-    case "chat_task_created":
-    case "chat_task_updated":
-    case "chat_task_deleted":
-    case "chat_task_claimed":
-    case "chat_task_run_bound":
-    case "chat_task_settled":
-    case "chat_task_integrated":
-    case "chat_task_note":
-    case "chat_task_epoch_advanced":
-    case "chat_task_native_synced": {
-      applyChatTaskEvent(state.chatTasksByChatId, e)
-      break
-    }
+  } else if (isEventOf("project", event)) {
+    applyProjectEvent(state, event)
+  } else if (isEventOf("chat", event)) {
+    applyChatLifecycleEvent(state, replayChatProvider, event)
+  } else if (isEventOf("message", event)) {
+    applyChatMessageMetadata(state.chatsById, event.chatId, event.entry)
+    const existing = legacyMessagesByChatId.get(event.chatId) ?? []
+    existing.push({ ...event.entry })
+    legacyMessagesByChatId.set(event.chatId, existing)
+  } else if (isEventOf("stack", event)) {
+    applyStackEvent(state.stacksById, event)
+  } else if (isEventOf("subagent", event)) {
+    applySubagentEvent(state.subagentRunsByChatId, event)
+  } else if (isEventOf("toolRequest", event)) {
+    applyToolRequestEvent(state.toolRequestsById, event)
+  } else if (isEventOf("chatTask", event)) {
+    applyChatTaskEvent(state.chatTasksByChatId, event)
   }
 }

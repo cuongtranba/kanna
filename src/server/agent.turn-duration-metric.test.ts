@@ -10,11 +10,16 @@ interface TerminalStore {
   onTurnTerminal:
     | ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void)
     | null
+  subscribeTurnTerminal?: (listener: NonNullable<TerminalStore["onTurnTerminal"]>) => () => void
   runningSubagentRuns?: () => never[]
   getAutoContinueEvents?: () => never[]
 }
 
 function buildCoordinator(store: TerminalStore) {
+  store.subscribeTurnTerminal = (listener) => {
+    store.onTurnTerminal = listener
+    return () => { store.onTurnTerminal = null }
+  }
   store.runningSubagentRuns = () => []
   store.getAutoContinueEvents = () => []
   return new AgentCoordinator({

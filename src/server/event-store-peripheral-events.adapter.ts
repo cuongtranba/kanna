@@ -2,24 +2,27 @@ import type { StorageBackend } from "./storage/backend"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import { dropSharesOfDeletedChats, type ShareEvent } from "./session-share/share-projection"
 import { dropUnmutedHistory, type PushEvent } from "./push/events"
-import {
-  applyTunnelEventToMap,
-  loadPushEventsFromLog,
-  loadShareEventsFromLog,
-  loadTunnelEventsFromLog,
-} from "./event-store-snapshot"
+import type { StoreLayout } from "./event-logs"
+import type { LogWriter } from "./event-store-writer"
+import { readJsonlSkippingCorrupt, writeJsonl } from "./jsonl-log"
 
 
 export interface PeripheralEventsDeps {
   readonly storage: StorageBackend
-  readonly tunnelLogPath: string
-  readonly sharesLogPath: string
-  readonly pushLogPath: string
+  readonly layout: StoreLayout
+  readonly writer: LogWriter
   readonly tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>
   isLiveChat: (chatId: string) => boolean
   readonly shareEventsAll: ShareEvent[]
-  getWriteChain: () => Promise<void>
-  setWriteChain: (p: Promise<void>) => void
+}
+
+function applyTunnelEventToMap(
+  tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>,
+  event: CloudflareTunnelEvent,
+): void {
+  const existing = tunnelEventsByChatId.get(event.chatId) ?? []
+  existing.push(event)
+  tunnelEventsByChatId.set(event.chatId, existing)
 }
 
 
@@ -27,13 +30,9 @@ export async function appendTunnelEvent(
   deps: PeripheralEventsDeps,
   event: CloudflareTunnelEvent,
 ): Promise<void> {
-  const payload = `${JSON.stringify(event)}\n`
-  const chain = deps.getWriteChain().then(async () => {
-    await deps.storage.appendText(deps.tunnelLogPath, payload)
+  await deps.writer.append(deps.layout.logPath("tunnels"), event, () => {
     applyTunnelEventToMap(deps.tunnelEventsByChatId, event)
   })
-  deps.setWriteChain(chain)
-  await chain
 }
 
 export function getTunnelEvents(
@@ -49,15 +48,14 @@ export function listTunnelChats(deps: PeripheralEventsDeps): string[] {
 }
 
 export async function loadTunnelEvents(deps: PeripheralEventsDeps): Promise<void> {
-  await loadTunnelEventsFromLog(deps.storage, deps.tunnelLogPath, deps.tunnelEventsByChatId)
+  const logPath = deps.layout.logPath("tunnels")
+  for (const event of await readJsonlSkippingCorrupt<CloudflareTunnelEvent>(deps.storage, logPath)) {
+    applyTunnelEventToMap(deps.tunnelEventsByChatId, event)
+  }
   const deadChatIds = [...deps.tunnelEventsByChatId.keys()].filter((chatId) => !deps.isLiveChat(chatId))
   if (deadChatIds.length === 0) return
   for (const chatId of deadChatIds) deps.tunnelEventsByChatId.delete(chatId)
-  await rewriteLog(deps.storage, deps.tunnelLogPath, [...deps.tunnelEventsByChatId.values()].flat())
-}
-
-async function rewriteLog(storage: StorageBackend, filePath: string, events: readonly object[]): Promise<void> {
-  await storage.writeText(filePath, events.map((event) => `${JSON.stringify(event)}\n`).join(""))
+  await writeJsonl(deps.storage, logPath, [...deps.tunnelEventsByChatId.values()].flat())
 }
 
 
@@ -65,13 +63,9 @@ export async function appendShareEvent(
   deps: PeripheralEventsDeps,
   event: ShareEvent,
 ): Promise<void> {
-  const payload = `${JSON.stringify(event)}\n`
-  const chain = deps.getWriteChain().then(async () => {
-    await deps.storage.appendText(deps.sharesLogPath, payload)
+  await deps.writer.append(deps.layout.logPath("shares"), event, () => {
     deps.shareEventsAll.push(event)
   })
-  deps.setWriteChain(chain)
-  await chain
 }
 
 export function getShareEvents(deps: PeripheralEventsDeps): ShareEvent[] {
@@ -79,11 +73,11 @@ export function getShareEvents(deps: PeripheralEventsDeps): ShareEvent[] {
 }
 
 export async function loadShareEvents(deps: PeripheralEventsDeps): Promise<void> {
-  const loaded: ShareEvent[] = []
-  await loadShareEventsFromLog(deps.storage, deps.sharesLogPath, loaded)
+  const logPath = deps.layout.logPath("shares")
+  const loaded = await readJsonlSkippingCorrupt<ShareEvent>(deps.storage, logPath)
   const kept = dropSharesOfDeletedChats(loaded, deps.isLiveChat)
   deps.shareEventsAll.push(...kept)
-  if (kept.length !== loaded.length) await rewriteLog(deps.storage, deps.sharesLogPath, kept)
+  if (kept.length !== loaded.length) await writeJsonl(deps.storage, logPath, kept)
 }
 
 
@@ -91,21 +85,15 @@ export async function appendPushEvent(
   deps: PeripheralEventsDeps,
   event: PushEvent,
 ): Promise<void> {
-  const payload = `${JSON.stringify(event)}\n`
-  const chain = deps.getWriteChain().then(async () => {
-    await deps.storage.appendText(deps.pushLogPath, payload)
-  })
-  deps.setWriteChain(chain)
-  await chain
+  await deps.writer.append(deps.layout.logPath("push"), event)
 }
 
 export async function loadPushEvents(deps: PeripheralEventsDeps): Promise<PushEvent[]> {
-  const loaded = await loadPushEventsFromLog(deps.storage, deps.pushLogPath)
+  const logPath = deps.layout.logPath("push")
+  const loaded = await readJsonlSkippingCorrupt<PushEvent>(deps.storage, logPath)
   const kept = dropUnmutedHistory(loaded)
   if (kept.length !== loaded.length) {
-    const chain = deps.getWriteChain().then(() => rewriteLog(deps.storage, deps.pushLogPath, kept))
-    deps.setWriteChain(chain)
-    await chain
+    await deps.writer.serialize(() => writeJsonl(deps.storage, logPath, kept))
   }
   return kept
 }

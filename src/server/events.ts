@@ -457,102 +457,6 @@ export function storeEventKind(event: StoreEvent): StoreEventKind {
   return isAutoContinueEvent(event) ? event.kind : event.type
 }
 
-export type LogName =
-  | "projects"
-  | "chats"
-  | "messages"
-  | "queued-messages"
-  | "turns"
-  | "schedules"
-  | "stacks"
-  | "tool-requests"
-  | "chat-tasks"
-
-export const LOG_FILES = {
-  projects: "projects.jsonl",
-  chats: "chats.jsonl",
-  messages: "messages.jsonl",
-  "queued-messages": "queued-messages.jsonl",
-  turns: "turns.jsonl",
-  schedules: "schedules.jsonl",
-  stacks: "stacks.jsonl",
-  "tool-requests": "tool-requests.jsonl",
-  "chat-tasks": "chat-tasks.jsonl",
-} satisfies Record<LogName, string>
-
-export const LOG_OF_EVENT = {
-  project_opened: "projects",
-  project_removed: "projects",
-  project_deleted: "projects",
-  sidebar_project_order_set: "projects",
-  project_star_set: "projects",
-  project_instructions_set: "projects",
-  chat_created: "chats",
-  chat_projects_attached: "chats",
-  chat_renamed: "chats",
-  chat_deleted: "chats",
-  chat_archived: "chats",
-  chat_unarchived: "chats",
-  chat_pin_set: "chats",
-  chat_provider_set: "chats",
-  chat_model_set: "chats",
-  chat_plan_mode_set: "chats",
-  chat_read_state_set: "chats",
-  chat_source_hash_set: "chats",
-  chat_policy_override_set: "chats",
-  chat_compact_failures_set: "chats",
-  message_appended: "messages",
-  queued_message_enqueued: "queued-messages",
-  queued_message_removed: "queued-messages",
-  turn_started: "turns",
-  turn_finished: "turns",
-  turn_failed: "turns",
-  turn_cancelled: "turns",
-  session_token_set: "turns",
-  pending_fork_session_token_set: "turns",
-  stack_added: "stacks",
-  stack_removed: "stacks",
-  stack_renamed: "stacks",
-  stack_project_added: "stacks",
-  stack_project_removed: "stacks",
-  stack_instructions_set: "stacks",
-  subagent_run_started: "turns",
-  subagent_message_delta: "turns",
-  subagent_entry_appended: "turns",
-  subagent_run_completed: "turns",
-  subagent_run_failed: "turns",
-  subagent_run_cancelled: "turns",
-  subagent_tool_pending: "turns",
-  subagent_tool_resolved: "turns",
-  tool_request_put: "tool-requests",
-  tool_request_resolved: "tool-requests",
-  auto_continue_proposed: "schedules",
-  auto_continue_accepted: "schedules",
-  auto_continue_rescheduled: "schedules",
-  auto_continue_cancelled: "schedules",
-  auto_continue_fired: "schedules",
-  loop_armed: "schedules",
-  loop_run_outcome: "schedules",
-  loop_disarmed: "schedules",
-  cron_armed: "schedules",
-  cron_disarmed: "schedules",
-  cron_paused: "schedules",
-  cron_resumed: "schedules",
-  cron_run_started: "schedules",
-  cron_run_outcome: "schedules",
-  cron_run_skipped: "schedules",
-  chat_task_created: "chat-tasks",
-  chat_task_updated: "chat-tasks",
-  chat_task_deleted: "chat-tasks",
-  chat_task_claimed: "chat-tasks",
-  chat_task_run_bound: "chat-tasks",
-  chat_task_settled: "chat-tasks",
-  chat_task_integrated: "chat-tasks",
-  chat_task_note: "chat-tasks",
-  chat_task_epoch_advanced: "chat-tasks",
-  chat_task_native_synced: "chat-tasks",
-} satisfies Record<StoreEventKind, LogName>
-
 export interface StackRecord {
   id: string
   title: string
@@ -576,6 +480,13 @@ export function createEmptyState(): StoreState {
     subagentRunsByChatId: new Map(),
     chatTasksByChatId: new Map<string, ChatTaskEvent[]>(),
     toolRequestsById: new Map<string, ToolRequest>(),
+  }
+}
+
+export function resetStoreState(state: StoreState): void {
+  for (const value of Object.values(state)) {
+    if (value instanceof Map) value.clear()
+    else value.length = 0
   }
 }
 

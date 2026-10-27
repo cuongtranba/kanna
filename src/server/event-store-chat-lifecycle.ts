@@ -13,10 +13,10 @@ import type {
   TurnEvent,
 } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"
-import { compactCronRunEvents } from "./cron/compact"
-import { compactLoopWakeEvents } from "./auto-continue/compact-loop-wakes"
+import { compactAutoContinueEvents } from "./auto-continue/compact"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { resolveLocalPath } from "./paths"
+import { liveRecord } from "./event-store-lookup"
 
 
 type ProjectLifecycleState = Pick<StoreState, "projectsById" | "projectIdsByPath" | "sidebarProjectOrder">
@@ -95,37 +95,37 @@ export function applyStackEvent(stacksById: Map<string, StackRecord>, event: Sta
       break
     }
     case "stack_removed": {
-      const stack = stacksById.get(event.stackId)
-      if (!stack || stack.deletedAt) break
+      const stack = liveRecord(stacksById, event.stackId)
+      if (!stack) break
       stack.deletedAt = event.timestamp
       stack.updatedAt = event.timestamp
       break
     }
     case "stack_renamed": {
-      const stack = stacksById.get(event.stackId)
-      if (!stack || stack.deletedAt) break
+      const stack = liveRecord(stacksById, event.stackId)
+      if (!stack) break
       stack.title = event.title
       stack.updatedAt = event.timestamp
       break
     }
     case "stack_project_added": {
-      const stack = stacksById.get(event.stackId)
-      if (!stack || stack.deletedAt) break
+      const stack = liveRecord(stacksById, event.stackId)
+      if (!stack) break
       if (stack.projectIds.includes(event.projectId)) break
       stack.projectIds = [...stack.projectIds, event.projectId]
       stack.updatedAt = event.timestamp
       break
     }
     case "stack_project_removed": {
-      const stack = stacksById.get(event.stackId)
-      if (!stack || stack.deletedAt) break
+      const stack = liveRecord(stacksById, event.stackId)
+      if (!stack) break
       stack.projectIds = stack.projectIds.filter((id) => id !== event.projectId)
       stack.updatedAt = event.timestamp
       break
     }
     case "stack_instructions_set": {
-      const stack = stacksById.get(event.stackId)
-      if (!stack || stack.deletedAt) break
+      const stack = liveRecord(stacksById, event.stackId)
+      if (!stack) break
       if (event.instructions === "") {
         delete stack.instructions
       } else {
@@ -420,7 +420,7 @@ export function applyAutoContinueToState(
   existing.push(event)
   autoContinueEventsByChatId.set(
     event.chatId,
-    compactLoopWakeEvents(compactCronRunEvents(existing)),
+    compactAutoContinueEvents(existing),
   )
 }
 
@@ -437,4 +437,28 @@ export function applyChatMessageMetadata(
     chat.lastMessageAt = entry.createdAt
   }
   chat.updatedAt = Math.max(chat.updatedAt, entry.createdAt)
+}
+
+export function normalizeSidebarProjectOrder<T>(value: T): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const projectIds: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== "string") continue
+    const projectId = entry.trim()
+    if (!projectId || seen.has(projectId)) continue
+    seen.add(projectId)
+    projectIds.push(projectId)
+  }
+
+  return projectIds
+}
+
+export function getForkedChatTitle(title: string): string {
+  const trimmed = title.trim()
+  if (!trimmed) return "Fork: New Chat"
+  return trimmed.startsWith("Fork: ") ? trimmed : `Fork: ${trimmed}`
 }

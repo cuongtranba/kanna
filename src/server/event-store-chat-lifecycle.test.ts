@@ -9,6 +9,8 @@ import {
   applyAutoContinueToState,
   applyProjectEvent,
   applyStackEvent,
+  getForkedChatTitle,
+  normalizeSidebarProjectOrder,
   updateChatTiming,
 } from "./event-store-chat-lifecycle"
 
@@ -430,5 +432,52 @@ describe("applyChatMessageMetadata", () => {
       _id: "msg-3", kind: "user_prompt", createdAt: TS, content: "hi", attachments: [],
     })
     expect(chatsById.size).toBe(0)
+  })
+})
+
+describe("normalizeSidebarProjectOrder", () => {
+  test("returns empty array for non-array input", () => {
+    expect(normalizeSidebarProjectOrder(null)).toEqual([])
+    expect(normalizeSidebarProjectOrder(42)).toEqual([])
+    expect(normalizeSidebarProjectOrder({ a: 1 })).toEqual([])
+  })
+
+  test("filters out non-string entries", () => {
+    expect(normalizeSidebarProjectOrder(["a", 2, null, "b"])).toEqual(["a", "b"])
+  })
+
+  test("trims whitespace and skips blank strings", () => {
+    expect(normalizeSidebarProjectOrder(["  a  ", "  ", "b"])).toEqual(["a", "b"])
+  })
+
+  test("deduplicates preserving first occurrence", () => {
+    expect(normalizeSidebarProjectOrder(["x", "y", "x", "z"])).toEqual(["x", "y", "z"])
+  })
+
+  test("returns ordered array for clean input", () => {
+    expect(normalizeSidebarProjectOrder(["proj-1", "proj-2"])).toEqual(["proj-1", "proj-2"])
+  })
+})
+
+
+describe("getForkedChatTitle", () => {
+  test("prefixes non-fork titles", () => {
+    expect(getForkedChatTitle("My Chat")).toBe("Fork: My Chat")
+  })
+
+  test("does not double-prefix already-forked titles", () => {
+    expect(getForkedChatTitle("Fork: My Chat")).toBe("Fork: My Chat")
+  })
+
+  test("returns default for empty title", () => {
+    expect(getForkedChatTitle("")).toBe("Fork: New Chat")
+  })
+
+  test("returns default for whitespace-only title", () => {
+    expect(getForkedChatTitle("   ")).toBe("Fork: New Chat")
+  })
+
+  test("trims whitespace before prefixing", () => {
+    expect(getForkedChatTitle("  Hello  ")).toBe("Fork: Hello")
   })
 })

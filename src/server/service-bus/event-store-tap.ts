@@ -2,7 +2,8 @@ import { createBusEnvelope } from "../../shared/service-bus/envelope"
 import { subjectOfSuffix, transcriptBusSubject } from "../../shared/service-bus/subjects"
 import type { TranscriptEntry } from "../../shared/types"
 import { toJsonValue } from "../json-boundary"
-import { LOG_OF_EVENT, storeEventKind, type StoreEvent } from "../events"
+import { storeEventKind, type StoreEvent } from "../events"
+import { EVENT_ROUTES } from "../event-routes"
 import type { BusSink } from "./service-bus"
 import {
   storeEventChatId,
@@ -35,7 +36,7 @@ export function createBusTap(
       const envelope = createBusEnvelope({
         subject: subjectOfSuffix(suffix),
         ts: now(),
-        source: { kind: "store", log: LOG_OF_EVENT[kind] },
+        source: { kind: "store", log: EVENT_ROUTES[kind].log },
         direction: "internal",
         idempotencyKey: `store:${kind}:${storeEventEntityId(event)}:${storeEventTimestamp(event)}`,
         payload: toJsonValue(event),

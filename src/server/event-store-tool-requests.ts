@@ -1,5 +1,5 @@
 import type { ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
-import type { StoreEvent, ToolRequestEvent } from "./events"
+import type { ToolRequestEvent } from "./events"
 import {
   buildPutToolRequestEvent,
   buildResolveToolRequestEvent,
@@ -8,8 +8,7 @@ import {
 
 export interface ToolRequestWriteDeps {
   readonly toolRequestsById: Map<string, ToolRequest>
-  readonly toolRequestsLogPath: string
-  append: (filePath: string, event: StoreEvent) => Promise<void>
+  commit: (event: ToolRequestEvent) => Promise<void>
 }
 
 export function applyToolRequestEvent(
@@ -81,7 +80,7 @@ export async function putToolRequest(
 ): Promise<void> {
   const event = buildPutToolRequestEvent(req)
   applyToolRequestEvent(deps.toolRequestsById, event)
-  await deps.append(deps.toolRequestsLogPath, event)
+  await deps.commit(event)
 }
 
 export async function resolveToolRequest(
@@ -91,7 +90,7 @@ export async function resolveToolRequest(
 ): Promise<void> {
   const event = buildResolveToolRequestEvent(deps.toolRequestsById, id, args)
   applyToolRequestEvent(deps.toolRequestsById, event)
-  await deps.append(deps.toolRequestsLogPath, event)
+  await deps.commit(event)
 }
 
 export type { ToolRequest, ToolRequestDecision, ToolRequestStatus }

@@ -3780,6 +3780,7 @@ function createFakeStore() {
     getSubagentRuns() {
       return Object.fromEntries(this.subagentRuns.entries())
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

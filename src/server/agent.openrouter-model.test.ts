@@ -101,6 +101,7 @@ function createFakeStore() {
     getQueuedMessages() {
       return [...this.queuedMessages]
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {},
   }
 }

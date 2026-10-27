@@ -26,16 +26,16 @@ function store(chatId: string, opts: { requireWorktree?: boolean; alive?: Set<st
     },
     project: (ctx: ChatTaskScheduleContext) => deriveChatTasks(byChat.get(chatId) ?? [], ctx),
     decide: async (ctx, fn) => {
-      let events: readonly ChatTaskEvent[] = []
-      chain = chain.then(async () => {
+      const decision = chain.then(async () => {
         await Promise.resolve()
-        events = fn(deriveChatTasks(byChat.get(chatId) ?? [], ctx))
+        const { events, result } = fn(deriveChatTasks(byChat.get(chatId) ?? [], ctx))
         for (const event of events) {
           byChat.set(event.chatId, [...(byChat.get(event.chatId) ?? []), event])
         }
+        return result
       })
-      await chain
-      return events
+      chain = decision.then(() => undefined)
+      return decision
     },
     isRunAlive: (runId) => opts.alive?.has(runId) ?? false,
     requireWorktree: () => opts.requireWorktree ?? false,
