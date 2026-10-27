@@ -6,7 +6,7 @@ import type { BackgroundTaskOutputRegistry } from "./background-task-output-regi
 import type { BoardChange, BoardRegistry } from "./board-registry"
 import type { BeaconRegistry } from "./beacon-registry"
 import type { EventStore } from "./event-store"
-import type { AgentCoordinator } from "./agent"
+import type { AgentCoordinator } from "./agent-coordinator"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { UpdateManager } from "./update-manager"

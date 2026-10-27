@@ -1,41 +1,22 @@
 
+import type { AgentAppSettingsView } from "./agent-app-settings-view"
 import type { AnalyticsReporter } from "./analytics"
+import type { StartClaudeSessionArgs } from "./claude-session-start"
 import type { CodexAppServerManager } from "./codex-app-server"
-import type { SdkEndpointEnv } from "./sdk-endpoint"
 import type { GenerateChatTitleResult } from "./generate-title"
-import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
+import type { ClaudeSessionHandle } from "./harness-types"
 import type {
-  CustomModelEntry,
   LlmProviderSnapshot,
   McpOAuthState,
-  McpServerConfig,
   Subagent,
 } from "../shared/types"
 import type { EventStore } from "./event-store"
-import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
-import type { LoopSetupInput } from "./loop-template"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import type { JsonValue } from "../shared/json"
-import type { ModelPrice } from "../shared/token-pricing"
-
-export interface AppSettingsSnapshot {
-  claudeDriver?: {
-    lifecycle?: { idleTimeoutMs?: number; maxConcurrent?: number }
-  }
-  globalPromptAppend?: string
-  customMcpServers?: readonly McpServerConfig[]
-  customModels?: readonly CustomModelEntry[]
-  subagentRuntime?: {
-    runTimeoutMs?: number
-    defaultLoopSubagentId?: string | null
-  }
-}
 
 export interface ClaudeSessionLifecycleOptions {
   idleMs: number
@@ -52,39 +33,7 @@ export interface AgentCoordinatorArgs {
   codexManager?: CodexAppServerManager
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   tunnelGateway?: TunnelGateway
-  startClaudeSession?: (args: {
-    projectId: string
-    localPath: string
-    model: string
-    effort?: string
-    planMode: boolean
-    sessionToken: string | null
-    forkSession: boolean
-    oauthToken: string | null
-    additionalDirectories?: string[]
-    chatId?: string
-    tunnelGateway?: TunnelGateway | null
-    onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-    systemPromptAppend?: string
-    endpoint?: SdkEndpointEnv | null
-    subagentOrchestrator?: SubagentOrchestrator
-    delegationContext?: KannaMcpDelegationContext
-    systemPromptOverride?: string
-    initialPrompt?: string
-    toolCallback?: ToolCallbackService
-    chatPolicy?: ChatPermissionPolicy
-    customMcpServers?: readonly McpServerConfig[]
-    oauthBearers?: ReadonlyMap<string, string>
-    restrictedAllowedPaths?: string[]
-    setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-    armCron?: (command: string) => Promise<{ jobId: string }>
-    updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
-    stopLoop?: () => Promise<void>
-    isLoopArmed?: () => boolean
-    keepAlive?: boolean
-    turnPrice?: ModelPrice | null
-    contextWindowOverride?: number
-  }) => Promise<ClaudeSessionHandle>
+  startClaudeSession?: (args: StartClaudeSessionArgs) => Promise<ClaudeSessionHandle>
   claudeLimitDetector?: LimitDetector
   codexLimitDetector?: LimitDetector
   scheduleManager?: ScheduleManager
@@ -92,7 +41,7 @@ export interface AgentCoordinatorArgs {
   getAutoResumePreference?: () => boolean
   openrouterFirstEntryTimeoutMs?: number
   getSubagents?: () => Subagent[]
-  getAppSettingsSnapshot?: () => AppSettingsSnapshot
+  getAppSettingsSnapshot?: () => Partial<AgentAppSettingsView>
   throwOnClaudeSessionStart?: boolean
   oauthPool?: OAuthTokenPool
   toolCallback?: ToolCallbackService

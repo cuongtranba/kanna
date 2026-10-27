@@ -2,7 +2,7 @@
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import { deriveChatSchedules, deriveLastLoopSpec } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import {
   disarmFailingLoop,
   type LoopCommandDeps,

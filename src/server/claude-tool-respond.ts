@@ -1,9 +1,11 @@
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
+import type { JsonValue } from "../shared/json"
+import { readPlanDecision } from "./claude-spawn-helpers"
 import type { ActiveTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
-import { timestamped, normalizeToolContent } from "./claude-message-normalizer"
+import { normalizeToolContent } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 
 interface ToolRespondStore {
@@ -69,13 +71,7 @@ export async function respondTool(
   }
 
   if (pending.tool.toolKind === "exit_plan_mode") {
-    const resultRec: JsonObject = isJsonObject(command.result)
-      ? command.result
-      : {}
-    const confirmed = Boolean(resultRec.confirmed)
-    const clearContext = Boolean(resultRec.clearContext)
-    const message =
-      typeof resultRec.message === "string" ? resultRec.message : ""
+    const { confirmed, clearContext, message = "" } = readPlanDecision(command.result)
 
     if (confirmed && clearContext) {
       await store.setSessionTokenForProvider(command.chatId, pending.provider, null)

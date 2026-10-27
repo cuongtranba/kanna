@@ -1,14 +1,6 @@
 import { statSync, openSync, readSync, closeSync } from "node:fs"
 import type { BackgroundTaskOutputDeps } from "./background-task-output-registry"
 
-function statSize(path: string): number | null {
-  try {
-    return statSync(path).size
-  } catch {
-    return null
-  }
-}
-
 function readAppend(path: string, fromByte: number): { data: string; endByte: number } {
   try {
     const size = statSync(path).size
@@ -33,7 +25,6 @@ function scheduleInterval(fn: () => void, ms: number): () => void {
 }
 
 export const backgroundTaskOutputIo: BackgroundTaskOutputDeps = {
-  statSize,
   readAppend,
   setInterval: scheduleInterval,
 }

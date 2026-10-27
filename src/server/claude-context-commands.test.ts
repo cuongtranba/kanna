@@ -240,6 +240,6 @@ describe("clearChatContext → next turn's context", () => {
 
     await clearChatContext(h.deps, "chat-1")
 
-    expect(buildHistoryPrimer(transcript, "claude", "what now?")).toBeNull()
+    expect(buildHistoryPrimer(transcript, "what now?")).toBeNull()
   })
 })

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs"
 import { join, dirname, basename } from "node:path"
 import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
+import { readJsonlLinesAt } from "./subagent-transcript-io.adapter"
 
 export interface WorkflowRawFile { runId: string; raw: JsonValue }
 
@@ -123,12 +124,8 @@ function parseJournalLine(line: string): WorkflowJournalEntry | null {
 }
 
 export function readWorkflowRunJournal(workflowsDir: string, runId: string): WorkflowJournalEntry[] {
-  const journalPath = join(liveRunRoot(workflowsDir), runId, "journal.jsonl")
-  if (!existsSync(journalPath)) return []
-  let text: string
-  try { text = readFileSync(journalPath, "utf8") } catch { return [] }
   const out: WorkflowJournalEntry[] = []
-  for (const line of text.split("\n")) {
+  for (const line of readJsonlLinesAt(join(liveRunRoot(workflowsDir), runId, "journal.jsonl"))) {
     const entry = parseJournalLine(line)
     if (entry) out.push(entry)
   }
@@ -209,7 +206,7 @@ export function watchWorkflowDir(
 
   return () => {
     disposed = true
-    if (timer) clearTimeout(timer)
+    if (timer) deps.clearTimeout(timer)
     stopParentPoll()
     closeWatcher()
   }

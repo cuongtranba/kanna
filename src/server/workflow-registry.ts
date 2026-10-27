@@ -12,6 +12,7 @@ export interface WorkflowRegistryDeps {
   watchRunDirs?: (workflowsDir: string, onChange: () => void) => () => void
   readRunJournal?: (workflowsDir: string, runId: string) => WorkflowJournalEntry[]
   readAgentTranscriptLines?: (workflowsDir: string, runId: string, agentId: string) => string[]
+  now?: () => number
 }
 export interface WorkflowRegistry {
   register(chatId: string, workflowsDir: string): void
@@ -73,7 +74,37 @@ function buildAgentsFromJournal(entries: WorkflowJournalEntry[]): WorkflowAgentP
   return [...out.values()]
 }
 
+interface JournalView {
+  run: WorkflowRun
+  hasAgents: boolean
+}
+
 export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegistry {
+  const listRunDirs = deps.listRunDirs ?? (() => [])
+  const watchRunDirs = deps.watchRunDirs ?? (() => () => {})
+  const readRunJournal = deps.readRunJournal ?? (() => [])
+  const readAgentTranscriptLines = deps.readAgentTranscriptLines ?? (() => [])
+  const now = deps.now ?? Date.now
+
+  function liveRunDirs(dir: string): WorkflowRunDirInfo[] {
+    const floor = now() - SNAPSHOT_LIVE_WINDOW_MS
+    return listRunDirs(dir).filter((r) => r.newestMtimeMs >= floor)
+  }
+
+  function journalView(dir: string, live: WorkflowRunDirInfo, sidecar: WorkflowRun | undefined): JournalView {
+    const agents = buildAgentsFromJournal(readRunJournal(dir, live.runId))
+    return {
+      hasAgents: agents.length > 0,
+      run: {
+        ...synthRunningRun(live.runId, live.newestMtimeMs),
+        taskId: sidecar?.taskId,
+        workflowName: sidecar?.workflowName,
+        agentCount: agents.length,
+        agents,
+      },
+    }
+  }
+
   const registry = createWatchedRegistry<Map<string, WorkflowRun>>({
     load: (workflowsDir) => {
       const runs = new Map<string, WorkflowRun>()
@@ -85,7 +116,7 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
     },
     watch: (workflowsDir, onChange) => {
       const disposeSidecar = deps.watch(workflowsDir, onChange)
-      const disposeLive = deps.watchRunDirs?.(workflowsDir, onChange) ?? (() => {})
+      const disposeLive = watchRunDirs(workflowsDir, onChange)
       return () => { disposeSidecar(); disposeLive() }
     },
   })
@@ -98,21 +129,12 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       if (!entry) return []
       const { key: dir, state: runs } = entry
       const merged = new Map(runs)
-      if (deps.listRunDirs) {
-        const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
-        for (const { runId, newestMtimeMs } of deps.listRunDirs(dir)) {
-          if (newestMtimeMs < floor) continue
-          const existing = merged.get(runId)
-          if (!existing) { merged.set(runId, synthRunningRun(runId, newestMtimeMs)); continue }
-          if (!isStaleCrashSidecar(existing) || !deps.readRunJournal) continue
-          const agents = buildAgentsFromJournal(deps.readRunJournal(dir, runId))
-          if (agents.length === 0) continue
-          merged.set(runId, {
-            ...synthRunningRun(runId, newestMtimeMs),
-            taskId: existing.taskId, workflowName: existing.workflowName,
-            agentCount: agents.length, agents,
-          })
-        }
+      for (const live of liveRunDirs(dir)) {
+        const existing = merged.get(live.runId)
+        if (!existing) { merged.set(live.runId, synthRunningRun(live.runId, live.newestMtimeMs)); continue }
+        if (!isStaleCrashSidecar(existing)) continue
+        const view = journalView(dir, live, existing)
+        if (view.hasAgents) merged.set(live.runId, view.run)
       }
       return [...merged.values()].sort(byNewest).map(toRunSummary)
     },
@@ -122,34 +144,24 @@ export function createWorkflowRegistry(deps: WorkflowRegistryDeps): WorkflowRegi
       const { key: dir, state: runs } = entry
       const sidecar = runs.get(runId)
       if (sidecar && !isStaleCrashSidecar(sidecar)) return sidecar
-      if (deps.listRunDirs) {
-        const floor = Date.now() - SNAPSHOT_LIVE_WINDOW_MS
-        const live = deps.listRunDirs(dir).find((r) => r.runId === runId && r.newestMtimeMs >= floor)
-        if (live) {
-          const base = synthRunningRun(runId, live.newestMtimeMs)
-          if (deps.readRunJournal) {
-            const agents = buildAgentsFromJournal(deps.readRunJournal(dir, runId))
-            if (agents.length > 0 || !sidecar) {
-              return { ...base, taskId: sidecar?.taskId, workflowName: sidecar?.workflowName, agentCount: agents.length, agents }
-            }
-          } else if (!sidecar) {
-            return base
-          }
-        }
+      const live = liveRunDirs(dir).find((r) => r.runId === runId)
+      if (live) {
+        const view = journalView(dir, live, sidecar)
+        if (view.hasAgents || !sidecar) return view.run
       }
       return sidecar ?? null
     },
     getAgentTranscript(chatId, runId, agentId) {
       const entry = registry.entry(chatId)
-      if (!entry || !deps.readAgentTranscriptLines) return []
-      return parseAgentTranscriptLines(deps.readAgentTranscriptLines(entry.key, runId, agentId))
+      if (!entry) return []
+      return parseAgentTranscriptLines(readAgentTranscriptLines(entry.key, runId, agentId))
     },
-    hasActiveRun(chatId, freshnessMs, now) {
+    hasActiveRun(chatId, freshnessMs, at) {
       const entry = registry.entry(chatId)
-      if (!entry || !deps.listRunDirs) return false
+      if (!entry) return false
       const { key: dir, state: runs } = entry
-      const floor = now - freshnessMs
-      for (const { runId, newestMtimeMs } of deps.listRunDirs(dir)) {
+      const floor = at - freshnessMs
+      for (const { runId, newestMtimeMs } of listRunDirs(dir)) {
         if (newestMtimeMs < floor) continue
         const sidecar = runs.get(runId)
         if (!sidecar || sidecar.status === "running") return true

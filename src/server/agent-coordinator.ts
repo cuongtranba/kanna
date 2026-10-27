@@ -54,12 +54,10 @@ import {
   buildBackgroundTaskWakePrompt,
   buildBackgroundTasksAbandonedMessage,
 } from "./claude-prompt-helpers"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import { log } from "../shared/log"
-import {
-  type SendMessageOptions,
-  type SendToStartingProfile,
-} from "./claude-steer-log"
+import type { SendToStartingProfile } from "./claude-steer-log"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {

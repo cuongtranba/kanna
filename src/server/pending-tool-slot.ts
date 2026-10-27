@@ -1,6 +1,20 @@
 import type { AgentProvider, NormalizedToolCall } from "../shared/types"
 import type { JsonObject, JsonValue } from "../shared/json"
-import { discardedToolResult } from "./claude-sdk-queue"
+
+export function discardedToolResult(
+  tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
+): JsonObject {
+  if (tool.toolKind === "ask_user_question") {
+    return {
+      discarded: true,
+      answers: {},
+    }
+  }
+
+  return {
+    discarded: true,
+  }
+}
 
 export interface ParkedTool {
   toolUseId: string

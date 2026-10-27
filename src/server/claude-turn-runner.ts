@@ -6,7 +6,7 @@ import type { HarnessTurn } from "./harness-types"
 import type { ActiveTurn } from "./claude-session-state"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import type { TurnEndGuard } from "./turn-end-guard"
 
 

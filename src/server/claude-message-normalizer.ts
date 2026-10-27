@@ -5,6 +5,7 @@ import { isRecord } from "../shared/errors"
 import { toJsonArray, toJsonObject } from "./json-boundary"
 import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 import { normalizeToolCall } from "../shared/tools"
+import { timestamped } from "../shared/transcript-entry"
 
 
 function stringFromUnknown<T>(value: T): string {
@@ -23,18 +24,6 @@ function normalizeMcpServerEntry(s: JsonValue): { name: string; status: string }
     return { name: s.name, status: typeof s.status === "string" ? s.status : "connected" }
   }
   return { name: String(s), status: "connected" }
-}
-
-
-export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
-  entry: T,
-  createdAt = Date.now()
-) {
-  return {
-    _id: crypto.randomUUID(),
-    createdAt,
-    ...entry,
-  }
 }
 
 
@@ -137,6 +126,17 @@ function numberOrUndefined(...candidates: readonly (JsonValue | undefined)[]): n
   return undefined
 }
 
+function stringOrUndefined(...candidates: readonly (JsonValue | undefined)[]): string | undefined {
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate
+  }
+  return undefined
+}
+
+function durationMsOf(message: ClaudeRawSdkMessage): number {
+  return numberOrUndefined(message.duration_ms, message.durationMs) ?? 0
+}
+
 export function parseCompactMetadata(
   message: ClaudeRawSdkMessage,
 ): CompactBoundaryMetadata | undefined {
@@ -157,10 +157,7 @@ export function parseCompactMetadata(
 
 
 function parseApiErrorReason(message: ClaudeRawSdkMessage): string | undefined {
-  for (const candidate of [message.api_error, message.apiError]) {
-    if (typeof candidate === "string" && candidate.length > 0) return candidate
-  }
-  return undefined
+  return stringOrUndefined(message.api_error, message.apiError)
 }
 
 
@@ -244,14 +241,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
         const match = /API Error:\s*(\d{3})/i.exec(joinedText)
         return match ? Number.parseInt(match[1], 10) : undefined
       })()
-      let requestId: string | undefined
-      if (typeof message.request_id === "string") {
-        requestId = message.request_id
-      } else if (typeof message.requestId === "string") {
-        requestId = message.requestId
-      } else {
-        requestId = undefined
-      }
+      const requestId = stringOrUndefined(message.request_id, message.requestId)
       const isPolicyRefusal =
         message.message?.stop_reason === "refusal"
         || POLICY_REFUSAL_TEXT_MARKERS.some((marker) => joinedText.includes(marker))
@@ -340,7 +330,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
         messageId,
         subtype: message.is_error ? "error" : "success",
         isError: Boolean(message.is_error),
-        durationMs: typeof message.duration_ms === "number" ? message.duration_ms : 0,
+        durationMs: durationMsOf(message),
         result: typeof message.result === "string" ? message.result : stringFromUnknown(message.result),
         debugRaw,
       }),
@@ -393,14 +383,6 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
   }
 
   if (message.type === "system" && message.subtype === "turn_duration") {
-    let durationMs: number
-    if (typeof message.durationMs === "number") {
-      durationMs = message.durationMs
-    } else if (typeof message.duration_ms === "number") {
-      durationMs = message.duration_ms
-    } else {
-      durationMs = 0
-    }
     const pendingWorkflowCount = typeof message.pendingWorkflowCount === "number"
       ? message.pendingWorkflowCount
       : undefined
@@ -410,7 +392,7 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
         messageId,
         subtype: "success",
         isError: false,
-        durationMs,
+        durationMs: durationMsOf(message),
         result: "",
         costUsd: undefined,
         ...(pendingWorkflowCount !== undefined ? { pendingWorkflowCount } : {}),

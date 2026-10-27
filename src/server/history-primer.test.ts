@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import type { TranscriptEntry } from "../shared/types"
 import { buildHistoryPrimer, extractPreviousAssistantReply, PRIMER_MAX_CHARS, shouldInjectPrimer } from "./history-primer"
 
 function userEntry(text: string, createdAt: number): TranscriptEntry {
@@ -31,7 +31,7 @@ describe("shouldInjectPrimer", () => {
 describe("buildHistoryPrimer", () => {
   test("returns null when no assistant entries exist", () => {
     const entries: TranscriptEntry[] = [userEntry("hi", 1000)]
-    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "next")).toBeNull()
+    expect(buildHistoryPrimer(entries, "next")).toBeNull()
   })
 
   test("renders user + assistant entries with tail", () => {
@@ -39,7 +39,7 @@ describe("buildHistoryPrimer", () => {
       userEntry("first", 1000),
       assistantEntry("reply", 2000),
     ]
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "now what?")!
+    const primer = buildHistoryPrimer(entries, "now what?")!
     expect(primer).toContain("BEGIN PRIOR CONVERSATION")
     expect(primer).toContain("first")
     expect(primer).toContain("reply")
@@ -53,7 +53,7 @@ describe("buildHistoryPrimer", () => {
       entries.push(userEntry("u".repeat(800), i * 2))
       entries.push(assistantEntry("a".repeat(800), i * 2 + 1))
     }
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    const primer = buildHistoryPrimer(entries, "tail")!
     expect(primer.length).toBeLessThanOrEqual(PRIMER_MAX_CHARS + 200)
     expect(primer).toContain("earlier conversation omitted")
   })
@@ -108,7 +108,7 @@ describe("buildHistoryPrimer — context resets", () => {
       assistantEntry("old reply", 2000),
       clearedEntry(3000),
     ]
-    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "next")).toBeNull()
+    expect(buildHistoryPrimer(entries, "next")).toBeNull()
   })
 
   test("renders only what came after the last context_cleared", () => {
@@ -119,7 +119,7 @@ describe("buildHistoryPrimer — context resets", () => {
       userEntry("new", 4000),
       assistantEntry("new reply", 5000),
     ]
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    const primer = buildHistoryPrimer(entries, "tail")!
     expect(primer).toContain("new reply")
     expect(primer).not.toContain("old reply")
     expect(primer).not.toContain("[user, 1970-01-01 00:00:01]\nold\n")
@@ -133,7 +133,7 @@ describe("buildHistoryPrimer — context resets", () => {
       summaryEntry("THE SUMMARY", 4000),
       userEntry("new", 5000),
     ]
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    const primer = buildHistoryPrimer(entries, "tail")!
     expect(primer).toContain("THE SUMMARY")
     expect(primer).toContain("new")
     expect(primer).not.toContain("old reply")
@@ -147,7 +147,7 @@ describe("buildHistoryPrimer — context resets", () => {
       boundaryEntry(4000),
       userEntry("new", 5000),
     ]
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    const primer = buildHistoryPrimer(entries, "tail")!
     expect(primer).toContain("THE SUMMARY")
     expect(primer).not.toContain("old reply")
   })
@@ -158,7 +158,7 @@ describe("buildHistoryPrimer — context resets", () => {
       assistantEntry("old reply", 2000),
       boundaryEntry(3000),
     ]
-    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")).toBeNull()
+    expect(buildHistoryPrimer(entries, "tail")).toBeNull()
   })
 
   test("a context_cleared after a summary discards the summary too", () => {
@@ -169,7 +169,7 @@ describe("buildHistoryPrimer — context resets", () => {
       userEntry("new", 4000),
       assistantEntry("new reply", 5000),
     ]
-    const primer = buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")!
+    const primer = buildHistoryPrimer(entries, "tail")!
     expect(primer).not.toContain("THE SUMMARY")
     expect(primer).toContain("new reply")
   })
@@ -180,6 +180,6 @@ describe("buildHistoryPrimer — context resets", () => {
       clearedEntry(2000),
       userEntry("new", 3000),
     ]
-    expect(buildHistoryPrimer(entries, "codex" as AgentProvider, "tail")).toBeNull()
+    expect(buildHistoryPrimer(entries, "tail")).toBeNull()
   })
 })

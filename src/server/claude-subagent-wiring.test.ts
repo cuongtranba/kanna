@@ -9,6 +9,7 @@ import {
 import type { ProviderRunStart } from "./subagent-orchestrator"
 import type { Subagent } from "../shared/subagent-types"
 import type { ToolCallbackService } from "./tool-callback"
+import type { KannaMcpDelegationContext } from "./kanna-mcp"
 
 
 const NOOP_PROMISE = () => Promise.resolve(null as unknown as never)
@@ -100,9 +101,18 @@ const BASE_ARGS: BuildSubagentProviderRunForChatArgs = {
 }
 
 
+const DELEGATION_CONTEXT: KannaMcpDelegationContext = {
+  parentSubagentId: "subagent-1",
+  parentRunId: "run-1",
+  ancestorSubagentIds: ["subagent-1"],
+  depth: 1,
+  getParentUserMessageId: () => "msg-1",
+  getMentionedSubagentIds: () => [],
+}
+
 describe("buildClaudeSubagentStarter", () => {
   test("returns a function", () => {
-    const starter = buildClaudeSubagentStarter(makeDeps())
+    const starter = buildClaudeSubagentStarter(makeDeps(), { delegationContext: DELEGATION_CONTEXT, beaconToolsAllowed: false })
     expect(typeof starter).toBe("function")
   })
 
@@ -116,7 +126,7 @@ describe("buildClaudeSubagentStarter", () => {
       getEnabledCustomMcpServers: () => [{ id: "s1", name: "server1", transport: "stdio", command: "npx", args: [], env: {}, disabled: false }] as never,
       buildOAuthBearers: async () => ({ byServerId: new Map([["s1", "bearer-token"]]), usableUntil: null }),
     })
-    const starter = buildClaudeSubagentStarter(deps)
+    const starter = buildClaudeSubagentStarter(deps, { delegationContext: DELEGATION_CONTEXT, beaconToolsAllowed: false })
     await starter({
       projectId: "proj",
       localPath: "/tmp/x",
@@ -154,7 +164,7 @@ describe("buildClaudeSubagentStarter", () => {
           return {} as never
         },
       }),
-      beaconToolsAllowed,
+      { delegationContext: DELEGATION_CONTEXT, beaconToolsAllowed },
     )
     await starter({
       projectId: "proj",
@@ -172,13 +182,13 @@ describe("buildClaudeSubagentStarter", () => {
 
   test("a subagent granted beacon tools receives the parent's tool callback so its beacon approvals reach the user", async () => {
     const args = await startWith(true)
-    expect(args?.beaconToolsAllowed).toBe(true)
+    expect(args?.kannaMcp?.beaconToolsAllowed).toBe(true)
     expect(args?.toolCallback).toBe(PARENT_TOOL_CALLBACK)
   })
 
   test("a subagent not granted beacon tools gets neither the flag nor a tool callback", async () => {
     const args = await startWith(false)
-    expect(args?.beaconToolsAllowed).toBe(false)
+    expect(args?.kannaMcp?.beaconToolsAllowed).toBe(false)
     expect(args?.toolCallback).toBeUndefined()
   })
 })

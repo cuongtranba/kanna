@@ -9,7 +9,7 @@ import {
 import { createBusEnvelope, inboundIdempotencyKey, inboundSourceId, type BusEnvelope, type InboundBusSource } from "../../shared/service-bus/envelope"
 import { mcpMessageSubject, webhookDeliverySubject } from "../../shared/service-bus/subjects"
 import type { AgentCoordinator } from "../agent-coordinator"
-import { timestamped } from "../claude-message-normalizer"
+import { timestamped } from "../../shared/transcript-entry"
 import type { EventStore } from "../event-store"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import type { BusSink } from "../service-bus/service-bus"

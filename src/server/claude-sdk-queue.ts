@@ -1,7 +1,5 @@
 import { type Query } from "@anthropic-ai/claude-agent-sdk"
 import { type ClaudeRawSdkMessage, isSdkToClaudeMessage } from "./claude-message-normalizer"
-import type { NormalizedToolCall } from "../shared/types"
-import type { JsonObject } from "../shared/json"
 
 export class AsyncMessageQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = []
@@ -47,21 +45,6 @@ export class AsyncMessageQueue<T> implements AsyncIterable<T> {
         })
       },
     }
-  }
-}
-
-export function discardedToolResult(
-  tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
-): JsonObject {
-  if (tool.toolKind === "ask_user_question") {
-    return {
-      discarded: true,
-      answers: {},
-    }
-  }
-
-  return {
-    discarded: true,
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { backgroundTaskIdsFromToolResult } from "./agent"
+import { backgroundTaskIdsFromToolResult } from "./claude-prompt-helpers"
 
 describe("backgroundTaskIdsFromToolResult (SDK parity)", () => {
   test("detects id from string content", () => {

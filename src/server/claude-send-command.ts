@@ -4,9 +4,9 @@ import { resolveClaudeApiModelId } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
 import {
   logSendToStartingProfile,
-  type SendMessageOptions,
   type SendToStartingProfile,
 } from "./claude-steer-log"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
 import { MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, shouldProactivelyCompact } from "./proactive-compact"
 import {

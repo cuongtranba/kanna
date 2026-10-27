@@ -33,6 +33,48 @@ export interface BuildCanUseToolArgs {
   chatPolicy?: ChatPermissionPolicy
 }
 
+export interface PlanDecision {
+  confirmed: boolean
+  clearContext: boolean
+  message: string | undefined
+}
+
+export function readPlanDecision(payload: JsonValue | undefined): PlanDecision {
+  const record: JsonObject = payload !== undefined && isJsonObject(payload) ? payload : {}
+  return {
+    confirmed: Boolean(record.confirmed),
+    clearContext: Boolean(record.clearContext),
+    message: typeof record.message === "string" ? record.message : undefined,
+  }
+}
+
+function permissionResultFor(
+  tool: HarnessToolRequest["tool"],
+  payload: JsonValue | undefined,
+): PermissionResult {
+  const record: JsonObject = payload !== undefined && isJsonObject(payload) ? payload : {}
+  if (tool.toolKind === "ask_user_question") {
+    return {
+      behavior: "allow",
+      updatedInput: {
+        ...(tool.rawInput ?? {}),
+        questions: record.questions ?? tool.input.questions,
+        answers: record.answers ?? payload,
+      },
+    }
+  }
+  const { confirmed, message } = readPlanDecision(payload)
+  if (confirmed) {
+    return { behavior: "allow", updatedInput: { ...(tool.rawInput ?? {}), ...record } }
+  }
+  return {
+    behavior: "deny",
+    message: message === undefined
+      ? "User wants to suggest edits to the plan before approving."
+      : `User wants to suggest edits to the plan: ${message}`,
+  }
+}
+
 export function buildCanUseTool(
   args: BuildCanUseToolArgs,
 ): (...params: Parameters<CanUseTool>) => Promise<PermissionResult> {
@@ -66,33 +108,7 @@ export function buildCanUseTool(
         return { behavior: "deny", message: result.decision.reason ?? "denied" }
       }
 
-      const rawPayload = result.decision.payload ?? null
-      const payload: JsonObject = isJsonObject(rawPayload) ? rawPayload : {}
-
-      if (tool.toolKind === "ask_user_question") {
-        return {
-          behavior: "allow",
-          updatedInput: {
-            ...(tool.rawInput ?? {}),
-            questions: payload.questions ?? tool.input.questions,
-            answers: payload.answers ?? result.decision.payload,
-          },
-        } satisfies PermissionResult
-      }
-
-      if (payload.confirmed) {
-        return {
-          behavior: "allow",
-          updatedInput: { ...(tool.rawInput ?? {}), ...payload },
-        } satisfies PermissionResult
-      }
-
-      return {
-        behavior: "deny",
-        message: typeof payload.message === "string"
-          ? `User wants to suggest edits to the plan: ${payload.message}`
-          : "User wants to suggest edits to the plan before approving.",
-      } satisfies PermissionResult
+      return permissionResultFor(tool, result.decision.payload)
     }
 
     const result = await args.onToolRequest({ tool })
@@ -104,33 +120,7 @@ export function buildCanUseTool(
       } satisfies PermissionResult
     }
 
-    if (tool.toolKind === "ask_user_question") {
-      const record: JsonObject = isJsonObject(result) ? result : {}
-      return {
-        behavior: "allow",
-        updatedInput: {
-          ...(tool.rawInput ?? {}),
-          questions: record.questions ?? tool.input.questions,
-          answers: record.answers ?? result,
-        },
-      } satisfies PermissionResult
-    }
-
-    const record: JsonObject = isJsonObject(result) ? result : {}
-    const confirmed = Boolean(record.confirmed)
-    if (confirmed) {
-      return {
-        behavior: "allow",
-        updatedInput: { ...(tool.rawInput ?? {}), ...record },
-      } satisfies PermissionResult
-    }
-
-    return {
-      behavior: "deny",
-      message: typeof record.message === "string"
-        ? `User wants to suggest edits to the plan: ${record.message}`
-        : "User wants to suggest edits to the plan before approving.",
-    } satisfies PermissionResult
+    return permissionResultFor(tool, result)
   }
 }
 

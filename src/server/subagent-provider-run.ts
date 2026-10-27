@@ -10,18 +10,40 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { isEndpointProvider, normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
-import { endpointEnvOf, type SdkEndpoint, type SdkEndpointEnv } from "./sdk-endpoint"
+import { endpointEnvOf, type SdkEndpoint } from "./sdk-endpoint"
 import {
   buildCodexDeveloperInstructions,
   renderInstructionSections,
   renderStackProjectsBlock,
   type KannaSystemPromptOptions,
 } from "../shared/kanna-system-prompt"
-import type { ClaudeSessionHandle } from "./agent"
+import type { ClaudeSessionHandle } from "./harness-types"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
-import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
+import type { StartClaudeSessionArgs } from "./claude-session-start"
 import { log } from "../shared/log"
+
+export type SubagentSessionArgs = Pick<
+  StartClaudeSessionArgs,
+  | "projectId"
+  | "localPath"
+  | "model"
+  | "effort"
+  | "planMode"
+  | "sessionToken"
+  | "forkSession"
+  | "oauthToken"
+  | "oauthBaseUrl"
+  | "endpoint"
+  | "contextWindowOverride"
+  | "additionalDirectories"
+  | "chatId"
+  | "onToolRequest"
+  | "systemPromptOverride"
+  | "initialPrompt"
+  | "restrictedAllowedPaths"
+  | "keepAlive"
+  | "maxTurns"
+>
 
 export interface BuildSubagentProviderRunArgs {
   subagent: Subagent
@@ -33,35 +55,7 @@ export interface BuildSubagentProviderRunArgs {
   cwd: string
   additionalDirectories?: string[]
   allowedPaths?: string[]
-  startClaudeSession: (args: {
-    projectId: string
-    localPath: string
-    model: string
-    effort?: string
-    planMode: boolean
-    sessionToken: string | null
-    forkSession: boolean
-    oauthToken: string | null
-    oauthBaseUrl?: string | null
-    endpoint?: SdkEndpointEnv | null
-    contextWindowOverride?: number
-    additionalDirectories?: string[]
-    chatId?: string
-    onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-    systemPromptOverride?: string
-    initialPrompt?: string
-    subagentOrchestrator?: SubagentOrchestrator
-    delegationContext?: KannaMcpDelegationContext
-    restrictedAllowedPaths?: string[]
-    keepAlive?: boolean
-    maxTurns?: number
-    getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-    chatTaskStore?: ChatTaskStorePort
-  }) => Promise<ClaudeSessionHandle>
-  subagentOrchestrator?: SubagentOrchestrator
-  delegationContext?: KannaMcpDelegationContext
-  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  chatTaskStore?: ChatTaskStorePort
+  startClaudeSession: (args: SubagentSessionArgs) => Promise<ClaudeSessionHandle>
   codexManager: CodexAppServerManager
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
@@ -164,13 +158,9 @@ async function runClaudeSubagent(opts: {
     onToolRequest: args.onToolRequest,
     systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, subagentPromptOptions(args)),
     initialPrompt,
-    subagentOrchestrator: args.subagentOrchestrator,
-    delegationContext: args.delegationContext,
     restrictedAllowedPaths: args.allowedPaths,
     keepAlive,
     maxTurns: args.subagent.maxTurns,
-    getArmedLoop: args.getArmedLoop,
-    chatTaskStore: args.chatTaskStore,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 

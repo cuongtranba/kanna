@@ -1,6 +1,7 @@
 import type {
   AgentProvider,
   ChatAttachment,
+  ModelOptions,
   ResolvedStackBinding,
   SlashCommandKind,
   Subagent,
@@ -19,6 +20,17 @@ import type { EventStore } from "./event-store"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { SendToStartingProfile } from "./claude-steer-log"
+
+export interface SendMessageOptions {
+  provider?: AgentProvider
+  model?: string
+  modelOptions?: ModelOptions
+  effort?: string
+  planMode?: boolean
+  autoContinue?: { scheduleId: string }
+  cronRun?: CronRunTag
+  origin?: CommandOrigin
+}
 
 export interface StartClaudeTurnArgs {
   chatId: string

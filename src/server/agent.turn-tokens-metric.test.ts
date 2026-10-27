@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { TURN_COST_USD, TURN_TOKENS } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 import type { ActiveTurn } from "./claude-session-state"

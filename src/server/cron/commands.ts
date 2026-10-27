@@ -9,7 +9,7 @@ import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
 import { deriveCronJobs } from "./read-model"
-import { timestamped } from "../claude-message-normalizer"
+import { timestamped } from "../../shared/transcript-entry"
 
 export interface CronCommandStore {
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>

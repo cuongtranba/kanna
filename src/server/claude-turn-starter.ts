@@ -30,7 +30,7 @@ import { decideMentionedProjectBindings } from "./project-mention-attach"
 import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import { logClaudeSteer, logSendToStartingProfile } from "./claude-steer-log"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
@@ -315,7 +315,7 @@ async function startTurnAfterTurnStarted(
     ? withBeaconMentions(typedPromptText, args.content, deps.getBeacons(), deps.isBeaconOnline)
     : typedPromptText
   const primer = shouldPrime
-    ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
+    ? buildHistoryPrimer(loadExistingMessages(), userPromptText)
     : null
   const promptContent = primer ?? userPromptText
 

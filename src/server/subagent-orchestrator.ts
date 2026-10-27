@@ -9,6 +9,7 @@ import {
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
+import { toError } from "../shared/errors"
 import {
   addCounter,
   recordHistogram,
@@ -66,6 +67,39 @@ export class PausableTimeout {
     if (this.handle != null) clearTimeout(this.handle)
     this.handle = null
     this.deadline = null
+  }
+}
+
+type RunStopReason = "timeout" | "max_turns" | "user_cancelled" | "chat_cancelled"
+
+class RunStopped extends Error {
+  constructor(readonly reason: RunStopReason) {
+    super(reason)
+    this.name = "RunStopped"
+  }
+}
+
+function stopReasonOf(error: Error, cancelled: boolean): RunStopReason | null {
+  if (error instanceof RunStopped) return error.reason
+  return cancelled ? "user_cancelled" : null
+}
+
+function stopReasonToFailure(
+  reason: RunStopReason,
+  ctx: { started: boolean; timeoutMs: number; maxTurns: number | null },
+): { code: SubagentErrorCode; message: string } {
+  switch (reason) {
+    case "timeout":
+      return { code: "TIMEOUT", message: `Run stalled (no activity for ${ctx.timeoutMs}ms)` }
+    case "max_turns":
+      return { code: "MAX_TURNS", message: `Run exceeded maxTurns (${ctx.maxTurns} tool calls)` }
+    case "user_cancelled":
+      return {
+        code: "USER_CANCELLED",
+        message: ctx.started ? "Cancelled by user" : "Cancelled before run started",
+      }
+    case "chat_cancelled":
+      return { code: "PROVIDER_ERROR", message: "Chat cancelled before run started" }
   }
 }
 
@@ -157,6 +191,25 @@ function recordSubagentSpend(provider: AgentProvider, usage: ProviderUsage | und
 
 const DEFAULT_RUN_TIMEOUT_MS = 600_000
 const SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT = 1000
+const CHUNK_PROGRESS_THROTTLE_MS = 100
+
+interface RefusalContext {
+  chatId: string
+  parentUserMessageId: string
+  parentRunId: string | null
+  depth: number
+}
+
+interface RefusedSubagent {
+  subagentId: string | null
+  name: string
+  provider: AgentProvider
+  model: string
+}
+
+function subagentIdentity(subagent: Subagent): RefusedSubagent {
+  return { subagentId: subagent.id, name: subagent.name, provider: subagent.provider, model: subagent.model }
+}
 
 interface LiveSession {
   chatId: string
@@ -252,6 +305,44 @@ export class SubagentOrchestrator {
     return `Subagent "${requested}" not found. Available subagents:\n${lines.join("\n")}\nRetry with the exact id (or unique name) of one of these.`
   }
 
+  private admissionError(
+    subagent: Subagent,
+    depth: number,
+    ancestorSubagentIds: readonly string[],
+  ): { code: SubagentErrorCode; message: string } | null {
+    if (depth > this.maxDepth()) {
+      return { code: "DEPTH_EXCEEDED", message: `Chain depth ${depth} exceeds limit ${this.maxDepth()}` }
+    }
+    if (ancestorSubagentIds.includes(subagent.id)) {
+      return { code: "LOOP_DETECTED", message: `Subagent ${subagent.name} already in ancestor chain` }
+    }
+    return null
+  }
+
+  private async refuseRun(
+    ctx: RefusalContext,
+    who: RefusedSubagent,
+    code: SubagentErrorCode,
+    message: string,
+  ): Promise<DelegationOutcome> {
+    const runId = crypto.randomUUID()
+    await this.deps.store.appendSubagentEvent({
+      v: STORE_VERSION,
+      type: "subagent_run_started",
+      timestamp: this.now(),
+      chatId: ctx.chatId,
+      runId,
+      subagentId: who.subagentId,
+      subagentName: who.name,
+      provider: who.provider,
+      model: who.model,
+      parentUserMessageId: ctx.parentUserMessageId,
+      parentRunId: ctx.parentRunId,
+      depth: ctx.depth,
+    })
+    return await this.failRun(ctx.chatId, runId, code, message)
+  }
+
   activePermitCount() {
     return this.maxParallel() - this.permits
   }
@@ -266,7 +357,7 @@ export class SubagentOrchestrator {
 
   private async acquire(chatId: string, runId: string): Promise<void> {
     if (this.cancelledChats.has(chatId)) {
-      throw new Error("CHAT_CANCELLED")
+      throw new RunStopped("chat_cancelled")
     }
     if (this.permits > 0) {
       this.permits -= 1
@@ -290,6 +381,81 @@ export class SubagentOrchestrator {
     }
   }
 
+  private async acquireSlot(chatId: string, runId: string): Promise<() => void> {
+    await this.acquire(chatId, runId)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.release()
+    }
+  }
+
+  private createRunSink(
+    chatId: string,
+    runId: string,
+    hooks: {
+      onActivity?: () => void
+      beforeEntry?: (entry: TranscriptEntry) => void
+      afterEntry?: (entry: TranscriptEntry) => void
+    } = {},
+  ): { onChunk: (chunk: string) => void; onEntry: (entry: TranscriptEntry) => void; flush: () => void } {
+    let progressTimer: ReturnType<typeof setTimeout> | null = null
+    return {
+      onChunk: (chunk) => {
+        if (!chunk) return
+        hooks.onActivity?.()
+        this.deps.store
+          .appendSubagentEvent({
+            v: STORE_VERSION,
+            type: "subagent_message_delta",
+            timestamp: this.now(),
+            chatId,
+            runId,
+            content: chunk,
+          })
+          .catch((err) => {
+            log.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId, runId, err })
+          })
+        if (progressTimer !== null) clearTimeout(progressTimer)
+        progressTimer = setTimeout(() => {
+          progressTimer = null
+          this.deps.onRunProgress?.(chatId, runId)
+        }, CHUNK_PROGRESS_THROTTLE_MS)
+      },
+      onEntry: (entry) => {
+        hooks.onActivity?.()
+        hooks.beforeEntry?.(entry)
+        this.deps.store
+          .appendSubagentEvent({
+            v: STORE_VERSION,
+            type: "subagent_entry_appended",
+            timestamp: this.now(),
+            chatId,
+            runId,
+            entry,
+          })
+          .catch((err) => {
+            log.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId, runId, err })
+          })
+        this.deps.onRunProgress?.(chatId, runId)
+        if (hooks.afterEntry) {
+          try {
+            hooks.afterEntry(entry)
+          } catch (err) {
+            log.warn(`${LOG_PREFIX} external onEntry threw`, { chatId, runId, err })
+          }
+        }
+      },
+      flush: () => {
+        if (progressTimer === null) return
+        clearTimeout(progressTimer)
+        progressTimer = null
+        this.deps.onRunProgress?.(chatId, runId)
+      },
+    }
+  }
+
   private release(): void {
     const next = this.waiters.shift()
     if (next) {
@@ -309,7 +475,7 @@ export class SubagentOrchestrator {
       const w = this.waiters[i]
       if (w.chatId !== chatId) continue
       this.waiters.splice(i, 1)
-      w.reject(new Error("CHAT_CANCELLED"))
+      w.reject(new RunStopped("chat_cancelled"))
     }
     const runIds: string[] = []
     for (const [runId, state] of this.runStateByRunId) {
@@ -335,7 +501,7 @@ export class SubagentOrchestrator {
       if (idx >= 0) this.waiters.splice(idx, 1)
       const reject = state.permitWaiter.reject
       state.permitWaiter = null
-      reject(new Error("USER_CANCELLED"))
+      reject(new RunStopped("user_cancelled"))
     } else {
       state.abortController.abort()
     }
@@ -355,45 +521,31 @@ export class SubagentOrchestrator {
     await this.recoveryPromise
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const resolved: { mention: Extract<ParsedMention, { kind: "subagent" }>; subagent: Subagent }[] = []
+    const refusalContext: RefusalContext = {
+      chatId: args.chatId,
+      parentUserMessageId: args.userMessageId,
+      parentRunId: null,
+      depth: 0,
+    }
 
     for (const mention of args.mentions) {
       if (mention.kind === "unknown-subagent") {
-        const runId = crypto.randomUUID()
-        await this.deps.store.appendSubagentEvent({
-          v: STORE_VERSION,
-          type: "subagent_run_started",
-          timestamp: this.now(),
-          chatId: args.chatId,
-          runId,
-          subagentId: null,
-          subagentName: mention.name,
-          provider: "claude",
-          model: "",
-          parentUserMessageId: args.userMessageId,
-          parentRunId: null,
-          depth: 0,
-        })
-        await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", `Unknown subagent '${mention.name}'`)
+        await this.refuseRun(
+          refusalContext,
+          { subagentId: null, name: mention.name, provider: "claude", model: "" },
+          "UNKNOWN_SUBAGENT",
+          `Unknown subagent '${mention.name}'`,
+        )
         continue
       }
       const subagent = subagents.find((s) => s.id === mention.subagentId)
       if (!subagent) {
-        const runId = crypto.randomUUID()
-        await this.deps.store.appendSubagentEvent({
-          v: STORE_VERSION,
-          type: "subagent_run_started",
-          timestamp: this.now(),
-          chatId: args.chatId,
-          runId,
-          subagentId: mention.subagentId,
-          subagentName: mention.subagentId,
-          provider: "claude",
-          model: "",
-          parentUserMessageId: args.userMessageId,
-          parentRunId: null,
-          depth: 0,
-        })
-        await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", `Subagent ${mention.subagentId} was deleted`)
+        await this.refuseRun(
+          refusalContext,
+          { subagentId: mention.subagentId, name: mention.subagentId, provider: "claude", model: "" },
+          "UNKNOWN_SUBAGENT",
+          `Subagent ${mention.subagentId} was deleted`,
+        )
         continue
       }
       resolved.push({ mention, subagent })
@@ -428,101 +580,39 @@ export class SubagentOrchestrator {
     background?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
+    const refusalContext: RefusalContext = {
+      chatId: args.chatId,
+      parentUserMessageId: args.parentUserMessageId,
+      parentRunId: args.parentRunId,
+      depth: args.depth,
+    }
     const subagent = this.resolveSubagent(args.subagentId)
     if (!subagent) {
-      const runId = crypto.randomUUID()
-      await this.deps.store.appendSubagentEvent({
-        v: STORE_VERSION,
-        type: "subagent_run_started",
-        timestamp: this.now(),
-        chatId: args.chatId,
-        runId,
-        subagentId: args.subagentId,
-        subagentName: args.subagentId,
-        provider: "claude",
-        model: "",
-        parentUserMessageId: args.parentUserMessageId,
-        parentRunId: args.parentRunId,
-        depth: args.depth,
-      })
-      return await this.failRun(args.chatId, runId, "UNKNOWN_SUBAGENT", this.describeUnknownSubagent(args.subagentId))
+      return await this.refuseRun(
+        refusalContext,
+        { subagentId: args.subagentId, name: args.subagentId, provider: "claude", model: "" },
+        "UNKNOWN_SUBAGENT",
+        this.describeUnknownSubagent(args.subagentId),
+      )
     }
     if (subagent.triggerMode === "manual" && !args.mentionedSubagentIds.includes(subagent.id)) {
-      const runId = crypto.randomUUID()
-      await this.deps.store.appendSubagentEvent({
-        v: STORE_VERSION,
-        type: "subagent_run_started",
-        timestamp: this.now(),
-        chatId: args.chatId,
-        runId,
-        subagentId: subagent.id,
-        subagentName: subagent.name,
-        provider: "claude",
-        model: "",
-        parentUserMessageId: args.parentUserMessageId,
-        parentRunId: args.parentRunId,
-        depth: args.depth,
-      })
-      return await this.failRun(
-        args.chatId,
-        runId,
+      return await this.refuseRun(
+        refusalContext,
+        { subagentId: subagent.id, name: subagent.name, provider: "claude", model: "" },
         "MANUAL_ONLY",
         `Subagent ${subagent.name} is manual-trigger; the user must @-mention it to delegate`,
       )
     }
-    if (args.depth > this.maxDepth()) {
-      const runId = crypto.randomUUID()
-      await this.deps.store.appendSubagentEvent({
-        v: STORE_VERSION,
-        type: "subagent_run_started",
-        timestamp: this.now(),
-        chatId: args.chatId,
-        runId,
-        subagentId: subagent.id,
-        subagentName: subagent.name,
-        provider: subagent.provider,
-        model: subagent.model,
-        parentUserMessageId: args.parentUserMessageId,
-        parentRunId: args.parentRunId,
-        depth: args.depth,
-      })
-      return await this.failRun(
-        args.chatId,
-        runId,
-        "DEPTH_EXCEEDED",
-        `Chain depth ${args.depth} exceeds limit ${this.maxDepth()}`,
-      )
-    }
-    if (args.ancestorSubagentIds.includes(subagent.id)) {
-      const runId = crypto.randomUUID()
-      await this.deps.store.appendSubagentEvent({
-        v: STORE_VERSION,
-        type: "subagent_run_started",
-        timestamp: this.now(),
-        chatId: args.chatId,
-        runId,
-        subagentId: subagent.id,
-        subagentName: subagent.name,
-        provider: subagent.provider,
-        model: subagent.model,
-        parentUserMessageId: args.parentUserMessageId,
-        parentRunId: args.parentRunId,
-        depth: args.depth,
-      })
-      return await this.failRun(
-        args.chatId,
-        runId,
-        "LOOP_DETECTED",
-        `Subagent ${subagent.name} already in ancestor chain`,
-      )
+    const admission = this.admissionError(subagent, args.depth, args.ancestorSubagentIds)
+    if (admission) {
+      return await this.refuseRun(refusalContext, subagentIdentity(subagent), admission.code, admission.message)
     }
     if (args.keepAlive) {
       const liveForChat = [...this.liveSessions.values()].filter((s) => s.chatId === args.chatId).length
       if (liveForChat >= this.maxLive()) {
-        const runId = crypto.randomUUID()
-        return await this.failRun(
-          args.chatId,
-          runId,
+        return await this.refuseRun(
+          refusalContext,
+          subagentIdentity(subagent),
           "CAP_EXCEEDED",
           `Live session cap of ${this.maxLive()} reached for chat ${args.chatId}`,
         )
@@ -663,23 +753,15 @@ export class SubagentOrchestrator {
       this.runStateByRunId.get(args.parentRunId)?.childRunIds.add(runId)
     }
 
+    let releaseSlot: () => void
     try {
-      await this.acquire(args.chatId, runId)
+      releaseSlot = await this.acquireSlot(args.chatId, runId)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      const code: SubagentErrorCode = msg === "USER_CANCELLED" ? "USER_CANCELLED" : "PROVIDER_ERROR"
-      const message = msg === "USER_CANCELLED"
-        ? "Cancelled before run started"
-        : "Chat cancelled before run started"
+      const reason = err instanceof RunStopped ? err.reason : "chat_cancelled"
+      const { code, message } = stopReasonToFailure(reason, { started: false, timeoutMs: this.timeoutMs(), maxTurns: null })
       const outcome = await this.failRun(args.chatId, runId, code, message)
       this.cleanupRunState(runId)
       return outcome
-    }
-    let released = false
-    const releaseSlot = () => {
-      if (released) return
-      released = true
-      this.release()
     }
 
     if (this.cancelledChats.has(args.chatId)) {
@@ -692,7 +774,7 @@ export class SubagentOrchestrator {
     try {
       let primer: string | null
       if (args.subagent.contextScope === "full-transcript") {
-        primer = buildHistoryPrimer(this.deps.store.getRecentRawEntries(args.chatId, SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT), args.subagent.provider, "")
+        primer = buildHistoryPrimer(this.deps.store.getRecentRawEntries(args.chatId, SUBAGENT_HISTORY_PRIMER_TAIL_LIMIT), "")
       } else {
         const reply = extractPreviousAssistantReply(this.deps.store.getRecentRawEntries(args.chatId, 100))
         primer = reply == null ? null : `Previous assistant reply:\n${reply}`
@@ -729,77 +811,36 @@ export class SubagentOrchestrator {
       let finalText = ""
       let usage: ProviderUsage | undefined
       let liveHandle: LiveTurnSource | undefined
-      let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
-      const CHUNK_PROGRESS_THROTTLE_MS = 100
 
-      const onChunk = (chunk: string) => {
-        if (!chunk) return
-        runState.timeout?.reset()
-        this.deps.store
-          .appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_message_delta",
-            timestamp: this.now(),
-            chatId: args.chatId,
-            runId,
-            content: chunk,
-          })
-          .catch((err) => {
-            log.warn(`${LOG_PREFIX} subagent delta append failed`, { chatId: args.chatId, runId, err })
-          })
-        if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
-        chunkProgressTimer = setTimeout(() => {
-          chunkProgressTimer = null
-          this.deps.onRunProgress?.(args.chatId, runId)
-        }, CHUNK_PROGRESS_THROTTLE_MS)
-      }
       const hostMaxTurns = runStart.maxTurns !== undefined && runStart.maxTurns > 0 && !runStart.nativeMaxTurns
         ? runStart.maxTurns
         : null
       let toolCallCount = 0
       const maxTurnsRejection = createDeferred<never>()
 
-      const externalOnEntry = args.onEntry
-      const onEntry = (entry: TranscriptEntry) => {
-        runState.timeout?.reset()
-        if (hostMaxTurns !== null && entry.kind === "tool_call") {
-          toolCallCount += 1
-          if (toolCallCount > hostMaxTurns) {
-            maxTurnsRejection.reject(new Error("MAX_TURNS"))
-            runState.abortController.abort()
+      const sink = this.createRunSink(args.chatId, runId, {
+        onActivity: () => runState.timeout?.reset(),
+        beforeEntry: (entry) => {
+          if (hostMaxTurns !== null && entry.kind === "tool_call") {
+            toolCallCount += 1
+            if (toolCallCount > hostMaxTurns) {
+              maxTurnsRejection.reject(new RunStopped("max_turns"))
+              runState.abortController.abort()
+            }
           }
-        }
-        this.deps.store
-          .appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_entry_appended",
-            timestamp: this.now(),
-            chatId: args.chatId,
-            runId,
-            entry,
-          })
-          .catch((err) => {
-            log.warn(`${LOG_PREFIX} subagent entry append failed`, { chatId: args.chatId, runId, err })
-          })
-        this.deps.onRunProgress?.(args.chatId, runId)
-        if (externalOnEntry) {
-          try {
-            externalOnEntry(entry)
-          } catch (err) {
-            log.warn(`${LOG_PREFIX} external onEntry threw`, { chatId: args.chatId, runId, err })
-          }
-        }
-      }
+        },
+        afterEntry: args.onEntry,
+      })
       const timeoutRejection = createDeferred<never>()
       const pausable = new PausableTimeout(this.timeoutMs(), () => {
-        timeoutRejection.reject(new Error("TIMEOUT"))
+        timeoutRejection.reject(new RunStopped("timeout"))
         runState.abortController.abort()
       })
       runState.timeout = pausable
       pausable.start()
       try {
         const abortRejection = createDeferred<never>()
-        const abortListener = () => abortRejection.reject(new Error("USER_CANCELLED"))
+        const abortListener = () => abortRejection.reject(new RunStopped("user_cancelled"))
         runState.abortController.signal.addEventListener("abort", abortListener, { once: true })
         let result: { text: string; usage?: ProviderUsage; live?: LiveTurnSource }
         try {
@@ -807,7 +848,7 @@ export class SubagentOrchestrator {
             abortListener()
           }
           result = await Promise.race([
-            runStart.start(onChunk, onEntry, { keepAlive: args.keepAlive }),
+            runStart.start(sink.onChunk, sink.onEntry, { keepAlive: args.keepAlive }),
             timeoutRejection.promise,
             maxTurnsRejection.promise,
             abortRejection.promise,
@@ -818,27 +859,18 @@ export class SubagentOrchestrator {
         finalText = result.text
         usage = result.usage
         liveHandle = result.live
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        let outcome: DelegationOutcome
-        if (message === "TIMEOUT") {
-          outcome = await this.failRun(args.chatId, runId, "TIMEOUT", `Run stalled (no activity for ${this.timeoutMs()}ms)`)
-        } else if (message === "MAX_TURNS") {
-          outcome = await this.failRun(args.chatId, runId, "MAX_TURNS", `Run exceeded maxTurns (${hostMaxTurns} tool calls)`)
-        } else if (message === "USER_CANCELLED" || runState.cancelled) {
-          outcome = await this.failRun(args.chatId, runId, "USER_CANCELLED", "Cancelled by user")
-        } else {
-          outcome = await this.failRun(args.chatId, runId, "PROVIDER_ERROR", message)
+      } catch (thrown) {
+        const error = toError(thrown)
+        const reason = stopReasonOf(error, runState.cancelled)
+        if (reason === null) {
+          return await this.failRun(args.chatId, runId, "PROVIDER_ERROR", error.message)
         }
-        return outcome
+        const { code, message } = stopReasonToFailure(reason, { started: true, timeoutMs: this.timeoutMs(), maxTurns: hostMaxTurns })
+        return await this.failRun(args.chatId, runId, code, message)
       } finally {
         pausable.clear()
         runState.timeout = null
-        if (chunkProgressTimer !== null) {
-          clearTimeout(chunkProgressTimer)
-          chunkProgressTimer = null
-          this.deps.onRunProgress?.(args.chatId, runId)
-        }
+        sink.flush()
       }
 
       if (runState.cancelled) {
@@ -869,42 +901,23 @@ export class SubagentOrchestrator {
         const chainSubagent = this.deps.appSettings.getSnapshot().subagents.find((s) => s.id === mention.subagentId)
         if (!chainSubagent) continue
         const childDepth = args.depth + 1
-        if (childDepth > this.maxDepth()) {
-          const childRunId = crypto.randomUUID()
-          await this.deps.store.appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_run_started",
-            timestamp: this.now(),
-            chatId: args.chatId,
-            runId: childRunId,
-            subagentId: chainSubagent.id,
-            subagentName: chainSubagent.name,
-            provider: chainSubagent.provider,
-            model: chainSubagent.model,
-            parentUserMessageId: args.parentUserMessageId,
-            parentRunId: runId,
-            depth: childDepth,
-          })
-          await this.failRun(args.chatId, childRunId, "DEPTH_EXCEEDED", `Chain depth ${childDepth} exceeds limit ${this.maxDepth()}`)
-          continue
-        }
-        if ([...args.ancestorSubagentIds, args.subagent.id].includes(chainSubagent.id)) {
-          const childRunId = crypto.randomUUID()
-          await this.deps.store.appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_run_started",
-            timestamp: this.now(),
-            chatId: args.chatId,
-            runId: childRunId,
-            subagentId: chainSubagent.id,
-            subagentName: chainSubagent.name,
-            provider: chainSubagent.provider,
-            model: chainSubagent.model,
-            parentUserMessageId: args.parentUserMessageId,
-            parentRunId: runId,
-            depth: childDepth,
-          })
-          await this.failRun(args.chatId, childRunId, "LOOP_DETECTED", `Subagent ${chainSubagent.name} already in ancestor chain`)
+        const admissionFailure = this.admissionError(
+          chainSubagent,
+          childDepth,
+          [...args.ancestorSubagentIds, args.subagent.id],
+        )
+        if (admissionFailure) {
+          await this.refuseRun(
+            {
+              chatId: args.chatId,
+              parentUserMessageId: args.parentUserMessageId,
+              parentRunId: runId,
+              depth: childDepth,
+            },
+            subagentIdentity(chainSubagent),
+            admissionFailure.code,
+            admissionFailure.message,
+          )
           continue
         }
         await this.spawnRun({
@@ -952,64 +965,16 @@ export class SubagentOrchestrator {
     }
     if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null }
 
-    await this.acquire(session.chatId, runId)
-    let released = false
-    const releaseSlot = () => {
-      if (released) return
-      released = true
-      this.release()
-    }
+    const releaseSlot = await this.acquireSlot(session.chatId, runId)
     try {
       const { chatId } = session
-      let chunkProgressTimer: ReturnType<typeof setTimeout> | null = null
-      const CHUNK_PROGRESS_THROTTLE_MS = 100
-
-      const onChunk = (chunk: string) => {
-        if (!chunk) return
-        this.deps.store
-          .appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_message_delta",
-            timestamp: this.now(),
-            chatId,
-            runId,
-            content: chunk,
-          })
-          .catch((err) => {
-            log.warn(`${LOG_PREFIX} sendToLiveRun delta append failed`, { chatId, runId, err })
-          })
-        if (chunkProgressTimer !== null) clearTimeout(chunkProgressTimer)
-        chunkProgressTimer = setTimeout(() => {
-          chunkProgressTimer = null
-          this.deps.onRunProgress?.(chatId, runId)
-        }, CHUNK_PROGRESS_THROTTLE_MS)
-      }
-
-      const onEntry = (entry: TranscriptEntry) => {
-        this.deps.store
-          .appendSubagentEvent({
-            v: STORE_VERSION,
-            type: "subagent_entry_appended",
-            timestamp: this.now(),
-            chatId,
-            runId,
-            entry,
-          })
-          .catch((err) => {
-            log.warn(`${LOG_PREFIX} sendToLiveRun entry append failed`, { chatId, runId, err })
-          })
-        this.deps.onRunProgress?.(chatId, runId)
-      }
+      const sink = this.createRunSink(chatId, runId)
 
       let turn: { text: string; usage?: ProviderUsage }
       try {
-        turn = await session.live.runTurn(prompt, onChunk, onEntry)
+        turn = await session.live.runTurn(prompt, sink.onChunk, sink.onEntry)
       } finally {
-        if (chunkProgressTimer !== null) {
-          clearTimeout(chunkProgressTimer)
-          chunkProgressTimer = null
-          this.deps.onRunProgress?.(session.chatId, runId)
-        }
+        sink.flush()
       }
 
       session.lastActivity = this.now()

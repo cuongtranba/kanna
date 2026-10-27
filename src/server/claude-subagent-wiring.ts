@@ -91,10 +91,15 @@ export interface BuildSubagentProviderRunForChatArgs {
 }
 
 
+export interface SubagentSessionScope {
+  delegationContext: KannaMcpDelegationContext
+  beaconToolsAllowed: boolean
+}
+
 export function buildClaudeSubagentStarter(
   deps: SubagentWiringDeps,
-  beaconToolsAllowed = false,
-): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
+  scope: SubagentSessionScope,
+): BuildSubagentProviderRunArgs["startClaudeSession"] {
   return async (a) => {
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
     const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
@@ -102,10 +107,16 @@ export function buildClaudeSubagentStarter(
       ...a,
       customMcpServers: enabledMcpServers,
       oauthBearers,
-      beaconRegistry: deps.beaconRegistry,
-      getBeacons: deps.getBeacons,
-      beaconToolsAllowed,
-      toolCallback: beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,
+      toolCallback: scope.beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,
+      kannaMcp: {
+        subagentOrchestrator: deps.subagentOrchestrator,
+        delegationContext: scope.delegationContext,
+        getArmedLoop: deps.getArmedLoop,
+        chatTaskStore: deps.chatTaskStore,
+        beaconRegistry: deps.beaconRegistry,
+        getBeacons: deps.getBeacons,
+        beaconToolsAllowed: scope.beaconToolsAllowed,
+      },
     })
   }
 }
@@ -191,11 +202,10 @@ export function buildSubagentProviderRunForChat(
     },
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
-    startClaudeSession: buildClaudeSubagentStarter(deps, args.subagent.allowBeaconTools === true),
-    subagentOrchestrator: deps.subagentOrchestrator,
-    delegationContext,
-    getArmedLoop: deps.getArmedLoop,
-    chatTaskStore: deps.chatTaskStore,
+    startClaudeSession: buildClaudeSubagentStarter(deps, {
+      delegationContext,
+      beaconToolsAllowed: args.subagent.allowBeaconTools === true,
+    }),
     codexManager: deps.codexManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,

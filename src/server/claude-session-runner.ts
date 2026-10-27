@@ -11,7 +11,7 @@ import {
   backgroundTaskLaunchesFromToolResult,
   toolCallDescription,
 } from "./claude-prompt-helpers"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import { isProactiveCompactTurn } from "./claude-session-state"

@@ -1,14 +1,13 @@
 
 import type { TranscriptEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
-import type { PendingToolSlots } from "./pending-tool-slot"
+import { discardedToolResult, type PendingToolSlots } from "./pending-tool-slot"
 import {
   interruptWithGrace,
   type HarnessTurn,
 } from "./harness-types"
 import { logClaudeSteer } from "./claude-steer-log"
-import { discardedToolResult } from "./claude-sdk-queue"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 
 interface DrainingStreamsMap {
