@@ -1726,12 +1726,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
                             contactSubject={appSettings?.push.contactSubject ?? ""}
                             contactSubjectDraft={pushContactSubjectDraft}
                             onContactSubjectDraftChange={setPushContactSubjectDraft}
-                            onContactSubjectSave={async (value) => {
-                              await state.socket.command({
-                                type: "settings.writeAppSettingsPatch",
-                                patch: { push: { contactSubject: value } },
-                              })
-                            }}
+                            onContactSubjectSave={(value) => state.handleWriteAppSettings({ push: { contactSubject: value } })}
                             onEnable={handleEnablePush}
                             onDisable={handleDisablePush}
                             onTest={async () => {

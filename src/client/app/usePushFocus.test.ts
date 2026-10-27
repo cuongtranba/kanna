@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { ClientCommand } from "../../shared/protocol"
 import { applyPushFocus, resolveFocusedChatId } from "./usePushFocus"
 
 describe("resolveFocusedChatId", () => {
@@ -24,7 +25,11 @@ describe("resolveFocusedChatId", () => {
 describe("applyPushFocus", () => {
   test("forwards the resolved focused chat id to the socket", () => {
     const calls: Array<string | null> = []
-    const socket = { setFocusedChat: (id: string | null) => calls.push(id) }
+    const socket = {
+      notify: (command: ClientCommand) => {
+        if (command.type === "push.setFocusedChat") calls.push(command.chatId)
+      },
+    }
 
     applyPushFocus({ socket, activeChatId: "chat-1", visibilityState: "visible" })
     applyPushFocus({ socket, activeChatId: "chat-1", visibilityState: "hidden" })

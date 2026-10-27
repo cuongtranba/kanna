@@ -3,7 +3,7 @@ import { Bell, BellOff, Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, Pane
 import { ShareButton } from "../share/ShareButton"
 import { SharePopover } from "../share/SharePopover"
 import type { ShareSummary } from "../../../shared/session-share/types"
-import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
+import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
 import type { AgentProvider, ChatStateTimings, KannaStatus, ResolvedStackBinding } from "../../../shared/types"
 import { PeerWorktreeStrip } from "./PeerWorktreeStrip"
 import { Button } from "../ui/button"
@@ -144,11 +144,6 @@ interface Props {
   rightSidebarPending?: boolean
   onOpenExternal?: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
   openExternalPending?: boolean
-  editorPreset?: EditorPreset
-  editorCommandTemplate?: string
-  platform?: NodeJS.Platform
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   terminalShortcut?: string[]
   rightSidebarShortcut?: string[]
   branchName?: string
@@ -186,11 +181,6 @@ export function ChatNavbar({
   rightSidebarPending = false,
   onOpenExternal,
   openExternalPending = false,
-  editorPreset = "cursor",
-  editorCommandTemplate,
-  platform = "darwin",
-  finderShortcut,
-  editorShortcut,
   terminalShortcut,
   rightSidebarShortcut,
   branchName,
@@ -215,7 +205,6 @@ export function ChatNavbar({
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
   const sharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.sharePopoverOpen)
   const setSharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.setSharePopoverOpen)
-  const isMac = platform === "darwin"
 
   return (
     <CardHeader
@@ -349,11 +338,6 @@ export function ChatNavbar({
             {onOpenExternal ? (
               <div className="hidden py-0.5 md:block border border-border rounded-2xl">
                 <OpenExternalSelect
-                  isMac={isMac}
-                  editorPreset={editorPreset}
-                  editorCommandTemplate={editorCommandTemplate}
-                  finderShortcut={finderShortcut}
-                  editorShortcut={editorShortcut}
                   onOpenExternal={onOpenExternal}
                   pending={openExternalPending}
                 />

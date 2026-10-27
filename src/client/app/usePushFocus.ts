@@ -3,16 +3,12 @@ import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { KannaSocket } from "./socket"
 
-interface FocusSocket {
-  setFocusedChat(chatId: string | null): void
-}
-
 export interface UsePushFocusPorts {
   dom?: DomPort
 }
 
 interface UsePushFocusArgs {
-  socket: Pick<KannaSocket, "setFocusedChat">
+  socket: Pick<KannaSocket, "notify">
   activeChatId: string | null
   ports?: UsePushFocusPorts
 }
@@ -25,16 +21,17 @@ export function resolveFocusedChatId(args: {
 }
 
 export function applyPushFocus(args: {
-  socket: FocusSocket
+  socket: Pick<KannaSocket, "notify">
   activeChatId: string | null
   visibilityState: DocumentVisibilityState
 }): void {
-  args.socket.setFocusedChat(
-    resolveFocusedChatId({
+  args.socket.notify({
+    type: "push.setFocusedChat",
+    chatId: resolveFocusedChatId({
       activeChatId: args.activeChatId,
       visibilityState: args.visibilityState,
     }),
-  )
+  })
 }
 
 export function usePushFocus({ socket, activeChatId, ports }: UsePushFocusArgs): void {
@@ -58,7 +55,7 @@ export function usePushFocus({ socket, activeChatId, ports }: UsePushFocusArgs):
       cleanupVisibility()
       cleanupPageHide()
       cleanupPageShow()
-      socket.setFocusedChat(null)
+      socket.notify({ type: "push.setFocusedChat", chatId: null })
     }
   }, [socket, activeChatId, dom])
 }

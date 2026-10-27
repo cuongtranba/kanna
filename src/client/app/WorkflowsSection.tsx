@@ -103,7 +103,7 @@ function WorkflowRunRow(props: {
           <span className={cn("truncate text-sm text-foreground", (live || selected) && "font-medium")}>
             {label}
           </span>
-          <WorkflowStatusPill status={run.status} pulse />
+          <WorkflowStatusPill status={run.status} />
         </span>
         <span className="flex w-full items-center gap-3 text-xs text-muted-foreground">
           {run.agentCount != null ? (
@@ -259,7 +259,7 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
       <div className="flex flex-col gap-1.5">
         {title ? <h3 className="truncate text-base font-semibold text-foreground">{title}</h3> : null}
         <div className="flex flex-wrap items-center gap-3">
-          <WorkflowStatusPill status={run.status} pulse />
+          <WorkflowStatusPill status={run.status} />
           {run.durationMs != null ? (
             <span className="text-xs text-muted-foreground tabular-nums">
               {formatCompactDuration(run.durationMs)}

@@ -3,6 +3,7 @@ import { KannaSocket, type KannaSocketPorts } from "./socket"
 import { domAdapter } from "../adapters/dom.adapter"
 import type { DomPort } from "../ports/domPort"
 import { HTTP_ROUTES } from "../../shared/http-routes"
+import { sendToStartingProfiler } from "./sendToStartingProfiler"
 
 
 const KannaSocketContext = createContext<KannaSocket | null>(null)
@@ -24,7 +25,7 @@ export function KannaSocketProvider({ children, socket, ports }: KannaSocketProv
   const dom = ports?.dom ?? domAdapter
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const owned = useMemo(() => (socket ? null : new KannaSocket(wsUrl(dom), ports ?? {})), [])
+  const owned = useMemo(() => (socket ? null : new KannaSocket(wsUrl(dom), { onFrame: sendToStartingProfiler.observeFrame, ...ports })), [])
   const instance = socket ?? owned
 
   useEffect(() => {

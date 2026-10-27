@@ -1,7 +1,6 @@
 import { useEffect, type RefObject } from "react"
 import {
   hasActiveTextSelection,
-  RESTORE_CHAT_INPUT_FOCUS_EVENT,
   resolveChatFocusAction,
 } from "./chatFocusPolicy"
 import type { DomPort } from "../ports/domPort"
@@ -71,13 +70,6 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel, p
       })
     }
 
-    const handleRestoreFocus = () => {
-      pointerStartTarget = null
-      const fallback = fallbackRef.current
-      if (!fallback || fallback.disabled) return
-      fallback.focus({ preventScroll: true })
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
 
@@ -100,14 +92,12 @@ export function useStickyChatFocus({ rootRef, fallbackRef, enabled, canCancel, p
     const cleanupPointerDown = dom.addWindowCaptureListener("pointerdown", handlePointerDown)
     const cleanupPointerUp = dom.addWindowCaptureListener("pointerup", handlePointerUp)
     const cleanupKeyDown = dom.addWindowCaptureListener("keydown", handleKeyDown)
-    const cleanupRestoreFocus = dom.addWindowCustomListener(RESTORE_CHAT_INPUT_FOCUS_EVENT, handleRestoreFocus)
 
     return () => {
       timer.cancelAnimationFrame(rafId)
       cleanupPointerDown()
       cleanupPointerUp()
       cleanupKeyDown()
-      cleanupRestoreFocus()
     }
   }, [canCancel, dom, enabled, fallbackRef, rootRef, timer])
 }

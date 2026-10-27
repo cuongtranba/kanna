@@ -4,31 +4,26 @@ import type {
   ServerEnvelope,
   ServerSnapshot,
   SubscriptionTopic,
-  TerminalEvent,
-  TerminalSnapshot,
   WsEvent,
 } from "../../shared/protocol"
 import { LOG_PREFIX } from "../../shared/branding"
 import { log } from "../../shared/log"
 import { generateUUID } from "../lib/utils"
 import { runDetached } from "../lib/runDetached"
-import { getStoredPushDeviceId } from "./pushClient"
+import type { FrameReceipt } from "./sendToStartingProfiler"
 import type { CommandPort, CommandReply } from "../ports/commandPort"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
-import type { StoragePort } from "../ports/storagePort"
 import type { WebSocketPort, WebSocketLike } from "../ports/webSocketPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
-import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.adapter"
 import { webSocketAdapter } from "../adapters/websocket.adapter"
 
 export interface KannaSocketPorts {
   dom?: DomPort
   timer?: TimerPort
-  localStorage?: StoragePort
-  sessionStorage?: StoragePort
   webSocket?: WebSocketPort
+  onFrame?: (frame: ServerEnvelope, receipt: FrameReceipt) => void
 }
 
 type SnapshotListener<T> = (value: T) => void
@@ -39,7 +34,8 @@ type StatusListener = (status: SocketStatus) => void
 const STALE_CONNECTION_MS = 25_000
 const HEARTBEAT_INTERVAL_MS = 15_000
 const PING_TIMEOUT_MS = 4_000
-const SEND_TO_STARTING_PROFILE_STORAGE_KEY = "kanna:profile-send-to-starting"
+const INITIAL_RECONNECT_DELAY_MS = 750
+const MAX_RECONNECT_DELAY_MS = 5_000
 
 type SnapshotData = ServerSnapshot["data"]
 
@@ -56,7 +52,7 @@ export class KannaSocket implements CommandPort {
   private ws: WebSocketLike | null = null
   private started = false
   private reconnectTimer: number | null = null
-  private reconnectDelayMs = 750
+  private reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS
   private readonly subscriptions = new Map<string, InternalSubscriptionEntry>()
   private readonly pending = new Map<string, { resolve: (value: AckResult) => void; reject: (reason: Error) => void }>()
   private readonly outboundQueue: ClientEnvelope[] = []
@@ -67,13 +63,11 @@ export class KannaSocket implements CommandPort {
   private lastOpenAt = 0
   private lastMessageAt = 0
   private reconnectImmediatelyOnClose = false
-  private serviceWorkerCleanup: (() => void) | null = null
 
   private readonly dom: DomPort
   private readonly timer: TimerPort
-  private readonly localStore: StoragePort
-  private readonly sessStore: StoragePort
   private readonly wsBridge: WebSocketPort
+  private readonly onFrame: KannaSocketPorts["onFrame"]
 
   private readonly handleWindowFocus = () => {
     runDetached("socket.ensureHealthyConnection", this.ensureHealthyConnection())
@@ -94,9 +88,8 @@ export class KannaSocket implements CommandPort {
     this.url = url
     this.dom = ports.dom ?? domAdapter
     this.timer = ports.timer ?? timerAdapter
-    this.localStore = ports.localStorage ?? localStorageAdapter
-    this.sessStore = ports.sessionStorage ?? sessionStorageAdapter
     this.wsBridge = ports.webSocket ?? webSocketAdapter
+    this.onFrame = ports.onFrame
   }
 
   start() {
@@ -104,13 +97,6 @@ export class KannaSocket implements CommandPort {
       return
     }
     this.started = true
-
-    this.serviceWorkerCleanup = this.dom.addServiceWorkerMessageListener((event: MessageEvent) => {
-      const data: { type?: string; url?: string } = event.data
-      if (data?.type === "kanna.navigate" && typeof data.url === "string") {
-        this.dom.setHref(data.url)
-      }
-    })
 
     this.dom.addWindowListener("focus", this.handleWindowFocus)
     this.dom.addWindowListener("online", this.handleOnline)
@@ -126,10 +112,6 @@ export class KannaSocket implements CommandPort {
     }
     this.stopHeartbeat()
     this.clearPingState()
-    if (this.serviceWorkerCleanup) {
-      this.serviceWorkerCleanup()
-      this.serviceWorkerCleanup = null
-    }
     this.ws?.close()
     this.ws = null
     for (const pending of this.pending.values()) {
@@ -165,28 +147,6 @@ export class KannaSocket implements CommandPort {
     }
   }
 
-  subscribeTerminal(
-    terminalId: string,
-    handlers: {
-      onSnapshot: SnapshotListener<TerminalSnapshot | null>
-      onEvent?: EventListener<TerminalEvent>
-    }
-  ) {
-    const id = generateUUID()
-    const topic: SubscriptionTopic = { type: "terminal", terminalId }
-    const entry: InternalSubscriptionEntry = {
-      topic,
-      listener: handlers.onSnapshot,
-      eventListener: handlers.onEvent,
-    }
-    this.subscriptions.set(id, entry)
-    this.enqueue({ v: 1, type: "subscribe", id, topic })
-    return () => {
-      this.subscriptions.delete(id)
-      this.enqueue({ v: 1, type: "unsubscribe", id })
-    }
-  }
-
   command<C extends ClientCommand>(command: C): Promise<CommandReply<C>>
   command(command: ClientCommand): Promise<AckResult> {
     const id = generateUUID()
@@ -197,14 +157,8 @@ export class KannaSocket implements CommandPort {
     })
   }
 
-  setFocusedChat(chatId: string | null) {
-    const id = generateUUID()
-    this.enqueue({
-      v: 1,
-      type: "command",
-      id,
-      command: { type: "push.setFocusedChat", chatId },
-    })
+  notify(command: ClientCommand) {
+    this.enqueue({ v: 1, type: "command", id: generateUUID(), command })
   }
 
   ensureHealthyConnection() {
@@ -225,15 +179,6 @@ export class KannaSocket implements CommandPort {
     return this.sendPing()
   }
 
-  private isSendToStartingProfilingEnabled() {
-    try {
-      return this.sessStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
-        || this.localStore.getItem(SEND_TO_STARTING_PROFILE_STORAGE_KEY) === "1"
-    } catch {
-      return false
-    }
-  }
-
   private connect() {
     if (!this.started) {
       return
@@ -242,7 +187,7 @@ export class KannaSocket implements CommandPort {
     this.ws = this.wsBridge.create(this.url)
 
     this.ws.addEventListener("open", () => {
-      this.reconnectDelayMs = 750
+      this.reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS
       this.reconnectImmediatelyOnClose = false
       this.lastOpenAt = Date.now()
       this.lastMessageAt = this.lastOpenAt
@@ -256,15 +201,6 @@ export class KannaSocket implements CommandPort {
         if (envelope) {
           this.sendNow(envelope)
         }
-      }
-      const pushDeviceId = getStoredPushDeviceId()
-      if (pushDeviceId) {
-        this.sendNow({
-          v: 1,
-          type: "command",
-          id: generateUUID(),
-          command: { type: "push.identifyDevice", pushDeviceId },
-        })
       }
     })
 
@@ -280,25 +216,7 @@ export class KannaSocket implements CommandPort {
         return
       }
 
-      if (this.isSendToStartingProfilingEnabled() && payload.type === "snapshot" && payload.snapshot.type === "chat" && payload.snapshot.data?.runtime.status === "starting") {
-        log.debug("[kanna/send->starting][client-ws]", {
-          stage: "socket_message_received",
-          receivedAt,
-          payloadBytes: rawText.length,
-          chatId: payload.snapshot.data.runtime.chatId,
-          status: payload.snapshot.data.runtime.status,
-          messageCount: payload.snapshot.data.messages.length,
-        })
-      }
-
-      if (this.isSendToStartingProfilingEnabled() && payload.type === "ack") {
-        log.debug("[kanna/send->starting][client-ws]", {
-          stage: "socket_ack_received",
-          receivedAt,
-          payloadBytes: rawText.length,
-          commandId: payload.id,
-        })
-      }
+      this.onFrame?.(payload, { receivedAt, bytes: rawText.length })
 
       if (payload.type === "snapshot") {
         const subscription = this.subscriptions.get(payload.id)
@@ -358,7 +276,7 @@ export class KannaSocket implements CommandPort {
     this.reconnectTimer = this.timer.setTimeout(() => {
       this.reconnectTimer = null
       this.connect()
-      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 5_000)
+      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS)
     }, this.reconnectDelayMs)
   }
 

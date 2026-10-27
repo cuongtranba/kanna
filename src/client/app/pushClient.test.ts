@@ -1,13 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import {
+  bindNotificationNavigation,
+  bindPushDeviceIdentity,
   detectPushSupport,
+  setStoredPushDeviceId,
   subscribePush,
   unsubscribePush,
   urlBase64ToUint8Array,
   type PushSubscribeServerCall,
 } from "./pushClient"
 import { makeFakePushPort } from "../adapters/testing/makeFakePushPort"
-import { makeFakeNotificationPort } from "../adapters/testing/makeFakePorts"
+import { makeFakeNotificationPort, makeFakeStoragePort } from "../adapters/testing/makeFakePorts"
+import type { ClientCommand } from "../../shared/protocol"
+import type { SocketStatus } from "./socket"
 import type { ServiceWorkerRegistrationLike } from "../ports/pushPort"
 
 const VAPID_KEY = "BPg4MhSNQjK4FjoUf4f9Ye_K2gM4ahK_5BWj9rYjZ8sHbqJj9oKkrFHBwZJh1XJF8AaXh"
@@ -215,5 +220,85 @@ describe("unsubscribePush", () => {
 
     expect(unsubscribed).toBe(true)
     expect(told!).toBe("device-1")
+  })
+})
+
+describe("bindPushDeviceIdentity", () => {
+  function makeStatusSocket() {
+    const sent: ClientCommand[] = []
+    let emit: (status: SocketStatus) => void = () => {}
+    return {
+      sent,
+      emit: (status: SocketStatus) => emit(status),
+      socket: {
+        notify: (command: ClientCommand) => { sent.push(command) },
+        onStatus: (listener: (status: SocketStatus) => void) => {
+          emit = listener
+          return () => { emit = () => {} }
+        },
+      },
+    }
+  }
+
+  test("identifies the stored device on every connection", () => {
+    const storage = makeFakeStoragePort()
+    setStoredPushDeviceId("device-1", { storage })
+    const harness = makeStatusSocket()
+
+    bindPushDeviceIdentity(harness.socket, { storage })
+    harness.emit("disconnected")
+    harness.emit("connected")
+    harness.emit("connected")
+
+    expect(harness.sent).toEqual([
+      { type: "push.identifyDevice", pushDeviceId: "device-1" },
+      { type: "push.identifyDevice", pushDeviceId: "device-1" },
+    ])
+  })
+
+  test("sends nothing when no device is stored", () => {
+    const harness = makeStatusSocket()
+
+    bindPushDeviceIdentity(harness.socket, { storage: makeFakeStoragePort() })
+    harness.emit("connected")
+
+    expect(harness.sent).toEqual([])
+  })
+})
+
+describe("bindNotificationNavigation", () => {
+  function makeNavigationDom() {
+    const hrefs: string[] = []
+    let deliver: (event: MessageEvent) => void = () => {}
+    return {
+      hrefs,
+      deliver: (data: object) => deliver(new MessageEvent("message", { data })),
+      dom: {
+        setHref: (href: string) => { hrefs.push(href) },
+        addServiceWorkerMessageListener: (handler: (event: MessageEvent) => void) => {
+          deliver = handler
+          return () => {}
+        },
+      },
+    }
+  }
+
+  test("navigates when the service worker asks the page to open a url", () => {
+    const harness = makeNavigationDom()
+    bindNotificationNavigation(harness.dom)
+
+    harness.deliver({ type: "kanna.navigate", url: "/chat/abc" })
+
+    expect(harness.hrefs).toEqual(["/chat/abc"])
+  })
+
+  test("ignores unrelated service worker messages", () => {
+    const harness = makeNavigationDom()
+    bindNotificationNavigation(harness.dom)
+
+    harness.deliver({ type: "other", url: "/chat/abc" })
+    harness.deliver({ type: "kanna.navigate" })
+
+    expect(harness.hrefs).toEqual([])
   })
 })

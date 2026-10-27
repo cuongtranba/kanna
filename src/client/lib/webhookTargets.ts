@@ -4,6 +4,7 @@ import { encodeInboundModelChoice } from "../../shared/inbound/handler"
 import type { WebhookConfig } from "../../shared/webhooks/types"
 import type { SearchableOption } from "../components/ui/searchable-select"
 import { fileNameOfPath } from "./pathUtils"
+import { allProjectGroups } from "../../shared/sidebar-data"
 
 export interface WebhookTargetOption {
   value: string
@@ -19,7 +20,7 @@ export interface WebhookTargets {
 export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
   const chats: WebhookTargetOption[] = []
   const projects: WebhookTargetOption[] = []
-  for (const group of [...sidebar.starredProjectGroups, ...sidebar.projectGroups]) {
+  for (const group of allProjectGroups(sidebar)) {
     const projectName = fileNameOfPath(group.localPath)
     projects.push({ value: group.groupKey, label: projectName, hint: group.localPath })
     for (const chat of group.chats) {

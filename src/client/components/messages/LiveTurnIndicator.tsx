@@ -75,7 +75,7 @@ function LiveThinking({ block }: { block: LiveThinkingBlock }) {
     <div data-testid="live-block-thinking" className="px-0.5 w-full max-w-[70ch]">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Brain className="h-3.5 w-3.5" />
-        <AnimatedShinyText className="ml-0 font-medium tracking-wider" shimmerWidth={44}>
+        <AnimatedShinyText className="ml-0 font-medium tracking-wider">
           Thinking…
         </AnimatedShinyText>
       </div>
@@ -95,7 +95,7 @@ function LiveToolUse({ block }: { block: LiveToolUseBlock }) {
         <Spinner className="size-4.5 text-muted-icon" />
         <LucideIconWrapper icon={getToolIcon(block.toolName)} className="size-4 shrink-0 text-muted-icon" />
         <MetaLabel className="shrink-0">
-          <AnimatedShinyText shimmerWidth={44}>{block.toolName}</AnimatedShinyText>
+          <AnimatedShinyText>{block.toolName}</AnimatedShinyText>
         </MetaLabel>
         {block.subject ? (
           <TruncatedText tooltip={block.subject} inline className="min-w-0 text-muted-foreground">

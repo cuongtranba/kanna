@@ -28,7 +28,7 @@ export function ProcessingMessage({ status }: ProcessingMessageProps) {
         ) : (
           <Loader2 className="size-4.5 animate-spin text-muted-icon" />
         )}
-        <AnimatedShinyText className="ml-[1px] text-sm" shimmerWidth={44}>
+        <AnimatedShinyText className="ml-[1px] text-sm">
           {label}
         </AnimatedShinyText>
       </MetaContent>

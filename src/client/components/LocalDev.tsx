@@ -23,6 +23,7 @@ import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip"
 import { useCopyFeedback } from "../stores/copyFeedbackStore"
 import { runDetached } from "../lib/runDetached"
+import type { ProjectRequest } from "../lib/projectRequest"
 import { runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { CREATE_PROJECT_KEY, openProjectKey } from "./chat-ui/sidebar/sidebarPendingActions"
 
@@ -35,7 +36,7 @@ interface LocalDevProps {
   newProjectOpen: boolean
   onNewProjectOpenChange: (open: boolean) => void
   onOpenProject: (localPath: string) => Promise<void>
-  onCreateProject: (project: { mode: "new" | "existing"; localPath: string; title: string }) => Promise<void>
+  onCreateProject: (project: ProjectRequest) => Promise<void>
 }
 
 function CopyButton({ text }: { text: string }) {

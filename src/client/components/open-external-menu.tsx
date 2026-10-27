@@ -4,6 +4,9 @@ import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
 import { isEditorPreset } from "../../shared/types"
 import { getDefaultEditorCommandTemplate } from "../stores/terminalPreferencesStore"
+import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../stores/appSettingsStore"
+import { useKannaStateStore } from "../stores/kannaStateStore"
+import { getResolvedKeybindings } from "../lib/keybindings"
 import { DefaultAppIcon, EDITOR_OPTIONS, EditorIcon, FinderIcon, FolderFallbackIcon, PreviewIcon, TerminalIcon } from "./editor-icons"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "./ui/tooltip"
 import { Button } from "./ui/button"
@@ -171,25 +174,25 @@ export interface OpenExternalSelectPorts {
 }
 
 function OpenExternalSelectInner({
-  isMac,
   editorPreset,
-  editorCommandTemplate,
-  finderShortcut,
-  editorShortcut,
   onOpenExternal,
   pending = false,
   ports,
 }: {
-  isMac: boolean
   editorPreset: EditorPreset
-  editorCommandTemplate?: string
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
   pending?: boolean
   ports?: OpenExternalSelectPorts
 }) {
   const storage = ports?.storage ?? localStorageAdapter
+  const editorCommandTemplate = useAppSettingsStore(selectEditorCommandTemplate)
+  const keybindings = useKannaStateStore((state) => state.keybindings)
+  const platform = useKannaStateStore((state) => state.localProjects?.machine.platform)
+  const isMac = (platform ?? "darwin") === "darwin"
+  const { openInFinder: finderShortcut, openInEditor: editorShortcut } = useMemo(
+    () => getResolvedKeybindings(keybindings).bindings,
+    [keybindings],
+  )
   const fallbackValue: OpenAppValue = `editor:${editorPreset}`
   const lastValue = OpenExternalSelectStore.useScopedStore((s) => s.lastValue)
   const setLastValue = OpenExternalSelectStore.useScopedStore((s) => s.setLastValue)
@@ -268,33 +271,20 @@ function OpenExternalSelectInner({
 }
 
 export function OpenExternalSelect({
-  isMac,
-  editorPreset,
-  editorCommandTemplate,
-  finderShortcut,
-  editorShortcut,
   onOpenExternal,
   pending,
   ports,
 }: {
-  isMac: boolean
-  editorPreset: EditorPreset
-  editorCommandTemplate?: string
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
   pending?: boolean
   ports?: OpenExternalSelectPorts
 }) {
+  const editorPreset = useAppSettingsStore(selectEditorPreset)
   const initialValue: OpenAppValue = `editor:${editorPreset}`
   return (
     <OpenExternalSelectStore.Provider init={{ initialValue }}>
       <OpenExternalSelectInner
-        isMac={isMac}
         editorPreset={editorPreset}
-        editorCommandTemplate={editorCommandTemplate}
-        finderShortcut={finderShortcut}
-        editorShortcut={editorShortcut}
         onOpenExternal={onOpenExternal}
         pending={pending}
         ports={ports}
