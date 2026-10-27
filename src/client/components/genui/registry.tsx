@@ -1,12 +1,14 @@
 import type { ComponentRenderer, ComponentRenderProps } from "@json-render/react"
-import type { GenUIComponentName } from "../../../shared/genui"
+import { GENUI_COMPONENTS, type GenUIComponentName } from "../../../shared/genui"
 import { FinancialChartElement } from "./components/financial-chart"
 import {
   CompareSelectorElement,
-  DimensionSelectorElement,
+  CurrencySelectorElement,
+  EntitySelectorElement,
   FinancialMetricElement,
   FinancialTableElement,
   PeriodSelectorElement,
+  statementTableElement,
 } from "./components/financial"
 import {
   BadgeElement,
@@ -50,13 +52,13 @@ export const GENUI_REGISTRY = {
   FinancialMetric: FinancialMetricElement,
   FinancialChart: FinancialChartElement,
   FinancialTable: FinancialTableElement,
-  IncomeStatement: FinancialTableElement,
-  BalanceSheet: FinancialTableElement,
-  CashFlowStatement: FinancialTableElement,
+  IncomeStatement: statementTableElement(GENUI_COMPONENTS.IncomeStatement.props, "Income statement"),
+  BalanceSheet: statementTableElement(GENUI_COMPONENTS.BalanceSheet.props, "Balance sheet"),
+  CashFlowStatement: statementTableElement(GENUI_COMPONENTS.CashFlowStatement.props, "Cash flow statement"),
   PeriodSelector: PeriodSelectorElement,
   CompareSelector: CompareSelectorElement,
-  CurrencySelector: DimensionSelectorElement,
-  EntitySelector: DimensionSelectorElement,
+  CurrencySelector: CurrencySelectorElement,
+  EntitySelector: EntitySelectorElement,
 } satisfies Record<GenUIComponentName, ComponentRenderer>
 
 export function UnknownElement({ element }: ComponentRenderProps) {

@@ -8,24 +8,19 @@ import {
   metricLabel,
   valueFormatOf,
   type DatasetDecl,
-  type DatasetQuery,
   type QueryResult,
   type QueryRow,
   type ValueFormat,
 } from "../../../../shared/genui"
-import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
-import { isBoolean, isStringList, useElementUiState } from "../useElementUiState"
-import { sentimentTone, toneInkClass } from "./primitives"
+import { isStringList, useElementUiState } from "../useElementUiState"
+import { sentimentTone, TABLE_HEAD_CLASS, toneInkClass, useExpandableRows } from "./primitives"
 
 type Element = ComponentRenderProps["element"]
 
-const PAGE_SIZE = 50
-
 export interface TableBodyConfig {
   variant: "detail" | "statement" | "comparison"
-  metric?: string
-  metrics?: string[]
+  metrics: string[]
   rows?: string
   groupRows?: string
   totals?: { label: string; groups: string[] }[]
@@ -34,41 +29,30 @@ export interface TableBodyConfig {
 interface Props {
   element: Element
   config: TableBodyConfig
-  query: DatasetQuery
   result: QueryResult
   decl: DatasetDecl
 }
 
-const HEAD = "px-3 py-2 text-xs font-medium text-muted-foreground"
 const CELL = "px-3 py-1.5 tabular-nums"
 
 function rowLabel(row: QueryRow, dimension: string | undefined): string {
   return dimension ? row.dimensions[dimension] ?? "" : "Total"
 }
 
-function ShowMore({ total, onShow }: { total: number; onShow: () => void }) {
-  return (
-    <div className="border-t border-border px-3 py-2">
-      <Button size="sm" variant="ghost" onClick={onShow}>Show all {total} rows</Button>
-    </div>
-  )
-}
-
-function DetailTable({ element, config, result, decl }: Omit<Props, "query">) {
-  const [expanded, setExpanded] = useElementUiState(element, "expanded", false, isBoolean)
-  const metrics = config.metrics ?? (config.metric ? [config.metric] : [])
-  const rows = expanded ? result.rows : result.rows.slice(0, PAGE_SIZE)
+function DetailTable({ element, config, result, decl }: Props) {
+  const { metrics } = config
+  const { visibleRows, showAll } = useExpandableRows(element, result.rows)
   return (
     <div className="max-h-[28rem] overflow-auto rounded-md border border-border">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-border">
-            <th scope="col" className={cn(HEAD, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
-            {metrics.map((metric) => <th key={metric} scope="col" className={cn(HEAD, "text-right")}>{metricLabel(metric, decl.metrics[metric])}</th>)}
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
+            {metrics.map((metric) => <th key={metric} scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>{metricLabel(metric, decl.metrics[metric])}</th>)}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <tr key={row.key}>
               <th scope="row" className="sticky left-0 bg-card px-3 py-1.5 text-left font-normal text-foreground">{rowLabel(row, config.rows)}</th>
               {metrics.map((metric) => (
@@ -78,7 +62,7 @@ function DetailTable({ element, config, result, decl }: Omit<Props, "query">) {
           ))}
         </tbody>
       </table>
-      {!expanded && result.rows.length > PAGE_SIZE ? <ShowMore total={result.rows.length} onShow={() => setExpanded(true)} /> : null}
+      {showAll}
     </div>
   )
 }
@@ -98,32 +82,31 @@ function VarianceCells({ value, compare, format, direction, accounting }: { valu
 function comparisonHeaders(label: string) {
   return (
     <>
-      <th scope="col" className={cn(HEAD, "text-right")}>{label}</th>
-      <th scope="col" className={cn(HEAD, "text-right")}>Change</th>
-      <th scope="col" className={cn(HEAD, "text-right")}>Change %</th>
+      <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>{label}</th>
+      <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>Change</th>
+      <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>Change %</th>
     </>
   )
 }
 
-function ComparisonTable({ element, config, result, decl }: Omit<Props, "query">) {
-  const [expanded, setExpanded] = useElementUiState(element, "expanded", false, isBoolean)
-  const metric = config.metric ?? config.metrics?.[0] ?? ""
+function ComparisonTable({ element, config, result, decl }: Props) {
+  const metric = config.metrics[0] ?? ""
   const def = decl.metrics[metric]
   const format = valueFormatOf(def)
-  const rows = expanded ? result.rows : result.rows.slice(0, PAGE_SIZE)
+  const { visibleRows, showAll } = useExpandableRows(element, result.rows)
   const baseline = result.comparison?.label
   return (
     <div className="max-h-[28rem] overflow-auto rounded-md border border-border">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-border">
-            <th scope="col" className={cn(HEAD, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
-            <th scope="col" className={cn(HEAD, "text-right")}>{metricLabel(metric, def)}</th>
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>{metricLabel(metric, def)}</th>
             {baseline ? comparisonHeaders(baseline) : null}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <tr key={row.key}>
               <th scope="row" className="sticky left-0 bg-card px-3 py-1.5 text-left font-normal text-foreground">{rowLabel(row, config.rows)}</th>
               <td className={cn(CELL, "text-right text-foreground")}>{formatMetricValue(row.values[metric] ?? null, format)}</td>
@@ -132,7 +115,7 @@ function ComparisonTable({ element, config, result, decl }: Omit<Props, "query">
           ))}
         </tbody>
       </table>
-      {!expanded && result.rows.length > PAGE_SIZE ? <ShowMore total={result.rows.length} onShow={() => setExpanded(true)} /> : null}
+      {showAll}
     </div>
   )
 }
@@ -166,10 +149,10 @@ export function statementGroups(result: QueryResult, metric: string, groupDimens
   }))
 }
 
-function StatementTable({ element, config, result, decl }: Omit<Props, "query">) {
+function StatementTable({ element, config, result, decl }: Props) {
   const [collapsedGroups, setCollapsedGroups] = useElementUiState<string[]>(element, "collapsed", [], isStringList)
   const collapsed = new Set(collapsedGroups)
-  const metric = config.metric ?? config.metrics?.[0] ?? ""
+  const metric = config.metrics[0] ?? ""
   const def = decl.metrics[metric]
   const format = valueFormatOf(def)
   const baseline = result.comparison?.label
@@ -187,8 +170,8 @@ function StatementTable({ element, config, result, decl }: Omit<Props, "query">)
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-border">
-            <th scope="col" className={cn(HEAD, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
-            <th scope="col" className={cn(HEAD, "text-right")}>{result.period.label}</th>
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-left")}>{config.rows ? dimensionLabel(config.rows, decl.dimensions?.[config.rows]) : ""}</th>
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>{result.period.label}</th>
             {baseline ? comparisonHeaders(baseline) : null}
           </tr>
         </thead>

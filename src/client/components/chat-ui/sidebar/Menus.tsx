@@ -1,27 +1,26 @@
 import { type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Pin, PinOff, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2, Users } from "lucide-react"
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "../../ui/context-menu"
+import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Pin, PinOff, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2 } from "lucide-react"
+import { ContextMenu, ContextMenuTrigger } from "../../ui/context-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
-import { createScopedStore } from "../../../lib/createScopedStore"
+import { InputPopoverStore } from "../InputPopover.store"
+import {
+  ContextMenuActions,
+  PopoverMenuActions,
+  stackActions,
+  type MenuAction,
+  type StackActionHandlers,
+} from "./menuActions"
 
-interface StackActionsPopoverStoreState {
-  open: boolean
-  setOpen: (open: boolean) => void
+function ActionContextMenu({ actions, children }: { actions: MenuAction[]; children: ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuActions actions={actions} />
+    </ContextMenu>
+  )
 }
-
-const stackActionsPopoverStore = createScopedStore<
-  Record<string, never>,
-  StackActionsPopoverStoreState
->("StackActionsPopover", () => (set) => ({
-  open: false,
-  setOpen: (open) => set({ open }),
-}))
 
 export function ProjectSectionMenu({
   editorLabel,
@@ -50,107 +49,29 @@ export function ProjectSectionMenu({
   onDelete?: () => void
   children: ReactNode
 }) {
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        {onOpenBoards ? (
-          <>
-            <ContextMenuItem
-              onSelect={(event) => {
-                event.stopPropagation()
-                onOpenBoards()
-              }}
-            >
-              <SquareKanban className="h-3.5 w-3.5" />
-              <span className="text-xs font-medium">Boards</span>
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        ) : null}
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onToggleStar()
-          }}
-        >
-          {starred ? <StarOff className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
-          <span className="text-xs font-medium">{starred ? "Unstar project" : "Star project"}</span>
-        </ContextMenuItem>
-        {onEditInstructions ? (
-          <ContextMenuItem
-            onSelect={(event) => {
-              event.stopPropagation()
-              onEditInstructions()
-            }}
-          >
-            <ScrollText className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">Edit instructions</span>
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onCopyPath()
-          }}
-        >
-          <Copy className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Copy Path</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onShowArchived()
-          }}
-        >
-          <Archive className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Show Archived</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onOpenInFinder()
-          }}
-        >
-          <FolderOpen className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Show in Finder</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onOpenInEditor()
-          }}
-        >
-          <Code className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Open in {editorLabel}</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.stopPropagation()
-            onHide()
-          }}
-          className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
-        >
-          <EyeOff className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Hide</span>
-        </ContextMenuItem>
-        {onDelete ? (
-          <ContextMenuItem
-            onSelect={(event) => {
-              event.stopPropagation()
-              onDelete()
-            }}
-            className="text-destructive hover:bg-destructive/10 focus:bg-destructive/10"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">Delete project</span>
-          </ContextMenuItem>
-        ) : null}
-      </ContextMenuContent>
-    </ContextMenu>
-  )
+  const actions: MenuAction[] = [
+    ...(onOpenBoards
+      ? [{ id: "boards", label: "Boards", icon: SquareKanban, run: onOpenBoards, separatorAfter: true }]
+      : []),
+    {
+      id: "star",
+      label: starred ? "Unstar project" : "Star project",
+      icon: starred ? StarOff : Star,
+      run: onToggleStar,
+    },
+    ...(onEditInstructions
+      ? [{ id: "instructions", label: "Edit instructions", icon: ScrollText, run: onEditInstructions }]
+      : []),
+    { id: "copy-path", label: "Copy Path", icon: Copy, run: onCopyPath },
+    { id: "show-archived", label: "Show Archived", icon: Archive, run: onShowArchived },
+    { id: "open-finder", label: "Show in Finder", icon: FolderOpen, run: onOpenInFinder },
+    { id: "open-editor", label: `Open in ${editorLabel}`, icon: Code, run: onOpenInEditor },
+    { id: "hide", label: "Hide", icon: EyeOff, run: onHide, destructive: true },
+    ...(onDelete
+      ? [{ id: "delete", label: "Delete project", icon: Trash2, run: onDelete, destructive: true }]
+      : []),
+  ]
+  return <ActionContextMenu actions={actions}>{children}</ActionContextMenu>
 }
 
 export function ChatRowMenu({
@@ -176,109 +97,34 @@ export function ChatRowMenu({
   onEditPermissions?: () => void
   children: ReactNode
 }) {
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onTogglePin()
-          }}
-        >
-          {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-          <span className="text-xs font-medium">{pinned ? "Unpin" : "Pin to top"}</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onRename()
-          }}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Rename</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onOpenInFinder()
-          }}
-        >
-          <FolderOpen className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Open in Finder</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          disabled={!canFork}
-          onSelect={(event) => {
-            event.preventDefault()
-            if (!canFork) return
-            onFork()
-          }}
-        >
-          <Split className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Fork</span>
-        </ContextMenuItem>
-        {onEditPermissions ? (
-          <ContextMenuItem
-            onSelect={(event) => {
-              event.preventDefault()
-              onEditPermissions()
-            }}
-          >
-            <ShieldAlert className="h-3.5 w-3.5" />
-            <span className="text-xs font-medium">Permissions…</span>
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onArchive()
-          }}
-        >
-          <Archive className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Archive</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onDelete()
-          }}
-          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Delete</span>
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  )
+  const actions: MenuAction[] = [
+    {
+      id: "pin",
+      label: pinned ? "Unpin" : "Pin to top",
+      icon: pinned ? PinOff : Pin,
+      run: onTogglePin,
+      keepsMenuOpen: true,
+    },
+    { id: "rename", label: "Rename", icon: Pencil, run: onRename, keepsMenuOpen: true },
+    { id: "open-finder", label: "Open in Finder", icon: FolderOpen, run: onOpenInFinder, keepsMenuOpen: true },
+    { id: "fork", label: "Fork", icon: Split, run: onFork, disabled: !canFork, keepsMenuOpen: true },
+    ...(onEditPermissions
+      ? [{ id: "permissions", label: "Permissions…", icon: ShieldAlert, run: onEditPermissions, keepsMenuOpen: true }]
+      : []),
+    { id: "archive", label: "Archive", icon: Archive, run: onArchive, keepsMenuOpen: true },
+    { id: "delete", label: "Delete", icon: Trash2, run: onDelete, destructive: true, keepsMenuOpen: true },
+  ]
+  return <ActionContextMenu actions={actions}>{children}</ActionContextMenu>
 }
 
-function StackActionsPopoverInner({
-  stackTitle,
-  onOpenBoards,
-  onRename,
-  onEditMembers,
-  onDelete,
-  children,
-}: {
+type StackMenuProps = StackActionHandlers & {
   stackTitle: string
-  onOpenBoards?: () => void
-  onRename: () => void
-  onEditMembers: () => void
-  onDelete: () => void
   children: ReactNode
-}) {
-  const open = stackActionsPopoverStore.useScopedStore((s) => s.open)
-  const setOpen = stackActionsPopoverStore.useScopedStore((s) => s.setOpen)
+}
 
-  function handle(action: () => void) {
-    return () => {
-      setOpen(false)
-      action()
-    }
-  }
+function StackActionsPopoverInner({ stackTitle, children, ...handlers }: StackMenuProps) {
+  const open = InputPopoverStore.useScopedStore((s) => s.open)
+  const setOpen = InputPopoverStore.useScopedStore((s) => s.setOpen)
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -290,146 +136,27 @@ function StackActionsPopoverInner({
         role="menu"
         aria-label={`Actions for ${stackTitle}`}
       >
-        {onOpenBoards ? (
-          <>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handle(onOpenBoards)}
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs font-medium hover:bg-muted focus-visible:bg-muted outline-hidden"
-            >
-              <SquareKanban className="h-3.5 w-3.5" />
-              <span>Boards</span>
-            </button>
-            <div className="my-1 h-px bg-border" />
-          </>
-        ) : null}
-        <button
-          type="button"
-          role="menuitem"
-          onClick={handle(onRename)}
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs font-medium hover:bg-muted focus-visible:bg-muted outline-hidden"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          <span>Rename</span>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          onClick={handle(onEditMembers)}
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs font-medium hover:bg-muted focus-visible:bg-muted outline-hidden"
-        >
-          <Users className="h-3.5 w-3.5" />
-          <span>Edit members</span>
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          onClick={handle(onDelete)}
-          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs font-medium text-destructive dark:text-red-400 hover:bg-destructive/10 focus-visible:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus-visible:bg-red-500/20 outline-hidden"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          <span>Delete {stackTitle}</span>
-        </button>
+        <PopoverMenuActions
+          actions={stackActions(stackTitle, handlers, { keepsMenuOpen: false })}
+          onSelected={() => setOpen(false)}
+        />
       </PopoverContent>
     </Popover>
   )
 }
 
-export function StackActionsPopover({
-  stackTitle,
-  onOpenBoards,
-  onRename,
-  onEditMembers,
-  onDelete,
-  children,
-}: {
-  stackTitle: string
-  onOpenBoards?: () => void
-  onRename: () => void
-  onEditMembers: () => void
-  onDelete: () => void
-  children: ReactNode
-}) {
+export function StackActionsPopover(props: StackMenuProps) {
   return (
-    <stackActionsPopoverStore.Provider init={{}}>
-      <StackActionsPopoverInner
-        stackTitle={stackTitle}
-        onOpenBoards={onOpenBoards}
-        onRename={onRename}
-        onEditMembers={onEditMembers}
-        onDelete={onDelete}
-      >
-        {children}
-      </StackActionsPopoverInner>
-    </stackActionsPopoverStore.Provider>
+    <InputPopoverStore.Provider init={undefined}>
+      <StackActionsPopoverInner {...props} />
+    </InputPopoverStore.Provider>
   )
 }
 
-export function StackSectionMenu({
-  stackTitle,
-  onOpenBoards,
-  onRename,
-  onEditMembers,
-  onDelete,
-  children,
-}: {
-  stackTitle: string
-  onOpenBoards?: () => void
-  onRename: () => void
-  onEditMembers: () => void
-  onDelete: () => void
-  children: ReactNode
-}) {
+export function StackSectionMenu({ stackTitle, children, ...handlers }: StackMenuProps) {
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent>
-        {onOpenBoards ? (
-          <>
-            <ContextMenuItem
-              onSelect={(event) => {
-                event.stopPropagation()
-                onOpenBoards()
-              }}
-            >
-              <SquareKanban className="h-3.5 w-3.5" />
-              <span className="text-xs font-medium">Boards</span>
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        ) : null}
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onRename()
-          }}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Rename</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onEditMembers()
-          }}
-        >
-          <Users className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Edit members</span>
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={(event) => {
-            event.preventDefault()
-            onDelete()
-          }}
-          className="text-destructive dark:text-red-400 hover:bg-destructive/10 focus:bg-destructive/10 dark:hover:bg-red-500/20 dark:focus:bg-red-500/20"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          <span className="text-xs font-medium">Delete {stackTitle}</span>
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <ActionContextMenu actions={stackActions(stackTitle, handlers, { keepsMenuOpen: true })}>
+      {children}
+    </ActionContextMenu>
   )
 }

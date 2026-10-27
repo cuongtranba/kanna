@@ -18,7 +18,6 @@ function renderPanel(
       TooltipProvider,
       null,
       createElement(StackCreatePanel, {
-        mode: "create",
         projects,
         onSubmit: noopAsync,
         onCancel: () => undefined,
@@ -64,7 +63,6 @@ describe("StackCreatePanel", () => {
 
   test("edit mode prefills title and selected chips", () => {
     const html = renderPanel({
-      mode: "edit",
       initialTitle: "My Stack",
       initialProjectIds: ["p1"],
     })
@@ -129,7 +127,7 @@ describe("StackCreatePanel — stack instructions", () => {
   })
 
   test("seeds the field from the stack being edited", () => {
-    const html = renderPanel({ mode: "edit", initialInstructions: "api is upstream of web" })
+    const html = renderPanel({ initialInstructions: "api is upstream of web" })
     expect(html).toContain("api is upstream of web")
   })
 })

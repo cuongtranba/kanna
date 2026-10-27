@@ -190,6 +190,7 @@ function ChatRowImpl({
       ) : null}
       {chat.pinnedAt !== undefined ? <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" /> : null}
       <span
+        data-flip-title
         className={cn(
           "min-w-0 flex-1 truncate text-sm",
           isActive ? "font-medium text-foreground" : "text-foreground/90",

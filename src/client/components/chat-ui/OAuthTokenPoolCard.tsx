@@ -6,7 +6,7 @@ import {
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   clampTokenConcurrency,
 } from "../../../shared/types"
-import { normalizeAnthropicBaseUrl } from "../../../shared/anthropic-base-url"
+import { BASE_URL_SCHEME_MESSAGE, parseBaseUrlDraft } from "../../../shared/anthropic-base-url"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
@@ -98,6 +98,12 @@ function StatusPill({ entry, now }: { entry: OAuthTokenEntry; now: number }) {
 }
 
 
+const TEST_RESULT_VISIBLE_MS = 3000
+
+function BaseUrlError() {
+  return <div className="mt-1 text-xs text-destructive">{BASE_URL_SCHEME_MESSAGE}</div>
+}
+
 function TokenRow({
   entry,
   now,
@@ -133,8 +139,7 @@ function TokenRow({
   const testResult = rowState?.testResult ?? null
   const testing = rowState?.testing ?? false
   const baseUrlValue = baseUrlDrafts[entry.id] ?? entry.baseUrl ?? ""
-  const baseUrlInvalid =
-    baseUrlValue.trim().length > 0 && normalizeAnthropicBaseUrl(baseUrlValue, OAUTH_TOKEN_BASE_URL_MAX) === null
+  const baseUrlInvalid = parseBaseUrlDraft(baseUrlValue, OAUTH_TOKEN_BASE_URL_MAX).kind === "invalid"
 
   const removeKey = pendingActionKey("oauthPool.remove", entry.id)
   const toggleKey = pendingActionKey("oauthPool.toggle", entry.id)
@@ -159,12 +164,11 @@ function TokenRow({
       const res = await onTest(entry.token, entry.baseUrl)
       const label = res.ok ? "OK" : (res.error ?? "Error")
       setTokenRowTestResult(entry.id, label)
-      timer.setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } catch {
       setTokenRowTestResult(entry.id, "Error")
-      timer.setTimeout(() => setTokenRowTestResult(entry.id, null), 3000)
     } finally {
       setTokenRowTesting(entry.id, false)
+      timer.setTimeout(() => setTokenRowTestResult(entry.id, null), TEST_RESULT_VISIBLE_MS)
     }
   }
 
@@ -273,11 +277,7 @@ function TokenRow({
       />
     </label>
     </HoverHint>
-    {baseUrlInvalid && (
-      <div className="mt-1 text-xs text-destructive">
-        Must start with http:// or https://
-      </div>
-    )}
+    {baseUrlInvalid && <BaseUrlError />}
     </div>
   )
 }
@@ -300,8 +300,8 @@ function AddTokenForm({
   const setAddSubmitting = useOAuthTokenPoolCardStore((state) => state.setAddSubmitting)
   const resetAddForm = useOAuthTokenPoolCardStore((state) => state.resetAddForm)
 
-  const normalizedAddBaseUrl = normalizeAnthropicBaseUrl(addBaseUrl, OAUTH_TOKEN_BASE_URL_MAX)
-  const addBaseUrlInvalid = addBaseUrl.trim().length > 0 && normalizedAddBaseUrl === null
+  const addBaseUrlDraft = parseBaseUrlDraft(addBaseUrl, OAUTH_TOKEN_BASE_URL_MAX)
+  const addBaseUrlInvalid = addBaseUrlDraft.kind === "invalid"
   const canSubmit =
     addLabel.trim().length > 0 && addToken.trim().length > 0 && !addBaseUrlInvalid && !addSubmitting
 
@@ -319,7 +319,7 @@ function AddTokenForm({
         lastErrorAt: null,
         lastErrorMessage: null,
         addedAt: Date.now(),
-        ...(normalizedAddBaseUrl !== null ? { baseUrl: normalizedAddBaseUrl } : {}),
+        ...(addBaseUrlDraft.kind === "url" ? { baseUrl: addBaseUrlDraft.url } : {}),
       }
       await onWrite({ tokens: [...tokens, newEntry] })
       resetAddForm()
@@ -372,11 +372,7 @@ function AddTokenForm({
           className="text-sm font-mono"
           aria-label="Anthropic base URL"
         />
-        {addBaseUrlInvalid && (
-          <div className="mt-1 text-xs text-destructive">
-            Must start with http:// or https://
-          </div>
-        )}
+        {addBaseUrlInvalid && <BaseUrlError />}
       </div>
     </div>
   )
@@ -420,8 +416,9 @@ export function OAuthTokenPoolCard({
   const handleChangeBaseUrl = async (id: string, value: string) => {
     const entry = tokens.find((t) => t.id === id)
     if (!entry) return
-    const normalized = normalizeAnthropicBaseUrl(value, OAUTH_TOKEN_BASE_URL_MAX)
-    if (normalized === null && value.trim().length > 0) return
+    const draft = parseBaseUrlDraft(value, OAUTH_TOKEN_BASE_URL_MAX)
+    if (draft.kind === "invalid") return
+    const normalized = draft.kind === "url" ? draft.url : null
     clearBaseUrlDraft(id)
     if (normalized === (entry.baseUrl ?? null)) return
     await onWrite({

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
-import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
+import { activeTabIdOf, type PaneLeaf, type SplitPosition } from "../../lib/paneTree"
 import { cn } from "../../lib/utils"
 import { PaneScopedStore } from "../../stores/paneScopedStore"
 import type { PaneContentRegistry } from "./paneContentRegistry"
@@ -65,15 +65,14 @@ function PaneShellInner({
     return () => observer.disconnect()
   }, [storeApi, setLayoutWidth])
 
+  const activeTabId = activeTabIdOf(pane)
+
   const handleSplit = useCallback(
     (position: SplitPosition) => {
-      const tabId = pane.focusedTabId ?? pane.tabs[0]?.tabId
-      if (tabId) onSplit({ tabId, paneId: pane.id, position })
+      if (activeTabId) onSplit({ tabId: activeTabId, paneId: pane.id, position })
     },
-    [pane.focusedTabId, pane.tabs, pane.id, onSplit],
+    [activeTabId, pane.id, onSplit],
   )
-
-  const activeTabId = pane.focusedTabId ?? pane.tabs[0]?.tabId ?? null
 
   const tabRecency = PaneScopedStore.useScopedStore((s) => s.tabRecency)
   const noteTabActivated = PaneScopedStore.useScopedStore((s) => s.noteTabActivated)

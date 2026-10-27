@@ -2,11 +2,11 @@ import { useCallback, useRef, type KeyboardEvent, type FormEvent, type ReactNode
 import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { createScopedStore } from "../../../lib/createScopedStore"
+import { canFormStack, STACK_NEEDS_PROJECTS_MESSAGE } from "../../../../shared/stacks"
 import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { STACK_PANEL_SAVE_KEY } from "./sidebarPendingActions"
 
 interface StackCreatePanelProps {
-  mode: "create" | "edit"
   initialTitle?: string
   initialProjectIds?: string[]
   initialInstructions?: string
@@ -44,11 +44,10 @@ const stackCreatePanelStore = createScopedStore<
 }))
 
 function StackCreatePanelInner({
-  mode: _mode,
   projects,
   onSubmit,
   onCancel,
-}: StackCreatePanelProps): ReactNode {
+}: Pick<StackCreatePanelProps, "projects" | "onSubmit" | "onCancel">): ReactNode {
   const chipContainerRef = useRef<HTMLDivElement>(null)
 
   const title = stackCreatePanelStore.useScopedStore((s) => s.title)
@@ -59,9 +58,9 @@ function StackCreatePanelInner({
   const setSelectedIds = stackCreatePanelStore.useScopedStore((s) => s.setSelectedIds)
 
   const saving = usePendingAction(STACK_PANEL_SAVE_KEY)
-  const hasEnoughProjects = projects.length >= 2
+  const hasEnoughProjects = canFormStack(projects.length)
   const isSaveDisabled =
-    !hasEnoughProjects || title.trim() === "" || selectedIds.size < 2
+    !hasEnoughProjects || title.trim() === "" || !canFormStack(selectedIds.size)
 
   const toggleProject = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -175,7 +174,7 @@ function StackCreatePanelInner({
 
       {!hasEnoughProjects && (
         <p className="text-xs text-muted-foreground">
-          Register a second project to create a stack
+          {STACK_NEEDS_PROJECTS_MESSAGE}
         </p>
       )}
 
@@ -202,7 +201,6 @@ function StackCreatePanelInner({
 }
 
 export function StackCreatePanel({
-  mode,
   initialTitle,
   initialInstructions,
   initialProjectIds,
@@ -218,15 +216,7 @@ export function StackCreatePanel({
         initialSelectedIds: new Set(initialProjectIds ?? []),
       }}
     >
-      <StackCreatePanelInner
-        mode={mode}
-        initialTitle={initialTitle}
-        initialInstructions={initialInstructions}
-        initialProjectIds={initialProjectIds}
-        projects={projects}
-        onSubmit={onSubmit}
-        onCancel={onCancel}
-      />
+      <StackCreatePanelInner projects={projects} onSubmit={onSubmit} onCancel={onCancel} />
     </stackCreatePanelStore.Provider>
   )
 }

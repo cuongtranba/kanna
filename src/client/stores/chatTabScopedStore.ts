@@ -1,5 +1,5 @@
 import { createScopedStore } from "../lib/createScopedStore"
-import type { UploadedAttachment } from "../../shared/types"
+import type { ChatAttachment, UploadedAttachment } from "../../shared/types"
 
 
 export interface ComposerAttachment extends UploadedAttachment {
@@ -7,6 +7,25 @@ export interface ComposerAttachment extends UploadedAttachment {
   previewUrl?: string
   uploadProgress?: number
   cancelUpload?: () => void
+}
+
+export function toWireAttachment(attachment: ComposerAttachment): ChatAttachment {
+  return {
+    id: attachment.id,
+    kind: attachment.kind,
+    displayName: attachment.displayName,
+    absolutePath: attachment.absolutePath,
+    relativePath: attachment.relativePath,
+    contentUrl: attachment.contentUrl,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+  }
+}
+
+export function toDraftAttachment(attachment: ComposerAttachment): UploadedAttachment {
+  return attachment.reused === undefined
+    ? toWireAttachment(attachment)
+    : { ...toWireAttachment(attachment), reused: attachment.reused }
 }
 
 export interface MentionSuggestionsState {

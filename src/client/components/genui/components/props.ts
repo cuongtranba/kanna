@@ -1,5 +1,5 @@
 import type { ComponentRenderProps } from "@json-render/react"
-import { jsonObjectSchema, type CompareMode, type DatasetFilter, type PeriodSpec } from "../../../../shared/genui"
+import { jsonObjectSchema, type CompareMode, type DatasetFilter, type DatasetQuery, type PeriodSpec } from "../../../../shared/genui"
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "../../../../shared/json"
 import { ELEMENT_KEY_PROP } from "../useElementUiState"
 
@@ -30,8 +30,42 @@ export function compareOf(value: CompareMode | "none" | undefined): CompareMode 
 }
 
 export function withDrillFilter(filters: readonly DatasetFilter[] | undefined, drill: { dimension: string; value: string } | null): DatasetFilter[] | undefined {
-  if (!drill) return filters ? [...filters] : undefined
-  return [...(filters ?? []), { dimension: drill.dimension, value: drill.value }]
+  const all = drill ? [...(filters ?? []), { dimension: drill.dimension, value: drill.value }] : filters
+  return all && all.length > 0 ? [...all] : undefined
+}
+
+export function metricListOf(props: { metric?: string | readonly string[] | undefined; metrics?: readonly string[] | undefined }): string[] {
+  if (props.metrics) return [...props.metrics]
+  if (props.metric === undefined) return []
+  return typeof props.metric === "string" ? [props.metric] : [...props.metric]
+}
+
+export function primaryMetricOf(props: { metric?: string | readonly string[] | undefined; metrics?: readonly string[] | undefined }): string {
+  return metricListOf(props)[0] ?? ""
+}
+
+interface DatasetQueryParts {
+  metrics: string[]
+  groupBy?: string[] | undefined
+  period?: DatasetQuery["period"] | undefined
+  compare?: DatasetQuery["compare"] | undefined
+  scenario?: DatasetQuery["scenario"] | undefined
+  filters?: DatasetFilter[] | undefined
+  sort?: DatasetQuery["sort"] | undefined
+  limit?: number | undefined
+}
+
+export function datasetQuery({ metrics, groupBy, period, compare, scenario, filters, sort, limit }: DatasetQueryParts): DatasetQuery {
+  return {
+    metrics,
+    ...(groupBy ? { groupBy } : {}),
+    ...(period ? { period } : {}),
+    ...(compare ? { compare } : {}),
+    ...(scenario ? { scenario } : {}),
+    ...(filters && filters.length > 0 ? { filters } : {}),
+    ...(sort ? { sort } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+  }
 }
 
 export function periodKey(period: PeriodSpec | undefined): string {

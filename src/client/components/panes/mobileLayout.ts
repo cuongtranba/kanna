@@ -1,4 +1,4 @@
-import { collectPanes, type PaneLayout, type PaneLeaf } from "../../lib/paneTree"
+import { activeTabIdOf, collectPanes, type PaneLayout, type PaneLeaf } from "../../lib/paneTree"
 
 export function flattenLayoutForMobile(layout: PaneLayout): PaneLeaf {
   const panes = collectPanes(layout.root)
@@ -9,6 +9,6 @@ export function flattenLayoutForMobile(layout: PaneLayout): PaneLeaf {
     kind: "pane",
     id: focused?.id ?? "mobile",
     tabs,
-    focusedTabId: focused?.focusedTabId ?? tabs[0]?.tabId ?? null,
+    focusedTabId: (focused ? activeTabIdOf(focused) : null) ?? tabs[0]?.tabId ?? null,
   }
 }

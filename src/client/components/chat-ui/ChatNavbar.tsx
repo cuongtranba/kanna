@@ -1,4 +1,3 @@
-import { type MouseEvent as ReactMouseEvent } from "react"
 import { Bell, BellOff, Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from "lucide-react"
 import { ShareButton } from "../share/ShareButton"
 import { SharePopover } from "../share/SharePopover"
@@ -51,19 +50,13 @@ function SessionSigil({
 }
 
 import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
+import { openContextMenuFromButton } from "../../lib/openContextMenuFromButton"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useFollowedSessionsStore, selectIsFollowing } from "../../stores/followedSessionsStore"
 import type { DomPort } from "../../ports/domPort"
 import { domAdapter } from "../../adapters/dom.adapter"
-
-function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>, dom: DomPort) {
-  event.preventDefault()
-  event.stopPropagation()
-  const rect = event.currentTarget.getBoundingClientRect()
-  dom.dispatchContextMenuEvent(event.currentTarget, rect.left + rect.width / 2, rect.bottom)
-}
 
 function NavbarOverflowMenu({
   showOnDesktop,

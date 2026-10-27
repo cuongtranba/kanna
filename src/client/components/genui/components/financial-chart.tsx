@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, type RefObject } from "react"
-import { useActions, useStateValue, type ComponentRenderProps } from "@json-render/react"
+import { useActions, useStateValue } from "@json-render/react"
+import type { z } from "zod"
 import { ChevronLeft, MessageSquareText } from "lucide-react"
 import {
   bucketLabel,
@@ -25,8 +26,9 @@ import { useDatasetDecl, useDatasetQuery } from "../useDatasetQuery"
 import { useElementUiState } from "../useElementUiState"
 import type { JsonValue } from "../../../../shared/json"
 import { useGenUIView } from "../view-context"
-import { DataStateNotice, EmptyNotice, PropsIssue } from "./primitives"
-import { compareOf, resolvedProps, withDrillFilter } from "./props"
+import { defineElement } from "./define-element"
+import { DataStateNotice, EmptyNotice, TABLE_HEAD_CLASS } from "./primitives"
+import { compareOf, datasetQuery, metricListOf, primaryMetricOf, withDrillFilter } from "./props"
 
 const LazyVChartSurface = lazy(() => import("../charts/VChartSurface"))
 
@@ -37,14 +39,7 @@ function isChartView(value: JsonValue | undefined): value is "chart" | "table" {
 }
 const DEFAULT_CHART_LIMIT = 60
 
-type ChartProps = NonNullable<ReturnType<typeof parseChartProps>>
-
-function parseChartProps(props: ComponentRenderProps["element"]["props"]) {
-  const json = resolvedProps(props)
-  if (!json) return null
-  const parsed = GENUI_COMPONENTS.FinancialChart.props.safeParse(json)
-  return parsed.success ? parsed.data : null
-}
+type ChartProps = z.output<typeof GENUI_COMPONENTS.FinancialChart.props>
 
 export function useDrillState(datasetId: string | undefined): DrillState | null {
   const raw = useStateValue<JsonObject>(drillStatePath(datasetId ?? ""))
@@ -56,20 +51,17 @@ export function useDrillState(datasetId: string | undefined): DrillState | null 
 }
 
 function chartQuery(props: ChartProps, drill: DrillState | null): DatasetQuery {
-  const metrics = Array.isArray(props.metric) ? props.metric : [props.metric]
+  const metrics = metricListOf(props)
   const dimension = drill ? drill.into : props.dimension
-  const period = drill?.period ?? props.period
-  const compare = props.chart === "waterfall" || props.chart === "composition" || drill ? undefined : compareOf(props.compareWith)
-  const filters = withDrillFilter(props.filters, drill)
-  return {
+  return datasetQuery({
     metrics: props.secondaryMetric ? [...metrics, props.secondaryMetric] : metrics,
     groupBy: props.series && !drill ? [dimension, props.series] : [dimension],
-    ...(period ? { period } : {}),
-    ...(compare ? { compare } : {}),
-    ...(filters && filters.length > 0 ? { filters } : {}),
-    ...(props.chart === "waterfall" ? { sort: { by: dimension, direction: "asc" as const } } : {}),
+    period: drill?.period ?? props.period,
+    compare: props.chart === "waterfall" || props.chart === "composition" || drill ? undefined : compareOf(props.compareWith),
+    filters: withDrillFilter(props.filters, drill),
+    sort: props.chart === "waterfall" ? { by: dimension, direction: "asc" } : undefined,
     limit: props.limit ?? DEFAULT_CHART_LIMIT,
-  }
+  })
 }
 
 function chartKind(props: ChartProps, drill: DrillState | null): ChartKind {
@@ -106,9 +98,9 @@ function ChartTable({ model, drill }: { model: ChartModel; drill: ChartTableDril
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-border">
-            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{model.dimensionLabel}</th>
+            <th scope="col" className={cn(TABLE_HEAD_CLASS, "text-left")}>{model.dimensionLabel}</th>
             {series.map((entry) => (
-              <th key={entry.id} scope="col" className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">{entry.label}</th>
+              <th key={entry.id} scope="col" className={cn(TABLE_HEAD_CLASS, "text-right")}>{entry.label}</th>
             ))}
           </tr>
         </thead>
@@ -150,7 +142,7 @@ function ExplainButton({ props, drill }: { props: ChartProps; drill: DrillState 
   const host = useGenUIHost()
   const key = pendingActionKey("genui.financial.explainVariance", viewKey, props.dataset)
   const pending = usePendingAction(key)
-  const metric = Array.isArray(props.metric) ? props.metric[0] ?? "" : props.metric
+  const metric = primaryMetricOf(props)
   const handleExplain = useCallback(() => {
     const filters = withDrillFilter(props.filters, drill)
     const period = drill?.period ?? props.period
@@ -161,7 +153,7 @@ function ExplainButton({ props, drill }: { props: ChartProps; drill: DrillState 
         metric,
         compareWith: compareOf(props.compareWith) ?? "previous-period",
         ...(period ? { period } : {}),
-        ...(filters && filters.length > 0 ? { filters: filters.map((filter) => ({ ...filter })) } : {}),
+        ...(filters ? { filters: filters.map((filter) => ({ ...filter })) } : {}),
       },
     }))
   }, [drill, execute, key, metric, props])
@@ -226,16 +218,15 @@ function chartSubtitle(props: ChartProps, result: { period: { label: string }; c
   return comparisonLabel ? `${period} · vs ${comparisonLabel.charAt(0).toLowerCase()}${comparisonLabel.slice(1)}` : period
 }
 
-export function FinancialChartElement({ element }: ComponentRenderProps) {
-  const props = useMemo(() => parseChartProps(element.props), [element.props])
-  const decl = useDatasetDecl(props?.dataset)
-  const drill = useDrillState(props?.drilldown ? props.dataset : undefined)
-  const query = useMemo(() => (props ? chartQuery(props, drill) : null), [props, drill])
-  const state = useDatasetQuery(props?.dataset, query)
+export const FinancialChartElement = defineElement(GENUI_COMPONENTS.FinancialChart.props, ({ element, props }) => {
+  const decl = useDatasetDecl(props.dataset)
+  const drill = useDrillState(props.drilldown ? props.dataset : undefined)
+  const query = useMemo(() => chartQuery(props, drill), [props, drill])
+  const state = useDatasetQuery(props.dataset, query)
   const [view, setView] = useElementUiState(element, "view", "chart", isChartView)
   const { execute } = useActions()
   const { viewKey } = useGenUIView()
-  const drillKey = pendingActionKey("genui.financial.drilldown", viewKey, props?.dataset ?? "")
+  const drillKey = pendingActionKey("genui.financial.drilldown", viewKey, props.dataset)
   const titleId = useId()
   const figureRef = useRef<HTMLElement>(null)
   const backRef = useRef<HTMLButtonElement>(null)
@@ -243,11 +234,10 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
   const drillPending = usePendingAction(drillKey)
 
   const modelResult = useMemo(() => {
-    if (!props || !decl || state.status !== "ok") return null
-    const metrics = Array.isArray(props.metric) ? props.metric : [props.metric]
+    if (!decl || state.status !== "ok") return null
     return buildChartModel({
       chart: chartKind(props, drill),
-      metrics,
+      metrics: metricListOf(props),
       ...(props.secondaryMetric ? { secondaryMetric: props.secondaryMetric } : {}),
       dimension: drill ? drill.into : props.dimension,
       ...(props.series && !drill ? { series: props.series } : {}),
@@ -257,11 +247,10 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
 
   const drilldown = props?.drilldown
   const onPointClick = useCallback((point: ChartPointRef) => {
-    if (!props || !drilldown || drill) return
-    const metric = Array.isArray(props.metric) ? props.metric[0] ?? "" : props.metric
+    if (!drilldown || drill) return
     runPendingAction(drillKey, () => execute({
       action: "financial.drilldown",
-      params: { dataset: props.dataset, metric, dimension: props.dimension, value: point.x, into: drilldown.dimension, ...(props.period ? { period: props.period } : {}) },
+      params: { dataset: props.dataset, metric: primaryMetricOf(props), dimension: props.dimension, value: point.x, into: drilldown.dimension, ...(props.period ? { period: props.period } : {}) },
     }))
   }, [drill, drillKey, drilldown, execute, props])
 
@@ -277,9 +266,8 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
     onPointClick(point)
   }, [onPointClick])
 
-  if (!props) return <PropsIssue component="FinancialChart" />
   const height = CHART_HEIGHT[props.height ?? "md"]
-  const metricId = Array.isArray(props.metric) ? props.metric[0] ?? "" : props.metric
+  const metricId = primaryMetricOf(props)
   const title = props.title ?? metricLabel(metricId, decl?.metrics[metricId])
   const subtitle = chartSubtitle(props, state.status === "ok" ? state.result : null, drill, decl)
   const tableDrill: ChartTableDrill | null = props.drilldown && !drill && decl
@@ -312,4 +300,4 @@ export function FinancialChartElement({ element }: ComponentRenderProps) {
       ) : null}
     </figure>
   )
-}
+})

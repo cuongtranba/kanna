@@ -1,7 +1,7 @@
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api"
 import type { FlowDiagramProps, FlowEdge, FlowNode } from "../../../../shared/genui"
 import { domAdapter } from "../../../adapters/dom.adapter"
-import { fileNameOfPath } from "../../../lib/pathUtils"
+import { flowFileLabel, flowNodeChrome, FLOW_NODE_METRICS } from "./flow-kinds"
 
 export type FlowDirection = "LR" | "TB"
 
@@ -49,11 +49,6 @@ const GROUP_HEADER = 30
 const GROUP_PAD = 14
 const NODE_MIN_WIDTH = 132
 const NODE_MAX_WIDTH = 300
-const NODE_CHROME = 50
-const TERMINAL_CHROME = 8
-const NODE_ROW = 16
-const NODE_BASE_HEIGHT = 38
-const STATUS_CHROME = 24
 
 function bodyFont(): string {
   return domAdapter.getCssVar("--kanna-font-body", "system-ui, sans-serif")
@@ -67,21 +62,18 @@ function textWidth(text: string, font: string, perChar: number): number {
   return domAdapter.measureTextWidth(text, font) ?? text.length * perChar
 }
 
-function fileName(path: string, line: number | undefined): string {
-  const name = fileNameOfPath(path)
-  return line ? `${name}:${line}` : name
-}
-
 export function flowNodeSize(node: FlowNode): { width: number; height: number } {
+  const metrics = FLOW_NODE_METRICS
   const body = bodyFont()
-  const label = textWidth(node.label, `500 14px ${body}`, 7.6)
-  const status = node.status ? textWidth(node.status, `500 12px ${body}`, 6.4) + STATUS_CHROME : 0
-  const description = node.description ? textWidth(node.description, `12px ${body}`, 6.2) : 0
-  const path = node.path ? textWidth(fileName(node.path, node.line), `12px ${monoFont()}`, 7.2) : 0
+  const label = textWidth(node.label, `${metrics.labelFont} ${body}`, 7.6)
+  const status = node.status ? textWidth(node.status, `${metrics.statusFont} ${body}`, 6.4) + metrics.statusChrome : 0
+  const description = node.description ? textWidth(node.description, `${metrics.textFont} ${body}`, 6.2) : 0
+  const file = flowFileLabel(node)
+  const path = file ? textWidth(file, `${metrics.textFont} ${monoFont()}`, 7.2) : 0
   const content = Math.max(label + status, description, path)
   return {
-    width: Math.round(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, content + NODE_CHROME + (node.kind === "start" || node.kind === "end" ? TERMINAL_CHROME : 0)))),
-    height: NODE_BASE_HEIGHT + (node.description ? NODE_ROW : 0) + (node.path ? NODE_ROW : 0),
+    width: Math.round(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, content + flowNodeChrome(node)))),
+    height: metrics.baseHeight + (node.description ? metrics.rowHeight : 0) + (node.path ? metrics.rowHeight : 0),
   }
 }
 
@@ -96,7 +88,7 @@ function elkGraph(diagram: FlowDiagramProps, direction: FlowDirection): ElkNode 
     id: edgeKey(index),
     sources: [edge.from],
     targets: [edge.to],
-    ...(edge.label ? { labels: [{ text: edge.label, width: textWidth(edge.label, `12px ${bodyFont()}`, 6.4) + 10, height: 18 }] } : {}),
+    ...(edge.label ? { labels: [{ text: edge.label, width: textWidth(edge.label, `${FLOW_NODE_METRICS.textFont} ${bodyFont()}`, 6.4) + 10, height: 18 }] } : {}),
   }))
   return {
     id: "root",

@@ -6,8 +6,10 @@ import { cn } from "../../../lib/utils"
 import { StackActionsPopover, StackSectionMenu } from "./Menus"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"
 import { formatStackActivity } from "../../../../shared/stack-activity"
+import { canFormStack, STACK_NEEDS_PROJECTS_MESSAGE } from "../../../../shared/stacks"
 import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { startStackChatKey } from "./sidebarPendingActions"
+import { stackMembers } from "./stackMembers"
 
 interface StacksSectionProps {
   stacks: StackSummary[]
@@ -38,7 +40,7 @@ export function StacksSection({
   renderChatRow,
   chats,
 }: StacksSectionProps): ReactNode {
-  const canCreateStack = projects.length >= 2
+  const canCreateStack = canFormStack(projects.length)
 
   const chatsByStackId = new Map<string, SidebarChatRow[]>()
   for (const chat of chats) {
@@ -76,7 +78,7 @@ export function StacksSection({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={4}>
-            {canCreateStack ? "New stack" : "Register a second project to create a stack"}
+            {canCreateStack ? "New stack" : STACK_NEEDS_PROJECTS_MESSAGE}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -89,7 +91,7 @@ export function StacksSection({
         <div className="flex flex-col gap-px">
           {stacks.map((stack, index) => {
             const isExpanded = expandedStackIds.has(stack.id)
-            const memberProjects = projects.filter((p) => stack.projectIds.includes(p.id))
+            const memberProjects = stackMembers(stack, projects)
             const activityLabel = stack.activity ? formatStackActivity(stack.activity) : null
 
             const headerRow = (

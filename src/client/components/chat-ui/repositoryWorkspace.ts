@@ -5,11 +5,12 @@ import type {
   ChatDiffFile,
   ChatDiffSnapshot,
   DiffCommitMode,
+  GitSyncAction,
 } from "../../../shared/types"
 import { buildProjectFileContentUrl } from "../../../shared/projectFileUrl"
 import { fileNameOfPath } from "../../lib/pathUtils"
 
-export type RepositorySyncAction = "fetch" | "pull" | "publish"
+export type RepositorySyncAction = Exclude<GitSyncAction, "push">
 
 export interface RepositorySnapshot {
   syncAction: RepositorySyncAction
@@ -110,6 +111,17 @@ export function filterBranchEntries(
       (value) => value?.toLowerCase().includes(normalizedQuery),
     ),
   )
+}
+
+export function filterMergeBranchGroups(groups: BranchGroups, query: string): BranchGroups {
+  const normalizedQuery = query.trim().toLowerCase()
+  return {
+    defaultBranch: groups.defaultBranch
+      ? filterBranchEntries([groups.defaultBranch], normalizedQuery)[0]
+      : undefined,
+    recent: filterBranchEntries(groups.recent, normalizedQuery),
+    other: filterBranchEntries(groups.other, normalizedQuery),
+  }
 }
 
 export function deriveBranchListSnapshot(

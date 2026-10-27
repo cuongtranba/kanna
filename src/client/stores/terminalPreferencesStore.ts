@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { EditorPreset } from "../../shared/protocol"
+import { clampRounded } from "../../shared/numeric"
 import { clampScrollback, DEFAULT_TERMINAL_SCROLLBACK } from "../../shared/terminal-scrollback"
 
 export {
@@ -44,9 +45,10 @@ export function getEditorPresetLabel(preset: EditorPreset) {
   }
 }
 
+const MIN_COLUMN_WIDTH_RANGE = { min: MIN_TERMINAL_MIN_COLUMN_WIDTH, max: MAX_TERMINAL_MIN_COLUMN_WIDTH }
+
 function clampMinColumnWidth(value: number) {
-  if (!Number.isFinite(value)) return DEFAULT_TERMINAL_MIN_COLUMN_WIDTH
-  return Math.min(MAX_TERMINAL_MIN_COLUMN_WIDTH, Math.max(MIN_TERMINAL_MIN_COLUMN_WIDTH, Math.round(value)))
+  return clampRounded(value, MIN_COLUMN_WIDTH_RANGE, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH)
 }
 
 function normalizeEditorPreset(value?: string): EditorPreset {

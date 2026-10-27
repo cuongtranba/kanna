@@ -3,7 +3,8 @@ import { OpenExternalSelectStore } from "./OpenExternalSelect.store"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
 import { isEditorPreset } from "../../shared/types"
-import { getDefaultEditorCommandTemplate } from "../stores/terminalPreferencesStore"
+import { oneOf } from "../../shared/vocab"
+import { getDefaultEditorCommandTemplate, getEditorPresetLabel } from "../stores/terminalPreferencesStore"
 import { DefaultAppIcon, EDITOR_OPTIONS, EditorIcon, FinderIcon, FolderFallbackIcon, PreviewIcon, TerminalIcon } from "./editor-icons"
 import { HotkeyTooltip, HotkeyTooltipContent, HotkeyTooltipTrigger } from "./ui/tooltip"
 import { Button } from "./ui/button"
@@ -13,26 +14,59 @@ import { ContextMenuContent, ContextMenuItem } from "./ui/context-menu"
 import type { StoragePort } from "../ports/storagePort"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 
-export type OpenAppValue = "finder" | "terminal" | "preview" | "default" | `editor:${EditorPreset}`
+const FIXED_OPEN_APPS = ["finder", "terminal", "preview", "default"] as const
+type FixedOpenApp = (typeof FIXED_OPEN_APPS)[number]
+const isFixedOpenApp = oneOf(FIXED_OPEN_APPS)
 
+export type OpenAppValue = FixedOpenApp | `editor:${EditorPreset}`
+export type OpenAppTarget = { kind: FixedOpenApp } | { kind: "editor"; preset: EditorPreset }
+
+const EDITOR_VALUE_PREFIX = "editor:"
 const OPEN_SELECT_STORAGE_KEY = "kanna:last-open-external"
 const OPEN_APP_MENU_ITEM_CLASS_NAME = "py-2 pl-2 pr-8"
 const OPEN_APP_CONTEXT_MENU_ITEM_CLASS_NAME = "rounded-md text-sm font-normal focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground"
 const OPEN_APP_MENU_ROW_CLASS_NAME = "flex items-center gap-3"
 const OPEN_APP_MENU_ICON_CLASS_NAME = "h-5 w-5 shrink-0"
 
+const OPEN_EXTERNAL_ACTION: Record<FixedOpenApp, OpenExternalAction> = {
+  finder: "open_finder",
+  terminal: "open_terminal",
+  preview: "open_preview",
+  default: "open_default",
+}
+
+export function parseOpenAppValue(value: string | null): OpenAppTarget | null {
+  if (value === null) return null
+  if (isFixedOpenApp(value)) return { kind: value }
+  if (!value.startsWith(EDITOR_VALUE_PREFIX)) return null
+  const preset = value.slice(EDITOR_VALUE_PREFIX.length)
+  return isEditorPreset(preset) ? { kind: "editor", preset } : null
+}
+
+export function formatOpenAppValue(target: OpenAppTarget): OpenAppValue {
+  return target.kind === "editor" ? `editor:${target.preset}` : target.kind
+}
+
+function editorTarget(preset: EditorPreset): OpenAppTarget {
+  return { kind: "editor", preset }
+}
+
+function isSameTarget(a: OpenAppTarget, b: OpenAppTarget): boolean {
+  return formatOpenAppValue(a) === formatOpenAppValue(b)
+}
+
 function OpenAppMenuItemContent({
-  value,
+  target,
   label,
   isMac,
 }: {
-  value: OpenAppValue
+  target: OpenAppTarget
   label: string
   isMac: boolean
 }) {
   return (
     <span className={OPEN_APP_MENU_ROW_CLASS_NAME}>
-      <OpenAppIcon value={value} isMac={isMac} className={OPEN_APP_MENU_ICON_CLASS_NAME} />
+      <OpenAppIcon target={target} isMac={isMac} className={OPEN_APP_MENU_ICON_CLASS_NAME} />
       <span>{label}</span>
     </span>
   )
@@ -47,47 +81,41 @@ export function getEditorSettings(preset: EditorPreset, customTemplate?: string)
   }
 }
 
-export function getOpenAppLabel(value: OpenAppValue, isMac: boolean) {
-  if (value === "finder") return isMac ? "Finder" : "Folder"
-  if (value === "terminal") return "Terminal"
-  if (value === "preview") return "Preview"
-  if (value === "default") return "Default App"
-  const preset = value.slice("editor:".length)
-  if (preset === "vscode") return "VS Code"
-  return EDITOR_OPTIONS.find((option) => option.value === preset)?.label ?? "Editor"
+export function getOpenAppLabel(target: OpenAppTarget, isMac: boolean) {
+  switch (target.kind) {
+    case "finder":
+      return isMac ? "Finder" : "Folder"
+    case "terminal":
+      return "Terminal"
+    case "preview":
+      return "Preview"
+    case "default":
+      return "Default App"
+    case "editor":
+      return getEditorPresetLabel(target.preset)
+  }
 }
 
-export function OpenAppIcon({ value, isMac, className }: { value: OpenAppValue; isMac: boolean; className?: string }) {
-  if (value === "finder") {
-    return isMac ? <FinderIcon className={className} /> : <FolderFallbackIcon className={className} />
+export function OpenAppIcon({ target, isMac, className }: { target: OpenAppTarget; isMac: boolean; className?: string }) {
+  switch (target.kind) {
+    case "finder":
+      return isMac ? <FinderIcon className={className} /> : <FolderFallbackIcon className={className} />
+    case "terminal":
+      return <TerminalIcon className={className} />
+    case "preview":
+      return <PreviewIcon className={className} />
+    case "default":
+      return <DefaultAppIcon className={className} />
+    case "editor":
+      return <EditorIcon preset={target.preset} className={className} />
   }
-  if (value === "terminal") {
-    return <TerminalIcon className={className} />
-  }
-  if (value === "preview") {
-    return <PreviewIcon className={className} />
-  }
-  if (value === "default") {
-    return <DefaultAppIcon className={className} />
-  }
-  const preset = value.slice("editor:".length)
-  const resolvedPreset = EDITOR_OPTIONS.find((o) => o.value === preset)?.value ?? "vscode"
-  return <EditorIcon preset={resolvedPreset} className={className} />
 }
 
-function normalizeOpenAppValue(value: string | null, fallback: OpenAppValue): OpenAppValue {
-  if (value === "finder" || value === "terminal" || value === "preview" || value === "default") return value
-  if (value?.startsWith("editor:")) {
-    const preset = value.slice("editor:".length)
-    if (isEditorPreset(preset)) {
-      const v: OpenAppValue = `editor:${preset}`
-      return v
-    }
-  }
-  return fallback
-}
+type OpenAppItem = { value: OpenAppValue; target: OpenAppTarget; label: string }
 
-type OpenAppItem = { value: OpenAppValue; label: string }
+function openAppItem(target: OpenAppTarget, isMac: boolean): OpenAppItem {
+  return { value: formatOpenAppValue(target), target, label: getOpenAppLabel(target, isMac) }
+}
 
 export function getOpenAppItems({
   editorPreset,
@@ -106,64 +134,41 @@ export function getOpenAppItems({
   includeDefault?: boolean
   menuKind?: "context" | "navbar"
 }): Array<OpenAppItem> {
-  const finderItem: OpenAppItem = { value: "finder", label: isMac ? "Finder" : "Folder" }
-  const terminalItem: OpenAppItem = { value: "terminal", label: "Terminal" }
-  const previewItem: OpenAppItem = { value: "preview", label: "Preview" }
-  const defaultItem: OpenAppItem = { value: "default", label: "Default App" }
-  const customEditorItem: OpenAppItem = { value: "editor:custom", label: "Custom" }
-
-  const editorItems: Array<OpenAppItem> = [
-    { value: "editor:cursor", label: "Cursor" },
-    { value: "editor:xcode", label: "Xcode" },
-    { value: "editor:windsurf", label: "Windsurf" },
-    ...(editorPreset === "custom" ? [customEditorItem] : []),
-  ]
-  const defaultEditorValue: OpenAppValue = `editor:${editorPreset}`
-  const sortedEditorItems = [
-    ...editorItems.filter((item) => item.value === defaultEditorValue),
-    ...editorItems.filter((item) => item.value !== defaultEditorValue),
-  ]
+  const fixedItem = (kind: FixedOpenApp, included: boolean) => (included ? [openAppItem({ kind }, isMac)] : [])
+  const editorItems = EDITOR_OPTIONS
+    .filter((option) => option.value !== "custom" || editorPreset === "custom")
+    .map((option) => openAppItem(editorTarget(option.value), isMac))
+  const defaultEditorValue = formatOpenAppValue(editorTarget(editorPreset))
+  const defaultEditorItems = editorItems.filter((item) => item.value === defaultEditorValue)
+  const otherEditorItems = editorItems.filter((item) => item.value !== defaultEditorValue)
   if (menuKind === "navbar") {
     return [
-      ...sortedEditorItems.filter((item) => item.value === defaultEditorValue),
-      ...(includeFinder ? [finderItem] : []),
-      ...(includeTerminal ? [terminalItem] : []),
-      ...sortedEditorItems.filter((item) => item.value !== defaultEditorValue),
+      ...defaultEditorItems,
+      ...fixedItem("finder", includeFinder),
+      ...fixedItem("terminal", includeTerminal),
+      ...otherEditorItems,
     ]
   }
   return [
-    ...sortedEditorItems,
-    ...(includePreview && isMac ? [previewItem] : []),
-    ...(includeFinder ? [finderItem] : []),
-    ...(includeTerminal ? [terminalItem] : []),
-    ...(includeDefault ? [defaultItem] : []),
+    ...defaultEditorItems,
+    ...otherEditorItems,
+    ...fixedItem("preview", includePreview && isMac),
+    ...fixedItem("finder", includeFinder),
+    ...fixedItem("terminal", includeTerminal),
+    ...fixedItem("default", includeDefault),
   ]
 }
 
-export function openAppValue(args: {
-  value: OpenAppValue
+export function openAppTarget(args: {
+  target: OpenAppTarget
   editorCommandTemplate?: string
   onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
 }) {
-  if (args.value === "finder") {
-    args.onOpenExternal("open_finder")
+  if (args.target.kind === "editor") {
+    args.onOpenExternal("open_editor", getEditorSettings(args.target.preset, args.editorCommandTemplate))
     return
   }
-  if (args.value === "terminal") {
-    args.onOpenExternal("open_terminal")
-    return
-  }
-  if (args.value === "preview") {
-    args.onOpenExternal("open_preview")
-    return
-  }
-  if (args.value === "default") {
-    args.onOpenExternal("open_default")
-    return
-  }
-  const rawPreset = args.value.slice("editor:".length)
-  const preset = EDITOR_OPTIONS.find((o) => o.value === rawPreset)?.value ?? "vscode"
-  args.onOpenExternal("open_editor", getEditorSettings(preset, args.editorCommandTemplate))
+  args.onOpenExternal(OPEN_EXTERNAL_ACTION[args.target.kind])
 }
 
 export interface OpenExternalSelectPorts {
@@ -190,13 +195,12 @@ function OpenExternalSelectInner({
   ports?: OpenExternalSelectPorts
 }) {
   const storage = ports?.storage ?? localStorageAdapter
-  const fallbackValue: OpenAppValue = `editor:${editorPreset}`
-  const lastValue = OpenExternalSelectStore.useScopedStore((s) => s.lastValue)
-  const setLastValue = OpenExternalSelectStore.useScopedStore((s) => s.setLastValue)
+  const lastTarget = OpenExternalSelectStore.useScopedStore((s) => s.lastTarget)
+  const setLastTarget = OpenExternalSelectStore.useScopedStore((s) => s.setLastTarget)
 
   useEffect(() => {
-    setLastValue(normalizeOpenAppValue(storage.getItem(OPEN_SELECT_STORAGE_KEY), fallbackValue))
-  }, [fallbackValue, setLastValue, storage])
+    setLastTarget(parseOpenAppValue(storage.getItem(OPEN_SELECT_STORAGE_KEY)) ?? editorTarget(editorPreset))
+  }, [editorPreset, setLastTarget, storage])
 
   const items = useMemo(() => getOpenAppItems({
     editorPreset,
@@ -206,16 +210,16 @@ function OpenExternalSelectInner({
     menuKind: "navbar",
   }), [editorPreset, isMac])
 
-  function handleOpenValue(value: OpenAppValue) {
-    setLastValue(value)
-    storage.setItem(OPEN_SELECT_STORAGE_KEY, value)
-    openAppValue({ value, editorCommandTemplate, onOpenExternal })
+  function handleOpenTarget(target: OpenAppTarget) {
+    setLastTarget(target)
+    storage.setItem(OPEN_SELECT_STORAGE_KEY, formatOpenAppValue(target))
+    openAppTarget({ target, editorCommandTemplate, onOpenExternal })
   }
 
   let tooltipShortcut: typeof finderShortcut | undefined
-  if (lastValue === "finder") {
+  if (lastTarget.kind === "finder") {
     tooltipShortcut = finderShortcut
-  } else if (lastValue === `editor:${editorPreset}`) {
+  } else if (isSameTarget(lastTarget, editorTarget(editorPreset))) {
     tooltipShortcut = editorShortcut
   } else {
     tooltipShortcut = undefined
@@ -228,15 +232,15 @@ function OpenExternalSelectInner({
           <Button
             variant="ghost"
             size="none"
-            onClick={() => handleOpenValue(lastValue)}
+            onClick={() => handleOpenTarget(lastTarget)}
             disabled={pending}
             aria-busy={pending || undefined}
-            title={`Open in ${getOpenAppLabel(lastValue, isMac)}`}
+            title={`Open in ${getOpenAppLabel(lastTarget, isMac)}`}
             className="border-0 !pl-2.5 !pr-1 hover:!border-border/0 hover:!bg-transparent"
           >
             {pending
               ? <Spinner className="size-6 p-1" />
-              : <OpenAppIcon value={lastValue} isMac={isMac} className="size-6" />}
+              : <OpenAppIcon target={lastTarget} isMac={isMac} className="size-6" />}
           </Button>
         </HotkeyTooltipTrigger>
         <HotkeyTooltipContent
@@ -244,7 +248,7 @@ function OpenExternalSelectInner({
           shortcut={tooltipShortcut}
         />
       </HotkeyTooltip>
-      <Select disabled={pending} value={undefined} onValueChange={(value) => handleOpenValue(normalizeOpenAppValue(value, lastValue))}>
+      <Select disabled={pending} value={undefined} onValueChange={(value) => handleOpenTarget(parseOpenAppValue(value) ?? lastTarget)}>
         <SelectTrigger
           aria-label="Choose open destination"
           className="!pl-1 !pr-2.5 border-0 bg-transparent hover:bg-transparent focus:ring-0 focus:ring-offset-0 [&>svg]:hidden"
@@ -257,7 +261,7 @@ function OpenExternalSelectInner({
           <SelectGroup>
             {items.map((item) => (
               <SelectItem key={item.value} value={item.value} className={OPEN_APP_MENU_ITEM_CLASS_NAME}>
-                <OpenAppMenuItemContent value={item.value} label={item.label} isMac={isMac} />
+                <OpenAppMenuItemContent target={item.target} label={item.label} isMac={isMac} />
               </SelectItem>
             ))}
           </SelectGroup>
@@ -286,9 +290,8 @@ export function OpenExternalSelect({
   pending?: boolean
   ports?: OpenExternalSelectPorts
 }) {
-  const initialValue: OpenAppValue = `editor:${editorPreset}`
   return (
-    <OpenExternalSelectStore.Provider init={{ initialValue }}>
+    <OpenExternalSelectStore.Provider init={{ initialTarget: editorTarget(editorPreset) }}>
       <OpenExternalSelectInner
         isMac={isMac}
         editorPreset={editorPreset}
@@ -331,9 +334,9 @@ export function OpenExternalContextMenuContent({
     includeDefault,
   })
 
-  const handleSelectApp = useCallback((event: Event, value: OpenAppValue) => {
+  const handleSelectApp = useCallback((event: Event, target: OpenAppTarget) => {
     event.preventDefault()
-    openAppValue({ value, editorCommandTemplate, onOpenExternal })
+    openAppTarget({ target, editorCommandTemplate, onOpenExternal })
   }, [editorCommandTemplate, onOpenExternal])
 
   return (
@@ -342,9 +345,9 @@ export function OpenExternalContextMenuContent({
         <ContextMenuItem
           key={item.value}
           className={`${OPEN_APP_MENU_ITEM_CLASS_NAME} ${OPEN_APP_CONTEXT_MENU_ITEM_CLASS_NAME}`}
-          onSelect={(event) => handleSelectApp(event, item.value)}
+          onSelect={(event) => handleSelectApp(event, item.target)}
         >
-          <OpenAppMenuItemContent value={item.value} label={item.label} isMac={isMac} />
+          <OpenAppMenuItemContent target={item.target} label={item.label} isMac={isMac} />
         </ContextMenuItem>
       ))}
     </ContextMenuContent>
