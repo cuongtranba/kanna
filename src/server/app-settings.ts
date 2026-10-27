@@ -10,24 +10,16 @@ import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normaliz
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
 import {
-  normalizeAuthSettings,
   normalizeRemoteMcpSettings,
   normalizeCloudflareTunnelSettings,
   normalizePushSettings,
   normalizeTelemetrySettings,
   normalizeTypographySettings,
-  normalizeUploadSettings,
 } from "../shared/settings/index"
 import {
-  AUTH_SESSION_MAX_AGE_DAYS_MAX,
-  AUTH_SESSION_MAX_AGE_DAYS_MIN,
   CLAUDE_AUTH_DEFAULTS,
   CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_IDLE_TIMEOUT_MS_MAX,
-  CLAUDE_IDLE_TIMEOUT_MS_MIN,
   CLAUDE_LIFECYCLE_DEFAULTS,
-  CLAUDE_MAX_CONCURRENT_MAX,
-  CLAUDE_MAX_CONCURRENT_MIN,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_OPENROUTER_SDK_MODEL,
@@ -47,8 +39,6 @@ import {
   normalizeAnthropicBaseUrl,
   normalizeClaudeReasoningEffort,
   PROVIDERS,
-  UPLOAD_MAX_FILE_SIZE_MB_MAX,
-  UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
   type AppSettingsPatch,
   type AppSettingsSnapshot,
@@ -97,6 +87,18 @@ import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput
 import { applyServiceBusPatch, normalizeServiceBusSettings, toPublicServiceBus, type ServiceBusSettingsStored } from "./service-bus-settings"
 import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
 import { isPlainObject } from "../shared/settings/plain-object"
+import {
+  assertWithinBound,
+  AUTH_SESSION_MAX_AGE_DAYS_BOUND,
+  CLAUDE_IDLE_TIMEOUT_MS_BOUND,
+  CLAUDE_MAX_CONCURRENT_BOUND,
+  normalizeAuthSettings,
+  normalizeBounded,
+  normalizeUploadSettings,
+  SHARE_DEFAULT_TTL_HOURS_BOUND,
+  SUBAGENT_RUN_TIMEOUT_MS_BOUND,
+  UPLOAD_MAX_FILE_SIZE_MB_BOUND,
+} from "./app-settings-bounds"
 import type { JsonArray, JsonObject, JsonValue } from "../shared/json"
 
 type StatusPatch = Partial<Pick<OAuthTokenEntry,
@@ -188,8 +190,6 @@ interface NormalizedAppSettings {
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
 const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
-const MIN_SUBAGENT_RUN_TIMEOUT_MS = 30_000
-const MAX_SUBAGENT_RUN_TIMEOUT_MS = 86_400_000
 const DEFAULT_TERMINAL_SCROLLBACK = 1_000
 const MIN_TERMINAL_SCROLLBACK = 500
 const MAX_TERMINAL_SCROLLBACK = 5_000
@@ -746,34 +746,20 @@ function normalizeClaudeLifecycle<T>(value: T, warnings: string[]): ClaudeLifecy
   if (value !== undefined && !source) {
     warnings.push("claudeDriver.lifecycle must be an object")
   }
-  const idleRaw = source?.idleTimeoutMs
-  let idleTimeoutMs = CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs
-  if (idleRaw !== undefined) {
-    if (typeof idleRaw !== "number" || !Number.isFinite(idleRaw)) {
-      warnings.push("claudeDriver.lifecycle.idleTimeoutMs must be a number")
-    } else if (idleRaw < CLAUDE_IDLE_TIMEOUT_MS_MIN || idleRaw > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
-      warnings.push(
-        `claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`,
-      )
-      idleTimeoutMs = clampNumber(idleRaw, CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs, CLAUDE_IDLE_TIMEOUT_MS_MIN, CLAUDE_IDLE_TIMEOUT_MS_MAX)
-    } else {
-      idleTimeoutMs = Math.round(idleRaw)
-    }
-  }
-  const maxRaw = source?.maxConcurrent
-  let maxConcurrent = CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent
-  if (maxRaw !== undefined) {
-    if (typeof maxRaw !== "number" || !Number.isFinite(maxRaw)) {
-      warnings.push("claudeDriver.lifecycle.maxConcurrent must be a number")
-    } else if (maxRaw < CLAUDE_MAX_CONCURRENT_MIN || maxRaw > CLAUDE_MAX_CONCURRENT_MAX) {
-      warnings.push(
-        `claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`,
-      )
-      maxConcurrent = clampNumber(maxRaw, CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent, CLAUDE_MAX_CONCURRENT_MIN, CLAUDE_MAX_CONCURRENT_MAX)
-    } else {
-      maxConcurrent = Math.round(maxRaw)
-    }
-  }
+  const idleTimeoutMs = normalizeBounded(
+    CLAUDE_IDLE_TIMEOUT_MS_BOUND,
+    source?.idleTimeoutMs,
+    CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs,
+    "clamp",
+    warnings,
+  )
+  const maxConcurrent = normalizeBounded(
+    CLAUDE_MAX_CONCURRENT_BOUND,
+    source?.maxConcurrent,
+    CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent,
+    "clamp",
+    warnings,
+  )
   return { idleTimeoutMs, maxConcurrent }
 }
 
@@ -813,17 +799,13 @@ function normalizeSubagentRuntime<T>(
     warnings.push("subagentRuntime must be an object")
   }
 
-  let runTimeoutMs = DEFAULT_SUBAGENT_RUN_TIMEOUT_MS
-  const rawTimeout = src?.runTimeoutMs
-  if (rawTimeout !== undefined) {
-    if (typeof rawTimeout !== "number" || !Number.isInteger(rawTimeout)) {
-      warnings.push("subagentRuntime.runTimeoutMs must be an integer")
-    } else if (rawTimeout < MIN_SUBAGENT_RUN_TIMEOUT_MS || rawTimeout > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
-      warnings.push(`subagentRuntime.runTimeoutMs must be between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
-    } else {
-      runTimeoutMs = rawTimeout
-    }
-  }
+  const runTimeoutMs = normalizeBounded(
+    SUBAGENT_RUN_TIMEOUT_MS_BOUND,
+    src?.runTimeoutMs,
+    DEFAULT_SUBAGENT_RUN_TIMEOUT_MS,
+    "fallback",
+    warnings,
+  )
 
   let defaultLoopSubagentId: string | null = null
   const rawId = src?.defaultLoopSubagentId
@@ -926,15 +908,13 @@ function normalizeAppSettings<T>(
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
   const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
 
-  let shareDefaultTtlHours = DEFAULT_SHARE_DEFAULT_TTL_HOURS
-  if (source?.shareDefaultTtlHours !== undefined) {
-    const raw = source.shareDefaultTtlHours
-    if (typeof raw !== "number" || !Number.isInteger(raw) || raw <= 0) {
-      warnings.push("shareDefaultTtlHours must be a positive integer")
-    } else {
-      shareDefaultTtlHours = raw
-    }
-  }
+  const shareDefaultTtlHours = normalizeBounded(
+    SHARE_DEFAULT_TTL_HOURS_BOUND,
+    source?.shareDefaultTtlHours,
+    DEFAULT_SHARE_DEFAULT_TTL_HOURS,
+    "fallback",
+    warnings,
+  )
 
   const subagentRuntime = normalizeSubagentRuntime(source?.subagentRuntime, subagents, warnings)
   const packageUpdates = normalizePackageUpdateSettings(source?.packageUpdates, warnings)
@@ -1515,17 +1495,11 @@ type BeaconPairingPatch = Omit<AppSettingsPatch, "customBeacons"> & {
 
 function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSettingsState {
   if (patch.shareDefaultTtlHours !== undefined) {
-    const value = patch.shareDefaultTtlHours
-    if (!Number.isInteger(value) || value < 1) {
-      throw new Error("shareDefaultTtlHours must be a positive integer >= 1")
-    }
+    assertWithinBound(SHARE_DEFAULT_TTL_HOURS_BOUND, patch.shareDefaultTtlHours)
   }
 
   if (patch.subagentRuntime?.runTimeoutMs !== undefined) {
-    const value = patch.subagentRuntime.runTimeoutMs
-    if (!Number.isInteger(value) || value < MIN_SUBAGENT_RUN_TIMEOUT_MS || value > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
-      throw new Error(`subagentRuntime.runTimeoutMs must be an integer between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
-    }
+    assertWithinBound(SUBAGENT_RUN_TIMEOUT_MS_BOUND, patch.subagentRuntime.runTimeoutMs)
   }
   if (patch.subagentRuntime?.defaultLoopSubagentId != null) {
     const id = patch.subagentRuntime.defaultLoopSubagentId
@@ -1730,22 +1704,14 @@ export class AppSettingsManager {
 
   async setAuth(patch: Partial<AuthSettings>) {
     if (patch.sessionMaxAgeDays !== undefined) {
-      const value = patch.sessionMaxAgeDays
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < AUTH_SESSION_MAX_AGE_DAYS_MIN || value > AUTH_SESSION_MAX_AGE_DAYS_MAX) {
-        throw new Error(`auth.sessionMaxAgeDays must be between ${AUTH_SESSION_MAX_AGE_DAYS_MIN} and ${AUTH_SESSION_MAX_AGE_DAYS_MAX}`)
-      }
+      assertWithinBound(AUTH_SESSION_MAX_AGE_DAYS_BOUND, patch.sessionMaxAgeDays)
     }
     return this.writePatch({ auth: patch })
   }
 
   async setUploads(patch: Partial<UploadSettings>) {
     if (patch.maxFileSizeMb !== undefined) {
-      const value = patch.maxFileSizeMb
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < UPLOAD_MAX_FILE_SIZE_MB_MIN || value > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
-        throw new Error(`uploads.maxFileSizeMb must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX}`)
-      }
+      assertWithinBound(UPLOAD_MAX_FILE_SIZE_MB_BOUND, patch.maxFileSizeMb)
     }
     return this.writePatch({ uploads: patch })
   }
@@ -1754,18 +1720,10 @@ export class AppSettingsManager {
     lifecycle?: Partial<ClaudeLifecycleSettings>
   }) {
     if (patch.lifecycle?.idleTimeoutMs !== undefined) {
-      const value = patch.lifecycle.idleTimeoutMs
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_IDLE_TIMEOUT_MS_MIN || value > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
-        throw new Error(`claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`)
-      }
+      assertWithinBound(CLAUDE_IDLE_TIMEOUT_MS_BOUND, patch.lifecycle.idleTimeoutMs)
     }
     if (patch.lifecycle?.maxConcurrent !== undefined) {
-      const value = patch.lifecycle.maxConcurrent
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_MAX_CONCURRENT_MIN || value > CLAUDE_MAX_CONCURRENT_MAX) {
-        throw new Error(`claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`)
-      }
+      assertWithinBound(CLAUDE_MAX_CONCURRENT_BOUND, patch.lifecycle.maxConcurrent)
     }
     return this.writePatch({ claudeDriver: patch })
   }

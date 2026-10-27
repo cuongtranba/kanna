@@ -151,6 +151,7 @@ c3-201:
   - src/types/bun-process-signals.d.ts
 c3-202:
   - src/server/app-settings.ts
+  - src/server/app-settings-bounds.ts
   - src/server/server.ts
   - src/server/http-dispatcher.ts
   - src/server/http-api-routes.ts

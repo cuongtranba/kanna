@@ -1,7 +1,7 @@
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { AutoContinueEvent } from "./auto-continue/events"
-import type { StoreEvent, StoreState } from "./events"
+import { isAutoContinueEvent, type StoreEvent, type StoreState } from "./events"
 import {
   applyChatLifecycleEvent,
   applyChatMessageMetadata,
@@ -12,10 +12,6 @@ import {
 import { applySubagentEvent } from "./event-store-subagent"
 import { applyChatTaskEvent } from "./event-store-tasks"
 import { applyToolRequestEvent } from "./event-store-tool-requests"
-
-function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
-  return "kind" in event
-}
 
 export function applyStoreEvent(
   event: StoreEvent,

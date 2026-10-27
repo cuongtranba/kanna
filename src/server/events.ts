@@ -446,6 +446,14 @@ export type StoreEventKind =
   | Exclude<StoreEvent, AutoContinueEvent>["type"]
   | AutoContinueEvent["kind"]
 
+export function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
+  return "kind" in event
+}
+
+export function storeEventKind(event: StoreEvent): StoreEventKind {
+  return isAutoContinueEvent(event) ? event.kind : event.type
+}
+
 export type LogName =
   | "projects"
   | "chats"

@@ -65,6 +65,12 @@ const LEGACY_TERMINAL_STORAGE_KEY = "terminal-preferences"
 const LEGACY_CHAT_PREFERENCES_STORAGE_KEY = "chat-preferences"
 
 
+function applyAppSettingsSnapshot(snapshot: AppSettingsSnapshot) {
+  useAppSettingsStore.getState().setFromServer(snapshot)
+  useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
+  useKannaStateStore.getState().setCommandError(null)
+}
+
 function applyProjectCommandsSnapshotLocal(
   subscribedProjectId: string,
   snapshot: ProjectCommandsSnapshot | null,
@@ -507,10 +513,7 @@ export function useAppGlobalState(
 
   useEffect(() => {
     return socket.subscribe<AppSettingsSnapshot>({ type: "app-settings" }, (snapshot) => {
-      const store = useKannaStateStore.getState()
-      useAppSettingsStore.getState().setFromServer(snapshot)
-      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-      store.setCommandError(null)
+      applyAppSettingsSnapshot(snapshot)
     })
   }, [socket])
 
@@ -648,10 +651,7 @@ export function useAppGlobalState(
     try {
       useAppSettingsStore.getState().setHydrationStatus("loading")
       const snapshot = await socket.command({ type: "settings.readAppSettings" })
-      const store = useKannaStateStore.getState()
-      useAppSettingsStore.getState().setFromServer(snapshot)
-      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-      store.setCommandError(null)
+      applyAppSettingsSnapshot(snapshot)
     } catch (error) {
       useAppSettingsStore.getState().setHydrationStatus("error")
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
@@ -696,10 +696,7 @@ export function useAppGlobalState(
         type: "settings.writeAppSettingsPatch",
         patch,
       })
-      const store = useKannaStateStore.getState()
-      useAppSettingsStore.getState().setFromServer(snapshot)
-      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-      store.setCommandError(null)
+      applyAppSettingsSnapshot(snapshot)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       await handleReadAppSettings()
@@ -807,10 +804,7 @@ export function useAppGlobalState(
         type: "appSettings.setCloudflareTunnel",
         patch,
       })
-      const store = useKannaStateStore.getState()
-      useAppSettingsStore.getState().setFromServer(snapshot)
-      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-      store.setCommandError(null)
+      applyAppSettingsSnapshot(snapshot)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       await handleReadAppSettings()
@@ -825,10 +819,7 @@ export function useAppGlobalState(
         type: "appSettings.setClaudeAuth",
         patch,
       })
-      const store = useKannaStateStore.getState()
-      useAppSettingsStore.getState().setFromServer(snapshot)
-      useChatPreferencesStore.getState().applyServerDefaults(snapshot.defaultProvider, snapshot.providerDefaults)
-      store.setCommandError(null)
+      applyAppSettingsSnapshot(snapshot)
     } catch (error) {
       useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       await handleReadAppSettings()

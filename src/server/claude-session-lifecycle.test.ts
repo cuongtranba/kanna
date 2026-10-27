@@ -4,14 +4,13 @@ import {
   resolveClaudeIdleMs,
   resolveClaudeMaxResident,
   hasLiveWorkflow,
-  hasPendingBackgroundTask,
-  backgroundTaskGuardExpired,
   closeClaudeSession,
   maybeRegisterSdkWorkflowsDir,
   enforceClaudeSessionBudget,
   buildPoolUnavailableMessage,
   type SessionLifecycleDeps,
 } from "./claude-session-lifecycle"
+import { backgroundTaskGuardExpired, hasPendingBackgroundTask } from "./claude-session-state-queries"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
 

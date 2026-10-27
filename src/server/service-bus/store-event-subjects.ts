@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "../../shared/types"
-import type { StoreEvent, StoreEventKind } from "../events"
+import { isAutoContinueEvent, storeEventKind, type StoreEvent, type StoreEventKind } from "../events"
 
 export const STORE_EVENT_SUBJECT = {
   project_opened: "project.opened",
@@ -89,16 +89,12 @@ export const TRANSCRIPT_BUS_KINDS: ReadonlySet<TranscriptEntry["kind"]> = new Se
   "cron_job_change",
 ])
 
-export function storeEventKind(event: StoreEvent): StoreEventKind {
-  return "kind" in event ? event.kind : event.type
-}
-
 export function storeEventSubject(event: StoreEvent): string | null {
   return STORE_EVENT_SUBJECT[storeEventKind(event)]
 }
 
 export function storeEventEntityId(event: StoreEvent): string {
-  if ("kind" in event) return event.scheduleId
+  if (isAutoContinueEvent(event)) return event.scheduleId
   switch (event.type) {
     case "sidebar_project_order_set":
       return ""

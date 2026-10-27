@@ -16,11 +16,12 @@ import {
   type StoreState,
   type SubagentRunEvent,
   type TurnRunConfig,
-  type StoreEventKind,
   type LogName,
   LOG_FILES,
   LOG_OF_EVENT,
   createEmptyState,
+  isAutoContinueEvent,
+  storeEventKind,
 } from "./events"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
@@ -263,7 +264,7 @@ export class EventStore implements PushEventStore {
   private applyEvent(event: StoreEvent) {
     applyStoreEvent(event, this.state, this.legacyMessagesByChatId, this.replayChatProvider)
     this.tap?.onEventApplied(event)
-    if ("kind" in event) return
+    if (isAutoContinueEvent(event)) return
     const typedEvent: Exclude<StoreEvent, AutoContinueEvent> = event
     if (typedEvent.type === "chat_deleted") {
       const { chatId } = typedEvent
@@ -293,8 +294,7 @@ export class EventStore implements PushEventStore {
   }
 
   private commit(event: StoreEvent): Promise<void> {
-    const key: StoreEventKind = "kind" in event ? event.kind : event.type
-    const logName: LogName = LOG_OF_EVENT[key]
+    const logName: LogName = LOG_OF_EVENT[storeEventKind(event)]
     const filePath = path.join(this.dataDir, LOG_FILES[logName])
     return this.append(filePath, event)
   }

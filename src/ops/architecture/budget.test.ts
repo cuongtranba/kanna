@@ -227,6 +227,15 @@ describe("the manifest itself", () => {
     expect(expression.test("  const x: SendCommandDeps = build()")).toBe(false)
   })
 
+  test("coordinator-passthroughs counts the forwarding method itself, whatever its deps accessor is called", () => {
+    const budget = PATTERN_BUDGETS.find((b) => b.id === "coordinator-passthroughs")
+    expect(budget).toBeDefined()
+    const expression = new RegExp(budget?.pattern ?? "")
+    expect(expression.test("    return closeChatFn(this.chatManagementDeps(), chatId)")).toBe(true)
+    expect(expression.test("    return closeChatFn(this.buildChatManagementDeps(), chatId)")).toBe(true)
+    expect(expression.test("    const x = closeChatFn(deps)")).toBe(false)
+  })
+
   test("no budget scans the manifest or the scanner, which quote every regex as a literal", () => {
     for (const budget of PATTERN_BUDGETS) {
       for (const selfPath of SELF_EXCLUDED_PATHS) {

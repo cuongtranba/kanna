@@ -73,13 +73,13 @@ import { buildCompactSummaryEntry, recordCompactionStarted } from "./compaction"
 import {
   resolveClaudeIdleMs as resolveClaudeIdleMsFn,
   hasLiveWorkflow as hasLiveWorkflowFn,
-  hasPendingBackgroundTask as hasPendingBackgroundTaskFn,
   closeClaudeSession as closeClaudeSessionFn,
   maybeRegisterSdkWorkflowsDir as maybeRegisterSdkWorkflowsDirFn,
   enforceClaudeSessionBudget as enforceClaudeSessionBudgetFn,
   buildPoolUnavailableMessage as buildPoolUnavailableMessageFn,
   type SessionLifecycleDeps,
 } from "./claude-session-lifecycle"
+import { hasPendingBackgroundTask } from "./claude-session-state-queries"
 import {
   handleLimitError as handleLimitErrorFn,
   handleLimitDetection as handleLimitDetectionFn,
@@ -145,7 +145,7 @@ import {
 } from "./claude-send-command"
 import { clearChatContext as clearChatContextFn, type ClearChatContextDeps } from "./claude-context-commands"
 import {
-  subagentPendingKey as subagentPendingKeyFn,
+  subagentPendingKey,
   rejectPendingResolversForChat as rejectPendingResolversForChatFn,
   rejectPendingResolversForRun as rejectPendingResolversForRunFn,
   respondSubagentTool as respondSubagentToolFn,
@@ -585,7 +585,7 @@ export class AgentCoordinator {
       startingTurns: this.startingTurns,
       pendingTools: this.pendingTools,
       hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      hasPendingBackgroundTask,
       getSubagents: () => this.getSubagents(),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
@@ -638,7 +638,7 @@ export class AgentCoordinator {
         const session = this.claudeSessions.get(chatId)
         return Object.values(this.store.getSubagentRuns(chatId)).some((run) => run.status === "running")
           || this.hasLiveWorkflow(chatId)
-          || (session !== undefined && this.hasPendingBackgroundTask(session, Date.now()))
+          || (session !== undefined && hasPendingBackgroundTask(session, Date.now()))
       },
       clearChatContext: (chatId) => this.clearChatContext(chatId),
       createChat: (projectId) => this.store.createChat(projectId),
@@ -730,8 +730,7 @@ export class AgentCoordinator {
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       readLlmProvider: () => this.readLlmProvider(),
       getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
-      subagentPendingKey: (chatId, runId, toolUseId) =>
-        this.subagentPendingKey(chatId, runId, toolUseId),
+      subagentPendingKey,
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
       beaconRegistry: this.beaconRegistry ?? undefined,
       getBeacons: this.getBeacons,
@@ -793,10 +792,6 @@ export class AgentCoordinator {
       })
   }
 
-  hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-    return hasPendingBackgroundTaskFn(session, now)
-  }
-
   closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
@@ -847,7 +842,7 @@ export class AgentCoordinator {
       claudeSessions: this.claudeSessions,
       drainingStreams: this.drainingStreams,
       isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      hasPendingBackgroundTask,
       resolveClaudeIdleMs: () => this.resolveClaudeIdleMs(),
       resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
       resolveBackgroundTaskMaxWakes: () => this.resolveBackgroundTaskMaxWakes(),
@@ -861,10 +856,6 @@ export class AgentCoordinator {
         this.notifyBackgroundTasksAbandoned(chatId, taskIds)
       },
     }
-  }
-
-  subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
-    return subagentPendingKeyFn(chatId, runId, toolUseId)
   }
 
   rejectPendingResolversForChat(chatId: string): void {
@@ -923,7 +914,7 @@ export class AgentCoordinator {
       startingTurns: this.startingTurns,
       pendingTools: this.pendingTools,
       hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      hasPendingBackgroundTask,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
       emitStateChange: (chatId) => this.emitStateChange(chatId),

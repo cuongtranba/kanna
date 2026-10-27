@@ -416,6 +416,15 @@ silently re-narrowed.
 When a budget fires, check whether the cheapest way to satisfy it is a rename.
 If it is, the pattern is measuring a spelling rather than the defect.
 
+**It happened a second time, and silently.** `coordinator-passthroughs` matched
+`Fn\(this\.build`; #928 renamed `buildXDeps()` to `xDeps()` and lowered the pin
+55 → 0, while `AgentCoordinator` still had 50 methods whose whole body is
+`return xFn(this.xDeps(), …)`. A pin at 0 reads as "done", so nothing flagged it
+for two months (#1379). The pattern now matches the forwarding method itself
+(`^\s+return [A-Za-z]+Fn\(`) and the pin was re-baselined to the true count.
+When a pin drops sharply in the same commit as a rename, re-measure the concept
+by hand before believing it.
+
 **A budget graduates, it does not settle at a residue.** Once its issue lands and
 the type system or a lint rule enforces the property permanently, delete the entry
 rather than pinning whatever the regex still matches.

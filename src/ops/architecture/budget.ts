@@ -51,11 +51,11 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   {
     id: "coordinator-passthroughs",
     include: ["src/server/agent-coordinator.ts"],
-    pattern: "Fn\\(this\\.build",
-    max: 0,
+    pattern: "^\\s+return [A-Za-z]+Fn\\(",
+    max: 47,
     issue: 893,
     rationale:
-      "A method whose whole body is `return xFn(this.buildYDeps(), ...)` adds interface without adding implementation, and costs three hops through two files to reach one line of logic.",
+      "A method whose whole body is `return xFn(this.yDeps(), ...)` adds interface without adding implementation, and costs three hops through two files to reach one line of logic. The first pattern, `Fn\\(this\\.build`, went blind when #928 renamed buildXDeps() to xDeps() and still read 0; this one counts the forwarding method itself in every spelling. Each remaining one is a facade method that only supplies private wiring, which #1379 should collapse; the two that took no deps at all (hasPendingBackgroundTask, subagentPendingKey) were deleted outright.",
   },
   {
     id: "event-store-passthroughs",
@@ -106,10 +106,28 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "settings-bound-throws",
     include: ["src/server/app-settings.ts"],
     pattern: "throw new Error\\(",
-    max: 13,
+    max: 7,
     issue: 898,
     rationale:
-      "Each restates a bound that a normalize* function also enforces, with opposite semantics — the WS path throws where the file path clamps, so the same out-of-range value is rejected or silently corrected depending on how it arrived.",
+      "The numeric bounds now live once in app-settings-bounds.ts, which owns each bound's message and gives the write path its single throw (assertWithinBound) while the file path keeps its clamp or fall-back policy. The throws left here are type and identity checks (cloudflare mode, unknown subagent id, globalPromptAppend, claudeAuth) that no bound table covers.",
+  },
+  {
+    id: "store-event-discriminator-probes",
+    include: ["src/server/"],
+    pattern: '"kind" in event',
+    max: 1,
+    issue: 1379,
+    rationale:
+      "Which StoreEvent variant is discriminated by kind instead of type is a fact about the event union, so events.ts owns it through isAutoContinueEvent and storeEventKind. A site that probes the field itself learns the union's layout and has to be found and edited whenever a second variant joins the exception.",
+  },
+  {
+    id: "settings-snapshot-application",
+    include: ["src/client/"],
+    pattern: "applyServerDefaults\\(",
+    max: 1,
+    issue: 1379,
+    rationale:
+      "Which stores an app-settings snapshot feeds, and in what order, is one decision. Five handlers in useAppGlobalState each restated the set-from-server, apply-chat-defaults, clear-error triple, so adding a store meant finding every copy; applyAppSettingsSnapshot is the single caller of applyServerDefaults.",
   },
   {
     id: "shared-types-star-exports",

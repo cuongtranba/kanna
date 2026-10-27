@@ -1,12 +1,11 @@
 import { safeJsonParse, type JsonValue } from "../../shared/json"
 import { busSubject, type BusEnvelope } from "../../shared/service-bus/envelope"
 import type { TranscriptEntry } from "../../shared/types"
-import { LOG_OF_EVENT, type StoreEvent } from "../events"
+import { LOG_OF_EVENT, storeEventKind, type StoreEvent } from "../events"
 import type { BusSink } from "./service-bus"
 import {
   storeEventChatId,
   storeEventEntityId,
-  storeEventKind,
   storeEventSubject,
   storeEventTimestamp,
   TRANSCRIPT_BUS_KINDS,
