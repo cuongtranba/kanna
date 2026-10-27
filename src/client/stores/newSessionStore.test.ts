@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import type { TimerPort } from "../ports/timerPort"
 import { MOTION_DURATION } from "../lib/motion"
 import { selectIsAnySpawning, selectIsSpawning, useNewSessionStore } from "./newSessionStore"

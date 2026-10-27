@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { easeInOutCubic, interpolateLayout } from "./terminalToggleAnimation"
 import { resolveTerminalAnimationState, shouldRequestTerminalFocus } from "./useTerminalToggleAnimation"
 

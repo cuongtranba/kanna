@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { MCP_SOURCE_PRESETS } from "./presets"
 import { MCP_SOURCE_NAME_MAX, type McpSourceInput } from "./types"
 import { parseMcpSourceArgs, validateMcpSource } from "./validate"

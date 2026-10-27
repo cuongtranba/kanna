@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { COLUMN_DOT_CLASS, isOverWipLimit } from "./columnStyle"
 import { COLUMN_COLOR_TOKENS } from "../../../shared/boards/types"
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { buildClaudeEnv } from "./agent"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"

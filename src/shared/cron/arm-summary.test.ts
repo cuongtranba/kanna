@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { cronModeConsequence, formatCronArmSummary } from "./arm-summary"
 import type { CronArmSummary } from "./types"
 

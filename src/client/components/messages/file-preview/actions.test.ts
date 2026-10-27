@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { downloadFile, shareViaWebShare } from "./actions"
 import type { PreviewSource } from "./types"
 import { makeFakeDomPort, makeFakeClipboardPort } from "../../../adapters/testing/makeFakePorts"

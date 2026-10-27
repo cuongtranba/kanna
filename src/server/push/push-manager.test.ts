@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import type { InboxThread } from "../../shared/inbox/types"
 import type { PushPayload } from "../../shared/types"
 import type { PushEvent, PushEventStore } from "./events"

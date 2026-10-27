@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { startSnapshotSweep } from "./sweep"
 import type { SessionShareService } from "./index"
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { BEACON_UPDATE_STATES } from "../../shared/beacon-protocol"
 import { beaconUpdateLabel, beaconUpdateTone, isBeaconUpdateInFlight } from "./beaconUpdateStatus"
 

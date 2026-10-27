@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { INBOX_REPORT_TOOL_NAME } from "../tools"
 import { INBOUND_PROMPT_BODY_MAX_CHARS } from "./handler"
 import { INBOUND_TRUNCATION_MARKER, renderHandlerInstruction, renderUntrustedText, resolvePath } from "./template"

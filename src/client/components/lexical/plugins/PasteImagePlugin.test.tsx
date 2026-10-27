@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test"
+import { describe, expect, it, vi } from "vite-plus/test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $getRoot } from "lexical"
 import type { ChatAttachment } from "../../../../shared/types"
@@ -48,7 +48,7 @@ function buildEditor() {
 
 
 function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): UploadFileFn {
-  return mock(() => ({
+  return vi.fn(() => ({
     promise: Promise.resolve({ attachments: [attachment] }),
     abort: () => {},
   })) as unknown as UploadFileFn
@@ -200,7 +200,7 @@ describe("uploadAndInsertFiles", () => {
       { ...fakeAttachment, id: "att-a" },
       { ...fakeAttachment, id: "att-b" },
     ]
-    const mockUpload = mock(() => {
+    const mockUpload = vi.fn(() => {
       const att = attachments[callIndex++]!
       return { promise: Promise.resolve({ attachments: [att] }), abort: () => {} }
     }) as unknown as UploadFileFn
@@ -218,7 +218,7 @@ describe("uploadAndInsertFiles", () => {
 
   it("calls onUploadError when upload returns no attachment", async () => {
     const editor = buildEditor()
-    const mockUpload = mock(() => ({
+    const mockUpload = vi.fn(() => ({
       promise: Promise.resolve({ attachments: [] }),
       abort: () => {},
     })) as unknown as UploadFileFn
@@ -237,7 +237,7 @@ describe("uploadAndInsertFiles", () => {
 
   it("calls onUploadError when upload rejects", async () => {
     const editor = buildEditor()
-    const mockUpload = mock(() => ({
+    const mockUpload = vi.fn(() => ({
       promise: Promise.reject(new Error("network error")),
       abort: () => {},
     })) as unknown as UploadFileFn
@@ -271,7 +271,7 @@ describe("uploadAndInsertFiles", () => {
     let maxConcurrent = 0
     let current = 0
 
-    const mockUpload = mock(() => ({
+    const mockUpload = vi.fn(() => ({
       promise: new Promise<{ attachments: ChatAttachment[] }>((resolve) => {
         current++
         if (current > maxConcurrent) maxConcurrent = current

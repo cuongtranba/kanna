@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { buildInitialAppSettingsSnapshot } from "../../../server/ws-router-defaults"
 import type { RemoteMcpSettings } from "../../../shared/settings/remote-mcp"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"

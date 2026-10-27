@@ -1,12 +1,12 @@
 import "../../../../lib/testing/setupHappyDom"
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, vi } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TableBody, __clearTableBodyCacheForTests } from "./TableBody"
 import type { PreviewSource } from "../types"
 
 beforeEach(() => {
   __clearTableBodyCacheForTests()
-  ;(globalThis as { fetch?: unknown }).fetch = mock(async () => new Response("a,b\n1,2"))
+  ;(globalThis as { fetch?: unknown }).fetch = vi.fn(async () => new Response("a,b\n1,2"))
 })
 afterEach(() => {
   delete (globalThis as { fetch?: unknown }).fetch

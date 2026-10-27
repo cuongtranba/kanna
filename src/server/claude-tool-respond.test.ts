@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, vi } from "vite-plus/test"
 import {
   respondTool,
   type RespondToolCommand,
@@ -60,11 +60,11 @@ type SetSessionTokenFn = (
 function makeDeps(
   activeTurns: Map<string, ActiveTurn>,
   pendingTools: PendingToolSlots,
-  appendMessage = mock(async (_chatId: string, _entry: unknown) => {}),
-  setSessionTokenForProvider = mock(
+  appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {}),
+  setSessionTokenForProvider = vi.fn(
     async (_chatId: string, _provider: string, _token: string | null) => {},
   ),
-  emitStateChange = mock((_chatId: string) => {}),
+  emitStateChange = vi.fn((_chatId: string) => {}),
 ): ToolRespondDeps {
   return {
     activeTurns,
@@ -124,7 +124,7 @@ describe("respondTool", () => {
 
   it("throws when toolUseId does not match the parked request", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
     parkTool(slots, "chat-1", askUserQuestionTool("tool-xyz"), resolve)
     const deps = makeDeps(new Map([["chat-1", makeActiveTurn()]]), slots)
 
@@ -136,9 +136,9 @@ describe("respondTool", () => {
 
   it("resolves an ask_user_question tool and updates active turn state", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
-    const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
-    const emitStateChange = mock((_chatId: string) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
+    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
+    const emitStateChange = vi.fn((_chatId: string) => {})
     const result: JsonValue = { answer: "yes" }
 
     parkTool(slots, "chat-1", askUserQuestionTool("tool-abc"), resolve)
@@ -151,7 +151,7 @@ describe("respondTool", () => {
       turns,
       slots,
       appendMessage,
-      mock(async (_chatId: string, _provider: string, _token: string | null) => {}),
+      vi.fn(async (_chatId: string, _provider: string, _token: string | null) => {}),
       emitStateChange,
     )
 
@@ -174,8 +174,8 @@ describe("respondTool", () => {
 
   it("resolves a request parked with NO active turn (SDK self-wake)", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
-    const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
+    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
     const result: JsonValue = { answers: { q1: "option-a" } }
 
     parkTool(slots, "chat-1", askUserQuestionTool("tool-abc"), resolve)
@@ -190,12 +190,12 @@ describe("respondTool", () => {
 
   it("clears session token and appends context_cleared when exit_plan_mode confirmed+clearContext", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
-    const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
-    const setSessionTokenForProvider = mock(
+    const resolve = vi.fn((_v: JsonValue) => {})
+    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
+    const setSessionTokenForProvider = vi.fn(
       async (_chatId: string, _provider: string, _token: string | null) => {},
     )
-    const emitStateChange = mock((_chatId: string) => {})
+    const emitStateChange = vi.fn((_chatId: string) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve)
     const active = makeActiveTurn({ provider: "claude" })
@@ -218,9 +218,9 @@ describe("respondTool", () => {
 
   it("does NOT clear context when confirmed=false even if clearContext=true", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
-    const appendMessage = mock(async (_chatId: string, _entry: unknown) => {})
-    const setSessionTokenForProvider = mock(
+    const resolve = vi.fn((_v: JsonValue) => {})
+    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
+    const setSessionTokenForProvider = vi.fn(
       async (_chatId: string, _provider: string, _token: string | null) => {},
     )
 
@@ -239,7 +239,7 @@ describe("respondTool", () => {
 
   it("sets postToolFollowUp on codex provider when exit_plan_mode confirmed", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })
@@ -261,7 +261,7 @@ describe("respondTool", () => {
 
   it("sets postToolFollowUp on codex provider when exit_plan_mode rejected", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })
@@ -283,7 +283,7 @@ describe("respondTool", () => {
 
   it("uses default messages when message field is empty", async () => {
     const slots = new PendingToolSlots()
-    const resolve = mock((_v: JsonValue) => {})
+    const resolve = vi.fn((_v: JsonValue) => {})
 
     parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve, "codex")
     const active = makeActiveTurn({ provider: "codex" })

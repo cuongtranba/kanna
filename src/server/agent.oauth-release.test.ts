@@ -1,4 +1,4 @@
-import { describe, test } from "bun:test"
+import { describe, test } from "vite-plus/test"
 import { AgentCoordinator } from "./agent"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { HarnessEvent } from "./harness-types"

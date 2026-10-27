@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { recoverQueuedMessages } from "./queued-message-recovery"
 
 function makeDeps(opts: {

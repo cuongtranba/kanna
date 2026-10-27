@@ -1,4 +1,4 @@
-import { describe, test, expect, afterEach } from "bun:test"
+import { describe, test, expect, afterEach } from "vite-plus/test"
 import {
   parseApplyPatch,
   parsePlanSteps,

@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import ts from "typescript"
 import { COMMAND_REGISTRY } from "../shared/commands"
 
-const SERVER_DIR = import.meta.dir
+const SERVER_DIR = import.meta.dirname
 const COMMAND_TYPE_SHAPE = /^[a-z][A-Za-z]*(?:\.[A-Za-z]+)+$/
 
 const HANDLER_FILES = readdirSync(SERVER_DIR)

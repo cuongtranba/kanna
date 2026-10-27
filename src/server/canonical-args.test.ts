@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect } from "vite-plus/test"
 import { canonicalArgsHash } from "./canonical-args"
 
 test("canonicalArgsHash: object key order doesn't matter", () => {

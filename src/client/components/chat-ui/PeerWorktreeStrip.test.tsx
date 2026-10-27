@@ -1,6 +1,6 @@
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { PeerWorktreeStrip } from "./PeerWorktreeStrip"
 import type { ResolvedStackBinding } from "../../../shared/types"
 

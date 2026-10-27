@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
 import { scanCjsInterop } from "./cjs-interop-scan.adapter"
 import {
@@ -157,7 +157,7 @@ describe("formatInteropBreach", () => {
 })
 
 describe("the bundled client survives rolldown's CommonJS interop", () => {
-  const root = path.resolve(import.meta.dir, "../../..")
+  const root = path.resolve(import.meta.dirname, "../../..")
   const scan = scanCjsInterop(root)
 
   test("no file default-imports a package whose default binding rolldown resolves differently", () => {

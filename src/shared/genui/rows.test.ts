@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { rowsFromCsv, rowsFromJson } from "./index"
 
 test("reads a CSV whose quoted fields contain commas, quotes and line breaks", () => {

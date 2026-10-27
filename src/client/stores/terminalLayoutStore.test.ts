@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { findTerminalOwner, getDefaultProjectTerminalLayout, useTerminalLayoutStore } from "./terminalLayoutStore"
 
 const PROJECT_ID = "project-1"
@@ -29,7 +29,7 @@ describe("terminalLayoutStore", () => {
   test("removing the last terminal hides the workspace", () => {
     useTerminalLayoutStore.getState().addTerminal(PROJECT_ID)
     const terminalId = useTerminalLayoutStore.getState().projects[PROJECT_ID]?.terminals[0]?.id
-    expect(terminalId).toBeString()
+    expect(terminalId).toBeTypeOf("string")
 
     useTerminalLayoutStore.getState().removeTerminal(PROJECT_ID, terminalId!)
 

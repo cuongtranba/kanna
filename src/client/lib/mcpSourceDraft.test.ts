@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { McpPollSource } from "../../shared/mcp-sources/types"
 import {
   applyZaloPreset,

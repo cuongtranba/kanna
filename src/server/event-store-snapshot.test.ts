@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { StorageBackend } from "./storage/backend"
 import type { SnapshotFile } from "./events"
 import { createEmptyState } from "./events"

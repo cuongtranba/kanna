@@ -1,4 +1,4 @@
-import { beforeAll, expect, test } from "bun:test"
+import { beforeAll, expect, test } from "vite-plus/test"
 import { LINK_RULES_FOR_PARITY, repairMermaidSource } from "./mermaidRepair"
 
 

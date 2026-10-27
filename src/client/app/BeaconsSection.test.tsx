@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, test } from "vite-plus/test"
 import { act } from "react"
 import "../lib/testing/setupHappyDom"
 import { makeFakeClipboardPort, makeFakeTimerPort } from "../adapters/testing/makeFakePorts"

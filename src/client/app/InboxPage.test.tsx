@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { MemoryRouter } from "react-router-dom"
 import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"

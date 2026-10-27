@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { PROTOCOL_VERSION } from "../../shared/types"
 import type { ServerEnvelope } from "../../shared/protocol"
 import { dispatchSend, followChat, latestTurnBaseline, type SendCommand } from "./send-and-wait"

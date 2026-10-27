@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { mergePluginCommands, pluginCommandName } from "./plugin-slash-commands"
 import type { PluginCommandCenterItem } from "../plugins/contributionRegistry"
 import type { SlashCommand } from "../../shared/types"

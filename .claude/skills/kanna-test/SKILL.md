@@ -1,6 +1,6 @@
 ---
 name: kanna-test
-description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / a banned empty .catch, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
+description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / a banned empty .catch, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when a test file reports "(0 test)" or "Spread syntax requires ...iterable" from an import cycle, when Vitest says "Invalid Chai property: toStartWith", or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
 user-invocable: false
 ---
 
@@ -13,7 +13,7 @@ CI — so knowing what each one guards saves a long hunt.
 ## The commands
 
 ```bash
-bun run test        # bun test --conditions production --timeout 30000
+bun run test        # Vitest via `vp test`, run under Bun: bun --bun vp test run
 bun run lint        # eslint src/ --max-warnings=0
 bun run typecheck   # TypeScript 7 native compiler
 bun run lint:usestate   # ast-grep scan (React #185 + store-discipline rules)
@@ -23,11 +23,21 @@ bunx ast-grep test      # the ast-grep rules' own fixture tests
 `bun run verify:client-arch` chains ast-grep, lint, typecheck, and test — the full
 gate, and what to run before declaring UI work done.
 
-**Always run tests through `bun run test`, never bare `bun test`.** The
-`--conditions production` flag is load-bearing: Lexical 0.45's dev ESM build has a
-circular-dependency TDZ that crashes the run outright, so a bare `bun test` fails
-for a reason that has nothing to do with your change. For a single suite while
-iterating: `bun test --conditions production src/server/<file>.test.ts`.
+**Always run tests through `bun run test`.** The runner is Vitest 5 via Vite+
+(`vp test`), and it must run inside Bun (`bun --bun vp test run`) because server
+code uses `bun:sqlite`, `Bun.serve` and `Bun.Terminal`. Test files import
+`describe`/`test`/`expect`/`vi` from `"vite-plus/test"`; `bun:test` is gone, so a
+bare `bun test` runs nothing useful. The `production` export condition (Lexical
+0.45's dev ESM build has a circular-dependency TDZ) is applied by `vite.config.ts`
+in test mode only. For a single suite while iterating:
+`bun run test src/server/<file>.test.ts`.
+
+Under Vitest, `import.meta.dir` is `undefined` — use `import.meta.dirname`, in
+production files too. Bun-only matchers (`toStartWith`, `toEndWith`, `toBeString`,
+`toBeNumber`) do not exist: use an anchored `toMatch` or `toBeTypeOf`. An
+`expect(...).rejects` must be awaited. `test.each` titles take `%o`/`%s`, not `%p`.
+The full list, with the `blob:` external and the lazy-cycle fix, is in CLAUDE.md
+under "# Tests".
 
 **Typecheck through the script, never bare `tsc`.** Two TypeScript packages are
 installed — `typescript` (6.x, whose legacy compiler API typescript-eslint still
@@ -40,7 +50,7 @@ your change; run the full suite once, from the main agent, before pushing.
 
 ## Tests that mount React must unmount
 
-happy-dom gives the whole Bun process **one** document, and the preload wipes
+happy-dom gives the whole worker **one** document, and `scripts/test-setup.ts` wipes
 `document.body` after each test. That wipe cannot reach a React root you left
 mounted — and any portal it opened (Radix Dialog, Popover, Select, or a bare
 `createPortal`) used `document.body` itself as its container. When that root next
@@ -65,19 +75,19 @@ whose callers forgot the returned `cleanup`, and asserts no render-loop warnings
 or a credential prompt hangs until the timeout, plus an explicit per-test timeout
 (`test(name, fn, 30_000)`) since CI runners are slower than the 5 s default.
 
-## Module mocks poison the whole process
+## Module mocks are banned
 
-`mock.module` rewrites bun's process-wide module registry and nothing restores it
-between files, so a factory that omits an export can kill an UNRELATED suite's
-import with `SyntaxError: Export named '…' not found in module` — the error lands
-on the victim file, which contains no mock, and only in the file orders CI's ext4
-produces, never on APFS. This is what intermittently failed main and blocked the
-v1.58.0 publish (#1141). Do not add one: inject the dependency as a parameter
-defaulting to the production value and hand the fake in from the test.
+`vi.mock` / `vi.doMock` swap a module for every importer in the file and keep
+passing when the real dependency breaks. Under the old `bun test` runner
+`mock.module` also rewrote the process-wide registry and killed UNRELATED suites in
+CI's file order, which blocked the v1.58.0 publish (#1141); Vitest isolates each
+file, so that is historical, but the policy stays. Do not add one: inject the
+dependency as a parameter defaulting to the production value and hand the fake in
+from the test.
 `src/ops/testing/module-mock-guard.test.ts` enforces it — a new module mock fails
 the suite, and the legacy allowlist only shrinks (converting a file deletes its
 entry in the same PR). The full mechanism, the incident, and the one sanctioned
-exception (`scripts/test-preload.ts`'s uniform `node:fs` shim) are in CLAUDE.md
+exception (`scripts/test-setup.ts`'s uniform `node:fs` watch shim) are in CLAUDE.md
 under "Module mocks are banned".
 
 ## The gates, and what each one is protecting

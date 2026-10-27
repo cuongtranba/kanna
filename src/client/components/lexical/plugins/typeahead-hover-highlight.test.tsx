@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vite-plus/test"
 import { act, useState } from "react"
 import type { MouseEvent as ReactMouseEvent } from "react"
 import { renderClientMarkup } from "../../../lib/testing/renderClientMarkup"

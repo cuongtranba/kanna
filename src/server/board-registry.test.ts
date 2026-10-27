@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { createBoardRegistry, DEFAULT_BOARD_PAGE_SIZE, type BoardChange, type BoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"
 import { BoardStoreError, type BoardOwnerRef, type BoardStore } from "./board-store"

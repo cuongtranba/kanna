@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   DEFAULT_TAB_MIN_WIDTH,
   MAX_TAB_WIDTH,

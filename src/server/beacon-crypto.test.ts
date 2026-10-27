@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { generateKeyPairSync, sign } from "node:crypto"
 import { beaconKeyFingerprint, beaconScriptHash, generateChallengeNonce, verifyBeaconSignature } from "./beacon-crypto"
 

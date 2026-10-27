@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"

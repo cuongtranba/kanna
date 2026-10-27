@@ -1,5 +1,5 @@
 import "../../lib/testing/setupHappyDom"
-import { describe, expect, test, afterEach } from "bun:test"
+import { describe, expect, test, afterEach } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { MermaidZoomModal } from "./MermaidZoomModal"

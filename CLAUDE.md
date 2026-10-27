@@ -46,14 +46,14 @@ bun run install:dev      # build, then install this tree globally as the `kanna`
 The client dev server and build run through Vite+ (`vp dev` / `vp build`, from
 the `vite-plus` devDependency). It needs Node `^22.18.0 || ^24.11.0 || >=26.0.0`
 on PATH, and `vite` is aliased to `@voidzero-dev/vite-plus-core` both as a direct
-devDependency and in `overrides` — Bun needs both. Tests stay on `bun test` and
-lint stays on ESLint.
+devDependency and in `overrides` — Bun needs both. Tests run on Vitest through
+`vp test`, still inside the Bun runtime (see "# Tests"); lint stays on ESLint.
 
 Verification — `bun run check` is typecheck → lint → build:client → check:bundle:
 
 ```bash
 bun run check
-bun run test                                   # NEVER bare `bun test` (see TypeScript / Tests)
+bun run test                                   # Vitest via `vp test` under Bun (see # Tests)
 bun run test src/server/agent.test.ts          # one suite
 bun run typecheck                              # TS7 by explicit path, not bare `tsc`
 ```
@@ -888,89 +888,121 @@ with no worktree, or one naming the loop workdir itself, is refused at claim.
 
 # Tests
 
+Tests run on **Vitest 5 through Vite+** (`vp test`), and the runner itself runs
+**inside the Bun runtime**: `bun run test` is `bun --bun vp test run`. The `--bun`
+is not optional — server code uses `bun:sqlite`, `Bun.serve`, `Bun.Terminal` and
+`Bun.spawn`, none of which exist under Node. `bun test` (bun:test) is no longer
+the runner and `bun:test` is not importable by a test file: import
+`describe`/`test`/`expect`/`vi`/hooks from `"vite-plus/test"`. There are no
+globals, so no `types` entry is needed in `tsconfig.json`.
+
 `bun run test` MUST pass locally before any push or PR. CI (`.github/workflows/test.yml`)
-runs `bun test --conditions production` on every push to `main` and every PR; merges are blocked on failure.
-Always use `--conditions production` (or `bun run test`) — Lexical 0.45 dev ESM builds
-have a circular-dep TDZ that crashes bare `bun test`. For fast iteration on a single
-suite: `bun test --conditions production src/server/<file>.test.ts`.
+runs it through `scripts/ci-test-with-hang-diagnostics.sh` on every push to `main`
+and every PR; merges are blocked on failure. For fast iteration on a single suite:
+`bun run test src/server/<file>.test.ts`.
 When a test spawns `git` or other subprocesses, ensure the spawn sets
 `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` so a hung credential prompt
-cannot exhaust the test timeout. Also give it an explicit timeout
-(`test(name, fn, 30_000)`) — the 5s Bun default is too tight for CI runners.
+cannot exhaust the test timeout. `testTimeout` and `hookTimeout` are 30s in
+`vite.config.ts` (the config owns it, not a CLI flag); give a slower test an explicit
+timeout (`test(name, fn, 90_000)`).
+
+Vitest runs one worker per file and defaults to cores minus one, which is far more
+parallel than the old single-process `bun test`. Suites that spawn real shells, PTYs,
+`claude`/`codex` CLIs or MCP stubs (`terminal-manager`, `mcp-validator`,
+`package-inventory-io.adapter`, `workflow-watch-io.adapter`) time out when the host
+is already saturated by other sessions; `VITEST_MAX_WORKERS=3` mirrors a 4-vCPU CI
+runner and is the first thing to try before suspecting a test. The CI wrapper's
+`HANG_AFTER` is 300s because the Vitest run burns several times the CPU of bun's.
+
+**Config lives in the `test` block of `vite.config.ts`.** Facts that each cost an
+investigation and are easy to break:
+
+- **The `production` export condition is scoped to test mode.** Lexical 0.45's dev
+  ESM builds have a circular-dependency TDZ, so `resolve.conditions` and
+  `ssr.resolve.{conditions,externalConditions}` carry `production` — but only when
+  `mode === "test"`. Never set it unconditionally: it would change the client build.
+  `bun run build` + `bun run check:bundle` must report the same gzip bytes.
+- **`import.meta.dir` is `undefined` under Vitest's module runner; use
+  `import.meta.dirname`** (Bun supports it natively). Production code is included:
+  a file that reads `import.meta.dir` cannot be imported by a test.
+- **`blob:` URLs are external** (`server.deps.external: [/^blob:/]`). Plugin tests
+  `import()` a `blob:` URL that only Bun's native loader can resolve; a Vite
+  `resolveId` plugin did NOT work, only the `external` entry does.
+- **`tsconfig` is pinned to the root `tsconfig.json` in test mode.** `wiki/` extends
+  `astro/tsconfigs/strict`, which only exists inside `wiki/node_modules`, and oxc
+  fails the transform when it cannot resolve it. The wiki test is collected from the
+  root, so the root tsconfig has to answer for it.
+- **Keep the default `sequence.hooks` (`"stack"`).** `afterEach` hooks then run in
+  REVERSE registration order, so the sweep registered by `scripts/test-setup.ts`
+  runs after every hook a test file registers. `"list"` fires the sweep first and
+  fails tests that clean up correctly.
+- **A Lexical import cycle shows up as `(0 test)` plus `TypeError: Spread syntax
+  requires ...iterable not be null or undefined`.** A module-level
+  `const NODES = [...KANNA_MESSAGE_NODES]` runs while the cycle is still being
+  evaluated and spreads an export that is not initialised yet. Make it lazy —
+  `const messageNodes = () => [...]` called at the use site, as in `renderMessage.tsx`
+  — rather than reordering imports.
+- **Bun-only matchers do not exist.** `toStartWith`/`toEndWith`/`toBeString`/
+  `toBeNumber` fail with `Invalid Chai property`; use an anchored `toMatch` or
+  `toBeTypeOf`. `expect(...).rejects` must be `await`ed — Vitest fails the test for
+  an un-awaited assertion. `%p` is not a `test.each` placeholder; use `%o`/`%s`.
 
 ## Every React root a test mounts must be unmounted (enforced)
 
-happy-dom gives the whole Bun process ONE document, so `scripts/test-preload.ts`
+happy-dom gives the whole worker ONE document, so `scripts/test-setup.ts`
 wipes `document.body` after each test. The wipe cannot reach the React root that
 owned those nodes: a test that calls `container.remove()` but never
 `root.unmount()` leaves a live root — and any portal it opened (Radix
 Dialog/Popover/Select, `createPortal`) had `document.body` ITSELF as its
 container. When that root next commits, React removes a node the wipe already
 took and happy-dom throws `removeChild: The node to be removed is not a child of
-this node`, blaming **whichever test is running at that moment** — a different
-test, in a different file. File order is the filesystem's, so it reproduces on
-CI's ext4 and not on APFS (PR #646: `SharePopover` crashed `CardDrawer` two files
-later; the full suite, CI's exact file order, bun 1.3.11, and Linux under Docker
-were all green locally).
+this node`, blaming **whichever test is running at that moment**. Under bun's
+single-process runner that was a different test in a different file, in filesystem
+order (PR #646: `SharePopover` crashed `CardDrawer` two files later). Vitest gives
+each file its own worker and document, so the blame now lands inside the leaking
+file — the rule is unchanged.
 
-The same `afterEach` now FAILS the test that leaked, naming the nodes. It reports
+The same `afterEach` FAILS the test that leaked, naming the nodes. It reports
 only REACT-OWNED leftovers — Lexical's typeahead plugin appends a menu straight
 to `document.body` even under `renderToStaticMarkup`, and nothing holds a
 reference that could commit against it later.
 
 `renderForLoopCheck` unmounts roots whose callers never called the `cleanup` it
-returns, via the teardown registry the preload publishes on
-`globalThis.__kannaDomTeardowns`. It cannot own an `afterEach` for that: bun runs
-hooks in registration order and the preload registers first, so a helper-owned
-hook fires after the sweep has already failed the test.
+returns, via the teardown registry the setup file publishes on
+`globalThis.__kannaDomTeardowns`. It does not own an `afterEach` for that.
 
-## Module mocks are banned — `mock.module` outlives its test file (enforced)
+## Module mocks are banned — inject the dependency (enforced)
 
-`mock.module` substitutes an entry in bun's process-wide module registry, and
-nothing restores it when the test file ends — `mock.restore()` covers functions,
-not modules, and `bun run test` runs every file in ONE process. Whether the
-poison detonates depends on load order. If the real module was already loaded,
-the mock only patches its live bindings: exports the factory omits stay real,
-and the suite passes. If the mock registers FIRST, the registry holds a
-synthetic record with ONLY the factory's keys, and the next file that
-static-imports a missing export dies at link time —
-`SyntaxError: Export named '…' not found in module` — reported as an
-"Unhandled error between tests" against the VICTIM file, which contains no mock
-at all. File order is the filesystem's: alphabetical-ish on APFS, hash-order
-with a per-VM seed on CI's ext4, so the failure never reproduces locally and
-strikes CI at random. Verified on bun 1.3.11 and 1.4.2 alike — a bun upgrade
-does not fix it.
-
-Not theoretical: `usePluginContributions.test.tsx` mocked
-`./loadPluginContributions` with a factory exporting only the `FromServer`
-variant, and whenever ext4 ordered it before `loadPluginContributions.test.ts`
-the victim's import of `loadPluginContributions` failed exactly that way. On
-2026-09-23 it turned three runs red in one morning — Test on main, the release
-PR's Test run, and the Release Please publish job — blocking the v1.58.0 npm
-publish (fixed in #1141).
+`vi.mock` and `vi.doMock` substitute a module for every importer in the test
+file, and keep passing when the real dependency breaks — the exact failure a
+behavioral test exists to catch. Under the old `bun test` runner the damage was
+worse: `mock.module` rewrote bun's process-wide module registry, nothing restored
+it when the file ended, and one process ran every file, so a factory that omitted
+an export killed an unrelated suite at link time (`SyntaxError: Export named '…'
+not found in module`) in filesystem-dependent order. On 2026-09-23 that blocked
+the v1.58.0 npm publish (#1141). Vitest isolates each test file in its own worker,
+so that cross-file poisoning no longer exists — the policy stays because the
+within-file hazard and the testing-philosophy reason remain.
 
 **The remedy is injection, never a better mock.** Pass the dependency as a
 parameter defaulting to the production value — #1141's shape:
 `load: typeof loadPluginContributionsFromServer = loadPluginContributionsFromServer`
 — or thread it through an existing deps object. The test hands its fake
-straight in, and no registry state survives the file.
+straight in.
 
 **Enforced by `src/ops/testing/module-mock-guard.test.ts`.** It scans `src/`
-and fails any file registering a module mock outside `LEGACY_MODULE_MOCKS` —
+and fails any file calling `vi.mock(` or `vi.doMock(` outside `LEGACY_MODULE_MOCKS` —
 the 11 files that predate the rule. The list only shrinks: a second test
 asserts every entry still registers one, so converting a file to injection
 must delete its entry in the same PR, and a stale entry cannot be reused to
-smuggle a new mock in. The legacy files hold today only because each loads its
-real module (directly or transitively, via hoisted static imports) before
-mocking — the live-bindings case above. That shield is luck, not design: the
-`mermaid` and `shiki` mocks among them register synthetic records and would
-misbehave in an unlucky order, so burn the list down; never add to it.
+smuggle a new mock in. Burn the list down; never add to it.
 
-**The one sanctioned module patch is `scripts/test-preload.ts`'s `node:fs`
-shim.** It runs before ANY test file loads, applies to every file identically,
-and spreads the real module so no export goes missing — uniform harness
-foundation rather than per-suite state, which is why it cannot create order
-dependence. It sits outside the guard's `src/` scope on purpose.
+**The one sanctioned module patch is `scripts/test-setup.ts`'s `node:fs` watch
+shim**, armed only by `KANNA_WATCH_LEAK=1`. It runs in the setup file before any
+test file loads, applies to every file identically, and spreads the real module so
+no export goes missing. It sits outside the guard's `src/` scope on purpose. Check
+it with `KANNA_WATCH_LEAK=1 bun run test src/server/workflow-watch-io.adapter.test.ts`
+and look for `[watch-leak] detector armed` on stderr.
 
 # Wiki
 
@@ -1001,7 +1033,7 @@ bun run test:e2e
 
 It is deliberately off the CI critical path — never wired into
 `.github/workflows/test.yml` — because it needs a real Chrome, not the
-happy-dom `bun test` runs against.
+happy-dom the Vitest suite runs against.
 
 Regenerate env-var reference table:
 
@@ -1010,8 +1042,8 @@ cd wiki && bun run scripts/extract-env-vars.ts
 ```
 
 Wiki is isolated from the main repo build — its own `package.json`, own
-`node_modules`. `bun run lint` and `bun test` at the repo root do NOT touch
-`wiki/`.
+`node_modules`. `bun run lint` at the repo root does not touch `wiki/`; the root
+test run collects only `wiki/scripts/**/*.test.ts`.
 
 # Feature invariants — read the owning skill before editing
 

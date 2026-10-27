@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 
@@ -16,7 +16,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("raw semantic tokens are never used as ink", () => {
-  const root = join(import.meta.dir, "../../..")
+  const root = join(import.meta.dirname, "../../..")
 
   test("no client or shared source paints text with a raw semantic token", () => {
     const offenders: string[] = []

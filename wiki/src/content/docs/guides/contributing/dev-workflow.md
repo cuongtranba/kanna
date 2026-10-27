@@ -52,7 +52,7 @@ architecture budget uses ceilings rather than exact line pins.
 bun run test src/server/<file>.test.ts
 ```
 
-Never bare `bun test` — see [Lint & Tests](/guides/contributing/lint-and-tests/).
+`bun run test` runs Vitest under Bun — see [Lint & Tests](/guides/contributing/lint-and-tests/).
 
 ## Before you push
 

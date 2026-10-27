@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { buildBeaconPairLink, parseBeaconPairingInput } from "./beacon-pair-link"
 
 const TARGET = { kannaUrl: "https://kanna.example.com", code: "ABCD2345" }

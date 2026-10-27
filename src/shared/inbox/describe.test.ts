@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { BusEnvelope } from "../service-bus/envelope"
 import { describeEnvelope, previewOfPayload } from "./describe"
 

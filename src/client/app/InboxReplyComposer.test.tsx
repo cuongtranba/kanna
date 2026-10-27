@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import type { InboxThread } from "../../shared/inbox/types"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { useInboxStore } from "../stores/inboxStore"

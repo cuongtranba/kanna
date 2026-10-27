@@ -89,7 +89,7 @@ upgrading, or using in an unfamiliar way, rather than recalling an API that may
 have shifted.
 
 **Verify before reporting.** `bun run test`, `bun run lint`, and `bun run typecheck`
-must pass — see `.claude/skills/kanna-test/SKILL.md` for the flags that matter and
+must pass — see `.claude/skills/kanna-test/SKILL.md` for how the suite runs and
 the failures that only reproduce on CI. Report what actually happened: if a check
 failed or you skipped one, say so plainly.
 

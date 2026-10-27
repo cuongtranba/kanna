@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { buildRemoteMcpSetupSnippets, PASSWORD_PLACEHOLDER } from "./setup-snippets"
 
 const ORIGIN = "https://kanna.example.dev"

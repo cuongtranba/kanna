@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createLocalSkillAccess, type SkillCatalog } from "./skill-invocation"
 import type { SkillRosterEntry } from "../shared/kanna-system-prompt"
 

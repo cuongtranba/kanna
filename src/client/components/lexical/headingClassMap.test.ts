@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { HEADING_CLASS_MAP as configHeadingClassMap } from "./config"
 import { HEADING_CLASS_MAP as renderMessageHeadingClassMap } from "./markdown/renderMessage"
 import { HEADING_CLASS_MAP as lexicalToReactHeadingClassMap } from "./markdown/lexicalToReact"

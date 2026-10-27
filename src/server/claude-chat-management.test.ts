@@ -1,5 +1,5 @@
 
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, vi } from "vite-plus/test"
 import {
   stopDraining,
   closeChat,
@@ -28,41 +28,41 @@ function makeQueuedMessage(overrides?: Partial<QueuedChatMessage>): QueuedChatMe
 function makeDeps(overrides?: Partial<ChatManagementDeps>): ChatManagementDeps {
   return {
     activeTurns: {
-      has: mock(() => false),
-      get: mock(() => undefined),
+      has: vi.fn(() => false),
+      get: vi.fn(() => undefined),
     },
     drainingStreams: {
-      get: mock(() => undefined),
-      has: mock(() => false),
-      delete: mock(() => false),
+      get: vi.fn(() => undefined),
+      has: vi.fn(() => false),
+      delete: vi.fn(() => false),
     },
     claudeSessions: {
-      get: mock(() => undefined),
+      get: vi.fn(() => undefined),
     },
     autoResumeByChat: {
-      delete: mock(() => false),
+      delete: vi.fn(() => false),
     },
     store: {
-      getQueuedMessage: mock((_chatId: string, _id: string) => null),
-      removeQueuedMessage: mock(async () => {}),
-      requireChat: mock((_chatId: string) => ({
+      getQueuedMessage: vi.fn((_chatId: string, _id: string) => null),
+      removeQueuedMessage: vi.fn(async () => {}),
+      requireChat: vi.fn((_chatId: string) => ({
         title: "Chat title",
         provider: "claude" as const,
         sessionTokensByProvider: { claude: "tok-123" },
         pendingForkSessionToken: null,
       })),
-      forkChat: mock(async (_chatId: string) => ({ id: "forked-id" })),
-      renameChat: mock(async () => {}),
+      forkChat: vi.fn(async (_chatId: string) => ({ id: "forked-id" })),
+      renameChat: vi.fn(async () => {}),
     },
     analytics: {
-      track: mock(() => {}),
+      track: vi.fn(() => {}),
     },
-    cancel: mock(async () => {}),
-    closeClaudeSession: mock(() => {}),
-    emitStateChange: mock(() => {}),
-    generateTitle: mock(async () => ({ title: "New Title", usedFallback: false, failureMessage: null })),
+    cancel: vi.fn(async () => {}),
+    closeClaudeSession: vi.fn(() => {}),
+    emitStateChange: vi.fn(() => {}),
+    generateTitle: vi.fn(async () => ({ title: "New Title", usedFallback: false, failureMessage: null })),
     reportBackgroundError: null,
-    dequeueAndStartQueuedMessage: mock(async () => {}),
+    dequeueAndStartQueuedMessage: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -77,12 +77,12 @@ describe("stopDraining", () => {
   })
 
   it("closes the turn, removes the stream, and emits state change", async () => {
-    const close = mock(() => {})
+    const close = vi.fn(() => {})
     const deps = makeDeps({
       drainingStreams: {
-        get: mock(() => ({ turn: { close } })),
-        has: mock(() => true),
-        delete: mock(() => true),
+        get: vi.fn(() => ({ turn: { close } })),
+        has: vi.fn(() => true),
+        delete: vi.fn(() => true),
       },
     })
     await stopDraining(deps, "chat-1")
@@ -104,7 +104,7 @@ describe("closeChat", () => {
   it("closes the claude session when one exists", async () => {
     const fakeSession = { sessionId: "s1" } as never
     const deps = makeDeps({
-      claudeSessions: { get: mock(() => fakeSession) },
+      claudeSessions: { get: vi.fn(() => fakeSession) },
     })
     await closeChat(deps, "chat-1")
     expect(deps.closeClaudeSession).toHaveBeenCalledWith("chat-1", fakeSession)
@@ -129,8 +129,8 @@ describe("steer", () => {
   it("cancels active turn then dequeues when chat is active", async () => {
     const qm = makeQueuedMessage()
     let hasCallCount = 0
-    const cancelFn = mock(async () => {})
-    const dequeueStartFn = mock(async () => {})
+    const cancelFn = vi.fn(async () => {})
+    const dequeueStartFn = vi.fn(async () => {})
     const deps: ChatManagementDeps = {
       ...makeDeps(),
       activeTurns: {
@@ -182,15 +182,15 @@ describe("dequeue", () => {
     const qm = makeQueuedMessage()
     const deps = makeDeps({
       activeTurns: {
-        has: mock(() => true),
-        get: mock(() => ({ compactionTurn: "proactive" as const })),
+        has: vi.fn(() => true),
+        get: vi.fn(() => ({ compactionTurn: "proactive" as const })),
       },
       store: {
-        getQueuedMessage: mock(() => qm),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        getQueuedMessage: vi.fn(() => qm),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await expect(
@@ -202,11 +202,11 @@ describe("dequeue", () => {
     const qm = makeQueuedMessage()
     const deps = makeDeps({
       store: {
-        getQueuedMessage: mock(() => qm),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        getQueuedMessage: vi.fn(() => qm),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await dequeue(deps, { type: "message.dequeue", chatId: "c1", queuedMessageId: "qm-1" })
@@ -218,14 +218,14 @@ describe("dequeue", () => {
 describe("forkChat", () => {
   it("throws when chat is active", async () => {
     const deps = makeDeps({
-      activeTurns: { has: mock(() => true), get: mock(() => undefined) },
+      activeTurns: { has: vi.fn(() => true), get: vi.fn(() => undefined) },
     })
     await expect(forkChat(deps, "c1")).rejects.toThrow("Chat must be idle before forking")
   })
 
   it("throws when chat is draining", async () => {
     const deps = makeDeps({
-      drainingStreams: { has: mock(() => true), get: mock(() => undefined), delete: mock(() => false) },
+      drainingStreams: { has: vi.fn(() => true), get: vi.fn(() => undefined), delete: vi.fn(() => false) },
     })
     await expect(forkChat(deps, "c1")).rejects.toThrow("Chat must be idle before forking")
   })
@@ -233,11 +233,11 @@ describe("forkChat", () => {
   it("throws when chat has no provider", async () => {
     const deps = makeDeps({
       store: {
-        getQueuedMessage: mock(() => null),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        getQueuedMessage: vi.fn(() => null),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({ title: "", provider: null, sessionTokensByProvider: {}, pendingForkSessionToken: null })),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await expect(forkChat(deps, "c1")).rejects.toThrow("Chat must have a provider before forking")
@@ -246,16 +246,16 @@ describe("forkChat", () => {
   it("throws when chat has no session token", async () => {
     const deps = makeDeps({
       store: {
-        getQueuedMessage: mock(() => null),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({
+        getQueuedMessage: vi.fn(() => null),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({
           title: "",
           provider: "claude" as const,
           sessionTokensByProvider: { claude: null },
           pendingForkSessionToken: null,
         })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await expect(forkChat(deps, "c1")).rejects.toThrow("Chat has no session to fork")
@@ -271,16 +271,16 @@ describe("forkChat", () => {
   it("accepts pendingForkSessionToken as the fork source", async () => {
     const deps = makeDeps({
       store: {
-        getQueuedMessage: mock(() => null),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({
+        getQueuedMessage: vi.fn(() => null),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({
           title: "",
           provider: "claude" as const,
           sessionTokensByProvider: { claude: null },
           pendingForkSessionToken: { provider: "claude" as const, token: "pending-tok" },
         })),
-        forkChat: mock(async () => ({ id: "forked-2" })),
-        renameChat: mock(async () => {}),
+        forkChat: vi.fn(async () => ({ id: "forked-2" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     const result = await forkChat(deps, "c1")
@@ -292,18 +292,18 @@ describe("forkChat", () => {
 describe("generateTitleInBackground", () => {
   it("renames chat when title generation succeeds and title still matches", async () => {
     const deps = makeDeps({
-      generateTitle: mock(async () => ({ title: "AI Title", usedFallback: false, failureMessage: null })),
+      generateTitle: vi.fn(async () => ({ title: "AI Title", usedFallback: false, failureMessage: null })),
       store: {
-        getQueuedMessage: mock(() => null),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({
+        getQueuedMessage: vi.fn(() => null),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({
           title: "original",
           provider: null,
           sessionTokensByProvider: {},
           pendingForkSessionToken: null,
         })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await generateTitleInBackground(deps, "c1", "message content", "/path", "original")
@@ -313,18 +313,18 @@ describe("generateTitleInBackground", () => {
 
   it("skips rename when title has changed since the call was queued", async () => {
     const deps = makeDeps({
-      generateTitle: mock(async () => ({ title: "AI Title", usedFallback: false, failureMessage: null })),
+      generateTitle: vi.fn(async () => ({ title: "AI Title", usedFallback: false, failureMessage: null })),
       store: {
-        getQueuedMessage: mock(() => null),
-        removeQueuedMessage: mock(async () => {}),
-        requireChat: mock(() => ({
+        getQueuedMessage: vi.fn(() => null),
+        removeQueuedMessage: vi.fn(async () => {}),
+        requireChat: vi.fn(() => ({
           title: "already changed",
           provider: null,
           sessionTokensByProvider: {},
           pendingForkSessionToken: null,
         })),
-        forkChat: mock(async () => ({ id: "" })),
-        renameChat: mock(async () => {}),
+        forkChat: vi.fn(async () => ({ id: "" })),
+        renameChat: vi.fn(async () => {}),
       },
     })
     await generateTitleInBackground(deps, "c1", "message content", "/path", "original")
@@ -333,16 +333,16 @@ describe("generateTitleInBackground", () => {
 
   it("skips rename when usedFallback is true", async () => {
     const deps = makeDeps({
-      generateTitle: mock(async () => ({ title: "fallback", usedFallback: true, failureMessage: null })),
+      generateTitle: vi.fn(async () => ({ title: "fallback", usedFallback: true, failureMessage: null })),
     })
     await generateTitleInBackground(deps, "c1", "content", "/path", "original")
     expect(deps.store.renameChat).not.toHaveBeenCalled()
   })
 
   it("reports error on failure without throwing", async () => {
-    const report = mock((_msg: string) => {})
+    const report = vi.fn((_msg: string) => {})
     const deps = makeDeps({
-      generateTitle: mock(async () => { throw new Error("API error") }),
+      generateTitle: vi.fn(async () => { throw new Error("API error") }),
       reportBackgroundError: report,
     })
     await expect(
@@ -354,9 +354,9 @@ describe("generateTitleInBackground", () => {
   })
 
   it("reports provider failure message without renaming", async () => {
-    const report = mock((_msg: string) => {})
+    const report = vi.fn((_msg: string) => {})
     const deps = makeDeps({
-      generateTitle: mock(async () => ({ title: "title", usedFallback: false, failureMessage: "quota exceeded" })),
+      generateTitle: vi.fn(async () => ({ title: "title", usedFallback: false, failureMessage: "quota exceeded" })),
       reportBackgroundError: report,
     })
     await generateTitleInBackground(deps, "c1", "content", "/path", "original")

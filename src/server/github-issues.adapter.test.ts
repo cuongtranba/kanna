@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import type { RemoteSourceRef } from "../shared/boards/types"
 

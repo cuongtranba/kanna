@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { signSlack } from "../../test-helpers/slack-harness"
 import { verifySlackSignature } from "./slack-signature"
 

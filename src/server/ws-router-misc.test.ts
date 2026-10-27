@@ -1,5 +1,5 @@
 
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type {
   MiscAgentDep,
   MiscAnalyticsDep,
@@ -14,20 +14,20 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 
 function makeStore(overrides: Partial<MiscStoreDep> = {}): MiscStoreDep {
   return {
-    getProject: mock(() => null),
-    createStack: mock(async () => ({ id: "stack-1" })),
-    renameStack: mock(async () => {}),
-    setStackInstructions: mock(async () => {}),
-    removeStack: mock(async () => {}),
-    addProjectToStack: mock(async () => {}),
-    removeProjectFromStack: mock(async () => {}),
+    getProject: vi.fn(() => null),
+    createStack: vi.fn(async () => ({ id: "stack-1" })),
+    renameStack: vi.fn(async () => {}),
+    setStackInstructions: vi.fn(async () => {}),
+    removeStack: vi.fn(async () => {}),
+    addProjectToStack: vi.fn(async () => {}),
+    removeProjectFromStack: vi.fn(async () => {}),
     ...overrides,
   }
 }
 
 function makeTerminals(overrides: Partial<MiscTerminalsDep> = {}): MiscTerminalsDep {
   return {
-    createTerminal: mock(() => ({
+    createTerminal: vi.fn(() => ({
       terminalId: "term-1",
       title: "bash",
       cwd: "/tmp",
@@ -39,25 +39,25 @@ function makeTerminals(overrides: Partial<MiscTerminalsDep> = {}): MiscTerminals
       status: "running" as const,
       exitCode: null,
     })),
-    write: mock(() => {}),
-    resize: mock(() => {}),
-    close: mock(() => {}),
+    write: vi.fn(() => {}),
+    resize: vi.fn(() => {}),
+    close: vi.fn(() => {}),
     ...overrides,
   }
 }
 
 function makeAgent(overrides: Partial<MiscAgentDep> = {}): MiscAgentDep {
   return {
-    enqueue: mock(async () => ({ queuedMessageId: "msg-1" })),
-    steer: mock(async () => {}),
-    dequeue: mock(async () => {}),
+    enqueue: vi.fn(async () => ({ queuedMessageId: "msg-1" })),
+    steer: vi.fn(async () => {}),
+    dequeue: vi.fn(async () => {}),
     ...overrides,
   }
 }
 
 function makeSessionShare(overrides: Partial<MiscSessionShareDep> = {}): MiscSessionShareDep {
   return {
-    mintToken: mock(async () => ({
+    mintToken: vi.fn(async () => ({
       ok: true as const,
       data: {
         summary: {
@@ -70,8 +70,8 @@ function makeSessionShare(overrides: Partial<MiscSessionShareDep> = {}): MiscSes
         },
       },
     })),
-    revokeToken: mock(async () => ({ ok: true as const, data: { tokenId: "tok-1" } })),
-    listSharesForChat: mock(() => []),
+    revokeToken: vi.fn(async () => ({ ok: true as const, data: { tokenId: "tok-1" } })),
+    listSharesForChat: vi.fn(() => []),
     ...overrides,
   }
 }
@@ -104,7 +104,7 @@ function makeDeps(opts: {
     terminals: makeTerminals(opts.terminalsOverrides),
     agent: makeAgent(opts.agentOverrides),
     sessionShare: opts.sessionShare !== undefined ? opts.sessionShare : null,
-    analytics: { track: mock(() => {}) },
+    analytics: { track: vi.fn(() => {}) },
     listWorktrees: async (path) => {
       worktreeCallPaths.push(path)
       return (opts.worktreeResult ?? []) as import("../shared/types").GitWorktree[]
@@ -137,7 +137,7 @@ describe("handleMiscCommand", () => {
 
 
   test("message.enqueue — calls agent.enqueue, acks with result, broadcasts chat+sidebar", async () => {
-    const deps = makeDeps({ agentOverrides: { enqueue: mock(async () => ({ queuedMessageId: "q-1" })) } })
+    const deps = makeDeps({ agentOverrides: { enqueue: vi.fn(async () => ({ queuedMessageId: "q-1" })) } })
     const cmd: ClientCommand = {
       type: "message.enqueue",
       chatId: "chat-1",
@@ -146,7 +146,7 @@ describe("handleMiscCommand", () => {
     }
     const handled = await handleMiscCommand(deps, cmd, "r1")
     expect(handled).toBe(true)
-    expect(deps.agent.enqueue as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
+    expect(deps.agent.enqueue as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(cmd)
     const ack = deps.sent[0] as { type: string; result: unknown }
     expect(ack.type).toBe("ack")
     expect(ack.result).toEqual({ queuedMessageId: "q-1" })
@@ -162,7 +162,7 @@ describe("handleMiscCommand", () => {
     }
     const handled = await handleMiscCommand(deps, cmd, "r2")
     expect(handled).toBe(true)
-    expect(deps.agent.steer as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
+    expect(deps.agent.steer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(cmd)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.chatBroadcasts).toContain("chat-2")
   })
@@ -176,7 +176,7 @@ describe("handleMiscCommand", () => {
     }
     const handled = await handleMiscCommand(deps, cmd, "r3")
     expect(handled).toBe(true)
-    expect(deps.agent.dequeue as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
+    expect(deps.agent.dequeue as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(cmd)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.chatBroadcasts).toContain("chat-3")
   })
@@ -185,7 +185,7 @@ describe("handleMiscCommand", () => {
   test("terminal.create — calls createTerminal with project path, acks with snapshot", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        getProject: mock(() => ({ localPath: "/home/user/project" })),
+        getProject: vi.fn(() => ({ localPath: "/home/user/project" })),
       },
     })
     const cmd: ClientCommand = {
@@ -198,7 +198,7 @@ describe("handleMiscCommand", () => {
     }
     const handled = await handleMiscCommand(deps, cmd, "r4")
     expect(handled).toBe(true)
-    const createFn = deps.terminals.createTerminal as ReturnType<typeof mock>
+    const createFn = deps.terminals.createTerminal as ReturnType<typeof vi.fn>
     expect(createFn).toHaveBeenCalledWith({
       projectPath: "/home/user/project",
       terminalId: "term-1",
@@ -212,7 +212,7 @@ describe("handleMiscCommand", () => {
   })
 
   test("terminal.create — throws when project not found", async () => {
-    const deps = makeDeps({ storeOverrides: { getProject: mock(() => null) } })
+    const deps = makeDeps({ storeOverrides: { getProject: vi.fn(() => null) } })
     const cmd: ClientCommand = {
       type: "terminal.create",
       projectId: "missing",
@@ -229,7 +229,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "terminal.input", terminalId: "term-1", data: "ls\r" }
     const handled = await handleMiscCommand(deps, cmd, "r6")
     expect(handled).toBe(true)
-    expect(deps.terminals.write as ReturnType<typeof mock>).toHaveBeenCalledWith("term-1", "ls\r")
+    expect(deps.terminals.write as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("term-1", "ls\r")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
@@ -238,7 +238,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "terminal.resize", terminalId: "term-1", cols: 200, rows: 50 }
     const handled = await handleMiscCommand(deps, cmd, "r7")
     expect(handled).toBe(true)
-    expect(deps.terminals.resize as ReturnType<typeof mock>).toHaveBeenCalledWith("term-1", 200, 50)
+    expect(deps.terminals.resize as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("term-1", 200, 50)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
@@ -247,7 +247,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "terminal.close", terminalId: "term-2" }
     const handled = await handleMiscCommand(deps, cmd, "r8")
     expect(handled).toBe(true)
-    expect(deps.terminals.close as ReturnType<typeof mock>).toHaveBeenCalledWith("term-2")
+    expect(deps.terminals.close as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("term-2")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.pushSnapshots).toContain("term-2")
   })
@@ -255,15 +255,15 @@ describe("handleMiscCommand", () => {
 
   test("stack.create — creates stack, acks with stackId, tracks analytics, broadcasts sidebar", async () => {
     const deps = makeDeps({
-      storeOverrides: { createStack: mock(async () => ({ id: "stack-99" })) },
+      storeOverrides: { createStack: vi.fn(async () => ({ id: "stack-99" })) },
     })
     const cmd: ClientCommand = { type: "stack.create", title: "My Stack", projectIds: ["p1", "p2"] }
     const handled = await handleMiscCommand(deps, cmd, "r9")
     expect(handled).toBe(true)
-    expect(deps.store.createStack as ReturnType<typeof mock>).toHaveBeenCalledWith("My Stack", ["p1", "p2"])
+    expect(deps.store.createStack as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("My Stack", ["p1", "p2"])
     const ack = deps.sent[0] as { type: string; result: { stackId: string } }
     expect(ack.result).toEqual({ stackId: "stack-99" })
-    expect(deps.analytics.track as ReturnType<typeof mock>).toHaveBeenCalledWith("stack_created")
+    expect(deps.analytics.track as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("stack_created")
     expect(deps.sideBroadcasts).toBeGreaterThan(0)
   })
 
@@ -272,7 +272,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "stack.rename", stackId: "s-1", title: "New Title" }
     const handled = await handleMiscCommand(deps, cmd, "r10")
     expect(handled).toBe(true)
-    expect(deps.store.renameStack as ReturnType<typeof mock>).toHaveBeenCalledWith("s-1", "New Title")
+    expect(deps.store.renameStack as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("s-1", "New Title")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.sideBroadcasts).toBeGreaterThan(0)
   })
@@ -282,7 +282,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "stack.remove", stackId: "s-2" }
     const handled = await handleMiscCommand(deps, cmd, "r11")
     expect(handled).toBe(true)
-    expect(deps.store.removeStack as ReturnType<typeof mock>).toHaveBeenCalledWith("s-2")
+    expect(deps.store.removeStack as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("s-2")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.sideBroadcasts).toBeGreaterThan(0)
   })
@@ -292,7 +292,7 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "stack.addProject", stackId: "s-3", projectId: "proj-5" }
     const handled = await handleMiscCommand(deps, cmd, "r12")
     expect(handled).toBe(true)
-    expect(deps.store.addProjectToStack as ReturnType<typeof mock>).toHaveBeenCalledWith("s-3", "proj-5")
+    expect(deps.store.addProjectToStack as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("s-3", "proj-5")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.sideBroadcasts).toBeGreaterThan(0)
   })
@@ -302,14 +302,14 @@ describe("handleMiscCommand", () => {
     const cmd: ClientCommand = { type: "stack.removeProject", stackId: "s-4", projectId: "proj-6" }
     const handled = await handleMiscCommand(deps, cmd, "r13")
     expect(handled).toBe(true)
-    expect(deps.store.removeProjectFromStack as ReturnType<typeof mock>).toHaveBeenCalledWith("s-4", "proj-6")
+    expect(deps.store.removeProjectFromStack as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("s-4", "proj-6")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
   test("stack.listWorktrees — lists worktrees for project path, acks with result", async () => {
     const fakeWorktrees = [{ branch: "main", path: "/repo" }]
     const deps = makeDeps({
-      storeOverrides: { getProject: mock(() => ({ localPath: "/my/repo" })) },
+      storeOverrides: { getProject: vi.fn(() => ({ localPath: "/my/repo" })) },
       worktreeResult: fakeWorktrees,
     })
     const cmd: ClientCommand = { type: "stack.listWorktrees", projectId: "proj-w" }
@@ -321,7 +321,7 @@ describe("handleMiscCommand", () => {
   })
 
   test("stack.listWorktrees — throws when project not found", async () => {
-    const deps = makeDeps({ storeOverrides: { getProject: mock(() => null) } })
+    const deps = makeDeps({ storeOverrides: { getProject: vi.fn(() => null) } })
     const cmd: ClientCommand = { type: "stack.listWorktrees", projectId: "missing" }
     await expect(handleMiscCommand(deps, cmd, "r15")).rejects.toThrow("Project not found")
   })
@@ -336,7 +336,7 @@ describe("handleMiscCommand", () => {
     }
     const handled = await handleMiscCommand(deps, cmd, "r16")
     expect(handled).toBe(true)
-    expect(shareService.mintToken as ReturnType<typeof mock>).toHaveBeenCalledWith(
+    expect(shareService.mintToken as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       { chatId: "chat-share-1", ttlHours: 3600 },
       "http://localhost:3000",
     )
@@ -376,12 +376,12 @@ describe("handleMiscCommand", () => {
   })
 
   test("share.list — lists shares for chat when service available", async () => {
-    const shareService = makeSessionShare({ listSharesForChat: mock(() => [{ tokenId: "t-1", chatId: "chat-s", createdAt: 0, expiresAt: 0, url: "https://u", revoked: false }]) })
+    const shareService = makeSessionShare({ listSharesForChat: vi.fn(() => [{ tokenId: "t-1", chatId: "chat-s", createdAt: 0, expiresAt: 0, url: "https://u", revoked: false }]) })
     const deps = makeDeps({ sessionShare: shareService, originHost: "https://myapp.com" })
     const cmd: ClientCommand = { type: "share.list", payload: { chatId: "chat-s" } }
     const handled = await handleMiscCommand(deps, cmd, "r20")
     expect(handled).toBe(true)
-    expect(shareService.listSharesForChat as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-s", "https://myapp.com")
+    expect(shareService.listSharesForChat as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-s", "https://myapp.com")
     const ack = deps.sent[0] as { type: string; result: { ok: boolean; kind: string; data: { shares: unknown[] } } }
     expect(ack.result.ok).toBe(true)
     expect(ack.result.kind).toBe("list")

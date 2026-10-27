@@ -45,9 +45,9 @@ server. mermaid is a browser library, so the adapter installs a ~20-line
 measured-minimum DOM surface **only around `await import("mermaid")`** and
 restores it in a `finally` — nothing downstream can sniff `window` and take a
 browser code path. `installDomShim` stands down entirely when a real `document`
-exists (the happy-dom the test preload registers process-wide). ~9 ms per
+exists (the happy-dom the test setup file registers globally). ~9 ms per
 parse, every diagram type. Rejected: happy-dom as a prod dep (it swaps
-`fetch`/`FormData`/`Blob` — see `scripts/test-preload.ts` undoing exactly that)
+`fetch`/`FormData`/`Blob` — see `scripts/test-setup.ts` undoing exactly that)
 and a child process (~200 ms spawn for a 9 ms parse). The adapter's suite
 includes a **subprocess test with no happy-dom** — the only thing that proves
 the gate works where it runs; without it a broken shim would pass CI and
@@ -145,8 +145,8 @@ executes.** ADR `adr-20260929-generative-ui`.
   (`lexical/markdown/kannaUiTransformers.ts`) and `lexicalToReact` builds its default
   list at call time. Spreading `KANNA_BUILTIN_TRANSFORMERS` at module load through
   `messageTransformers` hit an import cycle in the PRODUCTION bundle and left the
-  whole app blank (`UC is not iterable`) while every bun test passed — bun orders
-  modules differently. `e2e/smoke.pw.ts` is what catches this class.
+  whole app blank (`UC is not iterable`) while every unit test passed — the test
+  runner orders modules differently from the bundle. `e2e/smoke.pw.ts` is what catches this class.
 - **Charts** (`charts/`): VChart **core** with explicit `register*` calls, lazily
   loaded (~360 KB gzip chunk, never in the entry). `buildChartModel` is the
   deterministic adapter and enforces one axis — a combo whose metrics differ in

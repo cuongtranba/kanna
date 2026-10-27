@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vite-plus/test"
 
 
 const WORKFLOW_PATH = new URL("../.github/workflows/release-please.yml", import.meta.url)

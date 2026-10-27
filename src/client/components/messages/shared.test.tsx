@@ -1,11 +1,11 @@
 import "../../lib/testing/setupHappyDom"
-import { expect, test, mock, afterEach } from "bun:test"
+import { expect, test, afterEach, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { makeFakeClipboardPort } from "../../adapters/testing/makeFakePorts"
 
-mock.module("../../hooks/useTheme", () => ({
+vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
 }))
 

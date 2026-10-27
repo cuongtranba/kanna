@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { create, type UseBoundStore, type StoreApi } from "zustand"
 import { renderForLoopCheck } from "./renderForLoopCheck"
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
@@ -34,7 +34,7 @@ function makeEntry(overrides: Partial<PendingToolRequestHydrated> = {}): Pending
 
 describe("PendingToolRequestMessage — ask_user_question", () => {
   test("renders question text and option buttons", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -52,7 +52,7 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
   })
 
   test("clicking an option then Submit calls onAnswer with answer decision", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -86,7 +86,7 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
   })
 
   test("MCP shim `text` field maps to question — answer keys use question body, not 'undefined'", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -132,7 +132,7 @@ describe("PendingToolRequestMessage — ask_user_question", () => {
   })
 
   test("Cancel button calls onAnswer with deny decision", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -181,7 +181,7 @@ describe("PendingToolRequestMessage — multiSelect question", () => {
   }
 
   test("clicking two options toggles both into selected state without submitting", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -223,7 +223,7 @@ describe("PendingToolRequestMessage — multiSelect question", () => {
   })
 
   test("clicking a selected option in multiSelect deselects it", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -265,7 +265,7 @@ describe("PendingToolRequestMessage — exit_plan_mode", () => {
   }
 
   test("renders plan text and Confirm + Edit buttons", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -282,7 +282,7 @@ describe("PendingToolRequestMessage — exit_plan_mode", () => {
   })
 
   test("Confirm button calls onAnswer with answer/confirmed decision", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -309,7 +309,7 @@ describe("PendingToolRequestMessage — exit_plan_mode", () => {
   })
 
   test("Edit button calls onAnswer with deny/user_canceled decision", async () => {
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -342,7 +342,7 @@ describe("PendingToolRequestMessage — generic fallback", () => {
       toolName: "mcp__kanna__expose_port",
       arguments: { port: 3000 },
     })
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -363,7 +363,7 @@ describe("PendingToolRequestMessage — generic fallback", () => {
       toolName: "mcp__kanna__bash",
       arguments: { command: "echo hi" },
     })
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 
@@ -389,7 +389,7 @@ describe("PendingToolRequestMessage — generic fallback", () => {
       toolName: "mcp__kanna__bash",
       arguments: { command: "echo hi" },
     })
-    const onAnswer = mock((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
+    const onAnswer = vi.fn((_id: string, _decision: ToolRequestDecision) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 

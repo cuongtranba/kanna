@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../../shared/types"
 import type { AutoContinueEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"

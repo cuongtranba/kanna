@@ -375,6 +375,7 @@ const WEAK_ORACLE_PATTERNS: readonly RegExp[] = [
 
 const STRONG_ORACLE_PATTERNS: readonly RegExp[] = [
   /\bbun\s+(?:run\s+)?(?:test|check|lint|typecheck)\b/,
+  /\bvp\s+(?:test|lint|check)\b/,
   /\btask\s+\S*(?:check|test)\S*/,
   /\b(?:pnpm|npm|yarn)\s+(?:run\s+)?(?:test|check|lint|typecheck)\b/,
   /\b(?:vitest|jest|pytest|playwright|mocha|ava)\b/,

@@ -1,5 +1,5 @@
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach } from "vite-plus/test"
 import {
   resolveProvider,
   getProviderSettings,
@@ -534,7 +534,7 @@ describe("sendCommand", () => {
   })
 
   test("throws when no chatId and no projectId", async () => {
-    expect(sendCommand(deps, {
+    await expect(sendCommand(deps, {
       type: "chat.send",
       content: "hello",
       chatId: undefined,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { compactLoopWakeEvents } from "./compact-loop-wakes"
 import { deriveChatSchedules, deriveLoopState } from "./read-model"
 import type { AutoContinueEvent } from "./events"

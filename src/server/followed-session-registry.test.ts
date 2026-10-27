@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -12,11 +12,11 @@ function makeRegistry(over: Partial<FollowedSessionRegistryDeps> = {}) {
   let nowMs = 1_000_000
   const stat = { size: 100, mtimeMs: nowMs }
   const deps: FollowedSessionRegistryDeps = {
-    statFile: mock(() => ({ ...stat })),
-    runDelta: mock(async () => {}),
-    isTurnActive: mock(() => false),
+    statFile: vi.fn(() => ({ ...stat })),
+    runDelta: vi.fn(async () => {}),
+    isTurnActive: vi.fn(() => false),
     now: () => nowMs,
-    onChange: mock(() => {}),
+    onChange: vi.fn(() => {}),
     activeWindowMs: 600_000,
     idleMs: 600_000,
     ...over,
@@ -46,7 +46,7 @@ describe("FollowedSessionRegistry", () => {
     expect(deps.runDelta).toHaveBeenCalledTimes(1)
   })
   test("tick pauses while a Kanna turn is active (still following)", async () => {
-    const { reg, deps, stat } = makeRegistry({ isTurnActive: mock(() => true) })
+    const { reg, deps, stat } = makeRegistry({ isTurnActive: vi.fn(() => true) })
     reg.consider(INFO); stat.size = 250
     await reg.tick()
     expect(deps.runDelta).not.toHaveBeenCalled()
@@ -65,7 +65,7 @@ describe("FollowedSessionRegistry", () => {
     advance(700_000)
     await reg.tick()
     expect(reg.isFollowing("chat-1")).toBe(false)
-    const { reg: reg2 } = makeRegistry({ statFile: mock(() => null) })
+    const { reg: reg2 } = makeRegistry({ statFile: vi.fn(() => null) })
     reg2.consider(INFO)
     await reg2.tick()
     expect(reg2.isFollowing("chat-1")).toBe(false)

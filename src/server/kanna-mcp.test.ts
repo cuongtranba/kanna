@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
@@ -715,7 +715,7 @@ describe("query_tracking_file + append_tracking_row tools", () => {
 
     expect(res.isError).toBe(true)
     expect(res.content[0].text).toContain("run setup_loop")
-    expect(readFile(path.join(dir, "PROGESS.md"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(dir, "PROGESS.md"), "utf8")).rejects.toThrow()
   })
 
   describe("delegate_subagent chunk-label fallback", () => {

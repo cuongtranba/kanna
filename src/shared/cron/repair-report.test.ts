@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { formatCronDefect, formatCronRepairRequest } from "./repair-report"
 import { parseCronCommand } from "./parse-command"
 import type { CronParseError } from "./types"

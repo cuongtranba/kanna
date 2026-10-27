@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { JsonObject } from "../json"
 import { datasetDeclSchema, runDatasetQuery, type DatasetDecl, type DatasetQuery, type QueryResult } from "./index"
 

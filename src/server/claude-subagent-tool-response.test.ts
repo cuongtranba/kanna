@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, vi } from "vite-plus/test"
 import {
   subagentPendingKey,
   rejectPendingResolvers,
@@ -31,13 +31,13 @@ function makeDeps(
   return {
     subagentPendingResolvers: new Map(),
     store: {
-      appendSubagentEvent: mock(() => Promise.resolve()),
+      appendSubagentEvent: vi.fn(() => Promise.resolve()),
     },
     subagentOrchestrator: {
-      notifySubagentToolResolved: mock(() => undefined),
-      cancelRun: mock(() => undefined),
+      notifySubagentToolResolved: vi.fn(() => undefined),
+      cancelRun: vi.fn(() => undefined),
     },
-    emitStateChange: mock(() => undefined),
+    emitStateChange: vi.fn(() => undefined),
     ...overrides,
   }
 }

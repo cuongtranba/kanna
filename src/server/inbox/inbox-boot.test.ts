@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { InboundHandler } from "../../shared/inbound/handler"
 import type { InboxThread } from "../../shared/inbox/types"
 import type { McpSource } from "../../shared/mcp-sources/types"

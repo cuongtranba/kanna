@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"

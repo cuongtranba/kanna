@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import React, { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { StackSummary, SidebarChatRow } from "../../../../shared/types"

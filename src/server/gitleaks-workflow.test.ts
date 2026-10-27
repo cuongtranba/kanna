@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const REPO_ROOT = join(import.meta.dir, "..", "..")
+const REPO_ROOT = join(import.meta.dirname, "..", "..")
 const WORKFLOW_PATH = join(REPO_ROOT, ".github", "workflows", "gitleaks.yml")
 const PINNED_IMAGE = "zricethezav/gitleaks:v8.30.1"
 

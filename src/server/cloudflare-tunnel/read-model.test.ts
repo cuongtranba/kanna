@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { deriveChatTunnels } from "./read-model"
 import type { CloudflareTunnelEvent } from "./events"
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   KANNA_PLUGIN_API_VERSION,
   KANNA_PLUGIN_MANIFEST_FILENAME,
@@ -27,7 +27,7 @@ describe("plugin id rules", () => {
     ["hello.kanna", false],
     ["hello/../etc", false],
     ["a".repeat(65), false],
-  ])("isValidPluginId(%p) === %p", (id, expected) => {
+  ])("isValidPluginId(%o) === %o", (id, expected) => {
     expect(isValidPluginId(id)).toBe(expected)
   })
 
@@ -63,7 +63,7 @@ describe("parseKannaPluginManifest", () => {
     ["[]", "not_an_object"],
     ["null", "not_an_object"],
     ['"a string"', "not_an_object"],
-  ])("rejects %p as %p", (raw, code) => {
+  ])("rejects %o as %o", (raw, code) => {
     expect(parseKannaPluginManifest(raw)).toMatchObject({ ok: false, code })
   })
 
@@ -76,7 +76,7 @@ describe("parseKannaPluginManifest", () => {
     [{ id: "hello", name: "X", version: "1.0.0" }, "unsupported_api"],
     [{ id: "hello", name: "X", version: "1.0.0", kannaPluginApi: 2 }, "unsupported_api"],
     [{ id: "hello", name: "X", version: "1.0.0", kannaPluginApi: "1" }, "unsupported_api"],
-  ])("rejects %o as %p", (json, code) => {
+  ])("rejects %o as %o", (json, code) => {
     expect(ok(json)).toMatchObject({ ok: false, code })
   })
 
@@ -85,7 +85,7 @@ describe("parseKannaPluginManifest", () => {
     "../outside.ts",
     "nested/../../escape.ts",
     "",
-  ])("rejects entry %p as invalid_entry", (entry) => {
+  ])("rejects entry %o as invalid_entry", (entry) => {
     expect(ok({ id: "hello", name: "X", version: "1.0.0", kannaPluginApi: 1, entry })).toMatchObject({
       ok: false,
       code: "invalid_entry",

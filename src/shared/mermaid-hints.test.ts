@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { hintForMermaidError } from "./mermaid-hints"
 import { parseMermaidError } from "./mermaidError"
 

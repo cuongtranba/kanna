@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { buildWebhookInput, buildWebhookPatch, parseSlackMemberIds, validateWebhookDraft, type WebhookDraftFields } from "./webhookDraft"
 
 const SLACK_DRAFT: WebhookDraftFields = {

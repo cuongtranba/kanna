@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { ToolRequest } from "./permission-policy"
 import { POLICY_DEFAULT, POLICY_TERMINAL_STATUSES } from "./permission-policy"
 

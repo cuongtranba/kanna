@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { deriveImportedSubagentsDir } from "./imported-subagents-dir"
 import { encodeCwd } from "./claude-projects-path.adapter"
 

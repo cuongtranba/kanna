@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test"
+import { describe, expect, test, beforeEach, vi } from "vite-plus/test"
 import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { OAuthTokenPoolCard } from "./OAuthTokenPoolCard"
@@ -169,7 +169,7 @@ describe("OAuthTokenPoolCard", () => {
   })
 
   test("Remove button renders for each token", () => {
-    const onWrite = mock(async () => {})
+    const onWrite = vi.fn(async () => {})
     const html = renderToStaticMarkup(
       <OAuthTokenPoolCard
         concurrencyDefault={1}
@@ -357,7 +357,7 @@ describe("OAuthTokenPoolCard base URL editing", () => {
   })
 
   test("Test passes the token's endpoint so a proxy credential is probed correctly", async () => {
-    const onTest = mock(async () => ({ ok: true, error: null }))
+    const onTest = vi.fn(async () => ({ ok: true, error: null }))
     const rendered = await renderClientMarkup(
       <OAuthTokenPoolCard
         concurrencyDefault={1}

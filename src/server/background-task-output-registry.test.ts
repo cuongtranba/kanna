@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { createBackgroundTaskOutputRegistry } from "./background-task-output-registry"
 import type { BackgroundTaskOutputDeps } from "./background-task-output-registry"
 import { OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"

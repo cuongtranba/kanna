@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, test, vi } from "vite-plus/test"
 import type { ToolRequest } from "../shared/permission-policy"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
@@ -47,7 +47,7 @@ describe("EventStore", () => {
 
     const store = new EventStore()
 
-    expect(store.dataDir).toEndWith("/.kanna-dev/data")
+    expect(store.dataDir).toMatch(/\/\.kanna-dev\/data$/)
   })
 
   test("migrates legacy snapshot and messages log transcripts into per-chat files", async () => {
@@ -863,7 +863,7 @@ describe("EventStore", () => {
 
     await store.archiveChat(chat.id)
 
-    expect(store.getChat(chat.id)?.archivedAt).toBeNumber()
+    expect(store.getChat(chat.id)?.archivedAt).toBeTypeOf("number")
     expect(store.listChatsByProject(project.id)).toEqual([])
     expect(store.getMessages(chat.id).map((message) => message.kind)).toEqual(["user_prompt"])
 
@@ -1324,7 +1324,7 @@ describe("EventStore subagent runs", () => {
     await rm(turnsLogPath, { force: true })
     await mkdir(turnsLogPath)
 
-    const errorSpy = spyOn(console, "error").mockImplementation(() => {})
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     try {
       await store.appendSubagentEvent({
         v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,

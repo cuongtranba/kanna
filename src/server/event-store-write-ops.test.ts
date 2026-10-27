@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ToolRequest } from "../shared/permission-policy"
 import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatRecord, ProjectRecord, StackRecord } from "./events"

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { JsonValue } from "../json"
 import { isAttention, inboxTab, raisesNotification } from "./policy"
 import type { InboxActivityItem, InboxThread, InboxThreadState } from "./types"

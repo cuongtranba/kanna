@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -153,7 +153,7 @@ describe("KeybindingsManager", () => {
 
     const manager = new KeybindingsManager()
 
-    expect(manager.filePath).toEndWith("/.kanna-dev/keybindings.json")
+    expect(manager.filePath).toMatch(/\/\.kanna-dev\/keybindings\.json$/)
 
     if (previous === undefined) {
       delete process.env.KANNA_RUNTIME_PROFILE

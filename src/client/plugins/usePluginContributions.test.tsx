@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from "bun:test"
+import { describe, expect, test, afterEach } from "vite-plus/test"
 import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { usePluginContributions } from "./usePluginContributions"

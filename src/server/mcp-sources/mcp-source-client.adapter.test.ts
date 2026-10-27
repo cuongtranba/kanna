@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server"
 import { SdkError, SdkErrorCode, type McpSubscription } from "@modelcontextprotocol/client"
 import { z } from "zod"

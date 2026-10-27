@@ -21,9 +21,9 @@
 import { Glob } from 'bun'
 import path from 'node:path'
 
-const REPO_ROOT = path.resolve(import.meta.dir, '../../')
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../')
 const SRC = path.join(REPO_ROOT, 'src')
-const OUT = path.join(import.meta.dir, '../src/content/docs/reference/env-vars-data.ts')
+const OUT = path.join(import.meta.dirname, '../src/content/docs/reference/env-vars-data.ts')
 
 const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_CLAUDE_DRIVER: { default: '(unset)', description: 'Ignored. The PTY driver was removed and every Claude chat runs on the Claude Agent SDK. Setting it to "pty" only logs a warning at boot; leave it unset.' },

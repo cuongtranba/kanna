@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { fetchProjectPaths } from "./projects"
 import { makeFakeCommandPort } from "../adapters/testing/makeFakePorts"
 

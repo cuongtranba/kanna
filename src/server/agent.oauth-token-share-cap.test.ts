@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AgentCoordinator } from "./agent"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"

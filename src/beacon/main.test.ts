@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import type { BeaconFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"

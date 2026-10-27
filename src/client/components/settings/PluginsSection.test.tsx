@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PluginKindSection } from "./PluginsSection"
 import type { InstalledPackage, PackageUpdateEntry } from "../../../shared/packages/types"

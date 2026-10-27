@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readdirSync } from "node:fs"
 import { join } from "node:path"
 
@@ -6,7 +6,7 @@ const CAP = 0
 
 const MIN_FILES_WALKED = 100
 
-const CLIENT_DIR = join(import.meta.dir, "../../..", "src/client")
+const CLIENT_DIR = join(import.meta.dirname, "../../..", "src/client")
 const PX_TEXT_PATTERN = /text-\[\d+px\]/g
 
 function listSourceFiles(dir: string): string[] {

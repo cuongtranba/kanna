@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto"
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { createWebhookHarness } from "../test-helpers/webhook-harness"
 import { handleWebhookRequest } from "./webhook-http-routes"
 import { WEBHOOK_BODY_MAX_BYTES } from "../../shared/webhooks/types"

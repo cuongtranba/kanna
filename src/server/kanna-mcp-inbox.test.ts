@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { ZodTypeAny } from "zod"
 import type { JsonObject } from "../shared/json"
 import type { BusEnvelope } from "../shared/service-bus/envelope"

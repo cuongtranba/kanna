@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
 import type { PluginService } from "./plugins/plugin-service"
 import { join } from "node:path"
 
-const FIXTURES = join(import.meta.dir, "__fixtures__", "plugins")
+const FIXTURES = join(import.meta.dirname, "__fixtures__", "plugins")
 const HELLO = join(FIXTURES, "hello")
 const LEAKY = join(FIXTURES, "leaky")
 const THROWING = join(FIXTURES, "throwing")

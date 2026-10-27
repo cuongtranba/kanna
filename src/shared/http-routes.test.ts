@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { buildRoutePath, HTTP_ROUTES, listHttpRoutes, matchRoutePath } from "./http-routes"
 
 describe("http route inventory paths", () => {

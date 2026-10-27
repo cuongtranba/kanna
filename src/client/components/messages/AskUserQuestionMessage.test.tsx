@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
@@ -61,7 +61,7 @@ async function renderAndSubmit(
 
 describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   test("a rejected onSubmit returns the card to the interactive state and shows the error", async () => {
-    const onSubmit = mock(() => Promise.reject(new Error("No pending tool request")))
+    const onSubmit = vi.fn(() => Promise.reject(new Error("No pending tool request")))
 
     const container = await renderAndSubmit(onSubmit)
     await act(async () => { await Promise.resolve() })
@@ -75,7 +75,7 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   })
 
   test("a resolved onSubmit keeps the completed state", async () => {
-    const onSubmit = mock(() => Promise.resolve())
+    const onSubmit = vi.fn(() => Promise.resolve())
 
     const container = await renderAndSubmit(onSubmit)
     await act(async () => { await Promise.resolve() })
@@ -87,7 +87,7 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   })
 
   test("a synchronous void onSubmit keeps the completed state", async () => {
-    const onSubmit = mock(() => undefined)
+    const onSubmit = vi.fn(() => undefined)
 
     const container = await renderAndSubmit(onSubmit)
     await act(async () => { await Promise.resolve() })
@@ -98,7 +98,7 @@ describe("AskUserQuestionMessage — optimistic submit rollback", () => {
   })
 
   test("a synchronously throwing onSubmit rolls back too", async () => {
-    const onSubmit = mock(() => { throw new Error("socket closed") })
+    const onSubmit = vi.fn(() => { throw new Error("socket closed") })
 
     const container = await renderAndSubmit(onSubmit)
     await act(async () => { await Promise.resolve() })

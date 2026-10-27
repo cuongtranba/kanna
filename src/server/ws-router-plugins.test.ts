@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { PluginService } from "./plugins/plugin-service"
 import { handlePluginsCommand } from "./ws-router-plugins"

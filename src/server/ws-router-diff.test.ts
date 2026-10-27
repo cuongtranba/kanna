@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type { DiffCommandDeps, DiffStoreDep } from "./ws-router-diff"
 import { handleDiffCommand } from "./ws-router-diff"
 import type { ClientCommand } from "../shared/protocol"
@@ -6,19 +6,19 @@ import type { ClientCommand } from "../shared/protocol"
 
 function makeStore(overrides: Partial<DiffStoreDep> = {}): DiffStoreDep {
   return {
-    refreshSnapshot: mock(async () => false),
-    initializeGit: mock(async () => ({ ok: true as const, branchName: "main", snapshotChanged: false })),
-    getGitHubPublishInfo: mock(async () => ({
+    refreshSnapshot: vi.fn(async () => false),
+    initializeGit: vi.fn(async () => ({ ok: true as const, branchName: "main", snapshotChanged: false })),
+    getGitHubPublishInfo: vi.fn(async () => ({
       ghInstalled: false,
       authenticated: false,
       activeAccountLogin: undefined,
       owners: [],
       suggestedRepoName: "my-repo",
     })),
-    checkGitHubRepoAvailability: mock(async () => ({ available: true, message: "" })),
-    publishToGitHub: mock(async () => ({ ok: false, title: "", message: "", snapshotChanged: false })),
-    listBranches: mock(async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const })),
-    previewMergeBranch: mock(async () => ({
+    checkGitHubRepoAvailability: vi.fn(async () => ({ available: true, message: "" })),
+    publishToGitHub: vi.fn(async () => ({ ok: false, title: "", message: "", snapshotChanged: false })),
+    listBranches: vi.fn(async () => ({ recent: [], local: [], remote: [], pullRequests: [], pullRequestsStatus: "unavailable" as const })),
+    previewMergeBranch: vi.fn(async () => ({
       currentBranchName: "main",
       targetBranchName: "feat",
       targetDisplayName: "feat",
@@ -27,14 +27,14 @@ function makeStore(overrides: Partial<DiffStoreDep> = {}): DiffStoreDep {
       hasConflicts: false,
       message: "",
     })),
-    mergeBranch: mock(async () => ({ ok: true as const, title: "", message: "", snapshotChanged: false })),
-    checkoutBranch: mock(async () => ({ ok: true as const, branchName: "main", snapshotChanged: false })),
-    syncBranch: mock(async () => ({ ok: true as const, action: "fetch" as const, branchName: "main", snapshotChanged: false })),
-    createBranch: mock(async () => ({ ok: true as const, branchName: "new-branch", snapshotChanged: false })),
-    generateCommitMessage: mock(async () => ({ subject: "Update", body: "", usedFallback: false, failureMessage: null })),
-    commitFiles: mock(async () => ({ ok: true as const, mode: "commit_only" as const, branchName: "main", pushed: false, snapshotChanged: false })),
-    discardFile: mock(async () => ({ snapshotChanged: false })),
-    ignoreFile: mock(async () => ({ snapshotChanged: false })),
+    mergeBranch: vi.fn(async () => ({ ok: true as const, title: "", message: "", snapshotChanged: false })),
+    checkoutBranch: vi.fn(async () => ({ ok: true as const, branchName: "main", snapshotChanged: false })),
+    syncBranch: vi.fn(async () => ({ ok: true as const, action: "fetch" as const, branchName: "main", snapshotChanged: false })),
+    createBranch: vi.fn(async () => ({ ok: true as const, branchName: "new-branch", snapshotChanged: false })),
+    generateCommitMessage: vi.fn(async () => ({ subject: "Update", body: "", usedFallback: false, failureMessage: null })),
+    commitFiles: vi.fn(async () => ({ ok: true as const, mode: "commit_only" as const, branchName: "main", pushed: false, snapshotChanged: false })),
+    discardFile: vi.fn(async () => ({ snapshotChanged: false })),
+    ignoreFile: vi.fn(async () => ({ snapshotChanged: false })),
     ...overrides,
   }
 }
@@ -63,7 +63,7 @@ describe("handleDiffCommand", () => {
 
 
   test("chat.refreshDiffs — acks and does NOT broadcast when unchanged", async () => {
-    const deps = makeDeps({ refreshSnapshot: mock(async () => false) })
+    const deps = makeDeps({ refreshSnapshot: vi.fn(async () => false) })
     const handled = await handleDiffCommand(deps, { type: "chat.refreshDiffs", chatId: "c1" }, "r1")
     expect(handled).toBe(true)
     expect(deps.sent).toHaveLength(1)
@@ -72,7 +72,7 @@ describe("handleDiffCommand", () => {
   })
 
   test("chat.refreshDiffs — broadcasts when snapshot changed", async () => {
-    const deps = makeDeps({ refreshSnapshot: mock(async () => true) })
+    const deps = makeDeps({ refreshSnapshot: vi.fn(async () => true) })
     await handleDiffCommand(deps, { type: "chat.refreshDiffs", chatId: "c1" }, "r2")
     expect(deps.broadcastCount).toBe(1)
   })
@@ -87,7 +87,7 @@ describe("handleDiffCommand", () => {
   })
 
   test("chat.initGit — broadcasts when snapshotChanged", async () => {
-    const deps = makeDeps({ initializeGit: mock(async () => ({ ok: true as const, branchName: "main", snapshotChanged: true })) })
+    const deps = makeDeps({ initializeGit: vi.fn(async () => ({ ok: true as const, branchName: "main", snapshotChanged: true })) })
     await handleDiffCommand(deps, { type: "chat.initGit", chatId: "c1" }, "r4")
     expect(deps.broadcastCount).toBe(1)
   })
@@ -102,7 +102,7 @@ describe("handleDiffCommand", () => {
 
 
   test("chat.checkGitHubRepoAvailability — acks without project lookup", async () => {
-    const resolveSpy = mock((chatId: string) => `/tmp/${chatId}`)
+    const resolveSpy = vi.fn((chatId: string) => `/tmp/${chatId}`)
     const deps = { ...makeDeps(), resolveChatRepoPath: resolveSpy }
     const handled = await handleDiffCommand(
       deps,
@@ -116,7 +116,7 @@ describe("handleDiffCommand", () => {
 
   test("chat.commitDiffs — broadcasts when snapshot changed", async () => {
     const deps = makeDeps({
-      commitFiles: mock(async () => ({ ok: true as const, mode: "commit_only" as const, branchName: "main", pushed: false, snapshotChanged: true })),
+      commitFiles: vi.fn(async () => ({ ok: true as const, mode: "commit_only" as const, branchName: "main", pushed: false, snapshotChanged: true })),
     })
     await handleDiffCommand(
       deps,
@@ -128,14 +128,14 @@ describe("handleDiffCommand", () => {
 
 
   test("chat.discardDiffFile — does not broadcast when snapshotChanged is false", async () => {
-    const deps = makeDeps({ discardFile: mock(async () => ({ snapshotChanged: false })) })
+    const deps = makeDeps({ discardFile: vi.fn(async () => ({ snapshotChanged: false })) })
     const handled = await handleDiffCommand(deps, { type: "chat.discardDiffFile", chatId: "c1", path: "src/foo.ts" }, "r8")
     expect(handled).toBe(true)
     expect(deps.broadcastCount).toBe(0)
   })
 
   test("chat.ignoreDiffFile — broadcasts when snapshotChanged is true", async () => {
-    const deps = makeDeps({ ignoreFile: mock(async () => ({ snapshotChanged: true })) })
+    const deps = makeDeps({ ignoreFile: vi.fn(async () => ({ snapshotChanged: true })) })
     await handleDiffCommand(deps, { type: "chat.ignoreDiffFile", chatId: "c1", path: "src/foo.ts" }, "r9")
     expect(deps.broadcastCount).toBe(1)
   })

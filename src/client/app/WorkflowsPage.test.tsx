@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
@@ -66,14 +66,14 @@ async function mount(props: {
 
 describe("WorkflowsPageView", () => {
   test("shows the empty prompt before any run is selected", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => null)
     const { container, cleanup } = await mount({ runs: [summary()], getRunDetail })
     expect(container.textContent).toContain("Select a run")
     cleanup()
   })
 
   test("clicking a run fetches its detail and renders the progress tree", async () => {
-    const getRunDetail = mock(async (_id: string): Promise<WorkflowRun | null> => fullRun())
+    const getRunDetail = vi.fn(async (_id: string): Promise<WorkflowRun | null> => fullRun())
     const { container, cleanup } = await mount({ runs: [summary({ runId: "run-1" })], getRunDetail })
 
     const row = container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-1']")
@@ -88,8 +88,8 @@ describe("WorkflowsPageView", () => {
   })
 
   test("clicking an agent's Transcript button fetches + shows the agent transcript", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => fullRun())
-    const getAgentTranscript = mock(async (_runId: string, _agentId: string): Promise<TranscriptEntry[]> => [])
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => fullRun())
+    const getAgentTranscript = vi.fn(async (_runId: string, _agentId: string): Promise<TranscriptEntry[]> => [])
     const { container, cleanup } = await mount({ runs: [summary({ runId: "run-1" })], getRunDetail, getAgentTranscript })
 
     await act(async () => { container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-1']")!.click() })
@@ -106,8 +106,8 @@ describe("WorkflowsPageView", () => {
   })
 
   test("back from the agent panel returns to the run detail", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => fullRun())
-    const getAgentTranscript = mock(async (): Promise<TranscriptEntry[]> => [])
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => fullRun())
+    const getAgentTranscript = vi.fn(async (): Promise<TranscriptEntry[]> => [])
     const { container, cleanup } = await mount({ runs: [summary({ runId: "run-1" })], getRunDetail, getAgentTranscript })
 
     await act(async () => { container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-1']")!.click() })
@@ -123,7 +123,7 @@ describe("WorkflowsPageView", () => {
   })
 
   test("shows a distinct 'not found' state when the detail fetch returns null", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => null)
     const { container, cleanup } = await mount({ runs: [summary({ runId: "run-1" })], getRunDetail })
     await act(async () => { container.querySelector<HTMLButtonElement>("[data-testid='workflow-row:run-1']")!.click() })
     await act(async () => {})
@@ -134,7 +134,7 @@ describe("WorkflowsPageView", () => {
   test("out-of-order detail fetches: the last-clicked run wins", async () => {
     const dA = deferred<WorkflowRun | null>()
     const dB = deferred<WorkflowRun | null>()
-    const getRunDetail = mock((id: string) => (id === "run-a" ? dA.promise : dB.promise))
+    const getRunDetail = vi.fn((id: string) => (id === "run-a" ? dA.promise : dB.promise))
     const container = document.createElement("div")
     document.body.appendChild(container)
     await act(async () => {
@@ -162,7 +162,7 @@ describe("WorkflowsPageView", () => {
       { index: 2, label: "pkg-bravo", state: "running", agentId: "a2" },
     ] })
     let n = 0
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => (n++ === 0 ? v1 : v2))
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => (n++ === 0 ? v1 : v2))
     const runRow = summary({ runId: "run-1", status: "running" })
 
     const container = document.createElement("div")
@@ -185,12 +185,12 @@ describe("WorkflowsPageView", () => {
   })
 
   test("renders a Back-to-chat button only when onBackToChat is provided, and clicking it fires the callback", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => null)
     const { container: bare, cleanup: cleanupBare } = await mount({ runs: [summary()], getRunDetail })
     expect(bare.querySelector("[aria-label='Back to chat']")).toBeNull()
     cleanupBare()
 
-    const onBackToChat = mock(() => undefined)
+    const onBackToChat = vi.fn(() => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
     await act(async () => {
@@ -211,7 +211,7 @@ describe("WorkflowsPageView", () => {
   })
 
   test("mounts without a render-loop warning", async () => {
-    const getRunDetail = mock(async (): Promise<WorkflowRun | null> => null)
+    const getRunDetail = vi.fn(async (): Promise<WorkflowRun | null> => null)
     const result = await renderForLoopCheck(
       <WorkflowsPageView runs={[summary()]} getRunDetail={getRunDetail} getAgentTranscript={async () => []} />,
     )

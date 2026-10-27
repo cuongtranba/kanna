@@ -1,5 +1,5 @@
 import type { JsonValue } from "../shared/json"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { handleBoardCommand, isBoardCommand, type BoardCommandDeps } from "./ws-router-boards"
 import { createBoardRegistry } from "./board-registry"
 import { createBoardStore } from "./board-store.adapter"

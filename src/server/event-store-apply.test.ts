@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { STORE_VERSION } from "../shared/types"
 import type { ToolRequest } from "../shared/permission-policy"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"

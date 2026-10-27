@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
 import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "../shared/task-doc"
 import {
@@ -579,7 +579,7 @@ describe("validateLoopSetup — workdir + parallelism", () => {
     expect(result.errors.some((e) => e.includes("workdir"))).toBe(true)
   })
 
-  test.each([0, -1, 1.5, 4, 99])("rejects parallelism %p", (parallelism) => {
+  test.each([0, -1, 1.5, 4, 99])("rejects parallelism %o", (parallelism) => {
     const result = validateLoopSetup({ goal: "g", verifyCommand: "true", parallelism }, cwd, CTX)
     expect(result.ok).toBe(false)
     if (result.ok) throw new Error("expected reject")
@@ -631,6 +631,13 @@ describe("auditOracle", () => {
   test("stays silent for a test-runner oracle", () => {
     for (const command of ["bun test", "task check", "pnpm test", "go test ./..."]) {
       expect(auditOracle({ verifyCommand: command, scriptPath: null, scriptContent: null })).toEqual([])
+    }
+  })
+
+  test("treats Vite+ test, lint and check as strong oracles behind a file-existence marker", () => {
+    for (const runner of ["vp test run", "vp lint", "vp check"]) {
+      const script = ["test -f a.ts || exit 1", runner].join("\n")
+      expect(auditOracle({ verifyCommand: "bash gate.sh", scriptPath: "gate.sh", scriptContent: script })).toEqual([])
     }
   })
 

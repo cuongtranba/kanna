@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { McpSourceState } from "../../shared/mcp-sources/types"
 import { mcpSourceStateLabel, mcpSourceStateTone } from "./mcpSourcePresentation"
 

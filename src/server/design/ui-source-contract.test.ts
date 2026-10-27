@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
 
-const repoRoot = join(import.meta.dir, "../../..")
+const repoRoot = join(import.meta.dirname, "../../..")
 const clientRoot = join(repoRoot, "src/client")
 
 async function clientSource() {

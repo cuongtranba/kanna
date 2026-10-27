@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { PROVIDERS } from "../types"
 import type { WebhookInput, WebhookSlackInput } from "./types"
 import { validateSlackHookFields } from "./slack"

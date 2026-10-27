@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { extractSessionId, extractSessionIds } from "./claude-session-id"
 
 const ID = "4f9c2b1e-8a31-4c7d-9b2e-1a2b3c4d5e6f"

@@ -1,4 +1,4 @@
-import { afterEach, describe, test, expect } from "bun:test"
+import { afterEach, describe, test, expect } from "vite-plus/test"
 import {
   withSpan,
   addCounter,

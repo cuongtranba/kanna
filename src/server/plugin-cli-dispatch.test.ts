@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import type { PluginLogEntry } from "../shared/plugins/log-ring"
 import { runCli } from "./cli-runtime"
 import {

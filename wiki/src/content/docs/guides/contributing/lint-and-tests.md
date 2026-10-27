@@ -10,11 +10,18 @@ bun run test                          # everything
 bun run test src/server/agent.test.ts # one suite
 ```
 
-:::caution[Never bare `bun test`]
-`bun run test` is `bun test --conditions production --timeout 30000`. The
-`--conditions production` is not optional: Lexical 0.45's dev ESM build has a
-circular-dependency TDZ that crashes a bare `bun test` before any test runs.
-The 30 s timeout matters too — Bun's 5 s default is too tight for CI runners.
+:::caution[Vitest, run under Bun]
+`bun run test` is `bun --bun vp test run`: Vitest 5 through Vite+, executed inside
+the Bun runtime. The `--bun` matters — server code uses `bun:sqlite`, `Bun.serve`
+and `Bun.Terminal`, which do not exist under Node. Test files import from
+`"vite-plus/test"`; `bun:test` is no longer available, so a bare `bun test` is not
+the runner.
+
+`vite.config.ts` carries the settings the old flags used to: the `production`
+export condition in test mode only (Lexical 0.45's dev ESM build has a
+circular-dependency TDZ), and a 30 s `testTimeout` because 5 s is too tight for CI
+runners. Use `import.meta.dirname`, never `import.meta.dir`, which is undefined
+under Vitest.
 :::
 
 ## The gate list
@@ -119,8 +126,8 @@ Components with effects that write stores should be covered by
 
 This one is enforced, and the failure it prevents is genuinely baffling.
 
-happy-dom gives the whole Bun process **one** document, and the test preload
-wipes `document.body` after each test. That wipe cannot reach a React root the
+happy-dom gives the whole test worker **one** document, and the test setup file
+(`scripts/test-setup.ts`) wipes `document.body` after each test. That wipe cannot reach a React root the
 test left alive — and any portal that root opened (Radix Dialog, Popover,
 Select, `createPortal`) had `document.body` itself as its container. The next
 time that root commits, React tries to remove a node the wipe already took, and
@@ -128,9 +135,11 @@ happy-dom throws `removeChild: The node to be removed is not a child of this
 node` — blaming **whichever test happens to be running at that moment**, in a
 different file.
 
-File order is the filesystem's, so it reproduces on CI's ext4 and not on APFS.
-In PR #646 a leaked `SharePopover` root crashed `CardDrawer` two files later,
-with the full suite green locally.
+Under the old `bun test` runner every file shared one process, so the blame landed
+in a different file and the order was the filesystem's: in PR #646 a leaked
+`SharePopover` root crashed `CardDrawer` two files later, on CI's ext4 and not on
+APFS. Vitest gives each file its own worker, so the blame now lands inside the
+leaking file, but the rule is unchanged.
 
 The `afterEach` sweep now fails the test that actually leaked, naming the nodes.
 Call `root.unmount()` — `container.remove()` is not enough.
@@ -148,5 +157,5 @@ A hung credential prompt otherwise eats the whole test timeout.
 ## Not on the critical path
 
 `bun run test:e2e` (Playwright, real Chrome) is deliberately **not** wired into
-CI — it needs a real browser, not the happy-dom that `bun test` runs against.
+CI — it needs a real browser, not the happy-dom that the Vitest suite runs against.
 Run it on demand.

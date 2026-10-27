@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { useChatStateStore, selectChatSlice, EMPTY_CHAT_SLICE } from "./chatStateStore"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { ChatRuntime, ChatSnapshot, TranscriptEntry } from "../../shared/types"

@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const REPO_ROOT = join(import.meta.dir, "..", "..")
+const REPO_ROOT = join(import.meta.dirname, "..", "..")
 const CONFIG_PATH = join(REPO_ROOT, ".gitleaks.toml")
 
 type GitleaksAllowlist = {

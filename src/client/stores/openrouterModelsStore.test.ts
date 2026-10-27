@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test"
+import { describe, it, expect, beforeEach } from "vite-plus/test"
 import { useOpenRouterModelsStore } from "./openrouterModelsStore"
 
 describe("openrouterModelsStore", () => {

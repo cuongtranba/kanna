@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -333,7 +333,7 @@ describe("normalizeClaudeStreamMessage", () => {
       "No response requested.",
       "No action needed.",
       "Nothing needed from you.",
-    ])("benign synthetic placeholder %p is dropped (no entry)", (text) => {
+    ])("benign synthetic placeholder %o is dropped (no entry)", (text) => {
       const entries = normalizeClaudeStreamMessage({
         type: "assistant",
         uuid: "msg-synthetic-benign",
