@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { isJsonObject } from "../../shared/json"
 import type { ChatHistoryPage } from "../../shared/types"
+import { toJsonValue } from "../json-boundary"
 import { fail } from "../kanna-mcp-tool"
 import { acceptedReport, followReply, guardedChatSend, guardedEnqueue } from "./remote-mcp-follow"
 import { IDEMPOTENCY_KEY_FIELD, TIMEOUT_SECONDS_FIELD, WAIT_FIELD } from "./remote-mcp-tool-fields"
@@ -16,7 +17,6 @@ import {
   pendingToolRequests,
   readChat,
   runCommand,
-  toJson,
 } from "./remote-mcp-views"
 
 const DEFAULT_ENTRY_LIMIT = 50
@@ -84,7 +84,7 @@ export const chatTools: readonly RemoteTool[] = [
           id: message.id,
           content: clipText(message.content, QUEUED_PREVIEW_CHARS),
           createdAt: message.createdAt,
-          origin: message.origin ? toJson(message.origin) : null,
+          origin: message.origin ? toJsonValue(message.origin) : null,
         })),
         entries: flattenEntries(snapshot.messages),
       })

@@ -1,12 +1,9 @@
 import path from "node:path"
+import { isPathInside } from "./path-containment"
 
 export interface ResolvedProjectFilePath {
   relativePath: string
   filePath: string
-}
-
-export function isWithinRoot(root: string, candidate: string): boolean {
-  return candidate === root || candidate.startsWith(`${root}${path.sep}`)
 }
 
 export function resolveProjectFilePath(projectRoot: string, requestedPath: string): ResolvedProjectFilePath | null {
@@ -22,6 +19,6 @@ export function resolveProjectFilePath(projectRoot: string, requestedPath: strin
   }
   const root = path.resolve(projectRoot)
   const filePath = path.resolve(root, relativePath)
-  if (!isWithinRoot(root, filePath)) return null
+  if (!isPathInside(root, filePath)) return null
   return { relativePath, filePath }
 }

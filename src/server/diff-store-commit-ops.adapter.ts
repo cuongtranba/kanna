@@ -3,9 +3,9 @@ import {
   formatGitFailure,
   readTextFileOrNull,
   rmPathRecursive,
-  runGit,
   writeTextFile,
 } from "./diff-store-io.adapter"
+import { runGit } from "./git-runner.adapter"
 import {
   getBranchName,
   getOriginRemoteUrl,

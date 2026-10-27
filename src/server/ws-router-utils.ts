@@ -5,7 +5,6 @@ import { log } from "../shared/log"
 import type { SidebarData } from "../shared/types"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
-import type { EventStore } from "./event-store"
 
 
 export function unhandledCommandMessage(commandType: string): string {
@@ -142,13 +141,6 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
     appSettings,
     terminal,
   }
-}
-
-
-export function getSidebarProjectOrder(store: EventStore): string[] {
-  return typeof store.getSidebarProjectOrder === "function"
-    ? store.getSidebarProjectOrder()
-    : []
 }
 
 

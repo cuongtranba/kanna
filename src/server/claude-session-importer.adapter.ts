@@ -15,11 +15,11 @@ import type {
   ClaudeSessionSummaryRecord,
   ParsedClaudeSession,
 } from "./claude-session-types"
+import { DEFAULT_CHAT_TITLE } from "../shared/types"
 
 export type { ImportClaudeSessionsResult }
 
 const IMPORTED_SESSION_TITLE = "Imported session"
-const NEW_CHAT_TITLE = "New Chat"
 const TITLE_MAX_LENGTH = 60
 
 export interface ImportClaudeSessionsArgs {
@@ -127,7 +127,7 @@ function legacyImportedTitleCandidates(session: ParsedClaudeSession): Set<string
     summaryTitle ?? userTitle ?? IMPORTED_SESSION_TITLE,
     userTitle ?? IMPORTED_SESSION_TITLE,
     IMPORTED_SESSION_TITLE,
-    NEW_CHAT_TITLE,
+    DEFAULT_CHAT_TITLE,
   ])
 }
 

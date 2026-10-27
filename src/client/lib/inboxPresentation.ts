@@ -2,6 +2,7 @@ import type { JsonValue } from "../../shared/json"
 import type { InboxActivityItem, InboxSourceKind, InboxThread, InboxThreadState, InboxVerdict } from "../../shared/inbox/types"
 import type { BusSource } from "../../shared/service-bus/envelope"
 import type { StatusTone } from "./statusLabel"
+import { namedBusSubject, subjectFamily } from "../../shared/service-bus/subjects"
 
 export interface InboxStateDisplay {
   tone: StatusTone
@@ -28,7 +29,7 @@ export function threadStateDisplay(thread: InboxThread): InboxStateDisplay {
   return THREAD_STATE_DISPLAY[thread.state]
 }
 
-const FAILED_SUBJECTS: ReadonlySet<string> = new Set(["kanna.turn.failed", "kanna.subagent.failed"])
+const FAILED_SUBJECTS: ReadonlySet<string> = new Set([namedBusSubject("turnFailed"), namedBusSubject("subagentFailed")])
 
 export function isFailedActivity(item: Pick<InboxActivityItem, "subject" | "title">): boolean {
   return FAILED_SUBJECTS.has(item.subject) || item.title.endsWith(" failed")
@@ -51,7 +52,7 @@ const SUBJECT_LABEL: Readonly<Record<string, string>> = {
 }
 
 export function subjectLabel(subject: string): string {
-  const family = subject.split(".")[1] ?? ""
+  const family = subjectFamily(subject)
   return SUBJECT_LABEL[family] ?? (family.length > 0 ? family : subject)
 }
 

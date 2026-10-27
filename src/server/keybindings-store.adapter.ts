@@ -1,11 +1,6 @@
 import { watch, type FSWatcher } from "node:fs"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { isErrnoException } from "../shared/errors"
-
-export interface KeybindingsFilePresence {
-  text: string | null
-}
 
 export async function ensureKeybindingsFile(filePath: string, initialContent: string): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true })
@@ -13,23 +8,6 @@ export async function ensureKeybindingsFile(filePath: string, initialContent: st
   if (!(await file.exists())) {
     await writeFile(filePath, initialContent, "utf8")
   }
-}
-
-export async function readKeybindingsFile(filePath: string): Promise<KeybindingsFilePresence> {
-  try {
-    const text = await readFile(filePath, "utf8")
-    return { text }
-  } catch (error) {
-    if (isErrnoException(error) && error.code === "ENOENT") {
-      return { text: null }
-    }
-    throw error
-  }
-}
-
-export async function writeKeybindingsFile(filePath: string, content: string): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true })
-  await writeFile(filePath, content, "utf8")
 }
 
 export interface KeybindingsWatcher {

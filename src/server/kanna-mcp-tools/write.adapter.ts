@@ -1,7 +1,8 @@
 import { z } from "zod"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { homedir } from "node:os"
+import { currentHomeDir } from "../home-dir.adapter"
+import { resolveUserPath } from "../home-path"
 import type { ToolCallbackService } from "../tool-callback"
 import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
 import { gatedToolCall } from "./tool-callback-shim"
@@ -19,11 +20,6 @@ export interface WriteTool {
   handler: (input: WriteInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
 }
 
-function resolvePath(p: string, cwd: string): string {
-  if (p.startsWith("~")) return path.join(homedir(), p.slice(1).replace(/^\//, ""))
-  return path.resolve(cwd, p)
-}
-
 export function createWriteTool(deps: { toolCallback: ToolCallbackService }): WriteTool {
   return {
     name: "write",
@@ -35,7 +31,7 @@ export function createWriteTool(deps: { toolCallback: ToolCallbackService }): Wr
         ctx,
         args: input,
         formatAnswer: async () => {
-          const resolved = resolvePath(input.path, ctx.cwd)
+          const resolved = resolveUserPath(input.path, ctx.cwd, currentHomeDir())
           try {
             await mkdir(path.dirname(resolved), { recursive: true })
             await writeFile(resolved, input.content, "utf8")

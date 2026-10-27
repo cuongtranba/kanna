@@ -1,8 +1,9 @@
-import os from "node:os"
 import { errorMessage } from "../shared/errors"
 import { safeJsonParse, type JsonValue } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import { parseCodexPluginAvailable } from "../shared/packages/parse-codex-plugins"
+import { currentHomeDir } from "./home-dir.adapter"
+import { spawnCapture } from "./process-utils.adapter"
 
 
 export interface CodexPluginCheckerSpawnResult {
@@ -134,26 +135,17 @@ export function createCodexPluginUpdateChecker(deps: CodexPluginCheckerDeps): Pa
 export function buildCodexPluginCheckerDeps(codexBinary: string | null): CodexPluginCheckerDeps {
   return {
     spawnFn: async (cmd, env, signal) => {
-      const proc = Bun.spawn(cmd, {
-        stdout: "pipe",
-        stderr: "ignore",
-        env,
-        signal,
-      })
-      const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+      const { stdout, exitCode } = await spawnCapture(cmd, { env, signal })
       return { stdout, exitCode }
     },
     codexBinary,
   }
 }
 
-export function buildCodexPluginCheckerDepsForEnv(): CodexPluginCheckerDeps {
-  const home = process.env.HOME ?? os.homedir()
-  const codexBinary = process.env.CODEX_BINARY_PATH ?? `${home}/.local/bin/codex`
-  return buildCodexPluginCheckerDeps(codexBinary)
+export function resolveCodexBinary(): string {
+  return process.env.CODEX_BINARY_PATH ?? `${currentHomeDir()}/.local/bin/codex`
 }
 
-export function findCodexBinary(): string {
-  const home = process.env.HOME ?? os.homedir()
-  return process.env.CODEX_BINARY_PATH ?? `${home}/.local/bin/codex`
+export function buildCodexPluginCheckerDepsForEnv(): CodexPluginCheckerDeps {
+  return buildCodexPluginCheckerDeps(resolveCodexBinary())
 }

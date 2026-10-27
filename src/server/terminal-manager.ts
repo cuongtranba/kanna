@@ -6,6 +6,7 @@ import { SerializeAddon } from "@xterm/addon-serialize"
 import type { TerminalEvent, TerminalSnapshot } from "../shared/protocol"
 import { clampScrollback } from "../shared/terminal-scrollback"
 import type { TerminalPidRegistry } from "./terminal-pid-registry.adapter"
+import { signalProcessGroup } from "./process-utils.adapter"
 import { createBunTerminal, hasBunTerminal, spawnTerminalProcess } from "./terminal-manager-io.adapter"
 import { projectProcessEnv } from "./project-process-env"
 
@@ -102,57 +103,6 @@ function filterFocusReportInput(data: string, allowFocusReporting: boolean) {
   return data.replaceAll(FOCUS_IN_SEQUENCE, "").replaceAll(FOCUS_OUT_SEQUENCE, "")
 }
 
-function killTerminalProcessTree(subprocess: Bun.Subprocess | null) {
-  if (!subprocess) return
-
-  const pid = subprocess.pid
-  if (typeof pid !== "number") return
-
-  if (process.platform !== "win32") {
-    try {
-      process.kill(-pid, "SIGKILL")
-      return
-    } catch {
-    }
-  }
-
-  try {
-    subprocess.kill("SIGKILL")
-  } catch {
-  }
-}
-
-function reapShellPgroup(pid: number | undefined) {
-  if (process.platform === "win32") return
-  if (typeof pid !== "number" || pid <= 0) return
-  try {
-    process.kill(-pid, "SIGKILL")
-  } catch {
-  }
-}
-
-function signalTerminalProcessGroup(subprocess: Bun.Subprocess | null, signal: NodeJS.Signals) {
-  if (!subprocess) return false
-
-  const pid = subprocess.pid
-  if (typeof pid !== "number") return false
-
-  if (process.platform !== "win32") {
-    try {
-      process.kill(-pid, signal)
-      return true
-    } catch {
-    }
-  }
-
-  try {
-    subprocess.kill(signal)
-    return true
-  } catch {
-    return false
-  }
-}
-
 export class TerminalManager {
   private readonly sessions = new Map<string, TerminalSession>()
   private readonly listeners = new Set<(event: TerminalEvent) => void>()
@@ -185,7 +135,7 @@ export class TerminalManager {
       existing.headless.options.scrollback = existing.scrollback
       existing.headless.resize(existing.cols, existing.rows)
       existing.terminal.resize(existing.cols, existing.rows)
-      signalTerminalProcessGroup(existing.process, "SIGWINCH")
+      signalProcessGroup(existing.process, "SIGWINCH")
       return this.snapshotOf(existing)
     }
 
@@ -250,38 +200,21 @@ export class TerminalManager {
         cwd: args.projectPath,
       })
     }
-    const handleShellExit = () => {
-      reapShellPgroup(shellPid)
+    const markExited = (exitCode: number, notice?: string) => {
+      signalProcessGroup(shellPid, "SIGKILL")
       void this.pidRegistry?.unregister(args.terminalId)
-    }
-    void session.process.exited.then((exitCode) => {
-      handleShellExit()
       const active = this.sessions.get(args.terminalId)
       if (!active) return
       active.status = "exited"
       active.exitCode = exitCode
-      this.emit({
-        type: "terminal.exit",
-        terminalId: args.terminalId,
-        exitCode,
-      })
-    }).catch((error) => {
-      handleShellExit()
-      const active = this.sessions.get(args.terminalId)
-      if (!active) return
-      active.status = "exited"
-      active.exitCode = 1
-      this.emit({
-        type: "terminal.output",
-        terminalId: args.terminalId,
-        data: `\r\n[terminal error] ${error instanceof Error ? error.message : String(error)}\r\n`,
-      })
-      this.emit({
-        type: "terminal.exit",
-        terminalId: args.terminalId,
-        exitCode: 1,
-      })
-    })
+      if (notice !== undefined) {
+        this.emit({ type: "terminal.output", terminalId: args.terminalId, data: notice })
+      }
+      this.emit({ type: "terminal.exit", terminalId: args.terminalId, exitCode })
+    }
+    void session.process.exited
+      .then((exitCode) => markExited(exitCode))
+      .catch((error) => markExited(1, `\r\n[terminal error] ${error instanceof Error ? error.message : String(error)}\r\n`))
 
     this.sessions.set(args.terminalId, session)
     return this.snapshotOf(session)
@@ -313,7 +246,7 @@ export class TerminalManager {
         session.terminal.write(filteredData.slice(cursor, ctrlCIndex))
       }
 
-      signalTerminalProcessGroup(session.process, "SIGINT")
+      signalProcessGroup(session.process, "SIGINT")
       cursor = ctrlCIndex + 1
     }
   }
@@ -325,7 +258,7 @@ export class TerminalManager {
     session.rows = normalizeTerminalDimension(rows, session.rows)
     session.headless.resize(session.cols, session.rows)
     session.terminal.resize(session.cols, session.rows)
-    signalTerminalProcessGroup(session.process, "SIGWINCH")
+    signalProcessGroup(session.process, "SIGWINCH")
   }
 
   close(terminalId: string) {
@@ -333,7 +266,7 @@ export class TerminalManager {
     if (!session) return
 
     this.sessions.delete(terminalId)
-    killTerminalProcessTree(session.process)
+    signalProcessGroup(session.process, "SIGKILL")
     void this.pidRegistry?.unregister(terminalId)
     session.terminal.close()
     session.serializeAddon.dispose()

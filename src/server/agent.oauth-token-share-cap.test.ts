@@ -148,6 +148,7 @@ function createMultiChatStore(chatIds: string[]) {
       this.queuedMessages.push(queuedMessage)
       return queuedMessage
     },
+    async setChatModel() {},
     getQueuedMessages() {
       return [...this.queuedMessages]
     },

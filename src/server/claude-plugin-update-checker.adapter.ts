@@ -1,6 +1,7 @@
-import os from "node:os"
 import path from "node:path"
 import { errorMessage } from "../shared/errors"
+import { currentHomeDir } from "./home-dir.adapter"
+import { spawnCapture } from "./process-utils.adapter"
 import { safeJsonParse } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import {
@@ -223,7 +224,7 @@ export function findClaudeBinary(): string | null {
 }
 
 export function buildClaudePluginCheckerDeps(claudeBinary: string | null): ClaudePluginCheckerDeps {
-  const home = process.env.HOME ?? os.homedir()
+  const home = currentHomeDir()
   return {
     readFileFn: async (p) => {
       try {
@@ -233,8 +234,7 @@ export function buildClaudePluginCheckerDeps(claudeBinary: string | null): Claud
       }
     },
     spawnFn: async (cmd, cwd, env) => {
-      const proc = Bun.spawn(cmd, { cwd, stdout: "pipe", stderr: "ignore", env })
-      const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+      const { stdout, exitCode } = await spawnCapture(cmd, { cwd, env })
       return { stdout, exitCode }
     },
     claudeBinary,

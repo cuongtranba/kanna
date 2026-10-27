@@ -1,16 +1,15 @@
 import path from "node:path"
-import {
-  runCommand,
-  runGit,
-  statOrNull,
-  summarizeGitFailure,
-} from "./diff-store-io.adapter"
+import { statOrNull, summarizeGitFailure } from "./diff-store-io.adapter"
+import { runGit } from "./git-runner.adapter"
+import { spawnCapture } from "./process-utils.adapter"
 import type {
   ChatBranchHistoryEntry,
   ChatBranchHistorySnapshot,
   GithubRelease,
 } from "../shared/types"
 
+const LOG_RECORD_SEPARATOR = "\u001e"
+const LOG_FIELD_SEPARATOR = "\u001f"
 
 export type SelectedBranch =
   | { kind: "local"; name: string }
@@ -363,7 +362,7 @@ interface FetchGitHubPullRequestsDeps {
 }
 
 async function fetchGitHubPullRequestsViaGh(path: string): Promise<GitHubPullRequestResponseItem[] | null> {
-  const result = await runCommand([
+  const result = await spawnCapture([
     "gh",
     "api",
     "-H",
@@ -417,7 +416,7 @@ interface FetchGitHubReleasesDeps {
 }
 
 async function fetchGitHubReleasesViaGh(path: string): Promise<GithubRelease[] | null> {
-  const result = await runCommand([
+  const result = await spawnCapture([
     "gh",
     "api",
     "-H",
@@ -528,10 +527,10 @@ export async function getBranchHistory(args: {
   const remoteUrl = await getOriginRemoteUrl(args.repoRoot)
   const parsedRecords: Array<{ sha: string; summary: string; description: string; authorName?: string; authoredAt: string }> = []
 
-  for (const record of logResult.stdout.split("")) {
+  for (const record of logResult.stdout.split(LOG_RECORD_SEPARATOR)) {
     const trimmed = record.trim()
     if (!trimmed) continue
-    const [sha, summary, description, authorName, authoredAt] = trimmed.split("")
+    const [sha, summary, description, authorName, authoredAt] = trimmed.split(LOG_FIELD_SEPARATOR)
     if (!sha || !summary || !authoredAt) continue
     parsedRecords.push({
       sha,
@@ -590,7 +589,7 @@ export function sanitizeRepoName(name: string) {
 }
 
 export async function getGhAuthInfo() {
-  const versionResult = await runCommand(["gh", "--version"])
+  const versionResult = await spawnCapture(["gh", "--version"])
   if (versionResult.exitCode !== 0) {
     return {
       ghInstalled: false,
@@ -599,7 +598,7 @@ export async function getGhAuthInfo() {
     }
   }
 
-  const authStatusResult = await runCommand(["gh", "auth", "status", "--json", "hosts"])
+  const authStatusResult = await spawnCapture(["gh", "auth", "status", "--json", "hosts"])
   if (authStatusResult.exitCode !== 0) {
     return {
       ghInstalled: true,
@@ -627,7 +626,7 @@ export async function getGhAuthInfo() {
 }
 
 export async function getGitHubOwners(): Promise<string[]> {
-  const userResult = await runCommand(["gh", "api", "user", "--jq", ".login"])
+  const userResult = await spawnCapture(["gh", "api", "user", "--jq", ".login"])
   if (userResult.exitCode !== 0) {
     return []
   }
@@ -638,7 +637,7 @@ export async function getGitHubOwners(): Promise<string[]> {
     owners.add(userLogin)
   }
 
-  const orgsResult = await runCommand(["gh", "api", "user/orgs", "--paginate", "--jq", ".[].login"])
+  const orgsResult = await spawnCapture(["gh", "api", "user/orgs", "--paginate", "--jq", ".[].login"])
   if (orgsResult.exitCode === 0) {
     for (const line of orgsResult.stdout.split(/\r?\n/u)) {
       const login = line.trim()

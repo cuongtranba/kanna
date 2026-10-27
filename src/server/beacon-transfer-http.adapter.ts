@@ -116,17 +116,15 @@ export function createBeaconTransferHandler(
   const completing = new Map<string, Promise<void>>()
 
   async function resumePoint(token: string): Promise<Response> {
-    const ticket = tickets.lookup(token, "upload")
+    const ticket = tickets.claim(token, "upload")
     if (ticket === null) return unauthorized()
-    tickets.touch(token)
     const received = await sizeOrZero(partPathOf(ticket.kannaPath))
     return Response.json({ direction: "upload", received })
   }
 
   async function rangedDownload(req: Request, token: string): Promise<Response> {
-    const ticket = tickets.lookup(token, "download")
+    const ticket = tickets.claim(token, "download")
     if (ticket === null) return unauthorized()
-    tickets.touch(token)
     let info: Awaited<ReturnType<typeof stat>>
     try {
       info = await stat(ticket.kannaPath)
@@ -150,9 +148,8 @@ export function createBeaconTransferHandler(
   }
 
   async function putChunk(req: Request, url: URL, token: string): Promise<Response> {
-    const ticket = tickets.lookup(token, "upload")
+    const ticket = tickets.claim(token, "upload")
     if (ticket === null) return unauthorized()
-    tickets.touch(token)
     const offset = wholeNumber(url.searchParams.get("offset"))
     if (offset === null) return Response.json({ error: "offset must be a whole number" }, { status: 400 })
     const length = wholeNumber(req.headers.get("content-length"))
@@ -212,9 +209,8 @@ export function createBeaconTransferHandler(
   }
 
   async function settleCompletion(token: string, claim: TransferOutcome): Promise<Response> {
-    const ticket = tickets.lookup(token, "upload")
+    const ticket = tickets.claim(token, "upload")
     if (ticket === null) return replayCompletion(token, claim)
-    tickets.touch(token)
     const part = partPathOf(ticket.kannaPath)
     await mkdir(path.dirname(part), { recursive: true })
     await (await open(part, constants.O_RDWR | constants.O_CREAT)).close()
@@ -235,8 +231,7 @@ export function createBeaconTransferHandler(
   }
 
   async function complete(req: Request, token: string): Promise<Response> {
-    if (tickets.lookup(token, "upload") === null && completedUpload(token) === null) return unauthorized()
-    tickets.touch(token)
+    if (tickets.claim(token, "upload") === null && completedUpload(token) === null) return unauthorized()
     const claim = completionClaim(await req.text())
     if (claim === null) return Response.json({ error: "bytes and sha256 are required" }, { status: 400 })
     const previous = completing.get(token) ?? Promise.resolve()

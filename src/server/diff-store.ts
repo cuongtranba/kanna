@@ -1,10 +1,7 @@
 import path from "node:path"
-import {
-  formatGitFailure,
-  runCommand,
-  runGit,
-  summarizeGitFailure,
-} from "./diff-store-io.adapter"
+import { formatGitFailure, summarizeGitFailure } from "./diff-store-io.adapter"
+import { runGit } from "./git-runner.adapter"
+import { spawnCapture } from "./process-utils.adapter"
 import {
   createBranchActionFailure,
   extractGitHubRepoSlug,
@@ -157,7 +154,7 @@ export class DiffStore {
       }
     }
 
-    const result = await runCommand(["gh", "api", `repos/${owner}/${name}`])
+    const result = await spawnCapture(["gh", "api", `repos/${owner}/${name}`])
     if (result.exitCode === 0) {
       return {
         available: false,
@@ -253,7 +250,7 @@ export class DiffStore {
       createArgs.push("--description", args.description.trim())
     }
 
-    const createResult = await runCommand(createArgs)
+    const createResult = await spawnCapture(createArgs)
     if (createResult.exitCode !== 0) {
       const detail = [createResult.stderr.trim(), createResult.stdout.trim()].filter(Boolean).join("\n")
       return {

@@ -1,19 +1,19 @@
 import type { BusEnvelope } from "../service-bus/envelope"
+import { namedBusSubject } from "../service-bus/subjects"
 import { isJsonObject, type JsonValue } from "../json"
 import type { InboxActivityItem, InboxThread } from "./types"
 
+const TOOL_REQUEST_PUT = namedBusSubject("toolRequestPut")
+const TOOL_REQUEST_RESOLVED = namedBusSubject("toolRequestResolved")
+
+const OUTCOME_SUBJECTS: ReadonlySet<string> = new Set([namedBusSubject("cronRunOutcome"), namedBusSubject("loopRunOutcome")])
+
 export const ATTENTION_SUBJECTS: ReadonlySet<string> = new Set([
-  "kanna.turn.failed",
-  "kanna.toolRequest.put",
-  "kanna.cron.runOutcome",
-  "kanna.subagent.failed",
-  "kanna.loop.runOutcome",
+  namedBusSubject("turnFailed"),
+  TOOL_REQUEST_PUT,
+  namedBusSubject("subagentFailed"),
+  ...OUTCOME_SUBJECTS,
 ])
-
-const OUTCOME_SUBJECTS: ReadonlySet<string> = new Set(["kanna.cron.runOutcome", "kanna.loop.runOutcome"])
-
-const TOOL_REQUEST_PUT = "kanna.toolRequest.put"
-const TOOL_REQUEST_RESOLVED = "kanna.toolRequest.resolved"
 
 type SubjectPayload = Pick<BusEnvelope, "subject" | "payload">
 

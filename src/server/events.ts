@@ -14,6 +14,9 @@ import type { AutoContinueEvent } from "./auto-continue/events"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { JsonArray, JsonObject } from "../shared/json"
+import type { STORE_VERSION } from "../shared/types"
+
+type StoreVersion = typeof STORE_VERSION
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -75,7 +78,7 @@ export interface StoreState {
 }
 
 export interface SnapshotFile {
-  v: 3
+  v: StoreVersion
   generatedAt: number
   projects: ProjectRecord[]
   chats: ChatRecord[]
@@ -88,35 +91,35 @@ export interface SnapshotFile {
 }
 
 export type ProjectEvent = {
-  v: 3
+  v: StoreVersion
   type: "project_opened"
   timestamp: number
   projectId: string
   localPath: string
   title: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_removed"
   timestamp: number
   projectId: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_deleted"
   timestamp: number
   projectId: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "sidebar_project_order_set"
   timestamp: number
   projectIds: string[]
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_star_set"
   timestamp: number
   projectId: string
   starredAt: number | null
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_instructions_set"
   timestamp: number
   projectId: string
@@ -125,7 +128,7 @@ export type ProjectEvent = {
 
 export type ChatEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_created"
       timestamp: number
       chatId: string
@@ -135,53 +138,53 @@ export type ChatEvent =
       stackBindings?: StackBinding[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_projects_attached"
       timestamp: number
       chatId: string
       stackBindings: StackBinding[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_renamed"
       timestamp: number
       chatId: string
       title: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_deleted"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_archived"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_unarchived"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_pin_set"
       timestamp: number
       chatId: string
       pinnedAt: number | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_provider_set"
       timestamp: number
       chatId: string
       provider: AgentProvider
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_model_set"
       timestamp: number
       chatId: string
@@ -189,35 +192,35 @@ export type ChatEvent =
       modelOptions?: ModelOptions
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_plan_mode_set"
       timestamp: number
       chatId: string
       planMode: boolean
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_read_state_set"
       timestamp: number
       chatId: string
       unread: boolean
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_source_hash_set"
       timestamp: number
       chatId: string
       sourceHash: string | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_policy_override_set"
       timestamp: number
       chatId: string
       policyOverride: ChatPermissionPolicyOverride | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_compact_failures_set"
       timestamp: number
       chatId: string
@@ -225,7 +228,7 @@ export type ChatEvent =
     }
 
 export type MessageEvent = {
-  v: 3
+  v: StoreVersion
   type: "message_appended"
   timestamp: number
   chatId: string
@@ -234,14 +237,14 @@ export type MessageEvent = {
 
 export type QueuedMessageEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "queued_message_enqueued"
       timestamp: number
       chatId: string
       message: QueuedChatMessage
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "queued_message_removed"
       timestamp: number
       chatId: string
@@ -259,33 +262,33 @@ export interface TurnRunConfig {
 
 export type TurnEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_started"
       timestamp: number
       chatId: string
       runConfig?: TurnRunConfig
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_finished"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_failed"
       timestamp: number
       chatId: string
       error: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_cancelled"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "session_token_set"
       timestamp: number
       chatId: string
@@ -293,7 +296,7 @@ export type TurnEvent =
       provider?: AgentProvider
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "pending_fork_session_token_set"
       timestamp: number
       chatId: string
@@ -303,7 +306,7 @@ export type TurnEvent =
 
 export type StackEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_added"
       timestamp: number
       stackId: string
@@ -311,34 +314,34 @@ export type StackEvent =
       projectIds: string[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_removed"
       timestamp: number
       stackId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_renamed"
       timestamp: number
       stackId: string
       title: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_project_added"
       timestamp: number
       stackId: string
       projectId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_project_removed"
       timestamp: number
       stackId: string
       projectId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_instructions_set"
       timestamp: number
       stackId: string
@@ -347,7 +350,7 @@ export type StackEvent =
 
 export type SubagentRunEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_started"
       timestamp: number
       chatId: string
@@ -362,7 +365,7 @@ export type SubagentRunEvent =
       depth: number
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_message_delta"
       timestamp: number
       chatId: string
@@ -370,7 +373,7 @@ export type SubagentRunEvent =
       content: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_completed"
       timestamp: number
       chatId: string
@@ -379,7 +382,7 @@ export type SubagentRunEvent =
       usage?: ProviderUsage
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_failed"
       timestamp: number
       chatId: string
@@ -387,14 +390,14 @@ export type SubagentRunEvent =
       error: { code: SubagentErrorCode; message: string }
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_cancelled"
       timestamp: number
       chatId: string
       runId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_entry_appended"
       timestamp: number
       chatId: string
@@ -402,7 +405,7 @@ export type SubagentRunEvent =
       entry: TranscriptEntry
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_tool_pending"
       timestamp: number
       chatId: string
@@ -412,7 +415,7 @@ export type SubagentRunEvent =
       input: JsonObject
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_tool_resolved"
       timestamp: number
       chatId: string
@@ -424,13 +427,13 @@ export type SubagentRunEvent =
 
 export type ToolRequestEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "tool_request_put"
       timestamp: number
       request: ToolRequest
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "tool_request_resolved"
       timestamp: number
       id: string

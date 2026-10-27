@@ -1,6 +1,7 @@
 
 import path from "node:path"
 import { parse as shellParse } from "shell-quote"
+import { isPathInside } from "./path-containment"
 
 export function shellCommandIsParseable(cmd: string): boolean {
   let singles = 0
@@ -31,7 +32,7 @@ export function confinePathToDir(input: string, baseDir: string, label = "path")
     ? path.resolve(normalized)
     : path.resolve(baseAbs, normalized)
   const rel = path.relative(baseAbs, abs)
-  if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
+  if (rel === "" || !isPathInside(baseAbs, abs)) {
     return { error: `${label} must resolve inside ${baseDir}` }
   }
   return { abs, rel }

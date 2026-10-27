@@ -1,5 +1,6 @@
 import { errorMessage } from "../../../shared/errors"
 import { log } from "../../../shared/log"
+import { createSerialQueue } from "../../serial-lane"
 
 export const SLACK_THREAD_CAP = 1000
 
@@ -33,7 +34,7 @@ function isNewer(candidate: string, current: string): boolean {
 
 export class SlackThreadRegistry {
   private readonly bindings = new Map<string, SlackThreadBinding>()
-  private writeChain: Promise<void> = Promise.resolve()
+  private readonly writes = createSerialQueue()
 
   constructor(
     private readonly store: SlackThreadStorePort,
@@ -91,9 +92,8 @@ export class SlackThreadRegistry {
   }
 
   private persist(): Promise<void> {
-    this.writeChain = this.writeChain.then(() => this.store.save([...this.bindings.values()])).catch((error) => {
+    return this.writes.run(() => this.store.save([...this.bindings.values()])).catch((error: Error) => {
       log.warn(`[slack] could not persist thread bindings: ${errorMessage(error)}`)
     })
-    return this.writeChain
   }
 }

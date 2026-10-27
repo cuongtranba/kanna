@@ -1,7 +1,9 @@
+import { AUTH_BASE_PATH } from "./remote-mcp/oauth-paths"
+
 export const OWNER_EMAIL = "owner@kanna.local"
 export const SESSION_COOKIE_NAME = "kanna_session"
 export const CLIENT_IP_HEADER = "x-kanna-client-ip"
-export const SIGN_IN_PATH = "/api/auth/sign-in/email"
+export const SIGN_IN_PATH = `${AUTH_BASE_PATH}/sign-in/email`
 
 export interface AuthSessionResult {
   authenticated: boolean

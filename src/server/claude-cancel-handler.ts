@@ -2,7 +2,10 @@
 import type { TranscriptEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
-import type { HarnessTurn } from "./harness-types"
+import {
+  interruptWithGrace,
+  type HarnessTurn,
+} from "./harness-types"
 import { logClaudeSteer } from "./claude-steer-log"
 import { discardedToolResult } from "./claude-sdk-queue"
 import { timestamped } from "./claude-message-normalizer"
@@ -109,13 +112,7 @@ export async function cancelChat(
         timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }),
       )
       deps.emitStateChange(chatId)
-      try {
-        await Promise.race([
-          session.session.interrupt(),
-          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-        ])
-      } catch {
-      }
+      await interruptWithGrace(session.session)
     }
     return
   }
@@ -162,12 +159,6 @@ export async function cancelChat(
     activePromptSeq: active.claudePromptSeq ?? null,
   })
 
-  try {
-    await Promise.race([
-      active.turn.interrupt(),
-      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-    ])
-  } catch {
-  }
+  await interruptWithGrace(active.turn)
   active.turn.close()
 }

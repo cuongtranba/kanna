@@ -34,6 +34,8 @@ function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
     size: async (p) => files.get(p)?.length ?? 0,
     readText: async (p) => files.get(p) ?? "",
     readTextSync: (p) => files.get(p) ?? "",
+    sizeSync: (p) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p, start, end) => Buffer.from(files.get(p) ?? "").subarray(start, end),
     writeText: async (p, v) => { files.set(p, v) },
     appendText: async (p, v) => { files.set(p, (files.get(p) ?? "") + v) },
     rename: async () => {},
@@ -943,6 +945,8 @@ describe("seedSeenMessageIdsFromTail", () => {
       size: async () => buf.length,
       readText: async () => content,
       readTextSync: () => { throw new Error("readTextSync must not be called for large transcripts") },
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => buf.subarray(start, end),
       writeText: async () => {},
       appendText: async () => {},
       rename: async () => {},
@@ -963,14 +967,6 @@ describe("seedSeenMessageIdsFromTail", () => {
     }
   }
 
-  test("returns false when backend lacks slice APIs", () => {
-    const files = new Map([["/data/transcripts/chat-1.jsonl", makeMessageEntry(0, "mid-0")]])
-    const deps = makeDeps({ storage: makeStorage(files) })
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
-    expect(result).toBe(false)
-    expect(deps.transcriptCache.isSeeded("chat-1")).toBe(false)
-  })
-
   test("seeds messageIds from tail and marks chat seeded", () => {
     const content = makeLargeTranscriptWithIds("old-mid", "recent-mid")
     const { storage } = makeSliceStorageForId(content)
@@ -978,9 +974,8 @@ describe("seedSeenMessageIdsFromTail", () => {
     const seenMessageIdsByChatId = new Map<string, Set<string>>()
     const deps = makeDeps({ storage, transcriptCache, seenMessageIdsByChatId })
 
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+    seedSeenMessageIdsFromTail(deps, "chat-1")
 
-    expect(result).toBe(true)
     expect(transcriptCache.isSeeded("chat-1")).toBe(true)
     const seen = seenMessageIdsByChatId.get("chat-1")
     expect(seen?.has("recent-mid")).toBe(true)
@@ -1034,9 +1029,8 @@ describe("seedSeenMessageIdsFromTail", () => {
     const seenMessageIdsByChatId = new Map<string, Set<string>>()
     const deps = makeDeps({ storage: sliceStorage, transcriptCache, seenMessageIdsByChatId })
 
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+    seedSeenMessageIdsFromTail(deps, "chat-1")
 
-    expect(result).toBe(true)
     expect(transcriptCache.isSeeded("chat-1")).toBe(true)
     expect(transcriptCache.has("chat-1")).toBe(true)
     const seen = seenMessageIdsByChatId.get("chat-1")

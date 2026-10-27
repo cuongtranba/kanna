@@ -26,10 +26,15 @@ import {
   PROCESS_RSS_RATIO,
   SUBAGENT_RUN_DURATION_MS,
   TURN_DURATION_MS,
+  METER_SCOPE,
+  PROCESS_EXTERNAL_BYTES,
+  PROCESS_HEAP_TOTAL_BYTES,
+  PROCESS_HEAP_USED_BYTES,
 } from "./observability"
 import { resolveMemoryCeiling, resolveRssRatio } from "./memory-ceiling"
 import { startProcessVitalsSampler, type ProcessVitalsSampler } from "./process-vitals-sampler.adapter"
 import type { ProcessVitals } from "./process-vitals"
+import { readIntEnv } from "./env-int"
 import { resolveOtelConfig, type ResolvedOtelConfig, type TelemetrySettingsInput } from "./otel-config"
 
 const HISTOGRAM_BUCKETS: readonly {
@@ -51,16 +56,10 @@ export interface InitObservabilityArgs {
   machineName?: string
 }
 
-function positiveIntEnv(raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback
-  const n = Number.parseInt(raw, 10)
-  return Number.isFinite(n) && n >= 0 ? n : fallback
-}
-
 const DEFAULT_METRIC_INTERVAL_MS = 15_000
 
 function metricIntervalMs(): number {
-  return positiveIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, DEFAULT_METRIC_INTERVAL_MS) || DEFAULT_METRIC_INTERVAL_MS
+  return readIntEnv(process.env.KANNA_OTEL_METRIC_INTERVAL_MS, DEFAULT_METRIC_INTERVAL_MS)
 }
 
 function formatVitals({ eventLoop, children }: ProcessVitals, mb: (n: number) => number): string {
@@ -155,7 +154,7 @@ export function initObservability(args: InitObservabilityArgs): ObservabilityHan
     machineName: args.machineName ?? "",
   }))
 
-  const memlogMs = positiveIntEnv(process.env.KANNA_MEMLOG_MS, 60_000)
+  const memlogMs = readIntEnv(process.env.KANNA_MEMLOG_MS, 60_000, { min: 0 })
   if (memlogMs > 0) {
     const timer = setInterval(() => {
       const usage = process.memoryUsage()
@@ -238,11 +237,11 @@ function isRunningUnderPm2(): boolean {
 }
 
 function registerMemoryGauges(vitals: ProcessVitalsSampler): void {
-  const meter = metrics.getMeter("kanna")
+  const meter = metrics.getMeter(METER_SCOPE)
   const rss = meter.createObservableGauge(PROCESS_RSS_BYTES)
-  const heapUsed = meter.createObservableGauge("kanna.process.heap_used_bytes")
-  const heapTotal = meter.createObservableGauge("kanna.process.heap_total_bytes")
-  const external = meter.createObservableGauge("kanna.process.external_bytes")
+  const heapUsed = meter.createObservableGauge(PROCESS_HEAP_USED_BYTES)
+  const heapTotal = meter.createObservableGauge(PROCESS_HEAP_TOTAL_BYTES)
+  const external = meter.createObservableGauge(PROCESS_EXTERNAL_BYTES)
   const hostMemoryTotal = meter.createObservableGauge(HOST_MEMORY_TOTAL_BYTES)
   const memoryCeiling = meter.createObservableGauge(PROCESS_MEMORY_CEILING_BYTES)
   const rssRatio = meter.createObservableGauge(PROCESS_RSS_RATIO)

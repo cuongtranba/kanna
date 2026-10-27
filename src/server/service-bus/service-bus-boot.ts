@@ -4,6 +4,7 @@ import { log } from "../../shared/log"
 import { DISABLED_SERVICE_BUS_STATUS, type ServiceBusSettingsStored, type ServiceBusStatus } from "../../shared/service-bus/jetstream-config"
 import type { AppSettingsManager } from "../app-settings"
 import type { EventStore } from "../event-store"
+import { createSerialQueue } from "../serial-lane"
 import { createBusTap } from "./event-store-tap"
 import { createInMemoryServiceBus } from "./in-memory-service-bus"
 import { installNatsServer } from "./nats-server-install.adapter"
@@ -66,7 +67,7 @@ export function createServiceBusMirror(
   let natsProcess: NatsServerProcess | null = null
   let stopProcessEvents: (() => void) | null = null
   let endpoint: NatsEndpoint | null = null
-  let work: Promise<void> = Promise.resolve()
+  const work = createSerialQueue()
   let activeRestart = ""
   let activeReconcile = ""
   let persistingToken = false
@@ -173,10 +174,9 @@ export function createServiceBusMirror(
   }
 
   function enqueue(step: () => Promise<void>): Promise<void> {
-    work = work.then(step).catch((error: Error) => {
+    return work.run(step).catch((error: Error) => {
       log.warn("[service-bus] step failed:", errorMessage(error))
     })
-    return work
   }
 
   appSettings.onChange(() => {

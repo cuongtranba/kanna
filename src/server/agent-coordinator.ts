@@ -1,6 +1,6 @@
 import { type ChatTaskStorePort, type SetupLoopHandlerResult } from "./kanna-mcp"
 import { buildSeedTaskEvents } from "../shared/chat-tasks/seed"
-import { EMPTY_CHAT_TASK_PROJECTION, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
+import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { readDoc } from "./structured-doc-io.adapter"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
@@ -23,6 +23,7 @@ import { CodexAppServerManager } from "./codex-app-server"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
 import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
+import { readIntEnv } from "./env-int"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { AutoContinueEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
@@ -50,7 +51,6 @@ import {
 import { toError } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
 import {
-  positiveIntegerFromEnv,
   buildBackgroundTaskWakePrompt,
   buildBackgroundTasksAbandonedMessage,
 } from "./claude-prompt-helpers"
@@ -384,10 +384,10 @@ export class AgentCoordinator {
       onBackgroundRunComplete: (chatId, runId, outcome) => {
         void this.deliverSubagentToMain(chatId, runId, outcome)
       },
-      maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
-      liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
+      maxLive: readIntEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
+      liveIdleTimeoutMs: readIntEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
+        ?? readIntEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
         || undefined,
     })
     this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
@@ -397,18 +397,18 @@ export class AgentCoordinator {
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
     this.claudeSessionLifecycle = {
       idleMs: args.claudeSessionLifecycle?.idleMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_IDLE_MS, DEFAULT_CLAUDE_SESSION_IDLE_MS),
+        ?? readIntEnv(process.env.KANNA_CLAUDE_SESSION_IDLE_MS, DEFAULT_CLAUDE_SESSION_IDLE_MS),
       maxResidentSessions: args.claudeSessionLifecycle?.maxResidentSessions
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_MAX_RESIDENT, DEFAULT_CLAUDE_SESSION_MAX_RESIDENT),
+        ?? readIntEnv(process.env.KANNA_CLAUDE_SESSION_MAX_RESIDENT, DEFAULT_CLAUDE_SESSION_MAX_RESIDENT),
       sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
+        ?? readIntEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
       backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
-        ?? positiveIntegerFromEnv(
+        ?? readIntEnv(
           process.env.KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS,
-          positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS),
+          readIntEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS),
         ),
       backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
-        ?? positiveIntegerFromEnv(process.env.KANNA_BACKGROUND_TASK_MAX_WAKES, DEFAULT_BACKGROUND_TASK_MAX_WAKES),
+        ?? readIntEnv(process.env.KANNA_BACKGROUND_TASK_MAX_WAKES, DEFAULT_BACKGROUND_TASK_MAX_WAKES),
     }
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
@@ -573,7 +573,6 @@ export class AgentCoordinator {
   }
 
   private projectChatTasks(chatId: string): ChatTaskProjection {
-    if (typeof this.store.getChatTasks !== "function") return EMPTY_CHAT_TASK_PROJECTION
     return this.store.getChatTasks(chatId, { now: Date.now() })
   }
 
@@ -601,7 +600,6 @@ export class AgentCoordinator {
       getChatTasks: (chatId) => this.projectChatTasks(chatId).tasks,
       getChatTaskProjection: (chatId) => this.projectChatTasks(chatId),
       seedChatTasks: async (chatId, tasks, failedApproaches) => {
-        if (typeof this.store.appendChatTaskEvents !== "function") return
         await this.store.appendChatTaskEvents(buildSeedTaskEvents({
           chatId,
           now: Date.now(),

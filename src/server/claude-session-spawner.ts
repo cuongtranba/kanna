@@ -14,7 +14,7 @@ import { resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pric
 import type { ModelPrice } from "../shared/token-pricing"
 import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
-import { OAuthPoolUnavailableError } from "./oauth-errors"
+import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
@@ -134,11 +134,9 @@ export async function spawnClaudeTurn(
     }
 
     deps.enforceClaudeSessionBudget(args.chatId)
-    const picked = endpoint ? null : (deps.oauthPool?.pickActive(args.chatId) ?? null)
-    if (!endpoint && deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
-      throw new OAuthPoolUnavailableError(deps.buildPoolUnavailableMessage(args.chatId, ""))
-    }
-    if (picked) deps.oauthPool!.markUsed(picked.id)
+    const picked = endpoint
+      ? null
+      : pickOAuthTokenOrRefuse(deps.oauthPool, args.chatId, () => deps.buildPoolUnavailableMessage(args.chatId, ""))
 
     let openrouterTurnPrice: ModelPrice | null = null
     let openrouterContextWindow: number | undefined

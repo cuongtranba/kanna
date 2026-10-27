@@ -19,6 +19,18 @@ export interface HarnessTurn {
   close: () => void
 }
 
+const INTERRUPT_GRACE_MS = 5_000
+
+export async function interruptWithGrace(target: Pick<HarnessTurn, "interrupt">): Promise<void> {
+  try {
+    await Promise.race([
+      target.interrupt(),
+      new Promise<void>((resolve) => setTimeout(resolve, INTERRUPT_GRACE_MS)),
+    ])
+  } catch {
+  }
+}
+
 export interface ClaudeSessionHandle {
   provider: "claude"
   stream: AsyncIterable<HarnessEvent>

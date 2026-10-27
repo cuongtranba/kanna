@@ -47,7 +47,8 @@ import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { renderTaskDocSkeleton } from "../shared/task-doc"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
-import { withFileLock } from "./tracking-file-lock"
+import { isPathInside } from "./path-containment"
+import { withKeyedLane } from "./serial-lane"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import { parseMermaid } from "./mermaid-parse.adapter"
@@ -164,7 +165,7 @@ export async function resolveOfferDownload(
 
   const projectRoot = path.resolve(args.localPath)
   const absolutePath = path.resolve(args.localPath, relativePath)
-  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
+  if (!isPathInside(projectRoot, absolutePath)) {
     return { ok: false, error: "Path resolves outside the project root" }
   }
 
@@ -236,7 +237,7 @@ export async function resolveWorkspaceFile(
 
   const projectRoot = path.resolve(args.localPath)
   const absolutePath = path.resolve(args.localPath, relativePath)
-  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
+  if (!isPathInside(projectRoot, absolutePath)) {
     return { ok: false, error: "Path resolves outside the project root" }
   }
 
@@ -710,7 +711,7 @@ function buildTrackingDocToolList(args: {
         if (!doc) {
           return fail(`structured append supports .md files only (got ${confined.rel})`)
         }
-        return withFileLock(confined.abs, async () => {
+        return withKeyedLane(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
             return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
@@ -763,7 +764,7 @@ function buildReplaceTrackingSectionTool(
         if (!doc) {
           return fail(`structured replace supports .md files only (got ${confined.rel})`)
         }
-        return withFileLock(confined.abs, async () => {
+        return withKeyedLane(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
             return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)

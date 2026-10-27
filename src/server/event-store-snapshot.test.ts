@@ -50,6 +50,8 @@ function makeStorage(initial: Record<string, string> = {}): StorageBackend & {
       if (content === undefined) throw new Error(`File not found: ${p}`)
       return content
     },
+    sizeSync: (p) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p, start, end) => Buffer.from(files.get(p) ?? "").subarray(start, end),
     readTextSync: (p) => {
       const content = files.get(p)
       if (content === undefined) throw new Error(`File not found: ${p}`)

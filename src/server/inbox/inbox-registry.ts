@@ -16,7 +16,8 @@ import {
   type InboxVerdict,
 } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
-import { busSubject, type BusEnvelope } from "../../shared/service-bus/envelope"
+import { createBusEnvelope, inboundSourceId, type BusEnvelope } from "../../shared/service-bus/envelope"
+import { ALL_BUS_SUBJECTS, inboxBusSubject, isInboxSubject, namedBusSubject } from "../../shared/service-bus/subjects"
 import type { ServiceBus } from "../service-bus/service-bus"
 import {
   applyInboxEvent,
@@ -46,17 +47,16 @@ export type InboxReportResult = { ok: true } | { ok: false; error: string }
 export type { InboxPage }
 
 const DEFAULT_SNAPSHOT_LIMIT = 200
-const INBOX_SUBJECT_PREFIX = "kanna.inbox."
-const TURN_END_SUBJECTS: readonly string[] = ["kanna.turn.finished", "kanna.turn.failed"]
+const TURN_END_SUBJECTS: readonly string[] = [namedBusSubject("turnFinished"), namedBusSubject("turnFailed")]
 
 function cloneThread(thread: InboxThread): InboxThread {
   return { ...thread, messages: [...thread.messages] }
 }
 
 function sourceOf(envelope: BusEnvelope): { kind: InboxSourceKind; id: string } | null {
-  if (envelope.source.kind === "webhook") return { kind: "webhook", id: envelope.source.hookId }
-  if (envelope.source.kind === "mcp") return { kind: "mcp", id: envelope.source.sourceId }
-  return null
+  const { source } = envelope
+  if (source.kind !== "webhook" && source.kind !== "mcp") return null
+  return { kind: source.kind, id: inboundSourceId(source) }
 }
 
 function threadMatches(thread: InboxThread, filter: InboxFilter): boolean {
@@ -97,7 +97,7 @@ export class InboxRegistry {
       await this.logPort.rewrite(compactInboxEvents(events, dropped))
     }
     this.unsubscribe?.()
-    this.unsubscribe = this.bus.subscribe("kanna.>", (envelope) => this.onEnvelope(envelope))
+    this.unsubscribe = this.bus.subscribe(ALL_BUS_SUBJECTS, (envelope) => this.onEnvelope(envelope))
   }
 
   async flush(): Promise<void> {
@@ -266,7 +266,7 @@ export class InboxRegistry {
 
   private onEnvelope(envelope: BusEnvelope): void {
     if (envelope.direction !== "internal") return
-    if (envelope.subject.startsWith(INBOX_SUBJECT_PREFIX)) return
+    if (isInboxSubject(envelope.subject)) return
     this.record({ v: 1, ts: this.now(), kind: "inbox_activity_added", item: this.itemOf(envelope) })
     if (TURN_END_SUBJECTS.includes(envelope.subject)) this.escalatePendingThreads(envelope)
   }
@@ -312,16 +312,14 @@ export class InboxRegistry {
 
   private publishInbox(verb: string, payload: Record<string, string | number | string[]>): void {
     const ts = this.now()
-    this.bus.publish({
-      v: 1,
-      id: crypto.randomUUID(),
-      subject: busSubject("inbox", verb),
+    this.bus.publish(createBusEnvelope({
+      subject: inboxBusSubject(verb),
       ts,
       source: { kind: "inbox" },
       direction: "internal",
       idempotencyKey: `inbox:${verb}:${JSON.stringify(payload)}:${ts}`,
       payload,
-    })
+    }))
   }
 
   private notify(): void {

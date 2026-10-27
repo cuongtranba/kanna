@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { createInterface } from "node:readline"
 import { join, relative, resolve } from "node:path"
 import { toError } from "../../shared/errors"
+import { isPathInside } from "../path-containment"
 import { errorMessage } from "../../shared/errors"
 import { isJsonArray, isJsonObject, safeJsonParse } from "../../shared/json"
 import {
@@ -133,7 +134,7 @@ async function findServerLiteralLeaks(
   for (const inputPath of clientInputPaths) {
     if (!SERVER_FILE_PATTERN.test(inputPath)) continue
     const absolutePath = resolve(process.cwd(), inputPath)
-    if (relative(sourceDir, absolutePath).startsWith("..")) continue
+    if (!isPathInside(sourceDir, absolutePath)) continue
     const source = await readFile(absolutePath, "utf8")
     for (const match of source.matchAll(LITERAL_EXPORT_PATTERN)) {
       const literal = match[2]

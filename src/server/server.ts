@@ -20,6 +20,7 @@ import { AppSettingsManager } from "./app-settings"
 import { DiffStore } from "./diff-store"
 import { discoverProjects, type DiscoveredProject } from "./discovery.adapter"
 import { KeybindingsManager } from "./keybindings"
+import { readIntEnv } from "./env-int"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { OpenRouterModelCache } from "./openrouter-models"
 import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
@@ -95,12 +96,6 @@ import { createStoreBus, type StoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
 
 export { buildAgentAppSettingsView }
-
-function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback
-  const n = Number.parseInt(raw, 10)
-  return Number.isFinite(n) && n > 0 ? n : fallback
-}
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) return settingsPath
@@ -361,7 +356,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     store,
     scheduleManager,
     cronScheduler,
-    openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
+    openrouterFirstEntryTimeoutMs: readIntEnv(
       process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
       2 * 60 * 1000,
     ),
@@ -487,11 +482,11 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,
     onChange: () => pushFollowedSessions?.(),
-    activeWindowMs: parsePositiveIntEnv(
+    activeWindowMs: readIntEnv(
       process.env.KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
       IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
     ),
-    idleMs: parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
+    idleMs: readIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
   })
 
   const router = createWsRouter({
@@ -552,7 +547,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
   const followedSessionTickInterval = setInterval(
     () => { void followedSessionRegistry.tick() },
-    parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
+    readIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
   )
 
   return {

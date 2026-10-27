@@ -13,6 +13,7 @@ import { NoopAnalyticsReporter } from "./analytics"
 import type { AppSettingsManager } from "./app-settings"
 import type { DiscoveredProject } from "./discovery.adapter"
 import { stampCommandOrigin } from "./command-origin-stamp"
+import { toJsonValue } from "./json-boundary"
 import { DiffStore } from "./diff-store"
 import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
@@ -88,11 +89,8 @@ import type { RepoSuggestion } from "../shared/boards/sync-types"
 import type { PackageUpdateManager } from "./package-update-manager"
 
 export {
-  assertSafeSkillId,
-  assertSafeSkillSource,
   buildInstallSkillCommand,
   buildUninstallSkillCommand,
-  getGlobalSkillLockPath,
   installSkill,
   listInstalledSkills,
   parseInstalledSkillsLock,
@@ -481,7 +479,7 @@ export function createWsRouter({
 
   async function dispatchCommand(candidate: ClientCommand, origin?: CommandOrigin): Promise<ServerEnvelope> {
     const id = randomUUID()
-    const validated = parseClientCommand(safeJsonParse(JSON.stringify(candidate)) ?? null)
+    const validated = parseClientCommand(toJsonValue(candidate))
     if (!validated.ok) {
       log.warn("[ws-router] invalid command rejected", { id, message: validated.error })
       return { v: PROTOCOL_VERSION, type: "error", id, message: validated.error }

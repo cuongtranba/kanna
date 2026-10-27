@@ -10,7 +10,6 @@ import {
   backgroundTaskLaunchesFromToolResult,
   mergeBackgroundTaskSnapshot,
   toolCallDescription,
-  positiveIntegerFromEnv,
   findLastUserMessageId,
 } from "./claude-prompt-helpers"
 import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
@@ -282,39 +281,6 @@ describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
   test("new task not in previous gets null outputPath from snapshot alone", () => {
     const result = mergeBackgroundTaskSnapshot(new Map(), ["t2"], undefined, 200)
     expect(result.get("t2")?.outputPath).toBeNull()
-  })
-})
-
-
-describe("positiveIntegerFromEnv", () => {
-  test("returns fallback for undefined", () => {
-    expect(positiveIntegerFromEnv(undefined, 5)).toBe(5)
-  })
-
-  test("returns fallback for empty string", () => {
-    expect(positiveIntegerFromEnv("", 5)).toBe(5)
-    expect(positiveIntegerFromEnv("   ", 5)).toBe(5)
-  })
-
-  test("returns parsed value for valid positive integer", () => {
-    expect(positiveIntegerFromEnv("10", 5)).toBe(10)
-    expect(positiveIntegerFromEnv("1", 5)).toBe(1)
-  })
-
-  test("returns fallback for zero", () => {
-    expect(positiveIntegerFromEnv("0", 5)).toBe(5)
-  })
-
-  test("returns fallback for negative integer", () => {
-    expect(positiveIntegerFromEnv("-3", 5)).toBe(5)
-  })
-
-  test("returns fallback for non-integer float", () => {
-    expect(positiveIntegerFromEnv("3.14", 5)).toBe(5)
-  })
-
-  test("returns fallback for non-numeric string", () => {
-    expect(positiveIntegerFromEnv("abc", 5)).toBe(5)
   })
 })
 

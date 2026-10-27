@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtemp, mkdir, rm, writeFile, readFile, access } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { relocateExternalFileIntoProject, RELOCATED_OUTPUT_DIR } from "./projectFileRelocation.adapter"
+import { relocateExternalFileIntoProject } from "./projectFileRelocation.adapter"
 
 describe("relocateExternalFileIntoProject", () => {
   let projectRoot: string
@@ -38,7 +38,7 @@ describe("relocateExternalFileIntoProject", () => {
     const result = relocateExternalFileIntoProject(source, projectRoot)
 
     expect(result.relocated).toBe(true)
-    expect(result.relativePath).toBe(`${RELOCATED_OUTPUT_DIR}/ig_abc.png`)
+    expect(result.relativePath).toBe(".kanna/outputs/ig_abc.png")
     const destAbsolute = join(projectRoot, result.relativePath)
     await access(destAbsolute)
     expect(await readFile(destAbsolute, "utf8")).toBe("image-bytes")
@@ -54,8 +54,8 @@ describe("relocateExternalFileIntoProject", () => {
     const first = relocateExternalFileIntoProject(source1, projectRoot)
     const second = relocateExternalFileIntoProject(source2, projectRoot)
 
-    expect(first.relativePath).toBe(`${RELOCATED_OUTPUT_DIR}/dup.png`)
-    expect(second.relativePath).toBe(`${RELOCATED_OUTPUT_DIR}/dup-1.png`)
+    expect(first.relativePath).toBe(`.kanna/outputs/dup.png`)
+    expect(second.relativePath).toBe(`.kanna/outputs/dup-1.png`)
     expect(await readFile(join(projectRoot, second.relativePath), "utf8")).toBe("second")
   })
 

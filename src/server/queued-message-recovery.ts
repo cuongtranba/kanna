@@ -1,6 +1,6 @@
 
 import { log } from "../shared/log"
-import { addCounter } from "./observability"
+import { addCounter, QUEUED_MESSAGE_RECOVERED } from "./observability"
 
 export interface QueuedMessageRecoveryDeps {
   listChatsWithQueuedMessages(): string[]
@@ -15,7 +15,7 @@ export async function recoverQueuedMessages(
     try {
       if (await deps.maybeStartNextQueuedMessage(chatId, { replay: true })) {
         recovered.push(chatId)
-        addCounter("kanna.queued_message.recovered", 1)
+        addCounter(QUEUED_MESSAGE_RECOVERED, 1)
       }
     } catch (error) {
       log.warn("[kanna] queued-message recovery failed", { chatId, error: String(error) })

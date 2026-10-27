@@ -30,10 +30,7 @@ import type { PackageUpdateManager } from "./package-update-manager"
 import type { PushManager } from "./push/push-manager"
 import type { DiffStore } from "./diff-store"
 import type { DiscoveredProject } from "./discovery.adapter"
-import {
-  getSidebarProjectOrder,
-  isSendToStartingProfilingEnabled,
-} from "./ws-router-utils"
+import { isSendToStartingProfilingEnabled } from "./ws-router-utils"
 import type { ClientState, SnapshotComputationCache } from "./ws-router-utils"
 import type { ResolvedAppSettings } from "./ws-router-defaults"
 
@@ -104,7 +101,7 @@ function buildSidebarSnapshotCacheEntry(
     deps.getDiscoveredProjects().map((p) => [p.localPath, p.discoveredByProviders])
   )
   const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
-    sidebarProjectOrder: getSidebarProjectOrder(store),
+    sidebarProjectOrder: store.getSidebarProjectOrder(),
     drainingChatIds: agent.getDrainingChatIds(),
     claudeSessionStates: agent.getClaudeSessionStates?.(),
     discoveredProvidersByPath,
@@ -501,9 +498,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
       }
     }
 
-    const seq = typeof store.chatOps?.currentSeq === "function"
-      ? store.chatOps.currentSeq(topic.chatId)
-      : undefined
+    const seq = store.chatOps.currentSeq(topic.chatId)
     const data = deriveChatSnapshot(
       store.state,
       agent.getActiveStatuses(),

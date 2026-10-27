@@ -8,6 +8,7 @@ import {
   CLI_CHILD_MODE,
   CLI_CHILD_MODE_ENV_VAR,
   CLI_STARTUP_UPDATE_RESTART_EXIT_CODE,
+  CLI_DISABLE_SELF_UPDATE_ENV_VAR,
   CLI_SUPPRESS_OPEN_ONCE_ENV_VAR,
   isUiUpdateRestart,
   parseChildArgsEnv,
@@ -38,7 +39,7 @@ function spawnChild(argv: string[]) {
         ...process.env,
         [CLI_CHILD_MODE_ENV_VAR]: CLI_CHILD_MODE,
         ...(suppressOpenThisChild ? { [CLI_SUPPRESS_OPEN_ONCE_ENV_VAR]: "1" } : {}),
-        ...(skipUpdateThisChild ? { KANNA_DISABLE_SELF_UPDATE: "1" } : {}),
+        ...(skipUpdateThisChild ? { [CLI_DISABLE_SELF_UPDATE_ENV_VAR]: "1" } : {}),
       },
     })
 

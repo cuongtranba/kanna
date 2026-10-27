@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import path from "node:path"
 import { mkdirRecursive, readBunFileText, readTextFileOrThrow, renameFile, writeTextFileUtf8 } from "./app-settings-io.adapter"
 import { getSettingsFilePath } from "../shared/branding"
+import { shortenHomePath } from "../shared/home-path"
 import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
 import { applyBeaconSetters, beaconNotFound, createBeacon, normalizeBeacons, updateBeacon } from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
@@ -239,15 +240,6 @@ async function atomicWriteJson(filePath: string, content: string) {
   const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`
   await writeTextFileUtf8(tmpPath, content)
   await renameFile(tmpPath, filePath)
-}
-
-function formatDisplayPath(filePath: string) {
-  const homePath = homedir()
-  if (filePath === homePath) return "~"
-  if (filePath.startsWith(`${homePath}${path.sep}`)) {
-    return `~${filePath.slice(homePath.length)}`
-  }
-  return filePath
 }
 
 function createAnalyticsUserId() {
@@ -942,7 +934,7 @@ function normalizeAppSettings<T>(
     defaultProvider: normalizeDefaultProvider(source?.defaultProvider),
     providerDefaults: normalizeProviderDefaults(source?.providerDefaults, customModels),
     warning: null,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
     cloudflareTunnel,
     push,
     telemetry,
@@ -1804,7 +1796,7 @@ export class AppSettingsManager {
     const nextState = {
       ...applyPatch(this.state, patch),
       warning: null,
-      filePathDisplay: formatDisplayPath(this.filePath),
+      filePathDisplay: shortenHomePath(this.filePath, homedir()),
     }
     await mkdirRecursive(path.dirname(this.filePath))
     await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`)

@@ -1,5 +1,7 @@
 
 import { errorMessage } from "../shared/errors"
+import { nonInteractiveGitEnv } from "./git-runner.adapter"
+import { spawnCapture } from "./process-utils.adapter"
 
 export interface GitHubTokenResult {
   token: string | null
@@ -9,17 +11,7 @@ export interface GitHubTokenResult {
 
 export async function readGitHubCliToken(): Promise<GitHubTokenResult> {
   try {
-    const proc = Bun.spawn(["gh", "auth", "token"], {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    })
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
+    const { stdout, stderr, exitCode } = await spawnCapture(["gh", "auth", "token"], { env: nonInteractiveGitEnv() })
     const token = stdout.trim()
     if (exitCode === 0 && token !== "") return { token, reason: "ok", detail: null }
     const detail = stderr.trim() || stdout.trim() || null

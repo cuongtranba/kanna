@@ -18,14 +18,13 @@ import {
   type RemoteMcpAuthConfig,
 } from "./auth-backend"
 import { createOAuthPort } from "./better-auth-oauth.adapter"
-import { REMOTE_MCP_PATH } from "./remote-mcp/oauth-paths"
+import { AUTH_BASE_PATH, OAUTH_CONSENT_PATH, OAUTH_LOGIN_PATH, remoteMcpResourceUrl } from "./remote-mcp/oauth-paths"
 
 const SECRET_FILE = "auth-secret"
 const DATABASE_FILE = "auth.db"
 const LEGACY_SESSIONS_FILE = "sessions.json"
 const SECONDS_PER_DAY = 86_400
 const SESSION_UPDATE_AGE_SECONDS = SECONDS_PER_DAY
-const AUTH_BASE_PATH = "/api/auth"
 const INTERNAL_BASE_URL = "http://localhost"
 const MAX_PASSWORD_LENGTH = 4096
 const SECRET_BYTES = 32
@@ -76,9 +75,9 @@ function authOptions(database: Database, secret: string, sessionMaxAgeDays: numb
     plugins: [
       jwt(),
       mcp({
-        loginPage: "/oauth/login",
-        consentPage: "/oauth/consent",
-        resource: `${origin}${REMOTE_MCP_PATH}`,
+        loginPage: OAUTH_LOGIN_PATH,
+        consentPage: OAUTH_CONSENT_PATH,
+        resource: remoteMcpResourceUrl(origin),
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         allowPublicClientPrelogin: true,
@@ -190,7 +189,7 @@ export async function createBetterAuthBackend(options: BetterAuthBackendOptions)
       }
     },
     remoteMcpResource() {
-      return configuredOrigin ? `${configuredOrigin}${REMOTE_MCP_PATH}` : null
+      return configuredOrigin ? remoteMcpResourceUrl(configuredOrigin) : null
     },
     async signIn(request) {
       return current.handler(request)

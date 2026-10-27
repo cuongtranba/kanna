@@ -1,10 +1,8 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { join } from "node:path"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../../shared/json"
+import { createSecretJsonStore } from "../../secret-json-store.adapter"
 import type { SlackThreadBinding, SlackThreadStorePort } from "./slack-threads"
 
 const FILE_NAME = "slack-threads.json"
-const FILE_MODE = 0o600
 
 function parseBinding(value: JsonValue): SlackThreadBinding | null {
   if (!isJsonObject(value)) return null
@@ -38,21 +36,5 @@ export function parseSlackThreads(text: string): SlackThreadBinding[] {
 }
 
 export function createFileSlackThreadStore(dataDir: string): SlackThreadStorePort {
-  const path = join(dataDir, FILE_NAME)
-  const tempPath = `${path}.tmp`
-  return {
-    async load() {
-      try {
-        return parseSlackThreads(await readFile(path, "utf8"))
-      } catch {
-        return []
-      }
-    },
-    async save(bindings) {
-      await mkdir(dataDir, { recursive: true })
-      await writeFile(tempPath, JSON.stringify({ threads: bindings }, null, 2), { mode: FILE_MODE })
-      await chmod(tempPath, FILE_MODE)
-      await rename(tempPath, path)
-    },
-  }
+  return createSecretJsonStore(dataDir, FILE_NAME, "threads", parseSlackThreads)
 }

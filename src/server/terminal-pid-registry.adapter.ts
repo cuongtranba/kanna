@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import process from "node:process"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
+import { createSerialQueue } from "./serial-lane"
+import { signalProcessGroup } from "./process-utils.adapter"
 
 export interface TerminalPidEntry {
   terminalId: string
@@ -17,7 +18,8 @@ interface RegistryFile {
 export class TerminalPidRegistry {
   private readonly filePath: string
   private entries: TerminalPidEntry[] = []
-  private writeQueue: Promise<void> = Promise.resolve()
+  private loaded = false
+  private readonly writes = createSerialQueue()
 
   constructor(filePath: string) {
     this.filePath = filePath
@@ -39,12 +41,13 @@ export class TerminalPidRegistry {
 
   async reapStale(): Promise<TerminalPidEntry[]> {
     const stored = await this.readFromDisk()
+    this.loaded = true
     if (stored.length === 0) {
       this.entries = []
       return []
     }
     for (const entry of stored) {
-      killPgroup(entry.pid)
+      signalProcessGroup(entry.pid, "SIGKILL")
     }
     this.entries = []
     await this.persist()
@@ -52,8 +55,9 @@ export class TerminalPidRegistry {
   }
 
   private async loadIfNeeded() {
-    if (this.entries.length > 0) return
+    if (this.loaded) return
     this.entries = await this.readFromDisk()
+    this.loaded = true
   }
 
   private async readFromDisk(): Promise<TerminalPidEntry[]> {
@@ -71,13 +75,10 @@ export class TerminalPidRegistry {
   private async persist() {
     const snapshot: RegistryFile = { entries: [...this.entries] }
     const serialized = JSON.stringify(snapshot)
-    this.writeQueue = this.writeQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await mkdir(path.dirname(this.filePath), { recursive: true })
-        await writeFile(this.filePath, serialized, "utf8")
-      })
-    await this.writeQueue
+    await this.writes.run(async () => {
+      await mkdir(path.dirname(this.filePath), { recursive: true })
+      await writeFile(this.filePath, serialized, "utf8")
+    })
   }
 }
 
@@ -92,11 +93,3 @@ function isValidEntry(value: JsonValue): value is JsonValue & TerminalPidEntry {
   )
 }
 
-function killPgroup(pid: number) {
-  if (process.platform === "win32") return
-  if (!Number.isFinite(pid) || pid <= 0) return
-  try {
-    process.kill(-pid, "SIGKILL")
-  } catch {
-  }
-}

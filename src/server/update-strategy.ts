@@ -178,7 +178,7 @@ export function createUpdateStrategy(deps: CreateUpdateStrategyDeps): UpdateStra
 }
 
 async function runCommandCapture(command: string, args: string[], cwd: string): Promise<string> {
-  const { stdout, stderr, exitCode } = await spawnCapture(command, args, cwd)
+  const { stdout, stderr, exitCode } = await spawnCapture([command, ...args], { cwd })
   if (exitCode !== 0) {
     const tail = stderr.trim().slice(-500)
     throw new Error(tail || `${command} exited with code ${exitCode}`)

@@ -22,6 +22,22 @@ export interface BusEnvelope {
   payload: JsonValue
 }
 
+export type BusEnvelopeFields = Omit<BusEnvelope, "v" | "id">
+
+export function createBusEnvelope(fields: BusEnvelopeFields): BusEnvelope {
+  return { v: 1, id: crypto.randomUUID(), ...fields }
+}
+
+export type InboundBusSource = Extract<BusSource, { kind: "webhook" | "mcp" }>
+
+export function inboundSourceId(source: InboundBusSource): string {
+  return source.kind === "webhook" ? source.hookId : source.sourceId
+}
+
+export function inboundIdempotencyKey(kind: "webhook" | "mcp", sourceId: string, deliveryId: string): string {
+  return `${kind}:${sourceId}:${deliveryId}`
+}
+
 export const BUS_SUBJECT_PREFIX = "kanna"
 
 const SUBJECT_TOKEN_INVALID = /[^A-Za-z0-9_-]/g

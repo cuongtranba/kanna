@@ -17,6 +17,8 @@ import {
   resolveFinalTurnUsage,
 } from "./agent"
 import { EventStore } from "./event-store"
+import { EMPTY_CHAT_TASK_PROJECTION } from "../shared/chat-tasks/read-model"
+import { getLatestContextWindowUsage } from "./proactive-compact"
 import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -3611,6 +3613,14 @@ function createFakeStore() {
     getMessages() {
       return this.messages
     },
+    getLatestContextWindowUsage() {
+      return getLatestContextWindowUsage(this.messages)
+    },
+    async setChatModel() {},
+    getChatTasks() {
+      return EMPTY_CHAT_TASK_PROJECTION
+    },
+    async appendChatTaskEvents() {},
     getLastUserMessageId(_chatId: string) {
       const last = [...this.messages].reverse().find((e) => e.kind === "user_prompt")
       return last?._id ?? null

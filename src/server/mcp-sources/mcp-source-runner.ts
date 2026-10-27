@@ -12,7 +12,7 @@ import {
 } from "../../shared/mcp-sources/types"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import type { InboundDelivery, InboundDeliveryResult } from "../inbound/deliver-inbound"
-import { addCounter } from "../observability"
+import { addCounter, MCP_SOURCE_ERRORS, MCP_SOURCE_ITEMS } from "../observability"
 
 export type McpSourceCloseReason = "local" | "graceful" | "remote"
 
@@ -232,7 +232,7 @@ export class McpSourceRunner {
   }
 
   private fail(entry: Entry, error: Error): void {
-    addCounter("kanna.mcp_source.errors", 1, { mode: entry.source.mode })
+    addCounter(MCP_SOURCE_ERRORS, 1, { mode: entry.source.mode })
     log.warn(`[kanna/mcp-source] ${entry.source.name}:`, error.message)
     this.patch(entry, { lastError: error.message })
   }
@@ -277,7 +277,7 @@ export class McpSourceRunner {
       [source.id]: { ...state, recentKeys: [...state.recentKeys, key].slice(-MCP_SOURCE_DEDUPE_KEYS) },
     }
     this.persist()
-    addCounter("kanna.mcp_source.items", 1, { mode: source.mode })
+    addCounter(MCP_SOURCE_ITEMS, 1, { mode: source.mode })
     this.patch(entry, { lastItemAt: at, itemCount: entry.status.itemCount + 1, lastError: null })
   }
 

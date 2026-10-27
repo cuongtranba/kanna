@@ -1,31 +1,35 @@
 import { isJsonObject, type JsonValue } from "../json"
 import type { BusEnvelope } from "../service-bus/envelope"
+import { namedBusSubject } from "../service-bus/subjects"
 import { INBOX_PREVIEW_MAX_CHARS } from "./types"
 
+const CRON_RUN_OUTCOME = namedBusSubject("cronRunOutcome")
+const LOOP_RUN_OUTCOME = namedBusSubject("loopRunOutcome")
+
 const FIXED_TITLES: Readonly<Record<string, string>> = {
-  "kanna.turn.started": "Turn started",
-  "kanna.turn.finished": "Turn finished",
-  "kanna.turn.failed": "Turn failed",
-  "kanna.turn.cancelled": "Turn cancelled",
-  "kanna.chat.created": "Chat created",
-  "kanna.chat.renamed": "Chat renamed",
-  "kanna.chat.deleted": "Chat deleted",
-  "kanna.chat.archived": "Chat archived",
-  "kanna.project.opened": "Project opened",
-  "kanna.project.removed": "Project hidden",
-  "kanna.project.deleted": "Project deleted",
-  "kanna.subagent.started": "Subagent started",
-  "kanna.subagent.completed": "Subagent completed",
-  "kanna.subagent.failed": "Subagent failed",
-  "kanna.subagent.cancelled": "Subagent cancelled",
-  "kanna.toolRequest.put": "Tool approval needed",
-  "kanna.toolRequest.resolved": "Tool request resolved",
-  "kanna.cron.armed": "Cron job armed",
-  "kanna.cron.disarmed": "Cron job disarmed",
-  "kanna.cron.runStarted": "Cron run started",
-  "kanna.cron.runSkipped": "Cron run skipped",
-  "kanna.loop.armed": "Loop armed",
-  "kanna.loop.disarmed": "Loop disarmed",
+  [namedBusSubject("turnStarted")]: "Turn started",
+  [namedBusSubject("turnFinished")]: "Turn finished",
+  [namedBusSubject("turnFailed")]: "Turn failed",
+  [namedBusSubject("turnCancelled")]: "Turn cancelled",
+  [namedBusSubject("chatCreated")]: "Chat created",
+  [namedBusSubject("chatRenamed")]: "Chat renamed",
+  [namedBusSubject("chatDeleted")]: "Chat deleted",
+  [namedBusSubject("chatArchived")]: "Chat archived",
+  [namedBusSubject("projectOpened")]: "Project opened",
+  [namedBusSubject("projectRemoved")]: "Project hidden",
+  [namedBusSubject("projectDeleted")]: "Project deleted",
+  [namedBusSubject("subagentStarted")]: "Subagent started",
+  [namedBusSubject("subagentCompleted")]: "Subagent completed",
+  [namedBusSubject("subagentFailed")]: "Subagent failed",
+  [namedBusSubject("subagentCancelled")]: "Subagent cancelled",
+  [namedBusSubject("toolRequestPut")]: "Tool approval needed",
+  [namedBusSubject("toolRequestResolved")]: "Tool request resolved",
+  [namedBusSubject("cronArmed")]: "Cron job armed",
+  [namedBusSubject("cronDisarmed")]: "Cron job disarmed",
+  [namedBusSubject("cronRunStarted")]: "Cron run started",
+  [namedBusSubject("cronRunSkipped")]: "Cron run skipped",
+  [namedBusSubject("loopArmed")]: "Loop armed",
+  [namedBusSubject("loopDisarmed")]: "Loop disarmed",
 }
 
 const PREVIEW_KEYS: readonly string[] = ["error", "title", "name", "content", "message", "instruction", "reason"]
@@ -37,8 +41,8 @@ function outcomeOk(payload: JsonValue): boolean | null {
 function titleFor(envelope: BusEnvelope): string {
   const fixed = FIXED_TITLES[envelope.subject]
   if (fixed !== undefined) return fixed
-  if (envelope.subject === "kanna.cron.runOutcome" || envelope.subject === "kanna.loop.runOutcome") {
-    const family = envelope.subject === "kanna.cron.runOutcome" ? "Cron run" : "Loop run"
+  if (envelope.subject === CRON_RUN_OUTCOME || envelope.subject === LOOP_RUN_OUTCOME) {
+    const family = envelope.subject === CRON_RUN_OUTCOME ? "Cron run" : "Loop run"
     const ok = outcomeOk(envelope.payload)
     return ok === null ? family : `${family} ${ok ? "ok" : "failed"}`
   }

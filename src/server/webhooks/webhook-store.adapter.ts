@@ -1,12 +1,10 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { join } from "node:path"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 import { isAgentProvider } from "../../shared/types"
 import { isWebhookMode } from "../../shared/webhooks/validate"
+import { createSecretJsonStore } from "../secret-json-store.adapter"
 import type { StoredWebhook, WebhookStorePort } from "./webhook-registry"
 
 const FILE_NAME = "webhooks.json"
-const FILE_MODE = 0o600
 
 function optionalString(value: JsonValue | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
@@ -72,21 +70,5 @@ export function parseStoredWebhooks(text: string): StoredWebhook[] {
 }
 
 export function createFileWebhookStore(dataDir: string): WebhookStorePort {
-  const path = join(dataDir, FILE_NAME)
-  const tempPath = `${path}.tmp`
-  return {
-    async load() {
-      try {
-        return parseStoredWebhooks(await readFile(path, "utf8"))
-      } catch {
-        return []
-      }
-    },
-    async save(hooks) {
-      await mkdir(dataDir, { recursive: true })
-      await writeFile(tempPath, JSON.stringify({ hooks }, null, 2), { mode: FILE_MODE })
-      await chmod(tempPath, FILE_MODE)
-      await rename(tempPath, path)
-    },
-  }
+  return createSecretJsonStore(dataDir, FILE_NAME, "hooks", parseStoredWebhooks)
 }
