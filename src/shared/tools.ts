@@ -12,58 +12,67 @@ import type {
   ReadFileToolResult,
   TaskCreateToolResult,
   TaskListToolResult,
-  TaskStatus,
   TaskUpdateToolCall,
   TaskUpdateToolResult,
   TodoItem,
   WorkflowToolResult,
 } from "./types"
 import { isJsonObject, type JsonObject, type JsonValue } from "./json"
+import { isTaskStatus } from "./tool-call-types"
 import { beaconToolOp, summarizeBeaconCall } from "./beacon-tools"
 
 export * from "./beacon-tools"
 
 export const KANNA_MCP_SERVER_NAME = "kanna"
-export const OFFER_DOWNLOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__offer_download`
-export const PREVIEW_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__preview_file`
-export const EXPOSE_PORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__expose_port`
-export const QUERY_TRACKING_FILE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__query_tracking_file`
-export const APPEND_TRACKING_ROW_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__append_tracking_row`
-export const REPLACE_TRACKING_SECTION_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__replace_tracking_section`
-export const CLAIM_TRACKING_TASK_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__claim_tracking_task`
-export const COMPLETE_TRACKING_TASK_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__complete_tracking_task`
-export const INTEGRATE_TRACKING_TASKS_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__integrate_tracking_tasks`
-export const TASK_CREATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_create`
-export const TASK_UPDATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_update`
-export const TASK_LIST_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_list`
-export const TASK_GET_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_get`
-export const TASK_NOTE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_note`
-export const TASK_CLAIM_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_claim`
-export const TASK_SETTLE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_settle`
-export const TASK_INTEGRATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__task_integrate`
-export const DELEGATE_SUBAGENT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__delegate_subagent`
-export const STOP_LOOP_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__stop_loop`
-export const SETUP_LOOP_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__setup_loop`
-export const ARM_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__arm_cron`
-export const VALIDATE_CRON_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_cron`
-export const VALIDATE_MERMAID_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_mermaid`
-export const INBOX_REPORT_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__inbox_report`
-export const VALIDATE_UI_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__validate_ui`
-export const RUN_VERIFY_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__run_verify`
-export const PLUGIN_LIST_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_list`
-export const PLUGIN_VALIDATE_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_validate`
-export const PLUGIN_LOGS_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_logs`
-export const PLUGIN_SCAFFOLD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_scaffold`
-export const PLUGIN_INSTALL_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_install`
-export const PLUGIN_RELOAD_TOOL_NAME = `mcp__${KANNA_MCP_SERVER_NAME}__plugin_reload`
-function asRecord(value: JsonValue | undefined): JsonObject | null {
-  return value !== undefined && isJsonObject(value) ? value : null
+
+export function mcpToolName(server: string, tool: string): string {
+  return `mcp__${server}__${tool}`
 }
 
-const TASK_STATUSES = new Set(["pending", "in_progress", "completed"])
+export function parseMcpToolName(name: string): { server: string; tool: string } | null {
+  const match = /^mcp__(.+?)__(.+)$/.exec(name)
+  return match ? { server: match[1], tool: match[2] } : null
+}
 
-function isTaskStatus(value: JsonValue | undefined): value is TaskStatus {
-  return typeof value === "string" && TASK_STATUSES.has(value)
+export function kannaToolName(tool: string): string {
+  return mcpToolName(KANNA_MCP_SERVER_NAME, tool)
+}
+
+export const OFFER_DOWNLOAD_TOOL_NAME = kannaToolName("offer_download")
+export const PREVIEW_FILE_TOOL_NAME = kannaToolName("preview_file")
+export const EXPOSE_PORT_TOOL_NAME = kannaToolName("expose_port")
+export const QUERY_TRACKING_FILE_TOOL_NAME = kannaToolName("query_tracking_file")
+export const APPEND_TRACKING_ROW_TOOL_NAME = kannaToolName("append_tracking_row")
+export const REPLACE_TRACKING_SECTION_TOOL_NAME = kannaToolName("replace_tracking_section")
+export const TASK_CREATE_TOOL_NAME = kannaToolName("task_create")
+export const TASK_UPDATE_TOOL_NAME = kannaToolName("task_update")
+export const TASK_LIST_TOOL_NAME = kannaToolName("task_list")
+export const TASK_GET_TOOL_NAME = kannaToolName("task_get")
+export const TASK_NOTE_TOOL_NAME = kannaToolName("task_note")
+export const TASK_CLAIM_TOOL_NAME = kannaToolName("task_claim")
+export const TASK_SETTLE_TOOL_NAME = kannaToolName("task_settle")
+export const TASK_INTEGRATE_TOOL_NAME = kannaToolName("task_integrate")
+export const DELEGATE_SUBAGENT_TOOL_NAME = kannaToolName("delegate_subagent")
+export const STOP_LOOP_TOOL_NAME = kannaToolName("stop_loop")
+export const SETUP_LOOP_TOOL_NAME = kannaToolName("setup_loop")
+export const ARM_CRON_TOOL_NAME = kannaToolName("arm_cron")
+export const VALIDATE_CRON_TOOL_NAME = kannaToolName("validate_cron")
+export const VALIDATE_MERMAID_TOOL_NAME = kannaToolName("validate_mermaid")
+export const INBOX_REPORT_TOOL_NAME = kannaToolName("inbox_report")
+export const VALIDATE_UI_TOOL_NAME = kannaToolName("validate_ui")
+export const RUN_VERIFY_TOOL_NAME = kannaToolName("run_verify")
+export const PLUGIN_LIST_TOOL_NAME = kannaToolName("plugin_list")
+export const PLUGIN_VALIDATE_TOOL_NAME = kannaToolName("plugin_validate")
+export const PLUGIN_LOGS_TOOL_NAME = kannaToolName("plugin_logs")
+export const PLUGIN_SCAFFOLD_TOOL_NAME = kannaToolName("plugin_scaffold")
+export const PLUGIN_INSTALL_TOOL_NAME = kannaToolName("plugin_install")
+export const PLUGIN_RELOAD_TOOL_NAME = kannaToolName("plugin_reload")
+export const ASK_USER_QUESTION_TOOL_NAME = kannaToolName("ask_user_question")
+export const EXIT_PLAN_MODE_TOOL_NAME = kannaToolName("exit_plan_mode")
+export const CARD_MOVE_TOOL_NAME = kannaToolName("card_move")
+
+function asRecord(value: JsonValue | undefined): JsonObject | null {
+  return value !== undefined && isJsonObject(value) ? value : null
 }
 
 function isTaskUpdateStatus(value: JsonValue | undefined): value is TaskUpdateToolCall["input"]["status"] {
@@ -84,324 +93,164 @@ function parseWorkflowMeta(script: string): { name?: string; description?: strin
   return { name, description }
 }
 
+type ToolKind = NormalizedToolCall["toolKind"]
+type ToolInput<K extends ToolKind> = Extract<NormalizedToolCall, { toolKind: K }>["input"]
+
+function stringInput(input: JsonObject, key: string): string {
+  const value = input[key]
+  return typeof value === "string" ? value : ""
+}
+
+function optionalStringInput(input: JsonObject, key: string): string | undefined {
+  const value = input[key]
+  return typeof value === "string" ? value : undefined
+}
+
+function kannaAskUserQuestions(input: JsonObject): AskUserQuestionItem[] {
+  if (!Array.isArray(input.questions)) return []
+  return input.questions.flatMap((q) => {
+    if (!isJsonObject(q)) return []
+    const options: AskUserQuestionOption[] | undefined = Array.isArray(q.options)
+      ? q.options.filter((o: JsonValue): o is JsonValue & AskUserQuestionOption => isJsonObject(o) && typeof o.label === "string")
+      : undefined
+    return [{
+      question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
+      header: typeof q.header === "string" ? q.header : undefined,
+      options,
+      multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
+    }]
+  })
+}
+
 export function normalizeToolCall(args: {
   toolName: string
   toolId: string
   input: JsonObject
 }): NormalizedToolCall {
   const { toolName, toolId, input } = args
+  const call = <K extends ToolKind>(toolKind: K, callInput: ToolInput<K>) => ({
+    kind: "tool" as const,
+    toolKind,
+    toolName,
+    toolId,
+    input: callInput,
+    rawInput: input,
+  })
 
   switch (toolName) {
     case "AskUserQuestion":
-      return {
-        kind: "tool",
-        toolKind: "ask_user_question",
-        toolName,
-        toolId,
-        input: {
-          questions: Array.isArray(input.questions)
-            ? input.questions.filter((q): q is AskUserQuestionItem => isJsonObject(q) && typeof q.question === "string")
-            : [],
-        },
-        rawInput: input,
-      }
-    case "mcp__kanna__ask_user_question": {
-      const questions: AskUserQuestionItem[] = Array.isArray(input.questions)
-        ? input.questions.flatMap((q) => {
-            if (!isJsonObject(q)) return []
-            const options: AskUserQuestionOption[] | undefined = Array.isArray(q.options)
-              ? q.options.filter((o: JsonValue): o is JsonValue & AskUserQuestionOption => isJsonObject(o) && typeof o.label === "string")
-              : undefined
-            return [{
-              question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
-              header: typeof q.header === "string" ? q.header : undefined,
-              options,
-              multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
-            }]
-          })
-        : []
-      return {
-        kind: "tool",
-        toolKind: "ask_user_question",
-        toolName,
-        toolId,
-        input: { questions },
-        rawInput: input,
-      }
-    }
+      return call("ask_user_question", {
+        questions: Array.isArray(input.questions)
+          ? input.questions.filter((q): q is AskUserQuestionItem => isJsonObject(q) && typeof q.question === "string")
+          : [],
+      })
+    case ASK_USER_QUESTION_TOOL_NAME:
+      return call("ask_user_question", { questions: kannaAskUserQuestions(input) })
     case "ExitPlanMode":
-    case "mcp__kanna__exit_plan_mode":
-      return {
-        kind: "tool",
-        toolKind: "exit_plan_mode",
-        toolName,
-        toolId,
-        input: {
-          plan: typeof input.plan === "string" ? input.plan : undefined,
-          summary: typeof input.summary === "string" ? input.summary : undefined,
-        },
-        rawInput: input,
-      }
+    case EXIT_PLAN_MODE_TOOL_NAME:
+      return call("exit_plan_mode", {
+        plan: optionalStringInput(input, "plan"),
+        summary: optionalStringInput(input, "summary"),
+      })
     case "TodoWrite":
-      return {
-        kind: "tool",
-        toolKind: "todo_write",
-        toolName,
-        toolId,
-        input: {
-          todos: Array.isArray(input.todos)
-            ? input.todos.filter(
-                (t): t is TodoItem =>
-                  isJsonObject(t) &&
-                  typeof t.content === "string" &&
-                  typeof t.status === "string" &&
-                  typeof t.activeForm === "string",
-              )
-            : [],
-        },
-        rawInput: input,
-      }
+      return call("todo_write", {
+        todos: Array.isArray(input.todos)
+          ? input.todos.filter(
+              (t): t is TodoItem =>
+                isJsonObject(t) &&
+                typeof t.content === "string" &&
+                typeof t.status === "string" &&
+                typeof t.activeForm === "string",
+            )
+          : [],
+      })
     case "TaskCreate":
-      return {
-        kind: "tool",
-        toolKind: "task_create",
-        toolName,
-        toolId,
-        input: {
-          subject: typeof input.subject === "string" ? input.subject : "",
-          description: typeof input.description === "string" ? input.description : "",
-          ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
-        },
-        rawInput: input,
-      }
+      return call("task_create", {
+        subject: stringInput(input, "subject"),
+        description: stringInput(input, "description"),
+        ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
+      })
     case "TaskUpdate":
-      return {
-        kind: "tool",
-        toolKind: "task_update",
-        toolName,
-        toolId,
-        input: {
-          taskId: readTaskId(input),
-          ...(typeof input.subject === "string" ? { subject: input.subject } : {}),
-          ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
-          ...(isTaskUpdateStatus(input.status) ? { status: input.status } : {}),
-        },
-        rawInput: input,
-      }
+      return call("task_update", {
+        taskId: readTaskId(input),
+        ...(typeof input.subject === "string" ? { subject: input.subject } : {}),
+        ...(typeof input.activeForm === "string" ? { activeForm: input.activeForm } : {}),
+        ...(isTaskUpdateStatus(input.status) ? { status: input.status } : {}),
+      })
     case "TaskGet":
-      return {
-        kind: "tool",
-        toolKind: "task_get",
-        toolName,
-        toolId,
-        input: { taskId: readTaskId(input) },
-        rawInput: input,
-      }
+      return call("task_get", { taskId: readTaskId(input) })
     case "TaskList":
-      return {
-        kind: "tool",
-        toolKind: "task_list",
-        toolName,
-        toolId,
-        input: {},
-        rawInput: input,
-      }
+      return call("task_list", {})
     case "Skill":
-      return {
-        kind: "tool",
-        toolKind: "skill",
-        toolName,
-        toolId,
-        input: {
-          skill: typeof input.skill === "string" ? input.skill : "",
-        },
-        rawInput: input,
-      }
+      return call("skill", { skill: stringInput(input, "skill") })
     case "Glob":
-      return {
-        kind: "tool",
-        toolKind: "glob",
-        toolName,
-        toolId,
-        input: {
-          pattern: typeof input.pattern === "string" ? input.pattern : "",
-        },
-        rawInput: input,
-      }
+      return call("glob", { pattern: stringInput(input, "pattern") })
     case "Grep":
-      return {
-        kind: "tool",
-        toolKind: "grep",
-        toolName,
-        toolId,
-        input: {
-          pattern: typeof input.pattern === "string" ? input.pattern : "",
-          outputMode: typeof input.output_mode === "string" ? input.output_mode : undefined,
-        },
-        rawInput: input,
-      }
+      return call("grep", {
+        pattern: stringInput(input, "pattern"),
+        outputMode: optionalStringInput(input, "output_mode"),
+      })
     case "Bash":
-      return {
-        kind: "tool",
-        toolKind: "bash",
-        toolName,
-        toolId,
-        input: {
-          command: typeof input.command === "string" ? input.command : "",
-          description: typeof input.description === "string" ? input.description : undefined,
-          timeoutMs: typeof input.timeout === "number" ? input.timeout : undefined,
-          runInBackground: Boolean(input.run_in_background),
-        },
-        rawInput: input,
-      }
+      return call("bash", {
+        command: stringInput(input, "command"),
+        description: optionalStringInput(input, "description"),
+        timeoutMs: typeof input.timeout === "number" ? input.timeout : undefined,
+        runInBackground: Boolean(input.run_in_background),
+      })
     case "WebSearch":
-      return {
-        kind: "tool",
-        toolKind: "web_search",
-        toolName,
-        toolId,
-        input: {
-          query: typeof input.query === "string" ? input.query : "",
-        },
-        rawInput: input,
-      }
+      return call("web_search", { query: stringInput(input, "query") })
     case "Read":
-      return {
-        kind: "tool",
-        toolKind: "read_file",
-        toolName,
-        toolId,
-        input: {
-          filePath: typeof input.file_path === "string" ? input.file_path : "",
-        },
-        rawInput: input,
-      }
+      return call("read_file", { filePath: stringInput(input, "file_path") })
     case "Write":
-      return {
-        kind: "tool",
-        toolKind: "write_file",
-        toolName,
-        toolId,
-        input: {
-          filePath: typeof input.file_path === "string" ? input.file_path : "",
-          content: typeof input.content === "string" ? input.content : "",
-        },
-        rawInput: input,
-      }
+      return call("write_file", {
+        filePath: stringInput(input, "file_path"),
+        content: stringInput(input, "content"),
+      })
     case "Edit":
-      return {
-        kind: "tool",
-        toolKind: "edit_file",
-        toolName,
-        toolId,
-        input: {
-          filePath: typeof input.file_path === "string" ? input.file_path : "",
-          oldString: typeof input.old_string === "string" ? input.old_string : "",
-          newString: typeof input.new_string === "string" ? input.new_string : "",
-        },
-        rawInput: input,
-      }
+      return call("edit_file", {
+        filePath: stringInput(input, "file_path"),
+        oldString: stringInput(input, "old_string"),
+        newString: stringInput(input, "new_string"),
+      })
     case "Workflow": {
-      const script = typeof input.script === "string" ? input.script : ""
-      const meta = parseWorkflowMeta(script)
-      return {
-        kind: "tool",
-        toolKind: "workflow",
-        toolName,
-        toolId,
-        input: {
-          name: meta.name,
-          description: meta.description,
-          scriptPath: typeof input.scriptPath === "string" ? input.scriptPath : undefined,
-        },
-        rawInput: input,
-      }
+      const meta = parseWorkflowMeta(stringInput(input, "script"))
+      return call("workflow", {
+        name: meta.name,
+        description: meta.description,
+        scriptPath: optionalStringInput(input, "scriptPath"),
+      })
     }
-  }
-
-  if (toolName === OFFER_DOWNLOAD_TOOL_NAME) {
-    return {
-      kind: "tool",
-      toolKind: "offer_download",
-      toolName,
-      toolId,
-      input: {
-        path: typeof input.path === "string" ? input.path : "",
-        label: typeof input.label === "string" ? input.label : undefined,
-      },
-      rawInput: input,
-    }
-  }
-
-  if (toolName === PREVIEW_FILE_TOOL_NAME) {
-    return {
-      kind: "tool",
-      toolKind: "preview_file",
-      toolName,
-      toolId,
-      input: {
-        path: typeof input.path === "string" ? input.path : "",
-        label: typeof input.label === "string" ? input.label : undefined,
-      },
-      rawInput: input,
-    }
+    case OFFER_DOWNLOAD_TOOL_NAME:
+      return call("offer_download", {
+        path: stringInput(input, "path"),
+        label: optionalStringInput(input, "label"),
+      })
+    case PREVIEW_FILE_TOOL_NAME:
+      return call("preview_file", {
+        path: stringInput(input, "path"),
+        label: optionalStringInput(input, "label"),
+      })
   }
 
   const beaconOp = beaconToolOp(toolName)
   if (beaconOp !== null) {
-    return {
-      kind: "tool",
-      toolKind: "beacon",
-      toolName,
-      toolId,
-      input: {
-        op: beaconOp,
-        beaconId: typeof input.beaconId === "string" ? input.beaconId : "",
-        summary: summarizeBeaconCall(beaconOp, input),
-      },
-      rawInput: input,
-    }
+    return call("beacon", {
+      op: beaconOp,
+      beaconId: stringInput(input, "beaconId"),
+      summary: summarizeBeaconCall(beaconOp, input),
+    })
   }
 
-  const mcpMatch = toolName.match(/^mcp__(.+?)__(.+)$/)
-  if (mcpMatch) {
-    return {
-      kind: "tool",
-      toolKind: "mcp_generic",
-      toolName,
-      toolId,
-      input: {
-        server: mcpMatch[1],
-        tool: mcpMatch[2],
-        payload: input,
-      },
-      rawInput: input,
-    }
+  const mcpTool = parseMcpToolName(toolName)
+  if (mcpTool) {
+    return call("mcp_generic", { server: mcpTool.server, tool: mcpTool.tool, payload: input })
   }
 
   if (typeof input.subagent_type === "string") {
-    return {
-      kind: "tool",
-      toolKind: "subagent_task",
-      toolName,
-      toolId,
-      input: {
-        subagentType: input.subagent_type,
-      },
-      rawInput: input,
-    }
+    return call("subagent_task", { subagentType: input.subagent_type })
   }
 
-  return {
-    kind: "tool",
-    toolKind: "unknown_tool",
-    toolName,
-    toolId,
-    input: {
-      payload: input,
-    },
-    rawInput: input,
-  }
+  return call("unknown_tool", { payload: input })
 }
 
 function parseJsonValue(value: JsonValue): JsonValue {
@@ -424,19 +273,16 @@ type ReadStructuredImageBlock = {
   mimeType?: string
 }
 
-function normalizeReadBlocks(value: JsonValue): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
-  let blocks: readonly JsonValue[]
-  if (isJsonObject(value) && "content" in value && Array.isArray(value.content)) {
-    blocks = value.content
-  } else if (Array.isArray(value)) {
-    blocks = value
-  } else {
-    blocks = []
-  }
+function contentBlocks(value: JsonValue): readonly JsonValue[] | null {
+  if (isJsonObject(value) && Array.isArray(value.content)) return value.content
+  if (Array.isArray(value)) return value
+  return null
+}
 
+function normalizeReadBlocks(value: JsonValue): Array<ReadStructuredTextBlock | ReadStructuredImageBlock> {
   const normalized: Array<ReadStructuredTextBlock | ReadStructuredImageBlock> = []
 
-  for (const block of blocks) {
+  for (const block of contentBlocks(value) ?? []) {
     if (!block || typeof block !== "object" || !("type" in block)) {
       continue
     }
@@ -478,15 +324,7 @@ function normalizeReadBlocks(value: JsonValue): Array<ReadStructuredTextBlock | 
 }
 
 function extractMcpTextContent(value: JsonValue): string | null {
-  let blocks: readonly JsonValue[] | null
-  if (isJsonObject(value) && "content" in value && Array.isArray(value.content)) {
-    blocks = value.content
-  } else if (Array.isArray(value)) {
-    blocks = value
-  } else {
-    blocks = null
-  }
-
+  const blocks = contentBlocks(value)
   if (!blocks) return null
 
   const parts: string[] = []
@@ -496,6 +334,28 @@ function extractMcpTextContent(value: JsonValue): string | null {
     }
   }
   return parts.length > 0 ? parts.join("") : null
+}
+
+function unwrapMcpPayload(parsed: JsonValue): JsonObject | null {
+  const innerText = extractMcpTextContent(parsed)
+  return asRecord(innerText !== null ? parseJsonValue(innerText) : parsed)
+}
+
+function stringOfRecord(record: JsonObject | null, key: string): string {
+  const value = record?.[key]
+  return typeof value === "string" ? value : ""
+}
+
+function fileResultFields(record: JsonObject | null) {
+  const fileName = stringOfRecord(record, "fileName")
+  const displayName = record?.displayName
+  return {
+    contentUrl: stringOfRecord(record, "contentUrl"),
+    relativePath: stringOfRecord(record, "relativePath"),
+    fileName,
+    displayName: typeof displayName === "string" ? displayName : fileName,
+    size: typeof record?.size === "number" ? record.size : 0,
+  }
 }
 
 export const STRUCTURED_RESULT_TOOL_KINDS: ReadonlySet<NormalizedToolCall["toolKind"]> = new Set<NormalizedToolCall["toolKind"]>([
@@ -515,9 +375,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): Hyd
 
   switch (tool.toolKind) {
     case "ask_user_question": {
-      const innerText = extractMcpTextContent(parsed)
-      const payload = innerText !== null ? parseJsonValue(innerText) : parsed
-      const record = asRecord(payload)
+      const record = unwrapMcpPayload(parsed)
       const answers = asRecord(record?.answers) ?? (record ? record : {})
       const answersMap: AskUserQuestionAnswerMap = {}
       for (const [key, value] of Object.entries(answers)) {
@@ -537,9 +395,7 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): Hyd
       } satisfies AskUserQuestionToolResult
     }
     case "exit_plan_mode": {
-      const innerText = extractMcpTextContent(parsed)
-      const payload = innerText !== null ? parseJsonValue(innerText) : parsed
-      const record = asRecord(payload)
+      const record = unwrapMcpPayload(parsed)
       return {
         confirmed: typeof record?.confirmed === "boolean" ? record.confirmed : undefined,
         clearContext: typeof record?.clearContext === "boolean" ? record.clearContext : undefined,
@@ -580,53 +436,25 @@ export function hydrateToolResult(tool: NormalizedToolCall, raw: JsonValue): Hyd
       } satisfies TaskListToolResult
     }
     case "offer_download": {
-      const text = extractMcpTextContent(parsed)
-      const payload = text ? parseJsonValue(text) : parsed
-      const record = asRecord(payload)
-      let offerDisplayName: string
-      if (typeof record?.displayName === "string") {
-        offerDisplayName = record.displayName
-      } else if (typeof record?.fileName === "string") {
-        offerDisplayName = record.fileName
-      } else {
-        offerDisplayName = ""
-      }
+      const record = unwrapMcpPayload(parsed)
       return {
-        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
-        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
-        fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: offerDisplayName,
-        size: typeof record?.size === "number" ? record.size : 0,
+        ...fileResultFields(record),
         ...(typeof record?.mimeType === "string" ? { mimeType: record.mimeType } : {}),
       } satisfies OfferDownloadToolResult
     }
     case "preview_file": {
-      const text = extractMcpTextContent(parsed)
-      const payload = text ? parseJsonValue(text) : parsed
-      const record = asRecord(payload)
-      let previewDisplayName: string
-      if (typeof record?.displayName === "string") {
-        previewDisplayName = record.displayName
-      } else if (typeof record?.fileName === "string") {
-        previewDisplayName = record.fileName
-      } else {
-        previewDisplayName = ""
-      }
+      const record = unwrapMcpPayload(parsed)
       return {
-        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
-        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
-        fileName: typeof record?.fileName === "string" ? record.fileName : "",
-        displayName: previewDisplayName,
-        size: typeof record?.size === "number" ? record.size : 0,
+        ...fileResultFields(record),
         mimeType: typeof record?.mimeType === "string" ? record.mimeType : "application/octet-stream",
       } satisfies PreviewFileToolResult
     }
     case "image_generation": {
       const record = asRecord(parsed)
       return {
-        contentUrl: typeof record?.contentUrl === "string" ? record.contentUrl : "",
-        relativePath: typeof record?.relativePath === "string" ? record.relativePath : "",
-        fileName: typeof record?.fileName === "string" ? record.fileName : "",
+        contentUrl: stringOfRecord(record, "contentUrl"),
+        relativePath: stringOfRecord(record, "relativePath"),
+        fileName: stringOfRecord(record, "fileName"),
       } satisfies ImageGenerationToolResult
     }
     case "workflow": {

@@ -1,4 +1,8 @@
-export type PackageKind = "skill" | "claude-plugin" | "codex-plugin"
+import { oneOf } from "../vocab"
+
+export const PACKAGE_KINDS = ["skill", "claude-plugin", "codex-plugin"] as const
+export type PackageKind = (typeof PACKAGE_KINDS)[number]
+export const isPackageKind = oneOf(PACKAGE_KINDS)
 export type PackageId = string
 
 export interface InstalledPackage {

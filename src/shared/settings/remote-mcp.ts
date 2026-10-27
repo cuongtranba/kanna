@@ -1,4 +1,4 @@
-import { isPlainObject } from "./plain-object"
+import { readSettingsSection } from "./read-fields"
 
 export interface RemoteMcpSettings {
   readonly enabled: boolean
@@ -30,20 +30,13 @@ export function normalizeRemoteMcpPublicUrl(value: string | null): string | null
 }
 
 export function normalizeRemoteMcpSettings<T>(value: T, warnings: string[]): RemoteMcpSettings {
-  if (value === undefined) return { ...REMOTE_MCP_SETTINGS_DEFAULTS }
-  if (!isPlainObject(value)) {
-    warnings.push("remoteMcp must be an object")
-    return { ...REMOTE_MCP_SETTINGS_DEFAULTS }
-  }
-  const enabled = typeof value.enabled === "boolean" ? value.enabled : REMOTE_MCP_SETTINGS_DEFAULTS.enabled
-  if (value.enabled !== undefined && typeof value.enabled !== "boolean") {
-    warnings.push("remoteMcp.enabled must be a boolean")
-  }
-  const rawUrl = value.publicUrl
+  const section = readSettingsSection(value, "remoteMcp", warnings)
+  const enabled = section.boolean("enabled", REMOTE_MCP_SETTINGS_DEFAULTS.enabled)
+  const rawUrl = section.source?.publicUrl
   if (rawUrl === undefined || rawUrl === null || rawUrl === "") return { enabled, publicUrl: null }
   const publicUrl = typeof rawUrl === "string" ? normalizeRemoteMcpPublicUrl(rawUrl) : null
   if (publicUrl === null) {
-    warnings.push("remoteMcp.publicUrl must be an https URL, or an http URL on a loopback host")
+    section.warn("publicUrl", "an https URL, or an http URL on a loopback host")
   }
   return { enabled, publicUrl }
 }

@@ -11,7 +11,7 @@ import { selectServiceBusStatus, useServiceBusStore } from "../stores/serviceBus
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
 import { surfaceErrorIn } from "../lib/commandFeedback"
 import { problemsOf } from "../lib/serviceBusDraft"
-import type { ServiceBusMode } from "../../shared/service-bus/jetstream-config"
+import { SERVICE_BUS_MODES, type ServiceBusMode } from "../../shared/service-bus/jetstream-config"
 import type { KannaState } from "./useKannaState"
 import { SettingsRow } from "../components/settings/SettingsList"
 import { Fact, Field, Problems } from "./ServiceBusFields"
@@ -29,10 +29,8 @@ const ENABLED_OPTIONS = [
   { value: "enabled" as const, label: "Enabled" },
   { value: "disabled" as const, label: "Disabled" },
 ]
-const MODE_OPTIONS = [
-  { value: "embedded" as const, label: "Embedded" },
-  { value: "external" as const, label: "External" },
-]
+const MODE_LABELS: Record<ServiceBusMode, string> = { embedded: "Embedded", external: "External" }
+const MODE_OPTIONS = SERVICE_BUS_MODES.map((value) => ({ value, label: MODE_LABELS[value] }))
 
 type ServiceBusSectionState = Pick<KannaState, "handleWriteAppSettings">
 

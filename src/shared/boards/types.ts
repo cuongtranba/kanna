@@ -1,10 +1,13 @@
 
 import type { CardBlocker } from "./dependencies"
+import { oneOf } from "../vocab"
 
 
-export type BoardOwnerKind = "project" | "stack"
+export const BOARD_OWNER_KINDS = ["project", "stack"] as const
+export type BoardOwnerKind = (typeof BOARD_OWNER_KINDS)[number]
 
-export type ColumnSemantic = "start" | "active" | "review" | "done"
+export const COLUMN_SEMANTICS = ["start", "active", "review", "done"] as const
+export type ColumnSemantic = (typeof COLUMN_SEMANTICS)[number]
 
 export interface Board {
   id: string
@@ -33,20 +36,11 @@ export const COLUMN_COLOR_TOKENS = ["muted-icon", "info", "success", "warning", 
 
 export type ColumnColorToken = (typeof COLUMN_COLOR_TOKENS)[number]
 
-export function isColumnColorToken(value: string): value is ColumnColorToken {
-  return COLUMN_COLOR_TOKENS.some((entry) => entry === value)
-}
+export const isColumnColorToken = oneOf(COLUMN_COLOR_TOKENS)
 
 
-export type FieldKind =
-  | "text"
-  | "longtext"
-  | "url"
-  | "number"
-  | "date"
-  | "select"
-  | "multiselect"
-  | "label"
+export const FIELD_KINDS = ["text", "longtext", "url", "number", "date", "select", "multiselect", "label"] as const
+export type FieldKind = (typeof FIELD_KINDS)[number]
 
 export interface FieldOption {
   id: string
@@ -95,7 +89,8 @@ export interface Card {
   archivedAt: number | null
 }
 
-export type CardLinkKind = "chat" | "worktree" | "pr" | "card" | "cleanup_declined" | "blocked_by"
+export const CARD_LINK_KINDS = ["chat", "worktree", "pr", "card", "cleanup_declined", "blocked_by"] as const
+export type CardLinkKind = (typeof CARD_LINK_KINDS)[number]
 
 export interface CardLink {
   cardId: string
@@ -143,9 +138,11 @@ export interface BoardTemplate {
 }
 
 
-export type RemoteKind = "state" | "label" | "projectField"
+export const REMOTE_KINDS = ["state", "label", "projectField"] as const
+export type RemoteKind = (typeof REMOTE_KINDS)[number]
 
-export type SyncDirection = "pull" | "push" | "both"
+export const SYNC_DIRECTIONS = ["pull", "push", "both"] as const
+export type SyncDirection = (typeof SYNC_DIRECTIONS)[number]
 
 export type RemoteSourceRef =
   | { provider: "github-issues"; owner: string; repo: string }
@@ -181,7 +178,8 @@ export interface SyncLink {
   lastSyncedAt: number
 }
 
-export type OutboxOp = "create" | "update" | "move" | "close"
+export const OUTBOX_OPS = ["create", "update", "move", "close"] as const
+export type OutboxOp = (typeof OUTBOX_OPS)[number]
 
 export interface SyncOutboxEntry {
   id: string
@@ -196,7 +194,8 @@ export interface SyncOutboxEntry {
   heldReason: "agent_push_disabled" | null
 }
 
-export type ConflictResolution = "local" | "remote"
+export const CONFLICT_RESOLUTIONS = ["local", "remote"] as const
+export type ConflictResolution = (typeof CONFLICT_RESOLUTIONS)[number]
 
 export interface SyncConflict {
   id: string
@@ -210,57 +209,13 @@ export interface SyncConflict {
 }
 
 
-const COLUMN_SEMANTICS: readonly ColumnSemantic[] = ["start", "active", "review", "done"]
-const FIELD_KINDS: readonly FieldKind[] = [
-  "text",
-  "longtext",
-  "url",
-  "number",
-  "date",
-  "select",
-  "multiselect",
-  "label",
-]
-const SYNC_DIRECTIONS: readonly SyncDirection[] = ["pull", "push", "both"]
-const REMOTE_KINDS: readonly RemoteKind[] = ["state", "label", "projectField"]
-const OUTBOX_OPS: readonly OutboxOp[] = ["create", "update", "move", "close"]
-const BOARD_OWNER_KINDS: readonly BoardOwnerKind[] = ["project", "stack"]
-const CARD_LINK_KINDS: readonly CardLinkKind[] = [
-  "chat",
-  "worktree",
-  "pr",
-  "card",
-  "cleanup_declined",
-  "blocked_by",
-]
-
-export function isColumnSemantic(value: string): value is ColumnSemantic {
-  return COLUMN_SEMANTICS.some((entry) => entry === value)
-}
-
-export function isFieldKind(value: string): value is FieldKind {
-  return FIELD_KINDS.some((entry) => entry === value)
-}
-
-export function isSyncDirection(value: string): value is SyncDirection {
-  return SYNC_DIRECTIONS.some((entry) => entry === value)
-}
-
-export function isRemoteKind(value: string): value is RemoteKind {
-  return REMOTE_KINDS.some((entry) => entry === value)
-}
-
-export function isOutboxOp(value: string): value is OutboxOp {
-  return OUTBOX_OPS.some((entry) => entry === value)
-}
-
-export function isBoardOwnerKind(value: string): value is BoardOwnerKind {
-  return BOARD_OWNER_KINDS.some((entry) => entry === value)
-}
-
-export function isCardLinkKind(value: string): value is CardLinkKind {
-  return CARD_LINK_KINDS.some((entry) => entry === value)
-}
+export const isColumnSemantic = oneOf(COLUMN_SEMANTICS)
+export const isFieldKind = oneOf(FIELD_KINDS)
+export const isSyncDirection = oneOf(SYNC_DIRECTIONS)
+export const isRemoteKind = oneOf(REMOTE_KINDS)
+export const isOutboxOp = oneOf(OUTBOX_OPS)
+export const isBoardOwnerKind = oneOf(BOARD_OWNER_KINDS)
+export const isCardLinkKind = oneOf(CARD_LINK_KINDS)
 
 export function findActiveColumn(columns: readonly BoardColumn[]): BoardColumn | null {
   return columns.find((column) => column.semantic === "active") ?? null

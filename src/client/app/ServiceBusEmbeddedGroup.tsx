@@ -6,6 +6,7 @@ import { draftToEmbedded, embeddedToDraft, problemsOf } from "../lib/serviceBusD
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
+import { EMBEDDED_LOG_LEVELS, type EmbeddedLogLevel } from "../../shared/service-bus/jetstream-config"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
@@ -14,10 +15,8 @@ import { sendCommandWithFeedback, surfaceErrorIn } from "../lib/commandFeedback"
 const SAVE_KEY = pendingActionKey("settings.serviceBus", "embedded")
 const RESET_KEY = pendingActionKey("serviceBus.resetStore")
 
-const LOG_OPTIONS = [
-  { value: "info" as const, label: "Info" },
-  { value: "debug" as const, label: "Debug" },
-]
+const LOG_LABELS: Record<EmbeddedLogLevel, string> = { info: "Info", debug: "Debug" }
+const LOG_OPTIONS = EMBEDDED_LOG_LEVELS.map((value) => ({ value, label: LOG_LABELS[value] }))
 
 export function ServiceBusEmbeddedGroup({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
   const socket = useOptionalKannaSocket()

@@ -58,7 +58,7 @@ function syncNativeRows(
   for (const row of event.rows) {
     const id = nativeTaskId(row.nativeId, scope)
     const existing = tasks.get(id)
-    tasks.set(id, {
+    tasks.set(id, newTaskRecord({
       id,
       subject: row.subject.length > 0 ? row.subject : (existing?.subject ?? ""),
       activeForm: existing?.activeForm ?? null,
@@ -69,15 +69,33 @@ function syncNativeRows(
       worktree: existing?.worktree ?? null,
       branch: existing?.branch ?? null,
       integrated: existing?.integrated ?? false,
-      claimId: null,
-      claimedAt: null,
-      runId: null,
       epoch,
       originRunId: existing?.originRunId ?? null,
       createdAt: existing?.createdAt ?? event.timestamp,
       updatedAt: event.timestamp,
       completedAt: row.status === "completed" ? (existing?.completedAt ?? event.timestamp) : null,
-    })
+    }))
+  }
+}
+
+type NewTaskFields = Pick<ChatTaskRecord, "id" | "subject" | "source" | "epoch" | "createdAt" | "updatedAt">
+  & Partial<ChatTaskRecord>
+
+function newTaskRecord(fields: NewTaskFields): ChatTaskRecord {
+  return {
+    activeForm: null,
+    description: null,
+    status: "pending",
+    needs: [],
+    worktree: null,
+    branch: null,
+    integrated: false,
+    claimId: null,
+    claimedAt: null,
+    runId: null,
+    originRunId: null,
+    completedAt: null,
+    ...fields,
   }
 }
 
@@ -90,26 +108,20 @@ function applyEvent(
   switch (event.type) {
     case "chat_task_created": {
       if (tasks.has(event.taskId)) return
-      tasks.set(event.taskId, {
+      tasks.set(event.taskId, newTaskRecord({
         id: event.taskId,
         subject: event.subject,
         activeForm: event.activeForm ?? null,
         description: event.description ?? null,
-        status: "pending",
         source: event.source,
         needs: event.needs ?? [],
         worktree: event.worktree ?? null,
         branch: event.branch ?? null,
-        integrated: false,
-        claimId: null,
-        claimedAt: null,
-        runId: null,
         epoch: epochRef.value,
         originRunId: event.originRunId ?? null,
         createdAt: event.timestamp,
         updatedAt: event.timestamp,
-        completedAt: null,
-      })
+      }))
       return
     }
     case "chat_task_updated": {

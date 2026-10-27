@@ -1,5 +1,6 @@
 
 import {
+  CRON_MODES,
   isCronMode,
   type CronCommand,
   type CronJobPatch,
@@ -358,9 +359,7 @@ function missingModeError(line: string, tokens: Token[]): Outcome {
 
 function nearestMode(token: string): CronMode | null {
   const lowered = token.toLowerCase()
-  if (levenshtein(lowered, "inline", 2) <= 2) return "inline"
-  if (levenshtein(lowered, "spawn", 2) <= 2) return "spawn"
-  return null
+  return CRON_MODES.find((mode) => levenshtein(lowered, mode, 2) <= 2) ?? null
 }
 
 function stripQuotes(text: string): string {

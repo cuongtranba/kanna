@@ -1,10 +1,17 @@
 import { z } from "zod"
-import type {
-  EmbeddedServerSettings,
-  JetStreamConsumerSettings,
-  JetStreamStreamSettings,
-  ServiceBusSettingsPatch,
-  ServiceBusSettingsPublic,
+import {
+  CONSUMER_ACK_POLICIES,
+  CONSUMER_DELIVER_POLICIES,
+  EMBEDDED_LOG_LEVELS,
+  SERVICE_BUS_MODES,
+  STREAM_DISCARDS,
+  STREAM_RETENTIONS,
+  STREAM_STORAGES,
+  type EmbeddedServerSettings,
+  type JetStreamConsumerSettings,
+  type JetStreamStreamSettings,
+  type ServiceBusSettingsPatch,
+  type ServiceBusSettingsPublic,
 } from "./jetstream-config"
 import { assertParity } from "../type-parity"
 
@@ -12,12 +19,12 @@ export const jetStreamStreamSettingsSchema = z.object({
   name: z.string(),
   subjectPrefix: z.string(),
   extraSubjects: z.array(z.string()),
-  retention: z.enum(["limits", "interest", "workqueue"]),
-  storage: z.enum(["file", "memory"]),
+  retention: z.enum(STREAM_RETENTIONS),
+  storage: z.enum(STREAM_STORAGES),
   maxAgeDays: z.number(),
   maxBytesMb: z.number(),
   maxMsgs: z.number(),
-  discard: z.enum(["old", "new"]),
+  discard: z.enum(STREAM_DISCARDS),
   duplicateWindowSec: z.number(),
   replicas: z.number(),
 })
@@ -25,8 +32,8 @@ export const jetStreamStreamSettingsSchema = z.object({
 export const jetStreamConsumerSettingsSchema = z.object({
   durableName: z.string(),
   filterSubject: z.string(),
-  ackPolicy: z.enum(["explicit", "none", "all"]),
-  deliverPolicy: z.enum(["all", "new", "last"]),
+  ackPolicy: z.enum(CONSUMER_ACK_POLICIES),
+  deliverPolicy: z.enum(CONSUMER_DELIVER_POLICIES),
   maxAckPending: z.number(),
   ackWaitSec: z.number(),
 })
@@ -35,10 +42,10 @@ export const embeddedServerSettingsSchema = z.object({
   maxMemoryStoreMb: z.number(),
   maxFileStoreMb: z.number(),
   port: z.union([z.literal("auto"), z.number()]),
-  logLevel: z.enum(["info", "debug"]),
+  logLevel: z.enum(EMBEDDED_LOG_LEVELS),
 })
 
-const serviceBusModeSchema = z.enum(["embedded", "external"])
+const serviceBusModeSchema = z.enum(SERVICE_BUS_MODES)
 
 export const serviceBusSettingsPublicSchema = z.object({
   enabled: z.boolean(),

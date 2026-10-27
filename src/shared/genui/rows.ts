@@ -1,26 +1,10 @@
-import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "../json"
+import { isJsonArray, isJsonObject, resolveJsonPath, type JsonObject, type JsonValue } from "../json"
 
 export const DATASET_MAX_ROWS = 200_000
 
 export type RowsParse = { ok: true; rows: JsonObject[] } | { ok: false; message: string }
 
 const AUTO_ROW_KEYS = ["rows", "data", "items", "results", "records", "values"] as const
-
-function at(value: JsonValue, path: string): JsonValue | undefined {
-  let current: JsonValue | undefined = value
-  for (const segment of path.split(".")) {
-    if (current === undefined) return undefined
-    if (isJsonArray(current)) {
-      const index = Number(segment)
-      current = Number.isInteger(index) ? current[index] : undefined
-    } else if (isJsonObject(current)) {
-      current = current[segment]
-    } else {
-      return undefined
-    }
-  }
-  return current
-}
 
 function columnNames(value: JsonValue | undefined): string[] | null {
   if (!value || !isJsonArray(value)) return null
@@ -62,7 +46,7 @@ function isJsonObjectValue(value: JsonValue): value is JsonObject {
 }
 
 export function rowsFromJson(value: JsonValue, rowsPath?: string): RowsParse {
-  const target = rowsPath ? at(value, rowsPath) : value
+  const target = rowsPath ? resolveJsonPath(value, rowsPath) : value
   if (target === undefined) return { ok: false, message: `rowsPath "${rowsPath}" does not exist in the data` }
   const direct = tableFrom(target)
   if (direct) return capped(direct)

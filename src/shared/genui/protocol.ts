@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { TIME_GRAINS } from "./datasets"
-import { COMPARE_MODES, type QueryResult } from "./query"
+import { COMPARE_MODES } from "./period"
+import type { QueryResult } from "./query"
 import { assertParity } from "../type-parity"
 
 export const DATASET_ERROR_CODES = [

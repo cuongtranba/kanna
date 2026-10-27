@@ -6,6 +6,8 @@ import { getSettingsFilePath } from "../shared/branding"
 import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
 import { applyBeaconSetters, beaconNotFound, createBeacon, normalizeBeacons, updateBeacon } from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
+import { clampScrollback } from "../shared/terminal-scrollback"
+import { clampTerminalMinColumnWidth } from "../shared/terminal-column-width"
 import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normalizeMcpSources } from "./mcp-sources-settings"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
@@ -25,18 +27,22 @@ import {
   DEFAULT_OPENROUTER_SDK_MODEL,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   isAgentProvider,
+  isAppThemePreference,
+  isChatSoundId,
+  isChatSoundPreference,
+  isEditorPreset,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeCodexModelId,
   OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+  OAUTH_TOKEN_BASE_URL_MAX,
   OAUTH_TOKEN_LABEL_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
   clampTokenConcurrency,
   isTokenConcurrency,
-  normalizeAnthropicBaseUrl,
   normalizeClaudeReasoningEffort,
   PROVIDERS,
   type AgentProvider,
@@ -86,7 +92,8 @@ import { assertSafeSkillAgents } from "../shared/skill-agents"
 import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput, CustomProviderPatch } from "../shared/custom-providers"
 import { applyServiceBusPatch, normalizeServiceBusSettings, toPublicServiceBus, type ServiceBusSettingsStored } from "./service-bus-settings"
 import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
-import { isPlainObject } from "../shared/settings/plain-object"
+import { isRecord } from "../shared/errors"
+import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
 import {
   assertWithinBound,
   AUTH_SESSION_MAX_AGE_DAYS_BOUND,
@@ -160,7 +167,7 @@ interface AppSettingsFile {
 }
 
 function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
-  return isPlainObject(value)
+  return isRecord(value)
 }
 
 function isErrnoException<T>(error: T): error is T & NodeJS.ErrnoException {
@@ -168,7 +175,7 @@ function isErrnoException<T>(error: T): error is T & NodeJS.ErrnoException {
 }
 
 function isMcpOAuthState<T>(value: T): value is T & McpOAuthState {
-  return isPlainObject(value)
+  return isRecord(value)
 }
 
 function isMcpTransport<T>(value: T): value is T & McpServerTransport {
@@ -190,12 +197,6 @@ interface NormalizedAppSettings {
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
 const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
-const DEFAULT_TERMINAL_SCROLLBACK = 1_000
-const MIN_TERMINAL_SCROLLBACK = 500
-const MAX_TERMINAL_SCROLLBACK = 5_000
-const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
-const MIN_TERMINAL_MIN_COLUMN_WIDTH = 250
-const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
 const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
 const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
 const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
@@ -290,40 +291,16 @@ function createDefaultProviderDefaults(): ChatProviderPreferences {
   }
 }
 
-function clampNumber<T>(value: T, fallback: number, min: number, max: number) {
-  const numberValue = typeof value === "number" ? value : Number(value)
-  if (!Number.isFinite(numberValue)) return fallback
-  return Math.min(max, Math.max(min, Math.round(numberValue)))
-}
-
 function normalizeTheme<T>(value: T): AppThemePreference {
-  if (value === "light") return "light"
-  if (value === "dark") return "dark"
-  if (value === "system") return "system"
-  return "system"
+  return isAppThemePreference(value) ? value : "system"
 }
 
 function normalizeChatSoundPreference<T>(value: T): ChatSoundPreference {
-  if (value === "never") return "never"
-  if (value === "unfocused") return "unfocused"
-  if (value === "always") return "always"
-  return DEFAULT_CHAT_SOUND_PREFERENCE
+  return isChatSoundPreference(value) ? value : DEFAULT_CHAT_SOUND_PREFERENCE
 }
 
 function normalizeChatSoundId<T>(value: T): ChatSoundId {
-  switch (value) {
-    case "blow": return "blow"
-    case "bottle": return "bottle"
-    case "frog": return "frog"
-    case "funk": return "funk"
-    case "glass": return "glass"
-    case "ping": return "ping"
-    case "pop": return "pop"
-    case "purr": return "purr"
-    case "tink": return "tink"
-    default:
-      return DEFAULT_CHAT_SOUND_ID
-  }
+  return isChatSoundId(value) ? value : DEFAULT_CHAT_SOUND_ID
 }
 
 function normalizeDefaultProvider<T>(value: T): DefaultProviderPreference {
@@ -331,12 +308,7 @@ function normalizeDefaultProvider<T>(value: T): DefaultProviderPreference {
 }
 
 function normalizeEditorPreset<T>(value: T): EditorPreset {
-  if (value === "vscode") return "vscode"
-  if (value === "xcode") return "xcode"
-  if (value === "windsurf") return "windsurf"
-  if (value === "custom") return "custom"
-  if (value === "cursor") return "cursor"
-  return DEFAULT_EDITOR_PRESET
+  return isEditorPreset(value) ? value : DEFAULT_EDITOR_PRESET
 }
 
 function normalizeEditorCommandTemplate<T>(value: T, preset: EditorPreset) {
@@ -498,7 +470,7 @@ function normalizeSubagentEntry<T>(
   warnings: string[],
   customModels?: readonly CustomModelEntry[],
 ): Subagent | null {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (!source) return null
   if (typeof source.id !== "string" || !source.id.trim()) return null
   if (typeof source.name !== "string") return null
@@ -507,7 +479,7 @@ function normalizeSubagentEntry<T>(
     warnings.push(`Subagent '${source.id}' has invalid provider; dropped`)
     return null
   }
-  const rawModelOptions = isPlainObject(source.modelOptions) ? source.modelOptions : {}
+  const rawModelOptions = isRecord(source.modelOptions) ? source.modelOptions : {}
   const rawModel = typeof source.model === "string" ? source.model : undefined
   let model = rawModel ?? ""
   let modelOptions: Subagent["modelOptions"] = {}
@@ -575,7 +547,7 @@ function normalizeSubagents<T>(
 }
 
 function normalizeStringMap<T>(value: T): Record<string, string> {
-  const obj = isPlainObject(value) ? value : null
+  const obj = isRecord(value) ? value : null
   if (!obj) return {}
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
@@ -586,7 +558,7 @@ function normalizeStringMap<T>(value: T): Record<string, string> {
 }
 
 function normalizeMcpTestResult<T>(value: T): McpServerTestResult {
-  const v = isPlainObject(value) ? value : null
+  const v = isRecord(value) ? value : null
   if (!v) return { status: "untested" as const }
   switch (v.status) {
     case "pending":
@@ -609,7 +581,7 @@ function normalizeMcpTestResult<T>(value: T): McpServerTestResult {
 }
 
 function normalizeMcpEntry<T>(value: T, warnings: string[]): McpServerConfig | null {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) return null
   const id = typeof src.id === "string" && src.id.length > 0 ? src.id : null
   const name = typeof src.name === "string" ? src.name : null
@@ -689,7 +661,7 @@ function normalizeOAuthTokenStatus<T>(value: T): OAuthTokenStatus {
 }
 
 function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry | null {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) return null
   const id = typeof src.id === "string" && src.id.trim() ? src.id.trim() : null
   const token = typeof src.token === "string" ? src.token : ""
@@ -718,7 +690,7 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
     if (typeof src.baseUrl !== "string") {
       warnings.push("claudeAuth.tokens entry baseUrl must be a string")
     } else {
-      const normalized = normalizeAnthropicBaseUrl(src.baseUrl)
+      const normalized = normalizeAnthropicBaseUrl(src.baseUrl, OAUTH_TOKEN_BASE_URL_MAX)
       if (normalized === null) {
         warnings.push("claudeAuth.tokens entry baseUrl must be an http(s) URL")
       } else {
@@ -742,7 +714,7 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
 }
 
 function normalizeClaudeLifecycle<T>(value: T, warnings: string[]): ClaudeLifecycleSettings {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver.lifecycle must be an object")
   }
@@ -764,7 +736,7 @@ function normalizeClaudeLifecycle<T>(value: T, warnings: string[]): ClaudeLifecy
 }
 
 function normalizeClaudeDriverSettings<T>(value: T, warnings: string[]): ClaudeDriverSettings {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver must be an object")
     return {
@@ -794,7 +766,7 @@ function normalizeSubagentRuntime<T>(
   subagents: readonly Subagent[],
   warnings: string[],
 ): SubagentRuntimeSettings {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (value !== undefined && value !== null && !src) {
     warnings.push("subagentRuntime must be an object")
   }
@@ -825,7 +797,7 @@ function normalizeSubagentRuntime<T>(
 
 function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) {
     warnings.push("claudeAuth must be an object")
     return { ...CLAUDE_AUTH_DEFAULTS }
@@ -929,8 +901,8 @@ function normalizeAppSettings<T>(
     chatSoundPreference: normalizeChatSoundPreference(source?.chatSoundPreference),
     chatSoundId: normalizeChatSoundId(source?.chatSoundId),
     terminal: {
-      scrollbackLines: clampNumber(source?.terminal?.scrollbackLines, DEFAULT_TERMINAL_SCROLLBACK, MIN_TERMINAL_SCROLLBACK, MAX_TERMINAL_SCROLLBACK),
-      minColumnWidth: clampNumber(source?.terminal?.minColumnWidth, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH, MIN_TERMINAL_MIN_COLUMN_WIDTH, MAX_TERMINAL_MIN_COLUMN_WIDTH),
+      scrollbackLines: clampScrollback(source?.terminal?.scrollbackLines),
+      minColumnWidth: clampTerminalMinColumnWidth(source?.terminal?.minColumnWidth),
     },
     panes: {
       tabMinWidth: clampTabMinWidth(source?.panes?.tabMinWidth),
@@ -1202,7 +1174,7 @@ function normalizeTextSnippets<T>(value: T, warnings: string[]): TextSnippet[] {
   }
   const out: TextSnippet[] = []
   for (const raw of value) {
-    if (!isPlainObject(raw)) continue
+    if (!isRecord(raw)) continue
     const entry: TextSnippet = {
       id: typeof raw.id === "string" && raw.id.length > 0 ? raw.id : randomUUID(),
       shortcut: String(raw.shortcut ?? "").trim(),
@@ -1288,7 +1260,7 @@ function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntr
   }
   const out: CustomModelEntry[] = []
   for (const raw of value) {
-    if (!isPlainObject(raw)) continue
+    if (!isRecord(raw)) continue
     const entry: CustomModelEntry = {
       id: String(raw.id ?? ""),
       label: String(raw.label ?? ""),
@@ -1424,7 +1396,7 @@ const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
 
 const MCP_CRUD: CollectionCrud<McpServerConfig, McpServerInput, McpServerPatch> = {
   create(input, current) {
-    if (isPlainObject(input) && input.transport === "stdio" && isMcpOAuthState(input.oauth) && input.oauth.enabled) {
+    if (isRecord(input) && input.transport === "stdio" && isMcpOAuthState(input.oauth) && input.oauth.enabled) {
       throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
     }
     return validatedMcpEntry(buildMcpFromInput(input), current)

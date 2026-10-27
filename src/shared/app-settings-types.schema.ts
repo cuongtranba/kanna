@@ -11,6 +11,7 @@ import type {
   SubagentRuntimeSettings,
 } from "./app-settings-types"
 import { KEYBINDING_ACTIONS } from "./app-settings-types"
+import { PACKAGE_KINDS } from "./packages/types"
 import {
   appThemePreferenceSchema,
   chatSoundIdSchema,
@@ -82,7 +83,7 @@ const packageUpdateSettingsSchema = z.object({
   checkEnabled: z.boolean(),
   checkIntervalMs: z.number(),
   autoApply: z.boolean(),
-  autoApplyKinds: z.array(z.enum(["skill", "claude-plugin", "codex-plugin"])),
+  autoApplyKinds: z.array(z.enum(PACKAGE_KINDS)),
   skillAgents: z.array(z.string()),
 })
 
@@ -90,9 +91,15 @@ function providerPreferencePatch<M extends z.ZodType>(modelOptions: M) {
   return z.object({ model: z.string(), modelOptions, planMode: z.boolean() }).partial()
 }
 
-const idPatch = <P extends z.ZodType>(patch: P) => z.object({ id: z.string(), patch })
-const idOnly = z.object({ id: z.string() })
-const idEnabled = z.object({ id: z.string(), enabled: z.boolean() })
+const entityPatchShape = <P extends z.ZodType>(patch: P) => ({
+  update: z.object({ id: z.string(), patch }).optional(),
+  delete: z.object({ id: z.string() }).optional(),
+})
+const collectionPatchShape = <I extends z.ZodType, P extends z.ZodType>(input: I, patch: P) => ({
+  create: input.optional(),
+  ...entityPatchShape(patch),
+})
+const setEnabledShape = { setEnabled: z.object({ id: z.string(), enabled: z.boolean() }).optional() }
 
 export const appSettingsPatchSchema = z.object({
   analyticsEnabled: z.boolean().optional(),
@@ -119,62 +126,33 @@ export const appSettingsPatchSchema = z.object({
   auth: authSettingsSchema.partial().optional(),
   claudeAuth: claudeAuthSettingsSchema.partial().optional(),
   uploads: uploadSettingsSchema.partial().optional(),
-  subagents: z
-    .object({
-      create: subagentInputSchema.optional(),
-      update: idPatch(subagentPatchSchema).optional(),
-      delete: idOnly.optional(),
-    })
-    .optional(),
+  subagents: z.object(collectionPatchShape(subagentInputSchema, subagentPatchSchema)).optional(),
   customMcpServers: z
     .object({
-      create: mcpServerInputSchema.optional(),
-      update: idPatch(mcpServerPatchSchema).optional(),
-      delete: idOnly.optional(),
-      setEnabled: idEnabled.optional(),
+      ...collectionPatchShape(mcpServerInputSchema, mcpServerPatchSchema),
+      ...setEnabledShape,
       setTestResult: z.object({ id: z.string(), result: mcpServerTestResultSchema }).optional(),
       setOAuthState: z.object({ id: z.string(), oauth: mcpOAuthStateSchema }).optional(),
     })
     .optional(),
   customBeacons: z
     .object({
-      update: idPatch(beaconPatchSchema).optional(),
-      delete: idOnly.optional(),
-      setEnabled: idEnabled.optional(),
+      ...entityPatchShape(beaconPatchSchema),
+      ...setEnabledShape,
       setScope: z.object({ id: z.string(), scope: beaconScopeSchema }).optional(),
       addTrustedScript: z.object({ id: z.string(), hash: z.string() }).optional(),
       removeTrustedScript: z.object({ id: z.string(), hash: z.string() }).optional(),
     })
     .optional(),
-  customModels: z
-    .object({
-      create: customModelInputSchema.optional(),
-      update: idPatch(customModelPatchSchema).optional(),
-      delete: idOnly.optional(),
-    })
-    .optional(),
+  customModels: z.object(collectionPatchShape(customModelInputSchema, customModelPatchSchema)).optional(),
   mcpSources: z
     .object({
-      create: mcpSourceInputSchema.optional(),
-      update: idPatch(mcpSourcePatchSchema).optional(),
-      delete: idOnly.optional(),
-      setEnabled: idEnabled.optional(),
+      ...collectionPatchShape(mcpSourceInputSchema, mcpSourcePatchSchema),
+      ...setEnabledShape,
     })
     .optional(),
-  customProviders: z
-    .object({
-      create: customProviderInputSchema.optional(),
-      update: idPatch(customProviderPatchSchema).optional(),
-      delete: idOnly.optional(),
-    })
-    .optional(),
-  textSnippets: z
-    .object({
-      create: textSnippetInputSchema.optional(),
-      update: idPatch(textSnippetPatchSchema).optional(),
-      delete: idOnly.optional(),
-    })
-    .optional(),
+  customProviders: z.object(collectionPatchShape(customProviderInputSchema, customProviderPatchSchema)).optional(),
+  textSnippets: z.object(collectionPatchShape(textSnippetInputSchema, textSnippetPatchSchema)).optional(),
   claudeDriver: z.object({ lifecycle: claudeLifecycleSettingsSchema.partial().optional() }).optional(),
   globalPromptAppend: z.string().optional(),
   shareDefaultTtlHours: z.number().optional(),
@@ -184,11 +162,12 @@ export const appSettingsPatchSchema = z.object({
   remoteMcp: remoteMcpSettingsSchema.partial().optional(),
   serviceBus: serviceBusSettingsPatchSchema.optional(),
   installedPlugins: z
-    .object({
-      create: z.object({ sourceDir: z.string(), id: z.string() }).optional(),
-      update: idPatch(installedPluginConfigSchema.pick({ enabled: true }).partial()).optional(),
-      delete: idOnly.optional(),
-    })
+    .object(
+      collectionPatchShape(
+        z.object({ sourceDir: z.string(), id: z.string() }),
+        installedPluginConfigSchema.pick({ enabled: true }).partial(),
+      ),
+    )
     .optional(),
 })
 

@@ -11,7 +11,6 @@ import {
 import {
   assertTrackingFileSafe,
   auditOracle,
-  decideLoopAction,
   extractOracleScriptPath,
   LOOP_SECTIONS,
   reconcileTrackingFile,
@@ -728,24 +727,6 @@ describe("assertTrackingFileSafe", () => {
   test("a tracked file with no Goal section yet is allowed", () => {
     const result = assertTrackingFileSafe("# notes\n\nfree text\n", { goal: "g", gitTracked: true, force: false })
     expect(result.ok).toBe(true)
-  })
-})
-
-describe("decideLoopAction", () => {
-  test("oracle=0 + empty next chunk → GOAL_MET", () => {
-    expect(decideLoopAction(0, "empty")).toBe("GOAL_MET")
-  })
-
-  test("oracle=0 + has_work next chunk → ORACLE_TOO_WEAK", () => {
-    expect(decideLoopAction(0, "has_work")).toBe("ORACLE_TOO_WEAK")
-  })
-
-  test("oracle=nonzero + has_work next chunk → DELEGATE", () => {
-    expect(decideLoopAction("nonzero", "has_work")).toBe("DELEGATE")
-  })
-
-  test("oracle=nonzero + empty next chunk → WRITE_CHUNK", () => {
-    expect(decideLoopAction("nonzero", "empty")).toBe("WRITE_CHUNK")
   })
 })
 

@@ -1,10 +1,10 @@
 import { z } from "zod"
-import type { McpSource, McpSourceInput, McpSourceMode, McpSourcePatch } from "./types"
+import { MCP_SOURCE_MODES, type McpSource, type McpSourceInput, type McpSourcePatch } from "./types"
 import { jsonObjectSchema } from "../genui/json-schema"
 import { inboundHandlerSchema } from "../inbound/handler.schema"
 import { assertParity } from "../type-parity"
 
-export const mcpSourceModeSchema = z.enum(["subscribe", "poll"])
+export const mcpSourceModeSchema = z.enum(MCP_SOURCE_MODES)
 
 const mcpSourceInputBaseShape = {
   name: z.string(),
@@ -15,19 +15,22 @@ const mcpSourceInputBaseShape = {
   handler: inboundHandlerSchema,
 }
 
+const subscribeFieldsShape = { mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }
+
+const pollFieldsShape = {
+  mode: z.literal("poll"),
+  tool: z.string(),
+  args: jsonObjectSchema,
+  cursorArg: z.string(),
+  cursorPath: z.string(),
+  itemsPath: z.string(),
+  itemKeyPath: z.string().nullable(),
+  intervalMs: z.number(),
+}
+
 export const mcpSourceInputSchema = z.discriminatedUnion("mode", [
-  z.object({ ...mcpSourceInputBaseShape, mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }),
-  z.object({
-    ...mcpSourceInputBaseShape,
-    mode: z.literal("poll"),
-    tool: z.string(),
-    args: jsonObjectSchema,
-    cursorArg: z.string(),
-    cursorPath: z.string(),
-    itemsPath: z.string(),
-    itemKeyPath: z.string().nullable(),
-    intervalMs: z.number(),
-  }),
+  z.object({ ...mcpSourceInputBaseShape, ...subscribeFieldsShape }),
+  z.object({ ...mcpSourceInputBaseShape, ...pollFieldsShape }),
 ])
 
 const mcpSourceBaseShape = {
@@ -43,18 +46,8 @@ const mcpSourceBaseShape = {
 }
 
 export const mcpSourceSchema = z.discriminatedUnion("mode", [
-  z.object({ ...mcpSourceBaseShape, mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }),
-  z.object({
-    ...mcpSourceBaseShape,
-    mode: z.literal("poll"),
-    tool: z.string(),
-    args: jsonObjectSchema,
-    cursorArg: z.string(),
-    cursorPath: z.string(),
-    itemsPath: z.string(),
-    itemKeyPath: z.string().nullable(),
-    intervalMs: z.number(),
-  }),
+  z.object({ ...mcpSourceBaseShape, ...subscribeFieldsShape }),
+  z.object({ ...mcpSourceBaseShape, ...pollFieldsShape }),
 ])
 
 export const mcpSourcePatchSchema = z.object({
@@ -75,7 +68,6 @@ export const mcpSourcePatchSchema = z.object({
   intervalMs: z.number().optional(),
 })
 
-assertParity<z.output<typeof mcpSourceModeSchema>, McpSourceMode>()
 assertParity<z.output<typeof mcpSourceInputSchema>, McpSourceInput>()
 assertParity<z.output<typeof mcpSourcePatchSchema>, McpSourcePatch>()
 assertParity<z.output<typeof mcpSourceSchema>, McpSource>()

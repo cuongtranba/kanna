@@ -1,5 +1,5 @@
 import { isJsonObject, type JsonObject, type JsonValue } from "../json"
-import type { NormalizedToolCall } from "../tool-call-types"
+import { isTaskStatus, type NormalizedToolCall } from "../tool-call-types"
 import {
   CHAT_TASK_EVENT_VERSION,
   nativeTaskId,
@@ -77,10 +77,30 @@ function readListedRows(raw: JsonValue): ChatTaskNativeRow[] {
     rows.push({
       nativeId,
       subject: readString(entry, "subject") ?? "",
-      status: status === "in_progress" || status === "completed" ? status : "pending",
+      status: isTaskStatus(status) ? status : "pending",
     })
   }
   return rows
+}
+
+function nativeCreatedEvent(
+  input: NativeMirrorInput,
+  taskId: string,
+  subject: string,
+  activeForm?: string,
+  description?: string,
+): ChatTaskEvent {
+  return {
+    ...base(input),
+    type: "chat_task_created",
+    taskId,
+    subject,
+    source: "native",
+    sourceToolUseId: input.toolUseId,
+    ...(activeForm ? { activeForm } : {}),
+    ...(description ? { description } : {}),
+    ...(input.originRunId !== null ? { originRunId: input.originRunId } : {}),
+  }
 }
 
 function mirrorCreate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
@@ -90,17 +110,7 @@ function mirrorCreate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
   const taskId = nativeTaskId(created.id, input.scope)
   if (input.knownTaskIds.has(taskId)) return []
   const subject = input.tool.input.subject.length > 0 ? input.tool.input.subject : created.subject
-  return [{
-    ...base(input),
-    type: "chat_task_created",
-    taskId,
-    subject,
-    source: "native",
-    sourceToolUseId: input.toolUseId,
-    ...(input.tool.input.activeForm ? { activeForm: input.tool.input.activeForm } : {}),
-    ...(input.tool.input.description ? { description: input.tool.input.description } : {}),
-    ...(input.originRunId !== null ? { originRunId: input.originRunId } : {}),
-  }]
+  return [nativeCreatedEvent(input, taskId, subject, input.tool.input.activeForm, input.tool.input.description)]
 }
 
 function mirrorUpdate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
@@ -122,16 +132,7 @@ function mirrorUpdate(input: NativeMirrorInput): readonly ChatTaskEvent[] {
   }
 
   if (!input.knownTaskIds.has(taskId)) {
-    return [{
-      ...base(input),
-      type: "chat_task_created",
-      taskId,
-      subject: input.tool.input.subject ?? rawId,
-      source: "native",
-      sourceToolUseId: input.toolUseId,
-      ...(input.tool.input.activeForm ? { activeForm: input.tool.input.activeForm } : {}),
-      ...(input.originRunId !== null ? { originRunId: input.originRunId } : {}),
-    }, {
+    return [nativeCreatedEvent(input, taskId, input.tool.input.subject ?? rawId, input.tool.input.activeForm), {
       ...base(input),
       type: "chat_task_updated",
       taskId,

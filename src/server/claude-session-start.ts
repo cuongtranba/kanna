@@ -22,7 +22,7 @@ import type { LoopSetupInput } from "./loop-template"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
 import type { McpServerConfig } from "../shared/types"
-import { KANNA_SYSTEM_PROMPT_APPEND } from "../shared/kanna-system-prompt"
+import { KANNA_SYSTEM_PROMPT_BASE } from "../shared/kanna-system-prompt"
 import {
   buildCanUseTool,
   buildClaudeEnv,
@@ -262,7 +262,7 @@ export async function startClaudeSession(args: {
         : {
             type: "preset",
             preset: "claude_code",
-            append: args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_APPEND,
+            append: args.systemPromptAppend ?? KANNA_SYSTEM_PROMPT_BASE,
           },
       settingSources: ["user", "project", "local"],
       pathToClaudeCodeExecutable: process.env.CLAUDE_EXECUTABLE?.replace(/^~(?=\/|$)/, homedir()) || undefined,

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto"
 import { toError } from "../../shared/errors"
-import { resolvePath, stringifyValue } from "../../shared/inbound/template"
-import { isJsonArray, type JsonObject, type JsonValue } from "../../shared/json"
+import { isJsonArray, jsonText, resolveJsonPath, type JsonObject, type JsonValue } from "../../shared/json"
 import { log } from "../../shared/log"
 import {
   MCP_SOURCE_DEDUPE_KEYS,
@@ -81,7 +80,7 @@ function isUnauthorized(error: Error): boolean {
 }
 
 function textAt(item: JsonValue, path: string): string {
-  return path.length > 0 ? stringifyValue(resolvePath(item, path)).trim() : ""
+  return path.length > 0 ? jsonText(resolveJsonPath(item, path)).trim() : ""
 }
 
 function initialStatus(source: McpSource, state: McpSourceStatus["state"], lastError: string | null): McpSourceStatus {
@@ -347,7 +346,7 @@ export class McpSourceRunner {
     const { cursor } = this.cursorState(source.id)
     const args = cursor === null ? source.args : { ...source.args, [source.cursorArg]: cursor }
     const result = await connection.callTool(source.tool, args)
-    const items = resolvePath(result, source.itemsPath)
+    const items = resolveJsonPath(result, source.itemsPath)
     if (items === undefined || !isJsonArray(items)) {
       throw new Error(`"${source.itemsPath}" did not resolve to an array in the ${source.tool} result`)
     }
@@ -355,7 +354,7 @@ export class McpSourceRunner {
       const key = (source.itemKeyPath ? textAt(item, source.itemKeyPath) : "") || sha256(JSON.stringify(item))
       await this.ingest(entry, server, item, key, key)
     }
-    const next = resolvePath(result, source.cursorPath)
+    const next = resolveJsonPath(result, source.cursorPath)
     if (next === undefined) return
     this.cursors = { ...this.cursors, [source.id]: { ...this.cursorState(source.id), cursor: next } }
     this.persist()

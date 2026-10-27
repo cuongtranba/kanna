@@ -1,6 +1,7 @@
-import { isPlainObject } from "./plain-object"
+import { readSettingsSection } from "./read-fields"
 
-export type CloudflareTunnelMode = "always-ask" | "auto-expose"
+export const CLOUDFLARE_TUNNEL_MODES = ["always-ask", "auto-expose"] as const
+export type CloudflareTunnelMode = (typeof CLOUDFLARE_TUNNEL_MODES)[number]
 
 export interface CloudflareTunnelSettings {
   enabled: boolean
@@ -32,35 +33,15 @@ export function normalizeCloudflareTunnelSettings<T>(
   value: T,
   warnings: string[],
 ): CloudflareTunnelSettings {
-  const source = isPlainObject(value) ? value : null
-  if (value !== undefined && !source) {
-    warnings.push("cloudflareTunnel must be an object")
+  const section = readSettingsSection(value, "cloudflareTunnel", warnings)
+  return {
+    enabled: section.boolean("enabled", CLOUDFLARE_TUNNEL_DEFAULTS.enabled),
+    cloudflaredPath: section.trimmedString("cloudflaredPath", CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath),
+    mode: section.member(
+      "mode",
+      CLOUDFLARE_TUNNEL_MODES,
+      CLOUDFLARE_TUNNEL_DEFAULTS.mode,
+      CLOUDFLARE_TUNNEL_MODES.map((mode) => `"${mode}"`).join(" or "),
+    ),
   }
-
-  const enabled =
-    typeof source?.enabled === "boolean"
-      ? source.enabled
-      : CLOUDFLARE_TUNNEL_DEFAULTS.enabled
-  if (source?.enabled !== undefined && typeof source.enabled !== "boolean") {
-    warnings.push("cloudflareTunnel.enabled must be a boolean")
-  }
-
-  const cloudflaredPath =
-    typeof source?.cloudflaredPath === "string" && source.cloudflaredPath.trim()
-      ? source.cloudflaredPath.trim()
-      : CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath
-  if (source?.cloudflaredPath !== undefined && typeof source.cloudflaredPath !== "string") {
-    warnings.push("cloudflareTunnel.cloudflaredPath must be a string")
-  }
-
-  const rawMode = source?.mode
-  const mode: CloudflareTunnelMode =
-    rawMode === "always-ask" || rawMode === "auto-expose"
-      ? rawMode
-      : CLOUDFLARE_TUNNEL_DEFAULTS.mode
-  if (source?.mode !== undefined && rawMode !== "always-ask" && rawMode !== "auto-expose") {
-    warnings.push(`cloudflareTunnel.mode must be "always-ask" or "auto-expose"`)
-  }
-
-  return { enabled, cloudflaredPath, mode }
 }

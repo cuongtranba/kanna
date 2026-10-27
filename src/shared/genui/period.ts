@@ -1,5 +1,6 @@
 import type { JsonValue } from "../json"
 import type { TimeGrain } from "./datasets"
+import { oneOf } from "../vocab"
 
 export interface TimePoint {
   year: number
@@ -15,12 +16,19 @@ export interface PeriodWindow {
   to: number
 }
 
-export type CompareMode = "previous-period" | "previous-year" | "budget" | "forecast"
+export const COMPARE_MODES = ["previous-period", "previous-year", "budget", "forecast"] as const
+export type CompareMode = (typeof COMPARE_MODES)[number]
 
 const MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
 const DAY_MS = 86_400_000
-const MONTHS_PER_UNIT: Readonly<Record<string, number>> = { months: 1, quarters: 3, years: 12 }
+const RELATIVE_UNITS = ["days", "months", "quarters", "years"] as const
+type RelativeUnit = (typeof RELATIVE_UNITS)[number]
+const isRelativeUnit = oneOf(RELATIVE_UNITS)
+const MONTHS_PER_UNIT: Readonly<Record<Exclude<RelativeUnit, "days">, number>> = { months: 1, quarters: 3, years: 12 }
+const TO_DATE_PERIODS = ["ytd", "qtd", "mtd"] as const
+type ToDatePeriod = (typeof TO_DATE_PERIODS)[number]
+const isToDatePeriod = oneOf(TO_DATE_PERIODS)
 
 function point(year: number, month: number, day: number): TimePoint | null {
   if (!Number.isInteger(year) || year < 1000 || year > 9999) return null
@@ -144,52 +152,85 @@ function fiscalYearStartIndex(anchor: TimePoint, startMonth: number): number {
 
 export type PeriodResolution = { ok: true; window: PeriodWindow | null } | { ok: false; message: string }
 
-export function resolvePeriod(spec: PeriodSpec | undefined, anchor: TimePoint | null, fiscalYearStartMonth = 1): PeriodResolution {
-  if (spec === undefined || spec === "all") return { ok: true, window: null }
-  if (typeof spec !== "string") return resolveRange(spec)
+type PeriodAst =
+  | { kind: "all" }
+  | { kind: "toDate"; period: ToDatePeriod }
+  | { kind: "relative"; count: number; unit: RelativeUnit }
+  | { kind: "fiscal"; endYear: number }
+  | { kind: "quarter"; year: number; quarter: number }
+  | { kind: "year"; year: number }
+  | { kind: "month"; text: string }
+  | { kind: "day"; text: string }
+  | { kind: "unknown" }
+
+const PERIOD_GRAMMAR_HINT = 'use all, last-12-months, ytd, qtd, mtd, fy2026, 2026, 2026-Q3, 2026-08, 2026-08-15, or {"from","to"}'
+
+function parsePeriodSpec(spec: string): PeriodAst {
   const value = spec.trim().toLowerCase()
-  const relative = /^last-(\d{1,3})-(days|months|quarters|years)$/.exec(value)
-  if (relative || value === "ytd" || value === "qtd" || value === "mtd") {
-    if (!anchor) return { ok: false, message: `period "${spec}" needs a time dimension with at least one dated row` }
-    return { ok: true, window: resolveRelative(value, relative, anchor, fiscalYearStartMonth) }
-  }
+  if (value === "all") return { kind: "all" }
+  if (isToDatePeriod(value)) return { kind: "toDate", period: value }
+  const relative = /^last-(\d{1,3})-([a-z]+)$/.exec(value)
+  const unit = relative?.[2]
+  if (relative && isRelativeUnit(unit)) return { kind: "relative", count: Number(relative[1]), unit }
   const fiscal = /^fy(\d{4})$/.exec(value)
-  if (fiscal) {
-    const endYear = Number(fiscal[1])
-    const start = (endYear - (fiscalYearStartMonth === 1 ? 0 : 1)) * 12 + (fiscalYearStartMonth - 1)
-    return { ok: true, window: monthWindow(start, start + 11) }
-  }
+  if (fiscal) return { kind: "fiscal", endYear: Number(fiscal[1]) }
   const quarter = /^(\d{4})-q([1-4])$/.exec(value)
-  if (quarter) {
-    const start = Number(quarter[1]) * 12 + (Number(quarter[2]) - 1) * 3
-    return { ok: true, window: monthWindow(start, start + 2) }
-  }
-  if (/^\d{4}$/.test(value)) {
-    const start = Number(value) * 12
-    return { ok: true, window: monthWindow(start, start + 11) }
-  }
-  if (/^\d{4}-\d{2}$/.test(value)) {
-    const parsed = parseTimeValue(value)
-    if (!parsed) return { ok: false, message: `"${spec}" is not a valid month` }
-    return { ok: true, window: monthWindow(monthIndex(parsed), monthIndex(parsed)) }
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const parsed = parseTimeValue(value)
-    if (!parsed) return { ok: false, message: `"${spec}" is not a valid date` }
-    return { ok: true, window: { unit: "day", from: dayIndex(parsed), to: dayIndex(parsed) } }
-  }
-  return { ok: false, message: `unknown period "${spec}"; use all, last-12-months, ytd, qtd, mtd, fy2026, 2026, 2026-Q3, 2026-08, 2026-08-15, or {"from","to"}` }
+  if (quarter) return { kind: "quarter", year: Number(quarter[1]), quarter: Number(quarter[2]) }
+  if (/^\d{4}$/.test(value)) return { kind: "year", year: Number(value) }
+  if (/^\d{4}-\d{2}$/.test(value)) return { kind: "month", text: value }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { kind: "day", text: value }
+  return { kind: "unknown" }
 }
 
-function resolveRelative(value: string, relative: RegExpExecArray | null, anchor: TimePoint, fiscalYearStartMonth: number): PeriodWindow {
+export function resolvePeriod(spec: PeriodSpec | undefined, anchor: TimePoint | null, fiscalYearStartMonth = 1): PeriodResolution {
+  if (spec === undefined) return { ok: true, window: null }
+  if (typeof spec !== "string") return resolveRange(spec)
+  const ast = parsePeriodSpec(spec)
+  switch (ast.kind) {
+    case "all":
+      return { ok: true, window: null }
+    case "toDate":
+    case "relative":
+      if (!anchor) return { ok: false, message: `period "${spec}" needs a time dimension with at least one dated row` }
+      return { ok: true, window: resolveRelative(ast, anchor, fiscalYearStartMonth) }
+    case "fiscal": {
+      const start = (ast.endYear - (fiscalYearStartMonth === 1 ? 0 : 1)) * 12 + (fiscalYearStartMonth - 1)
+      return { ok: true, window: monthWindow(start, start + 11) }
+    }
+    case "quarter": {
+      const start = ast.year * 12 + (ast.quarter - 1) * 3
+      return { ok: true, window: monthWindow(start, start + 2) }
+    }
+    case "year":
+      return { ok: true, window: monthWindow(ast.year * 12, ast.year * 12 + 11) }
+    case "month": {
+      const parsed = parseTimeValue(ast.text)
+      if (!parsed) return { ok: false, message: `"${spec}" is not a valid month` }
+      return { ok: true, window: monthWindow(monthIndex(parsed), monthIndex(parsed)) }
+    }
+    case "day": {
+      const parsed = parseTimeValue(ast.text)
+      if (!parsed) return { ok: false, message: `"${spec}" is not a valid date` }
+      return { ok: true, window: { unit: "day", from: dayIndex(parsed), to: dayIndex(parsed) } }
+    }
+    case "unknown":
+      return { ok: false, message: `unknown period "${spec}"; ${PERIOD_GRAMMAR_HINT}` }
+  }
+}
+
+function resolveRelative(
+  ast: Extract<PeriodAst, { kind: "toDate" | "relative" }>,
+  anchor: TimePoint,
+  fiscalYearStartMonth: number,
+): PeriodWindow {
   const anchorMonth = monthIndex(anchor)
-  if (value === "ytd") return monthWindow(fiscalYearStartIndex(anchor, fiscalYearStartMonth), anchorMonth)
-  if (value === "qtd") return monthWindow(anchorMonth - ((anchor.month - 1) % 3), anchorMonth)
-  if (value === "mtd") return monthWindow(anchorMonth, anchorMonth)
-  const count = Number(relative?.[1] ?? "1")
-  const unit = relative?.[2]
-  if (unit === "days") return { unit: "day", from: dayIndex(anchor) - count + 1, to: dayIndex(anchor) }
-  const months = count * (MONTHS_PER_UNIT[unit ?? "months"] ?? 1)
+  if (ast.kind === "toDate") {
+    if (ast.period === "ytd") return monthWindow(fiscalYearStartIndex(anchor, fiscalYearStartMonth), anchorMonth)
+    if (ast.period === "qtd") return monthWindow(anchorMonth - ((anchor.month - 1) % 3), anchorMonth)
+    return monthWindow(anchorMonth, anchorMonth)
+  }
+  if (ast.unit === "days") return { unit: "day", from: dayIndex(anchor) - ast.count + 1, to: dayIndex(anchor) }
+  const months = ast.count * MONTHS_PER_UNIT[ast.unit]
   return monthWindow(anchorMonth - months + 1, anchorMonth)
 }
 
@@ -222,27 +263,34 @@ export function shiftWindow(window: PeriodWindow, shift: ComparisonShift): Perio
   return { unit: "day", from: move(window.from), to: move(window.to) }
 }
 
-const RELATIVE_UNIT_LABELS: Readonly<Record<string, string>> = { days: "day", months: "month", quarters: "quarter", years: "year" }
-const TO_DATE_LABELS: Readonly<Record<string, string>> = { ytd: "Year to date", qtd: "Quarter to date", mtd: "Month to date", all: "All time" }
+const RELATIVE_UNIT_LABELS: Readonly<Record<RelativeUnit, string>> = { days: "day", months: "month", quarters: "quarter", years: "year" }
+const TO_DATE_LABELS: Readonly<Record<ToDatePeriod, string>> = { ytd: "Year to date", qtd: "Quarter to date", mtd: "Month to date" }
 
 export function describePeriodSpec(spec: PeriodSpec | undefined): string {
   if (spec === undefined) return "All time"
   if (typeof spec !== "string") return `${describePeriodSpec(spec.from)} – ${describePeriodSpec(spec.to)}`
-  const value = spec.trim().toLowerCase()
-  const toDate = TO_DATE_LABELS[value]
-  if (toDate) return toDate
-  const relative = /^last-(\d{1,3})-(days|months|quarters|years)$/.exec(value)
-  if (relative) {
-    const count = Number(relative[1])
-    const unit = RELATIVE_UNIT_LABELS[relative[2] ?? ""] ?? "period"
-    return count === 1 ? `Last ${unit}` : `Last ${count} ${unit}s`
+  const ast = parsePeriodSpec(spec)
+  switch (ast.kind) {
+    case "all":
+      return "All time"
+    case "toDate":
+      return TO_DATE_LABELS[ast.period]
+    case "relative": {
+      const unit = RELATIVE_UNIT_LABELS[ast.unit]
+      return ast.count === 1 ? `Last ${unit}` : `Last ${ast.count} ${unit}s`
+    }
+    case "fiscal":
+      return `FY${ast.endYear}`
+    case "quarter":
+      return bucketLabel(`${ast.year}-Q${ast.quarter}`, "quarter")
+    case "day":
+      return bucketLabel(ast.text, "day")
+    case "month":
+      return bucketLabel(ast.text, "month")
+    case "year":
+    case "unknown":
+      return spec
   }
-  const fiscal = /^fy(\d{4})$/.exec(value)
-  if (fiscal) return `FY${fiscal[1]}`
-  if (/^\d{4}-q[1-4]$/.test(value)) return bucketLabel(value.toUpperCase(), "quarter")
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return bucketLabel(value, "day")
-  if (/^\d{4}-\d{2}$/.test(value)) return bucketLabel(value, "month")
-  return spec
 }
 
 const COMPARE_LABELS: Readonly<Record<CompareMode | "none", string>> = {

@@ -1,14 +1,12 @@
-import { validateInboundTarget } from "../inbound/handler"
-import { isJsonObject, safeJsonParse, type JsonObject } from "../json"
 import {
-  MCP_SOURCE_NAME_MAX,
-  MCP_SOURCE_PATH_MAX,
-  MCP_SOURCE_REPLY_HINT_MAX,
-  MCP_SOURCE_TEMPLATE_MAX,
-  isMcpSourceMode,
-  type McpSource,
-  type McpSourceInput,
-} from "./types"
+  inboundNameErrors,
+  inboundPathErrors,
+  inboundReplyHintErrors,
+  inboundTemplateErrors,
+  validateInboundTarget,
+} from "../inbound/handler"
+import { isJsonObject, safeJsonParse, type JsonObject } from "../json"
+import { isMcpSourceMode, type McpSource, type McpSourceInput } from "./types"
 
 type McpSourceShape = McpSourceInput | McpSource
 
@@ -17,14 +15,11 @@ function nonEmpty(value: string): boolean {
 }
 
 function validateHandler(shape: McpSourceShape): string[] {
-  const errors = validateInboundTarget(shape.handler)
-  const template = shape.handler.template.trim()
-  if (template.length === 0) errors.push("Template is required")
-  if (template.length > MCP_SOURCE_TEMPLATE_MAX) errors.push(`Template must be at most ${MCP_SOURCE_TEMPLATE_MAX} characters`)
-  if (shape.handler.replyHint.length > MCP_SOURCE_REPLY_HINT_MAX) {
-    errors.push(`Reply hint must be at most ${MCP_SOURCE_REPLY_HINT_MAX} characters`)
-  }
-  return errors
+  return [
+    ...validateInboundTarget(shape.handler),
+    ...inboundTemplateErrors(shape.handler.template, { required: true }),
+    ...inboundReplyHintErrors(shape.handler.replyHint),
+  ]
 }
 
 function validateModeFields(shape: McpSourceShape): string[] {
@@ -47,16 +42,11 @@ function validateModeFields(shape: McpSourceShape): string[] {
 
 export function validateMcpSource(shape: McpSourceShape): string[] {
   const errors: string[] = []
-  const name = shape.name.trim()
-  if (name.length === 0) errors.push("Name is required")
-  if (name.length > MCP_SOURCE_NAME_MAX) errors.push(`Name must be at most ${MCP_SOURCE_NAME_MAX} characters`)
+  errors.push(...inboundNameErrors(shape.name))
   if (!nonEmpty(shape.serverId)) errors.push("An MCP server is required")
   if (!isMcpSourceMode(shape.mode)) errors.push("Mode must be subscribe or poll")
   else errors.push(...validateModeFields(shape))
-  const paths = [shape.threadKeyPath, shape.senderPath]
-  if (paths.some((path) => path.length > MCP_SOURCE_PATH_MAX)) {
-    errors.push(`Paths must be at most ${MCP_SOURCE_PATH_MAX} characters`)
-  }
+  errors.push(...inboundPathErrors([shape.threadKeyPath, shape.senderPath]))
   errors.push(...validateHandler(shape))
   return errors
 }

@@ -5,6 +5,7 @@ import type { ProcessedSystemMessage } from "./types"
 import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer, toolIcons, defaultToolIcon, getToolIcon } from "./shared"
 import { toTitleCase } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
+import { mcpToolName, parseMcpToolName } from "../../../shared/tools"
 import { createToggleStore } from "../../lib/createToggleStore"
 
 const CollapsibleSectionStore = createToggleStore("CollapsibleSection")
@@ -59,12 +60,6 @@ function PillSection({ title, items, icon, getIcon }: PillSectionProps) {
       </div>
     </CollapsibleSection>
   )
-}
-
-function parseMcpTool(name: string): { server: string; tool: string } | null {
-  const match = name.match(/^mcp__([^_]+)__(.+)$/)
-  if (!match) return null
-  return { server: match[1], tool: match[2] }
 }
 
 interface McpServerWithTools {
@@ -128,7 +123,7 @@ function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
       {open && server.tools.length > 0 && (
         <div className="flex flex-wrap gap-1.5 ml-5">
           {server.tools.map((tool) => (
-            <MetaPill key={tool} icon={getToolIcon(`mcp__${server.name}__${tool}`)}>{tool}</MetaPill>
+            <MetaPill key={tool} icon={getToolIcon(mcpToolName(server.name, tool))}>{tool}</MetaPill>
           ))}
         </div>
       )}
@@ -203,7 +198,7 @@ export function SystemMessage({ message, rawJson }: Props) {
     const core: string[] = []
 
     for (const tool of message.tools) {
-      const parsed = parseMcpTool(tool)
+      const parsed = parseMcpToolName(tool)
       if (parsed) {
         const existing = mcpToolsByServer.get(parsed.server) || []
         existing.push(parsed.tool)

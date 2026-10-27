@@ -1,8 +1,8 @@
 import { z } from "zod"
-import type { CronField, CronJobPatch, CronMode, CronSchedule } from "./types"
+import { CRON_MODES, type CronField, type CronJobPatch, type CronSchedule } from "./types"
 import { assertParity } from "../type-parity"
 
-export const cronModeSchema = z.enum(["inline", "spawn"])
+export const cronModeSchema = z.enum(CRON_MODES)
 
 export const cronFieldSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("any") }),
@@ -30,7 +30,6 @@ export const cronJobPatchSchema = z.object({
   scheduleText: z.string().optional(),
 })
 
-assertParity<z.output<typeof cronModeSchema>, CronMode>()
 assertParity<z.output<typeof cronFieldSchema>, CronField>()
 assertParity<z.output<typeof cronScheduleSchema>, CronSchedule>()
 assertParity<z.output<typeof cronJobPatchSchema>, CronJobPatch>()

@@ -9,7 +9,6 @@ import {
   CODEX_PLAN_PROGRESS_SECTION,
   KANNA_SKILL_ROSTER_LIMIT,
   KANNA_SUBAGENT_ROSTER_LIMIT,
-  KANNA_SYSTEM_PROMPT_APPEND,
   KANNA_SYSTEM_PROMPT_BASE,
   buildCodexDeveloperInstructions,
   buildKannaSystemPromptAppend,
@@ -47,10 +46,6 @@ function fakeSubagent(overrides: Partial<Subagent> = {}): Subagent {
 describe("buildKannaSystemPromptAppend", () => {
   test("returns the static base unchanged when no subagents", () => {
     expect(buildKannaSystemPromptAppend([])).toBe(KANNA_SYSTEM_PROMPT_BASE)
-  })
-
-  test("KANNA_SYSTEM_PROMPT_APPEND equals the static base for back-compat", () => {
-    expect(KANNA_SYSTEM_PROMPT_APPEND).toBe(KANNA_SYSTEM_PROMPT_BASE)
   })
 
   test("includes name, id, and description for each subagent", () => {

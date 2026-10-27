@@ -101,14 +101,17 @@ export interface BranchActionFailure {
   snapshotChanged?: boolean
 }
 
+export const GIT_SYNC_ACTIONS = ["fetch", "pull", "push", "publish"] as const
+export type GitSyncAction = (typeof GIT_SYNC_ACTIONS)[number]
+
 export type ChatSyncSuccess = BranchActionSuccess & {
-  action: "fetch" | "pull" | "push" | "publish"
+  action: GitSyncAction
   aheadCount?: number
   behindCount?: number
 }
 
 export type ChatSyncFailure = BranchActionFailure & {
-  action: "fetch" | "pull" | "push" | "publish"
+  action: GitSyncAction
 }
 
 export type ChatSyncResult = ChatSyncSuccess | ChatSyncFailure

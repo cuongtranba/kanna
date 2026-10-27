@@ -33,12 +33,12 @@ function parse(content: string): Root {
   })
 }
 
-function normalizeHeading(raw: string): string {
-  return raw.replace(/^#+\s*/, "").trim().toLowerCase()
+function stripHeadingMarks(raw: string): string {
+  return raw.replace(/^#+\s*/, "").trim()
 }
 
-function normalizeQuery(name: string): string {
-  return name.replace(/^#+\s*/, "").trim().toLowerCase()
+function normalizeHeading(raw: string): string {
+  return stripHeadingMarks(raw).toLowerCase()
 }
 
 function offset(point: { offset?: number } | undefined, fallback: number): number {
@@ -75,7 +75,7 @@ function computeSections(content: string, root: Root): Section[] {
 }
 
 function matchesAny(sec: Section, wanted: readonly string[]): boolean {
-  return wanted.some((w) => sec.normalized.startsWith(normalizeQuery(w)))
+  return wanted.some((w) => sec.normalized.startsWith(normalizeHeading(w)))
 }
 
 function firstListInSection(root: Root, sec: Section): List | null {
@@ -107,8 +107,14 @@ function renderSection(heading: string, body: string): string {
   return body.length > 0 ? `${heading}\n\n${body}\n` : `${heading}\n`
 }
 
+function appendNewSection(content: string, section: string, render: (heading: string) => string): string {
+  const heading = section.startsWith("#") ? section : `## ${section}`
+  const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n"
+  return `${content}${sep}\n${render(heading)}`
+}
+
 function findSection(sections: readonly Section[], name: string): Section | undefined {
-  const q = normalizeQuery(name)
+  const q = normalizeHeading(name)
   return sections.find((s) => s.normalized.startsWith(q))
 }
 
@@ -118,7 +124,7 @@ export const markdownDoc: StructuredDoc = {
   sections(content: string): readonly SectionInfo[] {
     const root = parse(content)
     return computeSections(content, root).map((s) => ({
-      heading: s.headingRaw.replace(/^#+\s*/, "").trim(),
+      heading: stripHeadingMarks(s.headingRaw),
       normalized: s.normalized,
       depth: s.depth,
     }))
@@ -139,7 +145,7 @@ export const markdownDoc: StructuredDoc = {
 
     const missing = wanted
       ? wanted
-          .map(normalizeQuery)
+          .map(normalizeHeading)
           .filter((w) => !sections.some((s) => s.normalized.startsWith(w)))
       : []
 
@@ -172,9 +178,7 @@ export const markdownDoc: StructuredDoc = {
     const target = findSection(sections, req.section)
 
     if (!target) {
-      const heading = req.section.startsWith("#") ? req.section : `## ${req.section}`
-      const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n"
-      return { content: `${content}${sep}\n${heading}\n\n${entry}\n`, created: true }
+      return { content: appendNewSection(content, req.section, (heading) => `${heading}\n\n${entry}\n`), created: true }
     }
 
     if ((req.position ?? "bottom") === "top") {
@@ -197,9 +201,7 @@ export const markdownDoc: StructuredDoc = {
     const target = findSection(sections, req.section)
 
     if (!target) {
-      const heading = req.section.startsWith("#") ? req.section : `## ${req.section}`
-      const sep = content.length === 0 || content.endsWith("\n") ? "" : "\n"
-      return { content: `${content}${sep}\n${renderSection(heading, body)}`, created: true }
+      return { content: appendNewSection(content, req.section, (heading) => renderSection(heading, body)), created: true }
     }
 
     const before = content.slice(0, target.bodyStart)

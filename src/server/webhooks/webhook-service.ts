@@ -1,6 +1,6 @@
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import type { BusSink } from "../service-bus/service-bus"
-import type { WebhookBody } from "../../shared/webhooks/template"
+import type { JsonValue } from "../../shared/json"
 import {
   deliverWebhook,
   type WebhookDeliveryAgent,
@@ -22,7 +22,7 @@ export class WebhookService {
     private readonly now: () => number = Date.now,
   ) {}
 
-  deliver(hook: StoredWebhook, deliveryId: string, body: WebhookBody): Promise<WebhookDeliveryResult> {
+  deliver(hook: StoredWebhook, deliveryId: string, body: JsonValue): Promise<WebhookDeliveryResult> {
     return deliverWebhook(this.store, this.agent, this.bus, this.inbox, hook, deliveryId, body, this.now())
   }
 

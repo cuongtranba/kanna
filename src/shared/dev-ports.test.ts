@@ -3,9 +3,6 @@ import {
   DEFAULT_DEV_CLIENT_PORT,
   getDefaultDevServerPort,
   parseDevArgs,
-  resolveDevPorts,
-  stripShareArg,
-  stripPortArg,
 } from "./dev-ports"
 
 describe("getDefaultDevServerPort", () => {
@@ -15,50 +12,38 @@ describe("getDefaultDevServerPort", () => {
   })
 })
 
-describe("resolveDevPorts", () => {
+describe("parseDevArgs ports and forwarded args", () => {
   test("uses default dev ports when no port override is provided", () => {
-    expect(resolveDevPorts([])).toEqual({
-      clientPort: DEFAULT_DEV_CLIENT_PORT,
-      serverPort: DEFAULT_DEV_CLIENT_PORT + 1,
-    })
+    const parsed = parseDevArgs([], "dev-machine")
+    expect([parsed.clientPort, parsed.serverPort]).toEqual([DEFAULT_DEV_CLIENT_PORT, DEFAULT_DEV_CLIENT_PORT + 1])
   })
 
   test("treats --port as the client port and derives the backend port", () => {
-    expect(resolveDevPorts(["--remote", "--port", "4000"])).toEqual({
-      clientPort: 4000,
-      serverPort: 4001,
-    })
+    const parsed = parseDevArgs(["--remote", "--port", "4000"], "dev-machine")
+    expect([parsed.clientPort, parsed.serverPort]).toEqual([4000, 4001])
   })
 
   test("uses the last provided --port value", () => {
-    expect(resolveDevPorts(["--port", "4000", "--port", "4100"])).toEqual({
-      clientPort: 4100,
-      serverPort: 4101,
-    })
+    const parsed = parseDevArgs(["--port", "4000", "--port", "4100"], "dev-machine")
+    expect([parsed.clientPort, parsed.serverPort]).toEqual([4100, 4101])
   })
 
   test("throws when --port is missing a value", () => {
-    expect(() => resolveDevPorts(["--port"])).toThrow("Missing value for --port")
-    expect(() => resolveDevPorts(["--port", "--remote"])).toThrow("Missing value for --port")
+    expect(() => parseDevArgs(["--port"], "dev-machine")).toThrow("Missing value for --port")
+    expect(() => parseDevArgs(["--port", "--remote"], "dev-machine")).toThrow("Missing value for --port")
   })
-})
 
-describe("stripPortArg", () => {
   test("removes --port and its value while preserving other args", () => {
-    expect(stripPortArg(["--remote", "--port", "4000", "--host", "dev-box"])).toEqual([
+    expect(parseDevArgs(["--remote", "--port", "4000", "--host", "dev-box"], "dev-machine").serverArgs).toEqual([
       "--remote",
       "--host",
       "dev-box",
     ])
   })
-})
 
-describe("stripShareArg", () => {
   test("removes --share and --cloudflared arguments while preserving other args", () => {
-    expect(stripShareArg(["--remote", "--share", "--cloudflared", "secret-token", "--host", "dev-box"])).toEqual([
-      "--remote",
-      "--host",
-      "dev-box",
+    expect(parseDevArgs(["--cloudflared", "secret-token", "--share", "--verbose"], "dev-machine").serverArgs).toEqual([
+      "--verbose",
     ])
   })
 })

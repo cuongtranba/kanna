@@ -83,6 +83,7 @@ export {
 } from "./protocol"
 export { DATASET_MAX_ROWS, formatForPath, rowsFromCsv, rowsFromJson, rowsFromText, type RowsParse } from "./rows"
 export {
+  COMPARE_MODES,
   bucketLabel,
   describeCompareMode,
   describePeriodSpec,
@@ -93,7 +94,6 @@ export {
 } from "./period"
 export { renderGenUIPromptSection, type GenUIPromptOptions } from "./prompt"
 export {
-  COMPARE_MODES,
   QUERY_DEFAULT_LIMIT,
   QUERY_MAX_LIMIT,
   SCENARIOS,

@@ -2,7 +2,8 @@ import { z } from "zod"
 import type { JsonObject } from "../json"
 import { isJsonObject } from "../json"
 import { GENUI_IDENTIFIER } from "./datasets"
-import { COMPARE_MODES, datasetFilterSchema, periodSpecSchema, SCENARIOS } from "./query"
+import { COMPARE_MODES } from "./period"
+import { datasetFilterSchema, periodSpecSchema, SCENARIOS } from "./query"
 import { jsonObjectSchema, jsonValueSchema } from "./json-schema"
 
 const identifier = z.string().regex(GENUI_IDENTIFIER)

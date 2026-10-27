@@ -1,12 +1,15 @@
 import { type JsonObject } from "./json"
+import { oneOf } from "./vocab"
 
 import type { AgentProvider } from "./core-types"
 import type { ClaudeModelOptions, CodexModelOptions, OpenRouterModelOptions } from "./provider-model-types"
 import type { TranscriptEntry } from "./transcript-types"
 
-export type SubagentContextScope = "previous-assistant-reply" | "full-transcript"
+export const SUBAGENT_CONTEXT_SCOPES = ["previous-assistant-reply", "full-transcript"] as const
+export type SubagentContextScope = (typeof SUBAGENT_CONTEXT_SCOPES)[number]
 
-export type SubagentTriggerMode = "auto" | "manual"
+export const SUBAGENT_TRIGGER_MODES = ["auto", "manual"] as const
+export type SubagentTriggerMode = (typeof SUBAGENT_TRIGGER_MODES)[number]
 
 export interface SubagentRestriction {
   workingDir?: string
@@ -159,10 +162,6 @@ export interface LoopProgressSnapshot {
 }
 
 
-export function isSubagentContextScope(value: string): value is SubagentContextScope {
-  return value === "previous-assistant-reply" || value === "full-transcript"
-}
+export const isSubagentContextScope = oneOf(SUBAGENT_CONTEXT_SCOPES)
 
-export function isSubagentTriggerMode(value: string): value is SubagentTriggerMode {
-  return value === "auto" || value === "manual"
-}
+export const isSubagentTriggerMode = oneOf(SUBAGENT_TRIGGER_MODES)

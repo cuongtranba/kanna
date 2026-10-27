@@ -1,24 +1,17 @@
 
 import type { PackageUpdateSettings } from "../shared/types"
-import type { PackageKind } from "../shared/packages/types"
+import { isPackageKind, type PackageKind } from "../shared/packages/types"
 import {
   PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS,
   PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
-import { isPlainObject } from "../shared/settings/plain-object"
-
-
-const VALID_PACKAGE_KINDS = new Set<string>(["skill", "claude-plugin", "codex-plugin"])
-
-function isPackageKind(value: string): value is PackageKind {
-  return VALID_PACKAGE_KINDS.has(value)
-}
+import { isRecord } from "../shared/errors"
 
 export function normalizePackageUpdateSettings<T>(value: T, warnings: string[]): PackageUpdateSettings {
   if (value === undefined || value === null) return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) {
     warnings.push("packageUpdates must be an object")
     return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }

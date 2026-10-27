@@ -5,8 +5,8 @@ import {
   OAUTH_TOKEN_BASE_URL_MAX,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   clampTokenConcurrency,
-  normalizeAnthropicBaseUrl,
 } from "../../../shared/types"
+import { normalizeAnthropicBaseUrl } from "../../../shared/anthropic-base-url"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
@@ -134,7 +134,7 @@ function TokenRow({
   const testing = rowState?.testing ?? false
   const baseUrlValue = baseUrlDrafts[entry.id] ?? entry.baseUrl ?? ""
   const baseUrlInvalid =
-    baseUrlValue.trim().length > 0 && normalizeAnthropicBaseUrl(baseUrlValue) === null
+    baseUrlValue.trim().length > 0 && normalizeAnthropicBaseUrl(baseUrlValue, OAUTH_TOKEN_BASE_URL_MAX) === null
 
   const removeKey = pendingActionKey("oauthPool.remove", entry.id)
   const toggleKey = pendingActionKey("oauthPool.toggle", entry.id)
@@ -300,7 +300,7 @@ function AddTokenForm({
   const setAddSubmitting = useOAuthTokenPoolCardStore((state) => state.setAddSubmitting)
   const resetAddForm = useOAuthTokenPoolCardStore((state) => state.resetAddForm)
 
-  const normalizedAddBaseUrl = normalizeAnthropicBaseUrl(addBaseUrl)
+  const normalizedAddBaseUrl = normalizeAnthropicBaseUrl(addBaseUrl, OAUTH_TOKEN_BASE_URL_MAX)
   const addBaseUrlInvalid = addBaseUrl.trim().length > 0 && normalizedAddBaseUrl === null
   const canSubmit =
     addLabel.trim().length > 0 && addToken.trim().length > 0 && !addBaseUrlInvalid && !addSubmitting
@@ -420,7 +420,7 @@ export function OAuthTokenPoolCard({
   const handleChangeBaseUrl = async (id: string, value: string) => {
     const entry = tokens.find((t) => t.id === id)
     if (!entry) return
-    const normalized = normalizeAnthropicBaseUrl(value)
+    const normalized = normalizeAnthropicBaseUrl(value, OAUTH_TOKEN_BASE_URL_MAX)
     if (normalized === null && value.trim().length > 0) return
     clearBaseUrlDraft(id)
     if (normalized === (entry.baseUrl ?? null)) return

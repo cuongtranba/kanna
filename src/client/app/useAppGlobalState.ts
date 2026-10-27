@@ -2,7 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useShallow } from "zustand/react/shallow"
 import { type ChatNavigatorPort } from "./chatNavigator"
-import { type AppSettingsPatch, type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateSnapshot } from "../../shared/types"
+import {
+  isAppThemePreference,
+  isChatSoundId,
+  isChatSoundPreference,
+  isDefaultProviderPreference,
+  isEditorPreset,
+  type AppSettingsPatch,
+  type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateSnapshot } from "../../shared/types"
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useNewSessionStore } from "../stores/newSessionStore"
@@ -82,26 +89,18 @@ function applyProjectCommandsSnapshotLocal(
 function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch | null {
   const patch: AppSettingsPatch = {}
   const theme = storage.getItem(LEGACY_THEME_STORAGE_KEY)
-  if (theme === "light" || theme === "dark" || theme === "system") {
+  if (isAppThemePreference(theme)) {
     patch.theme = theme
   }
 
   const chatSoundState = readPersistedZustandState(LEGACY_CHAT_SOUND_STORAGE_KEY, storage)
-  if (chatSoundState?.chatSoundPreference === "never" || chatSoundState?.chatSoundPreference === "unfocused" || chatSoundState?.chatSoundPreference === "always") {
-    patch.chatSoundPreference = chatSoundState.chatSoundPreference
+  const chatSoundPreference = chatSoundState?.chatSoundPreference
+  if (isChatSoundPreference(chatSoundPreference)) {
+    patch.chatSoundPreference = chatSoundPreference
   }
-  if (
-    chatSoundState?.chatSoundId === "blow"
-    || chatSoundState?.chatSoundId === "bottle"
-    || chatSoundState?.chatSoundId === "frog"
-    || chatSoundState?.chatSoundId === "funk"
-    || chatSoundState?.chatSoundId === "glass"
-    || chatSoundState?.chatSoundId === "ping"
-    || chatSoundState?.chatSoundId === "pop"
-    || chatSoundState?.chatSoundId === "purr"
-    || chatSoundState?.chatSoundId === "tink"
-  ) {
-    patch.chatSoundId = chatSoundState.chatSoundId
+  const chatSoundId = chatSoundState?.chatSoundId
+  if (isChatSoundId(chatSoundId)) {
+    patch.chatSoundId = chatSoundId
   }
 
   const terminalState = readPersistedZustandState(LEGACY_TERMINAL_STORAGE_KEY, storage)
@@ -114,14 +113,9 @@ function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch 
       patch.terminal.minColumnWidth = terminalState.minColumnWidth
     }
     const editorPatch: NonNullable<AppSettingsPatch["editor"]> = {}
-    if (
-      terminalState.editorPreset === "cursor"
-      || terminalState.editorPreset === "vscode"
-      || terminalState.editorPreset === "xcode"
-      || terminalState.editorPreset === "windsurf"
-      || terminalState.editorPreset === "custom"
-    ) {
-      editorPatch.preset = terminalState.editorPreset
+    const editorPreset = terminalState.editorPreset
+    if (isEditorPreset(editorPreset)) {
+      editorPatch.preset = editorPreset
     }
     if (typeof terminalState.editorCommandTemplate === "string") {
       editorPatch.commandTemplate = terminalState.editorCommandTemplate
@@ -132,8 +126,9 @@ function readLegacyBrowserSettingsPatch(storage: StoragePort): AppSettingsPatch 
   }
 
   const chatPreferencesState = readPersistedZustandState(LEGACY_CHAT_PREFERENCES_STORAGE_KEY, storage)
-  if (chatPreferencesState?.defaultProvider === "last_used" || chatPreferencesState?.defaultProvider === "claude" || chatPreferencesState?.defaultProvider === "codex") {
-    patch.defaultProvider = chatPreferencesState.defaultProvider
+  const defaultProvider = chatPreferencesState?.defaultProvider
+  if (isDefaultProviderPreference(defaultProvider)) {
+    patch.defaultProvider = defaultProvider
   }
   const legacyProviderDefaults = chatPreferencesState
     ? decodeLegacyProviderDefaults(chatPreferencesState.providerDefaults)
