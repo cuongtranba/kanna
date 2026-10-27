@@ -1,5 +1,5 @@
 
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect, vi } from "vite-plus/test"
 import { runTurn, type RunTurnDeps } from "./claude-turn-runner"
 import { buildHistoryPrimer } from "./history-primer"
 import type { ActiveTurn } from "./claude-session-state"
@@ -19,7 +19,7 @@ function streamOf(events: HarnessEvent[]): HarnessTurn {
       },
     },
     interrupt: async () => {},
-    close: mock(() => {}),
+    close: vi.fn(() => {}),
   }
 }
 
@@ -61,24 +61,24 @@ async function runSummarizeTurn(history: TranscriptEntry[], summaryChunks: strin
 
   const deps: RunTurnDeps = {
     store: {
-      setSessionTokenForProvider: mock(async () => {}),
-      getChat: mock(() => null),
-      setPendingForkSessionToken: mock(async () => {}),
-      appendMessage: mock(async (_chatId: string, e: TranscriptEntry) => { transcript.push(e) }),
-      recordTurnFailed: mock(async () => {}),
-      recordTurnFinished: mock(async () => {}),
-      recordTurnCancelled: mock(async () => {}),
+      setSessionTokenForProvider: vi.fn(async () => {}),
+      getChat: vi.fn(() => null),
+      setPendingForkSessionToken: vi.fn(async () => {}),
+      appendMessage: vi.fn(async (_chatId: string, e: TranscriptEntry) => { transcript.push(e) }),
+      recordTurnFailed: vi.fn(async () => {}),
+      recordTurnFinished: vi.fn(async () => {}),
+      recordTurnCancelled: vi.fn(async () => {}),
     } as unknown as RunTurnDeps["store"],
     activeTurns: new Map(),
     drainingStreams: new Map(),
     oauthPool: null,
-    codexLimitDetector: { detect: mock(() => null) } as unknown as RunTurnDeps["codexLimitDetector"],
-    handleLimitError: mock(async () => false),
-    emitStateChange: mock(() => {}),
-    clearDrainingStream: mock(() => {}),
-    startTurnForChat: mock(async () => {}),
-    maybeStartNextQueuedMessage: mock(async () => {}),
-    stopCodexSession: mock(() => {}),
+    codexLimitDetector: { detect: vi.fn(() => null) } as unknown as RunTurnDeps["codexLimitDetector"],
+    handleLimitError: vi.fn(async () => false),
+    emitStateChange: vi.fn(() => {}),
+    clearDrainingStream: vi.fn(() => {}),
+    startTurnForChat: vi.fn(async () => {}),
+    maybeStartNextQueuedMessage: vi.fn(async () => {}),
+    stopCodexSession: vi.fn(() => {}),
   }
 
   await runTurn(deps, active)

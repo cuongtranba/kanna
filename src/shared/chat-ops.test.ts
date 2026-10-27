@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { applyChatOps } from "./chat-ops"
 import type { ChatOp } from "./chat-ops"
 import type { ChatRuntime, ChatSnapshot, TranscriptEntry } from "./types"

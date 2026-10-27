@@ -68,6 +68,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
       - run: bun install --frozen-lockfile
 
       - run: bun run build
@@ -85,7 +90,7 @@ jobs:
         run: timeout --foreground --signal=SIGTERM --kill-after=10 420 bash scripts/ci-test-with-hang-diagnostics.sh
         env:
           GIT_TERMINAL_PROMPT: "0"
-          HANG_AFTER: "170"
+          HANG_AFTER: "300"
 
       # Non-blocking too: a failed browser install would otherwise fail the job
       # and block the publish on behalf of a smoke test that cannot block it.

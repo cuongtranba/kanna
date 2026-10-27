@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { Clock } from "../auto-continue/schedule-manager"
 import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
 import { CronScheduler } from "./scheduler"

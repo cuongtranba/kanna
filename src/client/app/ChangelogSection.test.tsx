@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ChangelogSection } from "./ChangelogSection"
 import { formatPublishedDate } from "../lib/changelog"

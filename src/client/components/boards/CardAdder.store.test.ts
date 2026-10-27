@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { selectCardDraft, useCardAdderStore } from "./CardAdder.store"
 
 const state = () => useCardAdderStore.getState()

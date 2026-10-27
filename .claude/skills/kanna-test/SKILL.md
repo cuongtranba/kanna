@@ -1,6 +1,6 @@
 ---
 name: kanna-test
-description: Writes tests the Kanna way and verifies a change against the gates that block merges — bun tests, ESLint, ast-grep, the design gate, and the defect-count ratchets. Use when writing or changing a test, when about to run tests or report work as done, when a test passes locally but fails on CI, when a test reaches for mock(), spyOn, mock.module, a Date.now / fetch / window.confirm / console / process.env patch, a sleep, .skip or `as unknown as`, when ESLint rejects node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / an empty .catch, when ast-grep rejects a hook argument, a store selector, useState, raw fetch or WebSocket, or a raw timer/DOM global, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears.
+description: Writes tests the Kanna way and verifies a change against the merge gates: Vitest through vp test under Bun, Oxlint through vp lint, ast-grep, the design gate and the defect-count ratchets. Use when writing or changing a test, when about to run tests or report work as done, when a test passes locally but fails on CI, when a test reaches for vi.fn, vi.mock, a Date.now / fetch / console / process.env patch, a sleep, .skip or `as unknown as`, when lint rejects node:fs / process.env / a raw hex color / backdrop-blur / a native title / no-floating-promises / no-misused-promises / an empty .catch, when ast-grep rejects a hook argument, a store selector, useState, raw fetch or WebSocket, or a raw timer/DOM global, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when a test file reports "(0 test)" with "Spread syntax requires ...iterable", when Vitest says "Invalid Chai property: toStartWith", or when React error #185 "Maximum update depth exceeded" appears.
 user-invocable: false
 ---
 
@@ -14,29 +14,45 @@ Several gates fail in ways that point at the wrong file, or only on CI.
 - Commands
 - Verification workflow
 - Writing a test
+- Vitest under Bun facts
 - React roots, subprocesses, and module mocks
 - Gate reference ([references/gates.md](references/gates.md))
 
 ## Commands
 
 ```bash
-bun run test                                     # never bare `bun test`
+bun run test                                     # bun --bun vp test run; never bare `bun test`
 bun run test <file>.test.ts                      # one suite while iterating
-bun run typecheck                                # TS7 by explicit path, never bare tsc
-bun run lint && bun run lint:comments            # ESLint gates + the no-comments rule
+bun run typecheck                                # vp check --no-lint (tsgolint); never bare tsc
+bun run lint && bun run lint:comments            # vp lint --deny-warnings (Oxlint) + the no-comments rule
 bun run lint:usestate                            # every ast-grep rule in rules/ (CI runs this)
 bunx ast-grep test                               # rule fixtures in rule-tests/ (local only; CI does not run it)
 bun run check:arch                               # architecture and test-style ratchets
+bun run lint:limits                              # proves each complexity ceiling is still tight
 ```
 
-`bun run test` is `bun test --conditions production --timeout 30000`, the flags CI
-uses; a bare `bun test` drops both. Two TypeScript packages ship a `tsc` binary,
-so `bunx tsc` resolves ambiguously. `bun run verify:client-arch`
-chains ast-grep, lint, typecheck, and test for client work.
+`bun run test` is Vitest 5 through Vite+, run INSIDE Bun: the `--bun` is not optional
+because server code uses `bun:sqlite`, `Bun.serve`, `Bun.Terminal` and `Bun.spawn`.
+`bun:test` is not importable; test files import `describe`/`test`/`expect`/`vi`/hooks
+from `"vite-plus/test"` (there are no globals). A bare `bun test` runs the wrong runner.
+`bun run verify:client-arch` chains ast-grep, lint, typecheck, and test for client work.
+
+Type checking is tsgolint inside the Oxlint that `vite-plus` bundles. `typescript` 6.x
+stays installed only for its classic JS API (`scripts/comment-scan.ts` and two server
+tests), so a bare `tsc` is the wrong compiler. Lint rules live in `lint.config.ts`
+(pure data): bare names are native Oxlint rules, `typescript/` and `react-hooks/` are
+native plugins, and `eslint-js/` runs the real ESLint rule through
+`oxlint-plugin-eslint`, which is how the `no-restricted-syntax` AST gates and the four
+complexity ceilings work. Suppress with `oxlint-disable` or `eslint-disable`, both
+honoured, with the reason after `--`; the seal and design gates admit no suppression.
 
 Scope runs to what changed while iterating. A full-suite run from a subagent while
 other agents share the host exhausts it; run the full suite once, from the main
-agent, before pushing.
+agent, before pushing. Vitest runs one worker per file at cores minus one. Suites that
+spawn real shells, PTYs, `claude`/`codex` CLIs or MCP stubs (`terminal-manager`,
+`mcp-validator`, `package-inventory-io.adapter`, `workflow-watch-io.adapter`) time out
+on a saturated host: try `VITEST_MAX_WORKERS=3`, which mirrors a 4-vCPU CI runner,
+before suspecting a test.
 
 ## Verification workflow
 
@@ -66,11 +82,12 @@ fail. No answer means no test.
   third-party behavior directly.
 - **No mocks.** Pass a real, in-memory, or deterministic fake through a parameter
   that defaults to the production value, or through an existing deps or `dom`
-  object. A callback recorder is a plain array the fake pushes into, not `mock()`.
+  object. A callback recorder is a plain array the fake pushes into, not `vi.fn()`.
   This is what the side-effect seal buys: pure domain code takes plain values.
 - **No global patches.** Do not reassign `Date.now`, `fetch`, `window.confirm`,
-  `console.*`, or `process.env`. Every test file shares one bun process, so a
-  failure before the restore line leaks the patch into whichever test runs next.
+  `console.*`, or `process.env`. A
+  failure before the restore line leaks the patch into whichever test in the file
+  runs next.
   Inject the clock, dialog, logger, fetch, or environment instead.
 - **No sleeps.** Await the promise that produces the state, or poll for the public
   state with a timeout. A fixed delay is flaky on CI and slow everywhere else.
@@ -102,38 +119,66 @@ test("drops contributions with no id", async () => {
 A `check:arch` breach (including the test-style `TEST_PATTERN_BUDGETS`) is read
 and fixed per `.claude/skills/kanna-design/SKILL.md`.
 
+## Vitest under Bun: facts that cost an investigation
+
+Config is the `test` block of `vite.config.ts`; `testTimeout` and `hookTimeout` are 30s
+there (not a CLI flag), so a slower test gets an explicit timeout
+(`test(name, fn, 90_000)`).
+
+- **`import.meta.dir` is `undefined`** under Vitest's module runner. Use
+  `import.meta.dirname` (Bun supports it), in production files too: a file that reads
+  `import.meta.dir` cannot be imported by a test.
+- **Bun-only matchers do not exist.** `toStartWith`, `toEndWith`, `toBeString` and
+  `toBeNumber` fail with `Invalid Chai property`; use an anchored `toMatch` or
+  `toBeTypeOf`. `expect(...).rejects` must be awaited, or Vitest fails the test. `%p`
+  is not a `test.each` placeholder; use `%o` or `%s`.
+- **A Lexical import cycle looks like `(0 test)`** plus `TypeError: Spread syntax
+  requires ...iterable not be null or undefined`. A module-level
+  `const NODES = [...KANNA_MESSAGE_NODES]` spreads an export the cycle has not
+  initialised yet. Make it lazy, as `renderMessage.tsx` does, rather than reordering
+  imports.
+- **The `production` export condition is test-mode only.** Lexical 0.45's dev ESM build
+  has a circular-dependency TDZ, so `resolve.conditions` and `ssr.resolve` carry
+  `production` when `mode === "test"`. Setting it unconditionally changes the client
+  build; `bun run build:client` + `bun run check:bundle` must report the same gzip bytes.
+- **`blob:` URLs are external** (`server.deps.external`): plugin tests `import()` a
+  `blob:` URL that only Bun's native loader resolves.
+- **Keep the default `sequence.hooks` (`"stack"`).** `afterEach` hooks run in REVERSE
+  registration order, so the sweep in `scripts/test-setup.ts` runs after every hook a
+  test file registers. `"list"` fires the sweep first and fails tests that clean up.
+- **`tsconfig` is pinned to the root one in test mode**, because `wiki/` extends a
+  config that only exists inside `wiki/node_modules`.
+
 ## React roots, subprocesses, and module mocks
 
-**Unmount every React root.** happy-dom gives the process one document, and the
-preload wipes `document.body` after each test. A root left mounted, with any
-portal it opened, later throws `removeChild: The node to be removed is not a child
-of this node` against whichever test is running then, often in another file and
-only in CI's file order. Call `root.unmount()`, not just `container.remove()`.
-The `afterEach` sweep fails the test that leaked and names the nodes; it reports
-only React-owned leftovers, since Lexical's typeahead appends a menu to
-`document.body` that nothing can commit against later. Mount components with
+**Unmount every React root.** happy-dom gives the worker one document, and
+`scripts/test-setup.ts` wipes `document.body` after each test. A root left mounted,
+with any portal it opened, later throws `removeChild: The node to be removed is not a
+child of this node` against whichever test is running then. Call `root.unmount()`, not
+just `container.remove()`. The `afterEach` sweep fails the test that leaked and names
+the nodes; it reports only React-owned leftovers, since Lexical's typeahead appends a
+menu to `document.body` that nothing can commit against later. Mount components with
 store-writing effects through `renderForLoopCheck` (`src/client/lib/testing/`): it
-unmounts roots whose callers skipped its `cleanup` via the teardown registry the
-preload publishes on `globalThis.__kannaDomTeardowns`. A helper cannot own an
-`afterEach` for this, because bun runs hooks in registration order and the
-preload's sweep registers first.
+unmounts roots whose callers skipped its `cleanup` via the teardown registry the setup
+file publishes on `globalThis.__kannaDomTeardowns`. A helper cannot own an `afterEach`
+for this, because the setup file's sweep must run after every hook a test registers.
 
 **Subprocess-spawning tests** need `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0`,
-so a hung credential prompt cannot eat the 30s timeout `bun run test` sets.
+so a hung credential prompt cannot eat the 30s timeout from `vite.config.ts`.
 
-**`mock.module` is banned.** It replaces an entry in bun's process-wide module
-registry and nothing restores it when the file ends (`mock.restore()` covers
-functions, not modules). If the mock registers before the real module loads, the
-registry holds only the factory's exports, and the next file that imports a
-missing one dies with `SyntaxError: Export named '…' not found in module`,
-reported against that innocent file and only in CI's ext4 file order. A mock in
-`usePluginContributions.test.tsx` did exactly that and blocked the v1.58.0 publish
-(#1141). Inject the dependency instead (the shape above).
-`src/ops/testing/module-mock-guard.test.ts` fails any mock outside
-`LEGACY_MODULE_MOCKS`; that list only shrinks, so converting a file to injection
-deletes its entry in the same PR. The one sanctioned module patch is
-`scripts/test-preload.ts`'s `node:fs` shim: it loads before every test file and
-spreads the real module, so it cannot create order dependence.
+**`vi.mock` and `vi.doMock` are banned.** A module mock substitutes the module for
+every importer in the file and keeps passing when the real dependency breaks. Under the
+old `bun test` runner `mock.module` also rewrote the process-wide registry and killed
+unrelated suites in CI's file order, which blocked the v1.58.0 publish (#1141); Vitest
+isolates each file, so that is historical, but the policy stays. Inject the dependency
+instead (the shape above). `src/ops/testing/module-mock-guard.test.ts` fails any mock
+outside `LEGACY_MODULE_MOCKS`; that list only shrinks, so converting a file to
+injection deletes its entry in the same PR. The one sanctioned module patch is the
+`node:fs` watch shim in `scripts/test-setup.ts`, armed only by `KANNA_WATCH_LEAK=1`: it
+runs before every test file and spreads the real module, so it cannot create order
+dependence. Check it with
+`KANNA_WATCH_LEAK=1 bun run test src/server/workflow-watch-io.adapter.test.ts` and look
+for `[watch-leak] detector armed` on stderr.
 
 ## Gate reference
 

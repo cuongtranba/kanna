@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { PendingToolSlots, discardedToolResult, type ParkedTool } from "./pending-tool-slot"
 import type { NormalizedToolCall } from "../shared/types"
 import type { JsonValue } from "../shared/json"

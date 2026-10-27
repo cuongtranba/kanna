@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { HydratedTranscriptMessage } from "../../shared/transcript-types"
 import { buildResolvedTranscriptRows } from "./KannaTranscript"
 import { NO_LATEST_TOOL_IDS } from "./derived"
@@ -86,7 +86,7 @@ describe("TRANSCRIPT_GAP_CLASS", () => {
   test("covers every gap the table can produce", () => {
     for (const above of [...ALL_TONES, null]) {
       for (const below of ALL_TONES) {
-        expect(TRANSCRIPT_GAP_CLASS[getTranscriptGapAboveForTones(above, below)]).toBeString()
+        expect(TRANSCRIPT_GAP_CLASS[getTranscriptGapAboveForTones(above, below)]).toBeTypeOf("string")
       }
     }
   })
@@ -172,7 +172,7 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
       userPrompt("u2"),
       assistantText("a2"),
     ])
-    for (const gap of gaps) expect(gap).toBeString()
+    for (const gap of gaps) expect(gap).toBeTypeOf("string")
   })
 })
 

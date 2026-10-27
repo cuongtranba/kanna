@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { UploadedAttachment } from "../../../shared/types"
 import { makeFakeCommandPort } from "../../adapters/testing/makeFakePorts"
 import { getClipboardImageFiles } from "../lexical/plugins/PasteImagePlugin"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { moveCardInView, moveColumnInView } from "./optimistic"
 import type { CardMoveRequest } from "./dnd"
 import type { BoardViewSnapshot, Card } from "../../../shared/boards/types"

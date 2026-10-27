@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { HEADING_CLASS_MAP, kannaEditorTheme } from "./config"
 
 describe("Lexical heading className map", () => {

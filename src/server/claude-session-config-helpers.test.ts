@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect, vi } from "vite-plus/test"
 import {
   getEnabledCustomMcpServers,
   buildOAuthBearers,
@@ -66,7 +66,7 @@ describe("getEnabledCustomMcpServers", () => {
 
 describe("buildOAuthBearers", () => {
   test("skips stdio servers", async () => {
-    const ensureFreshToken = mock(async () => "token")
+    const ensureFreshToken = vi.fn(async () => "token")
     const deps = makeDeps({ ensureFreshToken })
     const stdioServer = makeServer({ transport: "stdio", command: "node", args: [], env: {} })
     const result = await buildOAuthBearers(deps, [stdioServer as McpServerConfig])
@@ -75,7 +75,7 @@ describe("buildOAuthBearers", () => {
   })
 
   test("skips unauthenticated servers", async () => {
-    const ensureFreshToken = mock(async () => "token")
+    const ensureFreshToken = vi.fn(async () => "token")
     const unauthOauth: McpOAuthState = { enabled: true, status: "unauthenticated" }
     const server = makeServer({ oauth: unauthOauth })
     const deps = makeDeps({ ensureFreshToken })
@@ -85,7 +85,7 @@ describe("buildOAuthBearers", () => {
   })
 
   test("fetches token for authenticated network servers and stores by id", async () => {
-    const ensureFreshToken = mock(async () => "bearer-xyz")
+    const ensureFreshToken = vi.fn(async () => "bearer-xyz")
     const authOauth: McpOAuthState = { enabled: true, status: "authenticated" }
     const server = makeServer({ id: "srv-auth", oauth: authOauth })
     const deps = makeDeps({ ensureFreshToken })
@@ -115,7 +115,7 @@ describe("buildOAuthBearers", () => {
     const authOauth: McpOAuthState = { enabled: true, status: "authenticated" }
     const bad = makeServer({ id: "bad", oauth: authOauth })
     const good = makeServer({ id: "good", oauth: authOauth, name: "good-server" })
-    const ensureFreshToken = mock(async (s: McpServerConfig) => {
+    const ensureFreshToken = vi.fn(async (s: McpServerConfig) => {
       if (s.id === "bad") throw new Error("refresh failed")
       return "good-token"
     })

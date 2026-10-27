@@ -1,13 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
-import { measureDuplication, measureModules, measurePatterns, measureTestSources, readEslintLimits } from "./budget-scan.adapter"
+import { measureDuplication, measureModules, measurePatterns, measureTestSources, readLintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
-  checkEslintLimits,
+  checkLintLimits,
   checkPatternBudget,
   COUNT_BUDGETS,
-  ESLINT_LIMIT_PINS,
+  LINT_LIMIT_PINS,
   formatBreach,
   MODULE_ALLOWANCES,
   MODULE_LINE_THRESHOLD,
@@ -107,7 +107,7 @@ describe("checkPatternBudget", () => {
   })
 })
 
-describe("checkEslintLimits", () => {
+describe("checkLintLimits", () => {
   const pins = [
     { rule: "complexity", max: 141, issue: 893, rationale: "r" },
     { rule: "max-params", max: 12, issue: 892, rationale: "r" },
@@ -115,26 +115,26 @@ describe("checkEslintLimits", () => {
   const configured = (entries: Record<string, number>) => new Map(Object.entries(entries))
 
   test("accepts ceilings sitting exactly on their pins", () => {
-    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12 }), pins)).toEqual([])
+    expect(checkLintLimits(configured({ complexity: 141, "max-params": 12 }), pins)).toEqual([])
   })
 
   test("rejects a raised ceiling", () => {
-    expect(checkEslintLimits(configured({ complexity: 150, "max-params": 12 }), pins))
+    expect(checkLintLimits(configured({ complexity: 150, "max-params": 12 }), pins))
       .toEqual([{ kind: "limit_raised", rule: "complexity", max: 141, actual: 150, issue: 893 }])
   })
 
   test("rejects a lowered ceiling whose pin was not lowered with it", () => {
-    expect(checkEslintLimits(configured({ complexity: 100, "max-params": 12 }), pins))
+    expect(checkLintLimits(configured({ complexity: 100, "max-params": 12 }), pins))
       .toEqual([{ kind: "limit_slack", rule: "complexity", max: 141, actual: 100, issue: 893 }])
   })
 
   test("rejects a configured limit rule that nothing pins", () => {
-    expect(checkEslintLimits(configured({ complexity: 141, "max-params": 12, "max-lines": 500 }), pins))
+    expect(checkLintLimits(configured({ complexity: 141, "max-params": 12, "max-lines": 500 }), pins))
       .toEqual([{ kind: "limit_unpinned", rule: "max-lines", actual: 500 }])
   })
 
-  test("rejects a pin whose rule eslint no longer configures, rather than passing vacuously", () => {
-    expect(checkEslintLimits(configured({ complexity: 141 }), pins))
+  test("rejects a pin whose rule the lint config no longer sets, rather than passing vacuously", () => {
+    expect(checkLintLimits(configured({ complexity: 141 }), pins))
       .toEqual([{ kind: "limit_unconfigured", rule: "max-params" }])
   })
 
@@ -166,7 +166,7 @@ describe("formatBreach", () => {
 })
 
 describe("the repository satisfies its architecture budget", () => {
-  const root = path.resolve(import.meta.dir, "../../..")
+  const root = path.resolve(import.meta.dirname, "../../..")
   const modules = measureModules(root)
   const patterns = measurePatterns(root, modules)
 
@@ -180,9 +180,9 @@ describe("the repository satisfies its architecture budget", () => {
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
-  test("every ESLint ceiling equals its pin, so a raised limit is a build failure", async () => {
-    const configured = await readEslintLimits(root, ESLINT_LIMIT_PINS.map((p) => p.rule))
-    const breaches = checkEslintLimits(configured)
+  test("every lint ceiling equals its pin, so a raised limit is a build failure", () => {
+    const configured = readLintLimits(LINT_LIMIT_PINS.map((p) => p.rule))
+    const breaches = checkLintLimits(configured)
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
@@ -274,9 +274,9 @@ describe("the manifest itself", () => {
     const budget = TEST_PATTERN_BUDGETS.find((b) => b.id === "test-mock-functions")
     expect(budget).toBeDefined()
     const expression = new RegExp(budget?.pattern ?? "")
-    expect(expression.test("  const onSave = mock(async () => {})")).toBe(true)
-    expect(expression.test("  const spy = spyOn(console, \"error\")")).toBe(true)
-    expect(expression.test(`${"mock"}.module("./x", () => ({}))`)).toBe(false)
+    expect(expression.test("  const onSave = vi.fn(async () => {})")).toBe(true)
+    expect(expression.test("  const spy = vi.spyOn(console, \"error\")")).toBe(true)
+    expect(expression.test(`${"vi"}.mock("./x", () => ({}))`)).toBe(false)
     expect(expression.test("  expect(onSave.mock.calls).toHaveLength(1)")).toBe(false)
   })
 

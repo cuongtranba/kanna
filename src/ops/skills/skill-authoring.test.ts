@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { lstatSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const SKILLS_ROOT = join(import.meta.dir, "../../../.claude/skills")
+const SKILLS_ROOT = join(import.meta.dirname, "../../../.claude/skills")
 
 const BODY_LINE_LIMIT = 500
 const DESCRIPTION_CHAR_LIMIT = 1024

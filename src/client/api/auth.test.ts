@@ -1,5 +1,5 @@
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { fetchAuthStatus, postAuthLogin, postAuthLogout } from "./auth"
 import { makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
 

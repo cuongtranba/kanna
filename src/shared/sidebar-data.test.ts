@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { EMPTY_CHAT_ACTIVITY, type SidebarChatRow, type SidebarData, type SidebarProjectGroup } from "./types"
 import { allChatRows, allProjectGroups } from "./sidebar-data"
 

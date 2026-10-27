@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createClaudeHarnessStream } from "./claude-harness-stream"
 import type { ClaudeRawSdkMessage } from "./claude-message-normalizer"
 import type { HarnessEvent } from "./harness-types"

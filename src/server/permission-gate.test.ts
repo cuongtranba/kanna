@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { policy } from "./permission-gate"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { BeaconConfig } from "../shared/beacon-config"

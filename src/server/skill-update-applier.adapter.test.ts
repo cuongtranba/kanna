@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { buildRepinSkillCommand } from "./skill-update-applier.adapter"
 
 describe("buildRepinSkillCommand", () => {

@@ -1,6 +1,6 @@
 
 
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { spawnClaudeTurn, type SpawnClaudeTurnArgs, type SpawnClaudeTurnDeps } from "./claude-session-spawner"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import { POLICY_DEFAULT } from "../shared/permission-policy"

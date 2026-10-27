@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { OAuthTokenPool } from "./oauth-token-pool"
 import type { OAuthTokenEntry } from "../../shared/types"
 

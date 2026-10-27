@@ -1,7 +1,8 @@
-import { defineConfig } from "vite"
+import { defineConfig } from "vite-plus"
 import react from "@vitejs/plugin-react"
 import { getDefaultDevServerPort } from "./src/shared/dev-ports"
 import { DEV_CLIENT_PORT } from "./src/shared/ports"
+import { lintConfig } from "./lint.config"
 
 function getAllowedHosts() {
   const defaults = ["localhost", "127.0.0.1", "0.0.0.0"]
@@ -31,8 +32,12 @@ function getBackendPort() {
 const backendTargetHost = getBackendTargetHost()
 const backendPort = getBackendPort()
 
-export default defineConfig({
+const PRODUCTION_CONDITIONS = ["production"]
+
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  lint: lintConfig,
+  check: { fmt: false },
   server: {
     host: "0.0.0.0",
     port: DEV_CLIENT_PORT,
@@ -54,8 +59,22 @@ export default defineConfig({
     },
     allowedHosts: getAllowedHosts(),
   },
+  ...(mode === "test"
+    ? {
+        tsconfig: "./tsconfig.json",
+        resolve: { conditions: PRODUCTION_CONDITIONS },
+        ssr: { resolve: { conditions: PRODUCTION_CONDITIONS, externalConditions: PRODUCTION_CONDITIONS } },
+      }
+    : {}),
+  test: {
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts", "wiki/scripts/**/*.test.ts"],
+    setupFiles: ["./scripts/test-setup.ts"],
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    server: { deps: { external: [/^blob:/] } },
+  },
   build: {
     outDir: "dist/client",
     emptyOutDir: true,
   },
-})
+}))

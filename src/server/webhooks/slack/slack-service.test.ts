@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { timestamped } from "../../../shared/transcript-entry"
 import {
   createSlackHookHarness,
@@ -55,7 +55,7 @@ test("a finished turn posts its last assistant message into the thread and swaps
 test.each([
   [{ kind: "failed", error: "model overloaded" } as const, "Kanna turn failed: model overloaded"],
   [{ kind: "cancelled" } as const, "Cancelled in Kanna."],
-])("a %p turn posts a one-line status and marks the message with a cross", async (outcome, text) => {
+])("a %o turn posts a one-line status and marks the message with a cross", async (outcome, text) => {
   const { harness, chatId } = await mentioned()
   await runSlackTurn(harness, chatId, ["partial work"], outcome)
   expect(posts(harness).map((call) => call.markdown)).toEqual([text])

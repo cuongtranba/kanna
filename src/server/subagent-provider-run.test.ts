@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { JsonValue } from "../shared/json"
 import type { ClaudeModelOptions, CustomModelEntry, Subagent, TranscriptEntry } from "../shared/types"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"

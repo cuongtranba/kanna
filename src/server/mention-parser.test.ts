@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { Subagent } from "../shared/types"
 import { parseMentions } from "./mention-parser"
 

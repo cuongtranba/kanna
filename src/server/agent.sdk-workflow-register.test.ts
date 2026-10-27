@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
 import { AgentCoordinator } from "./agent-coordinator"

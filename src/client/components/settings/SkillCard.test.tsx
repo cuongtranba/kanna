@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { InstalledSkillCard } from "./SkillCard"
 import type { InstalledSkillSummary } from "../../../shared/types"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "./types"
 
 describe("session-share types", () => {

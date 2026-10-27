@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import {
   DEFAULT_RIGHT_SIDEBAR_SIZE,
   DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,

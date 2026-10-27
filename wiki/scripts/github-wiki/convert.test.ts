@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, test } from 'vite-plus/test'
 import path from 'node:path'
 import { buildWikiPages, WIKI_ROOT } from './build'
 import { convertWiki } from './convert'

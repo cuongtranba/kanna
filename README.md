@@ -132,8 +132,8 @@ git clone https://github.com/cuongtranba/kanna.git && cd kanna
 bun install
 bun run setup:hooks   # gitleaks + commit-message hooks, once per clone
 bun run dev           # Vite client on :5174, server on :5175
-bun run check         # typecheck, lint, build
-bun run test          # never bare `bun test`
+bun run check         # lint + types, comments, build
+bun run test          # Vitest via vp test, run under Bun
 ```
 
 Start with [`CLAUDE.md`](CLAUDE.md) and the [contributing guide](https://kanna-wiki.lowbit.link/guides/contributing/overview/). The server is event-sourced, IO is sealed behind `*.adapter.ts` files, and the lint gates enforce both; the [architecture page](https://kanna-wiki.lowbit.link/guides/contributing/architecture/) explains the shape. Releases are cut by release-please; see [Releasing](https://kanna-wiki.lowbit.link/guides/contributing/releasing/).

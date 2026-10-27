@@ -28,7 +28,7 @@ export type BuildPluginBundlesResult =
 
 export const PLUGIN_BUILD_RESULT_MARKER = "__KANNA_PLUGIN_BUILD_RESULT__"
 
-const BUILD_CHILD_PATH = join(import.meta.dir, "plugin-build-child.adapter.ts")
+const BUILD_CHILD_PATH = join(import.meta.dirname, "plugin-build-child.adapter.ts")
 
 const BUILD_CHILD_DEADLINE_MS = 20_000
 

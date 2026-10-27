@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { startProcessVitalsSampler } from "./process-vitals-sampler.adapter"
 
 const WARM_UP_TICKS = 3

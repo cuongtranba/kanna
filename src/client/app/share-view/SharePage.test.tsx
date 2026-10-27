@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { createElement } from "react"
 import { act } from "react"
 import { createRoot } from "react-dom/client"

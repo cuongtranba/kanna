@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { createGroup, createPane, createTab, type PaneLayout } from "../../lib/paneTree"
 import { SplitContainer } from "./SplitContainer"

@@ -1,5 +1,5 @@
 import "../lib/testing/setupHappyDom"
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { domAdapter } from "./dom.adapter"
 
 function setTouchDevice(on: boolean) {

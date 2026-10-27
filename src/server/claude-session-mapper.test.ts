@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { JsonObject } from "../shared/json"
 import { decodeClaudeSessionRecord } from "./claude-session-decode"
 import { mapClaudeRecordsToEntries, sourceUuidOfEntryId } from "./claude-session-mapper"

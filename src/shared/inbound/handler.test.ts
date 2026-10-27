@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { decodeInboundModelChoice, encodeInboundModelChoice } from "./handler"
 
 test("a custom endpoint model id with a colon survives the encode and decode round trip", () => {

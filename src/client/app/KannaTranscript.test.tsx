@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import React from "react"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"

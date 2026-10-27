@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, test } from "vite-plus/test"
 import { act } from "react"
 import "../../../client/lib/testing/setupHappyDom"
 import { renderForLoopCheck } from "../../../client/lib/testing/renderForLoopCheck"

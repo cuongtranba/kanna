@@ -1,6 +1,6 @@
 
 
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { runClaudeSession } from "./claude-session-runner"
 import type { RunClaudeSessionDeps } from "./claude-session-runner"
 import { ClaudeSessionState } from "./claude-session-state"

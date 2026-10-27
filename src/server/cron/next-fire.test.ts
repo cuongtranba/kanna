@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { nextFireAt } from "./next-fire"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
 import type { CronSchedule } from "../../shared/cron/types"

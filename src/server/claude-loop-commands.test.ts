@@ -1,5 +1,5 @@
 
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import type { ClaudeSessionState } from "./claude-session-state"

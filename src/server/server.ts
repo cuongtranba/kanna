@@ -629,7 +629,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, refreshDiscovery, beacon, analytics } = services
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
-  const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
+  const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
   const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets })
 
   const port = options.port ?? 3210

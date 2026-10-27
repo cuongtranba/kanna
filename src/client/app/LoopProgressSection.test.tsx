@@ -1,5 +1,5 @@
 import "../lib/testing/setupHappyDom"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { LoopProgressSection } from "./LoopProgressSection"

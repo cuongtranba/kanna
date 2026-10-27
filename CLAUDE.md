@@ -9,11 +9,12 @@ the end of this file auto-trigger on their own.
 
 ```bash
 bun install
-bun run dev            # vite client :5174 + server :5175
+bun run dev            # Vite+ client (`vp dev`) :5174 + server :5175; needs Node 22.18+ on PATH
 bun run start          # single-process server, production shape
-bun run check          # typecheck → lint → lint:comments → build:client → check:bundle
-bun run test [file]    # always this, never bare `bun test`: it carries CI's flags
-bun run typecheck      # TS7 by explicit path; never bare tsc or bunx tsc (two tsc bins installed)
+bun run check          # vp check (lint + types) → lint:comments → build:client → check:bundle
+bun run test [file]    # bun --bun vp test run (Vitest under Bun); never bare `bun test`
+bun run lint           # vp lint --deny-warnings (Oxlint, rules in lint.config.ts)
+bun run typecheck      # vp check --no-lint (tsgolint); never bare tsc
 bun run check:arch     # architecture and test-style ratchets
 ```
 
@@ -68,16 +69,17 @@ string. The rules every change follows:
   JSON is `JsonValue`/`JsonObject` from `src/shared/json.ts`, narrowed with `isJsonObject`;
   caught errors go through `toError()`. A predicate is written `v is JsonValue & Foo`.
 - **No comments** in first-party TypeScript (`src/`, `scripts/`, `e2e/`); only tool
-  directives survive, and an `eslint-disable` gives its reason after `--`
+  directives survive, and an `oxlint-disable` or `eslint-disable` gives its reason after `--`
   (`bun run lint:comments`). Facts go in names, `.c3/`, an ADR or the wiki.
 - **UI:** read `DESIGN.md` first. Tokens from `src/index.css` only: no hex, no
   `backdrop-blur`, no native `title`. Semantic colour is a fill; text uses `-text` tokens.
 - **React:** selectors and hook arguments are reference-stable; state transitions are
   named store actions, not JSX logic; every client side effect runs through
   `runPendingAction` and renders its pending state (`kanna-react-style`).
-- **Tests:** no `mock.module`; inject the dependency as a defaulted parameter. Unmount
-  every React root you mount. Subprocesses get `stdin: "ignore"` and
-  `GIT_TERMINAL_PROMPT=0` (`kanna-test`).
+- **Tests:** import from `"vite-plus/test"`, never `bun:test`; use `import.meta.dirname`,
+  never `import.meta.dir`. No `vi.mock` or `vi.doMock`: inject the dependency as a
+  defaulted parameter. Unmount every React root you mount. Subprocesses get
+  `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` (`kanna-test` has the runner facts).
 - **Secrets:** a synthetic credential in a fixture gets one narrow `regexes` entry in
   `.gitleaks.toml`, never a `paths` glob. gitleaks is pinned at v8.30.1, which has no
   `protect` command.

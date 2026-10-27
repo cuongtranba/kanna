@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createDedupeStore, DEDUPE_TTL_MS, type DedupeRecord, type DedupeTarget } from "./remote-mcp-dedupe"
 import { guardedDispatch, type GuardedDispatch } from "./remote-mcp-send-guard"
 import { assistantText, queuedMessage, scriptedHost, snapshotOf, userPrompt } from "./test-helpers/chat-snapshots"

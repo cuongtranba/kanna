@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { MIN_PANE_FRACTION, clampPairSizes, normalizeSizes, redistributeToMinimum } from "./sizes"
 
 function sum(values: readonly number[]) {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   OAUTH_TOKEN_CONCURRENCY_DEFAULT,
   OAUTH_TOKEN_MAX_CONCURRENT_MIN,

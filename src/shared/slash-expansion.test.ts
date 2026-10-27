@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   buildSlashExpansion,
   parseSlashInvocation,
@@ -50,7 +50,7 @@ describe("parseSlashInvocation", () => {
     ["/", "slash alone"],
     ["//clear", "double slash"],
     ["/ review", "space before the name"],
-  ])("rejects %p (%s)", (input) => {
+  ])("rejects %o (%s)", (input) => {
     expect(parseSlashInvocation(input)).toBeNull()
   })
 })

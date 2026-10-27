@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test"
+import { test, expect, describe } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"

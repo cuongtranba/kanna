@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect, vi } from "vite-plus/test"
 import { runTurn, type RunTurnDeps } from "./claude-turn-runner"
 import type { ActiveTurn } from "./claude-session-state"
 import type { HarnessTurn, HarnessEvent } from "./harness-types"
@@ -16,7 +16,7 @@ function makeFakeTurn(events: HarnessEvent[] = []): HarnessTurn {
       },
     },
     interrupt: async () => {},
-    close: mock(() => {}),
+    close: vi.fn(() => {}),
   }
 }
 
@@ -33,7 +33,7 @@ function makeErrorTurn(error: Error): HarnessTurn {
       },
     },
     interrupt: async () => {},
-    close: mock(() => {}),
+    close: vi.fn(() => {}),
   }
 }
 
@@ -74,24 +74,24 @@ function makeDeps(overrides: Partial<RunTurnDeps> = {}): RunTurnDeps {
 
   return {
     store: {
-      setSessionTokenForProvider: mock(async () => {}),
-      getChat: mock(() => null),
-      setPendingForkSessionToken: mock(async () => {}),
-      appendMessage: mock(async () => {}),
-      recordTurnFailed: mock(async () => {}),
-      recordTurnFinished: mock(async () => {}),
-      recordTurnCancelled: mock(async () => {}),
+      setSessionTokenForProvider: vi.fn(async () => {}),
+      getChat: vi.fn(() => null),
+      setPendingForkSessionToken: vi.fn(async () => {}),
+      appendMessage: vi.fn(async () => {}),
+      recordTurnFailed: vi.fn(async () => {}),
+      recordTurnFinished: vi.fn(async () => {}),
+      recordTurnCancelled: vi.fn(async () => {}),
     } as unknown as RunTurnDeps["store"],
     activeTurns,
     drainingStreams,
-    oauthPool: { release: mock(() => {}) },
-    codexLimitDetector: { detect: mock(() => null) } as unknown as RunTurnDeps["codexLimitDetector"],
-    handleLimitError: mock(async () => false),
-    emitStateChange: mock(() => {}),
-    clearDrainingStream: mock(() => {}),
-    startTurnForChat: mock(async () => {}),
-    maybeStartNextQueuedMessage: mock(async () => {}),
-    stopCodexSession: mock(() => {}),
+    oauthPool: { release: vi.fn(() => {}) },
+    codexLimitDetector: { detect: vi.fn(() => null) } as unknown as RunTurnDeps["codexLimitDetector"],
+    handleLimitError: vi.fn(async () => false),
+    emitStateChange: vi.fn(() => {}),
+    clearDrainingStream: vi.fn(() => {}),
+    startTurnForChat: vi.fn(async () => {}),
+    maybeStartNextQueuedMessage: vi.fn(async () => {}),
+    stopCodexSession: vi.fn(() => {}),
     ...overrides,
   }
 }
@@ -220,7 +220,7 @@ describe("runTurn", () => {
     const errorTurn = makeErrorTurn(new Error("rate limit hit"))
     const active = makeActiveTurn({}, errorTurn)
     const deps = makeDeps({
-      handleLimitError: mock(async () => false),
+      handleLimitError: vi.fn(async () => false),
     })
 
     await runTurn(deps, active)
@@ -236,7 +236,7 @@ describe("runTurn", () => {
     const errorTurn = makeErrorTurn(new Error("quota exceeded"))
     const active = makeActiveTurn({}, errorTurn)
     const deps = makeDeps({
-      handleLimitError: mock(async () => true),
+      handleLimitError: vi.fn(async () => true),
     })
 
     await runTurn(deps, active)
@@ -266,13 +266,13 @@ describe("runTurn", () => {
     const active = makeActiveTurn({}, turn)
     const deps = makeDeps({
       store: {
-        setSessionTokenForProvider: mock(async () => {}),
-        getChat: mock(() => chatRecord),
-        setPendingForkSessionToken: mock(async () => {}),
-        appendMessage: mock(async () => {}),
-        recordTurnFailed: mock(async () => {}),
-        recordTurnFinished: mock(async () => {}),
-        recordTurnCancelled: mock(async () => {}),
+        setSessionTokenForProvider: vi.fn(async () => {}),
+        getChat: vi.fn(() => chatRecord),
+        setPendingForkSessionToken: vi.fn(async () => {}),
+        appendMessage: vi.fn(async () => {}),
+        recordTurnFailed: vi.fn(async () => {}),
+        recordTurnFinished: vi.fn(async () => {}),
+        recordTurnCancelled: vi.fn(async () => {}),
       } as unknown as RunTurnDeps["store"],
     })
 
@@ -341,8 +341,8 @@ describe("runTurn — codex summarize turn", () => {
     const deps = makeDeps({
       store: {
         ...makeDeps().store,
-        appendMessage: mock(async (_chatId: string, entry: TranscriptEntry) => { appended.push(entry) }),
-        setSessionTokenForProvider: mock(async (_chatId: string, provider: string, token: string | null) => {
+        appendMessage: vi.fn(async (_chatId: string, entry: TranscriptEntry) => { appended.push(entry) }),
+        setSessionTokenForProvider: vi.fn(async (_chatId: string, provider: string, token: string | null) => {
           tokenWrites.push({ provider, token })
         }),
       } as unknown as RunTurnDeps["store"],

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { z } from "zod"
 import {
   AGENT_INTENT_ACTIONS,

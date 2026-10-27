@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 
 import { withKeyedLane } from "./serial-lane"
 
@@ -29,8 +29,7 @@ describe("withKeyedLane", () => {
     const boom = withKeyedLane("/tmp/b.md", async () => {
       throw new Error("boom")
     })
-    expect(boom).rejects.toThrow("boom")
-    await boom.catch(() => undefined)
+    await expect(boom).rejects.toThrow("boom")
     expect(await withKeyedLane("/tmp/b.md", async () => "recovered")).toBe("recovered")
   })
 

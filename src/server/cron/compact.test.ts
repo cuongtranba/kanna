@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
 import { compactCronRunEvents } from "./compact"
 import { deriveCronJobs, findRunningCronRuns } from "./read-model"

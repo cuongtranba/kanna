@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
-import { type LoadedModule } from "../../shared/dynamic-module"
+import { type OxlintConfig } from "oxlint"
+import { lintConfig } from "../../../lint.config"
 import { isRecord } from "../../shared/errors"
 import {
   coveredBy,
@@ -84,27 +85,25 @@ export function measurePatterns(
   return budgets.map((budget) => measurePattern(root, sources, budget))
 }
 
-const limitOf = (setting: LoadedModule): number | null => {
+type RuleSetting = NonNullable<OxlintConfig["rules"]>[string]
+
+const limitOf = (setting: RuleSetting): number | null => {
   if (!Array.isArray(setting) || setting.length < 2) return null
-  const option: LoadedModule = setting[1]
+  const option = setting[1]
   if (typeof option === "number") return option
   if (isRecord(option) && typeof option.max === "number") return option.max
   return null
 }
 
-export async function readEslintLimits(
-  root: string,
+export function readLintLimits(
   rules: readonly string[],
-): Promise<ReadonlyMap<string, number>> {
-  const imported: LoadedModule = await import(path.join(root, "eslint.config.js"))
-  const config: LoadedModule = isRecord(imported) ? imported.default : null
+  config: OxlintConfig = lintConfig,
+): ReadonlyMap<string, number> {
   const found = new Map<string, number>()
-  if (!Array.isArray(config)) return found
+  const blocks = [config.rules, ...(config.overrides ?? []).map((override) => override.rules)]
 
-  for (const block of config) {
-    if (!isRecord(block)) continue
-    const blockRules: LoadedModule = block.rules
-    if (!isRecord(blockRules)) continue
+  for (const blockRules of blocks) {
+    if (!blockRules) continue
     for (const rule of rules) {
       const max = limitOf(blockRules[rule])
       if (max !== null) found.set(rule, max)

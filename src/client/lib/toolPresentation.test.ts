@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { Map, Terminal, ToyBrick, UserRound, ListTodo } from "lucide-react"
 import { normalizeToolCall } from "../../shared/tools"
 import { toolActivity, toolCategory, toolIcon, toolIconByName, toolTitle } from "./toolPresentation"

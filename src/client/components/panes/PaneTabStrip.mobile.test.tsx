@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
 import { useViewportStore } from "../../stores/viewportStore"

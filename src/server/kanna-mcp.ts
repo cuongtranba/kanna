@@ -249,7 +249,7 @@ export function buildDelegateProgressEmitter<TExtra>(
   if (typeof extra.sendNotification !== "function") return undefined
   const rawSendNotification = extra.sendNotification
   function sendNotification(notification: { method: string; params: JsonObject }): void {
-    void rawSendNotification(notification)
+    Promise.resolve(rawSendNotification(notification)).catch(() => undefined)
   }
   let progress = 0
   return (entry) => {

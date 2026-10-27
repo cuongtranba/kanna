@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { normalizeLayout } from "./normalize"
 import { buildTabId } from "./tabTarget"
 import { collectPanes, createGroup, createPane, createTab, getTreeDepth } from "./tree"

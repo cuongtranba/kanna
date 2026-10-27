@@ -1,6 +1,6 @@
 ---
 name: kanna-design
-description: Designs and refactors Kanna code by A Philosophy of Software Design — deep modules, information hiding, one owner per decision, no pass-through layers, errors defined out of existence — and owns the architecture ratchets that hold those gains (bun run check:arch). Use when adding a module, function, store, WS command, setting, event or protocol string; when a change has to edit the same rule in several files; when deciding where new code belongs; when reviewing a design or a PR for structure; or when check:arch reports a population that "grew to N (pinned at M)", "dropped to N", a module over 700 lines, or a raised ESLint ceiling.
+description: Designs and refactors Kanna code by A Philosophy of Software Design — deep modules, information hiding, one owner per decision, no pass-through layers, errors defined out of existence — and owns the architecture ratchets that hold those gains (bun run check:arch). Use when adding a module, function, store, WS command, setting, event or protocol string; when a change has to edit the same rule in several files; when deciding where new code belongs; when reviewing a design or a PR for structure; or when check:arch reports a population that "grew to N (pinned at M)", "dropped to N", a module over 700 lines, or a raised lint ceiling.
 ---
 
 # Designing code in Kanna
@@ -76,10 +76,9 @@ quietly given back.
 | --- | --- |
 | `PATTERN_BUDGETS` | Exact pin per production defect pattern, each with its issue and rationale |
 | `TEST_PATTERN_BUDGETS` | Exact pin per test-policy defect: mocks, global patches, sleeps, `.only`/`.skip`, double casts, nested describes |
-| `LEAKED_LITERAL_BUDGET` | Exact pin on protocol literals (env names, routes, bus subjects, storage keys) hard-coded in two or more modules |
-| `CLONE_BUDGET` | Exact pin on duplicated code blocks (jscpd, production only) |
+| `COUNT_BUDGETS` | Exact pin per counted population: `leaked-protocol-literals` (env names, routes, bus subjects, storage keys hard-coded in two or more modules) and `code-clones` (duplicated 8-line windows across production modules, measured by `src/ops/architecture/duplication.ts`) |
 | `MODULE_ALLOWANCES` | Ceiling per module over 700 lines; delist once under |
-| `ESLINT_LIMIT_PINS` | Equals the configured complexity, max-params, max-depth and nesting ceilings; `bun run lint:limits` proves each is tight |
+| `LINT_LIMIT_PINS` | Equals the configured complexity, max-params, max-depth and nesting ceilings; `bun run lint:limits` proves each is tight |
 
 Reading a breach:
 

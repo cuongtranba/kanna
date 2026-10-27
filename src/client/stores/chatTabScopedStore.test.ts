@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { toDraftAttachment, toWireAttachment, type ComposerAttachment } from "./chatTabScopedStore"
 
 function composerAttachment(overrides: Partial<ComposerAttachment> = {}): ComposerAttachment {

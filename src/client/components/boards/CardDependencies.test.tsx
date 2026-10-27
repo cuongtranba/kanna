@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createRoot } from "react-dom/client"
 import { act } from "react"
 import { CardDependencies, type BlockerCandidate } from "./CardDependencies"

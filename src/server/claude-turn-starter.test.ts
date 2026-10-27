@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect, vi } from "vite-plus/test"
 import { startTurnForChat, type StartClaudeTurnArgs, type StartTurnDeps, type StartTurnForChatArgs } from "./claude-turn-starter"
 import { OAuthPoolUnavailableError } from "./oauth-errors"
 import { ClaudeSessionState, type ActiveTurn, type StartingTurn } from "./claude-session-state"
@@ -103,40 +103,40 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
     mentionedSubagentIdsByChat,
 
     store: {
-      requireChat: mock(() => chat),
-      getMessages: mock(() => []),
-      getRecentRawEntries: mock(() => [] as readonly TranscriptEntry[]),
-      getProject: mock(() => project),
-      appendMessage: mock(async () => {}),
-      setChatProvider: mock(async () => {}),
-      setPlanMode: mock(async () => {}),
-      renameChat: mock(async () => {}),
-      recordTurnStarted: mock(async () => {}),
-      recordTurnFailed: mock(async () => {}),
-      setPendingForkSessionToken: mock(async () => {}),
+      requireChat: vi.fn(() => chat),
+      getMessages: vi.fn(() => []),
+      getRecentRawEntries: vi.fn(() => [] as readonly TranscriptEntry[]),
+      getProject: vi.fn(() => project),
+      appendMessage: vi.fn(async () => {}),
+      setChatProvider: vi.fn(async () => {}),
+      setPlanMode: vi.fn(async () => {}),
+      renameChat: vi.fn(async () => {}),
+      recordTurnStarted: vi.fn(async () => {}),
+      recordTurnFailed: vi.fn(async () => {}),
+      setPendingForkSessionToken: vi.fn(async () => {}),
     } as unknown as StartTurnDeps["store"],
 
     codexManager: {
-      startSession: mock(async () => null),
-      startTurn: mock(async () => fakeTurn),
+      startSession: vi.fn(async () => null),
+      startTurn: vi.fn(async () => fakeTurn),
     } as unknown as StartTurnDeps["codexManager"],
 
     subagentOrchestrator: {
-      clearChatCancellation: mock(() => {}),
+      clearChatCancellation: vi.fn(() => {}),
     },
 
-    clearDrainingStream: mock(() => {}),
-    emitStateChange: mock(() => {}),
-    getSubagents: mock(() => []),
+    clearDrainingStream: vi.fn(() => {}),
+    emitStateChange: vi.fn(() => {}),
+    getSubagents: vi.fn(() => []),
     getBeacons: () => [],
     isBeaconOnline: () => false,
-    getAppSettingsSnapshot: mock(() => ({ globalPromptAppend: undefined })),
-    listSkills: mock(() => []),
-    generateTitleInBackground: mock(async () => {}),
+    getAppSettingsSnapshot: vi.fn(() => ({ globalPromptAppend: undefined })),
+    listSkills: vi.fn(() => []),
+    generateTitleInBackground: vi.fn(async () => {}),
     pendingTools: new PendingToolSlots(),
-    startClaudeTurn: mock(async () => fakeTurn),
-    findLastUserMessageId: mock(() => null),
-    runTurn: mock(() => {}),
+    startClaudeTurn: vi.fn(async () => fakeTurn),
+    findLastUserMessageId: vi.fn(() => null),
+    runTurn: vi.fn(() => {}),
 
     ...overrides,
   }
@@ -161,13 +161,13 @@ function makeArgs(overrides: Partial<StartTurnForChatArgs> = {}): StartTurnForCh
 describe("startTurnForChat", () => {
   test("1. closes a draining stream before starting a new turn", async () => {
     const deps = makeDeps()
-    const closeFn = mock(() => {})
+    const closeFn = vi.fn(() => {})
     deps.drainingStreams.set("chat-1", { turn: { ...makeFakeTurn(), close: closeFn } })
 
     await startTurnForChat(deps, makeArgs())
 
     expect(closeFn).toHaveBeenCalledTimes(1)
-    expect(deps.clearDrainingStream as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1")
+    expect(deps.clearDrainingStream as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-1")
   })
 
   test("2. throws when chat is already running (activeTurns has the chatId)", async () => {
@@ -180,13 +180,13 @@ describe("startTurnForChat", () => {
   test("3. clears cancellation on subagentOrchestrator at the start", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs())
-    expect((deps.subagentOrchestrator.clearChatCancellation as ReturnType<typeof mock>)).toHaveBeenCalledWith("chat-1")
+    expect((deps.subagentOrchestrator.clearChatCancellation as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("chat-1")
   })
 
   test("4. appends user_prompt entry when appendUserPrompt is true", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ appendUserPrompt: true }))
-    expect(deps.store.appendMessage as ReturnType<typeof mock>).toHaveBeenCalled()
+    expect(deps.store.appendMessage as ReturnType<typeof vi.fn>).toHaveBeenCalled()
   })
 
   test("a prompt started on behalf of an MCP client is stored with that origin", async () => {
@@ -195,7 +195,7 @@ describe("startTurnForChat", () => {
 
     await startTurnForChat(deps, makeArgs({ origin }))
 
-    const stored = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+    const stored = (deps.store.appendMessage as ReturnType<typeof vi.fn>).mock.calls
       .map((call: unknown[]) => call[1] as { kind?: string; origin?: unknown })
       .find((entry) => entry.kind === "user_prompt")
     expect(stored?.origin).toEqual(origin)
@@ -206,7 +206,7 @@ describe("startTurnForChat", () => {
 
     await startTurnForChat(deps, makeArgs())
 
-    const stored = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+    const stored = (deps.store.appendMessage as ReturnType<typeof vi.fn>).mock.calls
       .map((call: unknown[]) => call[1] as { kind?: string; origin?: unknown })
       .find((entry) => entry.kind === "user_prompt")
     expect(stored && "origin" in stored).toBe(false)
@@ -215,7 +215,7 @@ describe("startTurnForChat", () => {
   test("5. does NOT append user_prompt entry when appendUserPrompt is false", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ appendUserPrompt: false }))
-    const appendCalls = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+    const appendCalls = (deps.store.appendMessage as ReturnType<typeof vi.fn>).mock.calls
     const userPromptCalls = appendCalls.filter(
       (call: unknown[]) => (call[1] as { kind?: string })?.kind === "user_prompt"
     )
@@ -225,7 +225,7 @@ describe("startTurnForChat", () => {
   test("6. calls recordTurnStarted with correct fields", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex", model: "gpt-4o", planMode: true }))
-    expect(deps.store.recordTurnStarted as ReturnType<typeof mock>).toHaveBeenCalledWith(
+    expect(deps.store.recordTurnStarted as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       "chat-1",
       expect.objectContaining({ provider: "codex", model: "gpt-4o", planMode: true })
     )
@@ -234,13 +234,13 @@ describe("startTurnForChat", () => {
   test("7. swallows OAuthPoolUnavailableError and persists a result error entry", async () => {
     const oauthError = new OAuthPoolUnavailableError("pool is full")
     const deps = makeDeps({
-      startClaudeTurn: mock(async () => { throw oauthError }),
+      startClaudeTurn: vi.fn(async () => { throw oauthError }),
     })
     const args = makeArgs({ provider: "claude", model: "claude-opus-4-5" })
 
     await expect(startTurnForChat(deps, args)).resolves.toBeUndefined()
 
-    const appendCalls = (deps.store.appendMessage as ReturnType<typeof mock>).mock.calls
+    const appendCalls = (deps.store.appendMessage as ReturnType<typeof vi.fn>).mock.calls
     const resultEntries = appendCalls.filter(
       (call: unknown[]) => {
         const entry = call[1] as { kind?: string; isError?: boolean }
@@ -253,21 +253,21 @@ describe("startTurnForChat", () => {
   test("8. rethrows non-OAuth errors after cleanup (recordTurnFailed, emitStateChange)", async () => {
     const boom = new Error("unexpected failure")
     const deps = makeDeps({
-      startClaudeTurn: mock(async () => { throw boom }),
+      startClaudeTurn: vi.fn(async () => { throw boom }),
     })
     const args = makeArgs({ provider: "claude", model: "claude-opus-4-5" })
 
     await expect(startTurnForChat(deps, args)).rejects.toThrow("unexpected failure")
 
-    expect(deps.store.recordTurnFailed as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", "unexpected failure")
-    expect(deps.emitStateChange as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-1", { immediate: true })
+    expect(deps.store.recordTurnFailed as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-1", "unexpected failure")
+    expect(deps.emitStateChange as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-1", { immediate: true })
   })
 
   test("9. routes to codexManager.startTurn for non-claude providers", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex", model: "gpt-4o" }))
-    expect(deps.codexManager.startTurn as ReturnType<typeof mock>).toHaveBeenCalledTimes(1)
-    expect(deps.startClaudeTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.codexManager.startTurn as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1)
+    expect(deps.startClaudeTurn as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
   })
 
   test("names a chat whose only prior entry is a webhook delivery card", async () => {
@@ -287,7 +287,7 @@ describe("startTurnForChat", () => {
 
     await startTurnForChat(deps, makeArgs({ content: "fix the assigned bug" }))
 
-    const renameCalls = (deps.store.renameChat as ReturnType<typeof mock>).mock.calls
+    const renameCalls = (deps.store.renameChat as ReturnType<typeof vi.fn>).mock.calls
     expect(renameCalls).toHaveLength(1)
     expect(renameCalls[0][0]).toBe("chat-1")
     expect(renameCalls[0][1]).not.toBe("New Chat")
@@ -297,12 +297,12 @@ describe("startTurnForChat", () => {
     function depsForBindings(stackBindings?: unknown) {
       const deps = makeDeps()
       const chat = makeFakeChatRecord(stackBindings ? { stackBindings } : {})
-      deps.store.requireChat = mock(() => chat) as never
+      deps.store.requireChat = vi.fn(() => chat) as never
       return deps
     }
 
     function instructionsOfSession(deps: StartTurnDeps): string | undefined {
-      const call = (deps.codexManager.startSession as ReturnType<typeof mock>).mock.calls[0]
+      const call = (deps.codexManager.startSession as ReturnType<typeof vi.fn>).mock.calls[0]
       return (call?.[0] as { developerInstructions?: string }).developerInstructions
     }
 
@@ -320,7 +320,7 @@ describe("startTurnForChat", () => {
 
     test("a solo chat gets the workspace block, the plan progress section, the generative UI section, and no stack block", async () => {
       const deps = depsForBindings()
-      deps.getAppSettingsSnapshot = mock(() => ({ globalPromptAppend: "Always TDD." })) as never
+      deps.getAppSettingsSnapshot = vi.fn(() => ({ globalPromptAppend: "Always TDD." })) as never
       await startTurnForChat(deps, makeArgs({ provider: "codex" }))
       expect(instructionsOfSession(deps)).toBe(`## Workspace instructions\n\nAlways TDD.\n\n${CODEX_PLAN_PROGRESS_SECTION}\n\n${renderGenUIPromptSection({ canValidate: false })}`)
     })
@@ -329,14 +329,14 @@ describe("startTurnForChat", () => {
   test("10. routes to startClaudeTurn for claude provider", async () => {
     const deps = makeDeps()
     const fakeTurn = makeFakeTurn()
-    deps.startClaudeTurn = mock(async () => {
-      deps.claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: mock(async () => {}), getAccountInfo: undefined }))
+    deps.startClaudeTurn = vi.fn(async () => {
+      deps.claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: vi.fn(async () => {}), getAccountInfo: undefined }))
       return fakeTurn
     })
 
     await startTurnForChat(deps, makeArgs({ provider: "claude", model: "claude-opus-4-5" }))
-    expect(deps.startClaudeTurn as ReturnType<typeof mock>).toHaveBeenCalledTimes(1)
-    expect(deps.codexManager.startTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.startClaudeTurn as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1)
+    expect(deps.codexManager.startTurn as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
   })
 
   test("11. registers ActiveTurn in activeTurns map after turn starts", async () => {
@@ -350,7 +350,7 @@ describe("startTurnForChat", () => {
   test("12. calls runTurn for Codex (non-SDK-session) provider", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex" }))
-    expect(deps.runTurn as ReturnType<typeof mock>).toHaveBeenCalledTimes(1)
+    expect(deps.runTurn as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1)
   })
 
   test("a codex /compact turn carries its compactionTurn tag when runTurn first sees it", async () => {
@@ -372,8 +372,8 @@ describe("startTurnForChat — starting-turn marker", () => {
   test("registers a starting marker before the provider boot and clears it on success", async () => {
     const gate = deferred<HarnessTurn>()
     const deps = makeDeps({ codexManager: {
-      startSession: mock(async () => null),
-      startTurn: mock(() => gate.promise),
+      startSession: vi.fn(async () => null),
+      startTurn: vi.fn(() => gate.promise),
     } as unknown as StartTurnDeps["codexManager"] })
 
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
@@ -403,7 +403,7 @@ describe("startTurnForChat — starting-turn marker", () => {
 
   test("clears the marker when the boot throws", async () => {
     const deps = makeDeps({
-      startClaudeTurn: mock(async () => { throw new Error("spawn failed") }),
+      startClaudeTurn: vi.fn(async () => { throw new Error("spawn failed") }),
     })
 
     await expect(
@@ -415,11 +415,11 @@ describe("startTurnForChat — starting-turn marker", () => {
 
   test("cancel during the boot tears the fresh turn down instead of registering it", async () => {
     const gate = deferred<HarnessTurn>()
-    const interrupt = mock(async () => {})
-    const close = mock(() => {})
+    const interrupt = vi.fn(async () => {})
+    const close = vi.fn(() => {})
     const deps = makeDeps({ codexManager: {
-      startSession: mock(async () => null),
-      startTurn: mock(() => gate.promise),
+      startSession: vi.fn(async () => null),
+      startTurn: vi.fn(() => gate.promise),
     } as unknown as StartTurnDeps["codexManager"] })
 
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
@@ -433,7 +433,7 @@ describe("startTurnForChat — starting-turn marker", () => {
     await pending
 
     expect(deps.activeTurns.has("chat-1")).toBe(false)
-    expect(deps.runTurn as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.runTurn as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     expect(interrupt).toHaveBeenCalledTimes(1)
     expect(close).toHaveBeenCalledTimes(1)
   })
@@ -441,8 +441,8 @@ describe("startTurnForChat — starting-turn marker", () => {
   test("a cancelled boot does not clear a newer turn's marker", async () => {
     const gate = deferred<HarnessTurn>()
     const deps = makeDeps({ codexManager: {
-      startSession: mock(async () => null),
-      startTurn: mock(() => gate.promise),
+      startSession: vi.fn(async () => null),
+      startTurn: vi.fn(() => gate.promise),
     } as unknown as StartTurnDeps["codexManager"] })
 
     const pending = startTurnForChat(deps, makeArgs({ provider: "codex" }))
@@ -469,7 +469,7 @@ describe("startTurnForChat — starting-turn marker", () => {
     let captured: ((request: { tool: unknown }) => Promise<unknown>) | null = null
 
     const deps = makeDeps({
-      startClaudeTurn: mock(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
+      startClaudeTurn: vi.fn(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
         captured = args.onToolRequest
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
@@ -498,7 +498,7 @@ describe("startTurnForChat — starting-turn marker", () => {
     let captured: ((request: { tool: unknown }) => Promise<unknown>) | null = null
 
     const deps = makeDeps({
-      startClaudeTurn: mock(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
+      startClaudeTurn: vi.fn(async (args: { onToolRequest: (r: { tool: unknown }) => Promise<unknown> }) => {
         captured = args.onToolRequest
         return makeFakeTurn()
       }) as unknown as StartTurnDeps["startClaudeTurn"],
@@ -532,8 +532,8 @@ describe("history primer loading", () => {
   ]
 
   test("uses getRecentRawEntries instead of getMessages when injecting primer", async () => {
-    const getMessagesMock = mock(() => primerEntries)
-    const getRecentRawEntriesMock = mock((_chatId: string, _limit: number) => primerEntries as readonly TranscriptEntry[])
+    const getMessagesMock = vi.fn(() => primerEntries)
+    const getRecentRawEntriesMock = vi.fn((_chatId: string, _limit: number) => primerEntries as readonly TranscriptEntry[])
     const fakeTurn = makeFakeTurn()
 
     const establishedChat = makeFakeChatRecord({
@@ -544,21 +544,21 @@ describe("history primer loading", () => {
 
     const deps = makeDeps({
       store: {
-        requireChat: mock(() => establishedChat),
+        requireChat: vi.fn(() => establishedChat),
         getMessages: getMessagesMock,
         getRecentRawEntries: getRecentRawEntriesMock,
-        getProject: mock(() => makeFakeProjectRecord()),
-        appendMessage: mock(async () => {}),
-        setChatProvider: mock(async () => {}),
-        setPlanMode: mock(async () => {}),
-        renameChat: mock(async () => {}),
-        recordTurnStarted: mock(async () => {}),
-        recordTurnFailed: mock(async () => {}),
-        setPendingForkSessionToken: mock(async () => {}),
+        getProject: vi.fn(() => makeFakeProjectRecord()),
+        appendMessage: vi.fn(async () => {}),
+        setChatProvider: vi.fn(async () => {}),
+        setPlanMode: vi.fn(async () => {}),
+        renameChat: vi.fn(async () => {}),
+        recordTurnStarted: vi.fn(async () => {}),
+        recordTurnFailed: vi.fn(async () => {}),
+        setPendingForkSessionToken: vi.fn(async () => {}),
       } as unknown as StartTurnDeps["store"],
       codexManager: {
-        startSession: mock(async () => null),
-        startTurn: mock(async () => fakeTurn),
+        startSession: vi.fn(async () => null),
+        startTurn: vi.fn(async () => fakeTurn),
       } as unknown as StartTurnDeps["codexManager"],
     })
 
@@ -570,7 +570,7 @@ describe("history primer loading", () => {
 
   test("passes a positive tail limit to getRecentRawEntries for primer", async () => {
     const capturedLimits: number[] = []
-    const getRecentRawEntriesMock = mock((_chatId: string, limit: number) => {
+    const getRecentRawEntriesMock = vi.fn((_chatId: string, limit: number) => {
       capturedLimits.push(limit)
       return primerEntries as readonly TranscriptEntry[]
     })
@@ -584,21 +584,21 @@ describe("history primer loading", () => {
 
     const deps = makeDeps({
       store: {
-        requireChat: mock(() => establishedChat),
-        getMessages: mock(() => []),
+        requireChat: vi.fn(() => establishedChat),
+        getMessages: vi.fn(() => []),
         getRecentRawEntries: getRecentRawEntriesMock,
-        getProject: mock(() => makeFakeProjectRecord()),
-        appendMessage: mock(async () => {}),
-        setChatProvider: mock(async () => {}),
-        setPlanMode: mock(async () => {}),
-        renameChat: mock(async () => {}),
-        recordTurnStarted: mock(async () => {}),
-        recordTurnFailed: mock(async () => {}),
-        setPendingForkSessionToken: mock(async () => {}),
+        getProject: vi.fn(() => makeFakeProjectRecord()),
+        appendMessage: vi.fn(async () => {}),
+        setChatProvider: vi.fn(async () => {}),
+        setPlanMode: vi.fn(async () => {}),
+        renameChat: vi.fn(async () => {}),
+        recordTurnStarted: vi.fn(async () => {}),
+        recordTurnFailed: vi.fn(async () => {}),
+        setPendingForkSessionToken: vi.fn(async () => {}),
       } as unknown as StartTurnDeps["store"],
       codexManager: {
-        startSession: mock(async () => null),
-        startTurn: mock(async () => fakeTurn),
+        startSession: vi.fn(async () => null),
+        startTurn: vi.fn(async () => fakeTurn),
       } as unknown as StartTurnDeps["codexManager"],
     })
 
@@ -616,30 +616,30 @@ describe("@project mentions", () => {
       { id: "proj-1", localPath: "/tmp/project", title: "Test Project" },
       { id: "proj-2", localPath: "/tmp", title: "Peer" },
     ]
-    const attachChatProjects = mock(async (_chatId: string, bindings: readonly unknown[]) => {
+    const attachChatProjects = vi.fn(async (_chatId: string, bindings: readonly unknown[]) => {
       Object.assign(chat, { stackBindings: bindings })
     })
     const claudeSessions = new Map<string, ClaudeSessionState>()
-    const startClaudeTurn = mock(async (_spawn: StartClaudeTurnArgs) => {
+    const startClaudeTurn = vi.fn(async (_spawn: StartClaudeTurnArgs) => {
       claudeSessions.set("chat-1", makeSdkSession({ sendPrompt: async () => {} }))
       return makeFakeTurn()
     })
     const deps = makeDeps({
       claudeSessions,
       store: {
-        requireChat: mock(() => chat),
-        getMessages: mock(() => []),
-        getRecentRawEntries: mock(() => [] as readonly TranscriptEntry[]),
-        getProject: mock((id: string) => projects.find((p) => p.id === id)),
-        listProjects: mock(() => projects),
+        requireChat: vi.fn(() => chat),
+        getMessages: vi.fn(() => []),
+        getRecentRawEntries: vi.fn(() => [] as readonly TranscriptEntry[]),
+        getProject: vi.fn((id: string) => projects.find((p) => p.id === id)),
+        listProjects: vi.fn(() => projects),
         attachChatProjects,
-        appendMessage: mock(async () => {}),
-        setChatProvider: mock(async () => {}),
-        setPlanMode: mock(async () => {}),
-        renameChat: mock(async () => {}),
-        recordTurnStarted: mock(async () => {}),
-        recordTurnFailed: mock(async () => {}),
-        setPendingForkSessionToken: mock(async () => {}),
+        appendMessage: vi.fn(async () => {}),
+        setChatProvider: vi.fn(async () => {}),
+        setPlanMode: vi.fn(async () => {}),
+        renameChat: vi.fn(async () => {}),
+        recordTurnStarted: vi.fn(async () => {}),
+        recordTurnFailed: vi.fn(async () => {}),
+        setPendingForkSessionToken: vi.fn(async () => {}),
       } as unknown as StartTurnDeps["store"],
       startClaudeTurn,
     })
@@ -760,7 +760,7 @@ describe("@beacon mentions", () => {
 
   test("a provider without beacon tools never receives the beacon block", async () => {
     const { deps } = makeBeaconDeps()
-    const startTurn = deps.codexManager.startTurn as ReturnType<typeof mock>
+    const startTurn = deps.codexManager.startTurn as ReturnType<typeof vi.fn>
 
     await startTurnForChat(deps, makeArgs({ provider: "codex", model: "gpt-4o", content: "run it on @beacon/office-mac" }))
 

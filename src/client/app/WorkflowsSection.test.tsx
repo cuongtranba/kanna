@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
@@ -113,7 +113,7 @@ describe("WorkflowsSection — list rendering", () => {
   })
 
   test("clicking a row calls onSelectRun with the run's id", async () => {
-    const onSelectRun = mock((_id: string) => undefined)
+    const onSelectRun = vi.fn((_id: string) => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -244,7 +244,7 @@ describe("WorkflowRunDetail — parity rendering", () => {
     const run = makeFullRun({
       agents: [{ index: 1, label: "modeler", state: "completed", agentId: "agent-xyz" }],
     })
-    const onSelectAgent = mock((_id: string) => undefined)
+    const onSelectAgent = vi.fn((_id: string) => undefined)
     const { container, cleanup } = await mountDetail(run, onSelectAgent)
     const btn = container.querySelector<HTMLButtonElement>("[data-testid='workflow-agent-transcript:agent-xyz']")
     expect(btn).not.toBeNull()
@@ -262,7 +262,7 @@ describe("WorkflowRunDetail — parity rendering", () => {
 
   test("no Transcript button when the agent has no agentId", async () => {
     const run = makeFullRun({ agents: [{ index: 1, label: "modeler", state: "completed" }] })
-    const onSelectAgent = mock((_id: string) => undefined)
+    const onSelectAgent = vi.fn((_id: string) => undefined)
     const { container, cleanup } = await mountDetail(run, onSelectAgent)
     expect(container.querySelector("[data-testid^='workflow-agent-transcript:']")).toBeNull()
     cleanup()
@@ -303,7 +303,7 @@ describe("formatWorkflowResult", () => {
 describe("WorkflowsSectionWithDetail — drill-in", () => {
   test("clicking a row calls getRunDetail with the run id and shows detail", async () => {
     const fullRun = makeFullRun()
-    const getRunDetail = mock(async (_runId: string): Promise<WorkflowRun | null> => fullRun)
+    const getRunDetail = vi.fn(async (_runId: string): Promise<WorkflowRun | null> => fullRun)
 
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -394,7 +394,7 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
     })
     const calls: string[] = []
     let n = 0
-    const getRunDetail = mock(async (runId: string) => {
+    const getRunDetail = vi.fn(async (runId: string) => {
       calls.push(runId)
       return n++ === 0 ? detailV1 : detailV2
     })
@@ -422,7 +422,7 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
       agents: [{ index: 1, label: "a", agentId: "a1", state: "running" }],
     })
     const calls: string[] = []
-    const getRunDetail = mock(async (runId: string) => { calls.push(runId); return detail })
+    const getRunDetail = vi.fn(async (runId: string) => { calls.push(runId); return detail })
 
     const { container, rerender, cleanup } = await mountWithDetail({ runs: [runRow], getRunDetail })
     const btn = container.querySelector<HTMLButtonElement>(`[data-testid="workflow-row:run-1"]`)!
@@ -440,7 +440,7 @@ describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
   test("no React error #185 across many pushes (renderForLoopCheck)", async () => {
     const runRow = makeRun({ runId: "run-1", status: "running" })
     const detail = makeFullRunForPush({ agents: [] })
-    const getRunDetail = mock(async () => detail)
+    const getRunDetail = vi.fn(async () => detail)
     const result = await renderForLoopCheck(<WorkflowsSectionWithDetail runs={[runRow]} getRunDetail={getRunDetail} />)
     expect(result.loopWarnings).toEqual([])
   })

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { EVENT_ROUTES } from "../event-routes"
 import { STORE_EVENT_SUBJECT } from "./store-event-subjects"
 

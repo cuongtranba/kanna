@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createCronConfirm } from "./confirm"
 import { createModelEscalation, type ModelEscalationConfig } from "../model-escalation"
 import type { CronArmSummary } from "../../shared/cron/types"

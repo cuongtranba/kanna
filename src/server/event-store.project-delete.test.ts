@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import path from "node:path"
 import { EventStore } from "./event-store"
 import { ALL_LOGS, storeLayoutFor } from "./event-logs"

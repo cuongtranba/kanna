@@ -1,10 +1,13 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
+import { ThemeProvider } from "../../../hooks/useTheme"
 import { renderMarkdownToReact } from "./lexicalToReact"
 
 function render(markdown: string): string {
   return renderToStaticMarkup(
-    <div>{renderMarkdownToReact(markdown)}</div>
+    <ThemeProvider>
+      <div>{renderMarkdownToReact(markdown)}</div>
+    </ThemeProvider>
   )
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { connect } from "@nats-io/transport-node"
 import { jetstream, jetstreamManager } from "@nats-io/jetstream"
 import { isBusEnvelope, type BusEnvelope } from "../../shared/service-bus/envelope"

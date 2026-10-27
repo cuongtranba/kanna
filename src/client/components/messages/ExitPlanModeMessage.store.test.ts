@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { createStore, type StoreApi } from "zustand"
 import {
   createExitPlanModeMessageState,

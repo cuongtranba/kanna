@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ChatAttachment } from "../../../shared/types"
 import {
   JSON_PREVIEW_LIMIT_BYTES,

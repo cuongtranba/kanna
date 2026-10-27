@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   PM2_MAX_MEMORY_RESTART_BYTES,
   SAFE_HOST_MEMORY_FRACTION,

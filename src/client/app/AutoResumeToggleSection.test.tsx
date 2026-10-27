@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { AutoResumeToggleSection } from "./AutoResumeToggleSection"
 import { usePreferencesStore } from "../stores/preferences"

@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { parseSkillLock } from "./parse-skill-lock"
 
 const EMPTY_MAP: ReadonlyMap<string, string[]> = new Map()

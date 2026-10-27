@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   BUILTIN_SLASH_COMMANDS,
   buildCodexCompactPrompt,
@@ -46,7 +46,7 @@ describe("parseBuiltinCommand", () => {
     ["clear"],
     [""],
     ["/"],
-  ])("returns null for %p", (content) => {
+  ])("returns null for %o", (content) => {
     expect(parseBuiltinCommand(content)).toBeNull()
   })
 

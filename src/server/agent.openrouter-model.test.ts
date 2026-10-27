@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AgentCoordinator } from "./agent-coordinator"
 import type { HarnessEvent } from "./harness-types"
 import type { LlmProviderSnapshot, SlashCommand, TranscriptEntry } from "../shared/types"

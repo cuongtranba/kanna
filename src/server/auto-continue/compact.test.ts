@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { compactCronRunEvents } from "../cron/compact"
 import { compactAutoContinueEvents } from "./compact"
 import { compactLoopWakeEvents } from "./compact-loop-wakes"

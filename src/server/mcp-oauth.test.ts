@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect } from "vite-plus/test"
 import { startMcpOAuth, ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { McpServerConfig, McpOAuthState } from "../shared/types"
 import type { OAuthClientInformationFull, OAuthTokens, AuthorizationServerMetadata } from "@modelcontextprotocol/sdk/shared/auth.js"

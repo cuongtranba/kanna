@@ -2,7 +2,7 @@ import { realpathSync } from "node:fs"
 import { mkdtemp, rm } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { computeProjectDir, computeWorkflowsDir, encodeCwd } from "./claude-projects-path.adapter"
 
 describe("encodeCwd", () => {

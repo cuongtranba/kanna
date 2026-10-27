@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { fallbackPathAfterClose, resolvePageRoute } from "./pageTabs"
 import { createDefaultLayout, createPane, createTab } from "./tree"
 import type { PaneLayout, PaneTabTarget } from "./types"

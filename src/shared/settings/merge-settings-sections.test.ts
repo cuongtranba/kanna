@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { mergeAppSettingsPatch } from "./merge-settings-sections"
 import { defaultAppSettingsSnapshot } from "../../server/app-settings"
 

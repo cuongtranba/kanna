@@ -17,7 +17,7 @@ bun install
 bun run dev
 ```
 
-This starts **two** processes: the Vite client on `:5174` and the server on
+This starts **two** processes: the Vite+ client (`vp dev`, which needs Node 22.18+ or 24.11+) on `:5174` and the server on
 `:5175` (always the client port + 1). Open the **client** port —
 [`localhost:5174`](http://localhost:5174) — for HMR. `--port` changes the client
 port and the server follows.
@@ -52,12 +52,12 @@ architecture budget uses ceilings rather than exact line pins.
 bun run test src/server/<file>.test.ts
 ```
 
-Never bare `bun test` — see [Lint & Tests](/guides/contributing/lint-and-tests/).
+`bun run test` runs Vitest under Bun — see [Lint & Tests](/guides/contributing/lint-and-tests/).
 
 ## Before you push
 
 ```bash
-bun run check   # typecheck → lint → build:client → check:bundle
+bun run check   # vp check (lint + types) → lint:comments → build:client → check:bundle
 bun run test
 ```
 

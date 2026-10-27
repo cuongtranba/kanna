@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"

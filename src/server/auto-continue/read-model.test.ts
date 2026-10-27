@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { deriveChatSchedules, deriveLoopState } from "./read-model"
 import type { ChatAutomationEvent } from "./events"
 

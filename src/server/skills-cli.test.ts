@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath } from "./skills-cli"
 
 describe("skills-cli", () => {

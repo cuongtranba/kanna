@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { collectPanes, getTreeDepth } from "../lib/paneTree"
 import { MAX_TREE_DEPTH } from "../lib/paneTree"
 import { buildLayoutFromLegacy, type LegacyProjectLayout } from "./paneLayoutMigration"

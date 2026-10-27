@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { TooltipProvider } from "../ui/tooltip"
 import { createPane, createTab, type PaneLeaf } from "../../lib/paneTree"

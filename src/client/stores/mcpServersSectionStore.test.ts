@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach } from "bun:test"
+import { test, expect, describe, beforeEach } from "vite-plus/test"
 import { useMcpServersSectionStore } from "./mcpServersSectionStore"
 import type { McpServerConfig } from "../../shared/types"
 

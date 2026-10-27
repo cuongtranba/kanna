@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { describeBeaconRequest, parseBeaconActivity, type BeaconActivity } from "./activity"
 
 test("every request shape gets a verb and a readable target", () => {

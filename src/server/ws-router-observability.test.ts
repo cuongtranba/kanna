@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type { ObservabilityCommandDeps } from "./ws-router-observability"
 import { handleObservabilityCommand } from "./ws-router-observability"
 import type { ClientCommand } from "../shared/protocol"
@@ -51,8 +51,8 @@ describe("handleObservabilityCommand", () => {
       NonNullable<ObservabilityCommandDeps["workflowRegistry"]>["getRun"]
     >
     const wf: NonNullable<ObservabilityCommandDeps["workflowRegistry"]> = {
-      getRun: mock(() => run),
-      getAgentTranscript: mock(() => []),
+      getRun: vi.fn(() => run),
+      getAgentTranscript: vi.fn(() => []),
     }
     const deps = makeDeps(wf)
     const handled = await handleObservabilityCommand(
@@ -83,8 +83,8 @@ describe("handleObservabilityCommand", () => {
       NonNullable<ObservabilityCommandDeps["workflowRegistry"]>["getAgentTranscript"]
     >
     const wf: NonNullable<ObservabilityCommandDeps["workflowRegistry"]> = {
-      getRun: mock(() => null),
-      getAgentTranscript: mock(() => entries),
+      getRun: vi.fn(() => null),
+      getAgentTranscript: vi.fn(() => entries),
     }
     const deps = makeDeps(wf)
     const handled = await handleObservabilityCommand(
@@ -103,9 +103,9 @@ describe("handleObservabilityCommand", () => {
       NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]>["getAgentTranscript"]
     >
     const sa: NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]> = {
-      has: mock(() => true),
-      register: mock(() => {}),
-      getAgentTranscript: mock(() => entries),
+      has: vi.fn(() => true),
+      register: vi.fn(() => {}),
+      getAgentTranscript: vi.fn(() => entries),
     }
     const deps = makeDeps(undefined, sa)
     const handled = await handleObservabilityCommand(
@@ -134,15 +134,15 @@ describe("handleObservabilityCommand", () => {
       NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]>["getAgentTranscript"]
     >
     const sa: NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]> = {
-      has: mock(() => false),
-      register: mock(() => {}),
-      getAgentTranscript: mock(() => entries),
+      has: vi.fn(() => false),
+      register: vi.fn(() => {}),
+      getAgentTranscript: vi.fn(() => entries),
     }
     const chat = { id: "c-1", projectId: "p-1", sessionTokensByProvider: { claude: "sess-1" } } as unknown as ChatRecord
     const project = { id: "p-1", localPath: REAL_CWD } as unknown as ProjectRecord
     const store: ObservabilityCommandDeps["store"] = {
-      getChat: mock(() => chat),
-      getProject: mock(() => project),
+      getChat: vi.fn(() => chat),
+      getProject: vi.fn(() => project),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -153,21 +153,22 @@ describe("handleObservabilityCommand", () => {
     expect(handled).toBe(true)
     expect(sa.has).toHaveBeenCalledWith("c-1")
     expect(sa.register).toHaveBeenCalledTimes(1)
-    const [registeredChatId, registeredDir] = (sa.register as ReturnType<typeof mock>).mock.calls[0]
+    const [registeredChatId, registeredDir] = (sa.register as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(registeredChatId).toBe("c-1")
-    expect(registeredDir).toEndWith(`/${encodeCwd(REAL_CWD)}/sess-1/subagents`)
+    const expectedSuffix = `/${encodeCwd(REAL_CWD)}/sess-1/subagents`
+    expect(registeredDir).toMatch(new RegExp(`${expectedSuffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`))
     expect(sa.getAgentTranscript).toHaveBeenCalledWith("c-1", "ag-2")
   })
 
   test("subagents.getRun — never overwrites an existing (live) registration", async () => {
     const sa: NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]> = {
-      has: mock(() => true),
-      register: mock(() => {}),
-      getAgentTranscript: mock(() => []),
+      has: vi.fn(() => true),
+      register: vi.fn(() => {}),
+      getAgentTranscript: vi.fn(() => []),
     }
     const store: ObservabilityCommandDeps["store"] = {
-      getChat: mock(() => { throw new Error("should not be reached") }),
-      getProject: mock(() => { throw new Error("should not be reached") }),
+      getChat: vi.fn(() => { throw new Error("should not be reached") }),
+      getProject: vi.fn(() => { throw new Error("should not be reached") }),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -182,14 +183,14 @@ describe("handleObservabilityCommand", () => {
 
   test("subagents.getRun — no-op derivation when chat has no claude session token", async () => {
     const sa: NonNullable<ObservabilityCommandDeps["subagentTranscriptRegistry"]> = {
-      has: mock(() => false),
-      register: mock(() => {}),
-      getAgentTranscript: mock(() => []),
+      has: vi.fn(() => false),
+      register: vi.fn(() => {}),
+      getAgentTranscript: vi.fn(() => []),
     }
     const chat = { id: "c-1", projectId: "p-1", sessionTokensByProvider: {} } as unknown as ChatRecord
     const store: ObservabilityCommandDeps["store"] = {
-      getChat: mock(() => chat),
-      getProject: mock(() => { throw new Error("should not be reached") }),
+      getChat: vi.fn(() => chat),
+      getProject: vi.fn(() => { throw new Error("should not be reached") }),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(

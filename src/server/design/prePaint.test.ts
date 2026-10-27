@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
 import { resolveEffectiveScaleStep, resolveTypographyVars } from "../../shared/design/typography"
 import type { JsonValue } from "../../shared/json"
 
 
-const HTML_PATH = join(import.meta.dir, "../../..", "index.html")
+const HTML_PATH = join(import.meta.dirname, "../../..", "index.html")
 const html = await Bun.file(HTML_PATH).text()
 
 function extractBlockingScript(source: string): string {

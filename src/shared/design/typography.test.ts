@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   DEFAULT_FONT_SCALE_STEP,
   FONT_SCALE_MULTIPLIERS,
@@ -38,7 +38,7 @@ describe("isFontScaleStep", () => {
   })
 
   test.each([undefined, null, "", "MD", "huge", 0, Number.NaN, {}, [], "SM", "medium"].map((c) => [c]))(
-    "rejects garbage input %p",
+    "rejects garbage input %o",
     (value) => {
       expect(isFontScaleStep(value)).toBe(false)
     },
@@ -54,7 +54,7 @@ describe("resolveFontScale", () => {
   )
 
   test.each([undefined, null, "", "MD", "huge", 0, Number.NaN, {}, []].map((c) => [c]))(
-    "total: garbage input %p resolves to the md multiplier (1)",
+    "total: garbage input %o resolves to the md multiplier (1)",
     (value) => {
       expect(resolveFontScale(value)).toBe(1)
     },

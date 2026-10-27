@@ -80,6 +80,6 @@ and the deliberate divergences are in `apps/beacon-win7/README.md`.
   `src/shared/beacon-conformance.test.ts` and the Go `protocol` / `keystore`
   tests read the same fixture files, so a fixture change that only one side
   honours fails CI.
-- No repo TypeScript gate (eslint, tsc, `lint:comments`, `check:arch`,
+- No repo TypeScript gate (Oxlint, type check, `lint:comments`, `check:arch`,
   ast-grep) scans the module; `go vet` and `go test` on Linux and Windows,
   plus a PE import-table check of the cross-built `.exe` files, do.

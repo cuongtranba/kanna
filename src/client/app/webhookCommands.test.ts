@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { revealCreatedWebhookSecret } from "./webhookCommands"
 
 test("creating a Slack hook succeeds without a secret to reveal", () => {

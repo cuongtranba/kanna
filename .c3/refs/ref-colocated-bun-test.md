@@ -1,49 +1,51 @@
 ---
 id: ref-colocated-bun-test
 c3-version: 4
-c3-seal: 4eec5e6a4b94eae9351f8803dae01591274400628f449b0cd97edad0e79a8e5e
-title: Colocated Bun Test
+c3-seal: a93427f2d1a84239ac9794e25c48c912934ff2d7bddcd847c7c1c948eb19d4de
+title: Colocated Test (Vitest under Bun)
 type: ref
-goal: Tests sit next to the file under test, named *.test.ts(x), and run under bun test — no separate test directory, no framework churn.
+goal: Tests sit next to the file under test, named *.test.ts(x), and run on Vitest through vp test inside the Bun runtime — no separate test directory, no second runner.
 ---
 
 # colocated-bun-test
 
 ## Goal
 
-Tests sit next to the file under test, named *.test.ts(x), and run under bun test — no separate test directory, no framework churn.
+Tests sit next to the file under test, named *.test.ts(x), and run on Vitest through vp test inside the Bun runtime — no separate test directory, no second runner.
 
 ## Choice
 
-bun test as the single test runner. Test file naming: <module>.test.ts or <module>.test.tsx. Live integration tests end in .live.test.ts and are gated by env.
+Vitest 5 through Vite+ (`vp test`), executed by Bun (`bun --bun vp test run`), as the single test runner. Test file naming: <module>.test.ts or <module>.test.tsx. Live integration tests end in .live.test.ts and are gated by env.
 
 ## Why
 
-Keeps tests visible and close to behavior. Bun's fast startup eliminates the cost of running narrow test subsets while iterating.
+Keeps tests visible and close to behavior. Vitest shares vite.config.ts with the client build and isolates each file in its own worker, and running it under Bun keeps `bun:sqlite`, `Bun.serve`, `Bun.Terminal` and `Bun.spawn` available to server tests. The ref id keeps its historical `bun-test` spelling because many component facts cite it.
 
 ## How
 
 | Guideline | Example |
 | --- | --- |
 | Test lives next to impl | src/server/auth.ts + auth.test.ts |
-| Live APIs gated by .live.test.ts | title-generation.live.test.ts |
-| Use bun test <glob> to scope runs | bun test src/server/agent.test.ts |
+| Test API comes from vite-plus/test | import { describe, expect, test } from "vite-plus/test" |
+| Live APIs gated by .live.test.ts and describe.skipIf | title-generation.live.test.ts |
+| Use bun run test <path> to scope runs | bun run test src/server/agent.test.ts |
 
 ## Not This
 
 | Alternative | Rejected Because |
 | --- | --- |
-| ... | ... |
+| bun test with bun:test | Single-process runner: module mocks and leaked React roots affected unrelated files, and it cannot share the Vite config |
+| Vitest under Node | Server code uses bun:sqlite, Bun.serve, Bun.Terminal and Bun.spawn, which Node does not provide |
 
 ## Scope
 
 **Applies to:**
 
-- <!-- containers/components where this ref governs behavior -->
+- Every colocated test file under src/, scripts/ and wiki/scripts/
 
 **Does NOT apply to:**
 
-- <!-- explicit exclusions -->
+- Playwright specs under e2e/, which run on demand through bun run test:e2e
 
 ## Override
 

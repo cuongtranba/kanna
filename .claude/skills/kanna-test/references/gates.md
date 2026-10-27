@@ -13,7 +13,7 @@
 `Bun.spawn`/`Bun.$`/`Bun.file`, `new Database`, `process.exit`, and `process.env`
 are errors across `src/shared/**`, `src/client/**`, **and** `src/server/**`
 production code. `src/beacon/**` has its own seal with the same shape (IO only in
-`src/beacon/**/*.adapter.ts`). ESLint leaves `fetch` alone, but the ast-grep rule
+`src/beacon/**/*.adapter.ts`). The lint seal leaves `fetch` alone, but the ast-grep rule
 `no-raw-fetch` bans it in `src/client/**` outside `src/client/api/**` and
 `*.adapter.ts` (see below); `src/shared/**` may call it.
 
@@ -26,7 +26,7 @@ glob, or inject the operation as a typed port parameter. A file whose whole job 
 performing one side effect on behalf of a port is named `*.adapter.ts` and sits
 next to that port; a module mixing domain logic with IO extracts the IO into a
 sibling `*-io.adapter.ts` rather than renaming the parent. There is no escape
-valve: do not reach for `eslint-disable`. Keeping the domain pure is what lets
+valve: do not reach for `eslint-disable` or `oxlint-disable`. Keeping the domain pure is what lets
 most of this codebase be tested with plain values instead of mocks.
 
 ## Design gate: tokens, not literals

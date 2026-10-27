@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type { PushCommandDeps, PushManagerDep } from "./ws-router-push"
 import { handlePushCommand } from "./ws-router-push"
 import type { ClientCommand } from "../shared/protocol"
@@ -6,13 +6,13 @@ import type { ClientCommand } from "../shared/protocol"
 
 function makePushManager(overrides: Partial<PushManagerDep> = {}): PushManagerDep {
   return {
-    recordDeviceSeen: mock(async () => {}),
-    addSubscription: mock(async () => ({ id: "sub-1" })),
-    removeSubscription: mock(async () => {}),
-    sendTest: mock(async () => {}),
-    setProjectMute: mock(async () => {}),
-    setChatMute: mock(async () => {}),
-    setFocusedChat: mock(() => {}),
+    recordDeviceSeen: vi.fn(async () => {}),
+    addSubscription: vi.fn(async () => ({ id: "sub-1" })),
+    removeSubscription: vi.fn(async () => {}),
+    sendTest: vi.fn(async () => {}),
+    setProjectMute: vi.fn(async () => {}),
+    setChatMute: vi.fn(async () => {}),
+    setFocusedChat: vi.fn(() => {}),
     ...overrides,
   }
 }
@@ -64,7 +64,7 @@ describe("handlePushCommand", () => {
     const handled = await handlePushCommand(deps, cmd, "r1")
     expect(handled).toBe(true)
     expect(deps._deviceId).toBe("dev-1")
-    expect(deps.pushManager.recordDeviceSeen as ReturnType<typeof mock>).toHaveBeenCalledWith("dev-1")
+    expect(deps.pushManager.recordDeviceSeen as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("dev-1")
     expect(deps.broadcasts).toHaveLength(1)
     expect(deps.broadcasts[0]).toEqual({ includePushConfig: true })
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
@@ -76,14 +76,14 @@ describe("handlePushCommand", () => {
     const handled = await handlePushCommand(deps, cmd, "r2")
     expect(handled).toBe(true)
     expect(deps._deviceId).toBeNull()
-    expect(deps.pushManager.recordDeviceSeen as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.pushManager.recordDeviceSeen as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     expect(deps.broadcasts).toHaveLength(0)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
 
   test("push.subscribe — calls addSubscription, sets deviceId from result, broadcasts, acks with result", async () => {
-    const deps = makeDeps({ addSubscription: mock(async () => ({ id: "sub-new" })) })
+    const deps = makeDeps({ addSubscription: vi.fn(async () => ({ id: "sub-new" })) })
     const cmd: ClientCommand = {
       type: "push.subscribe",
       subscription: { endpoint: "https://example.com/push", keys: { p256dh: "abc", auth: "def" } },
@@ -105,7 +105,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.unsubscribe", pushDeviceId: "dev-1" }
     const handled = await handlePushCommand(deps, cmd, "r4")
     expect(handled).toBe(true)
-    expect(deps.pushManager.removeSubscription as ReturnType<typeof mock>).toHaveBeenCalledWith("dev-1", "user_revoked")
+    expect(deps.pushManager.removeSubscription as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("dev-1", "user_revoked")
     expect(deps._deviceId).toBeNull()
     expect(deps.broadcasts).toHaveLength(1)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
@@ -124,7 +124,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.test" }
     const handled = await handlePushCommand(deps, cmd, "r6")
     expect(handled).toBe(true)
-    expect(deps.pushManager.sendTest as ReturnType<typeof mock>).toHaveBeenCalledWith("dev-1")
+    expect(deps.pushManager.sendTest as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("dev-1")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
@@ -133,7 +133,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.test" }
     const handled = await handlePushCommand(deps, cmd, "r7")
     expect(handled).toBe(true)
-    expect(deps.pushManager.sendTest as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.pushManager.sendTest as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
@@ -143,7 +143,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.setProjectMute", localPath: "/projects/foo", muted: true }
     const handled = await handlePushCommand(deps, cmd, "r8")
     expect(handled).toBe(true)
-    expect(deps.pushManager.setProjectMute as ReturnType<typeof mock>).toHaveBeenCalledWith("/projects/foo", true)
+    expect(deps.pushManager.setProjectMute as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("/projects/foo", true)
     expect(deps.broadcasts).toHaveLength(1)
     expect(deps.broadcasts[0]).toEqual({ includePushConfig: true })
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
@@ -155,7 +155,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.setChatMute", chatId: "chat-42", muted: true }
     const handled = await handlePushCommand(deps, cmd, "r11")
     expect(handled).toBe(true)
-    expect(deps.pushManager.setChatMute as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-42", true)
+    expect(deps.pushManager.setChatMute as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-42", true)
     expect(deps.broadcasts).toHaveLength(1)
     expect(deps.broadcasts[0]).toEqual({ includePushConfig: true })
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
@@ -166,7 +166,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.setChatMute", chatId: "chat-42", muted: false }
     const handled = await handlePushCommand(deps, cmd, "r12")
     expect(handled).toBe(true)
-    expect(deps.pushManager.setChatMute as ReturnType<typeof mock>).toHaveBeenCalledWith("chat-42", false)
+    expect(deps.pushManager.setChatMute as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("chat-42", false)
     expect(deps.broadcasts).toHaveLength(1)
   })
 
@@ -176,7 +176,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.setFocusedChat", chatId: "chat-42" }
     const handled = await handlePushCommand(deps, cmd, "r9")
     expect(handled).toBe(true)
-    expect(deps.pushManager.setFocusedChat as ReturnType<typeof mock>).toHaveBeenCalledWith("dev-1", "chat-42")
+    expect(deps.pushManager.setFocusedChat as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("dev-1", "chat-42")
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 
@@ -185,7 +185,7 @@ describe("handlePushCommand", () => {
     const cmd: ClientCommand = { type: "push.setFocusedChat", chatId: "chat-42" }
     const handled = await handlePushCommand(deps, cmd, "r10")
     expect(handled).toBe(true)
-    expect(deps.pushManager.setFocusedChat as ReturnType<typeof mock>).not.toHaveBeenCalled()
+    expect(deps.pushManager.setFocusedChat as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
   })
 })

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { CodexAppServerManager } from "./codex-app-server"
 import { fallbackTitleFromMessage, generateTitleForChatDetailed } from "./generate-title"
 import { QuickResponseAdapter, runClaudeStructured, runCodexStructured } from "./quick-response"
@@ -40,5 +40,9 @@ if (shouldRunLiveTests) {
       expect(typeof result.title).toBe("string")
       expect(result.title).not.toBe(fallbackTitleFromMessage(LIVE_MESSAGE))
     }, 15_000)
+  })
+} else {
+  test("live title generation is opt-in through KANNA_RUN_LIVE_TITLE_TESTS=1", () => {
+    expect(shouldRunLiveTests).toBe(false)
   })
 }

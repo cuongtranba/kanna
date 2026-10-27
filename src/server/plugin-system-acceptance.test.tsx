@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
 import { PLUGIN_LOG_DEFAULT_TAIL, tailLogEntries } from "../shared/plugins/log-ring"
 import type { PluginService } from "./plugins/plugin-service"
 import { join } from "node:path"
 
-const FIXTURES = join(import.meta.dir, "__fixtures__", "plugins")
+const FIXTURES = join(import.meta.dirname, "__fixtures__", "plugins")
 const HELLO = join(FIXTURES, "hello")
 const LEAKY = join(FIXTURES, "leaky")
 const THROWING = join(FIXTURES, "throwing")
@@ -385,7 +385,7 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
       "../client/plugins/contributionRegistry"
     )
     const { PluginBoundary } = await import("../client/plugins/PluginBoundary")
-    const { renderToStaticMarkup } = await import("react-dom/server")
+    const { renderForLoopCheck } = await import("../client/lib/testing/renderForLoopCheck")
 
     const hostRegistry = createPluginHostRegistry()
     const mod = await evaluatePluginModule({ code: built.client, registry: hostRegistry, pluginId: "throwing" })
@@ -397,21 +397,23 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
     if (!Component) return
 
     const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
-    let html = ""
-    expect(() => {
-      html = renderToStaticMarkup(
-        <div>
-          <span>sibling content survives</span>
-          <PluginBoundary pluginId="throwing">
-            <Component theme={theme} />
-          </PluginBoundary>
-        </div>,
-      )
-    }).not.toThrow()
-
-    expect(html).toContain("sibling content survives")
-    expect(html).not.toContain("THROWING_PANEL_DELIBERATE_FAILURE")
-    expect(html).toContain("throwing")
+    const rendered = await renderForLoopCheck(
+      <div>
+        <span>sibling content survives</span>
+        <PluginBoundary pluginId="throwing">
+          <Component theme={theme} />
+        </PluginBoundary>
+      </div>,
+    )
+    try {
+      expect(rendered.thrown).toBeNull()
+      const html = document.body.innerHTML
+      expect(html).toContain("sibling content survives")
+      expect(html).not.toContain("THROWING_PANEL_DELIBERATE_FAILURE")
+      expect(html).toContain("throwing")
+    } finally {
+      await rendered.cleanup()
+    }
   }, 60_000)
 })
 

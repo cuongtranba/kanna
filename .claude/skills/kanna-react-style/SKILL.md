@@ -276,7 +276,7 @@ socket.command({ type: "cron.remove", chatId, jobId }).catch(() => {})
 `no-floating-promises` with `ignoreVoid: false` (`void promise` fails;
 `navigate()` is allowlisted), `no-misused-promises` on JSX attributes, and a ban
 on `.catch(() => {})` / `() => undefined` / `() => null`. Never silence them with
-`eslint-disable`. Whether the flag is actually rendered is on you
+`eslint-disable` or `oxlint-disable`. Whether the flag is actually rendered is on you
 (`adr-20260925-client-pending-action-state`).
 
 ## Live state vs idle state styling
@@ -298,8 +298,8 @@ When extending a shared type, keep new fields:
 
 ## Running tests and clearing the gates
 
-`.claude/skills/kanna-test/SKILL.md` owns this: the flags that matter (`bun run
-test`, never bare `bun test`), the requirement to unmount every React root you
+`.claude/skills/kanna-test/SKILL.md` owns this: how the suite runs (`bun run
+test`, Vitest via `vp test` under Bun), the requirement to unmount every React root you
 mount, and the ast-grep and design gates that reject inline hook arguments, unstable
 store selectors, raw hex colors, and native `title` attributes. Read it before
 writing a test that mounts a component.
@@ -308,7 +308,7 @@ Scope runs to what you changed — a full suite from a subagent while other agen
 share the host exhausts it:
 
 ```bash
-bun test --conditions production src/client/lib/formatDuration
+bun run test src/client/lib/formatDuration
 bun run typecheck
 ```
 

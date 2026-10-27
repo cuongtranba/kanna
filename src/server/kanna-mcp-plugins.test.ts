@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -164,7 +164,7 @@ describe("plugin_logs", () => {
 
 describe("plugin_validate", () => {
   test("accepts the hello fixture without installing it", async () => {
-    const sourceDir = join(import.meta.dir, "__fixtures__", "plugins", "hello")
+    const sourceDir = join(import.meta.dirname, "__fixtures__", "plugins", "hello")
     const { service, calls } = fakeService([])
     const result = await toolsAt(0, service).get("plugin_validate")?.run({ source_dir: sourceDir })
     expect(result?.isError).toBeUndefined()

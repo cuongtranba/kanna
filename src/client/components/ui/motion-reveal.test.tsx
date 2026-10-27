@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { STAGGER_LIMIT, staggerDelay } from "../../lib/motion"
 
 describe("cascade delays", () => {

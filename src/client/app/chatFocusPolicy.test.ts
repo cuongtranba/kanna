@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   ALLOW_FOCUS_RETAIN_ATTRIBUTE,
   CHAT_INPUT_ATTRIBUTE,

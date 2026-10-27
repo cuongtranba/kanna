@@ -1,56 +1,46 @@
-import { ESLINT_LIMIT_PINS, PRODUCTION_EXCLUDES } from "../src/ops/architecture/budget"
+import { rmSync, writeFileSync } from "node:fs"
+import path from "node:path"
+import { type OxlintConfig } from "oxlint"
+import { lintConfig } from "../lint.config"
+import { LINT_LIMIT_PINS, PRODUCTION_EXCLUDES } from "../src/ops/architecture/budget"
+import { runOxlint } from "../src/ops/lint/oxlint-run.adapter"
 
-interface EslintMessage {
-  readonly ruleId: string | null
-}
-interface EslintResult {
-  readonly filePath: string
-  readonly messages: readonly EslintMessage[]
-}
+const ROOT = path.resolve(import.meta.dirname, "..")
+const PROBE_CONFIG = path.join(ROOT, ".lint-limits-probe.json")
 
 const isProduction = (filePath: string): boolean =>
   !PRODUCTION_EXCLUDES.some((excluded) => filePath.includes(excluded))
 
-const probeRules = Object.fromEntries(
-  ESLINT_LIMIT_PINS.map((pin) => [pin.rule, ["warn", { max: pin.max - 1 }]]),
-)
-
-const proc = Bun.spawn(
-  ["npx", "eslint", "src/", "--rule", JSON.stringify(probeRules), "--format", "json"],
-  { stdout: "pipe", stderr: "pipe" },
-)
-const raw = await new Response(proc.stdout).text()
-await proc.exited
-
-let results: readonly EslintResult[]
-try {
-  results = JSON.parse(raw) as readonly EslintResult[]
-} catch {
-  console.error("check:limits could not parse ESLint JSON output — refusing to report a pass it cannot prove.")
-  console.error(raw.slice(0, 2_000))
-  process.exit(1)
+const probeConfig: OxlintConfig = {
+  plugins: [],
+  categories: { correctness: "off" },
+  jsPlugins: lintConfig.jsPlugins,
+  ignorePatterns: lintConfig.ignorePatterns,
+  rules: Object.fromEntries(LINT_LIMIT_PINS.map((pin) => [pin.rule, ["error", { max: pin.max - 1 }]])),
 }
 
 const reached = new Set<string>()
-for (const result of results) {
-  if (!isProduction(result.filePath)) continue
-  for (const message of result.messages) {
-    if (message.ruleId) reached.add(message.ruleId)
+try {
+  writeFileSync(PROBE_CONFIG, JSON.stringify(probeConfig))
+  for (const diagnostic of runOxlint(ROOT, ["-c", PROBE_CONFIG, "src/"])) {
+    if (isProduction(diagnostic.filename)) reached.add(diagnostic.rule)
   }
+} finally {
+  rmSync(PROBE_CONFIG, { force: true })
 }
 
-const slack = ESLINT_LIMIT_PINS.filter((pin) => !reached.has(pin.rule))
+const slack = LINT_LIMIT_PINS.filter((pin) => !reached.has(pin.rule))
 if (slack.length === 0) {
-  console.log(`All ${ESLINT_LIMIT_PINS.length} ESLint ceilings are tight.`)
+  console.log(`All ${LINT_LIMIT_PINS.length} lint ceilings are tight.`)
   process.exit(0)
 }
 
 for (const pin of slack) {
   console.error(
     `"${pin.rule}" is pinned at ${pin.max} but nothing in production reaches ${pin.max - 1}.\n`
-    + `  The ceiling has gone slack — lower it in eslint.config.js AND in ESLINT_LIMIT_PINS\n`
-    + `  (src/ops/architecture/budget.ts) so the gain is locked in. Bisect with:\n`
-    + `    npx eslint src/ --rule '{"${pin.rule}":["warn",{"max":N}]}'\n`,
+    + `  The ceiling has gone slack — lower it in lint.config.ts AND in LINT_LIMIT_PINS\n`
+    + `  (src/ops/architecture/budget.ts) so the gain is locked in. Bisect by lowering\n`
+    + `  COMPLEXITY_CEILINGS["${pin.rule}"] and running \`bun run lint\`.\n`,
   )
 }
 process.exit(1)

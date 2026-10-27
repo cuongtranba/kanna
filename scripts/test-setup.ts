@@ -1,4 +1,4 @@
-export {}
+import { afterEach, vi } from "vite-plus/test"
 
 if (process.env.NODE_ENV === "production") {
   process.env.NODE_ENV = "test"
@@ -17,8 +17,7 @@ if (process.env.NODE_ENV === "production") {
   const nativeTransformStream = globalThis.TransformStream
   const nativeWritableStream = globalThis.WritableStream
 
-  const { GlobalRegistrator } =
-    require("@happy-dom/global-registrator") as typeof import("@happy-dom/global-registrator")
+  const { GlobalRegistrator } = await import("@happy-dom/global-registrator")
   if (!GlobalRegistrator.isRegistered) {
     GlobalRegistrator.register({ url: "http://localhost/" })
   }
@@ -45,7 +44,6 @@ if (process.env.NODE_ENV === "production") {
   const teardowns = new Set<() => void>()
   ;(globalThis as { __kannaDomTeardowns?: Set<() => void> }).__kannaDomTeardowns = teardowns
 
-  const { afterEach } = require("bun:test") as typeof import("bun:test")
   afterEach(() => {
     for (const teardown of teardowns) teardown()
     teardowns.clear()
@@ -66,8 +64,7 @@ if (process.env.NODE_ENV === "production") {
 }
 
 if (process.env.KANNA_WATCH_LEAK === "1") {
-  const { mock } = require("bun:test") as typeof import("bun:test")
-  const realFs = require("node:fs") as typeof import("node:fs")
+  const realFs = await import("node:fs")
 
   const emit = (msg: string) => {
     try {
@@ -77,28 +74,25 @@ if (process.env.KANNA_WATCH_LEAK === "1") {
   }
 
   let seq = 0
-  function wrapWatch(realWatch: typeof realFs.watch) {
-    return function watch(this: unknown, ...args: unknown[]) {
-      const w = (realWatch as (...a: unknown[]) => { close: () => void }).apply(this, args)
-      const id = ++seq
-      const target = typeof args[0] === "string" ? args[0] : String(args[0])
-      const stack = (new Error().stack ?? "(no stack)").split("\n").slice(1).join("\n")
-      emit(`[watch-leak] OPEN ${id} target=${target}\n${stack}\n[watch-leak] /OPEN ${id}\n`)
-      let closedOnce = false
-      const realClose = w.close.bind(w)
-      w.close = function close() {
-        if (!closedOnce) {
-          closedOnce = true
-          emit(`[watch-leak] CLOSE ${id}\n`)
-        }
-        return realClose()
+  const wrappedWatch = function watch(this: unknown, ...args: Parameters<typeof realFs.watch>) {
+    const w = Reflect.apply(realFs.watch, this, args)
+    const id = ++seq
+    const target = typeof args[0] === "string" ? args[0] : String(args[0])
+    const stack = (new Error().stack ?? "(no stack)").split("\n").slice(1).join("\n")
+    emit(`[watch-leak] OPEN ${id} target=${target}\n${stack}\n[watch-leak] /OPEN ${id}\n`)
+    let closedOnce = false
+    const realClose = w.close.bind(w)
+    w.close = function close() {
+      if (!closedOnce) {
+        closedOnce = true
+        emit(`[watch-leak] CLOSE ${id}\n`)
       }
-      return w
+      return realClose()
     }
+    return w
   }
 
-  const wrappedWatch = wrapWatch(realFs.watch)
   const patched = { ...realFs, watch: wrappedWatch }
-  mock.module("node:fs", () => ({ ...patched, default: patched }))
+  vi.doMock("node:fs", () => ({ ...patched, default: patched }))
   emit("[watch-leak] detector armed\n")
 }

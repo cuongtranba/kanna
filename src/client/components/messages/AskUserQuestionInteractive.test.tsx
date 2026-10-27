@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
@@ -21,7 +21,7 @@ describe("AskUserQuestionInteractive — basic render", () => {
   test("renders the question text and option labels", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -38,7 +38,7 @@ describe("AskUserQuestionInteractive — basic render", () => {
   test("renders the question header above the question text when provided", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
     const questions: AskUserQuestionItem[] = [{
       question: "Pick one",
       header: "Section 5 approval",
@@ -62,7 +62,7 @@ describe("AskUserQuestionInteractive — single-select submit", () => {
   test("clicking an option then Submit calls onSubmit with answer map keyed by question text", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -88,7 +88,7 @@ describe("AskUserQuestionInteractive — single-select submit", () => {
   test("uses question.id over question text when id is present", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
     const questions: AskUserQuestionItem[] = [{
       id: "qid-1",
       question: "Pick one",
@@ -130,7 +130,7 @@ describe("AskUserQuestionInteractive — slide nav", () => {
   test("single-select pick on Q1 auto-advances to Q2 after 150 ms", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -155,7 +155,7 @@ describe("AskUserQuestionInteractive — slide nav", () => {
   test("Back button on Q2 returns to Q1; not rendered on Q1", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -184,7 +184,7 @@ describe("AskUserQuestionInteractive — slide nav", () => {
   test("Submit only renders on the last question", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -217,7 +217,7 @@ describe("AskUserQuestionInteractive — multi-select", () => {
   test("multi-select picks toggle without auto-advance; Submit fires with array", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
     const questions: AskUserQuestionItem[] = [{
       question: "Pick many",
       multiSelect: true,
@@ -251,7 +251,7 @@ describe("AskUserQuestionInteractive — multi-select", () => {
   test("multi-select ticks and submits an option whose label contains a comma", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
     const questions: AskUserQuestionItem[] = [{
       question: "Pick many",
       multiSelect: true,
@@ -304,7 +304,7 @@ describe("AskUserQuestionInteractive — Other input", () => {
   test("typing in Other input then Submit produces answer with the typed value", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -329,7 +329,7 @@ describe("AskUserQuestionInteractive — Other input", () => {
   test("free-text-only question (no options) submits the typed value", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
     const questions: AskUserQuestionItem[] = [{
       question: "Anything?",
       multiSelect: false,
@@ -360,7 +360,7 @@ describe("AskUserQuestionInteractive — onCancel + edges", () => {
   test("onCancel undefined hides Cancel button", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -375,8 +375,8 @@ describe("AskUserQuestionInteractive — onCancel + edges", () => {
   test("onCancel supplied: Cancel button calls it without invoking onSubmit", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
-    const onCancel = mock(() => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
+    const onCancel = vi.fn(() => undefined)
 
     await act(async () => {
       createRoot(container).render(
@@ -397,7 +397,7 @@ describe("AskUserQuestionInteractive — onCancel + edges", () => {
   test("questions=[] renders nothing", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
-    const onSubmit = mock((_a: AskUserQuestionAnswerMap) => undefined)
+    const onSubmit = vi.fn((_a: AskUserQuestionAnswerMap) => undefined)
 
     await act(async () => {
       createRoot(container).render(

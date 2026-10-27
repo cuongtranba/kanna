@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
@@ -11,7 +11,7 @@ import {
 } from "../../client/lib/motion/tokens"
 
 
-const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
+const CSS_PATH = join(import.meta.dirname, "../../..", "src/index.css")
 const css = readFileSync(CSS_PATH, "utf8")
 
 function durationVarName(token: MotionDurationName): string {
@@ -92,7 +92,7 @@ describe("motion tokens agree between CSS and TypeScript", () => {
 })
 
 describe("DESIGN.md documents the real table", () => {
-  const design = readFileSync(join(import.meta.dir, "../../..", "DESIGN.md"), "utf8")
+  const design = readFileSync(join(import.meta.dirname, "../../..", "DESIGN.md"), "utf8")
 
   test("every token in the DESIGN.md table matches src/index.css", () => {
     const documented = new Map(

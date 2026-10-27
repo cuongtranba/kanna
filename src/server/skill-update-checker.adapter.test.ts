@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import type { InstalledPackage } from "../shared/packages/types"
 import { createSkillUpdateChecker } from "./skill-update-checker.adapter"
 

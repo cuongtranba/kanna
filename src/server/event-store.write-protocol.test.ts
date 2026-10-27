@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import { EventStore, type TurnTerminalListener } from "./event-store"

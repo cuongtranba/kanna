@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type {
   ProjectAnalyticsDep,
   ProjectCommandDeps,
@@ -15,14 +15,14 @@ import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 function makeStore(overrides: Partial<ProjectStoreDep> = {}): ProjectStoreDep {
   return {
     state: { projectIdsByPath: new Map(), chatsById: new Map() },
-    openProject: mock(async () => ({ id: "proj-1" })),
-    removeProject: mock(async () => {}),
-    deleteProject: mock(async () => {}),
-    getProject: mock(() => ({ id: "proj-1", localPath: "/tmp/proj" })),
-    getChat: mock(() => null),
-    setProjectStar: mock(async () => {}),
-    setProjectInstructions: mock(async () => {}),
-    setSidebarProjectOrder: mock(async () => {}),
+    openProject: vi.fn(async () => ({ id: "proj-1" })),
+    removeProject: vi.fn(async () => {}),
+    deleteProject: vi.fn(async () => {}),
+    getProject: vi.fn(() => ({ id: "proj-1", localPath: "/tmp/proj" })),
+    getChat: vi.fn(() => null),
+    setProjectStar: vi.fn(async () => {}),
+    setProjectInstructions: vi.fn(async () => {}),
+    setSidebarProjectOrder: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -46,9 +46,9 @@ function makeUpdateManager(overrides: Partial<ProjectUpdateManagerDep> = {}): Pr
     userMessage: null,
   }
   return {
-    checkForUpdates: mock(async () => base),
-    installUpdate: mock(async () => installResult),
-    forceReload: mock(async () => installResult),
+    checkForUpdates: vi.fn(async () => base),
+    installUpdate: vi.fn(async () => installResult),
+    forceReload: vi.fn(async () => installResult),
     ...overrides,
   }
 }
@@ -63,12 +63,12 @@ function makeAnalytics(): ProjectAnalyticsDep & { events: string[] } {
 
 function makeDiffStore(): ProjectDiffStoreDep {
   return {
-    readPatch: mock(async () => ({ patch: "diff content" })),
+    readPatch: vi.fn(async () => ({ patch: "diff content" })),
   }
 }
 
 function makeTerminals(): ProjectTerminalsDep {
-  return { closeByCwd: mock(() => {}) }
+  return { closeByCwd: vi.fn(() => {}) }
 }
 
 interface TestDeps extends ProjectCommandDeps {
@@ -98,10 +98,10 @@ function makeDeps(
     push: { getPreferences: () => ({ mutedProjectPaths: [], mutedChatIds: [] }), setProjectMute: async () => {}, setChatMute: async () => {} },
     removeWorktree: async () => {},
     removeProjectKannaFiles: async () => {},
-    refreshDiscovery: mock(async () => []),
-    ensureProjectDirectory: mock(async () => {}),
+    refreshDiscovery: vi.fn(async () => []),
+    ensureProjectDirectory: vi.fn(async () => {}),
     resolveLocalPath: (p) => p,
-    importClaudeSessionsFn: mock(async () => ({
+    importClaudeSessionsFn: vi.fn(async () => ({
       imported: 1,
       updated: 0,
       skipped: 0,
@@ -109,10 +109,10 @@ function makeDeps(
       newProjects: options.importResult?.newProjects ?? 0,
       ...options.importResult,
     })),
-    importSessionsByIdsFn: mock(async () => ({ results: [], newProjects: 0 })),
-    openExternalFn: options.openExternalFn ?? mock(async () => {}),
+    importSessionsByIdsFn: vi.fn(async () => ({ results: [], newProjects: 0 })),
+    openExternalFn: options.openExternalFn ?? vi.fn(async () => {}),
     send: (envelope) => { sent.push(envelope) },
-    broadcastSidebar: mock(async () => { sidebarBroadcasts++ }),
+    broadcastSidebar: vi.fn(async () => { sidebarBroadcasts++ }),
     sent,
     get sidebarBroadcasts() { return sidebarBroadcasts },
   }
@@ -166,7 +166,7 @@ describe("handleProjectCommand", () => {
       "r3",
     )
     expect(handled).toBe(true)
-    expect(um.checkForUpdates as ReturnType<typeof mock>).toHaveBeenCalledWith({ force: true })
+    expect(um.checkForUpdates as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({ force: true })
     const ack = deps.sent[0] as { type: string; result: { currentVersion: string } }
     expect(ack.result.currentVersion).toBe("1.0.0")
   })
@@ -183,7 +183,7 @@ describe("handleProjectCommand", () => {
     const deps = makeDeps({ updateManager: um })
     const handled = await handleProjectCommand(deps, { type: "update.reload" }, "r5")
     expect(handled).toBe(true)
-    expect(um.forceReload as ReturnType<typeof mock>).toHaveBeenCalled()
+    expect(um.forceReload as ReturnType<typeof vi.fn>).toHaveBeenCalled()
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r5" })
   })
 
@@ -192,7 +192,7 @@ describe("handleProjectCommand", () => {
     const deps = makeDeps({
       storeOverrides: {
         state: { projectIdsByPath: new Map(), chatsById: new Map() },
-        openProject: mock(async () => ({ id: "new-proj" })),
+        openProject: vi.fn(async () => ({ id: "new-proj" })),
       },
     })
     const handled = await handleProjectCommand(
@@ -204,15 +204,15 @@ describe("handleProjectCommand", () => {
     const ack = deps.sent[0] as { type: string; result: { projectId: string } }
     expect(ack.result.projectId).toBe("new-proj")
     expect((deps.analytics as ReturnType<typeof makeAnalytics>).events).toContain("project_opened")
-    expect(deps.ensureProjectDirectory as ReturnType<typeof mock>).toHaveBeenCalledWith("/tmp/newproj")
-    expect(deps.refreshDiscovery as ReturnType<typeof mock>).toHaveBeenCalled()
+    expect(deps.ensureProjectDirectory as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("/tmp/newproj")
+    expect(deps.refreshDiscovery as ReturnType<typeof vi.fn>).toHaveBeenCalled()
   })
 
   test("project.open — existing project — skips analytics", async () => {
     const deps = makeDeps({
       storeOverrides: {
         state: { projectIdsByPath: new Map([["/tmp/existing", "old-id"]]), chatsById: new Map() },
-        openProject: mock(async () => ({ id: "old-id" })),
+        openProject: vi.fn(async () => ({ id: "old-id" })),
       },
     })
     await handleProjectCommand(
@@ -228,7 +228,7 @@ describe("handleProjectCommand", () => {
     const deps = makeDeps({
       storeOverrides: {
         state: { projectIdsByPath: new Map(), chatsById: new Map() },
-        openProject: mock(async () => ({ id: "created-proj" })),
+        openProject: vi.fn(async () => ({ id: "created-proj" })),
       },
     })
     const handled = await handleProjectCommand(
@@ -246,11 +246,11 @@ describe("handleProjectCommand", () => {
 
 
   test("project.remove — removes project, closes terminal, tracks analytics", async () => {
-    const closeByCwd = mock(() => {})
-    const removeProject = mock(async () => {})
+    const closeByCwd = vi.fn(() => {})
+    const removeProject = vi.fn(async () => {})
     const deps = makeDeps({
       storeOverrides: {
-        getProject: mock(() => ({ id: "p1", localPath: "/tmp/proj" })),
+        getProject: vi.fn(() => ({ id: "p1", localPath: "/tmp/proj" })),
         removeProject,
       },
     })
@@ -262,15 +262,15 @@ describe("handleProjectCommand", () => {
       "r9",
     )
     expect(handled).toBe(true)
-    expect(removeProject as ReturnType<typeof mock>).toHaveBeenCalledWith("p1")
-    expect(closeByCwd as ReturnType<typeof mock>).toHaveBeenCalledWith("/tmp/proj")
+    expect(removeProject as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("p1")
+    expect(closeByCwd as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("/tmp/proj")
     expect((deps.analytics as ReturnType<typeof makeAnalytics>).events).toContain("project_removed")
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r9" })
   })
 
 
   test("project.setStar — sets star, acks, broadcasts sidebar", async () => {
-    const setProjectStar = mock(async () => {})
+    const setProjectStar = vi.fn(async () => {})
     const deps = makeDeps({ storeOverrides: { setProjectStar } })
     const handled = await handleProjectCommand(
       deps,
@@ -278,7 +278,7 @@ describe("handleProjectCommand", () => {
       "r10",
     )
     expect(handled).toBe(true)
-    expect(setProjectStar as ReturnType<typeof mock>).toHaveBeenCalledWith("p2", true)
+    expect(setProjectStar as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("p2", true)
     expect(deps.sidebarBroadcasts).toBe(1)
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r10" })
   })
@@ -287,7 +287,7 @@ describe("handleProjectCommand", () => {
   test("project.readDiffPatch — returns patch content", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        getProject: mock(() => ({ id: "p3", localPath: "/tmp/proj3" })),
+        getProject: vi.fn(() => ({ id: "p3", localPath: "/tmp/proj3" })),
       },
     })
     const handled = await handleProjectCommand(
@@ -298,7 +298,7 @@ describe("handleProjectCommand", () => {
     expect(handled).toBe(true)
     const ack = deps.sent[0] as { type: string; result: { patch: string } }
     expect(ack.result.patch).toBe("diff content")
-    expect(deps.diffStore.readPatch as ReturnType<typeof mock>).toHaveBeenCalledWith({
+    expect(deps.diffStore.readPatch as ReturnType<typeof vi.fn>).toHaveBeenCalledWith({
       projectPath: "/tmp/proj3",
       path: "src/foo.ts",
     })
@@ -307,7 +307,7 @@ describe("handleProjectCommand", () => {
   test("project.readDiffPatch — missing project — throws Project not found", async () => {
     const deps = makeDeps({
       storeOverrides: {
-        getProject: mock(() => undefined),
+        getProject: vi.fn(() => undefined),
       },
     })
     await expect(
@@ -332,12 +332,12 @@ describe("handleProjectCommand", () => {
   test("sessions.importClaude — newProjects > 0 — calls refreshDiscovery", async () => {
     const deps = makeDeps({ importResult: { imported: 1, newProjects: 2 } })
     await handleProjectCommand(deps, { type: "sessions.importClaude" }, "r14")
-    expect(deps.refreshDiscovery as ReturnType<typeof mock>).toHaveBeenCalled()
+    expect(deps.refreshDiscovery as ReturnType<typeof vi.fn>).toHaveBeenCalled()
   })
 
 
   test("sidebar.reorderProjectGroups — sets order, acks, broadcasts sidebar", async () => {
-    const setSidebarProjectOrder = mock(async () => {})
+    const setSidebarProjectOrder = vi.fn(async () => {})
     const deps = makeDeps({ storeOverrides: { setSidebarProjectOrder } })
     const handled = await handleProjectCommand(
       deps,
@@ -345,14 +345,14 @@ describe("handleProjectCommand", () => {
       "r15",
     )
     expect(handled).toBe(true)
-    expect(setSidebarProjectOrder as ReturnType<typeof mock>).toHaveBeenCalledWith(["p1", "p2"])
+    expect(setSidebarProjectOrder as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(["p1", "p2"])
     expect(deps.sidebarBroadcasts).toBe(1)
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r15" })
   })
 
 
   test("system.openExternal — calls openExternalFn, acks", async () => {
-    const openExternalFn = mock(async () => {})
+    const openExternalFn = vi.fn(async () => {})
     const deps = makeDeps({ openExternalFn })
     const cmd: ClientCommand = {
       type: "system.openExternal",
@@ -361,7 +361,7 @@ describe("handleProjectCommand", () => {
     } as unknown as ClientCommand
     const handled = await handleProjectCommand(deps, cmd, "r16")
     expect(handled).toBe(true)
-    expect(openExternalFn as ReturnType<typeof mock>).toHaveBeenCalledWith(cmd)
+    expect(openExternalFn as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(cmd)
     expect(deps.sent[0]).toMatchObject({ type: "ack", id: "r16" })
   })
 })

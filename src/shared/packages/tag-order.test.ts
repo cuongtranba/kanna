@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { pickLatestSemverTag } from "./tag-order"
 
 describe("pickLatestSemverTag", () => {

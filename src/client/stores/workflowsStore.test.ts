@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { useWorkflowsStore, selectRuns } from "./workflowsStore"
 import type { WorkflowRunSummary } from "../../shared/workflow-types"
 

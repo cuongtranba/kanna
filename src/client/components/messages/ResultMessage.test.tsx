@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
@@ -165,7 +165,7 @@ describe("ResultMessage — codex failure reasons", () => {
   })
 
   test("clicking Retry re-sends the failed turn's prompt", async () => {
-    const onRetry = mock((_resultMessageId: string) => Promise.resolve())
+    const onRetry = vi.fn((_resultMessageId: string) => Promise.resolve())
     const container = document.createElement("div")
     document.body.appendChild(container)
 

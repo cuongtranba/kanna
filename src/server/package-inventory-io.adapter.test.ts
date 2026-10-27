@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { mkdtemp, rm, writeFile, mkdir, symlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"

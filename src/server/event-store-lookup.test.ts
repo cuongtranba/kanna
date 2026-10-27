@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { liveRecord, requireLiveChat, requireLiveProject, requireLiveStack } from "./event-store-lookup"
 
 const records = new Map<string, { id: string; deletedAt?: number }>([

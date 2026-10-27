@@ -1,5 +1,5 @@
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderClientMarkup } from "../../../lib/testing/renderClientMarkup"
 import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../../../../shared/app-settings-types"
 import { InstructionsDialog } from "./InstructionsDialog"

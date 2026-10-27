@@ -1,9 +1,9 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { join } from "node:path"
 import { contrastRatio, oklchLuminance } from "../../shared/design/contrast"
 import { parseTokens } from "../../shared/design/tokens"
 
-const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
+const CSS_PATH = join(import.meta.dirname, "../../..", "src/index.css")
 const tokens = parseTokens(await Bun.file(CSS_PATH).text())
 
 const SLOTS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8]

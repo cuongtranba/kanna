@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { handleSettingsCommand, isSubagentValidationError } from "./ws-router-settings"
 import type { SettingsCommandDeps } from "./ws-router-settings"
 import type { AppSettingsSnapshot, Subagent, SubagentValidationError } from "../shared/types"
@@ -35,7 +35,7 @@ async function makeDeps(tmpDir: string): Promise<SettingsCommandDeps & { sent: u
       updateSubagent: async () => ({ id: "s1", name: "Test" }) as unknown as Subagent,
       deleteSubagent: async () => {},
     },
-    resolvedAnalytics: { track: mock(() => {}) },
+    resolvedAnalytics: { track: vi.fn(() => {}) },
     resolvedLlmProvider: {
       read: async () => ({ provider: "openai" as const, apiKey: "", model: "gpt-5.4-mini", baseUrl: "", resolvedBaseUrl: "https://api.openai.com/v1", enabled: false, warning: null, filePathDisplay: "~/.kanna/llm-provider.json" }),
       write: async (v) => ({ ...v, resolvedBaseUrl: "https://api.openai.com/v1", enabled: false, warning: null, filePathDisplay: "~/.kanna/llm-provider.json" }),

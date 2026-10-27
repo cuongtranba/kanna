@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { LogWriter } from "./event-store-writer"
 import { InMemoryStorageBackend } from "./storage/in-memory-storage"
 

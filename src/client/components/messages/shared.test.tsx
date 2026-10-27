@@ -1,5 +1,5 @@
 import "../../lib/testing/setupHappyDom"
-import { expect, test, afterEach } from "bun:test"
+import { expect, test, afterEach } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderThemed } from "../../lib/testing/renderThemed"

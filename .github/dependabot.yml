@@ -14,10 +14,10 @@ updates:
           - "minor"
           - "patch"
     ignore:
-      # typescript must stay <6.1.0: typescript-eslint's parser loads the
-      # legacy JS API via require('typescript'), peer range <6.1.0. TS7 is
-      # installed separately as the "typescript-7" alias. See the
-      # kanna-test skill.
+      # typescript must stay on 6.x: scripts/comment-scan.ts and two server
+      # tests use the classic JS API (createScanner, createProgram), which
+      # TS7 removed from require('typescript'). Type checking itself runs in
+      # Oxlint's bundled tsgolint. See CLAUDE.md "TypeScript".
       - dependency-name: "typescript"
         versions: [">=6.1.0"]
 

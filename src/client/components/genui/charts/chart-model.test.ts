@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { datasetDeclSchema, runDatasetQuery, type DatasetDecl, type DatasetQuery, type QueryResult } from "../../../../shared/genui"
 import type { JsonObject } from "../../../../shared/json"
 import { buildChartModel, type ChartModel, type ChartRequest } from "./chart-model"

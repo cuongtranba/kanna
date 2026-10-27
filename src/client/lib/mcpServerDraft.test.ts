@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { mcpServerInputFromDraft, mcpServerToDraft } from "./mcpServerDraft"
 import type { McpServerConfig } from "../../shared/types"
 

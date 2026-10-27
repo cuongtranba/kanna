@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { SubagentPendingTool, SubagentRunSnapshot } from "../../../shared/types"
 import { collectPendingQuestionRuns, selectPendingMainQuestion } from "./ChatTranscriptViewport"
 

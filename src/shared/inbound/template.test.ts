@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { INBOX_REPORT_TOOL_NAME } from "../tools"
 import { resolveJsonPath, type JsonValue } from "../json"
 import { INBOUND_PROMPT_BODY_MAX_CHARS } from "./handler"

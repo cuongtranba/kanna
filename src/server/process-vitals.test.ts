@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { summarizeChildProcesses, type ChildProcessUsage } from "./process-vitals"
 
 const ROOT_PID = 100

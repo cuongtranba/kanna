@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { createCodexPluginUpdateChecker, type CodexPluginCheckerDeps } from "./codex-plugin-update-checker.adapter"
 import type { InstalledPackage } from "../shared/packages/types"
 import pluginListFixture from "./__fixtures__/codex-plugin-list.json"

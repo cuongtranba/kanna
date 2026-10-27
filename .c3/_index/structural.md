@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:1341571f0c73976f5f9e64df1b890481ee458f9e411c2e9549ed0f099920c4b9 -->
+<!-- hash: sha256:c0707165ffd963e2ee2c3c4546ad20a78745a1a0827be766789e71f1a2b628ea -->
 
 ## c3-0 — Kanna (system)
 
@@ -289,7 +289,7 @@ files: .githooks/pre-commit, .github/workflows/gitleaks.yml, .gitleaks.toml, src
 ## c3-236 — architecture-budget (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
-files: scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts, src/ops/architecture/cjs-interop-scan.adapter.ts, src/ops/architecture/cjs-interop.ts
+files: lint.config.ts, scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts, src/ops/architecture/cjs-interop-scan.adapter.ts, src/ops/architecture/cjs-interop.ts, src/ops/lint/oxlint-run.adapter.ts
 
 ## c3-237 — package-autoupdate (component)
 container: c3-2 | context: c3-0
@@ -418,7 +418,7 @@ container: c3-3 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing
 files: src/shared/genui/*.ts
 
-## ref-colocated-bun-test — Colocated Bun Test (ref)
+## ref-colocated-bun-test — Colocated Test (Vitest under Bun) (ref)
 reverse deps: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
 citers: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
 
@@ -1036,11 +1036,13 @@ src/server/ws-router-observability.ts → c3-234
 .github/workflows/gitleaks.yml → c3-235
 .gitleaks.toml → c3-235
 src/server/gitleaks-hook.test.ts → c3-235
+lint.config.ts → c3-236
 scripts/check-complexity-limits.ts → c3-236
 src/ops/architecture/budget-scan.adapter.ts → c3-236
 src/ops/architecture/budget.ts → c3-236
 src/ops/architecture/cjs-interop-scan.adapter.ts → c3-236
 src/ops/architecture/cjs-interop.ts → c3-236
+src/ops/lint/oxlint-run.adapter.ts → c3-236
 src/server/app-settings-package-updates.ts → c3-237
 src/server/claude-plugin-update-applier.adapter.ts → c3-237
 src/server/claude-plugin-update-checker.adapter.ts → c3-237

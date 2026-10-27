@@ -1,6 +1,6 @@
 ---
 id: c3-236
-c3-seal: 3ab7b699d703b8b2289cc4e94a3b1149152698e6c27585ae2fd45d4e37402a54
+c3-seal: 492699c991e180f12ad4afe74a278fbc0c4958428e653a618f73ddba302eacd5
 title: architecture-budget
 type: component
 category: feature
@@ -21,7 +21,7 @@ Hold every structural-defect population in the codebase at or below a recorded p
 | Field | Value |
 | --- | --- |
 | Container | c3-2 Server |
-| Runtime | None. The budget runs only under bun test and never ships in the server binary. |
+| Runtime | None. The budget runs only under vp test (Vitest under Bun) and never ships in the server binary. |
 | Consumers | CI (Architecture budget step) and developers via bun run check:arch |
 | Boundary | Reads repository source as text. Imports no application module, so it cannot drift with the code it measures. |
 
@@ -47,7 +47,7 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | checkModuleBudget and checkPatternBudget | OUT | Pure functions returning every BudgetBreach rather than stopping at the first, so one run reports the whole regression. | No IO. Measurements are supplied by the caller. | src/ops/architecture/budget.test.ts |
 | measureModules, measureTestSources and measurePatterns | OUT | Module lines match wc -l as a newline count; pattern counts match grep -c as matching lines, so any pin is checkable by hand. | The only filesystem reader in the component. | src/ops/architecture/budget-scan.adapter.ts |
 | filesScanned | OUT | A budget whose include paths reach zero files reports pattern_unmeasured, never a shrink. | Prevents a renamed target from reading as a vanished population and being pinned at zero. | src/ops/architecture/budget.test.ts |
-| ESLINT_LIMIT_PINS | IN | Each pin must equal the ceiling eslint.config.js configures for that rule. Raising it is limit_raised; lowering the ceiling without lowering the pin is limit_slack; a pin whose rule eslint no longer configures is limit_unconfigured rather than a vacuous pass. | ESLint owns the per-function measurement a regex cannot make; the budget owns only the direction. | src/ops/architecture/budget.ts |
+| LINT\_LIMIT\_PINS | IN | Each pin must equal the ceiling lint.config.ts configures for that rule. Raising it is limit_raised; lowering the ceiling without lowering the pin is limit_slack; a pin whose rule the config no longer sets is limit_unconfigured rather than a vacuous pass. | Oxlint owns the per-function measurement a regex cannot make; the budget owns only the direction. | src/ops/architecture/budget.ts |
 
 ## Derived Materials
 
@@ -80,5 +80,5 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | A pin is raised to make a red build green, retiring the check instead of the defect | Any edit that increases a value in MODULE_ALLOWANCES or PATTERN_BUDGETS | The manifest is version-controlled, so the increase is a reviewable diff carrying the issue number it regresses | src/ops/architecture/budget.ts |
-| A renamed target silently makes a gate inert | A file listed in a PATTERN_BUDGETS include is moved or renamed | filesScanned reaches zero and the run reports pattern_unmeasured rather than a shrink | bun test --conditions production src/ops/architecture/budget.test.ts |
-| The scan stops reaching source and the gate passes vacuously | A change to the exclusion list or the directory walk | A guard test asserts the scan finds more than 400 modules and includes a known file | bun test src/ops/architecture/budget.test.ts |
+| A renamed target silently makes a gate inert | A file listed in a PATTERN_BUDGETS include is moved or renamed | filesScanned reaches zero and the run reports pattern_unmeasured rather than a shrink | bun run test src/ops/architecture/budget.test.ts |
+| The scan stops reaching source and the gate passes vacuously | A change to the exclusion list or the directory walk | A guard test asserts the scan finds more than 400 modules and includes a known file | bun run test src/ops/architecture/budget.test.ts |

@@ -1,5 +1,5 @@
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { fetchShareSnapshot, shareQueryKeys, shareQueryOptions } from "./share"
 import { makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
 

@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
 
-const TMP_DIR = join(import.meta.dir, "..", "__fixtures__", "plugins", ".tmp-shared-stub")
+const TMP_DIR = join(import.meta.dirname, "..", "__fixtures__", "plugins", ".tmp-shared-stub")
 
 describe("plugin-build.adapter — HOST_STUB_NAMESPACE", () => {
   test("a top-level call to the other target's declarative builder compiles AND evaluates as an identity no-op", async () => {
@@ -45,9 +45,9 @@ describe("plugin-build.adapter — process isolation", () => {
     const { buildPluginBundles } = await import("./plugin-build.adapter")
 
     const result = await buildPluginBundles({
-      sourceDir: import.meta.dir,
+      sourceDir: import.meta.dirname,
       entry: "index.ts",
-      childPath: join(import.meta.dir, "__fixtures__", "stalling-build-child.ts"),
+      childPath: join(import.meta.dirname, "__fixtures__", "stalling-build-child.ts"),
       deadlineMs: 400,
     })
 

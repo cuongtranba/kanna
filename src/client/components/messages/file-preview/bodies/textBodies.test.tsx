@@ -1,5 +1,5 @@
 import "../../../../lib/testing/setupHappyDom"
-import { describe, expect, test, beforeEach } from "bun:test"
+import { describe, expect, test, beforeEach } from "vite-plus/test"
 import { renderThemed } from "../../../../lib/testing/renderThemed"
 import { TextBody } from "./TextBody"
 import { JsonBody } from "./JsonBody"

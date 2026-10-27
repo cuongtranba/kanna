@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { JsonObject, JsonValue } from "../../shared/json"
 import type { McpPollSource, McpSubscribeSource } from "../../shared/mcp-sources/types"
 import type { McpServerConfig } from "../../shared/mcp-types"

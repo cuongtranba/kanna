@@ -1,5 +1,5 @@
 import type { JsonValue } from "../json"
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { parseClaudePluginList, parseClaudePluginsFile } from "./parse-claude-plugins"
 
 const USER_ENTRY = {

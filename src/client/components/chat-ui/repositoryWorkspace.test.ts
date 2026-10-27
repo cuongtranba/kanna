@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ChatBranchListEntry, ChatBranchListResult, ChatDiffSnapshot } from "../../../shared/types"
 import {
   canIgnoreDiffFile,

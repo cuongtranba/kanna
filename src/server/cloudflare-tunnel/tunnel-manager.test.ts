@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { TunnelManager, type SpawnFn, type ChildHandle } from "./tunnel-manager.adapter"
 import type { CloudflareTunnelEvent } from "./events"
 
@@ -27,7 +27,7 @@ function fakeChild(): FakeChild {
 describe("TunnelManager", () => {
   test("spawns cloudflared with --url and parses tunnel URL from stdout", async () => {
     const child = fakeChild()
-    const spawn: SpawnFn = mock(() => child)
+    const spawn: SpawnFn = vi.fn(() => child)
     const events: CloudflareTunnelEvent[] = []
     const mgr = new TunnelManager({
       spawn,
@@ -51,7 +51,7 @@ describe("TunnelManager", () => {
 
   test("reuses existing tunnel when same port requested twice", async () => {
     const child = fakeChild()
-    const spawn = mock(() => child)
+    const spawn = vi.fn(() => child)
     const mgr = new TunnelManager({ spawn, cloudflaredPath: "cloudflared", onEvent: () => {} })
 
     const a = await mgr.start({ chatId: "c1", port: 5173, sourcePid: 100 })
@@ -82,7 +82,7 @@ describe("TunnelManager", () => {
 
   test("stop() kills child and emits tunnel_stopped reason=user", async () => {
     const child = fakeChild()
-    const spawn = mock(() => child)
+    const spawn = vi.fn(() => child)
     const events: CloudflareTunnelEvent[] = []
     const mgr = new TunnelManager({
       spawn,
@@ -102,7 +102,7 @@ describe("TunnelManager", () => {
 
   test("emits tunnel_failed when child exits non-zero before URL parsed", async () => {
     const child = fakeChild()
-    const spawn = mock(() => child)
+    const spawn = vi.fn(() => child)
     const events: CloudflareTunnelEvent[] = []
     const mgr = new TunnelManager({
       spawn,

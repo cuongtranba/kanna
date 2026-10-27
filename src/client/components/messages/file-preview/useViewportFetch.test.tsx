@@ -1,5 +1,5 @@
 import "../../../lib/testing/setupHappyDom"
-import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, vi } from "vite-plus/test"
 import { useRef, act } from "react"
 import { createRoot } from "react-dom/client"
 import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
@@ -43,7 +43,7 @@ function Harness({ probe }: { probe: (state: ViewportFetchResult<string>) => voi
 describe("useViewportFetch", () => {
   test("starts idle before intersection", async () => {
     const states: Array<{ state: string }> = []
-    const probe = mock((s: ViewportFetchResult<string>) => {
+    const probe = vi.fn((s: ViewportFetchResult<string>) => {
       states.push({ state: s.state })
     })
     const result = await renderForLoopCheck(<Harness probe={probe} />)
@@ -54,7 +54,7 @@ describe("useViewportFetch", () => {
 
   test("returns memo-stable object across renders with same state", async () => {
     const refs: ViewportFetchResult<string>[] = []
-    const probe = mock((s: ViewportFetchResult<string>) => refs.push(s))
+    const probe = vi.fn((s: ViewportFetchResult<string>) => refs.push(s))
     const result = await renderForLoopCheck(<Harness probe={probe} />)
     expect(result.loopWarnings).toEqual([])
     if (refs.length >= 2) {
@@ -77,7 +77,7 @@ describe("useViewportFetch", () => {
     }
 
     const states: ViewportFetchResult<string>[] = []
-    const probe = mock((s: ViewportFetchResult<string>) => states.push(s))
+    const probe = vi.fn((s: ViewportFetchResult<string>) => states.push(s))
 
     const container = document.createElement("div")
     document.body.appendChild(container)

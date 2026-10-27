@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AGENT_PROVIDERS, type AgentProvider } from "../shared/core-types"
 import type { TranscriptEntry } from "../shared/types"
 import type { ClaudeSessionState } from "./claude-session-state"

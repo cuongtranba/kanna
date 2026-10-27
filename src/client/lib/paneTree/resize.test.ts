@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { KEYBOARD_RESIZE_STEP, findResizeBoundary } from "./resize"
 import { MIN_PANE_FRACTION } from "./sizes"
 import { createGroup, createPane } from "./tree"

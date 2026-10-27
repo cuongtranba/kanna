@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { SidebarData } from "../../shared/types"
 import type { ChatNavigatorPort } from "./chatNavigator"
 import { getNewestRemainingChatId, leaveRemovedChats } from "./chatLifecycle"

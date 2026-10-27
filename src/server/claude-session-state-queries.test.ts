@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, vi } from "vite-plus/test"
 import {
   getActiveStatuses,
   getBackgroundTasksByChatId,
@@ -107,15 +107,15 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
     pendingTools: new PendingToolSlots(),
     claudeSessions: new Map(),
     drainingStreams: new Map(),
-    isClaudeSdkProvider: mock(() => false),
-    resolveClaudeIdleMs: mock(() => 600_000),
-    resolveBackgroundTaskMaxMs: mock(() => 1_800_000),
-    resolveBackgroundTaskMaxWakes: mock(() => 3),
-    hasLiveWorkflow: mock(() => false),
-    closeClaudeSession: mock(() => undefined),
-    emitStateChange: mock(() => undefined),
-    wakeBackgroundTaskSession: mock(() => undefined),
-    notifyBackgroundTasksAbandoned: mock(() => undefined),
+    isClaudeSdkProvider: vi.fn(() => false),
+    resolveClaudeIdleMs: vi.fn(() => 600_000),
+    resolveBackgroundTaskMaxMs: vi.fn(() => 1_800_000),
+    resolveBackgroundTaskMaxWakes: vi.fn(() => 3),
+    hasLiveWorkflow: vi.fn(() => false),
+    closeClaudeSession: vi.fn(() => undefined),
+    emitStateChange: vi.fn(() => undefined),
+    wakeBackgroundTaskSession: vi.fn(() => undefined),
+    notifyBackgroundTasksAbandoned: vi.fn(() => undefined),
     ...overrides,
   }
 }
@@ -492,13 +492,13 @@ describe("sweepIdleClaudeSessions", () => {
   it("does nothing when no sessions", () => {
     const deps = makeDeps()
     sweepIdleClaudeSessions(deps, Date.now())
-    expect((deps.closeClaudeSession as ReturnType<typeof mock>).mock.calls.length).toBe(0)
+    expect((deps.closeClaudeSession as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
   })
 
   it("closes and emits state change for idle sessions", () => {
     const session = makeSession({ chatId: "chat-1", lastUsedAt: 0, pendingPromptSeqs: [] })
-    const closeFn = mock<(chatId: string, session: ClaudeSessionState) => void>(() => undefined)
-    const emitFn = mock<(chatId: string) => void>(() => undefined)
+    const closeFn = vi.fn<(chatId: string, session: ClaudeSessionState) => void>(() => undefined)
+    const emitFn = vi.fn<(chatId: string) => void>(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,
@@ -514,7 +514,7 @@ describe("sweepIdleClaudeSessions", () => {
 
   it("does not close non-idle sessions", () => {
     const session = makeSession({ chatId: "chat-1", lastUsedAt: Date.now(), pendingPromptSeqs: [] })
-    const closeFn = mock(() => undefined)
+    const closeFn = vi.fn(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 600_000,
@@ -549,9 +549,9 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       lastUsedAt: now - 32 * 60_000,
       backgroundTasksLevelSourced: true,
     })
-    const closeFn = mock(() => undefined)
-    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
-    const notifyFn = mock<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
+    const closeFn = vi.fn(() => undefined)
+    const wakeFn = vi.fn<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const notifyFn = vi.fn<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,
@@ -569,7 +569,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("still wakes a session that never saw a level snapshot", () => {
     const session = makeExpiredSession({ backgroundTasksLevelSourced: false })
-    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const wakeFn = vi.fn<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,
@@ -581,8 +581,8 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("fires a wake instead of closing when the guard expires with budget left", () => {
     const session = makeExpiredSession()
-    const closeFn = mock(() => undefined)
-    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const closeFn = vi.fn(() => undefined)
+    const wakeFn = vi.fn<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
     const now = Date.now()
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
@@ -602,8 +602,8 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("consumes the wake budget across sweeps until the cap", () => {
     const session = makeExpiredSession()
-    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
-    const closeFn = mock(() => undefined)
+    const wakeFn = vi.fn<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const closeFn = vi.fn(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,
@@ -622,9 +622,9 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("closes visibly (notify) once the wake budget is exhausted and the session is idle", () => {
     const session = makeExpiredSession({ backgroundTaskWakeCount: 3 })
-    const closeFn = mock(() => undefined)
-    const notifyFn = mock<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
-    const wakeFn = mock<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
+    const closeFn = vi.fn(() => undefined)
+    const notifyFn = vi.fn<SessionStateQueryDeps["notifyBackgroundTasksAbandoned"]>(() => undefined)
+    const wakeFn = vi.fn<SessionStateQueryDeps["wakeBackgroundTaskSession"]>(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,
@@ -644,8 +644,8 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("defers the exhausted-budget close while the session was recently used", () => {
     const session = makeExpiredSession({ backgroundTaskWakeCount: 3, lastUsedAt: Date.now() })
-    const closeFn = mock(() => undefined)
-    const notifyFn = mock(() => undefined)
+    const closeFn = vi.fn(() => undefined)
+    const notifyFn = vi.fn(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 600_000,
@@ -660,8 +660,8 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
 
   it("re-arms without consuming wake budget when a claude turn is active", () => {
     const session = makeExpiredSession()
-    const wakeFn = mock(() => undefined)
-    const closeFn = mock(() => undefined)
+    const wakeFn = vi.fn(() => undefined)
+    const closeFn = vi.fn(() => undefined)
     const now = Date.now()
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
@@ -685,7 +685,7 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       backgroundTasks: new Map(),
       backgroundTaskDeadlineAt: 0,
     })
-    const closeFn = mock(() => undefined)
+    const closeFn = vi.fn(() => undefined)
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
       resolveClaudeIdleMs: () => 1,

@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach, vi } from "vite-plus/test"
 
 
 type FakeQuery = {
@@ -20,14 +20,14 @@ const defaultFakeQ = (): FakeQuery => ({
   setPermissionMode: async () => {},
 })
 
-mock.module("@anthropic-ai/claude-agent-sdk", () => ({
+vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   query: (args: unknown) => {
     capturedQueryArgs = args
     return mockQueryFn(args)
   },
 }))
 
-mock.module("./kanna-mcp", () => ({
+vi.mock("./kanna-mcp", () => ({
   createKannaMcpServer: () => ({ transport: "stdio", command: "echo", args: [] }),
 }))
 

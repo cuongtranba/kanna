@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { fallbackTitleFromMessage, generateTitleForChat, generateTitleForChatDetailed } from "./generate-title"
 import { envWithoutParentClaudeCode, getQuickResponseWorkspace, QuickResponseAdapter, runClaudeStructured } from "./quick-response"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"

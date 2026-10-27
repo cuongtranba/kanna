@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $convertFromMarkdownString } from "@lexical/markdown"
 import {

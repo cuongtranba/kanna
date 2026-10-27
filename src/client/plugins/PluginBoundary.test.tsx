@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createContext, useContext } from "react"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { PluginBoundary } from "./PluginBoundary"

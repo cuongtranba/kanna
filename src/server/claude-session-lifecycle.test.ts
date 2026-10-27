@@ -1,5 +1,5 @@
 
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach } from "vite-plus/test"
 import {
   resolveClaudeIdleMs,
   resolveClaudeMaxResident,

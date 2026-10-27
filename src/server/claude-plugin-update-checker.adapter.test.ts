@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { createClaudePluginUpdateChecker, type ClaudePluginCheckerDeps } from "./claude-plugin-update-checker.adapter"
 import type { InstalledPackage } from "../shared/packages/types"
 

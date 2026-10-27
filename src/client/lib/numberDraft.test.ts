@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { resolveNumberCommit } from "./numberDraft"
 
 const ROUNDING = { min: 1, max: 100, whole: "round" } as const

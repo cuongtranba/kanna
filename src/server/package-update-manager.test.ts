@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { PackageUpdateManager } from "./package-update-manager"
 import type { PackageUpdateManagerDeps, TimerPort } from "./package-update-manager"
 import type { InstalledPackage, PackageInventorySnapshot, PackageUpdateApplier, PackageUpdateChecker, PackageUpdateStatus, PackageApplyResult } from "../shared/packages/types"

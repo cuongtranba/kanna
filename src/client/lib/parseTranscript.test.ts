@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { processTranscriptMessages } from "./parseTranscript"
 import { getLatestToolIds } from "../app/derived"
 import type { TranscriptEntry } from "../../shared/types"

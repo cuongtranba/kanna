@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { canForkChat, computeChatActivity, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, deriveTimings, stackSummaries } from "./read-models"
 import type { ComputeChatActivityDeps } from "./read-models"
 import type { ChatRecord } from "./events"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import { KannaAnalyticsReporter, getLaunchAnalyticsProperties } from "./analytics"
 

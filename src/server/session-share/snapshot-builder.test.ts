@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { DatasetDecl } from "../../shared/genui"
 import { datasetFreezeKey, datasetDeclSchema } from "../../shared/genui"
 import { CHAT_SNAPSHOT_VERSION, type FrozenDataset } from "../../shared/session-share/types"

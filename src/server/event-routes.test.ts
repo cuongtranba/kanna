@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { StoreEvent } from "./events"
 import { getReplayEventPriority, isEventOf, logOfEvent, UNKNOWN_EVENT_PRIORITY } from "./event-routes"
 

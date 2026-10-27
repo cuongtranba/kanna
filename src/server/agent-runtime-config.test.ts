@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { DEFAULT_AGENT_RUNTIME_CONFIG, resolveAgentRuntimeConfig } from "./agent-runtime-config"
 
 describe("resolveAgentRuntimeConfig", () => {

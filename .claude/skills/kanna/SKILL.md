@@ -7,8 +7,8 @@ description: Router and shared ground rules for ANY work in the Kanna repo — r
 
 Kanna is a local-first Bun + React agent host: an event-sourced server (`src/server/`),
 a React client (`src/client/`), and shared contracts (`src/shared/`). Most of what
-looks like a style preference here is actually enforced by a gate — ESLint,
-ast-grep, or a test — so a change that "looks fine" can still fail CI. This skill
+looks like a style preference here is actually enforced by a gate — Oxlint
+(`bun run lint`), ast-grep, or a test — so a change that "looks fine" can still fail CI. This skill
 routes you to the specialist that knows the relevant gate, and holds the few rules
 that apply to every task regardless of area.
 
@@ -87,7 +87,7 @@ upgrading, or using in an unfamiliar way, rather than recalling an API that may
 have shifted.
 
 **Verify before reporting.** `bun run test`, `bun run lint`, and `bun run typecheck`
-must pass — see `.claude/skills/kanna-test/SKILL.md` for the flags that matter and
+must pass — see `.claude/skills/kanna-test/SKILL.md` for how the suite runs and
 the failures that only reproduce on CI. Report what actually happened: if a check
 failed or you skipped one, say so plainly.
 

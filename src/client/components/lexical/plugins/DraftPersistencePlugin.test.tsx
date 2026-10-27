@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test"
+import { describe, expect, it, vi } from "vite-plus/test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import type { SerializedEditorState } from "lexical"
@@ -229,7 +229,7 @@ describe("DraftPersistencePlugin — SerializedEditorState round-trip", () => {
 describe("DraftPersistencePlugin — onChange prop contract", () => {
   it("onChange receives serialized state + plain text on every update", () => {
     const editor = buildEditor()
-    const onChange = mock((state: SerializedEditorState, text: string) => {
+    const onChange = vi.fn((state: SerializedEditorState, text: string) => {
       void state
       void text
     })

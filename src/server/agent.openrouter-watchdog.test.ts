@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AgentCoordinator } from "./agent-coordinator"
 import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
 import type { HarnessEvent } from "./harness-types"

@@ -1,5 +1,5 @@
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { probeFileUrl, deleteUploadedFile, fetchFileTextPreview } from "./files"
 import { makeFakeCommandPort, makeFakeHttpPort } from "../adapters/testing/makeFakePorts"
 

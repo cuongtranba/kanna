@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { LimitDetection } from "./auto-continue/limit-detector"
 import {

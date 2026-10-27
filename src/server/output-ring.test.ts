@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 
 describe("OutputRing", () => {

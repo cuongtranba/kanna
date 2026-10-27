@@ -232,7 +232,7 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   `z.never().optional()` for that reason.
 - **The endpoint is stateless.** `createMcpHandler` builds the MCP server per
   request (`remote-mcp-boot.ts`), so there is no session registry to bound or evict.
-- **Tests need native streams.** `scripts/test-preload.ts` restores the native
+- **Tests need native streams.** `scripts/test-setup.ts` restores the native
   `TransformStream` and `WritableStream` after happy-dom replaces them; the SDK
   client's SSE parser fails with "readable property must be a ReadableStream"
   under happy-dom's versions, and every SDK-client test hangs.

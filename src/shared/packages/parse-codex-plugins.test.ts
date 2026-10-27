@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { parseCodexPluginList, parseCodexPluginAvailable } from "./parse-codex-plugins"
 import fixture from "../../server/__fixtures__/codex-plugin-list.json"
 

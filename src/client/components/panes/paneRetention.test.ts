@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { PaneTab } from "../../lib/paneTree"
 import {
   DEFAULT_RETENTION_CAP,

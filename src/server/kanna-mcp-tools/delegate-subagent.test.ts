@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import type { DelegationOutcome } from "../subagent-orchestrator"

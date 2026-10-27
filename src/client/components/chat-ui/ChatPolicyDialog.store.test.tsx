@@ -1,22 +1,25 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ChatPolicyDialogStore } from "./ChatPolicyDialog.store"
 
+type PolicyDialogApi = ReturnType<typeof ChatPolicyDialogStore.useScopedStoreApi>
+
+function Capture({ onApi }: { onApi: (api: PolicyDialogApi) => void }) {
+  onApi(ChatPolicyDialogStore.useScopedStoreApi())
+  return null
+}
+
 function mountStore(initialDefaultAction: "ask" | "auto-allow" | "auto-deny") {
-  const captured: { api: ReturnType<typeof ChatPolicyDialogStore.useScopedStoreApi> | null } = { api: null }
-  function Capture() {
-    captured.api = ChatPolicyDialogStore.useScopedStoreApi()
-    return null
-  }
+  let captured: PolicyDialogApi | null = null
   renderToStaticMarkup(
     <ChatPolicyDialogStore.Provider
       init={{ initialDefaultAction, initialReadDenyText: "", initialWriteDenyText: "" }}
     >
-      <Capture />
+      <Capture onApi={(api) => { captured = api }} />
     </ChatPolicyDialogStore.Provider>,
   )
-  if (!captured.api) throw new Error("store was not captured")
-  return captured.api
+  if (!captured) throw new Error("store was not captured")
+  return captured as PolicyDialogApi
 }
 
 describe("ChatPolicyDialogStore default action", () => {

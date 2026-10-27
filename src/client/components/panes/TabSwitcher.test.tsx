@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { useTabSwitcherHotkeys } from "../../hooks/useTabSwitcherHotkeys"
 import { buildTabId, collectPanes, createDefaultLayout, type PaneTabTarget } from "../../lib/paneTree"
@@ -74,7 +74,7 @@ describe("recent-tab switcher", () => {
       tapSwitchKey()
       tapSwitchKey()
       expect(optionLabels()).toEqual(["GammaCurrent", "Beta", "Alpha"])
-      expect(highlightedLabel()).toStartWith("Alpha")
+      expect(highlightedLabel()).toMatch(/^Alpha/)
 
       releaseAlt()
       expect(focusedChat()).toBe("alpha")
@@ -119,7 +119,7 @@ describe("recent-tab switcher", () => {
       tapSwitchKey({}, terminal)
       tapSwitchKey({}, terminal)
       expect(reachedTerminal).toEqual([])
-      expect(highlightedLabel()).toStartWith("Alpha")
+      expect(highlightedLabel()).toMatch(/^Alpha/)
     } finally {
       terminal.remove()
       await view.cleanup()

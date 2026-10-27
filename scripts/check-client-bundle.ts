@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { gzipSync } from "node:zlib"
 import { join } from "node:path"
 
-const clientDir = join(import.meta.dir, "..", "dist", "client")
+const clientDir = join(import.meta.dirname, "..", "dist", "client")
 const html = readFileSync(join(clientDir, "index.html"), "utf8")
 const entryMatch = html.match(/src="\/assets\/([^"]+\.js)"/)
 

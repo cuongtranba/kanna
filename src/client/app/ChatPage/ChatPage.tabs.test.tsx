@@ -1,5 +1,5 @@
 
-import { beforeEach, describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "vite-plus/test"
 import { buildTabId, collectPanes, createDefaultLayout, type PaneLeaf, type PaneTabTarget } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { useChatStateStore, selectChatSlice } from "../../stores/chatStateStore"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { parseSha256Sums, releaseAssetUrl } from "../shared/release-sums"
 import {
   BEACON_RELEASE_TARGETS,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { installDomShim, parseMermaid } from "./mermaid-parse.adapter"
 
 const KIOSK_DIAGRAM = [

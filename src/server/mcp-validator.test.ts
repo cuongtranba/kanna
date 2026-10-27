@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect } from "vite-plus/test"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { validateMcpServer, networkHeaders } from "./mcp-validator"

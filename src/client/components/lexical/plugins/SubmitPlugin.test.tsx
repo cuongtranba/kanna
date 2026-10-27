@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vite-plus/test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH, COMMAND_PRIORITY_NORMAL } from "lexical"
 import {
