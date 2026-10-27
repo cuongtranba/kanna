@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Clock } from "../auto-continue/schedule-manager"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
 import { CronScheduler } from "./scheduler"
 import { compactCronRunEvents } from "./compact"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
@@ -49,7 +49,7 @@ function scheduleOf(text: string): CronSchedule {
   return parsed.schedule
 }
 
-function armedEvent(overrides: Partial<Extract<AutoContinueEvent, { kind: "cron_armed" }>> = {}): AutoContinueEvent {
+function armedEvent(overrides: Partial<Extract<ChatAutomationEvent, { kind: "cron_armed" }>> = {}): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_armed",
@@ -170,7 +170,7 @@ describe("CronScheduler", () => {
     clock.advance(2_000_000)
     const { scheduler, fires } = makeScheduler(clock)
 
-    const events: AutoContinueEvent[] = [
+    const events: ChatAutomationEvent[] = [
       armedEvent(),
       { v: AUTO_CONTINUE_EVENT_VERSION, kind: "cron_run_started", chatId: "c1", scheduleId: "j1", timestamp: 300_000, runId: "r1" },
       { v: AUTO_CONTINUE_EVENT_VERSION, kind: "cron_run_outcome", chatId: "c1", scheduleId: "j1", timestamp: 310_000, runId: "r1", ok: true },
@@ -188,7 +188,7 @@ describe("CronScheduler", () => {
   })
 
   test("rehydrate reports the same missed count over a compacted log", () => {
-    const full: AutoContinueEvent[] = [armedEvent()]
+    const full: ChatAutomationEvent[] = [armedEvent()]
     for (let i = 0; i < 120; i += 1) {
       const at = 300_000 + i * 1000
       full.push(

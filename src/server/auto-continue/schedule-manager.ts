@@ -1,4 +1,4 @@
-import type { AutoContinueEvent } from "./events"
+import type { AutoContinueScheduleEvent } from "./events"
 import { deriveChatSchedules } from "./read-model"
 import { log } from "../../shared/log"
 import { toError } from "../../shared/errors"
@@ -37,8 +37,8 @@ export class ScheduleManager {
     this.onError = args.onError ?? ((error) => log.error("[kanna/schedule-manager]", String(error)))
   }
 
-  rehydrate(events: readonly AutoContinueEvent[]) {
-    const byChat = new Map<string, AutoContinueEvent[]>()
+  rehydrate(events: readonly AutoContinueScheduleEvent[]) {
+    const byChat = new Map<string, AutoContinueScheduleEvent[]>()
     for (const event of events) {
       const list = byChat.get(event.chatId) ?? []
       list.push(event)
@@ -54,37 +54,18 @@ export class ScheduleManager {
     }
   }
 
-  onEvent(event: AutoContinueEvent) {
+  onEvent(event: AutoContinueScheduleEvent) {
     switch (event.kind) {
       case "auto_continue_proposed":
-        return
+        break
       case "auto_continue_accepted":
-        this.arm(event.chatId, event.scheduleId, event.scheduledAt)
-        return
       case "auto_continue_rescheduled":
         this.arm(event.chatId, event.scheduleId, event.scheduledAt)
-        return
+        break
       case "auto_continue_cancelled":
       case "auto_continue_fired":
         this.clear(event.scheduleId)
-        return
-      case "loop_armed":
-      case "loop_disarmed":
-      case "loop_run_outcome":
-        return
-      case "cron_armed":
-      case "cron_disarmed":
-      case "cron_paused":
-      case "cron_resumed":
-      case "cron_run_started":
-      case "cron_run_outcome":
-      case "cron_run_skipped":
-        return
-      default: {
-        const _exhaustive: never = event
-        void _exhaustive
-        
-      }
+        break
     }
   }
 

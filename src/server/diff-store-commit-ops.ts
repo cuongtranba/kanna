@@ -11,8 +11,8 @@ import {
   getBranchName,
   getOriginRemoteUrl,
   hasUpstreamBranch,
-  resolveRepo,
-} from "./diff-store-git-branch.adapter"
+  requireRepo,
+} from "./diff-store-git-branch"
 import { appendGitIgnoreEntry, normalizeRepoRelativePath } from "./diff-store-parse"
 import {
   createCommitFailure,
@@ -26,7 +26,7 @@ import {
   listDirtyPaths,
   readBaseFile,
   readWorktreeFile,
-} from "./diff-store-file-ops.adapter"
+} from "./diff-store-file-ops"
 import type {
   DiffCommitMode,
   DiffCommitResult,
@@ -38,7 +38,6 @@ export interface DiffStoreCommitOpsDeps {
 }
 
 export async function generateCommitMessage(
-  _deps: DiffStoreCommitOpsDeps,
   args: { projectPath: string; paths: string[] }
 ) {
   const normalizedPaths = [...new Set(args.paths.map(normalizeRepoRelativePath))]
@@ -46,10 +45,7 @@ export async function generateCommitMessage(
     throw new Error("Select at least one file")
   }
 
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const currentDirtyPaths = await listDirtyPaths(repo.repoRoot)
   const selectedFiles = await Promise.all(normalizedPaths.map(async (selectedPath) => {
@@ -99,10 +95,7 @@ export async function commitFiles(
     throw new Error("Select at least one file to commit")
   }
 
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
   const [hasUpstream, originRemoteUrl] = await Promise.all([
     hasUpstreamBranch(repo.repoRoot),
     getOriginRemoteUrl(repo.repoRoot),
@@ -189,10 +182,7 @@ export async function discardFile(
   args: { projectPath: string; path: string }
 ) {
   const relativePath = normalizeRepoRelativePath(args.path)
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const entry = await findDirtyPath(repo.repoRoot, relativePath)
   if (!entry) {
@@ -229,10 +219,7 @@ export async function ignoreFile(
   args: { projectPath: string; path: string }
 ) {
   const ignoreEntry = normalizeRepoRelativePath(args.path)
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const dirtyPaths = await listDirtyPaths(repo.repoRoot)
   const exactEntry = dirtyPaths.find((candidate) => candidate.path === ignoreEntry)

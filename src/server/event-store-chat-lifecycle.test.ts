@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentProvider } from "../shared/types"
 import type { ChatRecord, ChatTimingState, ProjectRecord, StackRecord, StoreState } from "./events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import {
   applyChatLifecycleEvent,
@@ -330,8 +330,8 @@ describe("applyChatLifecycleEvent — queued message events", () => {
 
 describe("applyAutoContinueToState", () => {
   test("appends event to list", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
-    const ev: AutoContinueEvent = {
+    const m = new Map<string, ChatAutomationEvent[]>()
+    const ev: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_accepted",
       chatId: "c1",
@@ -350,7 +350,7 @@ describe("applyAutoContinueToState", () => {
   })
 
   test("keeps cron run history bounded as events arrive one at a time", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
+    const m = new Map<string, ChatAutomationEvent[]>()
     applyAutoContinueToState(m, {
       v: 3,
       kind: "cron_armed",
@@ -378,8 +378,8 @@ describe("applyAutoContinueToState", () => {
   })
 
   test("leaves the array reference untouched when nothing is dropped", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
-    const ev: AutoContinueEvent = {
+    const m = new Map<string, ChatAutomationEvent[]>()
+    const ev: ChatAutomationEvent = {
       v: 3, kind: "loop_run_outcome", chatId: "c1", scheduleId: "loop-1", timestamp: TS, ok: true,
     }
     applyAutoContinueToState(m, ev)

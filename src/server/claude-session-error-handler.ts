@@ -1,6 +1,6 @@
 
 import type { TranscriptEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent, type ChatAutomationEventBase } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
@@ -30,8 +30,8 @@ interface ErrorHandlerOAuthPool {
 }
 
 interface ErrorHandlerStore {
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
   recordTurnFailed(chatId: string, error: string): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -50,7 +50,7 @@ export interface SessionErrorHandlerDeps {
 
   resolveAutoResumeFor(chatId: string): boolean
 
-  emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
 
   closeClaudeSession(
     chatId: string,
@@ -95,14 +95,7 @@ interface RotationFailure {
   tz: string
   rotationResetAt: (now: number) => number
   failureLabel: string
-  fallbackEvent: (base: AutoContinueEventBase, now: number) => AutoContinueEvent
-}
-
-interface AutoContinueEventBase {
-  v: typeof AUTO_CONTINUE_EVENT_VERSION
-  timestamp: number
-  chatId: string
-  scheduleId: string
+  fallbackEvent: (base: ChatAutomationEventBase, now: number) => ChatAutomationEvent
 }
 
 function hasLiveSchedule(deps: SessionErrorHandlerDeps, chatId: string): boolean {
@@ -132,9 +125,9 @@ async function rotateOrPropose(deps: SessionErrorHandlerDeps, failure: RotationF
 
   const now = Date.now()
   const scheduleId = crypto.randomUUID()
-  const base: AutoContinueEventBase = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
+  const base: ChatAutomationEventBase = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
-  const event: AutoContinueEvent = canRotate
+  const event: ChatAutomationEvent = canRotate
     ? {
         ...base,
         kind: "auto_continue_accepted",
@@ -193,9 +186,9 @@ function limitWaitEvent(
   deps: SessionErrorHandlerDeps,
   detection: LimitDetection,
   loop: LoopState | null,
-  base: AutoContinueEventBase,
+  base: ChatAutomationEventBase,
   now: number,
-): AutoContinueEvent {
+): ChatAutomationEvent {
   const earliestPoolUnlimit = deps.oauthPool?.earliestUnlimit() ?? null
   const waitUntil = earliestPoolUnlimit !== null
     ? Math.min(detection.resetAt, earliestPoolUnlimit)

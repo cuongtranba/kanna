@@ -41,6 +41,14 @@ export async function resolveRepo(
   }
 }
 
+export async function requireRepo(projectPath: string): Promise<{ repoRoot: string; baseCommit: string | null }> {
+  const repo = await resolveRepo(projectPath)
+  if (!repo) {
+    throw new Error("Project is not in a git repository")
+  }
+  return repo
+}
+
 export async function getBranchName(repoRoot: string) {
   const symbolicRef = await runGit(["symbolic-ref", "--quiet", "--short", "HEAD"], repoRoot)
   if (symbolicRef.exitCode === 0) {
@@ -67,13 +75,8 @@ export async function getLastFetchedAt(repoRoot: string) {
   }
 
   const gitDir = gitDirResult.stdout.trim()
-  const fetchHeadPath = path.resolve(repoRoot, gitDir, "FETCH_HEAD")
-  try {
-    const fetchHeadStat = (await statOrNull(fetchHeadPath))!
-    return fetchHeadStat.mtime.toISOString()
-  } catch {
-    return undefined
-  }
+  const fetchHeadStat = await statOrNull(path.resolve(repoRoot, gitDir, "FETCH_HEAD"))
+  return fetchHeadStat?.mtime.toISOString()
 }
 
 export async function getUpstreamStatusCounts(repoRoot: string) {
@@ -354,14 +357,12 @@ export interface GitHubPullRequestResponseItem {
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
-type GitHubCliApiLike = (path: string) => Promise<GitHubPullRequestResponseItem[] | null>
-
-interface FetchGitHubPullRequestsDeps {
+interface GitHubListDeps<Item> {
   fetchImpl?: FetchLike
-  ghApiImpl?: GitHubCliApiLike
+  ghApiImpl?: (path: string) => Promise<Item[] | null>
 }
 
-async function fetchGitHubPullRequestsViaGh(path: string): Promise<GitHubPullRequestResponseItem[] | null> {
+async function fetchListViaGh<Item>(path: string): Promise<Item[] | null> {
   const result = await spawnCapture([
     "gh",
     "api",
@@ -373,93 +374,53 @@ async function fetchGitHubPullRequestsViaGh(path: string): Promise<GitHubPullReq
     return null
   }
 
-  const json: GitHubPullRequestResponseItem[] = JSON.parse(result.stdout)
+  const json: Item[] = JSON.parse(result.stdout)
   return Array.isArray(json) ? json : []
 }
 
-export async function fetchGitHubPullRequests(
-  repoSlug: string,
-  deps: FetchLike | FetchGitHubPullRequestsDeps = fetch
-): Promise<GitHubPullRequestResponseItem[]> {
+async function fetchGitHubList<Item>(
+  apiPath: string,
+  label: string,
+  deps: FetchLike | GitHubListDeps<Item>,
+): Promise<Item[]> {
   const fetchImpl = typeof deps === "function" ? deps : (deps.fetchImpl ?? fetch)
-  const ghApiImpl = typeof deps === "function" ? fetchGitHubPullRequestsViaGh : (deps.ghApiImpl ?? fetchGitHubPullRequestsViaGh)
-  const ghPath = `repos/${repoSlug}/pulls?state=open&per_page=50`
+  const ghApiImpl = (typeof deps === "function" ? undefined : deps.ghApiImpl) ?? fetchListViaGh<Item>
 
   try {
-    const ghPulls = await ghApiImpl(ghPath)
-    if (ghPulls) {
-      return ghPulls
+    const viaGh = await ghApiImpl(apiPath)
+    if (viaGh) {
+      return viaGh
     }
   } catch {
   }
 
-  const response = await fetchImpl(`https://api.github.com/repos/${repoSlug}/pulls?state=open&per_page=50`, {
+  const response = await fetchImpl(`https://api.github.com/${apiPath}`, {
     headers: {
       Accept: "application/vnd.github+json",
     },
   })
 
   if (!response.ok) {
-    throw new Error(`GitHub pull requests request failed with status ${response.status}`)
+    throw new Error(`GitHub ${label} request failed with status ${response.status}`)
   }
 
-  const json: GitHubPullRequestResponseItem[] = await response.json()
+  const json: Item[] = await response.json()
   return Array.isArray(json) ? json : []
 }
 
-
-type GitHubReleasesCliApiLike = (path: string) => Promise<GithubRelease[] | null>
-
-interface FetchGitHubReleasesDeps {
-  fetchImpl?: FetchLike
-  ghApiImpl?: GitHubReleasesCliApiLike
-}
-
-async function fetchGitHubReleasesViaGh(path: string): Promise<GithubRelease[] | null> {
-  const result = await spawnCapture([
-    "gh",
-    "api",
-    "-H",
-    "Accept: application/vnd.github+json",
-    path,
-  ])
-  if (result.exitCode !== 0) {
-    return null
-  }
-
-  const json: GithubRelease[] = JSON.parse(result.stdout)
-  return Array.isArray(json) ? json : []
+export function fetchGitHubPullRequests(
+  repoSlug: string,
+  deps: FetchLike | GitHubListDeps<GitHubPullRequestResponseItem> = fetch
+): Promise<GitHubPullRequestResponseItem[]> {
+  return fetchGitHubList(`repos/${repoSlug}/pulls?state=open&per_page=50`, "pull requests", deps)
 }
 
 export async function fetchGitHubReleases(
   repoSlug: string,
-  deps: FetchLike | FetchGitHubReleasesDeps = fetch
+  deps: FetchLike | GitHubListDeps<GithubRelease> = fetch
 ): Promise<GithubRelease[]> {
-  const fetchImpl = typeof deps === "function" ? deps : (deps.fetchImpl ?? fetch)
-  const ghApiImpl = typeof deps === "function" ? fetchGitHubReleasesViaGh : (deps.ghApiImpl ?? fetchGitHubReleasesViaGh)
-  const ghPath = `repos/${repoSlug}/releases`
-
-  let releases: GithubRelease[] | null = null
-  try {
-    releases = await ghApiImpl(ghPath)
-  } catch {
-  }
-
-  if (!releases) {
-    const response = await fetchImpl(`https://api.github.com/${ghPath}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error(`GitHub releases request failed with status ${response.status}`)
-    }
-
-    releases = await response.json()
-  }
-
-  return Array.isArray(releases) ? releases.filter((release) => !release.draft) : []
+  const releases = await fetchGitHubList(`repos/${repoSlug}/releases`, "releases", deps)
+  return releases.filter((release) => !release.draft)
 }
 
 
@@ -651,7 +612,5 @@ export async function getGitHubOwners(): Promise<string[]> {
 }
 
 export async function readOriginRepoSlug(repoRoot: string): Promise<string | null> {
-  const result = await runGit(["remote", "get-url", "origin"], repoRoot)
-  if (result.exitCode !== 0) return null
-  return extractGitHubRepoSlug(result.stdout.trim())
+  return extractGitHubRepoSlug(await getOriginRemoteUrl(repoRoot))
 }

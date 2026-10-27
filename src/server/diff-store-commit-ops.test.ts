@@ -3,13 +3,13 @@ import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { runGit } from "./diff-store"
-import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops.adapter"
+import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops"
 import {
   commitFiles,
   discardFile,
   generateCommitMessage,
   ignoreFile,
-} from "./diff-store-commit-ops.adapter"
+} from "./diff-store-commit-ops"
 
 async function makeRepo(): Promise<string> {
   const dir = mkdtempSync(path.join(tmpdir(), "kanna-commit-ops-"))
@@ -299,7 +299,7 @@ describe("generateCommitMessage", () => {
   test("throws when not a git repo", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
-      generateCommitMessage(makeDeps(), {
+      generateCommitMessage({
         projectPath: dir,
         paths: ["README.md"],
       })
@@ -309,7 +309,7 @@ describe("generateCommitMessage", () => {
   test("throws when no paths provided", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage(makeDeps(), {
+      generateCommitMessage({
         projectPath: repo,
         paths: [],
       })
@@ -319,7 +319,7 @@ describe("generateCommitMessage", () => {
   test("throws when file is no longer changed", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage(makeDeps(), {
+      generateCommitMessage({
         projectPath: repo,
         paths: ["README.md"],
       })
@@ -329,7 +329,7 @@ describe("generateCommitMessage", () => {
   test("deduplicates paths before processing", async () => {
     const repo = await makeRepo()
     await expect(
-      generateCommitMessage(makeDeps(), {
+      generateCommitMessage({
         projectPath: repo,
         paths: ["README.md", "README.md"],
       })

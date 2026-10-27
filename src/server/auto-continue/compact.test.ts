@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { compactCronRunEvents } from "../cron/compact"
 import { compactAutoContinueEvents } from "./compact"
 import { compactLoopWakeEvents } from "./compact-loop-wakes"
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 
 const VERSION = 3 as const
 const CHAT = "chat-1"
 
-function loopArmed(scheduleId: string, timestamp: number): AutoContinueEvent {
+function loopArmed(scheduleId: string, timestamp: number): ChatAutomationEvent {
   return {
     v: VERSION,
     kind: "loop_armed",
@@ -22,7 +22,7 @@ function loopArmed(scheduleId: string, timestamp: number): AutoContinueEvent {
   }
 }
 
-function cronSkipped(index: number): AutoContinueEvent {
+function cronSkipped(index: number): ChatAutomationEvent {
   return {
     v: VERSION,
     kind: "cron_run_skipped",
@@ -35,7 +35,7 @@ function cronSkipped(index: number): AutoContinueEvent {
 
 describe("compactAutoContinueEvents", () => {
   test("applies cron-run retention first and loop-wake retention to its result", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1", 1),
       loopArmed("la-2", 2),
       ...Array.from({ length: 80 }, (_unused, index) => cronSkipped(index)),

@@ -121,7 +121,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     max: 1,
     issue: 1379,
     rationale:
-      "Which StoreEvent variant is discriminated by kind instead of type is a fact about the event union, so events.ts owns it through isAutoContinueEvent and storeEventKind. A site that probes the field itself learns the union's layout and has to be found and edited whenever a second variant joins the exception.",
+      "Which StoreEvent variant is discriminated by kind instead of type is a fact about the event union, so events.ts owns it through isChatAutomationEvent and storeEventKind. A site that probes the field itself learns the union's layout and has to be found and edited whenever a second variant joins the exception.",
   },
   {
     id: "settings-snapshot-application",

@@ -1,9 +1,9 @@
 
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 
 const MAX_LIVE_LOOP_RUN_OUTCOMES = 3
 
-export function compactLoopWakeEvents(events: AutoContinueEvent[]): AutoContinueEvent[] {
+export function compactLoopWakeEvents(events: ChatAutomationEvent[]): ChatAutomationEvent[] {
   const dropped = new Set<number>()
 
 

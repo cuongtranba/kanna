@@ -1,7 +1,7 @@
 
 import { describe, test, expect } from "bun:test"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import {
   resolveAutoResumeFor,
   emitAutoContinueEvent,
@@ -26,14 +26,14 @@ function makeQueuedMessage(): QueuedChatMessage {
   }
 }
 
-type StoredEvent = AutoContinueEvent
+type StoredEvent = ChatAutomationEvent
 
 interface FakeStore {
   events: StoredEvent[]
   messages: { chatId: string; entry: TranscriptEntry }[]
   chatExists: boolean
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   getChat(chatId: string): { id: string } | null | undefined
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -100,7 +100,7 @@ describe("emitAutoContinueEvent", () => {
   test("appends event to store", async () => {
     const store = makeStore()
     const deps = makeDeps({ store })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -113,11 +113,11 @@ describe("emitAutoContinueEvent", () => {
   })
 
   test("notifies schedule manager", async () => {
-    const notified: AutoContinueEvent[] = []
+    const notified: ChatAutomationEvent[] = []
     const deps = makeDeps({
       scheduleManager: { onEvent: (e) => { notified.push(e) } },
     })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -131,7 +131,7 @@ describe("emitAutoContinueEvent", () => {
   test("emits state change for chat", async () => {
     const changes: string[] = []
     const deps = makeDeps({ emitStateChange: (id) => { changes.push(id) } })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -152,7 +152,7 @@ describe("getChatSchedule", () => {
 
   test("returns the schedule when a proposed event exists", async () => {
     const deps = makeDeps()
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_proposed",
       timestamp: Date.now(),

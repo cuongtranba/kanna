@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { STORE_VERSION } from "../shared/types"
 import type { ToolRequest } from "../shared/permission-policy"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { createEmptyState } from "./events"
 import type { TranscriptEntry } from "../shared/types"
 import { applyStoreEvent } from "./event-store-apply"
@@ -224,7 +224,7 @@ describe("applyStoreEvent — stack events", () => {
 describe("applyStoreEvent — auto-continue events", () => {
   test("auto_continue_accepted is routed to autoContinueEventsByChatId", () => {
     const state = makeState()
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_accepted",
       chatId: "chat-1",

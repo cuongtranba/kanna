@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { spawn as nodeSpawn } from "node:child_process"
-import type { CloudflareTunnelEvent } from "./events"
-import { CLOUDFLARE_TUNNEL_EVENT_VERSION } from "./events"
+import { tunnelEnvelope, type CloudflareTunnelEvent, type TunnelStopReason } from "./events"
 
 export interface ChildHandle {
   pid: number
@@ -58,11 +57,8 @@ export class TunnelManager {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.onEvent({
-        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        ...tunnelEnvelope(input.chatId, tunnelId, this.now()),
         kind: "tunnel_failed",
-        timestamp: this.now(),
-        chatId: input.chatId,
-        tunnelId,
         error: `cloudflared failed to start: ${message}`,
       })
       return tunnelId
@@ -86,7 +82,7 @@ export class TunnelManager {
     return tunnelId
   }
 
-  async stop(tunnelId: string, reason: "user" | "source_exited" | "session_closed" | "server_shutdown"): Promise<void> {
+  async stop(tunnelId: string, reason: TunnelStopReason): Promise<void> {
     const record = this.byTunnel.get(tunnelId)
     if (!record) return
     if (record.state === "stopped" || record.state === "failed") return
@@ -94,11 +90,8 @@ export class TunnelManager {
     record.child.kill()
     this.byPort.delete(record.port)
     this.onEvent({
-      v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+      ...tunnelEnvelope(record.chatId, tunnelId, this.now()),
       kind: "tunnel_stopped",
-      timestamp: this.now(),
-      chatId: record.chatId,
-      tunnelId,
       reason,
     })
   }
@@ -115,11 +108,8 @@ export class TunnelManager {
     if (!match) return
     record.state = "active"
     this.onEvent({
-      v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+      ...tunnelEnvelope(record.chatId, record.tunnelId, this.now()),
       kind: "tunnel_active",
-      timestamp: this.now(),
-      chatId: record.chatId,
-      tunnelId: record.tunnelId,
       url: match[0],
     })
   }
@@ -129,11 +119,8 @@ export class TunnelManager {
     if (record.state === "starting") {
       record.state = "failed"
       this.onEvent({
-        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        ...tunnelEnvelope(record.chatId, record.tunnelId, this.now()),
         kind: "tunnel_failed",
-        timestamp: this.now(),
-        chatId: record.chatId,
-        tunnelId: record.tunnelId,
         error: `cloudflared exited (code ${code}) before tunnel URL appeared`,
       })
       return
@@ -141,11 +128,8 @@ export class TunnelManager {
     if (record.state === "active") {
       record.state = "stopped"
       this.onEvent({
-        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        ...tunnelEnvelope(record.chatId, record.tunnelId, this.now()),
         kind: "tunnel_stopped",
-        timestamp: this.now(),
-        chatId: record.chatId,
-        tunnelId: record.tunnelId,
         reason: "source_exited",
       })
     }

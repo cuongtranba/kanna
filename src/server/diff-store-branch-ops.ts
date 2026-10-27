@@ -1,4 +1,4 @@
-import { formatGitFailure, summarizeGitFailure } from "./diff-store-io.adapter"
+import { formatGitFailure } from "./diff-store-io.adapter"
 import { runGit } from "./git-runner.adapter"
 import {
   createBranchActionFailure,
@@ -17,12 +17,12 @@ import {
   hasUpstreamBranch,
   predictMergeConflicts,
   resolveDefaultBranchName,
-  resolveRepo,
+  requireRepo,
   resolveSelectedBranchRef,
-} from "./diff-store-git-branch.adapter"
-import type { SelectedBranch } from "./diff-store-git-branch.adapter"
-import { createSyncPushFailure } from "./diff-store-errors"
-import { listDirtyPaths } from "./diff-store-file-ops.adapter"
+} from "./diff-store-git-branch"
+import type { SelectedBranch } from "./diff-store-git-branch"
+import { createSyncFailure } from "./diff-store-errors"
+import { listDirtyPaths } from "./diff-store-file-ops"
 import type {
   ChatBranchListEntry,
   ChatBranchListResult,
@@ -43,10 +43,7 @@ export async function listBranches(
   deps: DiffStoreBranchOpsDeps,
   args: { projectPath: string }
 ): Promise<ChatBranchListResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const [currentBranchName, defaultBranchName, localBranchNames, remoteBranchNames, recentBranchNames, localUpdatedAtMap, remoteUpdatedAtMap] = await Promise.all([
     getBranchName(repo.repoRoot),
@@ -185,13 +182,9 @@ export async function listBranches(
 }
 
 export async function previewMergeBranch(
-  _deps: DiffStoreBranchOpsDeps,
   args: { projectPath: string; branch: SelectedBranch }
 ): Promise<ChatMergePreviewResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const currentBranchName = await getBranchName(repo.repoRoot)
   const resolvedBranch = await resolveSelectedBranchRef(repo.repoRoot, args.branch)
@@ -264,10 +257,7 @@ export async function mergeBranch(
   deps: DiffStoreBranchOpsDeps,
   args: { projectPath: string; branch: SelectedBranch }
 ): Promise<ChatMergeBranchResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const currentDirtyPaths = await listDirtyPaths(repo.repoRoot)
   if (currentDirtyPaths.length > 0) {
@@ -326,10 +316,7 @@ export async function checkoutBranch(
     bringChanges?: boolean
   }
 ): Promise<ChatCheckoutBranchResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const currentDirtyPaths = await listDirtyPaths(repo.repoRoot)
   if (currentDirtyPaths.length > 0 && !args.bringChanges) {
@@ -412,10 +399,7 @@ export async function createBranch(
     baseBranchName?: string
   }
 ): Promise<ChatCreateBranchResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
-  }
+  const repo = await requireRepo(args.projectPath)
 
   const branchName = args.name.trim()
   if (!branchName) {
@@ -462,137 +446,51 @@ export async function syncBranch(
     action: GitSyncAction
   }
 ): Promise<ChatSyncResult> {
-  const repo = await resolveRepo(args.projectPath)
-  if (!repo) {
-    throw new Error("Project is not in a git repository")
+  const repo = await requireRepo(args.projectPath)
+
+  const syncSuccess = async (): Promise<ChatSyncResult> => {
+    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
+    const branchName = await getBranchName(repo.repoRoot)
+    const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
+    const { aheadCount, behindCount } = nextHasUpstream
+      ? await getUpstreamStatusCounts(repo.repoRoot)
+      : { aheadCount: undefined, behindCount: undefined }
+    return {
+      ok: true,
+      action: args.action,
+      branchName,
+      aheadCount,
+      behindCount,
+      snapshotChanged,
+    }
   }
 
-  const hasUpstream = await hasUpstreamBranch(repo.repoRoot)
   if (args.action === "publish") {
     const publishResult = await runGit(["push", "-u", "origin", "HEAD"], repo.repoRoot)
     if (publishResult.exitCode !== 0) {
-      const detail = formatGitFailure(publishResult)
-      const normalized = detail.toLowerCase()
-      let title = "Publish branch failed"
-      let message = summarizeGitFailure(detail, "Git could not publish this branch.")
-
-      if (normalized.includes("could not read from remote repository") || normalized.includes("authentication failed") || normalized.includes("permission denied")) {
-        title = "Remote authentication failed"
-        message = "Git could not authenticate with the remote repository."
-      }
-
-      return {
-        ok: false,
-        action: args.action,
-        title,
-        message,
-        detail,
-        snapshotChanged: false,
-      }
+      return createSyncFailure("publish", formatGitFailure(publishResult), false)
     }
-
-    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
-    const branchName = await getBranchName(repo.repoRoot)
-    const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
-    const { aheadCount, behindCount } = nextHasUpstream
-      ? await getUpstreamStatusCounts(repo.repoRoot)
-      : { aheadCount: undefined, behindCount: undefined }
-
-    return {
-      ok: true,
-      action: args.action,
-      branchName,
-      aheadCount,
-      behindCount,
-      snapshotChanged,
-    }
+    return syncSuccess()
   }
 
-  if (args.action === "push") {
-    if (!hasUpstream) {
-      return {
-        ok: false,
-        action: args.action,
-        title: "Push failed",
-        message: "This branch does not have an upstream remote branch configured yet.",
-        snapshotChanged: false,
-      }
-    }
-
-    const pushResult = await runGit(["push"], repo.repoRoot)
-    if (pushResult.exitCode !== 0) {
-      const detail = formatGitFailure(pushResult)
-      return createSyncPushFailure(detail, false)
-    }
-
-    const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
-    const branchName = await getBranchName(repo.repoRoot)
-    const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
-    const { aheadCount, behindCount } = nextHasUpstream
-      ? await getUpstreamStatusCounts(repo.repoRoot)
-      : { aheadCount: undefined, behindCount: undefined }
-
-    return {
-      ok: true,
-      action: args.action,
-      branchName,
-      aheadCount,
-      behindCount,
-      snapshotChanged,
-    }
-  }
-
-  if (args.action === "pull" && !hasUpstream) {
+  if (args.action !== "fetch" && !(await hasUpstreamBranch(repo.repoRoot))) {
     return {
       ok: false,
       action: args.action,
-      title: "Pull failed",
+      title: args.action === "push" ? "Push failed" : "Pull failed",
       message: "This branch does not have an upstream remote branch configured yet.",
       snapshotChanged: false,
     }
   }
 
-  const syncResult = args.action === "pull"
-    ? await runGit(["pull", "--ff-only"], repo.repoRoot)
-    : await runGit(["fetch", "--all", "--prune"], repo.repoRoot)
-
-  if (syncResult.exitCode !== 0) {
-    const detail = formatGitFailure(syncResult)
-    const normalized = detail.toLowerCase()
-    let title = args.action === "pull" ? "Pull failed" : "Fetch failed"
-    let message = summarizeGitFailure(detail, args.action === "pull" ? "Git could not pull the latest changes." : "Git could not fetch the latest changes.")
-
-    if (args.action === "pull" && normalized.includes("not possible to fast-forward")) {
-      title = "Pull requires merge or rebase"
-      message = "Your branch cannot be fast-forwarded. Rebase or merge manually, then try again."
-    } else if (normalized.includes("could not read from remote repository") || normalized.includes("authentication failed") || normalized.includes("permission denied")) {
-      title = "Remote authentication failed"
-      message = "Git could not authenticate with the remote repository."
-    }
-
-    return {
-      ok: false,
-      action: args.action,
-      title,
-      message,
-      detail,
-      snapshotChanged: false,
-    }
+  const gitArgs = {
+    push: ["push"],
+    pull: ["pull", "--ff-only"],
+    fetch: ["fetch", "--all", "--prune"],
+  }[args.action]
+  const result = await runGit(gitArgs, repo.repoRoot)
+  if (result.exitCode !== 0) {
+    return createSyncFailure(args.action, formatGitFailure(result), false)
   }
-
-  const snapshotChanged = await deps.refreshSnapshot(args.projectPath)
-  const branchName = await getBranchName(repo.repoRoot)
-  const nextHasUpstream = await hasUpstreamBranch(repo.repoRoot)
-  const { aheadCount, behindCount } = nextHasUpstream
-    ? await getUpstreamStatusCounts(repo.repoRoot)
-    : { aheadCount: undefined, behindCount: undefined }
-
-  return {
-    ok: true,
-    action: args.action,
-    branchName,
-    aheadCount,
-    behindCount,
-    snapshotChanged,
-  }
+  return syncSuccess()
 }

@@ -1,4 +1,3 @@
-
 import { cronModeConsequence } from "../../shared/cron/arm-summary"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { parseCronCommand } from "../../shared/cron/parse-command"
@@ -6,13 +5,46 @@ import { formatCronDefect } from "../../shared/cron/repair-report"
 import type { CronArmSummary, CronCommand } from "../../shared/cron/types"
 import { nextFireAt } from "./next-fire"
 
-type ArmCommand = Extract<CronCommand, { sub: "arm" }>
+export type CronArmCommand = Extract<CronCommand, { sub: "arm" }>
 
 export type CronPreview =
-  | { ok: true; command: ArmCommand; summary: CronArmSummary }
+  | { ok: true; command: CronArmCommand; summary: CronArmSummary }
   | { ok: false; reason: string }
 
-const PREVIEW_FIRES = 3
+export type CronArmPlan =
+  | { ok: true; summary: CronArmSummary }
+  | { ok: false; neverFires: string }
+
+export interface CronArmContext {
+  model?: string
+  cwd?: string
+}
+
+const UPCOMING_FIRES = 3
+
+export function planCronArm(command: CronArmCommand, nowMs: number, context: CronArmContext = {}): CronArmPlan {
+  const fires = upcomingFires(command, nowMs)
+  if (fires.length === 0) {
+    return {
+      ok: false,
+      neverFires: `schedule "${command.scheduleText}" never fires (no matching date exists)`,
+    }
+  }
+  return {
+    ok: true,
+    summary: {
+      jobId: null,
+      instruction: command.instruction,
+      mode: command.mode,
+      modeConsequence: cronModeConsequence(command.mode),
+      scheduleText: command.scheduleText,
+      scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
+      upcomingFires: fires,
+      model: context.model ?? null,
+      cwd: context.cwd ?? null,
+    },
+  }
+}
 
 export function previewCronCommand(line: string, nowMs: number): CronPreview {
   const parsed = parseCronCommand(line)
@@ -30,34 +62,17 @@ export function previewCronCommand(line: string, nowMs: number): CronPreview {
     }
   }
 
-  const command = parsed.command
-  const fires = upcomingFires(command, nowMs)
-  if (fires.length === 0) {
-    return {
-      ok: false,
-      reason: `schedule "${command.scheduleText}" never fires (no matching date exists) — nothing would be scheduled.`,
-    }
+  const plan = planCronArm(parsed.command, nowMs)
+  if (!plan.ok) {
+    return { ok: false, reason: `${plan.neverFires} — nothing would be scheduled.` }
   }
-
-  const summary: CronArmSummary = {
-    jobId: null,
-    instruction: command.instruction,
-    mode: command.mode,
-    modeConsequence: cronModeConsequence(command.mode),
-    scheduleText: command.scheduleText,
-    scheduleHuman: humanizeSchedule(command.schedule, command.scheduleText),
-    upcomingFires: fires,
-    model: null,
-    cwd: null,
-  }
-
-  return { ok: true, command, summary }
+  return { ok: true, command: parsed.command, summary: plan.summary }
 }
 
-function upcomingFires(command: ArmCommand, nowMs: number): number[] {
+function upcomingFires(command: CronArmCommand, nowMs: number): number[] {
   const fires: number[] = []
   let cursor = nowMs
-  for (let i = 0; i < PREVIEW_FIRES; i++) {
+  for (let i = 0; i < UPCOMING_FIRES; i++) {
     const next = nextFireAt(command.schedule, cursor, nowMs)
     if (next === null) break
     fires.push(next)

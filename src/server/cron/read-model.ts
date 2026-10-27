@@ -5,18 +5,16 @@ import {
   type CronRunSnapshot,
 } from "../../shared/cron/types"
 import { nextFireAt } from "./next-fire"
-import type { AutoContinueEvent } from "../auto-continue/events"
+import type { ChatAutomationEvent } from "../auto-continue/events"
 
 interface JobAccum {
   job: Omit<CronJobSnapshot, "nextFireAt" | "lastRun" | "recentRuns">
   runs: CronRunSnapshot[]
 }
 
-export function deriveCronJobs(
-  events: readonly AutoContinueEvent[],
-  chatId: string,
-  nowMs: number,
-): CronJobSnapshot[] {
+export type CronJobState = Omit<CronJobSnapshot, "nextFireAt">
+
+export function foldCronJobs(events: readonly ChatAutomationEvent[], chatId: string): CronJobState[] {
   const jobs = new Map<string, JobAccum>()
 
   for (const event of events) {
@@ -87,19 +85,27 @@ export function deriveCronJobs(
     }
   }
 
-  const snapshots: CronJobSnapshot[] = []
+  const states: CronJobState[] = []
   for (const accum of jobs.values()) {
-    snapshots.push({
+    states.push({
       ...accum.job,
-      nextFireAt: accum.job.paused
-        ? null
-        : nextFireAt(accum.job.schedule, nowMs, accum.job.armedAt),
       lastRun: accum.runs[0] ?? null,
       recentRuns: accum.runs,
     })
   }
-  snapshots.sort((a, b) => a.armedAt - b.armedAt)
-  return snapshots
+  states.sort((a, b) => a.armedAt - b.armedAt)
+  return states
+}
+
+export function deriveCronJobs(
+  events: readonly ChatAutomationEvent[],
+  chatId: string,
+  nowMs: number,
+): CronJobSnapshot[] {
+  return foldCronJobs(events, chatId).map((state) => ({
+    ...state,
+    nextFireAt: state.paused ? null : nextFireAt(state.schedule, nowMs, state.armedAt),
+  }))
 }
 
 function pushRun(accum: JobAccum, run: CronRunSnapshot): void {
@@ -107,38 +113,8 @@ function pushRun(accum: JobAccum, run: CronRunSnapshot): void {
   if (accum.runs.length > MAX_RECENT_CRON_RUNS) accum.runs.length = MAX_RECENT_CRON_RUNS
 }
 
-export function hasUnpausedCronJob(events: readonly AutoContinueEvent[], chatId: string): boolean {
-  const armed = new Set<string>()
-  const paused = new Set<string>()
-  for (const event of events) {
-    if (event.chatId !== chatId) continue
-    switch (event.kind) {
-      case "cron_armed":
-        armed.add(event.scheduleId)
-        paused.delete(event.scheduleId)
-        break
-      case "cron_disarmed":
-        armed.delete(event.scheduleId)
-        paused.delete(event.scheduleId)
-        break
-      case "cron_paused":
-        if (armed.has(event.scheduleId)) paused.add(event.scheduleId)
-        break
-      case "cron_resumed":
-        paused.delete(event.scheduleId)
-        break
-      default:
-        break
-    }
-  }
-  for (const jobId of armed) {
-    if (!paused.has(jobId)) return true
-  }
-  return false
-}
-
 export function findRunningCronRuns(
-  events: readonly AutoContinueEvent[],
+  events: readonly ChatAutomationEvent[],
   chatId: string,
 ): Array<{ jobId: string; runId: string; spawnedChatId?: string }> {
   const running = new Map<string, { jobId: string; runId: string; spawnedChatId?: string }>()

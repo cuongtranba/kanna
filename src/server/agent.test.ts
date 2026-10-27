@@ -26,7 +26,7 @@ import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { HarnessEvent, HarnessTurn } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
@@ -3657,8 +3657,8 @@ function createFakeStore() {
       this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {
@@ -4511,7 +4511,7 @@ describe("AgentCoordinator.acceptAutoContinue", () => {
   test("happy path: appends auto_continue_accepted with source 'user' for a proposed schedule", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-1"
-    const proposedEvent: AutoContinueEvent = {
+    const proposedEvent: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_proposed",
       timestamp: Date.now(),

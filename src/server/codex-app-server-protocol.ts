@@ -25,39 +25,32 @@ export interface InitializeParams {
   }
 }
 
-export interface ThreadStartParams {
+export type CodexApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted"
+
+export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access"
+
+export interface ThreadPolicyParams {
   model?: string | null
   cwd?: string | null
   serviceTier?: ServiceTier | null
-  approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
-  sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
+  approvalPolicy?: CodexApprovalPolicy | null
+  sandbox?: CodexSandboxMode | null
+  persistExtendedHistory: boolean
+  config?: JsonObject | null
+}
+
+export interface ThreadStartParams extends ThreadPolicyParams {
   experimentalRawEvents: boolean
-  persistExtendedHistory: boolean
   developerInstructions?: string | null
-  config?: JsonObject | null
 }
 
-export interface ThreadResumeParams {
+export interface ThreadResumeParams extends ThreadPolicyParams {
   threadId: string
-  model?: string | null
-  cwd?: string | null
-  serviceTier?: ServiceTier | null
-  approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
-  sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
-  persistExtendedHistory: boolean
-  config?: JsonObject | null
 }
 
-export interface ThreadForkParams {
+export interface ThreadForkParams extends ThreadPolicyParams {
   threadId: string
-  model?: string | null
-  cwd?: string | null
-  serviceTier?: ServiceTier | null
-  approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
-  sandbox?: "read-only" | "workspace-write" | "danger-full-access" | null
   ephemeral?: boolean
-  persistExtendedHistory: boolean
-  config?: JsonObject | null
 }
 
 export interface TextUserInput {
@@ -82,7 +75,7 @@ export type ReasoningEffort = CodexReasoningEffort
 export interface TurnStartParams {
   threadId: string
   input: CodexUserInput[]
-  approvalPolicy?: "never" | "on-request" | "on-failure" | "untrusted" | null
+  approvalPolicy?: CodexApprovalPolicy | null
   model?: string | null
   effort?: ReasoningEffort | null
   serviceTier?: ServiceTier | null

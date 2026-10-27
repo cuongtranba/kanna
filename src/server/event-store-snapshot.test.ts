@@ -18,7 +18,7 @@ import {
   type LegacyTranscriptStats,
 } from "./event-store-snapshot"
 import type { TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { deriveCronJobs } from "./cron/read-model"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import type { StoreEvent } from "./events"
@@ -167,7 +167,7 @@ describe("loadSnapshotIntoState", () => {
   })
 
   test("converges an already-bloated cron history from the snapshot", async () => {
-    const events: AutoContinueEvent[] = [{
+    const events: ChatAutomationEvent[] = [{
       v: 3,
       kind: "cron_armed",
       chatId: "chat-1",

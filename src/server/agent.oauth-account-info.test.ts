@@ -4,7 +4,7 @@ import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { HarnessEvent } from "./harness-types"
 import type { AccountInfo, LlmProviderSnapshot, OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
 import { maskOauthKey } from "../shared/mask-oauth-key"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -76,8 +76,8 @@ function createFakeStore() {
       this.turnFailedCount += 1
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {

@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import type { TranscriptEntry } from "../shared/types"
 import type { SnapshotFile } from "./events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
 import { getLatestContextWindowUsage } from "./proactive-compact"
 import { deriveCronJobs, findRunningCronRuns } from "./cron/read-model"
@@ -413,7 +413,7 @@ describe("EventStore", () => {
     const project = await store.openProject("/tmp/project")
     const chat = await store.createChat(project.id)
 
-    const armed: AutoContinueEvent = {
+    const armed: ChatAutomationEvent = {
       v: 3,
       kind: "cron_armed",
       chatId: chat.id,
@@ -425,12 +425,12 @@ describe("EventStore", () => {
       schedule: { type: "interval", ms: 300_000 },
     }
     await store.appendAutoContinueEvent(armed)
-    const full: AutoContinueEvent[] = [armed]
+    const full: ChatAutomationEvent[] = [armed]
     for (let i = 0; i < 120; i += 1) {
-      const started: AutoContinueEvent = {
+      const started: ChatAutomationEvent = {
         v: 3, kind: "cron_run_started", chatId: chat.id, scheduleId: "job-1", timestamp: 100 + i * 10, runId: `r${i}`,
       }
-      const outcome: AutoContinueEvent = {
+      const outcome: ChatAutomationEvent = {
         v: 3, kind: "cron_run_outcome", chatId: chat.id, scheduleId: "job-1", timestamp: 101 + i * 10, runId: `r${i}`, ok: true,
       }
       await store.appendAutoContinueEvent(started)
@@ -1370,14 +1370,14 @@ describe("EventStore subagent runs", () => {
 })
 
 describe("EventStore auto-continue schedules", () => {
-  test("appends and replays AutoContinueEvent sequence", async () => {
+  test("appends and replays ChatAutomationEvent sequence", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
     await store.initialize()
     const project = await store.openProject("/tmp/p1")
     const chat = await store.createChat(project.id)
 
-    const proposed: AutoContinueEvent = {
+    const proposed: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_proposed",
       timestamp: 1_000,
@@ -1388,7 +1388,7 @@ describe("EventStore auto-continue schedules", () => {
       tz: "Asia/Saigon",
 
     }
-    const accepted: AutoContinueEvent = {
+    const accepted: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_accepted",
       timestamp: 1_100,

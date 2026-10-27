@@ -1,18 +1,18 @@
 import { EMPTY_CHAT_TASK_PROJECTION } from "../../shared/chat-tasks/read-model"
 
-import type { AutoContinueEvent } from "../auto-continue/events"
+import type { ChatAutomationEvent } from "../auto-continue/events"
 import type { TranscriptEntry } from "../../shared/types"
 import type { ClaudeSessionState } from "../claude-session-state"
 import type { LoopCommandDeps } from "../claude-loop-commands"
 
 
 export interface FakeStore {
-  events: AutoContinueEvent[]
+  events: ChatAutomationEvent[]
   messages: { chatId: string; entry: TranscriptEntry }[]
   chats: Map<string, { id: string; projectId: string }>
   projects: Map<string, { id: string; localPath: string }>
   sessionTokensSet: { chatId: string; provider: string; token: string | null }[]
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   getChat(chatId: string): { id: string; projectId: string } | null
   getProject(projectId: string): { id: string; localPath: string } | null
   setSessionTokenForProvider(chatId: string, provider: "claude", token: string | null): Promise<void>
@@ -65,7 +65,7 @@ export function makeStore(overrides: Partial<FakeStore> = {}): FakeStore {
 
 export function makeDeps(overrides: Partial<LoopCommandDeps> = {}): LoopCommandDeps {
   const store = makeStore()
-  const emittedEvents: AutoContinueEvent[] = []
+  const emittedEvents: ChatAutomationEvent[] = []
   const closedSessions: string[] = []
 
   return {

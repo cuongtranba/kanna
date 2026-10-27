@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { runGit } from "./diff-store"
-import type { DiffStoreBranchOpsDeps } from "./diff-store-branch-ops.adapter"
+import type { DiffStoreBranchOpsDeps } from "./diff-store-branch-ops"
 import {
   checkoutBranch,
   createBranch,
@@ -11,7 +11,7 @@ import {
   mergeBranch,
   previewMergeBranch,
   syncBranch,
-} from "./diff-store-branch-ops.adapter"
+} from "./diff-store-branch-ops"
 
 async function makeRepo(): Promise<string> {
   const dir = mkdtempSync(path.join(tmpdir(), "kanna-branch-ops-"))
@@ -168,7 +168,7 @@ describe("previewMergeBranch", () => {
   test("throws when not a git repo", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "kanna-not-git-"))
     await expect(
-      previewMergeBranch(makeDeps(), {
+      previewMergeBranch({
         projectPath: dir,
         branch: { kind: "local", name: "main" },
       })
@@ -177,7 +177,7 @@ describe("previewMergeBranch", () => {
 
   test("returns up_to_date when targeting current branch", async () => {
     const repo = await makeRepo()
-    const result = await previewMergeBranch(makeDeps(), {
+    const result = await previewMergeBranch({
       projectPath: repo,
       branch: { kind: "local", name: "main" },
     })
@@ -191,7 +191,7 @@ describe("previewMergeBranch", () => {
     await runGit(["switch", "-c", "empty-branch"], repo)
     await runGit(["switch", "main"], repo)
 
-    const result = await previewMergeBranch(makeDeps(), {
+    const result = await previewMergeBranch({
       projectPath: repo,
       branch: { kind: "local", name: "empty-branch" },
     })
@@ -207,7 +207,7 @@ describe("previewMergeBranch", () => {
     await runGit(["commit", "-m", "add new file"], repo)
     await runGit(["switch", "main"], repo)
 
-    const result = await previewMergeBranch(makeDeps(), {
+    const result = await previewMergeBranch({
       projectPath: repo,
       branch: { kind: "local", name: "with-commits" },
     })

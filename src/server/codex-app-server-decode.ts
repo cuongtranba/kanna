@@ -10,20 +10,11 @@ export type OutgoingCodexMessage =
   | { id: CodexRequestId; result: JsonValue }
   | { id: CodexRequestId; error: { message: string } }
 
-export function decodeThreadId(method: string, reply: JsonValue): string {
-  const thread = reply !== null && isJsonObject(reply) ? reply.thread : null
-  const id = thread !== null && thread !== undefined && isJsonObject(thread) ? thread.id : null
+export function decodeNestedId(method: string, reply: JsonValue, key: "thread" | "turn"): string {
+  const nested = reply !== null && isJsonObject(reply) ? reply[key] : null
+  const id = nested !== null && nested !== undefined && isJsonObject(nested) ? nested.id : null
   if (typeof id !== "string" || id.length === 0) {
-    throw new Error(`codex app-server ${method} reply carried no thread.id`)
-  }
-  return id
-}
-
-export function decodeTurnId(method: string, reply: JsonValue): string {
-  const turn = reply !== null && isJsonObject(reply) ? reply.turn : null
-  const id = turn !== null && turn !== undefined && isJsonObject(turn) ? turn.id : null
-  if (typeof id !== "string" || id.length === 0) {
-    throw new Error(`codex app-server ${method} reply carried no turn.id`)
+    throw new Error(`codex app-server ${method} reply carried no ${key}.id`)
   }
   return id
 }

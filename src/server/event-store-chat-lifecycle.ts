@@ -12,7 +12,7 @@ import type {
   StoreState,
   TurnEvent,
 } from "./events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { compactAutoContinueEvents } from "./auto-continue/compact"
 import { ACTIVE_SESSION_IDLE_GAP_MS } from "./read-models"
 import { resolveLocalPath } from "./paths"
@@ -413,8 +413,8 @@ export function applyChatLifecycleEvent(
 
 
 export function applyAutoContinueToState(
-  autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>,
-  event: AutoContinueEvent,
+  autoContinueEventsByChatId: Map<string, ChatAutomationEvent[]>,
+  event: ChatAutomationEvent,
 ): void {
   const existing = autoContinueEventsByChatId.get(event.chatId) ?? []
   existing.push(event)

@@ -58,8 +58,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const snapshot = store.getSnapshot(repoRoot)
@@ -78,8 +77,7 @@ describe("DiffStore", () => {
     const root = await mkdtemp(path.join(tmpdir(), "kanna-no-repo-"))
     tempDirs.push(root)
 
-    const store = new DiffStore(root)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(root)
 
     expect(store.getSnapshot(root)).toEqual({
@@ -101,8 +99,7 @@ describe("DiffStore", () => {
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
     await writeFile(path.join(repoRoot, "notes.txt"), "changed too\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     await store.commitFiles({
@@ -133,8 +130,7 @@ describe("DiffStore", () => {
     await run(["git", "switch", "-c", "feature/publish-me"], repoRoot)
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const result = await store.commitFiles({
@@ -160,8 +156,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const result = await store.commitFiles({
@@ -190,8 +185,7 @@ describe("DiffStore", () => {
     await writeFile(path.join(repoRoot, "build", ".gitignore"), ".wrangler/\n", "utf8")
     await writeFile(path.join(repoRoot, "build", ".wrangler", "state.sqlite"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const result = await store.commitFiles({
@@ -219,8 +213,7 @@ describe("DiffStore", () => {
     await run(["git", "remote", "add", "origin", "https://github.com/jakemor/test224.git"], repoRoot)
     await writeFile(path.join(repoRoot, "poem.md"), "rose\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     expect(store.getSnapshot(repoRoot)).toMatchObject({
@@ -239,8 +232,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await run(["git", "mv", "before.txt", "after.txt"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const snapshot = store.getSnapshot(repoRoot)
@@ -259,8 +251,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const snapshot = store.getSnapshot(repoRoot)
@@ -283,8 +274,7 @@ describe("DiffStore", () => {
     await mkdir(path.join(repoRoot, "thing"), { recursive: true })
     await writeFile(path.join(repoRoot, "thing", "file.txt"), "nested\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await expect(store.refreshSnapshot(repoRoot)).resolves.toBe(true)
 
     const snapshot = store.getSnapshot(repoRoot)
@@ -302,8 +292,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
     await store.discardFile({
       projectPath: repoRoot,
@@ -322,8 +311,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
     await store.discardFile({
       projectPath: repoRoot,
@@ -342,8 +330,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await run(["git", "mv", "before.txt", "after.txt"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
     await store.discardFile({
       projectPath: repoRoot,
@@ -363,8 +350,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "scratch.log"), "tmp\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
     await store.ignoreFile({
       projectPath: repoRoot,
@@ -383,8 +369,7 @@ describe("DiffStore", () => {
     await mkdir(path.join(repoRoot, "tmp/cache"), { recursive: true })
     await writeFile(path.join(repoRoot, "tmp/cache/output.log"), "tmp\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
     await store.ignoreFile({
       projectPath: repoRoot,
@@ -415,8 +400,7 @@ describe("DiffStore", () => {
     await run(["git", "tag", "v1.0.0"], repoRoot)
     await run(["git", "remote", "add", "origin", "git@github.com:acme/repo.git"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     const snapshot = store.getSnapshot(repoRoot)
@@ -437,8 +421,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(repoRoot)
 
     await expect(store.ignoreFile({
@@ -552,8 +535,7 @@ describe("DiffStore", () => {
     await run(["git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], repoRoot).catch(() => {})
     await run(["git", "update-ref", "refs/remotes/origin/feature/remote", "HEAD"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
 
     const result = await store.listBranches({ projectPath: repoRoot })
     expect(result.defaultBranchName).toBe("main")
@@ -576,7 +558,7 @@ describe("DiffStore", () => {
     await run(["git", "update-ref", "refs/remotes/origin/feature/pr-branch", "HEAD"], repoRoot)
     await run(["git", "update-ref", "refs/remotes/origin/feature/non-pr", "HEAD"], repoRoot)
 
-    const store = new DiffStore(repoRoot, async () => [
+    const store = new DiffStore(async () => [
       {
         number: 42,
         title: "PR branch",
@@ -593,7 +575,6 @@ describe("DiffStore", () => {
         },
       },
     ])
-    await store.initialize()
 
     const result = await store.listBranches({ projectPath: repoRoot })
     expect(result.pullRequests.some((entry) => entry.prNumber === 42)).toBe(true)
@@ -611,8 +592,7 @@ describe("DiffStore", () => {
     await run(["git", "remote", "add", "origin", "git@github.com:acme/repo.git"], repoRoot)
     await run(["git", "update-ref", "refs/remotes/origin/feature/remote", "HEAD"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     const result = await store.checkoutBranch({
       projectPath: repoRoot,
       branch: { kind: "remote", name: "feature/remote", remoteRef: "origin/feature/remote" },
@@ -632,8 +612,7 @@ describe("DiffStore", () => {
     await run(["git", "switch", "main"], repoRoot).catch(async () => run(["git", "switch", "master"], repoRoot))
     await writeFile(path.join(repoRoot, "app.txt"), "changed\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     const result = await store.checkoutBranch({
       projectPath: repoRoot,
       branch: { kind: "local", name: "feature/other" },
@@ -654,8 +633,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await run(["git", "switch", "-c", "feature/base"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
     const result = await store.createBranch({
       projectPath: repoRoot,
       name: "feature/new",
@@ -674,8 +652,7 @@ describe("DiffStore", () => {
     await run(["git", "commit", "-m", "init"], repoRoot)
     await run(["git", "switch", "-c", "feature/preview"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
 
     const upToDatePreview = await store.previewMergeBranch({
       projectPath: repoRoot,
@@ -712,8 +689,7 @@ describe("DiffStore", () => {
     await writeFile(path.join(repoRoot, "conflict.txt"), "main\n", "utf8")
     await run(["git", "commit", "-am", "main"], repoRoot)
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
 
     const preview = await store.previewMergeBranch({
       projectPath: repoRoot,
@@ -737,8 +713,7 @@ describe("DiffStore", () => {
     await run(["git", "switch", "main"], repoRoot)
     await writeFile(path.join(repoRoot, "scratch.txt"), "dirty\n", "utf8")
 
-    const store = new DiffStore(repoRoot)
-    await store.initialize()
+    const store = new DiffStore()
 
     const blockedResult = await store.mergeBranch({
       projectPath: repoRoot,
@@ -773,8 +748,7 @@ test("a worktree and its main checkout keep separate state", async () => {
   try {
     await addWorktree(dir, { kind: "new-branch", branch: "feature/x", path: worktreePath })
 
-    const store = new DiffStore(dir)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(dir)
     await store.refreshSnapshot(worktreePath)
 
@@ -796,8 +770,7 @@ test("a worktree and its main checkout keep separate state", async () => {
 test("an unrefreshed path reads as unknown rather than borrowing another tree", async () => {
   const { dir, cleanup } = makeTempRepo()
   try {
-    const store = new DiffStore(dir)
-    await store.initialize()
+    const store = new DiffStore()
     await store.refreshSnapshot(dir)
     expect(store.getSnapshot(dir).status).toBe("ready")
     expect(store.getSnapshot("/tmp/never-refreshed").status).toBe("unknown")

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { AgentCoordinator } from "./agent"
 import type { HarnessEvent } from "./harness-types"
 import type { LlmProviderSnapshot, SlashCommand, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -71,8 +71,8 @@ function createFakeStore() {
       this.turnFailedCount += 1
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {

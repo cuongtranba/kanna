@@ -1,6 +1,6 @@
 
 import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, isAutoContinueScheduleEvent, type AutoContinueScheduleEvent, type ChatAutomationEvent } from "./auto-continue/events"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { SendMessageOptions } from "./claude-steer-log"
 import { appendTurnError } from "./claude-turn-outcome"
@@ -9,12 +9,12 @@ import { addCounter, AUTOCONTINUE_FIRED } from "./observability"
 
 
 interface AutoContinueScheduleManager {
-  onEvent(event: AutoContinueEvent): void
+  onEvent(event: AutoContinueScheduleEvent): void
 }
 
 interface AutoContinueCommandStore {
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   getChat(chatId: string): { id: string } | null | undefined
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -48,10 +48,10 @@ export function resolveAutoResumeFor(deps: AutoContinueCommandDeps, chatId: stri
 
 export async function emitAutoContinueEvent(
   deps: AutoContinueCommandDeps,
-  event: AutoContinueEvent,
+  event: ChatAutomationEvent,
 ): Promise<void> {
   await deps.store.appendAutoContinueEvent(event)
-  deps.scheduleManager?.onEvent(event)
+  if (isAutoContinueScheduleEvent(event)) deps.scheduleManager?.onEvent(event)
   deps.emitStateChange(event.chatId)
 }
 
@@ -78,7 +78,7 @@ export async function fireAutoContinue(
   const schedule = getChatSchedule(deps, chatId, scheduleId)
   const promptToReplay = schedule?.prompt ?? "continue"
 
-  const event: AutoContinueEvent = {
+  const event: ChatAutomationEvent = {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_fired",
     timestamp: Date.now(),

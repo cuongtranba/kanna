@@ -10,6 +10,7 @@ import type {
   TurnPlanStep,
 } from "./codex-app-server-protocol"
 import { isUnifiedDiff } from "./codex-transcript-translator"
+import { parsePlanSteps } from "./codex-plan-steps"
 import type { CodexToolCallRecord, CodexToolOutputRecord } from "./codex-session-types"
 
 const EXEC_TOOL_NAMES: ReadonlySet<string> = new Set(["exec", "exec_command"])
@@ -168,30 +169,6 @@ export function parseApplyPatch(input: string): PatchChanges | null {
   return changes.length > 0 ? changes : null
 }
 
-function planStatus<T>(raw: T): TurnPlanStep["status"] {
-  if (raw === "completed") return "completed"
-  if (raw === "in_progress" || raw === "inProgress") return "inProgress"
-  return "pending"
-}
-
-export function parsePlanSteps(
-  input: string,
-): { steps: TurnPlanStep[]; explanation: string | null } | null {
-  const args = parseJsonObject(input)
-  if (args === null) return null
-  const plan = args.plan
-  if (!Array.isArray(plan)) return null
-  const steps: TurnPlanStep[] = []
-  for (const entry of plan) {
-    if (!isRecord(entry)) continue
-    const step = stringOrNull(entry.step)
-    if (step === null) continue
-    steps.push({ step, status: planStatus(entry.status) })
-  }
-  if (steps.length === 0) return null
-  return { steps, explanation: stringOrNull(args.explanation) }
-}
-
 function dynamicArguments(record: CodexToolCallRecord): DynamicToolCallItem["arguments"] {
   if (record.family === "function") {
     const parsed = parseJsonObject(record.input)
@@ -290,7 +267,8 @@ export function createRolloutMapper(warn: (message: string) => void = (message) 
     }
 
     if (record.name === UPDATE_PLAN_TOOL_NAME) {
-      const plan = parsePlanSteps(record.input)
+      const args = parseJsonObject(record.input)
+      const plan = args === null ? null : parsePlanSteps(args)
       if (plan !== null) {
         return {
           kind: "plan",

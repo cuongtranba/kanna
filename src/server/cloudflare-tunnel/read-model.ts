@@ -6,6 +6,10 @@ export interface ChatTunnelsProjection {
   liveTunnelId: string | null
 }
 
+export function isLiveTunnel(record: CloudflareTunnelRecord): boolean {
+  return record.state === "proposed" || record.state === "active"
+}
+
 const EMPTY: ChatTunnelsProjection = { tunnels: {}, liveTunnelId: null }
 
 export function deriveChatTunnels(
@@ -19,7 +23,7 @@ export function deriveChatTunnels(
     if (chatId !== undefined && event.chatId !== chatId) continue
     applyOne(tunnels, event)
     const record = tunnels[event.tunnelId]
-    if (record && (record.state === "proposed" || record.state === "active")) {
+    if (record && isLiveTunnel(record)) {
       liveTunnelId = record.tunnelId
     } else if (liveTunnelId === event.tunnelId) {
       liveTunnelId = null

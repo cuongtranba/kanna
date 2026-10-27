@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 
-describe("AutoContinueEvent", () => {
+describe("ChatAutomationEvent", () => {
   test("covers the five lifecycle kinds", () => {
-    const kinds: AutoContinueEvent["kind"][] = [
+    const kinds: ChatAutomationEvent["kind"][] = [
       "auto_continue_proposed",
       "auto_continue_accepted",
       "auto_continue_rescheduled",
@@ -14,7 +14,7 @@ describe("AutoContinueEvent", () => {
   })
 
   test("proposed event carries reset + tz metadata", () => {
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_proposed",
       timestamp: 1_000,
