@@ -16,6 +16,8 @@ export const SCOPE_ROOTS: readonly ScopeRoot[] = [
 const DIRECTIVE_MARKERS: readonly string[] = [
   "eslint-disable",
   "eslint-enable",
+  "oxlint-disable",
+  "oxlint-enable",
   "@ts-expect-error",
   "@ts-ignore",
   "@ts-nocheck",

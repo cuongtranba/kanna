@@ -222,7 +222,7 @@ body:
       options:
         - label: "`/c3 query <area>` run before coding; `/c3 change` run after if component boundaries, refs, or contracts moved"
         - label: "Tests written before the implementation, covering every acceptance criterion above"
-        - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
+        - label: "`bun run typecheck`, `bun run lint` (`--deny-warnings`), `bunx ast-grep test`, `bun run lint:usestate` all green"
         - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
         - label: "`bun run test` green — full suite, not just the new cases"
         - label: "Side-effect seal respected — new IO lives in a `*.adapter.ts` or behind a port, never inline in domain code"

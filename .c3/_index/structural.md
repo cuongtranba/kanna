@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:259116b6f90641ec0f54ff9d9c6315b7f31ecced7c05ac53331b8965afaa5627 -->
+<!-- hash: sha256:25d81683e59be820cd346e7db73d7e86583ad61f32e50fc6e54711340bbbb462 -->
 
 ## c3-0 — Kanna (system)
 
@@ -289,7 +289,7 @@ files: .githooks/pre-commit, .github/workflows/gitleaks.yml, .gitleaks.toml, src
 ## c3-236 — architecture-budget (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing, rule-colocated-bun-test
-files: scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts, src/ops/architecture/cjs-interop-scan.adapter.ts, src/ops/architecture/cjs-interop.ts
+files: lint.config.ts, scripts/check-complexity-limits.ts, src/ops/architecture/budget-scan.adapter.ts, src/ops/architecture/budget.ts, src/ops/architecture/cjs-interop-scan.adapter.ts, src/ops/architecture/cjs-interop.ts, src/ops/lint/oxlint-run.adapter.ts
 
 ## c3-237 — package-autoupdate (component)
 container: c3-2 | context: c3-0
@@ -1035,11 +1035,13 @@ src/server/ws-router-observability.ts → c3-234
 .github/workflows/gitleaks.yml → c3-235
 .gitleaks.toml → c3-235
 src/server/gitleaks-hook.test.ts → c3-235
+lint.config.ts → c3-236
 scripts/check-complexity-limits.ts → c3-236
 src/ops/architecture/budget-scan.adapter.ts → c3-236
 src/ops/architecture/budget.ts → c3-236
 src/ops/architecture/cjs-interop-scan.adapter.ts → c3-236
 src/ops/architecture/cjs-interop.ts → c3-236
+src/ops/lint/oxlint-run.adapter.ts → c3-236
 src/server/app-settings-package-updates.ts → c3-237
 src/server/claude-plugin-update-applier.adapter.ts → c3-237
 src/server/claude-plugin-update-checker.adapter.ts → c3-237

@@ -132,7 +132,7 @@ git clone https://github.com/cuongtranba/kanna.git && cd kanna
 bun install
 bun run setup:hooks   # gitleaks + commit-message hooks, once per clone
 bun run dev           # Vite client on :5174, server on :5175
-bun run check         # typecheck, lint, build
+bun run check         # lint + types, comments, build
 bun run test          # Vitest via vp test, run under Bun
 ```
 

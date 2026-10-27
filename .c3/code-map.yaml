@@ -654,6 +654,8 @@ c3-236:
   - src/ops/architecture/budget.ts
   - src/ops/architecture/budget-scan.adapter.ts
   - scripts/check-complexity-limits.ts
+  - lint.config.ts
+  - src/ops/lint/oxlint-run.adapter.ts
   - src/ops/architecture/cjs-interop.ts
   - src/ops/architecture/cjs-interop-scan.adapter.ts
 c3-311:

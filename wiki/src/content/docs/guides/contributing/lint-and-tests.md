@@ -30,18 +30,18 @@ CI runs these in order, and each covers something the others do not:
 
 | Command | Catches |
 | --- | --- |
-| `bun run lint` | ESLint at `--max-warnings=0`: the side-effect seal and the design gate |
+| `bun run lint` | Oxlint through `vp lint --deny-warnings`: the side-effect seal and the design gate, plus TypeScript diagnostics |
 | `bun run lint:usestate` | ast-grep: the React #185 rules and inline tint pairings |
 | `bun run lint:comments` | The no-code-comments rule across `src/`, `scripts/`, `e2e/` |
 | `bun run check:arch` | The architecture budget ratchet |
 | `bun run lint:limits` | Proves the complexity ceilings are still *tight* |
-| `bun run typecheck` | TypeScript 7, by explicit path |
+| `bun run typecheck` | tsgolint through `vp check --no-lint`, over the whole `tsconfig.json` program |
 | `bun run build` | The client build |
 | `bun run check:bundle` | Bundle size and CJS interop |
 | `bun run test` | The suite |
 
-`bun run check` chains typecheck → lint → lint:comments → build:client →
-check:bundle, which is the fastest single command that catches most of it.
+`bun run check` chains `vp check` (lint and type diagnostics) → lint:comments →
+build:client → check:bundle, which is the fastest single command that catches most of it.
 `bunx ast-grep test` runs the fixtures for the rules in `rules/`, and
 `bun run scan:secrets` runs gitleaks over the working tree — wire the pre-commit
 hook once with `bun run setup:hooks`.
@@ -58,11 +58,12 @@ describes; anything that cannot live in a name, a type or a small named function
 belongs in `CLAUDE.md`, a `.c3/` fact, an ADR, or this wiki, where a reader can
 search it and a build can hold it to account.
 
-The exceptions are comments a **tool executes** — `eslint-disable`,
+The exceptions are comments a **tool executes** — `eslint-disable`, `oxlint-disable`,
 `/// <reference />`, `@ts-expect-error`, `@vite-ignore`, `prettier-ignore`,
 `@license`, and a `#!` shebang. Deleting one of those is a behavior change, not
-a cleanup, so the checker leaves them alone. Give an `eslint-disable` its
-rationale after ESLint's own `--` separator rather than in a second comment.
+a cleanup, so the checker leaves them alone. Give an `eslint-disable` or
+`oxlint-disable` its rationale after the directive's own `--` separator rather than
+in a second comment.
 
 The gate parses each file with the TypeScript scanner rather than a regex, which
 cannot tell a comment from `"https://…"` inside a string literal. Re-strip an
@@ -71,10 +72,10 @@ offending tree with `bun run strip:comments`; `wiki/`, `rules/`, `rule-tests/`,
 
 ## Why `lint:limits` exists
 
-`eslint.config.js` pins four complexity ceilings at today's maxima. A ceiling
+`lint.config.ts` pins four complexity ceilings at today's maxima. A ceiling
 nothing reaches gates nothing — pinned at 141 while the worst function is 90
-leaves 50 points of free regression. `lint:limits` re-runs ESLint with every
-ceiling lowered by one and requires each rule to report at least one violation,
+leaves 50 points of free regression. `lint:limits` runs Oxlint on a generated
+config with every ceiling lowered by one and requires each rule to report at least one violation,
 which proves the ceiling is still binding.
 
 ## Why `check:arch` exists
@@ -99,7 +100,7 @@ spelling rather than the defect, and the pattern is what needs fixing.
 - `backdrop-blur` / `backdrop-filter` — the No-Glassmorphism rule
 - Native `title` on intrinsic elements — use the project Tooltip
 
-There is no escape valve; do not add `eslint-disable` comments.
+There is no escape valve; do not add `eslint-disable` or `oxlint-disable` comments.
 
 Contrast is gated twice: `lint:usestate` bans inline tinted-pill pairings, and
 `bun run test src/server/design/tone-pairings.test.ts` asserts WCAG AA for every

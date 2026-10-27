@@ -2,6 +2,7 @@ import { defineConfig } from "vite-plus"
 import react from "@vitejs/plugin-react"
 import { getDefaultDevServerPort } from "./src/shared/dev-ports"
 import { DEV_CLIENT_PORT } from "./src/shared/ports"
+import { lintConfig } from "./lint.config"
 
 function getAllowedHosts() {
   const defaults = ["localhost", "127.0.0.1", "0.0.0.0"]
@@ -35,6 +36,8 @@ const PRODUCTION_CONDITIONS = ["production"]
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  lint: lintConfig,
+  check: { fmt: false },
   server: {
     host: "0.0.0.0",
     port: DEV_CLIENT_PORT,

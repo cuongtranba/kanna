@@ -14,8 +14,8 @@ CI — so knowing what each one guards saves a long hunt.
 
 ```bash
 bun run test        # Vitest via `vp test`, run under Bun: bun --bun vp test run
-bun run lint        # eslint src/ --max-warnings=0
-bun run typecheck   # TypeScript 7 native compiler
+bun run lint        # vp lint --deny-warnings (Oxlint, rules + type diagnostics)
+bun run typecheck   # vp check --no-lint (tsgolint, whole tsconfig program)
 bun run lint:usestate   # ast-grep scan (React #185 + store-discipline rules)
 bunx ast-grep test      # the ast-grep rules' own fixture tests
 ```
@@ -39,10 +39,10 @@ production files too. Bun-only matchers (`toStartWith`, `toEndWith`, `toBeString
 The full list, with the `blob:` external and the lazy-cycle fix, is in CLAUDE.md
 under "# Tests".
 
-**Typecheck through the script, never bare `tsc`.** Two TypeScript packages are
-installed — `typescript` (6.x, whose legacy compiler API typescript-eslint still
-needs) and `typescript-7` (the real compiler). Both ship a `tsc` binary, so
-`bunx tsc` resolves ambiguously. `bun run typecheck` calls TS7 by explicit path.
+**Typecheck through the script, never bare `tsc`.** Type checking is tsgolint inside
+the Oxlint that `vite-plus` bundles; `bun run typecheck` is `vp check --no-lint`.
+The installed `typescript` (6.x) exists only for its classic JS API, used by
+`scripts/comment-scan.ts` and two server tests, so a bare `tsc` is the wrong compiler.
 
 **Scope test runs to what you changed.** A full-suite run from a subagent while
 other agents work the same host exhausts it. Targeted suites plus a typecheck cover
@@ -108,7 +108,7 @@ glob, or inject the operation as a typed port parameter. A file whose whole job 
 performing one side effect on behalf of a port is named `*.adapter.ts` and sits
 next to that port; a module mixing domain logic with IO extracts the IO into a
 sibling `*-io.adapter.ts` rather than renaming the parent. There is no escape
-valve — do not reach for `eslint-disable`. Keeping the domain pure is what lets
+valve — do not reach for `eslint-disable` or `oxlint-disable`. Keeping the domain pure is what lets
 most of this codebase be tested with plain values instead of mocks.
 
 ### Design gate — tokens, not literals

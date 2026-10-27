@@ -28,7 +28,7 @@ import Diagram from '../../../../components/Diagram.astro'
 
 ### The IO seal
 
-Side effects are sealed by ESLint at `error` level across `src/shared/**`,
+Side effects are sealed by Oxlint (`lint.config.ts`) at `error` level across `src/shared/**`,
 `src/client/**` and `src/server/**`: `node:fs`, `node:child_process`,
 `node:http`, `bun:sqlite`, `Bun.spawn`, `Bun.file`, `process.env` and friends
 fail `bun run lint` outside the exempt files.
@@ -42,7 +42,7 @@ fail `bun run lint` outside the exempt files.
 
 Adapters are leaf modules: they wrap one primitive and hold no domain logic, so
 anything can import them. There is no escape valve; do not add
-`eslint-disable` comments.
+`eslint-disable` or `oxlint-disable` comments.
 
 ## C3 component docs
 

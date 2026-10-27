@@ -1,7 +1,7 @@
 ---
 id: ref-strong-typing
 c3-version: 4
-c3-seal: 59a714df85f6e12a0975f6b69f001467c0f9f5736c9c84a7383176f4e1df0cf9
+c3-seal: 58beffb99fdc9ed3685907e7a8a8391da2455f9dea2b217c73896ac745ed0123
 title: Strong Typing Policy
 type: ref
 goal: No any / untyped shapes at boundaries — everything that crosses client↔server, provider↔coordinator, or log↔read-model is a named type in src/shared or the owning module.
@@ -27,7 +27,7 @@ Refactors stay safe, tool hydration logic can exhaustively switch on kinds, and 
 | --- | --- |
 | Discriminated unions over flags | TranscriptEntry kinds |
 | Shared types win over local duplicates | import from shared/types.ts |
-| bun run check must stay green | tsc --noEmit + vite build |
+| bun run check must stay green | vp check type diagnostics + vite build |
 
 ## Not This
 

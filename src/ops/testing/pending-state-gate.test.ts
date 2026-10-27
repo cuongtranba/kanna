@@ -1,39 +1,63 @@
-import { expect, test } from "vite-plus/test"
+import { afterAll, beforeAll, expect, test } from "vite-plus/test"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { ESLint } from "eslint"
+import { runOxlint } from "../lint/oxlint-run.adapter"
 
 const ROOT = path.resolve(import.meta.dirname, "../../..")
-const CLIENT_FILE = path.join(ROOT, "src/client/app/App.tsx")
-const eslint = new ESLint({ cwd: ROOT })
+const SNIPPET_DIR = path.join(ROOT, "src/client/app/__pending_gate_tmp__")
 
 const PRELUDE = `
-import { runPendingAction } from "../stores/pendingActionsStore"
+import { runPendingAction } from "../../stores/pendingActionsStore"
 declare function save(): Promise<void>
 `
 
-async function reportedRules(body: string): Promise<string[]> {
-  const [result] = await eslint.lintText(`${PRELUDE}${body}`, { filePath: CLIENT_FILE })
-  return (result?.messages ?? []).map((message) => message.ruleId ?? "parse-error")
+const SNIPPETS = {
+  voidClick: `export const Row = () => <button onClick={() => void save()}>Save</button>\n`,
+  voidStatement: `export function fire() { void save() }\n`,
+  asyncAttribute: `export const Row = () => <button onClick={save}>Save</button>\n`,
+  silentCatch: `export function fire() { return save().catch(() => {}) }\n`,
+  pendingAction: `export const Row = () => <button onClick={() => runPendingAction("row.save", save)}>Save</button>\n`,
 }
 
-test("a promise discarded with void in a click handler fails lint", async () => {
-  const rules = await reportedRules(`export const Row = () => <button onClick={() => void save()}>Save</button>\n`)
-  expect(rules).toContain("@typescript-eslint/no-floating-promises")
-}, 180_000)
+type SnippetName = keyof typeof SNIPPETS
 
-test("an async function handed to a void-typed JSX prop fails lint", async () => {
-  const rules = await reportedRules(`export const Row = () => <button onClick={save}>Save</button>\n`)
-  expect(rules).toContain("@typescript-eslint/no-misused-promises")
-}, 180_000)
+const fileOf = (name: SnippetName): string => path.join(SNIPPET_DIR, `${name}.tsx`)
 
-test("a catch that discards the error fails lint", async () => {
-  const rules = await reportedRules(`export function fire() { return save().catch(() => {}) }\n`)
-  expect(rules).toContain("no-restricted-syntax")
-}, 180_000)
+let reported: ReadonlyMap<SnippetName, string[]>
 
-test("launching through runPendingAction passes the promise rules", async () => {
-  const rules = await reportedRules(
-    `export const Row = () => <button onClick={() => runPendingAction("row.save", save)}>Save</button>\n`,
+beforeAll(() => {
+  mkdirSync(SNIPPET_DIR, { recursive: true })
+  const names = Object.keys(SNIPPETS).filter((name): name is SnippetName => name in SNIPPETS)
+  for (const name of names) writeFileSync(fileOf(name), `${PRELUDE}${SNIPPETS[name]}`)
+  const diagnostics = runOxlint(ROOT, names.map((name) => path.relative(ROOT, fileOf(name))))
+  reported = new Map(
+    names.map((name) => [
+      name,
+      diagnostics.filter((d) => path.resolve(ROOT, d.filename) === fileOf(name)).map((d) => d.rule),
+    ]),
   )
-  expect(rules).toEqual([])
 }, 180_000)
+
+afterAll(() => {
+  rmSync(SNIPPET_DIR, { recursive: true, force: true })
+})
+
+test("a promise discarded with void in a click handler fails lint", () => {
+  expect(reported.get("voidClick")).toContain("eslint-js/no-restricted-syntax")
+})
+
+test("a promise discarded with void in a statement fails lint", () => {
+  expect(reported.get("voidStatement")).toContain("typescript/no-floating-promises")
+})
+
+test("an async function handed to a void-typed JSX prop fails lint", () => {
+  expect(reported.get("asyncAttribute")).toContain("typescript/no-misused-promises")
+})
+
+test("a catch that discards the error fails lint", () => {
+  expect(reported.get("silentCatch")).toContain("eslint-js/no-restricted-syntax")
+})
+
+test("launching through runPendingAction passes the promise rules", () => {
+  expect(reported.get("pendingAction")).toEqual([])
+})
