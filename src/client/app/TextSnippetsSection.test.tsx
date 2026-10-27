@@ -2,6 +2,7 @@ import { test, expect, describe, beforeEach } from "bun:test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
+import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"
 import { TextSnippetsSection, type TextSnippetsSectionHandlers } from "./TextSnippetsSection"
 import { useTextSnippetsSectionStore } from "../stores/textSnippetsSectionStore"
 import type { TextSnippet } from "../../shared/types"
@@ -77,12 +78,13 @@ describe("TextSnippetsSection — list", () => {
   })
 
   test("delete invokes onDelete with the snippet id when confirmed", async () => {
-    const originalConfirm = window.confirm
-    window.confirm = () => true
+    const dom = makeFakeDomPort()
+    dom.confirmResult = true
     const deleted: string[] = []
     const { container, cleanup } = await mount({
       snippets: [snippet({})],
       handlers: { ...noopHandlers, onDelete: async (id) => { deleted.push(id) } },
+      dom,
     })
     const button = container.querySelector<HTMLButtonElement>('[aria-label="Delete pgm"]')
     expect(button).not.toBeNull()
@@ -90,7 +92,6 @@ describe("TextSnippetsSection — list", () => {
       button!.click()
     })
     expect(deleted).toEqual(["pgm-id"])
-    window.confirm = originalConfirm
     await cleanup()
   })
 })

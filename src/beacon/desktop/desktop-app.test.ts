@@ -80,6 +80,8 @@ function createHarness(options: {
   const runners: Array<ReturnType<typeof createFakeRunner> & { startPaused: boolean }> = []
   let restarts = 0
   let onActivity: (activity: BeaconActivity) => void = () => {}
+  const logged: string[] = []
+  const logWaiters: Array<{ line: string; resolve: () => void }> = []
   const deps: DesktopAppDeps = {
     os: "windows",
     machine: "DESKTOP-ADMIN",
@@ -133,7 +135,10 @@ function createHarness(options: {
       },
     },
     sleep: () => new Promise(() => {}),
-    log: () => {},
+    log: (line) => {
+      logged.push(line)
+      logWaiters.filter((waiter) => waiter.line === line).forEach((waiter) => waiter.resolve())
+    },
   }
   const app = createBeaconDesktopApp(deps)
   return {
@@ -147,6 +152,8 @@ function createHarness(options: {
       return state
     },
     activity: (activity: BeaconActivity) => onActivity(activity),
+    hasLogged: (line: string) =>
+      logged.includes(line) ? Promise.resolve() : new Promise<void>((resolve) => logWaiters.push({ line, resolve })),
   }
 }
 
@@ -313,13 +320,13 @@ describe("beacon desktop app", () => {
     const harness = createHarness({ state: PAIRED })
     await harness.app.start()
     harness.runners[0]?.end({ reason: "update" })
-    await Bun.sleep(0)
+    await harness.hasLogged("restarting into the new version")
     expect(harness.restarts).toBe(1)
     expect(harness.runners).toHaveLength(1)
     const other = createHarness({ state: PAIRED })
     await other.app.start()
     other.runners[0]?.end({ reason: "incompatible" })
-    await Bun.sleep(0)
+    await other.hasLogged("beacon stopped: incompatible")
     expect(other.restarts).toBe(0)
   })
 
@@ -327,7 +334,7 @@ describe("beacon desktop app", () => {
     const harness = createHarness({ state: PAIRED, restartResult: { ok: false, error: "Failed to start update helper" } })
     await harness.app.start()
     harness.runners[0]?.end({ reason: "update" })
-    await Bun.sleep(0)
+    await harness.hasLogged("could not restart into the new version: Failed to start update helper")
     expect(harness.restarts).toBe(1)
     expect(harness.runners).toHaveLength(2)
     expect(harness.app.view().runner?.status.phase).toBe("online")

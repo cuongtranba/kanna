@@ -2,6 +2,7 @@ import { test, expect, describe } from "bun:test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
+import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"
 import { McpServersSection } from "./McpServersSection"
 import type { McpServerConfig } from "../../shared/types"
 
@@ -245,15 +246,16 @@ describe("McpServersSection — row actions", () => {
   })
 
   test("delete asks for confirmation before calling onDelete", async () => {
-    const originalConfirm = window.confirm
     const deleted: string[] = []
+    const dom = makeFakeDomPort()
     const props = {
       ...listProps,
       servers: [stdio("fs")],
       handlers: { ...noopHandlers, onDelete: async (id: string) => { deleted.push(id) } },
+      dom,
     }
 
-    window.confirm = () => false
+    dom.confirmResult = false
     const declined = await mount(props)
     await act(async () => {
       declined.container.querySelector<HTMLButtonElement>('[aria-label="Delete fs"]')!.click()
@@ -261,15 +263,13 @@ describe("McpServersSection — row actions", () => {
     expect(deleted).toEqual([])
     await declined.cleanup()
 
-    window.confirm = () => true
+    dom.confirmResult = true
     const accepted = await mount(props)
     await act(async () => {
       accepted.container.querySelector<HTMLButtonElement>('[aria-label="Delete fs"]')!.click()
     })
     expect(deleted).toEqual(["fs"])
     await accepted.cleanup()
-
-    window.confirm = originalConfirm
   })
 })
 

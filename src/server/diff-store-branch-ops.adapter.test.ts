@@ -27,6 +27,7 @@ async function makeRepo(): Promise<string> {
 function makeDeps(overrides: Partial<DiffStoreBranchOpsDeps> = {}): DiffStoreBranchOpsDeps {
   return {
     refreshSnapshot: async () => false,
+    fetchPullRequests: async () => [],
     ...overrides,
   }
 }

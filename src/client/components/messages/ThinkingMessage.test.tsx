@@ -1,11 +1,7 @@
-import { describe, expect, test, mock } from "bun:test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test } from "bun:test"
+import { renderThemed } from "../../lib/testing/renderThemed"
 
-mock.module("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { ThinkingMessage } = await import("./ThinkingMessage")
+import { ThinkingMessage } from "./ThinkingMessage"
 import type { ProcessedThinkingMessage } from "./types"
 
 function buildMessage(text: string): ProcessedThinkingMessage {
@@ -19,7 +15,7 @@ function buildMessage(text: string): ProcessedThinkingMessage {
 
 describe("ThinkingMessage", () => {
   test("renders collapsed by default: shows label, hides reasoning body", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <ThinkingMessage message={buildMessage("private chain of thought")} />
     )
     expect(html).toContain("Thinking")
@@ -27,7 +23,7 @@ describe("ThinkingMessage", () => {
   })
 
   test("renders nothing for empty reasoning text", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <ThinkingMessage message={buildMessage("   ")} />
     )
     expect(html).not.toContain("Thinking")

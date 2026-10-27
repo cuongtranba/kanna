@@ -1,15 +1,12 @@
 import "../../lib/testing/setupHappyDom"
-import { expect, test, mock, afterEach } from "bun:test"
+import { expect, test, afterEach } from "bun:test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
-import { renderToStaticMarkup } from "react-dom/server"
+import { renderThemed } from "../../lib/testing/renderThemed"
+import { TestThemeProvider } from "../../lib/testing/TestThemeProvider"
 import { makeFakeClipboardPort } from "../../adapters/testing/makeFakePorts"
 
-mock.module("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { MermaidFallbackCodeBlock } = await import("./shared")
+import { MermaidFallbackCodeBlock } from "./shared"
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -26,12 +23,12 @@ async function render(node: React.ReactElement) {
   document.body.appendChild(container)
   await act(async () => {
     root = createRoot(container!)
-    root.render(node)
+    root.render(<TestThemeProvider>{node}</TestThemeProvider>)
   })
 }
 
 test("MermaidFallbackCodeBlock renders source inside a pre/code block", () => {
-  const html = renderToStaticMarkup(
+  const html = renderThemed(
     <MermaidFallbackCodeBlock source={"graph TD\nA-->B"} />
   )
   expect(html).toContain("<pre")
@@ -40,7 +37,7 @@ test("MermaidFallbackCodeBlock renders source inside a pre/code block", () => {
 })
 
 test("MermaidFallbackCodeBlock numbers every line when highlightLine is set", () => {
-  const html = renderToStaticMarkup(
+  const html = renderThemed(
     <MermaidFallbackCodeBlock source={"graph TD\nA-->B\nB-->C"} highlightLine={2} />
   )
   expect(html).toContain('aria-hidden="true"')

@@ -2,14 +2,36 @@ import { describe, expect, test } from "bun:test"
 import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
 import { KannaAnalyticsReporter, getLaunchAnalyticsProperties } from "./analytics"
 
-const originalLogAnalytics = process.env.KANNA_LOG_ANALYTICS
+function reporterWith(args: Pick<ConstructorParameters<typeof KannaAnalyticsReporter>[0], "environment" | "fetchImpl" | "logger" | "isLoggingEnabled">) {
+  return new KannaAnalyticsReporter({
+    endpoint: "https://kanna.sh/api/t",
+    currentVersion: "0.33.9",
+    settings: {
+      getState: () => ({
+        analyticsEnabled: true,
+        analyticsUserId: "anon_123",
+        cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+        warning: null,
+        filePathDisplay: "~/.kanna/data/settings.json",
+      }),
+    },
+    ...args,
+  })
+}
 
-function restoreAnalyticsLoggingEnv() {
-  if (originalLogAnalytics === undefined) {
-    delete process.env.KANNA_LOG_ANALYTICS
-    return
+function recordingLogger() {
+  const infos: Array<Array<string | number | boolean | null | undefined | object>> = []
+  const warnings: Array<Array<string | number | boolean | null | undefined | object>> = []
+  return {
+    infos,
+    warnings,
+    logger: {
+      debug: () => {},
+      info: (...args: Array<string | number | boolean | null | undefined | object>) => { infos.push(args) },
+      warn: (...args: Array<string | number | boolean | null | undefined | object>) => { warnings.push(args) },
+      error: () => {},
+    },
   }
-  process.env.KANNA_LOG_ANALYTICS = originalLogAnalytics
 }
 
 describe("getLaunchAnalyticsProperties", () => {
@@ -36,53 +58,48 @@ describe("getLaunchAnalyticsProperties", () => {
 
 describe("KannaAnalyticsReporter", () => {
   test("posts the userId, event name, and shared properties", async () => {
-    const originalLog = console.log
     const calls: Array<{ url: string; init?: RequestInit }> = []
-    console.log = () => {}
 
-    try {
-      const reporter = new KannaAnalyticsReporter({
-        endpoint: "https://kanna.sh/api/t",
-        currentVersion: "0.33.9",
-        environment: "dev",
-        settings: {
-          getState: () => ({
-            analyticsEnabled: true,
-            analyticsUserId: "anon_123",
-            cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-            warning: null,
-            filePathDisplay: "~/.kanna/data/settings.json",
-          }),
-        },
-        fetchImpl: async (url, init) => {
-          calls.push({ url: String(url), init })
-          return new Response(JSON.stringify({ ok: true }), { status: 200 })
-        },
-      })
+    const reporter = new KannaAnalyticsReporter({
+      endpoint: "https://kanna.sh/api/t",
+      currentVersion: "0.33.9",
+      environment: "dev",
+      settings: {
+        getState: () => ({
+          analyticsEnabled: true,
+          analyticsUserId: "anon_123",
+          cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
+          warning: null,
+          filePathDisplay: "~/.kanna/data/settings.json",
+        }),
+      },
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init })
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      },
+      isLoggingEnabled: () => false,
+    })
 
-      reporter.track("message_sent")
-      await (reporter as any).queue
+    reporter.track("message_sent")
+    await (reporter as any).queue
 
-      expect(calls).toHaveLength(1)
-      expect(calls[0]?.url).toBe("https://kanna.sh/api/t")
-      expect(calls[0]?.init?.method).toBe("POST")
-      expect(calls[0]?.init?.headers).toEqual({
-        "content-type": "application/json",
-      })
-      expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-        userId: "anon_123",
-        environment: "dev",
-        event: {
-          name: "message_sent",
-          properties: {
-            current_version: "0.33.9",
-            environment: "dev",
-          },
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe("https://kanna.sh/api/t")
+    expect(calls[0]?.init?.method).toBe("POST")
+    expect(calls[0]?.init?.headers).toEqual({
+      "content-type": "application/json",
+    })
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      userId: "anon_123",
+      environment: "dev",
+      event: {
+        name: "message_sent",
+        properties: {
+          current_version: "0.33.9",
+          environment: "dev",
         },
-      })
-    } finally {
-      console.log = originalLog
-    }
+      },
+    })
   })
 
   test("posts app_launch with launch flags as properties", async () => {
@@ -164,150 +181,70 @@ describe("KannaAnalyticsReporter", () => {
   })
 
   test("does not warn when analytics request logging is disabled and the request fails", async () => {
-    const originalWarn = console.warn
-    const warnings: unknown[][] = []
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args)
-    }
-    delete process.env.KANNA_LOG_ANALYTICS
+    const { warnings, logger } = recordingLogger()
+    const reporter = reporterWith({
+      environment: "dev",
+      fetchImpl: async () => new Response(JSON.stringify({ error: "bad request" }), { status: 400 }),
+      logger,
+      isLoggingEnabled: () => false,
+    })
 
-    try {
-      const reporter = new KannaAnalyticsReporter({
-        endpoint: "https://kanna.sh/api/t",
-        currentVersion: "0.33.9",
-        environment: "dev",
-        settings: {
-          getState: () => ({
-            analyticsEnabled: true,
-            analyticsUserId: "anon_123",
-            cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-            warning: null,
-            filePathDisplay: "~/.kanna/data/settings.json",
-          }),
-        },
-        fetchImpl: async () => new Response(JSON.stringify({ error: "bad request" }), { status: 400 }),
-      })
+    reporter.track("message_sent")
+    await (reporter as any).queue
 
-      reporter.track("message_sent")
-      await (reporter as any).queue
-
-      expect(warnings).toHaveLength(0)
-    } finally {
-      console.warn = originalWarn
-      restoreAnalyticsLoggingEnv()
-    }
+    expect(warnings).toHaveLength(0)
   })
 
   test("warns when analytics request logging is enabled and the request fails", async () => {
-    const originalWarn = console.warn
-    const warnings: unknown[][] = []
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args)
-    }
-    process.env.KANNA_LOG_ANALYTICS = "1"
+    const { warnings, logger } = recordingLogger()
+    const reporter = reporterWith({
+      environment: "prod",
+      fetchImpl: async () => new Response(JSON.stringify({ error: "bad request" }), { status: 400 }),
+      logger,
+      isLoggingEnabled: () => true,
+    })
 
-    try {
-      const reporter = new KannaAnalyticsReporter({
-        endpoint: "https://kanna.sh/api/t",
-        currentVersion: "0.33.9",
-        environment: "prod",
-        settings: {
-          getState: () => ({
-            analyticsEnabled: true,
-            analyticsUserId: "anon_123",
-            cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-            warning: null,
-            filePathDisplay: "~/.kanna/data/settings.json",
-          }),
-        },
-        fetchImpl: async () => new Response(JSON.stringify({ error: "bad request" }), { status: 400 }),
-      })
+    reporter.track("message_sent")
+    await (reporter as any).queue
 
-      reporter.track("message_sent")
-      await (reporter as any).queue
-
-      expect(warnings).toHaveLength(1)
-      expect(warnings[0]?.[0]).toBe("[kanna/analytics] Failed to send analytics event:")
-      expect(warnings[0]?.[1]).toBe("message_sent")
-      expect(warnings[0]?.[2]).toBeInstanceOf(Error)
-    } finally {
-      console.warn = originalWarn
-      restoreAnalyticsLoggingEnv()
-    }
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]?.[0]).toBe("[kanna/analytics] Failed to send analytics event:")
+    expect(warnings[0]?.[1]).toBe("message_sent")
+    expect(warnings[0]?.[2]).toBeInstanceOf(Error)
   })
 
   test("logs when analytics request logging is enabled and the request succeeds", async () => {
-    const originalInfo = console.info
-    const logs: unknown[][] = []
-    console.info = (...args: unknown[]) => {
-      logs.push(args)
-    }
-    process.env.KANNA_LOG_ANALYTICS = "1"
+    const { infos, logger } = recordingLogger()
+    const reporter = reporterWith({
+      environment: "dev",
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      logger,
+      isLoggingEnabled: () => true,
+    })
 
-    try {
-      const reporter = new KannaAnalyticsReporter({
-        endpoint: "https://kanna.sh/api/t",
-        currentVersion: "0.33.9",
-        environment: "dev",
-        settings: {
-          getState: () => ({
-            analyticsEnabled: true,
-            analyticsUserId: "anon_123",
-            cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-            warning: null,
-            filePathDisplay: "~/.kanna/data/settings.json",
-          }),
-        },
-        fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-      })
+    reporter.track("message_sent")
+    await (reporter as any).queue
 
-      reporter.track("message_sent")
-      await (reporter as any).queue
-
-      expect(logs).toHaveLength(1)
-      expect(logs[0]).toEqual([
-        "[kanna/analytics] Sent analytics event:",
-        "message_sent",
-        200,
-      ])
-    } finally {
-      console.info = originalInfo
-      restoreAnalyticsLoggingEnv()
-    }
+    expect(infos).toHaveLength(1)
+    expect(infos[0]).toEqual([
+      "[kanna/analytics] Sent analytics event:",
+      "message_sent",
+      200,
+    ])
   })
 
   test("does not log when analytics request logging is disabled and the request succeeds", async () => {
-    const originalLog = console.log
-    const logs: unknown[][] = []
-    console.log = (...args: unknown[]) => {
-      logs.push(args)
-    }
-    delete process.env.KANNA_LOG_ANALYTICS
+    const { infos, logger } = recordingLogger()
+    const reporter = reporterWith({
+      environment: "prod",
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      logger,
+      isLoggingEnabled: () => false,
+    })
 
-    try {
-      const reporter = new KannaAnalyticsReporter({
-        endpoint: "https://kanna.sh/api/t",
-        currentVersion: "0.33.9",
-        environment: "prod",
-        settings: {
-          getState: () => ({
-            analyticsEnabled: true,
-            analyticsUserId: "anon_123",
-            cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-            warning: null,
-            filePathDisplay: "~/.kanna/data/settings.json",
-          }),
-        },
-        fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
-      })
+    reporter.track("message_sent")
+    await (reporter as any).queue
 
-      reporter.track("message_sent")
-      await (reporter as any).queue
-
-      expect(logs).toHaveLength(0)
-    } finally {
-      console.log = originalLog
-      restoreAnalyticsLoggingEnv()
-    }
+    expect(infos).toHaveLength(0)
   })
 })

@@ -1,16 +1,13 @@
 
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 
-mock.module("../../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { renderMessageMarkdown, useRenderedMessage } = await import("./renderMessage")
+import { renderMessageMarkdown, useRenderedMessage } from "./renderMessage"
+import { TestThemeProvider } from "../../../lib/testing/TestThemeProvider"
 
 
 function render(text: string): string {
-  return renderToStaticMarkup(<div>{renderMessageMarkdown(text)}</div>)
+  return renderToStaticMarkup(<TestThemeProvider><div>{renderMessageMarkdown(text)}</div></TestThemeProvider>)
 }
 
 
@@ -126,7 +123,7 @@ describe("useRenderedMessage", () => {
       return <div>{node}</div>
     }
 
-    const hookHtml = renderToStaticMarkup(<TestComponent text="hello **world**" />)
+    const hookHtml = renderToStaticMarkup(<TestThemeProvider><TestComponent text="hello **world**" /></TestThemeProvider>)
     const directHtml = render("hello **world**")
 
     expect(hookHtml).toContain("hello")

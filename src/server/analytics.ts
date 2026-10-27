@@ -22,6 +22,8 @@ export interface LaunchAnalyticsOptions {
   strictPort: boolean
 }
 
+type AnalyticsLogger = Pick<typeof log, "info" | "warn">
+
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type AnalyticsEnvironment = "dev" | "prod"
 
@@ -47,6 +49,8 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
   private readonly fetchImpl: FetchLike
   private readonly currentVersion: string
   private readonly environment: AnalyticsEnvironment
+  private readonly logger: AnalyticsLogger
+  private readonly isLoggingEnabled: () => boolean
   private queue = Promise.resolve()
 
   constructor(args: {
@@ -55,12 +59,16 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
     environment: AnalyticsEnvironment
     endpoint?: string
     fetchImpl?: FetchLike
+    logger?: AnalyticsLogger
+    isLoggingEnabled?: () => boolean
   }) {
     this.settings = args.settings
     this.currentVersion = args.currentVersion
     this.environment = args.environment
     this.endpoint = args.endpoint ?? ANALYTICS_ENDPOINT
     this.fetchImpl = args.fetchImpl ?? fetch
+    this.logger = args.logger ?? log
+    this.isLoggingEnabled = args.isLoggingEnabled ?? isAnalyticsLoggingEnabled
   }
 
   track(eventName: string, properties?: JsonObject) {
@@ -90,13 +98,13 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
         if (!response.ok) {
           throw new Error(`Analytics request failed with status ${response.status}`)
         }
-        if (isAnalyticsLoggingEnabled()) {
-          log.info("[kanna/analytics] Sent analytics event:", eventName, response.status)
+        if (this.isLoggingEnabled()) {
+          this.logger.info("[kanna/analytics] Sent analytics event:", eventName, response.status)
         }
       })
       .catch((error) => {
-        if (isAnalyticsLoggingEnabled()) {
-          log.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
+        if (this.isLoggingEnabled()) {
+          this.logger.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
         }
       })
   }

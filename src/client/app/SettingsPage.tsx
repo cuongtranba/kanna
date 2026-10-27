@@ -313,30 +313,31 @@ export function resetSettingsPageChangelogCache() {
   changelogCache = null
 }
 
-export function getCachedChangelog() {
+export function getCachedChangelog(now: () => number = Date.now) {
   if (!changelogCache) return null
-  if (Date.now() >= changelogCache.expiresAt) {
+  if (now() >= changelogCache.expiresAt) {
     changelogCache = null
     return null
   }
   return changelogCache.releases
 }
 
-export function setCachedChangelog(releases: GithubRelease[]) {
+export function setCachedChangelog(releases: GithubRelease[], now: () => number = Date.now) {
   changelogCache = {
     releases,
-    expiresAt: Date.now() + CHANGELOG_CACHE_TTL_MS,
+    expiresAt: now() + CHANGELOG_CACHE_TTL_MS,
   }
 }
 
-export async function loadChangelog(fetchReleases: FetchReleases, options?: { force?: boolean }) {
-  const cached = options?.force ? null : getCachedChangelog()
+export async function loadChangelog(fetchReleases: FetchReleases, options?: { force?: boolean; now?: () => number }) {
+  const now = options?.now ?? Date.now
+  const cached = options?.force ? null : getCachedChangelog(now)
   if (cached) {
     return cached
   }
 
   const releases = await fetchReleases()
-  setCachedChangelog(releases)
+  setCachedChangelog(releases, now)
   return releases
 }
 

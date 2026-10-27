@@ -73,7 +73,11 @@ export { appendGitIgnoreEntry } from "./diff-store-parse"
 export class DiffStore {
   private readonly states = new Map<string, StoredChatDiffState>()
 
-  constructor(_: string) {}
+  private readonly fetchPullRequests: typeof fetchGitHubPullRequests
+
+  constructor(_: string, fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests) {
+    this.fetchPullRequests = fetchPullRequests
+  }
 
   async initialize() {}
 
@@ -378,6 +382,7 @@ export class DiffStore {
   private buildBranchOpsDeps(): DiffStoreBranchOpsDeps {
     return {
       refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
+      fetchPullRequests: this.fetchPullRequests,
     }
   }
 

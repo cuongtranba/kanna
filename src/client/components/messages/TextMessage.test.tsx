@@ -1,11 +1,7 @@
-import { describe, expect, test, mock } from "bun:test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test } from "bun:test"
+import { renderThemed } from "../../lib/testing/renderThemed"
 
-mock.module("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { TextMessage } = await import("./TextMessage")
+import { TextMessage } from "./TextMessage"
 import type { ProcessedTextMessage } from "./types"
 
 function buildMessage(text: string): ProcessedTextMessage {
@@ -19,7 +15,7 @@ function buildMessage(text: string): ProcessedTextMessage {
 
 describe("TextMessage", () => {
   test("renders visible text outside thinking tags as markdown", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <TextMessage message={buildMessage("hello **world**")} />
     )
     expect(html).toContain("hello")
@@ -29,7 +25,7 @@ describe("TextMessage", () => {
   })
 
   test("hides thinking content behind collapsed disclosure", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <TextMessage message={buildMessage("<thinking>secret monologue</thinking>visible answer")} />
     )
     expect(html).toContain("Thinking")
@@ -38,7 +34,7 @@ describe("TextMessage", () => {
   })
 
   test("renders multiple thinking blocks each as collapsed section", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <TextMessage
         message={buildMessage(
           "intro<thinking>plan A</thinking>middle<thinking>plan B</thinking>end"
@@ -55,14 +51,14 @@ describe("TextMessage", () => {
   })
 
   test("does not render Thinking label for unrelated text", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <TextMessage message={buildMessage("just a plain reply")} />
     )
     expect(html).not.toContain("Thinking")
   })
 
   test("treats unclosed thinking tag as open block (streaming)", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <TextMessage message={buildMessage("answer first <thinking>partial...")} />
     )
     expect(html).toContain("Thinking")

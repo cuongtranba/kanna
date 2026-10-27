@@ -30,6 +30,7 @@ import {
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { clipboardAdapter } from "../adapters/clipboard.adapter"
+import type { DomPort } from "../ports/domPort"
 import { McpRow, OAuthPill } from "./McpServerRow"
 
 const MCP_TRANSPORT_SET = new Set<string>(["stdio", "http", "sse", "ws"])
@@ -71,6 +72,7 @@ interface McpServersSectionProps {
   onStartCreate: () => void
   onCancelEditing: () => void
   handlers: McpServersSectionHandlers
+  dom?: DomPort
 }
 
 export function McpServersSection(props: McpServersSectionProps) {
@@ -122,6 +124,7 @@ export function McpServersSection(props: McpServersSectionProps) {
             server={s}
             handlers={props.handlers}
             onEdit={() => props.onSelect(s.id)}
+            dom={props.dom}
           />
         ))}
       </SettingsList>

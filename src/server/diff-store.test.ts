@@ -576,43 +576,30 @@ describe("DiffStore", () => {
     await run(["git", "update-ref", "refs/remotes/origin/feature/pr-branch", "HEAD"], repoRoot)
     await run(["git", "update-ref", "refs/remotes/origin/feature/non-pr", "HEAD"], repoRoot)
 
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = Object.assign(
-      async () => new Response(JSON.stringify([
-        {
-          number: 42,
-          title: "PR branch",
-          head: {
-            ref: "feature/pr-branch",
-            label: "jane:feature/pr-branch",
-            repo: {
-              clone_url: "git@github.com:jane/repo.git",
-              full_name: "jane/repo",
-            },
-          },
-          base: {
-            ref: "main",
+    const store = new DiffStore(repoRoot, async () => [
+      {
+        number: 42,
+        title: "PR branch",
+        head: {
+          ref: "feature/pr-branch",
+          label: "jane:feature/pr-branch",
+          repo: {
+            clone_url: "git@github.com:jane/repo.git",
+            full_name: "jane/repo",
           },
         },
-      ]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-      { preconnect: originalFetch.preconnect.bind(originalFetch) }
-    ) as typeof fetch
+        base: {
+          ref: "main",
+        },
+      },
+    ])
+    await store.initialize()
 
-    try {
-      const store = new DiffStore(repoRoot)
-      await store.initialize()
-
-      const result = await store.listBranches({ projectPath: repoRoot })
-      expect(result.pullRequests.some((entry) => entry.prNumber === 42)).toBe(true)
-      expect(result.remote.some((entry) => entry.remoteRef === "github-desktop-jane/feature/pr-branch")).toBe(false)
-      expect(result.remote.some((entry) => entry.remoteRef === "origin/feature/pr-branch")).toBe(false)
-      expect(result.remote.some((entry) => entry.remoteRef === "origin/feature/non-pr")).toBe(true)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await store.listBranches({ projectPath: repoRoot })
+    expect(result.pullRequests.some((entry) => entry.prNumber === 42)).toBe(true)
+    expect(result.remote.some((entry) => entry.remoteRef === "github-desktop-jane/feature/pr-branch")).toBe(false)
+    expect(result.remote.some((entry) => entry.remoteRef === "origin/feature/pr-branch")).toBe(false)
+    expect(result.remote.some((entry) => entry.remoteRef === "origin/feature/non-pr")).toBe(true)
   }, 30_000)
 
   test("checkoutBranch creates a local tracking branch from a remote branch", async () => {
