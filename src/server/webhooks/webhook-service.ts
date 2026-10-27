@@ -19,14 +19,10 @@ export class WebhookService {
     private readonly inbox: InboxRegistry,
     readonly slack: SlackService,
     readonly enabled: boolean,
-    private readonly now: () => number = Date.now,
+    readonly now: () => number = Date.now,
   ) {}
 
   deliver(hook: StoredWebhook, deliveryId: string, body: JsonValue): Promise<WebhookDeliveryResult> {
     return deliverWebhook(this.store, this.agent, this.bus, this.inbox, hook, deliveryId, body, this.now())
-  }
-
-  clock(): number {
-    return this.now()
   }
 }

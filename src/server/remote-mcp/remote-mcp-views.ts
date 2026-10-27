@@ -1,5 +1,5 @@
 import { isJsonObject, type JsonPrimitive, type JsonValue } from "../../shared/json"
-import type { ClientCommand } from "../../shared/protocol"
+import type { ClientCommand, ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../../shared/protocol"
 import type { ChatSnapshot, SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../shared/types"
 import type { TranscriptEntry } from "../../shared/transcript-types"
 import { toJsonValue } from "../json-boundary"
@@ -57,27 +57,47 @@ export function jsonResult(value: JsonPrimitive | object): ToolResult {
   return ok(JSON.stringify(value))
 }
 
-export async function runCommand(host: CommandRunner, command: ClientCommand): Promise<CommandOutcome> {
-  const envelope = await host.dispatchCommand(command)
+export function envelopeOutcome(envelope: ServerEnvelope): CommandOutcome {
   if (envelope.type === "error") return { ok: false, message: envelope.message }
   if (envelope.type === "ack") return { ok: true, result: envelope.result === undefined ? { ok: true } : toJsonValue(envelope.result) }
   if (envelope.type === "snapshot") return { ok: true, result: toJsonValue(envelope.snapshot) }
   return { ok: true, result: toJsonValue(envelope.event) }
 }
 
-export async function commandResult(host: CommandRunner, command: ClientCommand): Promise<ToolResult> {
-  const outcome = await runCommand(host, command)
+export function toToolResult(outcome: CommandOutcome): ToolResult {
   return outcome.ok ? jsonResult(outcome.result) : fail(outcome.message)
 }
 
+export function envelopeToToolResult(envelope: ServerEnvelope): ToolResult {
+  return toToolResult(envelopeOutcome(envelope))
+}
+
+export async function runCommand(host: CommandRunner, command: ClientCommand): Promise<CommandOutcome> {
+  return envelopeOutcome(await host.dispatchCommand(command))
+}
+
+export async function commandResult(host: CommandRunner, command: ClientCommand): Promise<ToolResult> {
+  return toToolResult(await runCommand(host, command))
+}
+
+type SnapshotOf<K extends ServerSnapshot["type"]> = Extract<ServerSnapshot, { type: K }>
+
+export function snapshotDataOf<K extends ServerSnapshot["type"]>(envelope: ServerEnvelope, type: K): SnapshotOf<K>["data"] | undefined
+export function snapshotDataOf(envelope: ServerEnvelope, type: ServerSnapshot["type"]): ServerSnapshot["data"] | undefined {
+  return envelope.type === "snapshot" && envelope.snapshot.type === type ? envelope.snapshot.data : undefined
+}
+
+export function readTopic<T extends SubscriptionTopic>(host: SnapshotReader, topic: T): SnapshotOf<T["type"]>["data"] | undefined
+export function readTopic(host: SnapshotReader, topic: SubscriptionTopic): ServerSnapshot["data"] | undefined {
+  return snapshotDataOf(host.readSnapshot(topic), topic.type)
+}
+
 export function readChat(host: SnapshotReader, chatId: string, recentLimit: number): ChatSnapshot | null {
-  const envelope = host.readSnapshot({ type: "chat", chatId, recentLimit })
-  return envelope.type === "snapshot" && envelope.snapshot.type === "chat" ? envelope.snapshot.data : null
+  return readTopic(host, { type: "chat", chatId, recentLimit }) ?? null
 }
 
 export function readSidebar(host: SnapshotReader): SidebarData | null {
-  const envelope = host.readSnapshot({ type: "sidebar" })
-  return envelope.type === "snapshot" && envelope.snapshot.type === "sidebar" ? envelope.snapshot.data : null
+  return readTopic(host, { type: "sidebar" }) ?? null
 }
 
 function allGroups(data: SidebarData): SidebarProjectGroup[] {
@@ -90,10 +110,9 @@ function lastPathSegment(localPath: string): string {
 }
 
 export function readProjectTitles(host: SnapshotReader): Map<string, string> {
-  const envelope = host.readSnapshot({ type: "local-projects" })
   const titles = new Map<string, string>()
-  if (envelope.type !== "snapshot" || envelope.snapshot.type !== "local-projects") return titles
-  for (const project of envelope.snapshot.data.projects) titles.set(project.localPath, project.title)
+  const projects = readTopic(host, { type: "local-projects" })?.projects ?? []
+  for (const project of projects) titles.set(project.localPath, project.title)
   return titles
 }
 

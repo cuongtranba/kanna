@@ -11,15 +11,15 @@ import type { ClientCommand } from "../shared/protocol"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
 import { assertSafeSkillId, assertSafeSkillSource } from "./skills-cli"
+import { createWsRouter } from "./ws-router"
 import {
   buildInstallSkillCommand,
   buildUninstallSkillCommand,
-  createWsRouter,
-  isBenignStaleStateMessage,
   listInstalledSkills,
   parseInstalledSkillsLock,
-  resolveMcpTestBearer,
-} from "./ws-router"
+} from "./ws-router-skills"
+import { resolveMcpTestBearer } from "./ws-router-settings"
+import { isBenignStaleStateMessage } from "./ws-router-utils"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
 import { createBoardRegistry } from "./board-registry"
@@ -250,7 +250,7 @@ describe("skills helpers", () => {
   })
 
   test("builds a global install command for the default agents and an uninstall command for every agent", () => {
-    expect(buildInstallSkillCommand("owner/repo", "my-skill").slice(1)).toEqual([
+    expect(buildInstallSkillCommand("owner/repo", "my-skill").argv.slice(1)).toEqual([
       "skills",
       "add",
       "owner/repo",
@@ -263,7 +263,7 @@ describe("skills helpers", () => {
       "codex",
       "--yes",
     ])
-    expect(buildUninstallSkillCommand("my-skill").slice(1)).toEqual([
+    expect(buildUninstallSkillCommand("my-skill").argv.slice(1)).toEqual([
       "skills",
       "remove",
       "my-skill",
@@ -737,10 +737,9 @@ describe("ws-router", () => {
     expect(beaconIdsPushed).toEqual([["b1", "b2"], ["b1"]])
   })
 
-  test("pushes MCP source status changes to subscribers and stops the runner on dispose", async () => {
+  test("pushes MCP source status changes to subscribers", async () => {
     const statuses: McpSourceStatus[] = [{ id: "s1", state: "connecting", lastError: null, lastItemAt: null, itemCount: 0 }]
     let notify: () => void = () => {}
-    let stopped = false
     const router = createWsRouter({
       store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
@@ -755,9 +754,6 @@ describe("ws-router", () => {
             notify = () => {}
           }
         },
-        stop: async () => {
-          stopped = true
-        },
       },
       refreshDiscovery: async () => [],
       getDiscoveredProjects: () => [],
@@ -770,14 +766,13 @@ describe("ws-router", () => {
     await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "subscribe", id: "src-1", topic: { type: "mcp-sources" } }))
     statuses[0] = { ...statuses[0]!, state: "listening" }
     notify()
-    await router.dispose()
+    router.dispose()
 
     const states = ws.sent.flatMap((envelope) => {
       const pushed = envelope as { id?: string; snapshot?: { data?: { sources?: Array<{ state: string }> } } }
       return pushed.id === "src-1" ? [pushed.snapshot?.data?.sources?.map((row) => row.state) ?? []] : []
     })
     expect(states).toEqual([["connecting"], ["listening"]])
-    expect(stopped).toBe(true)
   })
 
   test("tracks analytics preference transitions in the correct order", async () => {
@@ -4183,7 +4178,7 @@ describe("chat.ops delta broadcast", () => {
 
     await store.appendMessage(chat.id, { _id: "t-1", createdAt: 1, kind: "assistant_text", text: "hello" })
     await store.flush()
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
 
     const second = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(second)) throw new Error("missing broadcast envelope")
@@ -4208,7 +4203,7 @@ describe("chat.ops delta broadcast", () => {
         entries: [{ _id: `gap-${i}`, createdAt: i, kind: "assistant_text", text: String(i) }],
       })
     }
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
 
     const last = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(last)) throw new Error("missing envelope after gap")
@@ -4221,7 +4216,7 @@ describe("chat.ops delta broadcast", () => {
 
     await store.appendMessage(chat.id, { _id: "after-gap", createdAt: 999, kind: "assistant_text", text: "back" })
     await store.flush()
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
     const afterGap = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(afterGap)) throw new Error("missing envelope after re-arm")
     expect(afterGap.type).toBe("event")

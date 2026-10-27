@@ -144,10 +144,6 @@ export function storeEventEntityId(event: StoreEvent): string {
   }
 }
 
-export function storeEventTimestamp(event: StoreEvent): number {
-  return event.timestamp
-}
-
 export function storeEventChatId(event: StoreEvent): string | undefined {
   if ("chatId" in event) return event.chatId
   if (event.type === "tool_request_put") return event.request.chatId

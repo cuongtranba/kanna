@@ -230,16 +230,12 @@ export class SubagentOrchestrator {
 
   liveSessionCount() { return this.liveSessions.size }
 
-  private resolveSubagent(idOrName: string): Subagent | undefined {
+  findSubagent(idOrName: string): Subagent | undefined {
     const subagents = this.deps.appSettings.getSnapshot().subagents
     const byId = subagents.find((s) => s.id === idOrName)
     if (byId) return byId
     const byName = subagents.filter((s) => s.name === idOrName)
     return byName.length === 1 ? byName[0] : undefined
-  }
-
-  findSubagent(id: string): Subagent | undefined {
-    return this.resolveSubagent(id)
   }
 
   describeUnknownSubagent(requested: string): string {
@@ -428,7 +424,7 @@ export class SubagentOrchestrator {
     background?: boolean
   }): Promise<DelegationOutcome> {
     await this.recoveryPromise
-    const subagent = this.resolveSubagent(args.subagentId)
+    const subagent = this.findSubagent(args.subagentId)
     if (!subagent) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({

@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/server"
 import type { ServerEnvelope } from "../../shared/protocol"
+import { snapshotDataOf } from "./remote-mcp-views"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 
 const JSON_MIME_TYPE = "application/json"
@@ -20,7 +21,7 @@ export function registerKannaResources(server: McpServer, host: RemoteMcpHost): 
     { title: "Projects", description: "Every project group in the Kanna sidebar, with its chats.", mimeType: JSON_MIME_TYPE },
     (uri) => {
       const envelope = host.readSnapshot({ type: "sidebar" })
-      const data = envelope.type === "snapshot" && envelope.snapshot.type === "sidebar" ? envelope.snapshot.data : null
+      const data = snapshotDataOf(envelope, "sidebar")
       const text = data
         ? JSON.stringify({ starredProjectGroups: data.starredProjectGroups, projectGroups: data.projectGroups })
         : snapshotJson(envelope)

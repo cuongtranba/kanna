@@ -16,7 +16,7 @@ export interface McpSourcesRuntime {
   stop(): Promise<void>
 }
 
-export type McpSourcesTopic = Pick<McpSourcesRuntime, "snapshot" | "onStatus" | "stop">
+export type McpSourcesTopic = Pick<McpSourcesRuntime, "snapshot" | "onStatus">
 
 const realClock: McpSourceClock = {
   now: () => Date.now(),

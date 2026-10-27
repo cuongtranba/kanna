@@ -1,10 +1,9 @@
+import { isInFlightStatus } from "../../shared/chat-status"
 import type { DedupeRecord, DedupeStore, DedupeTarget } from "./remote-mcp-dedupe"
 import { dedupeIdsOf } from "./remote-mcp-dedupe"
 import { readChat } from "./remote-mcp-views"
 import type { SnapshotReader } from "./remote-mcp-views"
-import { WAITING_FOR_USER } from "./send-and-wait"
 
-const IN_FLIGHT_STATUSES: ReadonlySet<string> = new Set(["starting", "running", WAITING_FOR_USER])
 const PROBE_RECENT_LIMIT = 1
 
 export interface SendGuardHost extends SnapshotReader {
@@ -22,7 +21,7 @@ export type GuardedOutcome =
 function isStillInFlight(host: SnapshotReader, record: DedupeRecord): boolean {
   const snapshot = readChat(host, record.chatId, PROBE_RECENT_LIMIT)
   if (!snapshot) return false
-  if (IN_FLIGHT_STATUSES.has(snapshot.runtime.status)) return true
+  if (isInFlightStatus(snapshot.runtime.status)) return true
   return record.queuedMessageId !== undefined && snapshot.queuedMessages.some((queued) => queued.id === record.queuedMessageId)
 }
 

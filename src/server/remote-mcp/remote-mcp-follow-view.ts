@@ -1,6 +1,5 @@
 import type { JsonObject, JsonValue } from "../../shared/json"
 import type { FollowResult } from "./send-and-wait"
-import { WAITING_FOR_USER } from "./send-and-wait"
 import { toJsonValue } from "../json-boundary"
 
 export const DEFAULT_WAIT_SECONDS = 45
@@ -51,7 +50,7 @@ function nextStep(result: FollowResult, duplicateVia: DuplicateVia | null): stri
   if (result.queued) {
     return `${duplicate}The message is queued behind a running turn and has not started. Do NOT send it again — that queues a duplicate. ${follow} to keep following, or cancel_chat to stop the running turn.`
   }
-  if (result.status === WAITING_FOR_USER) {
+  if (result.status === "waiting_for_user") {
     return `${duplicate}The chat is waiting for input. Call list_pending_tool_requests, answer with answer_tool_request (kind tool_request) or respond_tool (kind interactive_tool), then ${follow.toLowerCase()} to continue.`
   }
   if (!result.done) {

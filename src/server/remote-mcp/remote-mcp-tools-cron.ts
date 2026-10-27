@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { envelopeToToolResult } from "./remote-mcp-envelope"
+import { envelopeToToolResult } from "./remote-mcp-views"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
 
 export const cronTools: readonly RemoteTool[] = [

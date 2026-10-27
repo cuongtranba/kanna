@@ -71,18 +71,10 @@ async function main() {
     let bytes = 0
     for (let t = 0; t < TICKS; t++) {
       const d0 = performance.now()
-      const snap = deriveChatSnapshot(
-        store2.state,
-        new Map(),
-        new Set(),
-        chat.id,
-        (chatId) => store2.getRecentChatHistory(chatId, RECENT_LIMIT),
-        (chatId) => store2.getTunnelEvents(chatId),
-        new Map(),
-        Date.now(),
-        new Map(),
-        { customModels: [], customProviders: [] },
-      )
+      const snap = deriveChatSnapshot(store2.state, chat.id, {
+        getMessages: (chatId) => store2.getRecentChatHistory(chatId, RECENT_LIMIT),
+        getTunnelEvents: (chatId) => store2.getTunnelEvents(chatId),
+      })
       const d1 = performance.now()
       const sig = getStableChatSnapshotSignature({ type: "chat", data: snap })
       const d2 = performance.now()

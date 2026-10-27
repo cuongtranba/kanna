@@ -4,6 +4,30 @@ import { UpdateInstallError, type UpdateChecker, type UpdateReloader } from "./u
 
 const UPDATE_CACHE_TTL_MS = 5 * 60 * 1000
 
+export const UPDATE_MANAGER_UNAVAILABLE = "Update manager unavailable."
+
+export function idleUpdateSnapshot(currentVersion: string): UpdateSnapshot {
+  return {
+    currentVersion,
+    latestVersion: null,
+    status: "idle",
+    updateAvailable: false,
+    lastCheckedAt: null,
+    error: null,
+    installAction: "restart",
+    reloadRequestedAt: null,
+  }
+}
+
+export function unavailableUpdateSnapshot(): UpdateSnapshot {
+  return {
+    ...idleUpdateSnapshot("unknown"),
+    status: "error",
+    lastCheckedAt: Date.now(),
+    error: UPDATE_MANAGER_UNAVAILABLE,
+  }
+}
+
 export interface UpdateManagerDeps {
   currentVersion: string
   checker: UpdateChecker
@@ -21,16 +45,10 @@ export class UpdateManager {
 
   constructor(deps: UpdateManagerDeps) {
     this.deps = deps
-    this.snapshot = {
-      currentVersion: deps.currentVersion,
-      latestVersion: deps.devMode ? `${deps.currentVersion}-dev` : null,
-      status: deps.devMode ? "available" : "idle",
-      updateAvailable: Boolean(deps.devMode),
-      lastCheckedAt: deps.devMode ? Date.now() : null,
-      error: null,
-      installAction: "restart",
-      reloadRequestedAt: null,
-    }
+    const idle = idleUpdateSnapshot(deps.currentVersion)
+    this.snapshot = deps.devMode
+      ? { ...idle, latestVersion: `${deps.currentVersion}-dev`, status: "available", updateAvailable: true, lastCheckedAt: Date.now() }
+      : idle
   }
 
   getSnapshot() {

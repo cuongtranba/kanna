@@ -1,4 +1,6 @@
 import type { ClientCommand } from "../../shared/protocol"
+import { isBusyStatus } from "../../shared/chat-status"
+import type { KannaStatus } from "../../shared/core-types"
 import type { ChatSnapshot } from "../../shared/types"
 import {
   assistantTextAfter,
@@ -22,8 +24,6 @@ const IDLE_SETTLE_POLLS = 3
 const HEARTBEAT_MS = 10_000
 const ACTIVITY_LIMIT = 20
 const ACTIVITY_TEXT_CHARS = 300
-const BUSY_STATUSES: ReadonlySet<string> = new Set(["starting", "running"])
-export const WAITING_FOR_USER = "waiting_for_user"
 
 export type SendCommand = Extract<ClientCommand, { type: "chat.send" }>
 
@@ -53,7 +53,7 @@ export interface FollowRequest {
 
 export interface FollowResult {
   chatId: string
-  status?: string
+  status?: KannaStatus
   busy: boolean
   done: boolean
   queued: boolean
@@ -73,10 +73,6 @@ function pause(ms: number): Promise<void> {
 
 function hasOutputAfter(snapshot: ChatSnapshot, baseline: number): boolean {
   return snapshot.messages.some((entry) => entry.createdAt > baseline && entry.kind !== "user_prompt")
-}
-
-function isBusyStatus(status: string | undefined): boolean {
-  return status !== undefined && BUSY_STATUSES.has(status)
 }
 
 function describeLatest(snapshot: ChatSnapshot): string {
@@ -141,7 +137,7 @@ export async function followChat(host: ChatFollowHost, request: FollowRequest): 
     }
 
     if (waitingInQueue) {
-      if (status === WAITING_FOR_USER) break
+      if (status === "waiting_for_user") break
       idleWithoutOutput = isBusyStatus(status) ? 0 : idleWithoutOutput + 1
       if (idleWithoutOutput >= IDLE_SETTLE_POLLS) break
       if (Date.now() - lastReportAt >= HEARTBEAT_MS) report("Message is queued behind the running turn")
@@ -173,8 +169,8 @@ export async function followChat(host: ChatFollowHost, request: FollowRequest): 
   const status = final?.runtime.status
   const queued = queuedMessageId !== undefined && (final?.queuedMessages.some((message) => message.id === queuedMessageId) ?? false)
   const busy = isBusyStatus(status) || queued
-  const done = final === null || (!busy && status !== WAITING_FOR_USER)
-  const stalledQueue = queued && !isBusyStatus(status) && status !== WAITING_FOR_USER
+  const done = final === null || (!busy && status !== "waiting_for_user")
+  const stalledQueue = queued && !isBusyStatus(status) && status !== "waiting_for_user"
   const recent = entries.filter((entry) => entry.createdAt > baseline)
   return {
     chatId,

@@ -59,7 +59,7 @@ async function deliver(
 ): Promise<Response> {
   const { registry } = service
   const outcome = (ok: boolean, status: number, detail: string) =>
-    registry.recordDelivery(hook.id, { at: service.clock(), ok, status, detail })
+    registry.recordDelivery(hook.id, { at: service.now(), ok, status, detail })
   try {
     const result = await service.deliver(hook, deliveryId, body)
     if (!result.ok) {
@@ -98,7 +98,7 @@ export async function handleWebhookRequest(
   const verdict = service.registry.matchFilter(hook.id, { body, headers: req.headers })
   if (!verdict.matched) {
     service.registry.recordDelivery(hook.id, {
-      at: service.clock(),
+      at: service.now(),
       ok: true,
       status: 200,
       filtered: true,

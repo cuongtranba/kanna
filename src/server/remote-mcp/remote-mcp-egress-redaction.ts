@@ -1,7 +1,10 @@
 import type { AppSettingsSnapshot } from "../../shared/app-settings-types"
+import { appSettingsSnapshotSchema } from "../../shared/app-settings-types.schema"
+import { commandsReturning } from "../../shared/commands"
 import type { McpOAuthState, McpServerConfig } from "../../shared/mcp-types"
 import type { ClientCommand, CommandResult, ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../../shared/protocol"
 import type { LlmProviderSnapshot } from "../../shared/types"
+import { llmProviderSnapshotSchema } from "../../shared/types.schema"
 import { REDACTED } from "./redact-secrets"
 
 export interface EgressHost {
@@ -9,18 +12,12 @@ export interface EgressHost {
   readSnapshot: (topic: SubscriptionTopic) => ServerEnvelope
 }
 
-const APP_SETTINGS_ACK_COMMANDS: ReadonlySet<ClientCommand["type"]> = new Set<ClientCommand["type"]>([
-  "settings.readAppSettings",
-  "settings.writeAppSettings",
-  "settings.writeAppSettingsPatch",
-  "appSettings.setCloudflareTunnel",
-  "appSettings.setClaudeAuth",
-])
+const APP_SETTINGS_ACK_COMMANDS = commandsReturning(appSettingsSnapshotSchema)
+const LLM_PROVIDER_ACK_COMMANDS = commandsReturning(llmProviderSnapshotSchema)
 
-const LLM_PROVIDER_ACK_COMMANDS: ReadonlySet<ClientCommand["type"]> = new Set<ClientCommand["type"]>([
-  "settings.readLlmProvider",
-  "settings.writeLlmProvider",
-])
+export function redactedAckCommandTypes(): ReadonlySet<ClientCommand["type"]> {
+  return new Set([...APP_SETTINGS_ACK_COMMANDS, ...LLM_PROVIDER_ACK_COMMANDS])
+}
 
 function maskSecret(value: string): string {
   return value === "" ? value : REDACTED
