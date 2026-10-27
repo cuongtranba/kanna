@@ -5,7 +5,7 @@ import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, ModelOptions, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import * as ChatTasks from "./event-store-tasks"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
@@ -20,7 +20,7 @@ import {
   LOG_FILES,
   LOG_OF_EVENT,
   createEmptyState,
-  isAutoContinueEvent,
+  isChatAutomationEvent,
   storeEventKind,
 } from "./events"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
@@ -262,8 +262,8 @@ export class EventStore implements PushEventStore {
   private applyEvent(event: StoreEvent) {
     applyStoreEvent(event, this.state, this.legacyMessagesByChatId, this.replayChatProvider)
     this.tap?.onEventApplied(event)
-    if (isAutoContinueEvent(event)) return
-    const typedEvent: Exclude<StoreEvent, AutoContinueEvent> = event
+    if (isChatAutomationEvent(event)) return
+    const typedEvent: Exclude<StoreEvent, ChatAutomationEvent> = event
     if (typedEvent.type === "chat_deleted") {
       const { chatId } = typedEvent
       this.seenMessageIdsByChatId.delete(chatId)
@@ -616,7 +616,7 @@ export class EventStore implements PushEventStore {
 
   async migrateLegacyTranscripts(onProgress?: (message: string) => void) { return migrateLegacyTranscriptsFn(this.initDeps, onProgress) }
 
-  async appendAutoContinueEvent(event: AutoContinueEvent) { return this.commit(event) }
+  async appendAutoContinueEvent(event: ChatAutomationEvent) { return this.commit(event) }
 
   async appendChatTaskEvents(events: readonly ChatTaskEvent[]): Promise<void> {
     for (const event of events) await this.commit(event)
@@ -648,7 +648,7 @@ export class EventStore implements PushEventStore {
     return ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx)
   }
 
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[] {
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[] {
     const list = this.state.autoContinueEventsByChatId.get(chatId)
     return list ? [...list] : []
   }

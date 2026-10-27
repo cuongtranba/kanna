@@ -1,6 +1,6 @@
 
 import { describe, test, expect } from "bun:test"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import { MAX_CONSECUTIVE_LOOP_FAILURES, type LoopCommandDeps } from "./claude-loop-commands"
 import { handleFailedLoopTurn, recoverArmedLoopWakes, resumeLoop } from "./loop-wake-recovery"
@@ -9,7 +9,7 @@ import { armedLoop, makeDeps, makeStore } from "./test-helpers/loop-command-fake
 describe("recoverArmedLoopWakes", () => {
   test("re-emits the wake for an armed chat left with nothing to wake it", async () => {
     const store = makeStore()
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (event) => { emitted.push(event) },
@@ -30,7 +30,7 @@ describe("recoverArmedLoopWakes", () => {
   })
 
   test("does nothing for a chat with no armed loop", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({ emitAutoContinueEvent: async (e) => { emitted.push(e) } })
     expect(await recoverArmedLoopWakes(deps)).toEqual([])
     expect(emitted).toEqual([])
@@ -39,7 +39,7 @@ describe("recoverArmedLoopWakes", () => {
   test("leaves a chat whose queued message survived to the queue recovery", async () => {
     const store = makeStore()
     store.queuedByChat.set("chat-1", [{ id: "qm-1" }])
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
@@ -50,7 +50,7 @@ describe("recoverArmedLoopWakes", () => {
   })
 
   test("leaves a chat that is already busy", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
       isLoopArmed: () => armedLoop(),
@@ -63,7 +63,7 @@ describe("recoverArmedLoopWakes", () => {
   test("one failing chat does not abort the rest", async () => {
     const store = makeStore()
     store.chats.set("chat-2", { id: "chat-2", projectId: "proj-1" })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (event) => {
@@ -79,7 +79,7 @@ describe("recoverArmedLoopWakes", () => {
   test("recovers a chat whose subagent run is stuck in `running` after a crash", async () => {
     const store = makeStore()
     store.subagentRunsByChat.set("chat-1", { "run-1": { status: "running" } })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
@@ -94,7 +94,7 @@ describe("recoverArmedLoopWakes", () => {
 describe("handleFailedLoopTurn", () => {
   function collectDeps(overrides: Partial<LoopCommandDeps> = {}) {
     const store = makeStore()
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const pending: (() => Promise<void>)[] = []
     const deps = makeDeps({
       store,
@@ -206,7 +206,7 @@ describe("handleFailedLoopTurn", () => {
 
 
 describe("resumeLoop", () => {
-  function armEvent(): AutoContinueEvent {
+  function armEvent(): ChatAutomationEvent {
     return {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
@@ -232,7 +232,7 @@ describe("resumeLoop", () => {
       scheduleId: "ld-1",
       reason: "user_send",
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (e) => { emitted.push(e); store.events.push(e) },
@@ -256,7 +256,7 @@ describe("resumeLoop", () => {
   })
 
   test("refuses when a loop is already armed", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
       isLoopArmed: () => armedLoop(),
@@ -266,7 +266,7 @@ describe("resumeLoop", () => {
   })
 
   test("refuses when the chat never armed a loop", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
       isLoopArmed: () => null,

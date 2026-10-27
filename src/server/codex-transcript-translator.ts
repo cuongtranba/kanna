@@ -10,7 +10,8 @@ import type {
   TranscriptEntry,
 } from "../shared/types"
 import { log } from "../shared/log"
-import { isRecord } from "../shared/errors"
+import { asRecord } from "../shared/errors"
+import { asFiniteNumber } from "../shared/numeric"
 import { toJsonArray, toJsonObject } from "./json-boundary"
 import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 import { codexErrorInfoTag } from "../shared/codex-error-classification"
@@ -24,23 +25,14 @@ import type {
   ToolRequestUserInputQuestion,
   TurnPlanStep,
 } from "./codex-app-server-protocol"
-import { createTranscriptEntry, dynamicToolPayload, genericDynamicToolCall } from "./codex-tool-payloads"
+import { dynamicToolPayload, genericDynamicToolCall } from "./codex-tool-payloads"
+import { timestamped } from "./transcript-entry"
+import { mirroredUsageSnapshot } from "./context-usage-snapshot"
 
 export interface TranslationContext {
   projectId: string | null
   cwd: string
   relocate(externalPath: string): string
-}
-
-const timestamped = createTranscriptEntry
-
-export function asRecord<T>(value: T) {
-  if (!isRecord(value)) return null
-  return value
-}
-
-function asNumber<T>(value: T): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
 
 export function codexSystemInitEntry(model: string): TranscriptEntry {
@@ -63,18 +55,18 @@ export function normalizeCodexTokenUsage(
   const totalUsage = usage.total_token_usage ?? usage.total
   const lastUsage = usage.last_token_usage ?? usage.last
 
-  const totalProcessedTokens = asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens)
-  const usedTokens = asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens) ?? totalProcessedTokens
+  const totalProcessedTokens = asFiniteNumber(totalUsage?.total_tokens) ?? asFiniteNumber(totalUsage?.totalTokens)
+  const usedTokens = asFiniteNumber(lastUsage?.total_tokens) ?? asFiniteNumber(lastUsage?.totalTokens) ?? totalProcessedTokens
   if (usedTokens === undefined || usedTokens <= 0) {
     return null
   }
 
-  const inputTokens = asNumber(lastUsage?.input_tokens) ?? asNumber(lastUsage?.inputTokens)
-  const cachedInputTokens = asNumber(lastUsage?.cached_input_tokens) ?? asNumber(lastUsage?.cachedInputTokens)
-  const outputTokens = asNumber(lastUsage?.output_tokens) ?? asNumber(lastUsage?.outputTokens)
+  const inputTokens = asFiniteNumber(lastUsage?.input_tokens) ?? asFiniteNumber(lastUsage?.inputTokens)
+  const cachedInputTokens = asFiniteNumber(lastUsage?.cached_input_tokens) ?? asFiniteNumber(lastUsage?.cachedInputTokens)
+  const outputTokens = asFiniteNumber(lastUsage?.output_tokens) ?? asFiniteNumber(lastUsage?.outputTokens)
   const reasoningOutputTokens =
-    asNumber(lastUsage?.reasoning_output_tokens) ?? asNumber(lastUsage?.reasoningOutputTokens)
-  const maxTokens = asNumber(usage.model_context_window) ?? asNumber(usage.modelContextWindow)
+    asFiniteNumber(lastUsage?.reasoning_output_tokens) ?? asFiniteNumber(lastUsage?.reasoningOutputTokens)
+  const maxTokens = asFiniteNumber(usage.model_context_window) ?? asFiniteNumber(usage.modelContextWindow)
 
   let costUsd: number | undefined
   if (resolveTurnPrice) {
@@ -88,19 +80,16 @@ export function normalizeCodexTokenUsage(
   }
 
   return {
-    usedTokens,
+    ...mirroredUsageSnapshot({
+      usedTokens,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      reasoningOutputTokens,
+      compactsAutomatically: true,
+    }),
     ...(totalProcessedTokens !== undefined && totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
-    ...(inputTokens !== undefined ? { inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
-    ...(inputTokens !== undefined ? { lastInputTokens: inputTokens } : {}),
-    ...(cachedInputTokens !== undefined ? { lastCachedInputTokens: cachedInputTokens } : {}),
-    ...(outputTokens !== undefined ? { lastOutputTokens: outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { lastReasoningOutputTokens: reasoningOutputTokens } : {}),
-    lastUsedTokens: usedTokens,
-    compactsAutomatically: true,
     ...(costUsd !== undefined ? { costUsd } : {}),
   }
 }
@@ -365,19 +354,7 @@ function fileChangeToToolCalls(item: Extract<ThreadItem, { type: "fileChange" }>
     const normalizedKind = fileChangeKind(change.kind)
 
     if (normalizedKind.movePath) {
-      return timestamped({
-        kind: "tool_call",
-        tool: {
-          kind: "tool",
-          toolKind: "unknown_tool",
-          toolName: "FileChange",
-          toolId,
-          input: {
-            payload,
-          },
-          rawInput: payload,
-        },
-      })
+      return genericDynamicToolCall(toolId, "FileChange", payload)
     }
 
     if (typeof change.diff === "string") {
@@ -405,19 +382,7 @@ function fileChangeToToolCalls(item: Extract<ThreadItem, { type: "fileChange" }>
 
       if (normalizedKind.type === "update") {
         if (!diffIsUnified) {
-          return timestamped({
-            kind: "tool_call",
-            tool: {
-              kind: "tool",
-              toolKind: "unknown_tool",
-              toolName: "FileChange",
-              toolId,
-              input: {
-                payload,
-              },
-              rawInput: payload,
-            },
-          })
+          return genericDynamicToolCall(toolId, "FileChange", payload)
         }
 
         return timestamped({
@@ -455,19 +420,7 @@ function fileChangeToToolCalls(item: Extract<ThreadItem, { type: "fileChange" }>
       }
     }
 
-    return timestamped({
-      kind: "tool_call",
-      tool: {
-        kind: "tool",
-        toolKind: "unknown_tool",
-        toolName: "FileChange",
-        toolId,
-        input: {
-          payload,
-        },
-        rawInput: payload,
-      },
-    })
+    return genericDynamicToolCall(toolId, "FileChange", payload)
   })
 }
 

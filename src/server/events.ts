@@ -10,7 +10,7 @@ import type {
   SubagentRunSnapshot,
   TranscriptEntry,
 } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { JsonArray, JsonObject } from "../shared/json"
@@ -69,7 +69,7 @@ export interface StoreState {
   chatsById: Map<string, ChatRecord>
   queuedMessagesByChatId: Map<string, QueuedChatMessage[]>
   sidebarProjectOrder: string[]
-  autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
+  autoContinueEventsByChatId: Map<string, ChatAutomationEvent[]>
   chatTimingsByChatId: Map<string, ChatTimingState>
   stacksById: Map<string, StackRecord>
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
@@ -85,7 +85,7 @@ export interface SnapshotFile {
   sidebarProjectOrder?: string[]
   queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
-  autoContinueEvents?: Array<{ chatId: string; events: AutoContinueEvent[] }>
+  autoContinueEvents?: Array<{ chatId: string; events: ChatAutomationEvent[] }>
   chatTasks?: Array<{ chatId: string; events: ChatTaskEvent[] }>
   stacks?: StackRecord[]
 }
@@ -443,18 +443,18 @@ export type ToolRequestEvent =
       mismatchReason?: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | ChatAutomationEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
 
 export type StoreEventKind =
-  | Exclude<StoreEvent, AutoContinueEvent>["type"]
-  | AutoContinueEvent["kind"]
+  | Exclude<StoreEvent, ChatAutomationEvent>["type"]
+  | ChatAutomationEvent["kind"]
 
-export function isAutoContinueEvent(event: StoreEvent): event is AutoContinueEvent {
+export function isChatAutomationEvent(event: StoreEvent): event is ChatAutomationEvent {
   return "kind" in event
 }
 
 export function storeEventKind(event: StoreEvent): StoreEventKind {
-  return isAutoContinueEvent(event) ? event.kind : event.type
+  return isChatAutomationEvent(event) ? event.kind : event.type
 }
 
 export type LogName =

@@ -16,10 +16,11 @@ import {
   getUpstreamStatusCounts,
   hasUpstreamBranch,
   resolveDefaultBranchName,
+  requireRepo,
   resolveRepo,
   sanitizeRepoName,
-} from "./diff-store-git-branch.adapter"
-import type { SelectedBranch } from "./diff-store-git-branch.adapter"
+} from "./diff-store-git-branch"
+import type { SelectedBranch } from "./diff-store-git-branch"
 import { normalizeRepoRelativePath } from "./diff-store-parse"
 import {
   createEmptyState,
@@ -32,7 +33,7 @@ import {
   findDirtyPath,
   readBaseFile,
   readWorktreeFile,
-} from "./diff-store-file-ops.adapter"
+} from "./diff-store-file-ops"
 import type {
   ChatBranchListResult,
   ChatCheckoutBranchResult,
@@ -54,15 +55,14 @@ import {
   mergeBranch,
   previewMergeBranch,
   syncBranch,
-} from "./diff-store-branch-ops.adapter"
-import type { DiffStoreBranchOpsDeps } from "./diff-store-branch-ops.adapter"
+} from "./diff-store-branch-ops"
+import type { DiffStoreBranchOpsDeps } from "./diff-store-branch-ops"
 import {
   commitFiles,
   discardFile,
   generateCommitMessage,
   ignoreFile,
-} from "./diff-store-commit-ops.adapter"
-import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops.adapter"
+} from "./diff-store-commit-ops"
 
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
 export { appendGitIgnoreEntry } from "./diff-store-parse"
@@ -70,13 +70,14 @@ export { appendGitIgnoreEntry } from "./diff-store-parse"
 export class DiffStore {
   private readonly states = new Map<string, StoredChatDiffState>()
 
-  private readonly fetchPullRequests: typeof fetchGitHubPullRequests
+  private readonly opsDeps: DiffStoreBranchOpsDeps
 
-  constructor(_: string, fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests) {
-    this.fetchPullRequests = fetchPullRequests
+  constructor(fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests) {
+    this.opsDeps = {
+      refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
+      fetchPullRequests,
+    }
   }
-
-  async initialize() {}
 
   async initializeGit(args: {
     projectPath: string
@@ -279,10 +280,7 @@ export class DiffStore {
     path: string
   }) {
     const relativePath = normalizeRepoRelativePath(args.path)
-    const repo = await resolveRepo(args.projectPath)
-    if (!repo) {
-      throw new Error("Project is not in a git repository")
-    }
+    const repo = await requireRepo(args.projectPath)
 
     const entry = await findDirtyPath(repo.repoRoot, relativePath)
     if (!entry) {
@@ -300,15 +298,7 @@ export class DiffStore {
   getSnapshot(repoPath: string): ChatDiffSnapshot {
     const state = this.states.get(repoPath) ?? createEmptyState()
     return {
-      status: state.status,
-      branchName: state.branchName,
-      defaultBranchName: state.defaultBranchName,
-      hasOriginRemote: state.hasOriginRemote,
-      originRepoSlug: state.originRepoSlug,
-      hasUpstream: state.hasUpstream,
-      aheadCount: state.aheadCount,
-      behindCount: state.behindCount,
-      lastFetchedAt: state.lastFetchedAt,
+      ...state,
       files: [...state.files],
       branchHistory: {
         entries: state.branchHistory.entries.map((entry) => ({
@@ -322,19 +312,7 @@ export class DiffStore {
   async refreshSnapshot(repoPath: string) {
     const repo = await resolveRepo(repoPath)
     if (!repo) {
-      const nextState = {
-        status: "no_repo",
-        branchName: undefined,
-        defaultBranchName: undefined,
-        hasOriginRemote: undefined,
-        originRepoSlug: undefined,
-        hasUpstream: undefined,
-        aheadCount: undefined,
-        behindCount: undefined,
-        lastFetchedAt: undefined,
-        files: [],
-        branchHistory: { entries: [] },
-      } satisfies StoredChatDiffState
+      const nextState: StoredChatDiffState = { ...createEmptyState(), status: "no_repo" }
       const changed = !snapshotsEqual(this.states.get(repoPath), nextState)
       this.states.set(repoPath, nextState)
       return changed
@@ -376,37 +354,24 @@ export class DiffStore {
     return changed
   }
 
-  private buildBranchOpsDeps(): DiffStoreBranchOpsDeps {
-    return {
-      refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
-      fetchPullRequests: this.fetchPullRequests,
-    }
-  }
-
-  private buildCommitOpsDeps(): DiffStoreCommitOpsDeps {
-    return {
-      refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
-    }
-  }
-
   async listBranches(args: {
     projectPath: string
   }): Promise<ChatBranchListResult> {
-    return listBranches(this.buildBranchOpsDeps(), args)
+    return listBranches(this.opsDeps, args)
   }
 
   async previewMergeBranch(args: {
     projectPath: string
     branch: SelectedBranch
   }): Promise<ChatMergePreviewResult> {
-    return previewMergeBranch(this.buildBranchOpsDeps(), args)
+    return previewMergeBranch(args)
   }
 
   async mergeBranch(args: {
     projectPath: string
     branch: SelectedBranch
   }): Promise<ChatMergeBranchResult> {
-    return mergeBranch(this.buildBranchOpsDeps(), args)
+    return mergeBranch(this.opsDeps, args)
   }
 
   async checkoutBranch(args: {
@@ -414,7 +379,7 @@ export class DiffStore {
     branch: SelectedBranch
     bringChanges?: boolean
   }): Promise<ChatCheckoutBranchResult> {
-    return checkoutBranch(this.buildBranchOpsDeps(), args)
+    return checkoutBranch(this.opsDeps, args)
   }
 
   async createBranch(args: {
@@ -422,21 +387,21 @@ export class DiffStore {
     name: string
     baseBranchName?: string
   }): Promise<ChatCreateBranchResult> {
-    return createBranch(this.buildBranchOpsDeps(), args)
+    return createBranch(this.opsDeps, args)
   }
 
   async syncBranch(args: {
     projectPath: string
     action: "fetch" | "pull" | "push" | "publish"
   }): Promise<ChatSyncResult> {
-    return syncBranch(this.buildBranchOpsDeps(), args)
+    return syncBranch(this.opsDeps, args)
   }
 
   async generateCommitMessage(args: {
     projectPath: string
     paths: string[]
   }) {
-    return generateCommitMessage(this.buildCommitOpsDeps(), args)
+    return generateCommitMessage(args)
   }
 
   async commitFiles(args: {
@@ -446,20 +411,20 @@ export class DiffStore {
     description?: string
     mode: DiffCommitMode
   }) {
-    return commitFiles(this.buildCommitOpsDeps(), args)
+    return commitFiles(this.opsDeps, args)
   }
 
   async discardFile(args: {
     projectPath: string
     path: string
   }) {
-    return discardFile(this.buildCommitOpsDeps(), args)
+    return discardFile(this.opsDeps, args)
   }
 
   async ignoreFile(args: {
     projectPath: string
     path: string
   }) {
-    return ignoreFile(this.buildCommitOpsDeps(), args)
+    return ignoreFile(this.opsDeps, args)
   }
 }

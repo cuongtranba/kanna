@@ -2,7 +2,7 @@
 import type { TranscriptEntry } from "../shared/types"
 import type { Subagent, AgentProvider } from "../shared/types"
 import { loopFailureBudget } from "../shared/loop-progress"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "./auto-continue/events"
 import { deriveChatSchedules, deriveLastLoopSpec, deriveLoopState, type LoopSpec, type LoopState } from "./auto-continue/read-model"
 import { clearClaudeSessionContext } from "./claude-context-commands"
 import { timestamped } from "./claude-message-normalizer"
@@ -35,7 +35,7 @@ import { withSpan } from "./observability"
 interface LoopCommandStore {
   getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null
   getProject(projectId: string): { localPath: string; id: string } | null
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   setSessionTokenForProvider(chatId: string, provider: AgentProvider, token: string | null): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
   listAutoContinueChats(): string[]
@@ -69,7 +69,7 @@ export interface LoopCommandDeps {
 
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 
-  emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
 
   ensureTrackingFile(args: EnsureTrackingFileArgs): Promise<EnsureTrackingFileResult>
 

@@ -35,7 +35,7 @@ import { addWorktree, isDirty, listWorktrees, localBranchExists, removeWorktree 
 import { resolveWorktreeCleanup, worktreeCleanupView, type WorktreeCleanupDeps } from "./board-worktree-cleanup"
 import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
-import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
+import { readOriginRepoSlug } from "./diff-store-git-branch"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
@@ -56,6 +56,7 @@ import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter, type ClientState } from "./ws-router"
+import { isAutoContinueScheduleEvent } from "./auto-continue/events"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
@@ -162,7 +163,7 @@ interface ApplicationServices {
 async function createApplicationServices(options: StartKannaServerOptions): Promise<ApplicationServices> {
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
-  const diffStore = new DiffStore(store.dataDir)
+  const diffStore = new DiffStore()
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
   const bus = createStoreBus(store)
@@ -178,7 +179,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
-  await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
 
   let discoveredProjects: DiscoveredProject[] = []
@@ -581,7 +581,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 function rehydrateScheduledWork(services: ApplicationServices): void {
   const { store, agent, scheduleManager, cronScheduler } = services
   scheduleManager.rehydrate(
-    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+    store
+      .listAutoContinueChats()
+      .flatMap((chatId) => store.getAutoContinueEvents(chatId))
+      .filter(isAutoContinueScheduleEvent),
   )
   const cronChatIds = store.listAutoContinueChats()
   const missedCronFires = cronScheduler.rehydrate(

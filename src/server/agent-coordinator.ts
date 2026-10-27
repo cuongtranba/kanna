@@ -25,7 +25,7 @@ import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
 import { readIntEnv } from "./env-int"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
 import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
@@ -620,6 +620,7 @@ export class AgentCoordinator {
       skipCoalescer: this.cronSkipCoalescer,
       emitStateChange: (chatId) => this.emitStateChange(chatId),
       pushCronJobsUpdate: () => this.onCronJobsChange?.(),
+      now: () => Date.now(),
       cronRepair: this._cronRepair,
       cronConfirm: this._cronConfirm,
       resolveChatCwd: (chatId) => resolveChatCwd(this.store, chatId),
@@ -1154,7 +1155,7 @@ export class AgentCoordinator {
     return resolveAutoResumeForFn(this.autoContinueDeps(), chatId)
   }
 
-  async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
+  async emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void> {
     await emitAutoContinueEventFn(this.autoContinueDeps(), event)
   }
 

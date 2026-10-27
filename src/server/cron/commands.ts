@@ -1,36 +1,33 @@
 
 import type { TranscriptEntry } from "../../shared/types"
-import { hasActiveRun, type CronArmSummary, type CronParseError, type CronParseResult } from "../../shared/cron/types"
+import { hasActiveRun, type CronParseError, type CronParseResult } from "../../shared/cron/types"
 import type { CronRepair } from "./repair"
 import type { CronConfirm } from "./confirm"
-import { cronModeConsequence } from "../../shared/cron/arm-summary"
-import { humanizeSchedule } from "../../shared/cron/humanize"
-import { nextFireAt } from "./next-fire"
-import type { AutoContinueEvent } from "../auto-continue/events"
-import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
+import { chatAutomationEnvelope, type ChatAutomationEvent, type CronEvent } from "../auto-continue/events"
 import { deriveCronJobs } from "./read-model"
+import { planCronArm } from "./preview"
 import { timestamped } from "../claude-message-normalizer"
 
 export interface CronCommandStore {
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
 }
 
 export interface CronCommandDeps {
   store: CronCommandStore
-  cronScheduler: { onEvent(event: AutoContinueEvent): void } | null
+  cronScheduler: { onEvent(event: ChatAutomationEvent): void } | null
   skipCoalescer?: { forget(chatId: string, jobId: string): void }
   emitStateChange(chatId: string): void
   pushCronJobsUpdate?: () => void
   cronRepair?: CronRepair
   cronConfirm?: CronConfirm
-  now?: () => number
+  now: () => number
   newJobId?: () => string
   resolveChatCwd?: (chatId: string) => string | undefined
 }
 
-export async function emitCronEvent(deps: CronCommandDeps, event: AutoContinueEvent): Promise<void> {
+export async function emitCronEvent(deps: CronCommandDeps, event: CronEvent): Promise<void> {
   await deps.store.appendAutoContinueEvent(event)
   deps.cronScheduler?.onEvent(event)
   if (event.kind === "cron_armed" || event.kind === "cron_disarmed" || event.kind === "cron_paused") {
@@ -60,62 +57,48 @@ export async function runCronCommand(
       await appendCronEntry(deps, chatId, { kind: "cron_list" })
       return null
     case "arm": {
-      const now = deps.now?.() ?? Date.now()
-      const fires = computeUpcomingFires(command.schedule, now, 3)
-      if (fires.length === 0) {
+      const now = deps.now()
+      const cwd = deps.resolveChatCwd?.(chatId)
+      const plan = planCronArm(command, now, { model, cwd })
+      if (!plan.ok) {
         await refuseCronCommand(deps, chatId, {
           part: "schedule",
-          message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
+          message: `${plan.neverFires} — not armed`,
           input: `/cron ${command.instruction} ${command.mode} ${command.scheduleText}`,
         })
         return null
       }
 
       const jobId = pickJobId(deps, chatId)
+      const summary = { ...plan.summary, jobId }
       await emitCronEvent(deps, {
-        v: AUTO_CONTINUE_EVENT_VERSION,
+        ...chatAutomationEnvelope(chatId, jobId, now),
         kind: "cron_armed",
-        chatId,
-        scheduleId: jobId,
-        timestamp: now,
         instruction: command.instruction,
         mode: command.mode,
         scheduleText: command.scheduleText,
         schedule: command.schedule,
         ...(model !== undefined ? { model } : {}),
       })
-      const cwd = deps.resolveChatCwd?.(chatId)
-      const scheduleHuman = humanizeSchedule(command.schedule, command.scheduleText)
       await appendCronEntry(deps, chatId, {
         kind: "cron_armed",
         jobId,
         instruction: command.instruction,
         mode: command.mode,
         scheduleText: command.scheduleText,
-        scheduleHuman,
-        nextFireAt: fires[0] ?? null,
+        scheduleHuman: summary.scheduleHuman,
+        nextFireAt: summary.upcomingFires[0] ?? null,
         ...(model !== undefined ? { model } : {}),
-        upcomingFires: fires,
+        upcomingFires: summary.upcomingFires,
         ...(cwd !== undefined ? { cwd } : {}),
       })
-      const summary: CronArmSummary = {
-        jobId,
-        instruction: command.instruction,
-        mode: command.mode,
-        modeConsequence: cronModeConsequence(command.mode),
-        scheduleText: command.scheduleText,
-        scheduleHuman,
-        upcomingFires: fires,
-        model: model ?? null,
-        cwd: cwd ?? null,
-      }
       await deps.cronConfirm?.offer(chatId, jobId, summary)
       return jobId
     }
     case "remove":
     case "pause":
     case "resume": {
-      const now = deps.now?.() ?? Date.now()
+      const now = deps.now()
       const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
       const job = jobs.find((candidate) => candidate.jobId === command.jobId)
       if (!job) {
@@ -141,13 +124,8 @@ export async function runCronCommand(
         return null
       }
 
-      const base = {
-        v: AUTO_CONTINUE_EVENT_VERSION,
-        chatId,
-        scheduleId: command.jobId,
-        timestamp: now,
-      } as const
-      let event: AutoContinueEvent
+      const base = chatAutomationEnvelope(chatId, command.jobId, now)
+      let event: CronEvent
       let change: "removed" | "paused" | "resumed"
       if (command.sub === "remove") {
         event = { ...base, kind: "cron_disarmed", reason: "user" }
@@ -168,7 +146,7 @@ export async function runCronCommand(
       return null
     }
     case "update": {
-      const now = deps.now?.() ?? Date.now()
+      const now = deps.now()
       const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
       const job = jobs.find((candidate) => candidate.jobId === command.jobId)
       if (!job) {
@@ -192,11 +170,8 @@ export async function runCronCommand(
       const schedule = patch.schedule ?? job.schedule
       const scheduleText = patch.scheduleText ?? job.scheduleText
       await emitCronEvent(deps, {
-        v: AUTO_CONTINUE_EVENT_VERSION,
+        ...chatAutomationEnvelope(chatId, command.jobId, now),
         kind: "cron_armed",
-        chatId,
-        scheduleId: command.jobId,
-        timestamp: now,
         instruction,
         mode,
         schedule,
@@ -230,16 +205,13 @@ async function refuseCronCommand(
 }
 
 export async function disarmCronJobsForChat(deps: CronCommandDeps, chatId: string): Promise<void> {
-  const now = deps.now?.() ?? Date.now()
+  const now = deps.now()
   const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
   for (const job of jobs) {
     await emitCronEvent(deps, {
-      v: AUTO_CONTINUE_EVENT_VERSION,
+      ...chatAutomationEnvelope(chatId, job.jobId, now),
       kind: "cron_disarmed",
       reason: "chat_deleted",
-      chatId,
-      scheduleId: job.jobId,
-      timestamp: now,
     })
   }
 }
@@ -253,26 +225,14 @@ export async function appendCronEntry(
   chatId: string,
   entry: NewTranscriptEntry,
 ): Promise<void> {
-  const stamped: TranscriptEntry = timestamped(entry, deps.now?.() ?? Date.now())
+  const stamped: TranscriptEntry = timestamped(entry, deps.now())
   await deps.store.appendMessage(chatId, stamped)
   deps.emitStateChange(chatId)
 }
 
-function computeUpcomingFires(schedule: import("../../shared/cron/types").CronSchedule, nowMs: number, count: number): number[] {
-  const fires: number[] = []
-  let cursor = nowMs
-  for (let i = 0; i < count; i++) {
-    const next = nextFireAt(schedule, cursor, nowMs)
-    if (next === null) break
-    fires.push(next)
-    cursor = next
-  }
-  return fires
-}
-
 function pickJobId(deps: CronCommandDeps, chatId: string): string {
   const taken = new Set(
-    deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, deps.now?.() ?? Date.now()).map(
+    deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, deps.now()).map(
       (job) => job.jobId,
     ),
   )

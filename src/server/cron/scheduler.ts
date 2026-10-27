@@ -1,8 +1,8 @@
 
 import type { CronSchedule } from "../../shared/cron/types"
 import { nextFireAt } from "./next-fire"
-import { deriveCronJobs } from "./read-model"
-import type { AutoContinueEvent } from "../auto-continue/events"
+import { foldCronJobs } from "./read-model"
+import type { ChatAutomationEvent } from "../auto-continue/events"
 import { realClock, type Clock } from "../auto-continue/schedule-manager"
 import { log } from "../../shared/log"
 import { toError } from "../../shared/errors"
@@ -47,7 +47,7 @@ export class CronScheduler {
   }
 
   rehydrate(
-    events: readonly AutoContinueEvent[],
+    events: readonly ChatAutomationEvent[],
   ): Array<{ chatId: string; jobId: string; missedCount: number }> {
     const chatIds = new Set<string>()
     for (const event of events) chatIds.add(event.chatId)
@@ -55,7 +55,7 @@ export class CronScheduler {
     const missed: Array<{ chatId: string; jobId: string; missedCount: number }> = []
     const now = this.clock.now()
     for (const chatId of chatIds) {
-      for (const snapshot of deriveCronJobs(events, chatId, now)) {
+      for (const snapshot of foldCronJobs(events, chatId)) {
         const job: ArmedJob = {
           chatId,
           jobId: snapshot.jobId,
@@ -77,7 +77,7 @@ export class CronScheduler {
     return missed
   }
 
-  onEvent(event: AutoContinueEvent): void {
+  onEvent(event: ChatAutomationEvent): void {
     switch (event.kind) {
       case "cron_armed": {
         this.clearJob(cronJobKey(event.chatId, event.scheduleId))

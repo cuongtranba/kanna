@@ -21,6 +21,10 @@ export function isRecord<T>(value: T): value is T & Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+export function asRecord<T>(value: T) {
+  return isRecord(value) ? value : null
+}
+
 export function onRejected(handle: (error: Error) => void): (reason: unknown) => void {
   return (reason) => {
     handle(toError(reason))

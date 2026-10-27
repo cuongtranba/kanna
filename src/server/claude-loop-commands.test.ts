@@ -1,6 +1,6 @@
 
 import { describe, test, expect } from "bun:test"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
 import type { ClaudeSessionState } from "./claude-session-state"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
@@ -40,7 +40,7 @@ describe("isLoopArmed", () => {
 
   test("returns LoopState when loop_armed event is present", () => {
     const deps = makeDeps()
-    const armEvent: AutoContinueEvent = {
+    const armEvent: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
       timestamp: Date.now(),
@@ -58,7 +58,7 @@ describe("isLoopArmed", () => {
   test("returns null after loop_disarmed event", () => {
     const deps = makeDeps()
     const now = Date.now()
-    const events: AutoContinueEvent[] = [
+    const events: ChatAutomationEvent[] = [
       {
         v: AUTO_CONTINUE_EVENT_VERSION,
         kind: "loop_armed",
@@ -92,7 +92,7 @@ describe("listLiveSchedules", () => {
   test("returns scheduleIds for proposed/scheduled events", () => {
     const deps = makeDeps()
     const now = Date.now() + 10_000
-    const events: AutoContinueEvent[] = [
+    const events: ChatAutomationEvent[] = [
       {
         v: AUTO_CONTINUE_EVENT_VERSION,
         kind: "auto_continue_accepted",
@@ -192,7 +192,7 @@ describe("setupLoop — arms in the chat's own tree", () => {
     const verifyCalls: { cwd: string }[] = []
     const ensured: { absPath: string }[] = []
     const seeded: string[] = []
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       getSubagents: () => [{ id: "sub-1", name: "Worker", triggerMode: "auto" } as never],
@@ -295,7 +295,7 @@ describe("setupLoop — arms in the chat's own tree", () => {
 
 describe("stopLoop", () => {
   test("is a no-op when loop is not armed", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       emitAutoContinueEvent: async (event) => {
         emitted.push(event)
@@ -306,8 +306,8 @@ describe("stopLoop", () => {
   })
 
   test("emits loop_disarmed when loop is armed", async () => {
-    const emitted: AutoContinueEvent[] = []
-    const armEvent: AutoContinueEvent = {
+    const emitted: ChatAutomationEvent[] = []
+    const armEvent: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
       timestamp: Date.now(),
@@ -356,7 +356,7 @@ describe("stopLoop", () => {
   })
 })
 
-function armedEvent(): AutoContinueEvent {
+function armedEvent(): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_armed",
@@ -372,7 +372,7 @@ function armedEvent(): AutoContinueEvent {
 }
 
 
-function disarmedEvent(): AutoContinueEvent {
+function disarmedEvent(): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_disarmed",
@@ -384,10 +384,10 @@ function disarmedEvent(): AutoContinueEvent {
 }
 
 describe("deliverSubagentToMain — naming the plan when no loop is armed", () => {
-  async function deliver(events: AutoContinueEvent[]) {
+  async function deliver(events: ChatAutomationEvent[]) {
     const store = makeStore()
     store.events.push(...events)
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (e) => { emitted.push(e) },
@@ -417,7 +417,7 @@ describe("deliverSubagentToMain", () => {
   test("no-ops when chat not found", async () => {
     const store = makeStore()
     store.chats.clear()
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       store,
       emitAutoContinueEvent: async (event) => { emitted.push(event) },
@@ -428,7 +428,7 @@ describe("deliverSubagentToMain", () => {
   })
 
   test("emits auto_continue_accepted on completed outcome", async () => {
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const store = makeStore()
     const deps = makeDeps({
       store,

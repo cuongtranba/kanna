@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
-import { deriveCronJobs, findRunningCronRuns, hasUnpausedCronJob } from "./read-model"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
+import { deriveCronJobs, findRunningCronRuns } from "./read-model"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
 import { hasActiveRun, MAX_RECENT_CRON_RUNS, type CronSchedule } from "../../shared/cron/types"
 
@@ -15,8 +15,8 @@ function scheduleOf(text: string): CronSchedule {
 function armed(
   jobId: string,
   timestamp: number,
-  overrides?: Partial<Extract<AutoContinueEvent, { kind: "cron_armed" }>>,
-): AutoContinueEvent {
+  overrides?: Partial<Extract<ChatAutomationEvent, { kind: "cron_armed" }>>,
+): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_armed",
@@ -35,13 +35,13 @@ function event(
   kind: "cron_disarmed" | "cron_paused" | "cron_resumed",
   jobId: string,
   timestamp: number,
-): AutoContinueEvent {
+): ChatAutomationEvent {
   const base = { v: AUTO_CONTINUE_EVENT_VERSION, chatId: CHAT, scheduleId: jobId, timestamp }
   if (kind === "cron_disarmed") return { ...base, kind, reason: "user" }
   return { ...base, kind }
 }
 
-function runStarted(jobId: string, runId: string, timestamp: number, spawnedChatId?: string): AutoContinueEvent {
+function runStarted(jobId: string, runId: string, timestamp: number, spawnedChatId?: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_started",
@@ -53,7 +53,7 @@ function runStarted(jobId: string, runId: string, timestamp: number, spawnedChat
   }
 }
 
-function runOutcome(jobId: string, runId: string, timestamp: number, ok: boolean, errorCode?: string): AutoContinueEvent {
+function runOutcome(jobId: string, runId: string, timestamp: number, ok: boolean, errorCode?: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_outcome",
@@ -183,7 +183,7 @@ describe("deriveCronJobs", () => {
   })
 
   test("recent runs are bounded newest-first", () => {
-    const events: AutoContinueEvent[] = [armed("j1", 0)]
+    const events: ChatAutomationEvent[] = [armed("j1", 0)]
     for (let i = 0; i < MAX_RECENT_CRON_RUNS + 10; i++) {
       events.push(runStarted("j1", `r${i}`, 1000 + i))
       events.push(runOutcome("j1", `r${i}`, 1500 + i, true))
@@ -196,22 +196,6 @@ describe("deriveCronJobs", () => {
   test("run events for unknown or disarmed jobs are ignored", () => {
     const jobs = deriveCronJobs([runStarted("ghost", "r1", 1000)], CHAT, 2000)
     expect(jobs).toEqual([])
-  })
-
-  test("hasUnpausedCronJob tracks arm, pause, resume, disarm", () => {
-    expect(hasUnpausedCronJob([], CHAT)).toBe(false)
-    expect(hasUnpausedCronJob([armed("j1", 1000)], CHAT)).toBe(true)
-    expect(hasUnpausedCronJob([armed("j1", 1000), event("cron_paused", "j1", 2000)], CHAT)).toBe(false)
-    expect(
-      hasUnpausedCronJob(
-        [armed("j1", 1000), event("cron_paused", "j1", 2000), event("cron_resumed", "j1", 3000)],
-        CHAT,
-      ),
-    ).toBe(true)
-    expect(hasUnpausedCronJob([armed("j1", 1000), event("cron_disarmed", "j1", 2000)], CHAT)).toBe(false)
-    expect(
-      hasUnpausedCronJob([armed("j1", 1000), armed("j2", 1500), event("cron_paused", "j1", 2000)], CHAT),
-    ).toBe(true)
   })
 
   test("cron_run_outcome is first-terminal-wins: a second outcome for the same runId is ignored", () => {
@@ -297,7 +281,7 @@ describe("findRunningCronRuns", () => {
   })
 
   test("includes spawnedChatId when present", () => {
-    const events: AutoContinueEvent[] = [
+    const events: ChatAutomationEvent[] = [
       armed("j1", 1000),
       runStarted("j1", "r1", 2000, "spawned-chat"),
     ]
@@ -306,7 +290,7 @@ describe("findRunningCronRuns", () => {
   })
 
   test("finds a running run buried under more than MAX_RECENT_CRON_RUNS skip records", () => {
-    const events: AutoContinueEvent[] = [armed("j1", 1000), runStarted("j1", "r1", 2000)]
+    const events: ChatAutomationEvent[] = [armed("j1", 1000), runStarted("j1", "r1", 2000)]
     for (let i = 0; i < MAX_RECENT_CRON_RUNS + 5; i++) {
       events.push({
         v: AUTO_CONTINUE_EVENT_VERSION,

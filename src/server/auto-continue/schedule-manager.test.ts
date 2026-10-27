@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ScheduleManager, type Clock } from "./schedule-manager"
-import type { AutoContinueEvent } from "./events"
+import type { AutoContinueScheduleEvent } from "./events"
 
 class FakeClock implements Clock {
   private current = 0
@@ -34,27 +34,19 @@ class FakeClock implements Clock {
   }
 }
 
-function event(kind: AutoContinueEvent["kind"], overrides: Partial<AutoContinueEvent> = {}): AutoContinueEvent {
+function event(kind: AutoContinueScheduleEvent["kind"], overrides: Partial<AutoContinueScheduleEvent> = {}): AutoContinueScheduleEvent {
   const base = { v: 3 as const, timestamp: 0, chatId: "c1", scheduleId: "s1" }
   switch (kind) {
     case "auto_continue_proposed":
-      return { ...base, kind, detectedAt: 0, resetAt: 1_000, tz: "UTC", ...overrides } as AutoContinueEvent
+      return { ...base, kind, detectedAt: 0, resetAt: 1_000, tz: "UTC", ...overrides } as AutoContinueScheduleEvent
     case "auto_continue_accepted":
-      return { ...base, kind, scheduledAt: 1_000, tz: "UTC", source: "user", resetAt: 1_000, detectedAt: 0, ...overrides } as AutoContinueEvent
+      return { ...base, kind, scheduledAt: 1_000, tz: "UTC", source: "user", resetAt: 1_000, detectedAt: 0, ...overrides } as AutoContinueScheduleEvent
     case "auto_continue_rescheduled":
-      return { ...base, kind, scheduledAt: 2_000, ...overrides } as AutoContinueEvent
+      return { ...base, kind, scheduledAt: 2_000, ...overrides } as AutoContinueScheduleEvent
     case "auto_continue_cancelled":
-      return { ...base, kind, reason: "user", ...overrides } as AutoContinueEvent
+      return { ...base, kind, reason: "user", ...overrides } as AutoContinueScheduleEvent
     case "auto_continue_fired":
-      return { ...base, kind, ...overrides } as AutoContinueEvent
-    case "loop_armed":
-      return { ...base, kind, subagentId: "sub-1", prompt: "p", ...overrides } as AutoContinueEvent
-    case "loop_disarmed":
-      return { ...base, kind, reason: "goal_met", ...overrides } as AutoContinueEvent
-    case "loop_run_outcome":
-      return { ...base, kind, ok: true, ...overrides } as AutoContinueEvent
-    default:
-      throw new Error(`fixture helper has no shape for kind ${kind}`)
+      return { ...base, kind, ...overrides } as AutoContinueScheduleEvent
   }
 }
 

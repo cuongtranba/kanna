@@ -1,5 +1,5 @@
 
-import type { AutoContinueEvent } from "../auto-continue/events"
+import type { ChatAutomationEvent } from "../auto-continue/events"
 import { MAX_RECENT_CRON_RUNS } from "../../shared/cron/types"
 import { cronJobKey } from "./job-key"
 
@@ -17,7 +17,7 @@ interface JobRetention {
   byRunId: Map<string, RunRecord>
 }
 
-export function compactCronRunEvents(events: AutoContinueEvent[]): AutoContinueEvent[] {
+export function compactCronRunEvents(events: ChatAutomationEvent[]): ChatAutomationEvent[] {
   const dropped = new Set<number>()
   const jobs = new Map<string, JobRetention>()
 

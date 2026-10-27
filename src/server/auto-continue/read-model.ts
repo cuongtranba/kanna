@@ -1,5 +1,5 @@
 import type { AutoContinueSchedule } from "../../shared/types"
-import type { AutoContinueEvent } from "./events"
+import { isAutoContinueScheduleEvent, type AutoContinueScheduleEvent, type ChatAutomationEvent, type LoopLifecycleEvent } from "./events"
 
 export interface ChatSchedulesProjection {
   schedules: Record<string, AutoContinueSchedule>
@@ -19,24 +19,30 @@ export interface LoopState {
   parallelism: number
 }
 
+type LoopArmedEvent = Extract<LoopLifecycleEvent, { kind: "loop_armed" }>
+
+function loopSpecOf(event: LoopArmedEvent): LoopSpec {
+  return {
+    subagentId: event.subagentId,
+    prompt: event.prompt,
+    armedAt: event.timestamp,
+    verifyCommand: event.verifyCommand ?? null,
+    workdirAbs: event.workdirAbs ?? null,
+    trackingFileRel: event.trackingFileRel ?? null,
+    parallelism: event.parallelism ?? 1,
+  }
+}
+
 export function deriveLoopState(
-  events: readonly AutoContinueEvent[],
+  events: readonly ChatAutomationEvent[],
   chatId: string,
 ): LoopState | null {
-  let state: Omit<LoopState, "consecutiveFailures"> | null = null
+  let state: LoopSpec | null = null
   let failures = 0
   for (const event of events) {
     if (event.chatId !== chatId) continue
     if (event.kind === "loop_armed") {
-      state = {
-        subagentId: event.subagentId,
-        prompt: event.prompt,
-        armedAt: event.timestamp,
-        verifyCommand: event.verifyCommand ?? null,
-        workdirAbs: event.workdirAbs ?? null,
-        trackingFileRel: event.trackingFileRel ?? null,
-        parallelism: event.parallelism ?? 1,
-      }
+      state = loopSpecOf(event)
       failures = 0
     } else if (event.kind === "loop_disarmed") {
       state = null
@@ -49,22 +55,14 @@ export function deriveLoopState(
 }
 
 export function deriveLastLoopSpec(
-  events: readonly AutoContinueEvent[],
+  events: readonly ChatAutomationEvent[],
   chatId: string,
 ): LoopSpec | null {
   let spec: LoopSpec | null = null
   for (const event of events) {
     if (event.chatId !== chatId) continue
     if (event.kind !== "loop_armed") continue
-    spec = {
-      subagentId: event.subagentId,
-      prompt: event.prompt,
-      armedAt: event.timestamp,
-      verifyCommand: event.verifyCommand ?? null,
-      workdirAbs: event.workdirAbs ?? null,
-      trackingFileRel: event.trackingFileRel ?? null,
-      parallelism: event.parallelism ?? 1,
-    }
+    spec = loopSpecOf(event)
   }
   return spec
 }
@@ -72,13 +70,14 @@ export function deriveLastLoopSpec(
 const EMPTY: ChatSchedulesProjection = { schedules: {}, liveScheduleId: null }
 
 export function deriveChatSchedules(
-  events: readonly AutoContinueEvent[],
+  events: readonly ChatAutomationEvent[],
   chatId?: string
 ): ChatSchedulesProjection {
   const schedules: Record<string, AutoContinueSchedule> = {}
   let liveScheduleId: string | null = null
   for (const event of events) {
     if (chatId && event.chatId !== chatId) continue
+    if (!isAutoContinueScheduleEvent(event)) continue
     applyOne(schedules, event)
     const schedule = schedules[event.scheduleId]
     if (schedule && (schedule.state === "proposed" || schedule.state === "scheduled")) {
@@ -92,7 +91,7 @@ export function deriveChatSchedules(
   return { schedules, liveScheduleId }
 }
 
-function applyOne(schedules: Record<string, AutoContinueSchedule>, event: AutoContinueEvent): void {
+function applyOne(schedules: Record<string, AutoContinueSchedule>, event: AutoContinueScheduleEvent): void {
   switch (event.kind) {
     case "auto_continue_proposed":
       schedules[event.scheduleId] = {

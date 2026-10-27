@@ -1,6 +1,6 @@
 import { BUS_SUBJECT_SUFFIX } from "../../shared/service-bus/subjects"
 import type { TranscriptEntry } from "../../shared/types"
-import { isAutoContinueEvent, storeEventKind, type StoreEvent, type StoreEventKind } from "../events"
+import { isChatAutomationEvent, storeEventKind, type StoreEvent, type StoreEventKind } from "../events"
 
 export const STORE_EVENT_SUBJECT = {
   project_opened: BUS_SUBJECT_SUFFIX.projectOpened,
@@ -95,7 +95,7 @@ export function storeEventSubject(event: StoreEvent): string | null {
 }
 
 export function storeEventEntityId(event: StoreEvent): string {
-  if (isAutoContinueEvent(event)) return event.scheduleId
+  if (isChatAutomationEvent(event)) return event.scheduleId
   switch (event.type) {
     case "sidebar_project_order_set":
       return ""

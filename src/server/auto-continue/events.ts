@@ -8,21 +8,21 @@ export type AutoContinueSource =
   | "token_rotation"
   | "subagent_background"
 
-interface AutoContinueEventBase {
+export interface ChatAutomationEventBase {
   v: typeof AUTO_CONTINUE_EVENT_VERSION
   timestamp: number
   chatId: string
   scheduleId: string
 }
 
-export type AutoContinueEvent =
-  | (AutoContinueEventBase & {
+export type AutoContinueScheduleEvent =
+  | (ChatAutomationEventBase & {
       kind: "auto_continue_proposed"
       detectedAt: number
       resetAt: number
       tz: string
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "auto_continue_accepted"
       scheduledAt: number
       tz: string
@@ -31,18 +31,20 @@ export type AutoContinueEvent =
       detectedAt: number
       prompt?: string
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "auto_continue_rescheduled"
       scheduledAt: number
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "auto_continue_cancelled"
       reason: "user" | "chat_deleted"
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "auto_continue_fired"
     })
-  | (AutoContinueEventBase & {
+
+export type LoopLifecycleEvent =
+  | (ChatAutomationEventBase & {
       kind: "loop_armed"
       subagentId: string
       prompt: string
@@ -51,16 +53,18 @@ export type AutoContinueEvent =
       trackingFileRel?: string
       parallelism?: number
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "loop_run_outcome"
       ok: boolean
       errorCode?: string
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "loop_disarmed"
       reason: "goal_met" | "user_send" | "chat_deleted" | "repeated_failures"
     })
-  | (AutoContinueEventBase & {
+
+export type CronEvent =
+  | (ChatAutomationEventBase & {
       kind: "cron_armed"
       instruction: string
       mode: CronMode
@@ -69,29 +73,45 @@ export type AutoContinueEvent =
       model?: string
       paused?: boolean
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_disarmed"
       reason: "user" | "chat_deleted"
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_paused"
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_resumed"
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_run_started"
       runId: string
       spawnedChatId?: string
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_run_outcome"
       runId: string
       ok: boolean
       errorCode?: string
     })
-  | (AutoContinueEventBase & {
+  | (ChatAutomationEventBase & {
       kind: "cron_run_skipped"
       reason: CronSkipReason
       missedCount?: number
     })
+
+export type ChatAutomationEvent = AutoContinueScheduleEvent | LoopLifecycleEvent | CronEvent
+
+export function isAutoContinueScheduleEvent(
+  event: ChatAutomationEvent,
+): event is AutoContinueScheduleEvent {
+  return event.kind.startsWith("auto_continue_")
+}
+
+export function chatAutomationEnvelope(
+  chatId: string,
+  scheduleId: string,
+  timestamp: number,
+): ChatAutomationEventBase {
+  return { v: AUTO_CONTINUE_EVENT_VERSION, timestamp, chatId, scheduleId }
+}

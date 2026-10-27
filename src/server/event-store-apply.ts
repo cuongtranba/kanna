@@ -1,7 +1,7 @@
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
-import { isAutoContinueEvent, type StoreEvent, type StoreState } from "./events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
+import { isChatAutomationEvent, type StoreEvent, type StoreState } from "./events"
 import {
   applyChatLifecycleEvent,
   applyChatMessageMetadata,
@@ -19,11 +19,11 @@ export function applyStoreEvent(
   legacyMessagesByChatId: Map<string, TranscriptEntry[]>,
   replayChatProvider: Map<string, AgentProvider | null>,
 ): void {
-  if (isAutoContinueEvent(event)) {
+  if (isChatAutomationEvent(event)) {
     applyAutoContinueToState(state.autoContinueEventsByChatId, event)
     return
   }
-  const e: Exclude<StoreEvent, AutoContinueEvent> = event
+  const e: Exclude<StoreEvent, ChatAutomationEvent> = event
   switch (e.type) {
     case "project_opened":
     case "project_removed":

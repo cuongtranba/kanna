@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { compactLoopWakeEvents } from "./compact-loop-wakes"
 import { deriveChatSchedules, deriveLoopState } from "./read-model"
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 
 const AUTO_CONTINUE_EVENT_VERSION = 3 as const
 const CHAT = "chat-1"
 const SUBAGENT = "sub-1"
 const LOOP_PROMPT = "L".repeat(3000)
 
-function loopArmed(scheduleId = "la-1"): AutoContinueEvent {
+function loopArmed(scheduleId = "la-1"): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_armed",
@@ -23,7 +23,7 @@ function loopArmed(scheduleId = "la-1"): AutoContinueEvent {
   }
 }
 
-function loopRunOutcome(ok: boolean, scheduleId = "lo-1"): AutoContinueEvent {
+function loopRunOutcome(ok: boolean, scheduleId = "lo-1"): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_run_outcome",
@@ -34,7 +34,7 @@ function loopRunOutcome(ok: boolean, scheduleId = "lo-1"): AutoContinueEvent {
   }
 }
 
-function accepted(scheduleId: string, prompt = LOOP_PROMPT): AutoContinueEvent {
+function accepted(scheduleId: string, prompt = LOOP_PROMPT): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_accepted",
@@ -50,7 +50,7 @@ function accepted(scheduleId: string, prompt = LOOP_PROMPT): AutoContinueEvent {
   }
 }
 
-function fired(scheduleId: string): AutoContinueEvent {
+function fired(scheduleId: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_fired",
@@ -60,7 +60,7 @@ function fired(scheduleId: string): AutoContinueEvent {
   }
 }
 
-function cancelled(scheduleId: string): AutoContinueEvent {
+function cancelled(scheduleId: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_cancelled",
@@ -71,7 +71,7 @@ function cancelled(scheduleId: string): AutoContinueEvent {
   }
 }
 
-function nonLoopAccepted(scheduleId: string): AutoContinueEvent {
+function nonLoopAccepted(scheduleId: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_accepted",
@@ -88,7 +88,7 @@ function nonLoopAccepted(scheduleId: string): AutoContinueEvent {
 
 describe("compactLoopWakeEvents — parity with both readers", () => {
   test("fired loop-wake pairs dropped — loop state unchanged", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       loopRunOutcome(true, "r-1"),
       accepted("s-1"),
@@ -103,7 +103,7 @@ describe("compactLoopWakeEvents — parity with both readers", () => {
   })
 
   test("fired loop-wake pairs dropped — live schedule unchanged", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       accepted("s-1"),
       fired("s-1"),
@@ -116,7 +116,7 @@ describe("compactLoopWakeEvents — parity with both readers", () => {
   })
 
   test("live schedule entry identical after compaction", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       accepted("s-1"),
       fired("s-1"),
@@ -134,13 +134,13 @@ describe("compactLoopWakeEvents — parity with both readers", () => {
 
 describe("compactLoopWakeEvents — invariants", () => {
   test("returns input by reference when nothing to drop", () => {
-    const log: AutoContinueEvent[] = [loopArmed(), accepted("s-1")]
+    const log: ChatAutomationEvent[] = [loopArmed(), accepted("s-1")]
     const compacted = compactLoopWakeEvents(log)
     expect(compacted).toBe(log)
   })
 
   test("drops accepted+fired pair", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       accepted("s-1"),
       fired("s-1"),
@@ -151,7 +151,7 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 
   test("drops accepted+cancelled pair", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       accepted("s-1"),
       cancelled("s-1"),
@@ -162,13 +162,13 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 
   test("never drops a pending (unfired) accepted event", () => {
-    const log: AutoContinueEvent[] = [loopArmed(), accepted("s-1")]
+    const log: ChatAutomationEvent[] = [loopArmed(), accepted("s-1")]
     const compacted = compactLoopWakeEvents([...log])
     expect(compacted.some((e) => e.kind === "auto_continue_accepted" && e.scheduleId === "s-1")).toBe(true)
   })
 
   test("keeps the sole loop_armed when there is no successor", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopRunOutcome(false, "lo-2"),
@@ -181,7 +181,7 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 
   test("never drops non-subagent-background accepted events", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       nonLoopAccepted("s-user"),
       fired("s-user"),
     ]
@@ -190,7 +190,7 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 
   test("drops multiple fired pairs, keeps one pending", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       accepted("s-1"),
       fired("s-1"),
@@ -207,7 +207,7 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 
   test("reduces memory footprint by removing large prompt duplicates", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed(),
       ...Array.from({ length: 10 }, (_, i) => [
         accepted(`s-${i}`),
@@ -222,7 +222,7 @@ describe("compactLoopWakeEvents — invariants", () => {
   })
 })
 
-function loopDisarmed(scheduleId = "ld-1"): AutoContinueEvent {
+function loopDisarmed(scheduleId = "ld-1"): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_disarmed",
@@ -235,7 +235,7 @@ function loopDisarmed(scheduleId = "ld-1"): AutoContinueEvent {
 
 describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   test("superseded loop_armed dropped when a later loop_armed follows", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopArmed("la-2"),
@@ -246,7 +246,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("loop_run_outcome events before the superseded arm are also dropped", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopRunOutcome(false, "lo-2"),
@@ -259,7 +259,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("retains the last loop_armed as a tombstone when the loop is disarmed", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopDisarmed("ld-1"),
@@ -272,7 +272,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("keeps only the newest tombstone across several arm/disarm cycles", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopDisarmed("ld-1"),
       loopArmed("la-2"),
@@ -285,7 +285,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("non-loop events preserved when loop is disarmed", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       accepted("s-1"),
       fired("s-1"),
@@ -297,7 +297,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("deriveLoopState output unchanged after superseded-arm compaction", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(false, "lo-1"),
       loopArmed("la-2"),
@@ -310,7 +310,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("deriveLoopState returns null after disarmed-loop compaction", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopDisarmed("ld-1"),
@@ -321,7 +321,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("deriveChatSchedules output unchanged after superseded-arm compaction", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopArmed("la-2"),
       accepted("s-pending"),
@@ -331,7 +331,7 @@ describe("compactLoopWakeEvents — superseded loop_armed trimming", () => {
   })
 
   test("returns input by reference when only one loop_armed and no disarm", () => {
-    const log: AutoContinueEvent[] = [loopArmed("la-1"), accepted("s-1")]
+    const log: ChatAutomationEvent[] = [loopArmed("la-1"), accepted("s-1")]
     const compacted = compactLoopWakeEvents(log)
     expect(compacted).toBe(log)
   })
@@ -342,7 +342,7 @@ describe("compactLoopWakeEvents — live-arm outcome cap", () => {
     const outcomes = Array.from({ length: 10 }, (_, i) =>
       loopRunOutcome(true, `lo-${i + 1}`)
     )
-    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes]
+    const log: ChatAutomationEvent[] = [loopArmed("la-1"), ...outcomes]
     const compacted = compactLoopWakeEvents([...log])
     const kept = compacted.filter((e) => e.kind === "loop_run_outcome")
     expect(kept).toHaveLength(3)
@@ -357,7 +357,7 @@ describe("compactLoopWakeEvents — live-arm outcome cap", () => {
       loopRunOutcome(false, "fail-1"),
       loopRunOutcome(false, "fail-2"),
     ]
-    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes]
+    const log: ChatAutomationEvent[] = [loopArmed("la-1"), ...outcomes]
     const compacted = compactLoopWakeEvents([...log])
     expect(deriveLoopState(compacted, CHAT)?.consecutiveFailures).toBe(
       deriveLoopState(log, CHAT)?.consecutiveFailures,
@@ -366,7 +366,7 @@ describe("compactLoopWakeEvents — live-arm outcome cap", () => {
   })
 
   test("exactly-cap outcomes unchanged by reference", () => {
-    const log: AutoContinueEvent[] = [
+    const log: ChatAutomationEvent[] = [
       loopArmed("la-1"),
       loopRunOutcome(true, "lo-1"),
       loopRunOutcome(true, "lo-2"),
@@ -380,7 +380,7 @@ describe("compactLoopWakeEvents — live-arm outcome cap", () => {
     const outcomes = Array.from({ length: 10 }, (_, i) =>
       loopRunOutcome(true, `lo-${i + 1}`)
     )
-    const log: AutoContinueEvent[] = [loopArmed("la-1"), ...outcomes, loopDisarmed("ld-1")]
+    const log: ChatAutomationEvent[] = [loopArmed("la-1"), ...outcomes, loopDisarmed("ld-1")]
     const compacted = compactLoopWakeEvents([...log])
     expect(compacted.filter((e) => e.kind === "loop_run_outcome")).toHaveLength(0)
   })

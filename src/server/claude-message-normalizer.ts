@@ -5,6 +5,7 @@ import { isRecord } from "../shared/errors"
 import { toJsonArray, toJsonObject } from "./json-boundary"
 import { isJsonObject, type JsonArray, type JsonObject, type JsonValue } from "../shared/json"
 import { normalizeToolCall } from "../shared/tools"
+import { timestamped } from "./transcript-entry"
 
 
 function stringFromUnknown<T>(value: T): string {
@@ -26,16 +27,7 @@ function normalizeMcpServerEntry(s: JsonValue): { name: string; status: string }
 }
 
 
-export function timestamped<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
-  entry: T,
-  createdAt = Date.now()
-) {
-  return {
-    _id: crypto.randomUUID(),
-    createdAt,
-    ...entry,
-  }
-}
+export { timestamped }
 
 
 export interface ClaudeRawUsage {

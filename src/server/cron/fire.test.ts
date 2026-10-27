@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../../shared/types"
-import type { AutoContinueEvent } from "../auto-continue/events"
+import type { ChatAutomationEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"
 import type { SendMessageOptions } from "../claude-steer-log"
 import { runCronCommand } from "./commands"
@@ -17,7 +17,7 @@ interface EnqueuedRecord {
 
 function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; now?: number } = {}) {
   const entries: Array<{ chatId: string; entry: TranscriptEntry }> = []
-  const events: AutoContinueEvent[] = []
+  const events: ChatAutomationEvent[] = []
   const cleared: string[] = []
   const enqueued: EnqueuedRecord[] = []
   const drained: string[] = []
@@ -283,7 +283,7 @@ describe("fireCronJob — spawn card link (onChatSpawned)", () => {
 })
 
 describe("fireCronJob — consecutive skips coalesce", () => {
-  function skippedEvents(events: AutoContinueEvent[]) {
+  function skippedEvents(events: ChatAutomationEvent[]) {
     return events.filter((event) => event.kind === "cron_run_skipped")
   }
 

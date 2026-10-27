@@ -14,7 +14,7 @@ import { startKannaServer } from "./server"
 const VERSION: string = await loadPackageVersion()
 
 const argv = process.argv.slice(2)
-let resolveExitAction: ((action: "ui_restart" | "exit") => void) | null = null
+const exitRequested = Promise.withResolvers<"ui_restart" | "exit">()
 
 const result = await runCli(argv, {
   version: VERSION,
@@ -25,7 +25,7 @@ const result = await runCli(argv, {
       started.updateManager.onChange((snapshot) => {
         if (snapshot.status !== "restart_pending") return
         log.info(`${LOG_PREFIX} update installed, shutting down current process for restart`)
-        resolveExitAction?.("ui_restart")
+        exitRequested.resolve("ui_restart")
       })
     }
 
@@ -46,17 +46,15 @@ if (result.kind === "restarting") {
   process.exit(result.reason === "startup_update" ? CLI_STARTUP_UPDATE_RESTART_EXIT_CODE : CLI_UI_UPDATE_RESTART_EXIT_CODE)
 }
 
-const exitAction = await new Promise<"ui_restart" | "exit">((resolve) => {
-  resolveExitAction = resolve
+const shutdown = () => {
+  exitRequested.resolve("exit")
+}
 
-  const shutdown = () => {
-    resolve("exit")
-  }
+process.once("SIGINT", shutdown)
+process.once("SIGTERM", shutdown)
+process.once("SIGHUP", shutdown)
 
-  process.once("SIGINT", shutdown)
-  process.once("SIGTERM", shutdown)
-  process.once("SIGHUP", shutdown)
-})
+const exitAction = await exitRequested.promise
 
 await result.stop()
 if (exitAction === "ui_restart") {

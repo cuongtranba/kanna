@@ -4,7 +4,7 @@ import { homedir } from "node:os"
 import { AgentCoordinator } from "./agent"
 import type { HarnessEvent } from "./harness-types"
 import type { SlashCommand, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { computeWorkflowsDir } from "./claude-projects-path.adapter"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
@@ -75,8 +75,8 @@ function createFakeStore() {
       this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {

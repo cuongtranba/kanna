@@ -1,15 +1,7 @@
 import type { ContextWindowUsageSnapshot } from "../shared/types"
-import { isRecord } from "../shared/errors"
-
-
-function asRecord<T>(value: T) {
-  return isRecord(value) ? value : null
-}
-
-function asNumber<T>(value: T): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
+import { asRecord } from "../shared/errors"
+import { asFiniteNumber } from "../shared/numeric"
+import { mirroredUsageSnapshot } from "./context-usage-snapshot"
 
 export function normalizeClaudeUsageSnapshot<T>(
   value: T,
@@ -18,16 +10,16 @@ export function normalizeClaudeUsageSnapshot<T>(
   const usage = asRecord(value)
   if (!usage) return null
 
-  const directInputTokens = asNumber(usage.input_tokens) ?? asNumber(usage.inputTokens) ?? 0
+  const directInputTokens = asFiniteNumber(usage.input_tokens) ?? asFiniteNumber(usage.inputTokens) ?? 0
   const cacheCreationInputTokens =
-    asNumber(usage.cache_creation_input_tokens) ?? asNumber(usage.cacheCreationInputTokens) ?? 0
+    asFiniteNumber(usage.cache_creation_input_tokens) ?? asFiniteNumber(usage.cacheCreationInputTokens) ?? 0
   const cacheReadInputTokens =
-    asNumber(usage.cache_read_input_tokens) ?? asNumber(usage.cacheReadInputTokens) ?? 0
-  const outputTokens = asNumber(usage.output_tokens) ?? asNumber(usage.outputTokens) ?? 0
+    asFiniteNumber(usage.cache_read_input_tokens) ?? asFiniteNumber(usage.cacheReadInputTokens) ?? 0
+  const outputTokens = asFiniteNumber(usage.output_tokens) ?? asFiniteNumber(usage.outputTokens) ?? 0
   const reasoningOutputTokens =
-    asNumber(usage.reasoning_output_tokens) ?? asNumber(usage.reasoningOutputTokens)
-  const toolUses = asNumber(usage.tool_uses) ?? asNumber(usage.toolUses)
-  const durationMs = asNumber(usage.duration_ms) ?? asNumber(usage.durationMs)
+    asFiniteNumber(usage.reasoning_output_tokens) ?? asFiniteNumber(usage.reasoningOutputTokens)
+  const toolUses = asFiniteNumber(usage.tool_uses) ?? asFiniteNumber(usage.toolUses)
+  const durationMs = asFiniteNumber(usage.duration_ms) ?? asFiniteNumber(usage.durationMs)
 
   const inputTokens = directInputTokens + cacheCreationInputTokens + cacheReadInputTokens
   const usedTokens = inputTokens + outputTokens
@@ -36,20 +28,17 @@ export function normalizeClaudeUsageSnapshot<T>(
   }
 
   return {
-    usedTokens,
-    inputTokens,
-    ...(cacheReadInputTokens > 0 ? { cachedInputTokens: cacheReadInputTokens } : {}),
-    ...(outputTokens > 0 ? { outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
-    lastUsedTokens: usedTokens,
-    lastInputTokens: inputTokens,
-    ...(cacheReadInputTokens > 0 ? { lastCachedInputTokens: cacheReadInputTokens } : {}),
-    ...(outputTokens > 0 ? { lastOutputTokens: outputTokens } : {}),
-    ...(reasoningOutputTokens !== undefined ? { lastReasoningOutputTokens: reasoningOutputTokens } : {}),
+    ...mirroredUsageSnapshot({
+      usedTokens,
+      inputTokens,
+      cachedInputTokens: cacheReadInputTokens > 0 ? cacheReadInputTokens : undefined,
+      outputTokens: outputTokens > 0 ? outputTokens : undefined,
+      reasoningOutputTokens,
+      compactsAutomatically: false,
+    }),
     ...(toolUses !== undefined ? { toolUses } : {}),
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(typeof maxTokens === "number" && maxTokens > 0 ? { maxTokens } : {}),
-    compactsAutomatically: false,
   }
 }
 
@@ -75,7 +64,7 @@ export function maxClaudeContextWindowFromModelUsage<T>(modelUsage: T): number |
   let maxContextWindow: number | undefined
   for (const value of Object.values(record)) {
     const usage = asRecord(value)
-    const contextWindow = asNumber(usage?.contextWindow) ?? asNumber(usage?.context_window)
+    const contextWindow = asFiniteNumber(usage?.contextWindow) ?? asFiniteNumber(usage?.context_window)
     if (contextWindow === undefined) continue
     maxContextWindow = Math.max(maxContextWindow ?? 0, contextWindow)
   }

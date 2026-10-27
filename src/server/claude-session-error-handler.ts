@@ -1,6 +1,6 @@
 
 import type { TranscriptEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
@@ -30,8 +30,8 @@ interface ErrorHandlerOAuthPool {
 }
 
 interface ErrorHandlerStore {
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
   recordTurnFailed(chatId: string, error: string): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -50,7 +50,7 @@ export interface SessionErrorHandlerDeps {
 
   resolveAutoResumeFor(chatId: string): boolean
 
-  emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
 
   closeClaudeSession(
     chatId: string,
@@ -128,7 +128,7 @@ export async function handleLimitDetection(
     ? Math.min(detection.resetAt, earliestPoolUnlimit)
     : detection.resetAt
 
-  let event: AutoContinueEvent
+  let event: ChatAutomationEvent
   if (canRotate) {
     event = {
       ...base,
@@ -212,7 +212,7 @@ export async function handleAuthFailure(
   const scheduleId = crypto.randomUUID()
   const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
-  const event: AutoContinueEvent = canRotate
+  const event: ChatAutomationEvent = canRotate
     ? {
         ...base,
         kind: "auto_continue_accepted",

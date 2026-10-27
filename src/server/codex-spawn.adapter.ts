@@ -1,9 +1,11 @@
-import { spawn, type SpawnOptions } from "node:child_process"
+import { spawn, type SpawnOptionsWithStdioTuple, type StdioPipe } from "node:child_process"
 import type { CodexAppServerProcess, SpawnCodexAppServer } from "./codex-app-server"
 import { projectProcessEnv } from "./project-process-env"
 
-export function buildCodexSpawnOptions(platform: string, cwd: string): SpawnOptions {
-  const base: SpawnOptions = {
+type CodexSpawnOptions = SpawnOptionsWithStdioTuple<StdioPipe, StdioPipe, StdioPipe>
+
+export function buildCodexSpawnOptions(platform: string, cwd: string): CodexSpawnOptions {
+  const base: CodexSpawnOptions = {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: projectProcessEnv(process.env),
@@ -15,13 +17,7 @@ export function buildCodexSpawnOptions(platform: string, cwd: string): SpawnOpti
 }
 
 function spawnCodexProcess(cwd: string): CodexAppServerProcess {
-  const child = spawn("codex", ["app-server"], {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-    env: projectProcessEnv(process.env),
-    shell: process.platform === "win32",
-  })
-  return child
+  return spawn("codex", ["app-server"], buildCodexSpawnOptions(process.platform, cwd))
 }
 
 export const defaultSpawnCodexAppServer: SpawnCodexAppServer = spawnCodexProcess

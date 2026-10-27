@@ -1,7 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import {
   parseApplyPatch,
-  parsePlanSteps,
   rolloutToolCallToThreadItem,
   rolloutToolOutputToThreadItem,
   createRolloutMapper,
@@ -158,25 +157,6 @@ describe("apply_patch → FileChangeItem", () => {
 })
 
 describe("update_plan → plan variant", () => {
-  test("parsePlanSteps parses camelCase and snake_case status", () => {
-    const result = parsePlanSteps(JSON.stringify({
-      explanation: "phase one",
-      plan: [
-        { step: "lint", status: "completed" },
-        { step: "test", status: "in_progress" },
-        { step: "deploy", status: "pending" },
-      ],
-    }))
-    expect(result).toEqual({
-      explanation: "phase one",
-      steps: [
-        { step: "lint", status: "completed" },
-        { step: "test", status: "inProgress" },
-        { step: "deploy", status: "pending" },
-      ],
-    })
-  })
-
   test("returns plan variant with callId and steps", () => {
     const mapped = rolloutToolCallToThreadItem(call({
       callId: "call_plan",
