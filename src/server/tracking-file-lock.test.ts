@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 
 import { withFileLock } from "./tracking-file-lock"
 
@@ -29,8 +29,7 @@ describe("withFileLock", () => {
     const boom = withFileLock("/tmp/b.md", async () => {
       throw new Error("boom")
     })
-    expect(boom).rejects.toThrow("boom")
-    await boom.catch(() => undefined)
+    await expect(boom).rejects.toThrow("boom")
     expect(await withFileLock("/tmp/b.md", async () => "recovered")).toBe("recovered")
   })
 

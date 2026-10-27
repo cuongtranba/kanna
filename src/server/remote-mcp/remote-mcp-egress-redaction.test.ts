@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { ClientCommand, CommandResult, ServerEnvelope } from "../../shared/protocol"
 import type { LlmProviderSnapshot } from "../../shared/types"
 import { PROTOCOL_VERSION } from "../../shared/types"

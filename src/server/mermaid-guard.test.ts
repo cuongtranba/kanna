@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createMermaidGuard } from "./mermaid-guard"
 import { createModelEscalation, type ModelEscalationConfig } from "./model-escalation"
 import type { MermaidParsePort } from "../shared/mermaid-validation"

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { bearerCurlSample, describeLastDelivery, hmacCurlSample, isPublicHttpsOrigin, webhookUrl } from "./webhookPresentation"
 
 test("the sample commands target the hook url and carry the secret", () => {

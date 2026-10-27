@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { renderForLoopCheck } from "../../../lib/testing/renderForLoopCheck"
@@ -42,7 +42,7 @@ describe("ProjectSectionMenu", () => {
   })
 
   test("accepts onToggleStar callback without throwing", () => {
-    const onToggleStar = mock(() => undefined)
+    const onToggleStar = vi.fn(() => undefined)
     expect(() =>
       renderToStaticMarkup(
         <ProjectSectionMenu {...defaultProps({ starred: false, onToggleStar })}>

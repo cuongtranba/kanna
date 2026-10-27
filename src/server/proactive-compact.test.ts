@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { TranscriptEntry } from "../shared/types"
 import {
   AUTOCOMPACT_BUFFER_TOKENS,

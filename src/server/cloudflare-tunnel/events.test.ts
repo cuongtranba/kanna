@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { CLOUDFLARE_TUNNEL_EVENT_VERSION, type CloudflareTunnelEvent } from "./events"
 
 describe("cloudflare tunnel events", () => {

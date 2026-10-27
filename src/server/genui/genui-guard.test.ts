@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { createModelEscalation } from "../model-escalation"
 import { createGenUIGuard } from "./genui-guard"
 import { runValidateUi } from "./validate-ui-tool"

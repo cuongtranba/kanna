@@ -1,5 +1,5 @@
 
-import { describe, it, expect } from "bun:test"
+import { describe, it, expect } from "vite-plus/test"
 import { ClaudeSessionState } from "./claude-session-state"
 
 function makeHandle(): import("./harness-types").ClaudeSessionHandle {

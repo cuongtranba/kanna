@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import type { AgentCtrlCommandDeps, AgentCtrlAgentDep, TunnelGatewayDep } from "./ws-router-agent-ctrl"
 import { handleAgentCtrlCommand } from "./ws-router-agent-ctrl"
 import type { ClientCommand } from "../shared/protocol"
@@ -6,19 +6,19 @@ import type { ClientCommand } from "../shared/protocol"
 
 function makeAgent(overrides: Partial<AgentCtrlAgentDep> = {}): AgentCtrlAgentDep {
   return {
-    acceptAutoContinue: mock(async () => {}),
-    rescheduleAutoContinue: mock(async () => {}),
-    cancelAutoContinue: mock(async () => {}),
-    runCronCommand: mock(async () => null),
+    acceptAutoContinue: vi.fn(async () => {}),
+    rescheduleAutoContinue: vi.fn(async () => {}),
+    cancelAutoContinue: vi.fn(async () => {}),
+    runCronCommand: vi.fn(async () => null),
     ...overrides,
   }
 }
 
 function makeTunnel(overrides: Partial<TunnelGatewayDep> = {}): TunnelGatewayDep {
   return {
-    accept: mock(async () => {}),
-    stop: mock(async () => {}),
-    retry: mock(async () => {}),
+    accept: vi.fn(async () => {}),
+    stop: vi.fn(async () => {}),
+    retry: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -59,7 +59,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "autoContinue.accept", chatId: "c-1", scheduleId: "s-1", scheduledAt: 1234 }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r1")
     expect(handled).toBe(true)
-    expect((deps.agent.acceptAutoContinue as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-1", "s-1", 1234)
+    expect((deps.agent.acceptAutoContinue as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-1", "s-1", 1234)
     expect(deps.sent).toHaveLength(1)
     expect((deps.sent[0] as { type: string }).type).toBe("ack")
     expect(deps.broadcasts).toEqual(["c-1"])
@@ -70,7 +70,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "autoContinue.reschedule", chatId: "c-2", scheduleId: "s-2", scheduledAt: 5678 }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r2")
     expect(handled).toBe(true)
-    expect((deps.agent.rescheduleAutoContinue as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-2", "s-2", 5678)
+    expect((deps.agent.rescheduleAutoContinue as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-2", "s-2", 5678)
     expect(deps.sent).toHaveLength(1)
     expect(deps.broadcasts).toEqual(["c-2"])
   })
@@ -80,7 +80,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "autoContinue.cancel", chatId: "c-3", scheduleId: "s-3" }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r3")
     expect(handled).toBe(true)
-    expect((deps.agent.cancelAutoContinue as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-3", "s-3", "user")
+    expect((deps.agent.cancelAutoContinue as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-3", "s-3", "user")
     expect(deps.sent).toHaveLength(1)
     expect(deps.broadcasts).toEqual(["c-3"])
   })
@@ -92,7 +92,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "tunnel.accept", chatId: "c-4", tunnelId: "t-1" }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r4")
     expect(handled).toBe(true)
-    expect((tunnel.accept as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-4", "t-1")
+    expect((tunnel.accept as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-4", "t-1")
     expect(deps.sent).toHaveLength(1)
     expect(deps.broadcasts).toEqual(["c-4"])
   })
@@ -112,7 +112,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "tunnel.stop", chatId: "c-6", tunnelId: "t-3" }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r6")
     expect(handled).toBe(true)
-    expect((tunnel.stop as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-6", "t-3")
+    expect((tunnel.stop as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-6", "t-3")
     expect(deps.broadcasts).toEqual(["c-6"])
   })
 
@@ -122,7 +122,7 @@ describe("handleAgentCtrlCommand", () => {
     const cmd: ClientCommand = { type: "tunnel.retry", chatId: "c-7", tunnelId: "t-4" }
     const handled = await handleAgentCtrlCommand(deps, cmd, "r7")
     expect(handled).toBe(true)
-    expect((tunnel.retry as ReturnType<typeof mock>)).toHaveBeenCalledWith("c-7", "t-4")
+    expect((tunnel.retry as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith("c-7", "t-4")
     expect(deps.broadcasts).toEqual(["c-7"])
   })
 })

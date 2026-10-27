@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxThread, InboxThreadState } from "../../shared/inbox/types"
 import { groupByDay, hasActiveFilter, oldestTimestamp, olderPageCursors, visibleRecords } from "./inboxFilter"
 

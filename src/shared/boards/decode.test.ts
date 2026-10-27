@@ -1,5 +1,5 @@
 import type { JsonValue } from "../json"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { CardContent, FieldDef, FieldValue } from "./types"
 import {
   decodeActor,

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { MemoryRouter } from "react-router-dom"
 import type { InboxSnapshot, InboxThread, InboxThreadState } from "../../shared/inbox/types"

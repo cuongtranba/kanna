@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"

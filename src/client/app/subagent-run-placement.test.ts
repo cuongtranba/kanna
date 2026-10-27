@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
 import {
   DELEGATE_SUBAGENT_TOOL_NAME,

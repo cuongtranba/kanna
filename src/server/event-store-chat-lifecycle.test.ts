@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { AgentProvider } from "../shared/types"
 import type { ChatRecord, ChatTimingState, ProjectRecord, StackRecord, StoreState } from "./events"
 import type { AutoContinueEvent } from "./auto-continue/events"

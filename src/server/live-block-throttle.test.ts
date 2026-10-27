@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createLiveBlockHub, type LiveBlockClock } from "./live-block-throttle"
 import type { LiveBlock } from "../shared/live-block"
 

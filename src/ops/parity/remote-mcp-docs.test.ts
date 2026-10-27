@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { COMMAND_REGISTRY, commandDomain, type CommandType } from "../../shared/commands"
 import { listHttpRoutes, type HttpRouteRemote } from "../../shared/http-routes"
 
-const PAGE = readFileSync(join(import.meta.dir, "..", "..", "..", "wiki", "src", "content", "docs", "guides", "user", "remote-mcp.md"), "utf8")
+const PAGE = readFileSync(join(import.meta.dirname, "..", "..", "..", "wiki", "src", "content", "docs", "guides", "user", "remote-mcp.md"), "utf8")
 
 function targetOf(remote: HttpRouteRemote): string | null {
   if (remote.kind === "mcp-tool") return remote.tool

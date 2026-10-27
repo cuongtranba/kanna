@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
 import { parseSubscriptionTopic } from "../../shared/remote-mcp/topics"
 
-const PROTOCOL_PATH = join(import.meta.dir, "..", "..", "shared", "protocol.ts")
+const PROTOCOL_PATH = join(import.meta.dirname, "..", "..", "shared", "protocol.ts")
 
 function declaredTopicTypes(): string[] {
   const source = readFileSync(PROTOCOL_PATH, "utf8")

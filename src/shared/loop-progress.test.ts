@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { buildLoopProgress, deriveChunkLabel, parseChunkMarker } from "./loop-progress"
 import type { ChatTaskRecord } from "./chat-tasks/types"
 import type { SubagentRunSnapshot } from "./types"

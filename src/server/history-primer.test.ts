@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import { buildHistoryPrimer, extractPreviousAssistantReply, PRIMER_MAX_CHARS, shouldInjectPrimer } from "./history-primer"
 

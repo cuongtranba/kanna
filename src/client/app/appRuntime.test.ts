@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "bun:test"
+import { describe, expect, test, beforeEach } from "vite-plus/test"
 import {
   sameDiffs,
   shouldPreserveExistingProjectDiffs,

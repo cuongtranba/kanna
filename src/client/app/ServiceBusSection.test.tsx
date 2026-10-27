@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
 import { DISABLED_SERVICE_BUS_STATUS, SERVICE_BUS_PUBLIC_DEFAULTS, type ServiceBusSettingsPublic, type ServiceBusStatus } from "../../shared/service-bus/jetstream-config"

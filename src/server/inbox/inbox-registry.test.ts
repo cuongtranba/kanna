@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { INBOX_MAX_ITEMS } from "../../shared/inbox/types"
 import type { BusEnvelope } from "../../shared/service-bus/envelope"
 import { createInboxHarness } from "../test-helpers/inbox-harness"

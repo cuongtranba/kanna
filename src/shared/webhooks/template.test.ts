@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { renderWebhookPrompt } from "./template"
 import { WEBHOOK_PROMPT_BODY_MAX_CHARS } from "./types"
 

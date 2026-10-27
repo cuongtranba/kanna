@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { BusEnvelope } from "../../shared/service-bus/envelope"
 import { createInMemoryServiceBus } from "./in-memory-service-bus"
 

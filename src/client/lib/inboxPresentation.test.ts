@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
 import { fencedJson, formatUnreadBadge, itemStateDisplay, reportSummaryText, subjectLabel, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
 

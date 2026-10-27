@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { INBOX_REPORT_TOOL_NAME } from "../tools"
 import { renderInstructPrompt, renderReplyPrompt } from "./reply-prompt"
 

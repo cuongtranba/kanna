@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { existsSync, statSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const REPO_ROOT = join(import.meta.dir, "../..")
+const REPO_ROOT = join(import.meta.dirname, "../..")
 const HOOK_PATH = join(REPO_ROOT, ".githooks/pre-commit")
 
 describe("gitleaks pre-commit hook", () => {

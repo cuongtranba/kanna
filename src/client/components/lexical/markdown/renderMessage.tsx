@@ -48,7 +48,7 @@ import { KANNA_MESSAGE_TRANSFORMERS } from "./messageTransformers"
 import { MessageCodeBlock } from "./MessageCodeBlock"
 
 
-const MESSAGE_NODES = [
+const messageNodes = () => [
   HeadingNode,
   QuoteNode,
   ListNode,
@@ -338,7 +338,7 @@ function convertMarkdown(markdown: string, caret: CaretOptions | undefined): Rea
   const processed = linkifyTextRefs(markdown)
   const editorConfig = buildKannaEditorConfig({
     namespace: "kanna-message-renderer",
-    nodes: MESSAGE_NODES,
+    nodes: messageNodes(),
     editable: false,
   })
   const editor = createHeadlessEditor(editorConfig)

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import {
   DEFAULT_CHAT_SOUND_ID,
   DEFAULT_CHAT_SOUND_PREFERENCE,

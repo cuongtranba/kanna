@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { JsonObject } from "../json"
 import { parseGenUISpec, type GenUIIssue } from "./index"
 

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { readInboxPage } from "./inboxCommands"
 
 test("reads an inbox page ack and refuses anything that is not one", () => {

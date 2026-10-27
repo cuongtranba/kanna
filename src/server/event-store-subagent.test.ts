@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { SubagentRunSnapshot } from "../shared/types"
 import { MAX_SUBAGENT_ENTRIES_PER_RUN, MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
 import type { SubagentRunEvent } from "./events"

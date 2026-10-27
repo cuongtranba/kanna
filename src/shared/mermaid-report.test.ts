@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { formatMermaidCorrection, formatMermaidDefect } from "./mermaid-report"
 import type { MermaidDefect } from "./mermaid-validation"
 

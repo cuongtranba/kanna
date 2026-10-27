@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AGENT_PROVIDERS } from "./core-types"
 import { providerExpandsSlashCommands, providerUsesSdkSession } from "./provider-model-types"
 

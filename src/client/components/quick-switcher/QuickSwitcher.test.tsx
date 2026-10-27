@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import type { LocalProjectSummary, SidebarChatRow, SidebarData } from "../../../shared/types"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"

@@ -31,7 +31,9 @@ function getBackendPort() {
 const backendTargetHost = getBackendTargetHost()
 const backendPort = getBackendPort()
 
-export default defineConfig({
+const PRODUCTION_CONDITIONS = ["production"]
+
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     host: "0.0.0.0",
@@ -54,8 +56,22 @@ export default defineConfig({
     },
     allowedHosts: getAllowedHosts(),
   },
+  ...(mode === "test"
+    ? {
+        tsconfig: "./tsconfig.json",
+        resolve: { conditions: PRODUCTION_CONDITIONS },
+        ssr: { resolve: { conditions: PRODUCTION_CONDITIONS, externalConditions: PRODUCTION_CONDITIONS } },
+      }
+    : {}),
+  test: {
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.ts", "wiki/scripts/**/*.test.ts"],
+    setupFiles: ["./scripts/test-setup.ts"],
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    server: { deps: { external: [/^blob:/] } },
+  },
   build: {
     outDir: "dist/client",
     emptyOutDir: true,
   },
-})
+}))

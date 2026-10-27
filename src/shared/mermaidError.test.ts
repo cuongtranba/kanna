@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { parseMermaidError } from "./mermaidError"
 
 const JISON_PARSE_ERROR = [

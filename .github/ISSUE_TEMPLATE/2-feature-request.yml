@@ -224,7 +224,7 @@ body:
         - label: "Tests written before the implementation, covering every acceptance criterion above"
         - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
         - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
-        - label: "`bun run test` green — full suite, not just the new cases (never bare `bun test`)"
+        - label: "`bun run test` green — full suite, not just the new cases"
         - label: "Side-effect seal respected — new IO lives in a `*.adapter.ts` or behind a port, never inline in domain code"
         - label: "UI follows `DESIGN.md` (token classes only, no hex, no backdrop-blur, project Tooltip over native `title`); new store selectors return stable references"
         - label: "Docs updated in the same PR — wiki page, `CLAUDE.md`, `DESIGN.md`, or `.c3/` docs as applicable"

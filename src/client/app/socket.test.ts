@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test"
 import { KannaSocket } from "./socket"
 import type { ComputedStyleLike, DomPort, ServiceWorkerRegistrationLike } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"

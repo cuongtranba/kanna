@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { ChatOpLog } from "./chat-op-log"
 import type { ChatOp } from "../shared/chat-ops"
 

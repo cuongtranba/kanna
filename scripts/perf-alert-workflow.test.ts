@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { existsSync } from "node:fs"
 import { PERF_ALERT_EVENT_TYPE } from "../src/ops/alerting/webhook-payload"
 

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
@@ -35,9 +35,9 @@ const BASE_PROVIDERS: ProviderCatalogEntry[] = [...PROVIDERS]
 
 function noopHandlers(): SubagentsSectionHandlers {
   return {
-    onCreate: mock(async () => ({ ok: true as const, subagent: makeSubagent() })),
-    onUpdate: mock(async () => ({ ok: true as const, subagent: makeSubagent() })),
-    onDelete: mock(async () => undefined),
+    onCreate: vi.fn(async () => ({ ok: true as const, subagent: makeSubagent() })),
+    onUpdate: vi.fn(async () => ({ ok: true as const, subagent: makeSubagent() })),
+    onDelete: vi.fn(async () => undefined),
   }
 }
 
@@ -288,7 +288,7 @@ describe("SubagentsSection — empty state", () => {
   })
 
   test("clicking Create subagent calls onStartCreate", async () => {
-    const onStartCreate = mock(() => undefined)
+    const onStartCreate = vi.fn(() => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -343,7 +343,7 @@ describe("SubagentsSection — create form", () => {
   })
 
   test("Cancel calls onCancelEditing", async () => {
-    const onCancelEditing = mock(() => undefined)
+    const onCancelEditing = vi.fn(() => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -429,9 +429,9 @@ describe("SubagentsSection — edit form", () => {
   test("server validation error renders under name field", async () => {
     const subagent = makeSubagent({ id: "sa-9", name: "auditor" })
     const handlers: SubagentsSectionHandlers = {
-      onCreate: mock(async () => ({ ok: false as const, error: { code: "DUPLICATE_NAME" as const, message: "Name already used" } })),
-      onUpdate: mock(async () => ({ ok: false as const, error: { code: "DUPLICATE_NAME" as const, message: "Name already used" } })),
-      onDelete: mock(async () => undefined),
+      onCreate: vi.fn(async () => ({ ok: false as const, error: { code: "DUPLICATE_NAME" as const, message: "Name already used" } })),
+      onUpdate: vi.fn(async () => ({ ok: false as const, error: { code: "DUPLICATE_NAME" as const, message: "Name already used" } })),
+      onDelete: vi.fn(async () => undefined),
     }
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -486,7 +486,7 @@ describe("SubagentsSection — trigger mode control", () => {
 
 describe("SubagentsSection — delete confirm", () => {
   test("first click flips Delete to 'Confirm delete', second click calls onDelete", async () => {
-    const onDelete = mock(async (_id: string) => undefined)
+    const onDelete = vi.fn(async (_id: string) => undefined)
     const handlers: SubagentsSectionHandlers = {
       ...noopHandlers(),
       onDelete,
@@ -537,7 +537,7 @@ describe("SubagentsSection — list rendering", () => {
   })
 
   test("clicking a list row calls onSelect with id", async () => {
-    const onSelect = mock((_id: string) => undefined)
+    const onSelect = vi.fn((_id: string) => undefined)
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)

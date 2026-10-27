@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createInstalledPluginStore, type InstalledPluginSettings } from "./installed-plugin-store"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 

@@ -1,5 +1,5 @@
 import "../../lib/testing/setupHappyDom"
-import { describe, expect, test, mock, afterEach } from "bun:test"
+import { describe, expect, test, afterEach, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
@@ -8,10 +8,10 @@ import { makeFakeDomPort } from "../../adapters/testing/makeFakePorts"
 let lastInitTheme: string | null = null
 let themeValue: "light" | "dark" = "light"
 
-mock.module("../../hooks/useTheme", () => ({
+vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: themeValue, theme: themeValue, setTheme: () => {} }),
 }))
-mock.module("mermaid", () => ({
+vi.mock("mermaid", () => ({
   default: {
     initialize: (cfg: { theme: string }) => { lastInitTheme = cfg.theme },
     render: async (_id: string, text: string) => {

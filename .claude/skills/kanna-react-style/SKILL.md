@@ -289,8 +289,8 @@ When extending a shared type, keep new fields:
 
 ## Running tests and clearing the gates
 
-`.claude/skills/kanna-test/SKILL.md` owns this: the flags that matter (`bun run
-test`, never bare `bun test`), the requirement to unmount every React root you
+`.claude/skills/kanna-test/SKILL.md` owns this: how the suite runs (`bun run
+test`, Vitest via `vp test` under Bun), the requirement to unmount every React root you
 mount, and the ast-grep and design gates that reject inline hook arguments, unstable
 store selectors, raw hex colors, and native `title` attributes. Read it before
 writing a test that mounts a component.
@@ -299,7 +299,7 @@ Scope runs to what you changed — a full suite from a subagent while other agen
 share the host exhausts it:
 
 ```bash
-bun test --conditions production src/client/lib/formatDuration
+bun run test src/client/lib/formatDuration
 bun run typecheck
 ```
 

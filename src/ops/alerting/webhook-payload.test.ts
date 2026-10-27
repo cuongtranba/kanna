@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   CLIENT_PAYLOAD_KEYS,
   CONTACT_POINT_NAME,

@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import type { InboundHandler } from "../../shared/inbound/handler"
 import { createWebhookHarness } from "../test-helpers/webhook-harness"
 import { deliverInbound } from "./deliver-inbound"

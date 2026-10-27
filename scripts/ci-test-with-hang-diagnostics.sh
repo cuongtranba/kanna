@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # CI test runner with hang diagnostics.
 #
-# Runs `bun test --conditions production` (production export condition is
-# required so Lexical's dev-build circular-ESM TDZ does not crash the runner;
-# see adr-20260624-lexical-chat-editor). If bun does not finish within
+# Runs the suite through Vitest under the Bun runtime (`bun --bun vp test run`;
+# vite.config.ts applies the production export condition in test mode so
+# Lexical's dev-build circular-ESM TDZ does not crash the runner; see
+# adr-20260624-lexical-chat-editor). If the run does not finish within
 # HANG_AFTER seconds, dumps the stuck process tree (per-thread wchan +
 # current syscall, kernel stacks, open fds, and a best-effort gdb
 # backtrace) BEFORE killing it, then fails the job. On normal completion
 # it is a transparent passthrough (same exit code, no extra output).
 #
-# Purpose: the bun-test step intermittently stalls the full 180s on CI
+# Purpose: the test step intermittently stalls the full 180s on CI
 # while passing locally. Component code is exonerated; this captures the
 # exact blocking syscall/stack on the next hung run.
 set -uo pipefail
 
-HANG_AFTER="${HANG_AFTER:-170}"
+HANG_AFTER="${HANG_AFTER:-300}"
 
-bun test --conditions production --timeout 30000 &
+bun --bun vp test run &
 BUNPID=$!
 
 dump_pid() {
@@ -59,7 +60,7 @@ dump_pid() {
     echo "(gdb install failed)"
   fi
   echo "::endgroup::"
-  echo "::error::bun test hung >${HANG_AFTER}s — see HANG DIAGNOSTICS group above"
+  echo "::error::vp test hung >${HANG_AFTER}s — see HANG DIAGNOSTICS group above"
   kill -SIGKILL "$BUNPID" 2>/dev/null
 ) &
 WATCHDOG=$!

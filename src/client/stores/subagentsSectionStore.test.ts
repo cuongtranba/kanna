@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach } from "bun:test"
+import { test, expect, describe, beforeEach } from "vite-plus/test"
 import { useSubagentsSectionStore } from "./subagentsSectionStore"
 import { DEFAULT_CLAUDE_MODEL_OPTIONS, type SubagentInput } from "../../shared/types"
 

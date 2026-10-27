@@ -110,7 +110,7 @@ export interface SpawnedPluginChild {
   kill(): void
 }
 
-const CHILD_ENTRY_PATH = join(import.meta.dir, "plugin-child-entry.adapter.ts")
+const CHILD_ENTRY_PATH = join(import.meta.dirname, "plugin-child-entry.adapter.ts")
 
 function pipeLines(
   stream: NodeJS.ReadableStream | null,

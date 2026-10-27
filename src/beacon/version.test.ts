@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { isBeaconBehind } from "../shared/beacon-status"
 import { APP_VERSION } from "../shared/branding"
 import { BEACON_VERSION } from "./version"

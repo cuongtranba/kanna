@@ -1,5 +1,5 @@
 
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { localCommandsForCwd, type SlashCommandsDeps } from "./claude-slash-commands"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { SlashCommand, SlashCommandScope } from "../shared/types"

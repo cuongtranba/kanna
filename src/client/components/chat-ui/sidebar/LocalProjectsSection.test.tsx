@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { ClientRect } from "@dnd-kit/core"

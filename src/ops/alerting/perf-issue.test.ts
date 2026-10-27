@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   MAX_OPEN_PERF_ISSUES,
   QUIET_PERIOD_MS,

@@ -1,15 +1,15 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 
-const MODULE_MOCK = /\bmock\s*\.\s*module\s*\(/
+const MODULE_MOCK = /\bvi\s*\.\s*(?:mock|doMock)\s*\(/
 
 const REMEDY =
-  "a bun module mock rewrites the process-wide registry and outlives its test file, " +
-  "so a factory that omits an export can kill an unrelated suite's import in " +
-  "filesystem-dependent order — the class that intermittently failed CI and blocked " +
-  "the v1.58.0 publish. Inject the dependency as a parameter with the production " +
-  'default instead; see CLAUDE.md "Module mocks are banned".'
+  "a module mock substitutes the module for every importer in its test file and hides " +
+  "a real dependency breaking — under bun test it also outlived its file and killed " +
+  "unrelated suites in filesystem-dependent order, the class that blocked the v1.58.0 " +
+  'publish. Inject the dependency as a parameter with the production default instead; ' +
+  'see CLAUDE.md "Module mocks are banned".'
 
 const LEGACY_MODULE_MOCKS = new Set([
   "src/client/components/lexical/markdown/MessageCodeBlock.test.tsx",
@@ -35,7 +35,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 describe("module mocks are banned outside the shrinking legacy list", () => {
-  const root = join(import.meta.dir, "../../..")
+  const root = join(import.meta.dirname, "../../..")
 
   test("no file outside the legacy list registers a module mock", () => {
     const offenders: string[] = []

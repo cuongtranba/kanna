@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { collectPaneBounds, findAdjacentPane } from "./navigation"
 import { createGroup, createPane } from "./tree"
 import type { PaneNode } from "./types"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   AUTH_DEFAULTS,
   AUTH_SESSION_MAX_AGE_DAYS_MAX,

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { withBeaconMentions } from "./beacon-mention-prompt"

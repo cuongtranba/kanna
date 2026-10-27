@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { LOAD_BEARING_FIELD_NOTES, loadBearingFieldNote } from "./cardSchema"
 import { buildStartWorkPrompt } from "./start-work"
 import type { Card, CardContent, FieldValue } from "./types"

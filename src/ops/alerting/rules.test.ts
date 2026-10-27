@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import {
   ALERT_RULES,
   EXPORTED_PROM_METRICS,
@@ -11,7 +11,7 @@ import {
 import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
 import { PROCESS_RSS_BYTES, TURN_DURATION_MS } from "../../server/observability"
 
-const REPO_ROOT = join(import.meta.dir, "../../..")
+const REPO_ROOT = join(import.meta.dirname, "../../..")
 
 
 describe("promMetricName", () => {

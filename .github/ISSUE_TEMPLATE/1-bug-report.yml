@@ -218,7 +218,7 @@ body:
         [CLAUDE.md](https://github.com/cuongtranba/kanna/blob/main/CLAUDE.md).
       options:
         - label: "`/c3 query <area>` run before coding; `/c3 change` run after if component boundaries, refs, or contracts moved"
-        - label: "Failing test written first, then the fix — `bun run test src/<path>.test.ts` (never bare `bun test`)"
+        - label: "Failing test written first, then the fix — `bun run test src/<path>.test.ts`"
         - label: "`bun run typecheck` (TS7), `bun run lint` (`--max-warnings=0`), `bunx ast-grep test`, `bun run lint:usestate` all green"
         - label: "`bun run check:arch` and `bun run lint:limits` green — the architecture budget is a ratchet, not a suggestion"
         - label: "`bun run test` green — full suite, not just the new case"

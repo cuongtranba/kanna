@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { isJsonArray, isJsonObject } from "../../shared/json"
 import { InMemoryStorageBackend } from "../storage/in-memory-storage"
 import { auditArgs, type RemoteMcpAuditRecord } from "./remote-mcp-audit"

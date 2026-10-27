@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { deriveChatTasks } from "../../shared/chat-tasks/read-model"
 import type { ChatTaskScheduleContext } from "../../shared/chat-tasks/schedule"
 import type { ChatTaskEvent } from "../../shared/chat-tasks/types"

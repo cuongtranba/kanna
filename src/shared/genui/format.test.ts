@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { computeVariance, formatMetricValue } from "./index"
 
 test("formats currency compactly for headline figures", () => {

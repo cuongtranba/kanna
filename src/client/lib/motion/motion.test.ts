@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { engine } from "animejs"
 import type { DomPort } from "../../ports/domPort"
 import { makeFakeDomPort } from "../testing/fakePorts"

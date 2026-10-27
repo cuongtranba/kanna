@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
@@ -7,7 +7,7 @@ import { SubagentTaskMessage } from "./SubagentTaskMessage"
 import { SubagentTranscriptFetchProvider } from "./subagent-fetch-context"
 import type { SubagentTaskResult, TranscriptEntry } from "../../../shared/types"
 
-mock.module("../../hooks/useTheme", () => ({
+vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
 }))
 
@@ -57,7 +57,7 @@ describe("SubagentTaskMessage — expandable drill-in", () => {
     const childEntries: TranscriptEntry[] = [
       { _id: "c1", createdAt: 1, kind: "assistant_text", text: "child step output" } as TranscriptEntry,
     ]
-    const fetchFn = mock(async (_agentId: string): Promise<TranscriptEntry[]> => childEntries)
+    const fetchFn = vi.fn(async (_agentId: string): Promise<TranscriptEntry[]> => childEntries)
 
     const container = document.createElement("div")
     document.body.appendChild(container)

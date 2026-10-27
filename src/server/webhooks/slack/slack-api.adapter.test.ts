@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { createSlackApi, type SlackFetch } from "./slack-api.adapter"
 
 interface Call {

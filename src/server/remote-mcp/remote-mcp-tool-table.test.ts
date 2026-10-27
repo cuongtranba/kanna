@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { COMMAND_REGISTRY, remotePolicyOf, type CommandType } from "../../shared/commands"
 import { subscriptionTopicSchema } from "../../shared/remote-mcp/topics"
 import { REMOTE_TOOLS } from "./remote-mcp-tool-table"

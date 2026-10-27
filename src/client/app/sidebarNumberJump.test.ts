@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { DEFAULT_KEYBINDINGS, EMPTY_CHAT_ACTIVITY } from "../../shared/types"
 import type { KeybindingsSnapshot, SidebarProjectGroup } from "../../shared/types"
 import {

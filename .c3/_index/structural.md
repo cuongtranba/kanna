@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:fa964519886245afc028698b289eccce15481039624b2bc7cb5cb5494273998d -->
+<!-- hash: sha256:259116b6f90641ec0f54ff9d9c6315b7f31ecced7c05ac53331b8965afaa5627 -->
 
 ## c3-0 — Kanna (system)
 
@@ -418,7 +418,7 @@ container: c3-3 | context: c3-0
 refs: rule-colocated-bun-test, rule-strong-typing
 files: src/shared/genui/*.ts
 
-## ref-colocated-bun-test — Colocated Bun Test (ref)
+## ref-colocated-bun-test — Colocated Test (Vitest under Bun) (ref)
 reverse deps: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
 citers: c3-102, c3-104, c3-206, c3-208, c3-210, c3-231, c3-303, c3-310
 

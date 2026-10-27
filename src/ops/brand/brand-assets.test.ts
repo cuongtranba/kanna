@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const ROOT = join(import.meta.dir, "../../..")
+const ROOT = join(import.meta.dirname, "../../..")
 const SOURCE_MARK = "assets/logo.svg"
 const MARK_COPIES = ["public/icon.svg", "wiki/src/assets/logo.svg", "wiki/public/favicon.svg"]
 

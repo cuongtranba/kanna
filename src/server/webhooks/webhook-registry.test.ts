@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { createMemoryWebhookStore } from "../test-helpers/webhook-harness"
 import type { WebhookInput } from "../../shared/webhooks/types"
 import { slackCredentialsOf, WebhookRegistry } from "./webhook-registry"
@@ -133,7 +133,7 @@ test("a generic hook cannot be given Slack settings and its kind never changes",
   const created = await registry.create({ ...BASE })
   if (!created.ok) throw new Error(created.errors.join())
   expect(created.value.hook.kind).toBe("generic")
-  expect(created.value.secret).toStartWith("kwh_")
+  expect(created.value.secret).toMatch(/^kwh_/)
   const patched = await registry.update(created.value.hook.id, { slack: { botToken: "xoxb-token-5678" } })
   expect(patched.ok).toBe(false)
 })

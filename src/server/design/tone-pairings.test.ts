@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
 import { contrastBetween, compositeOver, oklchLuminance } from "../../shared/design/contrast"
 import { parseTokens } from "../../shared/design/tokens"
 import { STATUS_PILL_CLASS, TONE_PAIRINGS } from "../../shared/design/tone-pairings"
 
-const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
+const CSS_PATH = join(import.meta.dirname, "../../..", "src/index.css")
 const css = await Bun.file(CSS_PATH).text()
 const tokens = parseTokens(css)
 

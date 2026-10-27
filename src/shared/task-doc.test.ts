@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { markdownDoc } from "./structured-doc/markdown"
 import { TASK_DOC_SECTIONS, renderTaskDocSkeleton } from "./task-doc"
 

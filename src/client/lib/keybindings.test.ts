@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { DEFAULT_KEYBINDINGS } from "../../shared/types"
 import { bindingMatchesEvent, findMatchingActionBinding, parseKeybindingInput } from "./keybindings"
 import type { KeybindingsSnapshot } from "../../shared/types"

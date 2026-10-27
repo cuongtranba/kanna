@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import {
   migrateChatPreferencesState,
   NEW_CHAT_COMPOSER_ID,

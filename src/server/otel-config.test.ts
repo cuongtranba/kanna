@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import { APP_VERSION } from "../shared/branding"
 import { resolveOtelConfig, sanitizeServiceNamePart } from "./otel-config"
 

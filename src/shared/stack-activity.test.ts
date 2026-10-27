@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { EMPTY_CHAT_ACTIVITY, type ChatActivity } from "./types"
 import {
   EMPTY_STACK_ACTIVITY,

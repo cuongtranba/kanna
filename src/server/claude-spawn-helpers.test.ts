@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test"
+import { describe, test, expect, vi } from "vite-plus/test"
 import {
   buildCanUseTool,
   buildClaudeEnv,
@@ -42,7 +42,7 @@ describe("buildCanUseTool", () => {
   })
 
   test("routes AskUserQuestion through legacy onToolRequest path and returns allow", async () => {
-    const onToolRequest = mock(async (_req: HarnessToolRequest): Promise<JsonValue> => ({
+    const onToolRequest = vi.fn(async (_req: HarnessToolRequest): Promise<JsonValue> => ({
       answers: { q1: "yes" },
     }))
     const canUseTool = buildCanUseTool(makeArgs({ onToolRequest }))
@@ -79,17 +79,17 @@ describe("buildCanUseTool", () => {
     process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
     try {
       const toolCallback: ToolCallbackService = {
-        submit: mock(async () => ({
+        submit: vi.fn(async () => ({
           status: "answered" as const,
           decision: {
             kind: "allow" as const,
             payload: { answers: { q1: "yes" }, questions: [] },
           },
         })),
-        answer: mock(async () => {}),
-        cancel: mock(async () => {}),
-        cancelAllForChat: mock(async () => {}),
-        recoverOnStartup: mock(async () => {}),
+        answer: vi.fn(async () => {}),
+        cancel: vi.fn(async () => {}),
+        cancelAllForChat: vi.fn(async () => {}),
+        recoverOnStartup: vi.fn(async () => {}),
       }
       const canUseTool = buildCanUseTool(makeArgs({ toolCallback }))
       const result = await canUseTool(
@@ -113,17 +113,17 @@ describe("buildCanUseTool", () => {
     process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
     try {
       const toolCallback: ToolCallbackService = {
-        submit: mock(async () => ({
+        submit: vi.fn(async () => ({
           status: "answered" as const,
           decision: {
             kind: "allow" as const,
             payload: { confirmed: false, message: "needs changes" },
           },
         })),
-        answer: mock(async () => {}),
-        cancel: mock(async () => {}),
-        cancelAllForChat: mock(async () => {}),
-        recoverOnStartup: mock(async () => {}),
+        answer: vi.fn(async () => {}),
+        cancel: vi.fn(async () => {}),
+        cancelAllForChat: vi.fn(async () => {}),
+        recoverOnStartup: vi.fn(async () => {}),
       }
       const canUseTool = buildCanUseTool(makeArgs({ toolCallback }))
       const result = await canUseTool("ExitPlanMode", { plan: "the plan" }, TOOL_OPTIONS)

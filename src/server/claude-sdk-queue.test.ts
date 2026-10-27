@@ -1,4 +1,4 @@
-import { expect, test, describe } from "bun:test"
+import { expect, test, describe } from "vite-plus/test"
 import { AsyncMessageQueue, discardedToolResult, toClaudeMessageStream } from "./claude-sdk-queue"
 import type { ClaudeRawSdkMessage } from "./claude-message-normalizer"
 import type { NormalizedToolCall } from "../shared/types"

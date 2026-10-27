@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { CommandOrigin } from "../../../shared/command-origin"
 import { ThemeProvider } from "../../hooks/useTheme"

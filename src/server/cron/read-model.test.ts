@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
 import { deriveCronJobs, findRunningCronRuns, hasUnpausedCronJob } from "./read-model"
 import { parseSchedule } from "../../shared/cron/parse-schedule"

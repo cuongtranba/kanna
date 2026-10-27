@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { ScheduleManager, type Clock } from "./schedule-manager"
 import type { AutoContinueEvent } from "./events"
 

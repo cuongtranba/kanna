@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vite-plus/test"
 import { createHeadlessEditor } from "@lexical/headless"
 import { $createParagraphNode, $createTextNode, $getRoot } from "lexical"
 import { $createMentionNode, MentionNode } from "../nodes/MentionNode"

@@ -1,5 +1,5 @@
 
-import { describe, test, expect, beforeEach } from "bun:test"
+import { describe, test, expect, beforeEach } from "vite-plus/test"
 import { cancelChat, type CancelHandlerDeps } from "./claude-cancel-handler"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, StartingTurn } from "./claude-session-state"

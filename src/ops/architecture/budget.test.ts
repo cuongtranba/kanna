@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
 import { measureModules, measurePatterns, readEslintLimits } from "./budget-scan.adapter"
 import {
@@ -163,7 +163,7 @@ describe("formatBreach", () => {
 })
 
 describe("the repository satisfies its architecture budget", () => {
-  const root = path.resolve(import.meta.dir, "../../..")
+  const root = path.resolve(import.meta.dirname, "../../..")
   const modules = measureModules(root)
   const patterns = measurePatterns(root, modules)
 

@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 
-const ROOT = join(import.meta.dir, "../../..")
+const ROOT = join(import.meta.dirname, "../../..")
 const WORKFLOW = readFileSync(join(ROOT, ".github/workflows/test.yml"), "utf8")
 const HOOK = readFileSync(join(ROOT, ".githooks/commit-msg"), "utf8")
 const PACKAGE = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {

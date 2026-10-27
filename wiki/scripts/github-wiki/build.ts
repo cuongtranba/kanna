@@ -4,7 +4,7 @@ import { envVars } from '../../src/content/docs/reference/env-vars-data'
 import { sidebar } from '../../src/sidebar.mjs'
 import { convertWiki, type DocSource, type SidebarItem } from './convert'
 
-export const WIKI_ROOT = path.resolve(import.meta.dir, '../..')
+export const WIKI_ROOT = path.resolve(import.meta.dirname, '../..')
 export const DOCS_DIR = path.join(WIKI_ROOT, 'src/content/docs')
 
 const GENERATED_DOCS = new Set(['changelog.md'])

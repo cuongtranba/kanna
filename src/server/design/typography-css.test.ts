@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
 
-const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
+const CSS_PATH = join(import.meta.dirname, "../../..", "src/index.css")
 const css = await Bun.file(CSS_PATH).text()
 
 function extractBlocks(cssText: string, matchesSelector: (selector: string) => boolean): string[] {

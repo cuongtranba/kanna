@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, test } from "vite-plus/test"
 import type { BeaconStatusRow } from "../../shared/beacon-status"
 import { useBeaconsStore } from "./beaconsStore"
 

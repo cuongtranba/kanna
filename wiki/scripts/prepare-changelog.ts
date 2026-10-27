@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 import path from 'node:path'
 
-const ROOT = path.resolve(import.meta.dir, '../../')
+const ROOT = path.resolve(import.meta.dirname, '../../')
 const SRC = path.join(ROOT, 'CHANGELOG.md')
-const DST = path.join(import.meta.dir, '../src/content/docs/changelog.md')
+const DST = path.join(import.meta.dirname, '../src/content/docs/changelog.md')
 
 const body = await Bun.file(SRC).text()
 const wrapped = `---

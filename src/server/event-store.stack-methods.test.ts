@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import type { EventStore } from "./event-store"
 import { createTestEventStore } from "./storage/test-helpers"
 

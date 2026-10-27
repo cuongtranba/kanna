@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { JsonValue } from "../shared/json"
 import { EventEmitter } from "node:events"
 import { PassThrough } from "node:stream"

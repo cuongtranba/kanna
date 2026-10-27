@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect } from "vite-plus/test"
 import {
   APPEND_TRACKING_ROW_TOOL_NAME,
   DELEGATE_SUBAGENT_TOOL_NAME,

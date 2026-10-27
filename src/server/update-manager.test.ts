@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { UpdateManager } from "./update-manager"
 import { UpdateInstallError, type UpdateChecker, type UpdateReloader } from "./update-strategy"
 

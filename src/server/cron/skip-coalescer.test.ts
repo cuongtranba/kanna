@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { CronSkipCoalescer, SKIP_FLUSH_WINDOW_MS } from "./skip-coalescer"
 
 const CHAT = "chat-1"

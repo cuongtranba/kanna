@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from "bun:test"
+import { describe, expect, test, afterEach } from "vite-plus/test"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { PluginsFooterSlot } from "./PluginsFooterSlot"
 import { usePluginContributionsStore } from "../stores/pluginContributionsStore"

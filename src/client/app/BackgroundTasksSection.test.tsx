@@ -1,5 +1,5 @@
 import "../lib/testing/setupHappyDom"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { BackgroundTasksSection } from "./BackgroundTasksSection"
 import type { ChatBackgroundTask } from "../../shared/types"

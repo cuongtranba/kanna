@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 import ts from "typescript"
 import { HTTP_ROUTES, listHttpRoutes } from "../../shared/http-routes"
 
-const ROOT = join(import.meta.dir, "..", "..", "..")
+const ROOT = join(import.meta.dirname, "..", "..", "..")
 const INVENTORY_MODULE = "src/shared/http-routes.ts"
 const WEB_CLIENT_ROOTS = ["src/client", "src/shared"]
 const ROUTE_ROOTS = ["src/client", "src/shared", "src/server"]

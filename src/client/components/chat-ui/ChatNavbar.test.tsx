@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { ChatNavbar } from "./ChatNavbar"
 import { TooltipProvider } from "../ui/tooltip"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { createDefaultLayout, createGroup, createPane, createTab, type PaneLayout } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createCronRepair } from "./repair"
 import { createModelEscalation, type ModelEscalationConfig } from "../model-escalation"
 import { parseCronCommand } from "../../shared/cron/parse-command"

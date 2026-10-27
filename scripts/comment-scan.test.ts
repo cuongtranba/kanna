@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import ts from "typescript"
 import { findComments, isDirectiveComment, stripComments } from "./comment-scan"
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { RawCatalogEntry } from "./local-catalog-io.adapter"
 import type { LocalCatalogScanner } from "./local-catalog"
 import { LocalCatalogService, catalogRootDirs, reduceCatalog } from "./local-catalog"

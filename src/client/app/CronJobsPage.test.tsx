@@ -1,5 +1,5 @@
 
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { MemoryRouter } from "react-router-dom"
 import type { CronJobsGlobalRow } from "../../shared/cron/types"

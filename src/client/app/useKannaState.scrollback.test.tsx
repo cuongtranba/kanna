@@ -1,5 +1,5 @@
 
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { MemoryRouter } from "react-router-dom"
 import { act } from "react"
 import { AppDialogProvider } from "../components/ui/app-dialog"

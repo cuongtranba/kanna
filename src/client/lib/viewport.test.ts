@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { BREAKPOINT_MD, isDesktopViewport, isMobileViewport } from "./viewport"
 
 describe("BREAKPOINT_MD", () => {

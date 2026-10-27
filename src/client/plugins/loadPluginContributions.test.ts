@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { loadPluginContributions, type PluginListEntry } from "./loadPluginContributions"
 import type { PluginModule } from "./evaluatePlugin"
 import { isRecord } from "../../shared/errors"

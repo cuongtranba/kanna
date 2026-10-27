@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { createPrivateKey, createPublicKey, sign } from "node:crypto"
 import framesFixture from "../../apps/beacon-win7/testdata/conformance/frames.json"
 import pathsFixture from "../../apps/beacon-win7/testdata/conformance/paths.json"

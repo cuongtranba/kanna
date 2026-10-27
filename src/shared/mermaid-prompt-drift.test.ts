@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect, test } from "vite-plus/test"
 import { KANNA_SYSTEM_PROMPT_BASE } from "./kanna-system-prompt"
 import { LINK_RULES_FOR_PARITY } from "./mermaidRepair"
 

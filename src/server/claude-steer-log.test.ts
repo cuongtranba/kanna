@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test"
+import { describe, it, expect, vi } from "vite-plus/test"
 import {
   isClaudeSteerLoggingEnabled,
   isSendToStartingProfilingEnabled,
@@ -104,7 +104,7 @@ describe("elapsedProfileMs", () => {
 
 describe("logClaudeSteer", () => {
   it("does not call log.info when logging is disabled", () => {
-    const spy = mock(() => {})
+    const spy = vi.fn(() => {})
     const original = log.info
     log.info = spy
     try {
@@ -157,7 +157,7 @@ describe("logClaudeSteer", () => {
 
 describe("logSendToStartingProfile", () => {
   it("is a no-op when profile is null", () => {
-    const spy = mock(() => {})
+    const spy = vi.fn(() => {})
     const original = log.info
     log.info = spy
     try {
@@ -171,7 +171,7 @@ describe("logSendToStartingProfile", () => {
   })
 
   it("is a no-op when profile is undefined", () => {
-    const spy = mock(() => {})
+    const spy = vi.fn(() => {})
     const original = log.info
     log.info = spy
     try {
@@ -185,7 +185,7 @@ describe("logSendToStartingProfile", () => {
   })
 
   it("is a no-op when profiling env var is not set", () => {
-    const spy = mock(() => {})
+    const spy = vi.fn(() => {})
     const original = log.info
     log.info = spy
     try {

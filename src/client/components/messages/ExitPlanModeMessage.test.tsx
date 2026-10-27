@@ -1,8 +1,8 @@
 
-import { describe, expect, test, mock } from "bun:test"
+import { describe, expect, test, vi } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 
-mock.module("../../hooks/useTheme", () => ({
+vi.mock("../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
 }))
 

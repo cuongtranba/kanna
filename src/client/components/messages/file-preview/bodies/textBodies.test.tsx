@@ -1,7 +1,7 @@
 import "../../../../lib/testing/setupHappyDom"
-import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach, vi } from "vite-plus/test"
 
-mock.module("../../../../hooks/useTheme", () => ({
+vi.mock("../../../../hooks/useTheme", () => ({
   useTheme: () => ({ resolvedTheme: "dark", theme: "dark", setTheme: () => {} }),
 }))
 
@@ -19,7 +19,7 @@ const makeSrc = (mime: string, name: string): PreviewSource => ({
 
 beforeEach(() => {
   __clearTextBodyCacheForTests()
-  ;(globalThis as { fetch?: unknown }).fetch = mock(async () => new Response("hello world"))
+  ;(globalThis as { fetch?: unknown }).fetch = vi.fn(async () => new Response("hello world"))
 })
 afterEach(() => {
   delete (globalThis as { fetch?: unknown }).fetch

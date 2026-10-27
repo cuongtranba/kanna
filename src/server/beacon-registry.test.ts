@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import type { JsonValue } from "../shared/json"
 import { UPDATE_PROTOCOL, type BeaconFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"

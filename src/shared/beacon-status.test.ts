@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vite-plus/test"
 import { DEFAULT_BEACON_SCOPE } from "./beacon-scope"
 import type { BeaconConfig } from "./beacon-config"
 import { buildBeaconStatusRows, isBeaconBehind, type BeaconLiveState } from "./beacon-status"

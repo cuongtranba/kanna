@@ -1,6 +1,6 @@
 ---
 id: c3-236
-c3-seal: 8a6738cbb9af961f05dae65d0f37b6e309412490f51ebcca0a21b540f1a48647
+c3-seal: 344603d79975ec770d6f9ef50c1c2995bd17194b141e3314db749e2c9a96047e
 title: architecture-budget
 type: component
 category: feature
@@ -21,7 +21,7 @@ Hold every structural-defect population in the codebase at or below a recorded p
 | Field | Value |
 | --- | --- |
 | Container | c3-2 Server |
-| Runtime | None. The budget runs only under bun test and never ships in the server binary. |
+| Runtime | None. The budget runs only under vp test (Vitest under Bun) and never ships in the server binary. |
 | Consumers | CI (Architecture budget step) and developers via bun run check:arch |
 | Boundary | Reads repository source as text. Imports no application module, so it cannot drift with the code it measures. |
 
@@ -79,5 +79,5 @@ Owns the machine-checkable record of how much structural debt the repository cur
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | A pin is raised to make a red build green, retiring the check instead of the defect | Any edit that increases a value in MODULE_ALLOWANCES or PATTERN_BUDGETS | The manifest is version-controlled, so the increase is a reviewable diff carrying the issue number it regresses | src/ops/architecture/budget.ts |
-| A renamed target silently makes a gate inert | A file listed in a PATTERN_BUDGETS include is moved or renamed | filesScanned reaches zero and the run reports pattern_unmeasured rather than a shrink | bun test --conditions production src/ops/architecture/budget.test.ts |
-| The scan stops reaching source and the gate passes vacuously | A change to the exclusion list or the directory walk | A guard test asserts the scan finds more than 400 modules and includes a known file | bun test src/ops/architecture/budget.test.ts |
+| A renamed target silently makes a gate inert | A file listed in a PATTERN_BUDGETS include is moved or renamed | filesScanned reaches zero and the run reports pattern_unmeasured rather than a shrink | bun run test src/ops/architecture/budget.test.ts |
+| The scan stops reaching source and the gate passes vacuously | A change to the exclusion list or the directory walk | A guard test asserts the scan finds more than 400 modules and includes a known file | bun run test src/ops/architecture/budget.test.ts |
