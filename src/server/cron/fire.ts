@@ -1,7 +1,7 @@
 
 import type { ChatAttachment, QueuedChatMessage } from "../../shared/types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
-import type { SendMessageOptions } from "../claude-steer-log"
+import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { chatAutomationEnvelope } from "../auto-continue/events"
 import { deriveCronJobs, findRunningCronRuns } from "./read-model"
 import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"

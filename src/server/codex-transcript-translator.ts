@@ -26,7 +26,7 @@ import type {
   TurnPlanStep,
 } from "./codex-app-server-protocol"
 import { dynamicToolPayload, genericDynamicToolCall } from "./codex-tool-payloads"
-import { timestamped } from "./transcript-entry"
+import { timestamped } from "../shared/transcript-entry"
 import { mirroredUsageSnapshot } from "./context-usage-snapshot"
 
 export interface TranslationContext {

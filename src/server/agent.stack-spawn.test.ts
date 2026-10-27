@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./agent"
+import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 
 describe("resolveSpawnPaths", () => {
   test("solo chat returns fallback cwd, no additionalDirectories", () => {

@@ -53,10 +53,8 @@ import {
 } from "./claude-prompt-helpers"
 import { appendTurnError } from "./claude-turn-outcome"
 import { log } from "../shared/log"
-import {
-  type SendMessageOptions,
-  type SendToStartingProfile,
-} from "./claude-steer-log"
+import type { SendToStartingProfile } from "./claude-steer-log"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {

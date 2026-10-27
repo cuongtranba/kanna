@@ -1,7 +1,6 @@
 import { expect, test, describe } from "bun:test"
-import { AsyncMessageQueue, discardedToolResult, toClaudeMessageStream } from "./claude-sdk-queue"
+import { AsyncMessageQueue, toClaudeMessageStream } from "./claude-sdk-queue"
 import type { ClaudeRawSdkMessage } from "./claude-message-normalizer"
-import type { NormalizedToolCall } from "../shared/types"
 
 
 async function* fakeQuery(
@@ -77,40 +76,6 @@ describe("AsyncMessageQueue", () => {
     q.push(1)
     q.close()
     expect(() => q.close()).not.toThrow()
-  })
-})
-
-
-function makeTool<TKind extends "ask_user_question" | "exit_plan_mode">(
-  toolKind: TKind
-): NormalizedToolCall & { toolKind: TKind } {
-  return {
-    kind: "tool",
-    toolKind,
-    toolName: toolKind,
-    toolId: "t1",
-    input: {} as never,
-  } as unknown as NormalizedToolCall & { toolKind: TKind }
-}
-
-describe("discardedToolResult", () => {
-  test("ask_user_question variant returns answers: {}", () => {
-    const result = discardedToolResult(makeTool("ask_user_question"))
-    expect(result).toHaveProperty("answers")
-    expect((result as { answers: Record<string, string> }).answers).toEqual({})
-  })
-
-  test("exit_plan_mode variant does not have an answers field", () => {
-    const result = discardedToolResult(makeTool("exit_plan_mode"))
-    expect(result).not.toHaveProperty("answers")
-  })
-
-  test("ask_user_question result carries discarded: true", () => {
-    expect(discardedToolResult(makeTool("ask_user_question")).discarded).toBe(true)
-  })
-
-  test("exit_plan_mode result carries discarded: true", () => {
-    expect(discardedToolResult(makeTool("exit_plan_mode")).discarded).toBe(true)
   })
 })
 

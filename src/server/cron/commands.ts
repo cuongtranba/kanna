@@ -7,7 +7,7 @@ import { formatCronCommand } from "../../shared/cron/parse-command"
 import { chatAutomationEnvelope, type ChatAutomationEvent, type CronEvent } from "../auto-continue/events"
 import { deriveCronJobs } from "./read-model"
 import { planCronArm } from "./preview"
-import { timestamped } from "../claude-message-normalizer"
+import { timestamped } from "../../shared/transcript-entry"
 
 export interface CronCommandStore {
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>

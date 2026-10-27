@@ -44,7 +44,7 @@ import {
 } from "./codex-app-server-protocol"
 import { isJsonObject, safeJsonParse } from "../shared/json"
 import { parsePlanSteps } from "./codex-plan-steps"
-import { timestamped } from "./transcript-entry"
+import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
 import { type CodexErrorInfo } from "../shared/codex-error-classification"

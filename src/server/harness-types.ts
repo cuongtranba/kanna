@@ -31,12 +31,8 @@ export async function interruptWithGrace(target: Pick<HarnessTurn, "interrupt">)
   }
 }
 
-export interface ClaudeSessionHandle {
+export interface ClaudeSessionHandle extends HarnessTurn {
   provider: "claude"
-  stream: AsyncIterable<HarnessEvent>
-  getAccountInfo?: () => Promise<AccountInfo | null>
-  interrupt: () => Promise<void>
-  close: () => void
   closed: Promise<void>
   sendPrompt: (content: string) => Promise<void>
   setModel: (model: string) => Promise<void>

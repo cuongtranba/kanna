@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { COMPACTION_STARTED } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 import type { CompactionEvent } from "./claude-session-start"

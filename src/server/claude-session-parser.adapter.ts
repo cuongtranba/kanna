@@ -1,16 +1,8 @@
 import { createHash } from "node:crypto"
 import { readFileSync, statSync } from "node:fs"
-import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
+import { safeJsonParse } from "../shared/json"
+import { decodeClaudeSessionRecord } from "./claude-session-decode"
 import type { ClaudeSessionRecord, ParsedClaudeSession } from "./claude-session-types"
-
-function isClaudeSessionRecord(v: JsonValue): v is JsonValue & ClaudeSessionRecord {
-  return isJsonObject(v) && typeof v.type === "string"
-}
-
-function tryParse(line: string): ClaudeSessionRecord | null {
-  const parsed = safeJsonParse(line)
-  return isClaudeSessionRecord(parsed) ? parsed : null
-}
 
 export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | null {
   let raw: string
@@ -30,7 +22,7 @@ export function parseClaudeSessionFile(filePath: string): ParsedClaudeSession | 
   for (const line of raw.split("\n")) {
     const trimmed = line.trim()
     if (!trimmed) continue
-    const record = tryParse(trimmed)
+    const record = decodeClaudeSessionRecord(safeJsonParse(trimmed))
     if (!record) continue
 
     if (!sessionId && typeof record.sessionId === "string") sessionId = record.sessionId

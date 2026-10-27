@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "../shared/types"
-import { timestamped } from "./transcript-entry"
+import { timestamped } from "../shared/transcript-entry"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type {
   ToolRequestUserInputParams,

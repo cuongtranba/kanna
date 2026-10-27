@@ -7,7 +7,7 @@ import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-con
 import { log } from "../shared/log"
 import type { OAuthTokenEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 
 export const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100

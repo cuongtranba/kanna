@@ -7,18 +7,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk"
 import type { CompactionTrigger } from "../shared/transcript-types"
-import type { BoardRegistry } from "./board-registry"
-import type { InboxRegistry } from "./inbox/inbox-registry"
-import type { BeaconRegistry } from "./beacon-registry"
-import type { BeaconConfig } from "../shared/beacon-config"
-import {
-  createKannaMcpServer,
-  type KannaMcpDelegationContext,
-  type SetupLoopHandlerResult,
-  type ArmedLoopInfo,
-  type ChatTaskStorePort,
-} from "./kanna-mcp"
-import type { LoopSetupInput } from "./loop-template"
+import { createKannaMcpServer, type KannaMcpArgs } from "./kanna-mcp"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
 import type { McpServerConfig } from "../shared/types"
@@ -42,8 +31,6 @@ import { createClaudeHarnessStream } from "./claude-harness-stream"
 import { parseConfiguredContextWindowFromModelId } from "./claude-usage-math"
 import { log } from "../shared/log"
 import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
-import type { SubagentOrchestrator } from "./subagent-orchestrator"
-import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { ModelPrice } from "../shared/token-pricing"
@@ -147,7 +134,12 @@ export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
   }
 }
 
-export async function startClaudeSession(args: {
+export type KannaMcpCapabilities = Omit<
+  KannaMcpArgs,
+  "projectId" | "localPath" | "chatId" | "sessionId" | "toolCallback" | "chatPolicy" | "restrictedAllowedPaths" | "parseMermaid"
+>
+
+export interface StartClaudeSessionArgs {
   projectId: string
   localPath: string
   model: string
@@ -160,32 +152,17 @@ export async function startClaudeSession(args: {
   endpoint?: SdkEndpointEnv | null
   additionalDirectories?: string[]
   chatId?: string
-  tunnelGateway?: TunnelGateway | null
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   systemPromptAppend?: string
   systemPromptOverride?: string
   initialPrompt?: string
   toolCallback?: ToolCallbackService
   chatPolicy?: ChatPermissionPolicy
-  subagentOrchestrator?: SubagentOrchestrator
-  delegationContext?: KannaMcpDelegationContext
   customMcpServers?: readonly McpServerConfig[]
   oauthBearers?: ReadonlyMap<string, string>
   restrictedAllowedPaths?: string[]
-  setupLoop?: (input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
-  armCron?: (command: string) => Promise<{ jobId: string }>
-  updateCron?: (jobId: string, patch: import("../shared/cron/types").CronJobPatch) => Promise<void>
-  stopLoop?: () => Promise<void>
-  resumeLoop?: () => Promise<import("./loop-wake-recovery").ResumeLoopResult>
+  kannaMcp?: KannaMcpCapabilities
   isLoopArmed?: () => boolean
-  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  isRunAlive?: (chatId: string, runId: string) => boolean
-  chatTaskStore?: ChatTaskStorePort
-  boardRegistry?: BoardRegistry
-  inboxRegistry?: InboxRegistry
-  beaconRegistry?: BeaconRegistry
-  getBeacons?: () => readonly BeaconConfig[]
-  beaconToolsAllowed?: boolean
   maxTurns?: number
   keepAlive?: boolean
   turnPrice?: ModelPrice | null
@@ -193,7 +170,10 @@ export async function startClaudeSession(args: {
   contextWindowOverride?: number
   onCompaction?: (event: CompactionEvent) => void
   streamLiveBlocks?: boolean
-},
+}
+
+export async function startClaudeSession(
+  args: StartClaudeSessionArgs,
   _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
 ): Promise<ClaudeSessionHandle> {
   const canUseTool = _deps.buildCanUseTool({
@@ -231,29 +211,14 @@ export async function startClaudeSession(args: {
         : [..._deps.claudeToolset],
       mcpServers: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
+          ...args.kannaMcp,
           projectId: args.projectId,
           localPath: args.localPath,
           chatId: args.chatId,
           sessionId: args.sessionToken ?? undefined,
-          tunnelGateway: args.tunnelGateway ?? null,
           toolCallback: args.toolCallback,
           chatPolicy: args.chatPolicy,
-          subagentOrchestrator: args.subagentOrchestrator,
-          delegationContext: args.delegationContext,
           restrictedAllowedPaths: args.restrictedAllowedPaths,
-          setupLoop: args.setupLoop,
-          armCron: args.armCron,
-          updateCron: args.updateCron,
-          stopLoop: args.stopLoop,
-          resumeLoop: args.resumeLoop,
-          getArmedLoop: args.getArmedLoop,
-          isRunAlive: args.isRunAlive,
-          chatTaskStore: args.chatTaskStore,
-          boardRegistry: args.boardRegistry,
-          inboxRegistry: args.inboxRegistry,
-          beaconRegistry: args.beaconRegistry,
-          getBeacons: args.getBeacons,
-          beaconToolsAllowed: args.beaconToolsAllowed,
         }),
         ..._deps.buildUserMcpServers(args.customMcpServers ?? [], args.oauthBearers),
       },
@@ -306,12 +271,11 @@ export async function startClaudeSession(args: {
 
   return {
     provider: "claude",
-    stream: _deps.createClaudeHarnessStream(
-      _deps.toClaudeMessageStream(q),
-      args.contextWindowOverride ?? _deps.parseConfiguredContextWindowFromModelId(args.model),
-      args.turnPrice ? () => args.turnPrice ?? null : undefined,
-      args.costBaselineUsd,
-    ),
+    stream: _deps.createClaudeHarnessStream(_deps.toClaudeMessageStream(q), {
+      contextWindow: args.contextWindowOverride ?? _deps.parseConfiguredContextWindowFromModelId(args.model),
+      turnPrice: args.turnPrice,
+      costBaselineUsd: args.costBaselineUsd,
+    }),
     getAccountInfo: async () => {
       try {
         return await q.accountInfo()

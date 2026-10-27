@@ -2,7 +2,7 @@
 import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, isAutoContinueScheduleEvent, type AutoContinueScheduleEvent, type ChatAutomationEvent } from "./auto-continue/events"
 import { deriveChatSchedules } from "./auto-continue/read-model"
-import type { SendMessageOptions } from "./claude-steer-log"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
 import { appendTurnError } from "./claude-turn-outcome"
 import { errorMessage } from "../shared/errors"
 import { addCounter, AUTOCONTINUE_FIRED } from "./observability"

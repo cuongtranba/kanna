@@ -2,17 +2,17 @@ import { statSync } from "node:fs"
 import { homedir } from "node:os"
 import type { EventStore } from "./event-store"
 import type { ChatRecord } from "./events"
-import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
+import { mapClaudeRecordsToEntries, sourceUuidOfEntryId } from "./claude-session-mapper"
 import { log } from "../shared/log"
 import { scanClaudeSessions, locateClaudeSessionFile } from "./claude-session-scanner.adapter"
 import { parseClaudeSessionFile } from "./claude-session-parser.adapter"
 import { extractSessionId } from "../shared/claude-session-id"
 import type { ImportSessionsByIdsResult, SingleImportResultRow } from "../shared/protocol"
 import type { ImportClaudeSessionsResult } from "../shared/commands/results/project"
-import { isRecord } from "../shared/errors"
 import type {
   ClaudeSessionCustomTitleRecord,
   ClaudeSessionSummaryRecord,
+  ClaudeSessionUserRecord,
   ParsedClaudeSession,
 } from "./claude-session-types"
 import { DEFAULT_CHAT_TITLE } from "../shared/types"
@@ -37,18 +37,15 @@ function cwdExists(cwd: string): boolean {
   }
 }
 
-function extractUserText<T>(content: T): string | null {
+function extractUserText(content: ClaudeSessionUserRecord["content"]): string | null {
   if (typeof content === "string") {
     const trimmed = content.trim()
     return trimmed ? trimmed : null
   }
-  if (!Array.isArray(content)) return null
   for (const block of content) {
-    if (!isRecord(block)) continue
-    if (block.type === "text" && typeof block.text === "string") {
-      const trimmed = block.text.trim()
-      if (trimmed) return trimmed
-    }
+    if (block.type !== "text") continue
+    const trimmed = block.text.trim()
+    if (trimmed) return trimmed
   }
   return null
 }
@@ -67,18 +64,10 @@ function truncateTitle(text: string): string {
   return text.slice(0, TITLE_MAX_LENGTH).trim()
 }
 
-function isCustomTitleRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionCustomTitleRecord {
-  return record.type === "custom-title"
-}
-
-function isSummaryRecord(record: ParsedClaudeSession["records"][number]): record is ClaudeSessionSummaryRecord {
-  return record.type === "summary"
-}
-
 function deriveCustomTitle(session: ParsedClaudeSession): string | null {
   for (let i = session.records.length - 1; i >= 0; i -= 1) {
     const record = session.records[i]
-    if (!isCustomTitleRecord(record)) continue
+    if (record.type !== "custom-title") continue
     const text = extractCustomTitleText(record)
     if (text) return truncateTitle(text)
   }
@@ -88,7 +77,7 @@ function deriveCustomTitle(session: ParsedClaudeSession): string | null {
 function deriveSummaryTitle(session: ParsedClaudeSession): string | null {
   for (let i = session.records.length - 1; i >= 0; i -= 1) {
     const record = session.records[i]
-    if (!isSummaryRecord(record)) continue
+    if (record.type !== "summary") continue
     const text = extractSummaryText(record)
     if (text) return truncateTitle(text)
   }
@@ -104,10 +93,7 @@ function isSyntheticClaudeUserText(text: string): boolean {
 function deriveUserTitle(session: ParsedClaudeSession): string | null {
   for (const record of session.records) {
     if (record.type !== "user") continue
-    const recordRec = isRecord(record) ? record : null
-    const message = recordRec && isRecord(recordRec.message) ? recordRec.message : null
-    const content = message?.content
-    const text = extractUserText(content)
+    const text = extractUserText(record.content)
     if (text && !isSyntheticClaudeUserText(text)) return truncateTitle(text)
   }
   return null
@@ -143,15 +129,10 @@ async function backfillImportedChatTitle(
   return true
 }
 
-function extractUuidFromEntryId(entryId: string): string | null {
-  const match = entryId.match(/^(.+)-(?:user|text-\d+|tool_call-\d+|tool_result-\d+)$/)
-  return match ? match[1] : null
-}
-
 function collectExistingUuids(store: EventStore, chatId: string): Set<string> {
   const seen = new Set<string>()
   for (const entry of store.getMessages(chatId)) {
-    const uuid = extractUuidFromEntryId(entry._id)
+    const uuid = sourceUuidOfEntryId(entry._id)
     if (uuid) seen.add(uuid)
   }
   return seen

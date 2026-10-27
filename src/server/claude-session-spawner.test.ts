@@ -590,10 +590,10 @@ describe("compaction observer wiring", () => {
 
 describe("delegation provenance", () => {
   test("a session in a live self-wake with no active turn still has a parent to delegate under", async () => {
-    let context: Parameters<SpawnClaudeTurnDeps["startClaudeSessionFn"]>[0]["delegationContext"]
+    let context: NonNullable<Parameters<SpawnClaudeTurnDeps["startClaudeSessionFn"]>[0]["kannaMcp"]>["delegationContext"]
     const deps = makeDeps({
       startClaudeSessionFn: async (a) => {
-        context = a.delegationContext
+        context = a.kannaMcp?.delegationContext
         return makeFakeHandle()
       },
     })

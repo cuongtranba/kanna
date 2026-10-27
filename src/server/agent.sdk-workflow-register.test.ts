@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import type { HarnessEvent } from "./harness-types"
 import type { SlashCommand, TranscriptEntry } from "../shared/types"
 import type { ChatAutomationEvent } from "./auto-continue/events"
@@ -283,7 +283,7 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
 
 describe("CLAUDE_TOOLSET — Workflow tool", () => {
   test("includes Workflow so SDK sessions can launch runs that feed the /workflows page", async () => {
-    const { CLAUDE_TOOLSET } = await import("./agent")
+    const { CLAUDE_TOOLSET } = await import("./claude-session-config")
     expect(CLAUDE_TOOLSET).toContain("Workflow")
   })
 })

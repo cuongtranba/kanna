@@ -2,20 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { AgentCoordinator } from "./agent-coordinator"
+import { buildCanUseTool, buildClaudeEnv } from "./claude-spawn-helpers"
+import { buildTaskNotification, buildUserMcpServers } from "./claude-session-config"
+import { buildAttachmentHintText, buildPromptText } from "./claude-prompt-helpers"
+import { normalizeClaudeStreamMessage } from "./claude-message-normalizer"
 import {
-  AgentCoordinator,
-  buildAttachmentHintText,
-  buildCanUseTool,
-  buildClaudeEnv,
-  buildPromptText,
-  buildTaskNotification,
-  buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
-  normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
   parseConfiguredContextWindowFromModelId,
   resolveFinalTurnUsage,
-} from "./agent"
+} from "./claude-usage-math"
 import { EventStore } from "./event-store"
 import { EMPTY_CHAT_TASK_PROJECTION } from "../shared/chat-tasks/read-model"
 import { getLatestContextWindowUsage } from "./proactive-compact"

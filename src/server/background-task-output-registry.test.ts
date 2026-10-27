@@ -8,10 +8,6 @@ function makeDeps(fileContents: Map<string, string> = new Map()): BackgroundTask
   const timers: Map<ReturnType<typeof setInterval>, { fn: () => void }> = new Map()
 
   return {
-    statSize(path: string): number | null {
-      const c = contents.get(path)
-      return c !== undefined ? Buffer.byteLength(c, "utf8") : null
-    },
     readAppend(path: string, fromByte: number): { data: string; endByte: number } {
       const c = contents.get(path) ?? ""
       const slice = c.slice(fromByte)

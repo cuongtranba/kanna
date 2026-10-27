@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "../shared/types"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 export interface TurnErrorAppendStore {
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>

@@ -2,37 +2,32 @@
 import type { JsonArray, JsonObject } from "../shared/json"
 
 export interface ClaudeSessionRecordBase {
-  type: string
   uuid?: string
-  parentUuid?: string | null
   sessionId?: string
   timestamp?: string
   cwd?: string
-  version?: string
 }
+
+export type ClaudeSessionUserBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_result"; tool_use_id: string; content?: string | JsonObject | JsonArray; is_error?: boolean }
+  | { type: "other" }
+
+export type ClaudeSessionAssistantBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: JsonObject }
+  | { type: "other" }
 
 export interface ClaudeSessionUserRecord extends ClaudeSessionRecordBase {
   type: "user"
-  message: {
-    role: "user"
-    content: string | Array<
-      | { type: "text"; text: string }
-      | { type: "tool_result"; tool_use_id: string; content?: string | JsonArray; is_error?: boolean }
-    >
-  }
-  toolUseResult?: JsonObject
+  content: string | ClaudeSessionUserBlock[]
+  debugRaw?: string
 }
 
 export interface ClaudeSessionAssistantRecord extends ClaudeSessionRecordBase {
   type: "assistant"
-  message: {
-    role: "assistant"
-    id?: string
-    content: Array<
-      | { type: "text"; text: string }
-      | { type: "tool_use"; id: string; name: string; input: JsonObject }
-    >
-  }
+  messageId?: string
+  content: ClaudeSessionAssistantBlock[]
 }
 
 export interface ClaudeSessionSummaryRecord extends ClaudeSessionRecordBase {
@@ -45,9 +40,8 @@ export interface ClaudeSessionCustomTitleRecord extends ClaudeSessionRecordBase 
   customTitle?: string
 }
 
-export interface ClaudeSessionSystemRecord extends ClaudeSessionRecordBase {
-  type: "system"
-  content?: string
+export interface ClaudeSessionOtherRecord extends ClaudeSessionRecordBase {
+  type: "other"
 }
 
 export type ClaudeSessionRecord =
@@ -55,8 +49,7 @@ export type ClaudeSessionRecord =
   | ClaudeSessionAssistantRecord
   | ClaudeSessionSummaryRecord
   | ClaudeSessionCustomTitleRecord
-  | ClaudeSessionSystemRecord
-  | ClaudeSessionRecordBase
+  | ClaudeSessionOtherRecord
 
 export interface ParsedClaudeSession {
   sessionId: string

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
 import type { HarnessEvent } from "./harness-types"
 import type { LlmProviderSnapshot, SlashCommand, TranscriptEntry } from "../shared/types"
