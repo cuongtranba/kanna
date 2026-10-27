@@ -4,9 +4,10 @@ import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
 import { cn } from "../../../lib/utils"
+import { formatMentionLabel, type MentionNamespace } from "../../../lib/mentionNamespaces"
 
 
-export type MentionKind = "agent" | "path" | "project" | "beacon"
+export type MentionKind = MentionNamespace | "path"
 
 export type SerializedMentionNode = Spread<
   {
@@ -93,16 +94,8 @@ export class MentionNode extends DecoratorNode<ReactNode> {
   }
 
   getTextContent(): string {
-    if (this.__mentionKind === "agent") {
-      return `@agent/${this.__value}`
-    }
-    if (this.__mentionKind === "project") {
-      return `@project/${this.__value}`
-    }
-    if (this.__mentionKind === "beacon") {
-      return `@beacon/${this.__value}`
-    }
-    return `@${this.__value}`
+    if (this.__mentionKind === "path") return `@${this.__value}`
+    return `@${formatMentionLabel(this.__mentionKind, this.__value)}`
   }
 
 

@@ -30,7 +30,7 @@ import {
   Waypoints,
 } from "lucide-react"
 import { useNavigate, useOutletContext } from "react-router-dom"
-import { getKeybindingsFilePathDisplay, SDK_CLIENT_APP } from "../../shared/branding"
+import { APP_VERSION, getKeybindingsFilePathDisplay } from "../../shared/branding"
 import { ANALYTICS_STATIC_EVENT_NAMES, ANALYTICS_STATIC_PROPERTY_NAMES } from "../../shared/analytics"
 import {
   CLAUDE_IDLE_TIMEOUT_MS_MAX,
@@ -124,8 +124,13 @@ import { PendingSegmentedControl } from "./PendingSegmentedControl"
 import { LLM_PROVIDER_READ_KEY } from "./useAppGlobalState"
 import { Spinner } from "../components/ui/spinner"
 import { runDetached } from "../lib/runDetached"
-import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { errorMessage, onRejected } from "../../shared/errors"
+import { pendingActionKey, runPendingAction, usePendingAction, usePendingActionsStore, usePendingScope } from "../stores/pendingActionsStore"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { KannaPluginsSettingsBranch } from "./KannaPluginsSettingsBranch"
+
+const SIGN_OUT_KEY = "auth.signOut"
+const GLOBAL_INSTRUCTIONS_SAVE_KEY = "settings.globalInstructions"
 
 const sidebarItems = [
   {
@@ -375,7 +380,6 @@ export function formatPublishedDate(value: string | null) {
   }).format(parsed)
 }
 
-const REDEPLOY_PENDING_KEY = "__redeploy__"
 const LLM_PROVIDER_WRITE_KEY = "settings.writeLlmProvider"
 const TUNNEL_WRITE_SCOPE = "appSettings.setCloudflareTunnel"
 const CLOUDFLARED_PATH_KEY = pendingActionKey(TUNNEL_WRITE_SCOPE, "cloudflaredPath")
@@ -402,36 +406,28 @@ export function ChangelogSection({
   onForceReload: () => Promise<void> | void
 }) {
   const checkPending = usePendingAction("update.check")
-  const pendingAction = useSettingsPageStore((s) => s.changelogPendingAction)
-  const setPendingAction = useSettingsPageStore((s) => s.setChangelogPendingAction)
+  const installInFlight = usePendingScope("update.install")
+  const redeployInFlight = usePendingAction("update.redeploy")
+  const pendingActions = usePendingActionsStore((s) => s.inFlight)
+  const userActionInFlight = installInFlight || redeployInFlight
   const latestVersion = updateSnapshot?.latestVersion ?? releases[0]?.tag_name ?? "Unknown"
   const currentVersionLabel = updateSnapshot?.currentVersion ?? currentVersion
   const isChecking = updateSnapshot?.status === "checking" || checkPending
   const snapshotUpdating = updateSnapshot?.status === "updating" || updateSnapshot?.status === "restart_pending"
-  const isUpdating = snapshotUpdating || pendingAction !== null
+  const isUpdating = snapshotUpdating || userActionInFlight
   const canInstallUpdate = updateSnapshot?.updateAvailable === true
   const normalizedLatestVersion = latestVersion.replace(/^v/i, "")
   const normalizedCurrentVersion = currentVersionLabel.replace(/^v/i, "")
 
   const handleInstallClick = useCallback(async (tag: string) => {
-    setPendingAction(tag)
-    try {
-      await onInstallUpdate(tag)
-    } finally {
-      setPendingAction(null)
-    }
-  }, [onInstallUpdate, setPendingAction])
+    await onInstallUpdate(tag)
+  }, [onInstallUpdate])
 
   const handleRedeployClick = useCallback(async () => {
-    setPendingAction(REDEPLOY_PENDING_KEY)
-    try {
-      await onForceReload()
-    } finally {
-      setPendingAction(null)
-    }
-  }, [onForceReload, setPendingAction])
+    await onForceReload()
+  }, [onForceReload])
 
-  const redeployPending = pendingAction === REDEPLOY_PENDING_KEY || snapshotUpdating
+  const redeployPending = redeployInFlight || snapshotUpdating
 
   return (
     <div className="space-y-4">
@@ -566,7 +562,8 @@ export function ChangelogSection({
                   
                 
                   { (isLatestRelease && canInstallUpdate) || (!isLatestRelease && !isCurrentRelease) ? (() => {
-                    const rowPending = pendingAction === release.tag_name || (snapshotUpdating && pendingAction === null)
+                    const rowPending = pendingActions[pendingActionKey("update.install", release.tag_name)] === true
+                      || (snapshotUpdating && !userActionInFlight)
                     let actionLabel: string
                     if (isLatestRelease) {
                       actionLabel = "Update"
@@ -663,8 +660,7 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
   const draft = useSettingsPageStore((s) => s.globalInstructionsDraft)
   const setDraft = useSettingsPageStore((s) => s.setGlobalInstructionsDraft)
   const persistedAtMount = useSettingsPageStore((s) => s.globalInstructionsPersistedAtMount)
-  const saving = useSettingsPageStore((s) => s.globalInstructionsSaving)
-  const setSaving = useSettingsPageStore((s) => s.setGlobalInstructionsSaving)
+  const saving = usePendingAction(GLOBAL_INSTRUCTIONS_SAVE_KEY)
   const error = useSettingsPageStore((s) => s.globalInstructionsError)
   const setError = useSettingsPageStore((s) => s.setGlobalInstructionsError)
 
@@ -684,16 +680,8 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
 
   const onSave = useCallback(async () => {
     if (saveDisabled) return
-    setError(null)
-    setSaving(true)
-    try {
-      await state.handleWriteAppSettings({ globalPromptAppend: trimmed })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
-  }, [saveDisabled, state, trimmed, setError, setSaving])
+    await surfaceErrorIn(setError, () => state.handleWriteAppSettings({ globalPromptAppend: trimmed }))
+  }, [saveDisabled, state, trimmed, setError])
 
   let saveLabel: string
   if (saving) {
@@ -733,7 +721,7 @@ export function GlobalInstructionsSection({ state }: { state: KannaState }) {
             <Button
               type="button"
               size="sm"
-              onClick={() => runPendingAction("settings.globalInstructions", onSave)}
+              onClick={() => runPendingAction(GLOBAL_INSTRUCTIONS_SAVE_KEY, onSave)}
               disabled={saveDisabled}
               pending={saving}
             >
@@ -756,8 +744,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
   const { theme, setTheme } = useTheme()
   const changelogStatus = useSettingsPageStore((s) => s.changelogStatus)
   const setChangelogStatus = useSettingsPageStore((s) => s.setChangelogStatus)
-  const signingOut = useSettingsPageStore((s) => s.signingOut)
-  const setSigningOut = useSettingsPageStore((s) => s.setSigningOut)
+  const signingOut = usePendingAction(SIGN_OUT_KEY)
   const authEnabled = useSettingsPageStore((s) => s.authEnabled)
   const setAuthEnabled = useSettingsPageStore((s) => s.setAuthEnabled)
   const releases = useSettingsPageStore((s) => s.releases)
@@ -777,7 +764,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
   const chatSoundIdSaving = usePendingAction("settings.chatSoundId")
   const machineName = state.localProjects?.machine.displayName ?? "Unavailable"
   const projectCount = state.localProjects?.projects.length ?? 0
-  const appVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
+  const appVersion = APP_VERSION
   const scrollbackLines = useAppSettingsStore(selectScrollbackLines)
   const minColumnWidth = useAppSettingsStore(selectMinColumnWidth)
   const editorPreset = useAppSettingsStore(selectEditorPreset)
@@ -835,6 +822,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
   const setEditorCommandDraft = useSettingsPageStore((s) => s.setEditorCommandDraft)
   const appSettingsError = useSettingsPageStore((s) => s.appSettingsError)
   const setAppSettingsError = useSettingsPageStore((s) => s.setAppSettingsError)
+  const reportAppSettingsFailure = (error: Error) => setAppSettingsError(error.message)
   const analyticsDialogOpen = useSettingsPageStore((s) => s.analyticsDialogOpen)
   const setAnalyticsDialogOpen = useSettingsPageStore((s) => s.setAnalyticsDialogOpen)
   const tunnelError = useSettingsPageStore((s) => s.tunnelError)
@@ -948,15 +936,10 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
   useEffect(() => {
     let cancelled = false
 
-    void fetchAuthStatus()
-      .then((payload) => {
-        if (cancelled) return
-        setAuthEnabled(payload.enabled === true)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setAuthEnabled(false)
-      })
+    runDetached("read auth status", fetchAuthStatus().then((result) => {
+      if (cancelled) return
+      setAuthEnabled(result.kind === "ok" && result.status.enabled === true)
+    }))
 
     return () => {
       cancelled = true
@@ -988,7 +971,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       })
       .catch((error) => {
         if (cancelled) return
-        setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
+        setChangelogError(errorMessage(error))
         setChangelogStatus("error")
       })
 
@@ -1004,9 +987,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       return
     }
     setScrollbackLines(nextValue)
-    void handleWriteAppSettings({ terminal: { scrollbackLines: nextValue } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
-    })
+    void handleWriteAppSettings({ terminal: { scrollbackLines: nextValue } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitMinColumnWidth() {
@@ -1016,9 +997,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       return
     }
     setMinColumnWidth(nextValue)
-    void handleWriteAppSettings({ terminal: { minColumnWidth: nextValue } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save terminal settings.")
-    })
+    void handleWriteAppSettings({ terminal: { minColumnWidth: nextValue } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitTabMinWidth() {
@@ -1027,9 +1006,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setTabMinWidthDraft(String(tabMinWidth))
       return
     }
-    void handleWriteAppSettings({ panes: { tabMinWidth: clampTabMinWidth(nextValue) } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save pane settings.")
-    })
+    void handleWriteAppSettings({ panes: { tabMinWidth: clampTabMinWidth(nextValue) } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitUploadMaxFileSize() {
@@ -1045,9 +1022,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setUploadMaxFileSizeDraft(String(uploadMaxFileSizeMb))
       return
     }
-    void handleWriteAppSettings({ uploads: { maxFileSizeMb: Math.round(nextValue) } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save upload settings.")
-    })
+    void handleWriteAppSettings({ uploads: { maxFileSizeMb: Math.round(nextValue) } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitClaudeIdleMinutes() {
@@ -1065,9 +1040,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     }
     void handleWriteAppSettings({
       claudeDriver: { lifecycle: { idleTimeoutMs: Math.round(nextMinutes) * 60_000 } },
-    }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save Claude lifecycle settings.")
-    })
+    }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitClaudeMaxConcurrent() {
@@ -1085,9 +1058,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     }
     void handleWriteAppSettings({
       claudeDriver: { lifecycle: { maxConcurrent: Math.round(nextValue) } },
-    }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save Claude lifecycle settings.")
-    })
+    }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function commitShareDefaultTtl() {
@@ -1101,9 +1072,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setShareDefaultTtlDraft(String(shareDefaultTtlHours))
       return
     }
-    void handleWriteAppSettings({ shareDefaultTtlHours: nextValue }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save share settings.")
-    })
+    void handleWriteAppSettings({ shareDefaultTtlHours: nextValue }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleNumberInputKeyDown(event: KeyboardEvent<HTMLInputElement>, commit: () => void) {
@@ -1114,22 +1083,16 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
 
   function commitEditorCommand() {
     setEditorCommandTemplate(editorCommandDraft)
-    void handleWriteAppSettings({ editor: { commandTemplate: editorCommandDraft } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save editor settings.")
-    })
+    void handleWriteAppSettings({ editor: { commandTemplate: editorCommandDraft } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleThemeChange(nextTheme: typeof theme) {
     setTheme(nextTheme)
-    void handleWriteAppSettings({ theme: nextTheme }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save theme settings.")
-    })
+    void handleWriteAppSettings({ theme: nextTheme }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleTypographyScaleChange(nextScale: FontScaleStep) {
-    void handleWriteAppSettings({ typography: { scale: nextScale } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save typography settings.")
-    })
+    void handleWriteAppSettings({ typography: { scale: nextScale } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleEditorPresetChange(nextPreset: EditorPreset) {
@@ -1140,9 +1103,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
         preset: nextPreset,
         commandTemplate,
       },
-    }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save editor settings.")
-    })
+    }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleChatSoundPreferenceChange(nextValue: ChatSoundPreference) {
@@ -1151,9 +1112,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     }
 
     setChatSoundPreference(nextValue)
-    runPendingAction("settings.chatSoundPreference", () => handleWriteAppSettings({ chatSoundPreference: nextValue }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
-    }))
+    runPendingAction("settings.chatSoundPreference", () => handleWriteAppSettings({ chatSoundPreference: nextValue }).catch(onRejected(reportAppSettingsFailure)))
     runDetached("chat sound preview", playChatNotificationSound(chatSoundId, 1))
   }
 
@@ -1163,9 +1122,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     }
 
     setChatSoundId(nextValue)
-    runPendingAction("settings.chatSoundId", () => handleWriteAppSettings({ chatSoundId: nextValue }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save chat sound settings.")
-    }))
+    runPendingAction("settings.chatSoundId", () => handleWriteAppSettings({ chatSoundId: nextValue }).catch(onRejected(reportAppSettingsFailure)))
     runDetached("chat sound preview", playChatNotificationSound(nextValue, 1))
   }
 
@@ -1174,7 +1131,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setAppSettingsError(null)
       await handleWriteAppSettings({ analyticsEnabled: nextValue === "enabled" })
     } catch (error) {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save analytics settings.")
+      setAppSettingsError(errorMessage(error))
     }
   }
 
@@ -1183,7 +1140,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setAppSettingsError(null)
       await handleWriteAppSettings({ telemetry: { enabled: nextValue === "enabled" } })
     } catch (error) {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save telemetry settings.")
+      setAppSettingsError(errorMessage(error))
     }
   }
 
@@ -1192,22 +1149,18 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
       setTunnelError(null)
       await handleWriteCloudflareTunnel(patch)
     } catch (error) {
-      setTunnelError(error instanceof Error ? error.message : "Unable to save Cloudflare Tunnel settings.")
+      setTunnelError(errorMessage(error))
     }
   }
 
   function handleDefaultProviderChange(nextValue: "last_used" | AgentProvider) {
     setDefaultProvider(nextValue)
-    void handleWriteAppSettings({ defaultProvider: nextValue }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
-    })
+    void handleWriteAppSettings({ defaultProvider: nextValue }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleProviderDefaultModelChange(provider: AgentProvider, model: string) {
     setProviderDefaultModel(provider, model)
-    void handleWriteAppSettings({ providerDefaults: { [provider]: { model } } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
-    })
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { model } } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleProviderDefaultModelOptionsChange(
@@ -1215,16 +1168,12 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     modelOptions: Partial<typeof providerDefaults[typeof provider]["modelOptions"]>
   ) {
     setProviderDefaultModelOptions(provider, modelOptions)
-    void handleWriteAppSettings({ providerDefaults: { [provider]: { modelOptions } } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
-    })
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { modelOptions } } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   function handleProviderDefaultPlanModeChange(provider: AgentProvider, planMode: boolean) {
     setProviderDefaultPlanMode(provider, planMode)
-    void handleWriteAppSettings({ providerDefaults: { [provider]: { planMode } } }).catch((error) => {
-      setAppSettingsError(error instanceof Error ? error.message : "Unable to save provider settings.")
-    })
+    void handleWriteAppSettings({ providerDefaults: { [provider]: { planMode } } }).catch(onRejected(reportAppSettingsFailure))
   }
 
   async function commitLlmProvider(nextValue = llmProviderDraft) {
@@ -1240,7 +1189,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
         : asJsonValue(error)
       setLlmValidationStatus("invalid")
       setLlmValidationError(fallbackError)
-      setLlmProviderError(error instanceof Error ? error.message : "Unable to save quick response provider settings.")
+      setLlmProviderError(errorMessage(error))
     }
   }
 
@@ -1265,7 +1214,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
         setChangelogStatus("success")
       })
       .catch((error) => {
-        setChangelogError(error instanceof Error ? error.message : "Unable to load changelog.")
+        setChangelogError(errorMessage(error))
         setChangelogStatus("error")
       })
   }
@@ -1339,16 +1288,6 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
     </>
   )
 
-  async function handleSidebarSignOut() {
-    if (signingOut) return
-    setSigningOut(true)
-    try {
-      await state.handleSignOut()
-    } finally {
-      setSigningOut(false)
-    }
-  }
-
   return (
     <div className="relative flex h-full flex-1 min-w-0 bg-background">
       <div className="flex min-w-0 flex-1">
@@ -1393,7 +1332,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
             {authEnabled ? (
               <button
                 type="button"
-                onClick={() => runPendingAction("auth.signOut", handleSidebarSignOut)}
+                onClick={() => runPendingAction(SIGN_OUT_KEY, state.handleSignOut)}
                 disabled={signingOut}
                 className="cursor-pointer rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -1434,7 +1373,7 @@ export function SettingsPage({ ports, sectionId }: { ports?: { dom?: DomPort }; 
               {authEnabled ? (
                 <button
                   type="button"
-                  onClick={() => runPendingAction("auth.signOut", handleSidebarSignOut)}
+                  onClick={() => runPendingAction(SIGN_OUT_KEY, state.handleSignOut)}
                   disabled={signingOut}
                   className="flex min-h-11 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 >

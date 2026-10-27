@@ -17,7 +17,6 @@ export interface ModelEditorDraft {
 }
 
 export interface ModelEditorFormState extends ModelEditorDraft {
-  submitting: boolean
   error: string | null
 }
 
@@ -30,7 +29,7 @@ const EMPTY_DRAFT: ModelEditorDraft = {
 }
 
 function createEditorFormFromInitial(draft: ModelEditorDraft): ModelEditorFormState {
-  return { ...draft, submitting: false, error: null }
+  return { ...draft, error: null }
 }
 
 interface ModelsSectionState {

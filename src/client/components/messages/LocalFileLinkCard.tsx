@@ -3,21 +3,17 @@ import { probeFileUrl } from "../../api/files"
 import { runDetached } from "../../lib/runDetached"
 import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
-import { toLocalFileUrl } from "../../lib/pathUtils"
-import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
+import { fileNameOfPath, toLocalFileUrl } from "../../lib/pathUtils"
+import { AttachmentFileCard } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
 import { LocalFileLinkCardStore } from "./LocalFileLinkCard.store"
+import { formatByteSize } from "../../lib/formatByteSize"
 
 interface Props {
   path: string
   linkText?: string
-}
-
-function basename(p: string): string {
-  const idx = p.lastIndexOf("/")
-  return idx >= 0 ? p.slice(idx + 1) : p
 }
 
 function LocalFileLinkCardInner({ path, linkText }: Props) {
@@ -36,7 +32,7 @@ function LocalFileLinkCardInner({ path, linkText }: Props) {
     return () => controller.abort()
   }, [contentUrl, setProbe])
 
-  const fileName = basename(path)
+  const fileName = fileNameOfPath(path)
   const rawDisplayName = linkText || fileName
   const displayName = middleTruncate(rawDisplayName, 28)
 
@@ -64,7 +60,7 @@ function LocalFileLinkCardInner({ path, linkText }: Props) {
 
   const iconKind = classifyAttachmentIcon(attachment)
   const friendlyType = friendlyMimeLabel(iconKind, mimeType)
-  const sizeLabel = size > 0 ? formatAttachmentSize(size) : null
+  const sizeLabel = size > 0 ? formatByteSize(size) : null
   const isLoading = probe.kind === "loading"
   const isError = probe.kind === "error"
 

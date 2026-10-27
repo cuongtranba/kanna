@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getAppAuthStateFromStatus, shouldPlayChatNotificationSound, shouldRedirectToChangelog, shouldRetryAuthStatusRequest } from "./App"
+import { getAppAuthStateFromStatus, shouldPlayChatNotificationSound, shouldRedirectToChangelog } from "./App"
 import { getChatNotificationSnapshot, getChatSoundBurstCount, getChatsNewlyWaiting, getNotificationTitle, getNotificationTitleCount } from "./chatNotifications"
 import { DEFAULT_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, clampSidebarWidth } from "./KannaSidebar"
 import { isBrowserUnfocused, shouldPlayChatSound } from "../lib/chatSounds"
@@ -45,12 +45,6 @@ describe("auth boot helpers", () => {
 
   test("maps enabled but unauthenticated auth status to locked", () => {
     expect(getAppAuthStateFromStatus({ enabled: true, authenticated: false })).toEqual({ status: "locked", error: null })
-  })
-
-  test("retries auth status requests unless the endpoint returned ok", () => {
-    expect(shouldRetryAuthStatusRequest(null)).toBe(true)
-    expect(shouldRetryAuthStatusRequest(false)).toBe(true)
-    expect(shouldRetryAuthStatusRequest(true)).toBe(false)
   })
 })
 

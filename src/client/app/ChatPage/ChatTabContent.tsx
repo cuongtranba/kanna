@@ -43,7 +43,9 @@ import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { runDetached } from "../../lib/runDetached"
-import { describeShareFailure, surfaceCommandError } from "./chatCommandFeedback"
+import { describeShareFailure } from "../../components/share/describeShareFailure"
+import { surfaceCommandError, withCommandFeedback } from "../../lib/commandFeedback"
+import { cronActionKey } from "../../lib/cronActions"
 import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
@@ -297,70 +299,64 @@ export function ChatTabContent({
   }, [])
 
 
+  const activeChatId = state.activeChatId
+  const socket = state.socket
+
   const handleAutoContinueAccept = useCallback(async (scheduleId: string, scheduledAt: number) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.accept", chatId, scheduleId, scheduledAt }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.accept", chatId: activeChatId, scheduleId, scheduledAt }))
+  }, [activeChatId, socket])
 
   const handleAutoContinueReschedule = useCallback(async (scheduleId: string, scheduledAt: number) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.reschedule", chatId: activeChatId, scheduleId, scheduledAt }))
+  }, [activeChatId, socket])
 
   const handleCronRemove = useCallback((jobId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
+    if (!activeChatId) return
     runPendingAction(
-      pendingActionKey("cron.remove", jobId),
-      () => surfaceCommandError(() => state.socket.command({ type: "cron.remove", chatId, jobId })),
+      cronActionKey("cron.remove", activeChatId, jobId),
+      () => surfaceCommandError(() => socket.command({ type: "cron.remove", chatId: activeChatId, jobId })),
     )
-  }, [state.activeChatId, state.socket])
+  }, [activeChatId, socket])
 
   const handleAutoContinueCancel = useCallback(async (scheduleId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.cancel", chatId: activeChatId, scheduleId }))
+  }, [activeChatId, socket])
 
 
   const sendTunnelAccept = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.accept", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.accept", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
   const sendTunnelStop = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.stop", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.stop", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
   const sendTunnelRetry = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.retry", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.retry", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
 
   const handleCancelSubagentRun = useCallback(async (chatId: string, runId: string) => {
-    await surfaceCommandError(() => state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }))
-  }, [state.socket])
+    await surfaceCommandError(() => socket.command({ type: "chat.cancelSubagentRun", chatId, runId }))
+  }, [socket])
 
-  const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
+  const workflowRuns = useWorkflowsStore(useShallow(selectRuns(activeChatId ?? "")))
 
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
-    const chatId = state.activeChatId
-    if (!chatId) return null
-    return state.socket.command({ type: "workflows.getRun", chatId, runId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return null
+    return socket.command({ type: "workflows.getRun", chatId: activeChatId, runId })
+  }, [activeChatId, socket])
 
   const handleGetSubagentTranscript = useCallback(async (agentId: string): Promise<TranscriptEntry[]> => {
-    const chatId = state.activeChatId
-    if (!chatId) return []
-    return state.socket.command({ type: "subagents.getRun", chatId, agentId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return []
+    return socket.command({ type: "subagents.getRun", chatId: activeChatId, agentId })
+  }, [activeChatId, socket])
 
 
   const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
@@ -451,13 +447,12 @@ export function ChatTabContent({
   const composePending = usePendingAction(COMPOSE_CHAT_KEY)
   const silentPending = usePendingAction(pendingActionKey("push.setChatMute", state.activeChatId ?? ""))
   const handleToggleSilent = useCallback(() => {
-    const chatId = state.activeChatId
-    if (!chatId) return
+    if (!activeChatId) return
     runPendingAction(
-      pendingActionKey("push.setChatMute", chatId),
-      () => surfaceCommandError(() => state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent })),
+      pendingActionKey("push.setChatMute", activeChatId),
+      () => surfaceCommandError(() => socket.command({ type: "push.setChatMute", chatId: activeChatId, muted: !isSilent })),
     )
-  }, [state.activeChatId, state.socket, isSilent])
+  }, [activeChatId, socket, isSilent])
 
   const openExternalPending = usePendingAction(projectOpenExternalKey(projectId))
   const rightSidebarPending = usePendingAction(gitInitializeKey(projectId))
@@ -467,7 +462,6 @@ export function ChatTabContent({
   }, [projectId, stateHandleOpenExternal])
 
   const stateHandleCancel = state.handleCancel
-  const activeChatId = state.activeChatId
   const handleCancel = useCallback(() => {
     runPendingAction(pendingActionKey("chat.cancel", activeChatId ?? ""), () => stateHandleCancel())
   }, [activeChatId, stateHandleCancel])
@@ -491,15 +485,14 @@ export function ChatTabContent({
   }, [addShare, state.socket])
 
   const handleShareRevoke = useCallback(async (tokenId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    const reply = await state.socket.command({
+    if (!activeChatId) return
+    const reply = await socket.command({
       type: "share.revoke",
       payload: { tokenId },
     })
     if (!reply.ok) throw new Error(describeShareFailure(reply.error))
-    removeShare(chatId, tokenId)
-  }, [removeShare, state.activeChatId, state.socket])
+    removeShare(activeChatId, tokenId)
+  }, [removeShare, activeChatId, socket])
 
 
   useStickyChatFocus({

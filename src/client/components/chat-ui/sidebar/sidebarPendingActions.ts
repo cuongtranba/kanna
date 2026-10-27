@@ -1,19 +1,10 @@
 import { pendingActionKey, usePendingActionsStore } from "../../../stores/pendingActionsStore"
 
-export type ChatRowAction = "chat.rename" | "chat.fork" | "chat.archive" | "chat.setPin" | "chat.delete" | "chat.openInFinder"
+const CHAT_ROW_ACTIONS = ["chat.rename", "chat.fork", "chat.archive", "chat.setPin", "chat.delete", "chat.openInFinder"] as const
 
-export type ProjectAction =
-  | "project.copyPath"
-  | "project.openFinder"
-  | "project.openEditor"
-  | "project.setStar"
-  | "project.remove"
-  | "project.delete"
-  | "project.setInstructions"
+export type ChatRowAction = (typeof CHAT_ROW_ACTIONS)[number]
 
-const CHAT_ROW_ACTIONS: readonly ChatRowAction[] = ["chat.rename", "chat.fork", "chat.archive", "chat.setPin", "chat.delete", "chat.openInFinder"]
-
-const PROJECT_ACTIONS: readonly ProjectAction[] = [
+const PROJECT_ACTIONS = [
   "project.copyPath",
   "project.openFinder",
   "project.openEditor",
@@ -21,7 +12,9 @@ const PROJECT_ACTIONS: readonly ProjectAction[] = [
   "project.remove",
   "project.delete",
   "project.setInstructions",
-]
+] as const
+
+export type ProjectAction = (typeof PROJECT_ACTIONS)[number]
 
 export const BULK_DELETE_CHATS_KEY = pendingActionKey("chat.delete", "bulk")
 export const BULK_ARCHIVE_CHATS_KEY = pendingActionKey("chat.archive", "bulk")
@@ -33,6 +26,10 @@ export const CREATE_PROJECT_KEY = pendingActionKey("project.create")
 
 export function chatRowActionKey(action: ChatRowAction, chatId: string): string {
   return pendingActionKey(action, chatId)
+}
+
+export function unarchiveChatKey(chatId: string): string {
+  return pendingActionKey("chat.unarchive", chatId)
 }
 
 export function projectActionKey(action: ProjectAction, projectId: string): string {

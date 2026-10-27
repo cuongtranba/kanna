@@ -248,7 +248,7 @@ function ProviderEditor({
     () => providers.filter((provider) => provider.id !== editingId).map((provider) => provider.id),
     [providers, editingId],
   )
-  const saveKey = pendingActionKey("settings.customProviders", editingId ?? (form.id || "new"))
+  const saveKey = pendingActionKey("settings.customProviders", editingId ?? "new")
   const savePending = usePendingAction(saveKey)
 
   const handleLabelChange = useCallback((value: string) => {
@@ -272,12 +272,11 @@ function ProviderEditor({
           }
         },
         onDone: discardEditor,
-        fallbackMessage: "Failed to save endpoint",
       }),
     )
   }, [discardEditor, editingId, form, handlers, mode, otherIds, patchEditorForm, saveKey])
 
-  const busy = form.submitting || savePending
+  const busy = savePending
 
   return (
     <div className="flex flex-col gap-4 rounded-md border border-border px-4 py-4">

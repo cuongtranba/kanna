@@ -12,8 +12,8 @@ import {
   SelectValue,
 } from "../components/ui/select"
 import { cn } from "../lib/utils"
-import { errorMessage } from "../../shared/errors"
-import { pendingActionKey, runPendingAction } from "../stores/pendingActionsStore"
+import { errorMessage, onRejected } from "../../shared/errors"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
@@ -279,7 +279,12 @@ function SubagentForm(props: SubagentFormProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { draft, error, pending, confirmDelete } = form
+  const { draft, error, confirmDelete } = form
+  const saveKey = pendingActionKey("subagent.save", props.subject?.id ?? "new")
+  const deleteKey = pendingActionKey("subagent.delete", props.subject?.id ?? "")
+  const savePending = usePendingAction(saveKey)
+  const deletePending = usePendingAction(deleteKey)
+  const pending = savePending || deletePending
   const offersCustom = draft.provider === "custom" || props.availableProviders.some((entry) => entry.id === "custom")
   const providerOptions = offersCustom ? PROVIDER_OPTIONS_WITH_CUSTOM : PROVIDER_OPTIONS
 
@@ -324,8 +329,8 @@ function SubagentForm(props: SubagentFormProps) {
   }
 
   async function handleSubmit() {
-    if (!canSave || pending) return
-    patchForm({ pending: true, error: null, confirmDelete: false })
+    if (!canSave || deletePending) return
+    patchForm({ error: null, confirmDelete: false })
     try {
       const result =
         props.mode === "create"
@@ -336,8 +341,6 @@ function SubagentForm(props: SubagentFormProps) {
       }
     } catch (cause) {
       patchForm({ error: { field: "general", message: errorMessage(cause) } })
-    } finally {
-      patchForm({ pending: false })
     }
   }
 
@@ -347,13 +350,13 @@ function SubagentForm(props: SubagentFormProps) {
       patchForm({ confirmDelete: true })
       return
     }
-    patchForm({ pending: true, error: null })
+    patchForm({ error: null })
     try {
       await props.handlers.onDelete(props.subject.id)
     } catch (cause) {
       patchForm({ error: { field: "general", message: errorMessage(cause) } })
     } finally {
-      patchForm({ pending: false, confirmDelete: false })
+      patchForm({ confirmDelete: false })
     }
   }
 
@@ -529,8 +532,8 @@ function SubagentForm(props: SubagentFormProps) {
             size="sm"
             data-testid="subagent-form-delete"
             disabled={pending}
-            pending={pending && confirmDelete}
-            onClick={() => { runPendingAction(pendingActionKey("subagent.delete", props.subject?.id ?? ""), handleDelete) }}
+            pending={deletePending}
+            onClick={() => { runPendingAction(deleteKey, handleDelete) }}
           >
             {confirmDelete ? "Confirm delete" : "Delete"}
           </Button>
@@ -540,8 +543,8 @@ function SubagentForm(props: SubagentFormProps) {
           size="sm"
           data-testid="subagent-form-save"
           disabled={!canSave || pending}
-          pending={pending && !confirmDelete}
-          onClick={() => { runPendingAction(pendingActionKey("subagent.save", props.subject?.id ?? "new"), handleSubmit) }}
+          pending={savePending}
+          onClick={() => { runPendingAction(saveKey, handleSubmit) }}
         >
           {pending ? "Saving…" : "Save"}
         </Button>
@@ -692,14 +695,14 @@ function LoopRuntimePanel(props: {
     setError(null)
     if (seconds === timeoutSeconds) return
     void props.handleWriteAppSettings({ subagentRuntime: { runTimeoutMs: seconds * 1000 } })
-      .catch((err) => setError(err instanceof Error ? err.message : "Unable to save subagent runtime settings."))
+      .catch(onRejected((error) => setError(error.message)))
   }
 
   function handleDefaultChange(value: string) {
     setError(null)
     const next = value === DEFAULT_LOOP_SUBAGENT_NONE ? null : value
     void props.handleWriteAppSettings({ subagentRuntime: { defaultLoopSubagentId: next } })
-      .catch((err) => setError(err instanceof Error ? err.message : "Unable to save default loop subagent."))
+      .catch(onRejected((error) => setError(error.message)))
   }
 
   return (

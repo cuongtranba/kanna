@@ -1,4 +1,5 @@
 import type { AgentProvider, ResolvedStackBinding } from "../../../shared/types"
+import { fileNameOfPath } from "../../lib/pathUtils"
 
 interface PeerWorktreeStripProps {
   bindings: ResolvedStackBinding[]
@@ -12,7 +13,7 @@ export function PeerWorktreeStrip({ bindings, provider, onOpenPath }: PeerWorktr
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-0.5">
       {bindings.map((binding) => {
-        const label = binding.worktreePath.split("/").pop() ?? binding.worktreePath
+        const label = fileNameOfPath(binding.worktreePath)
         const isPrimary = binding.role === "primary"
         const isMissing = binding.projectStatus === "missing"
 

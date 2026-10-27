@@ -11,8 +11,8 @@ import { cn } from "../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { WebhookCopyButton } from "./WebhookCopyButton"
-import { readRevealedSecret, sendWebhookCommand } from "./webhookCommands"
 
 interface Props {
   hook: WebhookSummary
@@ -41,7 +41,7 @@ export function WebhookRow({ hook, targets, catalog, origin, divider }: Props) {
 
   const handleToggle = useCallback(() => {
     runPendingAction(toggleKey, async () => {
-      await sendWebhookCommand(socket, { type: "webhooks.update", id: hook.id, patch: { enabled: !hook.enabled } })
+      await sendCommandWithFeedback(socket, { type: "webhooks.update", id: hook.id, patch: { enabled: !hook.enabled } })
     })
   }, [hook.enabled, hook.id, socket, toggleKey])
 
@@ -53,8 +53,8 @@ export function WebhookRow({ hook, targets, catalog, origin, divider }: Props) {
         confirmLabel: "Rotate",
       })
       if (!confirmed) return
-      const result = await sendWebhookCommand(socket, { type: "webhooks.rotateSecret", id: hook.id })
-      useWebhooksStore.getState().revealSecret(readRevealedSecret(result, hook.id, hook.name))
+      const result = await sendCommandWithFeedback(socket, { type: "webhooks.rotateSecret", id: hook.id })
+      useWebhooksStore.getState().revealSecret({ hookId: hook.id, hookName: hook.name, secret: result.secret })
     })
   }, [dialog, hook.id, hook.name, rotateKey, socket])
 
@@ -67,7 +67,7 @@ export function WebhookRow({ hook, targets, catalog, origin, divider }: Props) {
         confirmVariant: "destructive",
       })
       if (!confirmed) return
-      await sendWebhookCommand(socket, { type: "webhooks.delete", id: hook.id })
+      await sendCommandWithFeedback(socket, { type: "webhooks.delete", id: hook.id })
     })
   }, [deleteKey, dialog, hook.id, hook.name, socket])
 

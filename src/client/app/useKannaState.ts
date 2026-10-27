@@ -15,6 +15,8 @@ import type { AskUserQuestionItem } from "../components/messages/types"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
+import { reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
+import { onRejected, toError } from "../../shared/errors"
 import { canCancelStatus, getLatestToolIds, isPrimaryChatInstance, isProcessingStatus } from "./derived"
 import type { KannaSocket, SocketStatus } from "./socket"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../../shared/permission-policy"
@@ -736,9 +738,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     if (connectionStatus !== "connected") return
 
     const protectedChatIds = [...new Set([...draftChatIds, ...attachmentDraftChatIds])].sort()
-    void socket.command({ type: "chat.setDraftProtection", chatIds: protectedChatIds }).catch((error) => {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    })
+    void socket.command({ type: "chat.setDraftProtection", chatIds: protectedChatIds }).catch(onRejected(reportCommandFailure))
   }, [attachmentDraftChatIds, connectionStatus, draftChatIds, socket])
 
   useEffect(() => {
@@ -866,9 +866,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       .flatMap((group) => group.chats)
       .find((chat) => chat.chatId === activeChatId)
     if (!activeSidebarChat?.unread) return
-    void socket.command({ type: "chat.markRead", chatId: activeChatId }).catch((error) => {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    })
+    void socket.command({ type: "chat.markRead", chatId: activeChatId }).catch(onRejected(reportCommandFailure))
   }, [activeChatId, appGlobal.routeChatId, appGlobal.sidebarReady, dom, focusEpoch, sidebarProjectGroups, socket])
 
 
@@ -1005,7 +1003,7 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     }
 
     useChatStateStore.getState().setIsHistoryLoading(activeChatId, true)
-    try {
+    await surfaceCommandError(async () => {
       const page = await socket.command({
         type: "chat.loadHistory",
         chatId: activeChatId,
@@ -1016,13 +1014,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
       chatStore.setOlderHistoryEntries(activeChatId, (current) => mergeTranscriptEntries(page.messages, current))
       chatStore.setHistoryCursor(activeChatId, page.olderCursor)
       chatStore.setHasOlderHistory(activeChatId, page.hasOlder)
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      useKannaStateStore.getState().setCommandError(message)
-    } finally {
-      useChatStateStore.getState().setIsHistoryLoading(activeChatId, false)
-    }
+    })
+    useChatStateStore.getState().setIsHistoryLoading(activeChatId, false)
   }, [activeChatId, hasOlderHistory, historyCursor, isHistoryLoading, socket])
 
   const handleSend = useCallback(async (
@@ -1135,11 +1128,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     } catch (error) {
       useKannaStateStore.getState().setOptimisticUserPrompts((current) => current.filter((prompt) => prompt.id !== optimisticId))
       useChatStateStore.getState().setOptimisticProcessing(optimisticScopeId, null)
+      const failure = toError(error)
       logSendToStartingTrace(sendTrace, "handle_send_failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: failure.message,
       }, sessStore, localStore)
       sendToStartingProfilesRef.current.delete(clientTraceId)
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+      reportCommandFailure(failure)
       throw error
     }
   }, [activeChatId, appGlobal.chatNavigator, fallbackLocalProjectPath, localStore, optimisticScopeId, optimisticUserPrompts, selectedProjectId, serverTranscriptEntries, sessStore, sidebarProjectGroups, socket])
@@ -1148,51 +1142,36 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     if (!activeChatId) return
     useChatStateStore.getState().setOptimisticProcessing(activeChatId, { ackedAt: null })
     try {
-      await socket.command({
+      await withCommandFeedback(() => socket.command({
         type: "message.steer",
         chatId: activeChatId,
         queuedMessageId,
-      })
+      }))
       useChatStateStore.getState().setOptimisticProcessing(activeChatId, (current) => (
         current ? { ackedAt: performance.now() } : current
       ))
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
+    } catch {
       useChatStateStore.getState().setOptimisticProcessing(activeChatId, null)
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [activeChatId, socket])
 
   const handleRemoveQueuedMessage = useCallback(async (queuedMessageId: string) => {
     if (!activeChatId) return
-    try {
-      await socket.command({
-        type: "message.dequeue",
-        chatId: activeChatId,
-        queuedMessageId,
-      })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({
+      type: "message.dequeue",
+      chatId: activeChatId,
+      queuedMessageId,
+    }))
   }, [activeChatId, socket])
 
   const handleCancel = useCallback(async () => {
     if (!activeChatId) return
-    try {
-      await socket.command({ type: "chat.cancel", chatId: activeChatId })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({ type: "chat.cancel", chatId: activeChatId }))
   }, [activeChatId, socket])
 
   const handleStopDraining = useCallback(async () => {
     if (!activeChatId) return
-    try {
-      await socket.command({ type: "chat.stopDraining", chatId: activeChatId })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({ type: "chat.stopDraining", chatId: activeChatId }))
   }, [activeChatId, socket])
 
   const handleAskUserQuestion = useCallback(async (
@@ -1201,17 +1180,12 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     answers: AskUserQuestionAnswerMap
   ) => {
     if (!activeChatId) return
-    try {
-      await socket.command({
-        type: "chat.respondTool",
-        chatId: activeChatId,
-        toolUseId,
-        result: encodeAskUserQuestionResult(questions, answers),
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      throw error
-    }
+    await withCommandFeedback(() => socket.command({
+      type: "chat.respondTool",
+      chatId: activeChatId,
+      toolUseId,
+      result: encodeAskUserQuestionResult(questions, answers),
+    }))
   }, [activeChatId, socket])
 
   const handleExitPlanMode = useCallback(async (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => {
@@ -1219,20 +1193,16 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     if (confirmed) {
       useChatPreferencesStore.getState().setChatComposerPlanMode(activeChatId, false)
     }
-    try {
-      await socket.command({
-        type: "chat.respondTool",
-        chatId: activeChatId,
-        toolUseId,
-        result: {
-          confirmed,
-          ...(clearContext ? { clearContext: true } : {}),
-          ...(message ? { message } : {}),
-        },
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({
+      type: "chat.respondTool",
+      chatId: activeChatId,
+      toolUseId,
+      result: {
+        confirmed,
+        ...(clearContext ? { clearContext: true } : {}),
+        ...(message ? { message } : {}),
+      },
+    }))
   }, [activeChatId, socket])
 
   const handleSubagentAskUserQuestion = useCallback(async (
@@ -1242,17 +1212,13 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     answers: AskUserQuestionAnswerMap,
   ) => {
     if (!activeChatId) return
-    try {
-      await socket.command({
-        type: "chat.respondSubagentTool",
-        chatId: activeChatId,
-        runId,
-        toolUseId,
-        result: encodeAskUserQuestionResult(questions, answers),
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({
+      type: "chat.respondSubagentTool",
+      chatId: activeChatId,
+      runId,
+      toolUseId,
+      result: encodeAskUserQuestionResult(questions, answers),
+    }))
   }, [activeChatId, socket])
 
   const handleSubagentExitPlanMode = useCallback(async (
@@ -1261,31 +1227,23 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     response: { confirmed: boolean; clearContext?: boolean; message?: string },
   ) => {
     if (!activeChatId) return
-    try {
-      await socket.command({
-        type: "chat.respondSubagentTool",
-        chatId: activeChatId,
-        runId,
-        toolUseId,
-        result: response,
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({
+      type: "chat.respondSubagentTool",
+      chatId: activeChatId,
+      runId,
+      toolUseId,
+      result: response,
+    }))
   }, [activeChatId, socket])
 
   const handleToolRequestAnswer = useCallback(async (toolRequestId: string, decision: ToolRequestDecision) => {
     if (!activeChatId) return
-    try {
-      await socket.command({
-        type: "chat.toolRequestAnswer",
-        chatId: activeChatId,
-        toolRequestId,
-        decision,
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({
+      type: "chat.toolRequestAnswer",
+      chatId: activeChatId,
+      toolRequestId,
+      decision,
+    }))
   }, [activeChatId, socket])
 
   // eslint-disable-next-line react-hooks/refs

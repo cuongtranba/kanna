@@ -6,6 +6,7 @@ import { shareQueryOptions } from "../../api/share"
 import type { HttpPort } from "../../ports/httpPort"
 import { ShareViewPage } from "./ShareViewPage"
 import { SharePageStore } from "./SharePage.store"
+import { errorMessage } from "../../../shared/errors"
 
 function errorTitle(error: ShareError): string {
   switch (error.kind) {
@@ -17,7 +18,7 @@ function errorTitle(error: ShareError): string {
   }
 }
 
-function errorMessage(error: ShareError): string {
+function shareErrorMessage(error: ShareError): string {
   switch (error.kind) {
     case "not_found": return "This share link does not exist."
     case "revoked": return "The owner has revoked this share."
@@ -38,7 +39,7 @@ function SharePageInner({ token, http }: { token: string; http?: HttpPort }) {
       const err = query.error
       setLoadState({
         kind: "error",
-        error: { kind: "snapshot_read_failed", message: err instanceof Error ? err.message : String(err) },
+        error: { kind: "snapshot_read_failed", message: errorMessage(err) },
         status: 0,
       })
       return
@@ -62,7 +63,7 @@ function SharePageInner({ token, http }: { token: string; http?: HttpPort }) {
     return (
       <main className="kanna-share-view" data-state="error">
         <h1>{errorTitle(loadState.error)}</h1>
-        <p>{errorMessage(loadState.error)}</p>
+        <p>{shareErrorMessage(loadState.error)}</p>
       </main>
     )
   }

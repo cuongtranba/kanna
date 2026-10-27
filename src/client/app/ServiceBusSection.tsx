@@ -3,12 +3,13 @@ import { StateMarkLabel } from "../components/ui/state-mark"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { PendingSegmentedControl } from "./PendingSegmentedControl"
-import { formatBytes, serviceBusStateLabel, serviceBusStateTone } from "../lib/serviceBusView"
+import { serviceBusStateLabel, serviceBusStateTone } from "../lib/serviceBusView"
+import { formatByteSize } from "../lib/formatByteSize"
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { selectServiceBusStatus, useServiceBusStore } from "../stores/serviceBusStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
-import { errorMessage } from "../../shared/errors"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { problemsOf } from "../lib/serviceBusDraft"
 import type { ServiceBusMode } from "../../shared/service-bus/jetstream-config"
 import type { KannaState } from "./useKannaState"
@@ -43,7 +44,7 @@ function StatusFacts() {
       {status.stream ? (
         <>
           <Fact label="Messages" value={count(status.stream.messages)} />
-          <Fact label="Size" value={formatBytes(status.stream.bytes)} />
+          <Fact label="Size" value={formatByteSize(status.stream.bytes)} />
           <Fact label="First seq" value={count(status.stream.firstSeq)} />
           <Fact label="Last seq" value={count(status.stream.lastSeq)} />
         </>
@@ -69,26 +70,16 @@ function ConnectionSettings({ state }: { state: ServiceBusSectionState }) {
   const problems = problemsOf({ ...settings, mode: "external" }, { url })
   const urlDirty = url !== settings.url
 
-  const saveUrl = useCallback(async () => {
-    setError(null)
-    try {
-      await state.handleWriteAppSettings({ serviceBus: { url } })
-      discardConnection()
-    } catch (caught) {
-      setError(errorMessage(caught))
-    }
-  }, [state, url, discardConnection, setError])
+  const saveUrl = useCallback(() => surfaceErrorIn(setError, async () => {
+    await state.handleWriteAppSettings({ serviceBus: { url } })
+    discardConnection()
+  }), [state, url, discardConnection, setError])
 
   const writeToken = useCallback(
-    async (token: string | null) => {
-      setError(null)
-      try {
-        await state.handleWriteAppSettings({ serviceBus: { token } })
-        discardConnection()
-      } catch (caught) {
-        setError(errorMessage(caught))
-      }
-    },
+    (token: string | null) => surfaceErrorIn(setError, async () => {
+      await state.handleWriteAppSettings({ serviceBus: { token } })
+      discardConnection()
+    }),
     [state, discardConnection, setError],
   )
 
@@ -134,14 +125,7 @@ export function ServiceBusSection({ state }: { state: ServiceBusSectionState }) 
   const starting = usePendingAction(START_KEY)
 
   const write = useCallback(
-    async (patch: { enabled?: boolean; mode?: ServiceBusMode }) => {
-      setError(null)
-      try {
-        await state.handleWriteAppSettings({ serviceBus: patch })
-      } catch (caught) {
-        setError(errorMessage(caught))
-      }
-    },
+    (patch: { enabled?: boolean; mode?: ServiceBusMode }) => surfaceErrorIn(setError, () => state.handleWriteAppSettings({ serviceBus: patch })),
     [state, setError],
   )
 

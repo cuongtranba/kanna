@@ -588,7 +588,7 @@ const TranscriptSingleRow = memo(({
         )
         break
       case "cron_armed":
-        rendered = <CronArmedMessage key={message.id} message={message} onRemove={onCronRemove} />
+        rendered = <CronArmedMessage key={message.id} message={message} chatId={chatId} onRemove={onCronRemove} />
         break
       case "cron_command_error":
         rendered = <CronCommandErrorMessage key={message.id} message={message} />

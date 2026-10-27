@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { omitKey } from "../lib/recordOps"
 
 export interface TerminalPaneLayout {
   id: string
@@ -27,13 +28,15 @@ interface TerminalLayoutState {
 
 export const DEFAULT_TERMINAL_MAIN_SIZES: [number, number] = [68, 32]
 
+export const DEFAULT_PROJECT_TERMINAL_LAYOUT: ProjectTerminalLayout = {
+  isVisible: false,
+  mainSizes: [...DEFAULT_TERMINAL_MAIN_SIZES],
+  terminals: [],
+  nextTerminalIndex: 0,
+}
+
 function createDefaultProjectLayout(): ProjectTerminalLayout {
-  return {
-    isVisible: false,
-    mainSizes: [...DEFAULT_TERMINAL_MAIN_SIZES],
-    terminals: [],
-    nextTerminalIndex: 0,
-  }
+  return { ...DEFAULT_PROJECT_TERMINAL_LAYOUT, mainSizes: [...DEFAULT_TERMINAL_MAIN_SIZES], terminals: [] }
 }
 
 function getProjectLayout(projects: Record<string, ProjectTerminalLayout>, projectId: string): ProjectTerminalLayout {
@@ -181,8 +184,7 @@ export const useTerminalLayoutStore = create<TerminalLayoutState>()(
         })),
       clearProject: (projectId) =>
         set((state) => {
-          const { [projectId]: _removed, ...rest } = state.projects
-          return { projects: rest }
+          return { projects: omitKey(state.projects, projectId) }
         }),
     }),
     {
@@ -191,18 +193,3 @@ export const useTerminalLayoutStore = create<TerminalLayoutState>()(
     }
   )
 )
-
-export const DEFAULT_PROJECT_TERMINAL_LAYOUT: ProjectTerminalLayout = {
-  isVisible: false,
-  mainSizes: [...DEFAULT_TERMINAL_MAIN_SIZES],
-  terminals: [],
-  nextTerminalIndex: 0,
-}
-
-export function getDefaultProjectTerminalLayout() {
-  return {
-    ...DEFAULT_PROJECT_TERMINAL_LAYOUT,
-    mainSizes: [...DEFAULT_PROJECT_TERMINAL_LAYOUT.mainSizes],
-    terminals: [],
-  }
-}

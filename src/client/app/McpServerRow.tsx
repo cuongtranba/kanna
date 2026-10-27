@@ -5,7 +5,6 @@ import { Spinner } from "../components/ui/spinner"
 import { HoverHint } from "../components/ui/truncated-text"
 import { SettingsRowActions } from "../components/settings/SettingsList"
 import { cn } from "../lib/utils"
-import { useMcpServersSectionStore } from "../stores/mcpServersSectionStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import type { McpOAuthState, McpServerConfig, McpServerTestResult, McpServerTransport } from "../../shared/types"
 import type { DomPort } from "../ports/domPort"
@@ -28,23 +27,12 @@ export function McpRow({
   onEdit: () => void
   dom?: DomPort
 }) {
-  const testing = useMcpServersSectionStore((s) => s.testingServerIds.has(server.id))
-  const setServerTesting = useMcpServersSectionStore((s) => s.setServerTesting)
-
-  const onTest = useCallback(async () => {
-    setServerTesting(server.id, true)
-    try {
-      await handlers.onTest(server.id)
-    } finally {
-      setServerTesting(server.id, false)
-    }
-  }, [handlers, server.id, setServerTesting])
-
   const deleteKey = pendingActionKey("mcpServers.delete", server.id)
   const deletePending = usePendingAction(deleteKey)
   const setEnabledKey = pendingActionKey("mcpServers.setEnabled", server.id)
   const setEnabledPending = usePendingAction(setEnabledKey)
   const testKey = pendingActionKey("settings.testMcpServer", server.id)
+  const testing = usePendingAction(testKey)
 
   const onDelete = useCallback(() => {
     if (dom.confirmDialog(`Delete MCP server "${server.name}"?`)) {
@@ -58,8 +46,8 @@ export function McpRow({
   }, [handlers, server.id, setEnabledKey])
 
   const onTestClick = useCallback(() => {
-    runPendingAction(testKey, onTest)
-  }, [onTest, testKey])
+    runPendingAction(testKey, () => handlers.onTest(server.id))
+  }, [handlers, server.id, testKey])
 
   return (
     <li className="flex items-center gap-3 px-4 py-3" aria-busy={deletePending || undefined}>

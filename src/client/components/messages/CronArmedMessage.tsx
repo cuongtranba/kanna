@@ -1,40 +1,27 @@
 import { useCallback } from "react"
 import { CalendarClock, Check, Copy, Trash2 } from "lucide-react"
-import { CopyStateStore } from "./CopyState.store"
-import { clipboardAdapter, timerAdapter } from "../../adapters"
+import { useCopyFeedback } from "../../stores/copyFeedbackStore"
 import { runDetached } from "../../lib/runDetached"
-import { pendingActionKey, usePendingAction } from "../../stores/pendingActionsStore"
+import { usePendingAction } from "../../stores/pendingActionsStore"
+import { cronActionKey } from "../../lib/cronActions"
 import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
 import type { ProcessedCronArmedMessage } from "./types"
 
 interface Props {
   message: ProcessedCronArmedMessage
+  chatId?: string
   onRemove?: (jobId: string) => void
 }
 
-export function CronArmedMessage({ message, onRemove }: Props) {
-  return (
-    <CopyStateStore.Provider init={undefined}>
-      <CronArmedMessageInner message={message} onRemove={onRemove} />
-    </CopyStateStore.Provider>
-  )
-}
-
-function CronArmedMessageInner({ message, onRemove }: Props) {
-  const copied = CopyStateStore.useScopedStore((s) => s.copied)
-  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
+export function CronArmedMessage({ message, chatId, onRemove }: Props) {
+  const { copied, copy } = useCopyFeedback()
 
   const editCommand = `/cron ${message.instruction} ${message.mode} ${message.scheduleText}`
 
-  const copyEditCommand = useCallback(async () => {
-    await clipboardAdapter.writeText(editCommand)
-    setCopied(true)
-    timerAdapter.setTimeout(() => setCopied(false), 2000)
-  }, [editCommand, setCopied])
-  const handleCopyEdit = useCallback(() => { runDetached("copy cron edit command", copyEditCommand()) }, [copyEditCommand])
+  const handleCopyEdit = useCallback(() => { runDetached("copy cron edit command", copy(editCommand)) }, [copy, editCommand])
 
-  const disarming = usePendingAction(pendingActionKey("cron.remove", message.jobId))
+  const disarming = usePendingAction(cronActionKey("cron.remove", chatId ?? "", message.jobId))
 
   const fires = message.upcomingFires ?? (message.nextFireAt !== null ? [message.nextFireAt] : [])
 

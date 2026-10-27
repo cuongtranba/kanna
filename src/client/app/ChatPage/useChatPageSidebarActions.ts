@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from "react"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import type {
+  BranchActionFailure,
+  BranchActionSuccess,
   ChatBranchListEntry,
   ChatBranchListResult,
   ChatMergePreviewResult,
@@ -21,7 +23,18 @@ import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { runDetached } from "../../lib/runDetached"
+import { errorMessage } from "../../../shared/errors"
 import { timerAdapter } from "../../adapters/timer.adapter"
+
+type GitActionFailure = BranchActionFailure & { localCommitCreated?: boolean }
+type GitActionResult = BranchActionSuccess | GitActionFailure
+
+function describeGitFailure(failure: GitActionFailure): string {
+  const detail = failure.detail ? `\n\n${failure.detail}` : ""
+  return failure.localCommitCreated
+    ? `${failure.message}\n\nA local commit was created, but the push did not complete.${detail}`
+    : `${failure.message}${detail}`
+}
 
 export interface ChatPageSidebarActionsPorts {
   dom?: DomPort
@@ -94,6 +107,28 @@ export function useChatPageSidebarActions({
     }, 1_000)
   }, [refreshDiffs, showRightSidebar, timer])
 
+  const alertGitFailure = useCallback(async <T,>(failureTitle: string, run: () => Promise<T>): Promise<T | null> => {
+    try {
+      return await run()
+    } catch (error) {
+      await dialog.alert({ title: failureTitle, description: errorMessage(error), closeLabel: "OK" })
+      return null
+    }
+  }, [dialog])
+
+  const runGitAction = useCallback(<R extends GitActionResult>(
+    failureTitle: string,
+    refresh: () => void,
+    send: () => Promise<R>,
+  ): Promise<R | null> => alertGitFailure(failureTitle, async () => {
+    const result = await send()
+    if (result.snapshotChanged) refresh()
+    if (!result.ok && !result.cancelled) {
+      await dialog.alert({ title: result.title, description: describeGitFailure(result), closeLabel: "OK" })
+    }
+    return result
+  }), [alertGitFailure, dialog])
+
   const handleOpenDiffFile = useCallback((filePath: string) => {
     const projectPath = projectPathRef.current
     const resolvedPath = resolveDiffFilePath(projectPath, filePath)
@@ -135,20 +170,12 @@ export function useChatPageSidebarActions({
     })
     if (!confirmed) return
 
-    try {
-      await state.socket.command({
-        type: "chat.discardDiffFile",
-        chatId,
-        path: filePath,
-      })
-    } catch (error) {
-      await dialog.alert({
-        title: "Discard failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-    }
-  }, [dialog, state.socket])
+    await alertGitFailure("Discard failed", () => state.socket.command({
+      type: "chat.discardDiffFile",
+      chatId,
+      path: filePath,
+    }))
+  }, [alertGitFailure, dialog, state.socket])
 
   const handleIgnoreDiffFile = useCallback(async (filePath: string) => {
     const chatId = activeChatIdRef.current
@@ -162,20 +189,12 @@ export function useChatPageSidebarActions({
     })
     if (!confirmed) return
 
-    try {
-      await state.socket.command({
-        type: "chat.ignoreDiffFile",
-        chatId,
-        path: filePath,
-      })
-    } catch (error) {
-      await dialog.alert({
-        title: "Ignore failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-    }
-  }, [dialog, state.socket])
+    await alertGitFailure("Ignore failed", () => state.socket.command({
+      type: "chat.ignoreDiffFile",
+      chatId,
+      path: filePath,
+    }))
+  }, [alertGitFailure, dialog, state.socket])
 
   const handleIgnoreDiffFolder = useCallback(async (filePath: string) => {
     const chatId = activeChatIdRef.current
@@ -192,20 +211,12 @@ export function useChatPageSidebarActions({
     })
     if (!ignorePath) return
 
-    try {
-      await state.socket.command({
-        type: "chat.ignoreDiffFile",
-        chatId,
-        path: ignorePath,
-      })
-    } catch (error) {
-      await dialog.alert({
-        title: "Ignore failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-    }
-  }, [dialog, state.socket])
+    await alertGitFailure("Ignore failed", () => state.socket.command({
+      type: "chat.ignoreDiffFile",
+      chatId,
+      path: ignorePath,
+    }))
+  }, [alertGitFailure, dialog, state.socket])
 
   const handleOpenDiffInFinder = useCallback((filePath: string) => {
     return handleOpenExternalPath("open_finder", filePath)
@@ -216,37 +227,15 @@ export function useChatPageSidebarActions({
     if (!chatId) {
       return null
     }
-    try {
-      const result = await state.socket.command({
-        type: "chat.commitDiffs",
-        chatId,
-        paths: args.paths,
-        summary: args.summary,
-        description: args.description,
-        mode: args.mode,
-      })
-      if (result.snapshotChanged) {
-        refreshDiffs()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: result.localCommitCreated
-            ? `${result.message}\n\nA local commit was created, but the push did not complete.${result.detail ? `\n\n${result.detail}` : ""}`
-            : `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-      return result
-    } catch (error) {
-      await dialog.alert({
-        title: "Commit failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-      return null
-    }
-  }, [dialog, refreshDiffs, state.socket])
+    return await runGitAction("Commit failed", refreshDiffs, () => state.socket.command({
+      type: "chat.commitDiffs",
+      chatId,
+      paths: args.paths,
+      summary: args.summary,
+      description: args.description,
+      mode: args.mode,
+    }))
+  }, [refreshDiffs, runGitAction, state.socket])
 
   const handleSyncBranch = useCallback(async (action: "fetch" | "pull" | "push" | "publish") => {
     const chatId = activeChatIdRef.current
@@ -254,32 +243,12 @@ export function useChatPageSidebarActions({
       return null
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.syncBranch",
-        chatId,
-        action,
-      })
-      if (result.snapshotChanged) {
-        refreshDiffs()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-      return result
-    } catch (error) {
-      await dialog.alert({
-        title: "Git sync failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-      return null
-    }
-  }, [dialog, refreshDiffs, state.socket])
+    return await runGitAction("Git sync failed", refreshDiffs, () => state.socket.command({
+      type: "chat.syncBranch",
+      chatId,
+      action,
+    }))
+  }, [refreshDiffs, runGitAction, state.socket])
 
   const handleGenerateCommitMessage = useCallback(async (args: { paths: string[] }) => {
     const chatId = activeChatIdRef.current
@@ -305,31 +274,11 @@ export function useChatPageSidebarActions({
       return null
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.initGit",
-        chatId,
-      })
-      if (result.snapshotChanged) {
-        refreshProjectGitSnapshot()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-      return result
-    } catch (error) {
-      await dialog.alert({
-        title: "Initialize git failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-      return null
-    }
-  }, [dialog, refreshProjectGitSnapshot, state.socket])
+    return await runGitAction("Initialize git failed", refreshProjectGitSnapshot, () => state.socket.command({
+      type: "chat.initGit",
+      chatId,
+    }))
+  }, [refreshProjectGitSnapshot, runGitAction, state.socket])
 
   const handleGetGitHubPublishInfo = useCallback(async () => {
     const chatId = activeChatIdRef.current
@@ -376,35 +325,15 @@ export function useChatPageSidebarActions({
       return null
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.publishToGitHub",
-        chatId,
-        owner: args.owner,
-        name: args.name,
-        visibility: args.visibility,
-        description: args.description.trim() || undefined,
-      })
-      if (result.snapshotChanged) {
-        refreshProjectGitSnapshot()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-      return result
-    } catch (error) {
-      await dialog.alert({
-        title: "Publish failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-      return null
-    }
-  }, [dialog, refreshProjectGitSnapshot, state.socket])
+    return await runGitAction("Publish failed", refreshProjectGitSnapshot, () => state.socket.command({
+      type: "chat.publishToGitHub",
+      chatId,
+      owner: args.owner,
+      name: args.name,
+      visibility: args.visibility,
+      description: args.description.trim() || undefined,
+    }))
+  }, [refreshProjectGitSnapshot, runGitAction, state.socket])
 
   const handleListBranches = useCallback(async () => {
     const chatId = activeChatIdRef.current
@@ -444,32 +373,13 @@ export function useChatPageSidebarActions({
       bringChanges = true
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.checkoutBranch",
-        chatId,
-        branch: serializeBranchSelection(branch),
-        bringChanges,
-      })
-
-      if (result.snapshotChanged) {
-        refreshDiffs()
-      }
-      if (!result.ok && !result.cancelled) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-    } catch (error) {
-      await dialog.alert({
-        title: "Checkout failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-    }
-  }, [dialog, refreshDiffs, state.chatDiffSnapshot?.files.length, state.socket])
+    await runGitAction("Checkout failed", refreshDiffs, () => state.socket.command({
+      type: "chat.checkoutBranch",
+      chatId,
+      branch: serializeBranchSelection(branch),
+      bringChanges,
+    }))
+  }, [dialog, refreshDiffs, runGitAction, state.chatDiffSnapshot?.files.length, state.socket])
 
   const handlePreviewMergeBranch = useCallback(async (branch: ChatBranchListEntry) => {
     const chatId = activeChatIdRef.current
@@ -498,33 +408,12 @@ export function useChatPageSidebarActions({
       return null
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.mergeBranch",
-        chatId,
-        branch: serializeBranchSelection(branch),
-      })
-
-      if (result.snapshotChanged) {
-        refreshDiffs()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-      return result
-    } catch (error) {
-      await dialog.alert({
-        title: "Merge failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-      return null
-    }
-  }, [dialog, refreshDiffs, state.socket])
+    return await runGitAction("Merge failed", refreshDiffs, () => state.socket.command({
+      type: "chat.mergeBranch",
+      chatId,
+      branch: serializeBranchSelection(branch),
+    }))
+  }, [refreshDiffs, runGitAction, state.socket])
 
   const handleCreateBranch = useCallback(async () => {
     const chatId = activeChatIdRef.current
@@ -557,32 +446,13 @@ export function useChatPageSidebarActions({
       baseBranchName = createFromCurrent ? currentBranchName : defaultBranchName
     }
 
-    try {
-      const result = await state.socket.command({
-        type: "chat.createBranch",
-        chatId,
-        name,
-        baseBranchName,
-      })
-
-      if (result.snapshotChanged) {
-        refreshDiffs()
-      }
-      if (!result.ok) {
-        await dialog.alert({
-          title: result.title,
-          description: `${result.message}${result.detail ? `\n\n${result.detail}` : ""}`,
-          closeLabel: "OK",
-        })
-      }
-    } catch (error) {
-      await dialog.alert({
-        title: "Create branch failed",
-        description: error instanceof Error ? error.message : String(error),
-        closeLabel: "OK",
-      })
-    }
-  }, [dialog, handleListBranches, refreshDiffs, state.socket])
+    await runGitAction("Create branch failed", refreshDiffs, () => state.socket.command({
+      type: "chat.createBranch",
+      chatId,
+      name,
+      baseBranchName,
+    }))
+  }, [dialog, handleListBranches, refreshDiffs, runGitAction, state.socket])
 
   useEffect(() => {
     if (!projectId || !showRightSidebar) {

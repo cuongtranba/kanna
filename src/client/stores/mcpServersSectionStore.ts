@@ -1,7 +1,6 @@
 import { create } from "zustand"
 import type { McpServerConfig, McpServerTransport } from "../../shared/types"
 
-const EMPTY_TESTING_IDS: ReadonlySet<string> = new Set()
 
 export type EditingState =
   | { kind: "list" }
@@ -18,7 +17,6 @@ export interface EditorFormState {
   url: string
   headersText: string
   error: string | null
-  submitting: boolean
   oauthEnabled: boolean
   authFlowUrl: string | null
   callbackInput: string
@@ -48,7 +46,6 @@ function createEditorFormFromInitial(initial: McpServerConfig | null): EditorFor
             .join("\n")
         : "",
     error: null,
-    submitting: false,
     oauthEnabled:
       initial !== null && initial.transport !== "stdio"
         ? (initial.oauth?.enabled ?? false)
@@ -64,33 +61,18 @@ function createEditorFormFromInitial(initial: McpServerConfig | null): EditorFor
 interface McpServersSectionState {
   editing: EditingState
 
-  testingServerIds: ReadonlySet<string>
-
   editorForm: EditorFormState
 
   setEditing: (editing: EditingState) => void
-  setServerTesting: (id: string, testing: boolean) => void
   resetEditorForm: (initial: McpServerConfig | null) => void
   patchEditorForm: (patch: Partial<EditorFormState>) => void
 }
 
 export const useMcpServersSectionStore = create<McpServersSectionState>()((set) => ({
   editing: { kind: "list" },
-  testingServerIds: EMPTY_TESTING_IDS,
   editorForm: createEditorFormFromInitial(null),
 
   setEditing: (editing) => set({ editing }),
-
-  setServerTesting: (id, testing) =>
-    set((state) => {
-      const next = new Set(state.testingServerIds)
-      if (testing) {
-        next.add(id)
-      } else {
-        next.delete(id)
-      }
-      return { testingServerIds: next.size === 0 ? EMPTY_TESTING_IDS : next }
-    }),
 
   resetEditorForm: (initial) => set({ editorForm: createEditorFormFromInitial(initial) }),
 

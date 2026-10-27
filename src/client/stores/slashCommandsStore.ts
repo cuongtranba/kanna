@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { SlashCommand } from "../../shared/types"
+import { omitKey } from "../lib/recordOps"
 
 interface SlashCommandsState {
   byProjectId: Record<string, SlashCommand[]>
@@ -14,7 +15,6 @@ export const useSlashCommandsStore = create<SlashCommandsState>()((set) => ({
   clear: (projectId) =>
     set((state) => {
       if (!(projectId in state.byProjectId)) return state
-      const { [projectId]: _dropped, ...byProjectId } = state.byProjectId
-      return { byProjectId }
+      return { byProjectId: omitKey(state.byProjectId, projectId) }
     }),
 }))

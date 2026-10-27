@@ -1,10 +1,11 @@
 import { useCallback, useRef } from "react"
 import type { ChatAttachment } from "../../../../shared/types"
-import { AttachmentFileCard, formatAttachmentSize } from "../AttachmentCard"
+import { AttachmentFileCard } from "../AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel, fetchTextPreview } from "../attachmentPreview"
 import { useViewportFetch } from "./useViewportFetch"
 import type { PreviewSource } from "./types"
 import type { JsonValue } from "../../../../shared/json"
+import { formatByteSize } from "../../../lib/formatByteSize"
 
 function cachedSnippet(value: JsonValue): string | undefined {
   return typeof value === "string" ? value : undefined
@@ -29,7 +30,7 @@ export function InlinePreviewCard({ source, onOpen, variant }: Props) {
   }
   const iconKind = classifyAttachmentIcon(attachmentLike)
   const friendlyType = friendlyMimeLabel(iconKind, source.mimeType)
-  const sizeLabel = source.size && source.size > 0 ? formatAttachmentSize(source.size) : null
+  const sizeLabel = source.size && source.size > 0 ? formatByteSize(source.size) : null
 
   if (iconKind === "image") {
     return (

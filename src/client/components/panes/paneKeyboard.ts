@@ -1,5 +1,5 @@
 import type { KeybindingAction, KeybindingsSnapshot } from "../../../shared/app-settings-types"
-import { findMatchingActionBinding } from "../../lib/keybindings"
+import { bindingHasModifier, findMatchingActionBinding } from "../../lib/keybindings"
 import type { PaneDirection, SplitPosition } from "../../lib/paneTree"
 
 
@@ -25,15 +25,6 @@ const PANE_COMMANDS: ReadonlyArray<readonly [KeybindingAction, PaneCommand]> = [
   ["nextPaneTab", { kind: "cycleTab", delta: 1 }],
   ["previousPaneTab", { kind: "cycleTab", delta: -1 }],
 ]
-
-const MODIFIER_TOKENS = new Set(["cmd", "meta", "ctrl", "control", "alt", "option", "shift"])
-
-function bindingHasModifier(binding: string): boolean {
-  return binding
-    .split("+")
-    .map((token) => token.trim().toLowerCase())
-    .some((token) => MODIFIER_TOKENS.has(token))
-}
 
 export function isTypingTarget(
   target: { tagName?: string; isContentEditable?: boolean } | null,

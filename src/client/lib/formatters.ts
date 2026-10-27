@@ -28,10 +28,6 @@ export function formatBashCommandTitle(command: string): string {
   return trimmed
 }
 
-export function getPathBasename(fullPath: string): string {
-  return fullPath.split("/").pop() || fullPath
-}
-
 export function formatModelLabel(modelId: string): string {
   const shortModelName = modelId.split("/")[1]?.split(":")[0] ?? modelId
   return toTitleCase(shortModelName).replace(/^Claude\s+/i, "")

@@ -11,6 +11,7 @@ import { uploadFile } from "../../../lib/uploadFile.adapter"
 import { $createAttachmentNode } from "../nodes"
 import { runInlineUpload } from "./inlineUploadPending"
 import type { ChatAttachment } from "../../../../shared/types"
+import { errorMessage } from "../../../../shared/errors"
 
 
 export const MAX_FILES_PER_PASTE = 50
@@ -106,7 +107,7 @@ export async function uploadAndInsertFiles(
       })
     } catch (err) {
       if (err instanceof Error && err.name === "UploadAbortedError") return
-      onUploadError?.(err instanceof Error ? err.message : String(err))
+      onUploadError?.(errorMessage(err))
     }
 
     await processNext()

@@ -156,7 +156,9 @@ function SnippetEditor({
   const editorForm = useTextSnippetsSectionStore((state) => state.editorForm)
   const patchEditorForm = useTextSnippetsSectionStore((state) => state.patchEditorForm)
 
-  const { shortcut, expansion, submitting, error } = editorForm
+  const { shortcut, expansion, error } = editorForm
+  const saveKey = pendingActionKey("textSnippets.save", initial?.id ?? "new")
+  const submitting = usePendingAction(saveKey)
 
   const isEdit = initial !== null
   const trimmedShortcut = shortcut.trim()
@@ -179,7 +181,6 @@ function SnippetEditor({
         }
       },
       onDone,
-      fallbackMessage: "Failed to save snippet",
     })
 
   const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add snippet" })
@@ -222,7 +223,7 @@ function SnippetEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            runPendingAction(pendingActionKey("textSnippets.save", initial?.id ?? "new"), onSubmit)
+            runPendingAction(saveKey, onSubmit)
           }}
           pending={submitting}
           disabled={!canSave}

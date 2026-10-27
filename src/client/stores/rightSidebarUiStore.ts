@@ -6,20 +6,17 @@ import type {
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
 } from "../../shared/types"
+import { omitKey } from "../lib/recordOps"
 
 
 
 interface RightSidebarImplSlice {
-  isGenerating: boolean
   commitModeInFlight: DiffCommitMode | null
-  isSyncing: boolean
   isGitHubPublishModalOpen: boolean
   patchesByPath: Record<string, string>
   patchErrorsByPath: Record<string, string>
   loadingPatchPaths: Record<string, boolean>
-  setIsGenerating: (v: boolean) => void
   setCommitModeInFlight: (v: DiffCommitMode | null) => void
-  setIsSyncing: (v: boolean) => void
   setIsGitHubPublishModalOpen: (v: boolean) => void
   reconcilePatches: (filePaths: string[], isCurrentDigest: (path: string) => boolean) => void
   setPatchLoading: (path: string) => void
@@ -96,17 +93,13 @@ type RightSidebarUiState = RightSidebarImplSlice
   & GitHubPublishModalSlice
 
 export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
-  isGenerating: false,
   commitModeInFlight: null,
-  isSyncing: false,
   isGitHubPublishModalOpen: false,
   patchesByPath: {},
   patchErrorsByPath: {},
   loadingPatchPaths: {},
 
-  setIsGenerating: (v) => set({ isGenerating: v }),
   setCommitModeInFlight: (v) => set({ commitModeInFlight: v }),
-  setIsSyncing: (v) => set({ isSyncing: v }),
   setIsGitHubPublishModalOpen: (v) => set({ isGitHubPublishModalOpen: v }),
 
   reconcilePatches: (filePaths, isCurrentDigest) => set((state) => ({
@@ -124,13 +117,11 @@ export const useRightSidebarUiStore = create<RightSidebarUiState>()((set) => ({
     loadingPatchPaths: { ...state.loadingPatchPaths, [path]: true },
   })),
   clearPatchLoading: (path) => set((state) => {
-    const { [path]: _removed, ...rest } = state.loadingPatchPaths
-    return { loadingPatchPaths: rest }
+    return { loadingPatchPaths: omitKey(state.loadingPatchPaths, path) }
   }),
   clearPatchError: (path) => set((state) => {
     if (!(path in state.patchErrorsByPath)) return state
-    const { [path]: _removed, ...rest } = state.patchErrorsByPath
-    return { patchErrorsByPath: rest }
+    return { patchErrorsByPath: omitKey(state.patchErrorsByPath, path) }
   }),
   setPatchResult: (path, patch) => set((state) => ({
     patchesByPath: { ...state.patchesByPath, [path]: patch },

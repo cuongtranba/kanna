@@ -15,6 +15,7 @@ import { LOG_PREFIX } from "../../shared/branding"
 import { onRejected } from "../../shared/errors"
 import { log } from "../../shared/log"
 import { runDetached } from "../lib/runDetached"
+import { chatPath } from "../lib/paneTree"
 
 
 export interface WorkflowsPageViewProps {
@@ -217,7 +218,7 @@ export function WorkflowsPage({ chatId }: { chatId?: string }) {
 
   const handleBackToChat = useCallback(() => {
     if (!chatId) return
-    navigate(`/chat/${chatId}`)
+    navigate(chatPath(chatId))
   }, [chatId, navigate])
 
   if (!chatId) {

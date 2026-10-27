@@ -2,7 +2,9 @@ import { fileNameOfPath } from "../../lib/pathUtils"
 import { InlinePreviewCard } from "./file-preview/InlinePreviewCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import type { PreviewSource } from "./file-preview/types"
-import { ImageViewMessageStore } from "./ImageViewMessage.store"
+import { createToggleStore } from "../../lib/createToggleStore"
+
+const ImageViewMessageStore = createToggleStore("ImageViewMessage")
 
 interface Props {
   toolId: string
@@ -12,8 +14,8 @@ interface Props {
 }
 
 function ImageViewMessageInner({ toolId, path, contentUrl, mimeType }: Props) {
-  const open = ImageViewMessageStore.useScopedStore((s) => s.open)
-  const setOpen = ImageViewMessageStore.useScopedStore((s) => s.setOpen)
+  const open = ImageViewMessageStore.useScopedStore((s) => s.value)
+  const setOpen = ImageViewMessageStore.useScopedStore((s) => s.set)
   const fileName = fileNameOfPath(path)
 
   if (!contentUrl) {
@@ -44,7 +46,7 @@ function ImageViewMessageInner({ toolId, path, contentUrl, mimeType }: Props) {
 
 export function ImageViewMessage(props: Props) {
   return (
-    <ImageViewMessageStore.Provider init={undefined}>
+    <ImageViewMessageStore.Provider init={false}>
       <ImageViewMessageInner {...props} />
     </ImageViewMessageStore.Provider>
   )

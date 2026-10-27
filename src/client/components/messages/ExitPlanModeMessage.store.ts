@@ -3,12 +3,10 @@ import { createScopedStore } from "../../lib/createScopedStore"
 
 export interface ExitPlanModeMessageState {
   expanded: boolean
-  copied: boolean
   showEditInput: boolean
   editMessage: string
 
   setExpanded: (expanded: boolean) => void
-  setCopied: (copied: boolean) => void
   setEditMessage: (editMessage: string) => void
   openEdit: () => void
   cancelEdit: () => void
@@ -17,12 +15,10 @@ export interface ExitPlanModeMessageState {
 export function createExitPlanModeMessageState(): StateCreator<ExitPlanModeMessageState> {
   return (set) => ({
     expanded: false,
-    copied: false,
     showEditInput: false,
     editMessage: "",
 
     setExpanded: (expanded) => set({ expanded }),
-    setCopied: (copied) => set({ copied }),
     setEditMessage: (editMessage) => set({ editMessage }),
 
     openEdit: () => set({ showEditInput: true }),

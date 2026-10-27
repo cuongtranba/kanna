@@ -7,6 +7,7 @@ import type {
   DiffCommitMode,
 } from "../../../shared/types"
 import { buildProjectFileContentUrl } from "../../../shared/projectFileUrl"
+import { fileNameOfPath } from "../../lib/pathUtils"
 
 export type RepositorySyncAction = "fetch" | "pull" | "publish"
 
@@ -221,7 +222,7 @@ export function getDiffPreviewAttachment(
   return {
     id: `diff:${file.path}`,
     kind: file.mimeType.startsWith("image/") ? "image" : "file",
-    displayName: file.path.split("/").pop() ?? file.path,
+    displayName: fileNameOfPath(file.path),
     absolutePath: file.path,
     relativePath: file.path,
     contentUrl: buildProjectFileContentUrl(projectId, file.path) ?? "",

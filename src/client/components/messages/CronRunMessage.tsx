@@ -5,6 +5,7 @@ import { formatStartedClock } from "../../lib/formatters"
 import { cronRunLabel, cronRunTone } from "../../lib/statusLabel"
 import { StateMarkLabel } from "../ui/state-mark"
 import type { ProcessedCronRunMessage } from "./types"
+import { chatPath } from "../../lib/paneTree"
 
 interface Props {
   message: ProcessedCronRunMessage
@@ -32,7 +33,7 @@ export function CronRunMessage({ message, cronJobs }: Props) {
       <p className="mt-1.5 text-sm text-foreground/90">{message.instruction}</p>
       {message.spawnedChatId ? (
         <Link
-          to={`/chat/${message.spawnedChatId}`}
+          to={chatPath(message.spawnedChatId)}
           className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
         >
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />

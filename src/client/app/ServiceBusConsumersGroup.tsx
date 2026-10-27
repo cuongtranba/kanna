@@ -9,7 +9,7 @@ import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSett
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { selectServiceBusStatus, useServiceBusStore } from "../stores/serviceBusStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
-import { errorMessage } from "../../shared/errors"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
 
@@ -63,15 +63,10 @@ export function ServiceBusConsumersGroup({ state }: { state: Pick<KannaState, "h
   const saving = usePendingAction(SAVE_KEY)
 
   const write = useCallback(
-    async (consumers: JetStreamConsumerSettings[]) => {
-      setError(null)
-      try {
-        await state.handleWriteAppSettings({ serviceBus: { consumers } })
-        closeConsumerEditor()
-      } catch (caught) {
-        setError(errorMessage(caught))
-      }
-    },
+    (consumers: JetStreamConsumerSettings[]) => surfaceErrorIn(setError, async () => {
+      await state.handleWriteAppSettings({ serviceBus: { consumers } })
+      closeConsumerEditor()
+    }),
     [state, closeConsumerEditor, setError],
   )
 

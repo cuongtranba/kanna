@@ -15,26 +15,22 @@ interface WebhooksState {
   hooks: readonly WebhookSummary[]
   secretReveal: WebhookSecretReveal | null
   editor: WebhookEditor | null
-  copiedId: string | null
   setHooks(hooks: readonly WebhookSummary[]): void
   revealSecret(reveal: WebhookSecretReveal): void
   dismissSecret(): void
   openCreate(): void
   openEdit(hookId: string): void
   closeEditor(): void
-  markCopied(copyId: string): void
 }
 
 export const useWebhooksStore = create<WebhooksState>()((set) => ({
   hooks: EMPTY,
   secretReveal: null,
   editor: null,
-  copiedId: null,
   setHooks: (hooks) => set({ hooks: hooks.length > 0 ? hooks : EMPTY }),
   revealSecret: (secretReveal) => set({ secretReveal }),
   dismissSecret: () => set({ secretReveal: null }),
   openCreate: () => set({ editor: { mode: "create" } }),
   openEdit: (hookId) => set({ editor: { mode: "edit", hookId } }),
   closeEditor: () => set({ editor: null }),
-  markCopied: (copiedId) => set({ copiedId }),
 }))

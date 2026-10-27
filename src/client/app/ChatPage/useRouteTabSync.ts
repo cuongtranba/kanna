@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import {
-  collectPanes,
-  fallbackPathAfterClose,
-  pageTargetForPath,
-  type PageTabTarget,
-  type PaneTabTarget,
-} from "../../lib/paneTree"
+import { collectPanes, fallbackPathAfterClose, pageTargetForPath, type PageTabTarget, type PaneTabTarget, chatPath } from "../../lib/paneTree"
 import { usePaneLayoutStore } from "../../stores/paneLayoutStore"
 import { useAppGlobalContext } from "../AppGlobalProvider"
 
@@ -46,7 +40,7 @@ export function useRouteTabSync({ activeChatId, routeBoardId }: RouteTabSyncArgs
     const layout = getPaneLayout()
     const pane = collectPanes(layout.root).find((candidate) => candidate.id === layout.focusedPaneId)
     const target = pane?.tabs.find((tab) => tab.tabId === pane.focusedTabId)?.target
-    if (target?.kind === "chat" && pathname !== `/chat/${target.chatId}`) {
+    if (target?.kind === "chat" && pathname !== chatPath(target.chatId)) {
       chatNavigator.openChat(target.chatId)
     }
     if (target?.kind === "page" && pathname !== target.path) {

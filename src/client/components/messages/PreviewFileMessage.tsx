@@ -2,11 +2,12 @@ import { useEffect } from "react"
 import type { ChatAttachment, HydratedPreviewFileToolCall } from "../../../shared/types"
 import { probeFileUrl } from "../../api/files"
 import { runDetached } from "../../lib/runDetached"
-import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
+import { AttachmentFileCard } from "./AttachmentCard"
 import { classifyAttachmentIcon, friendlyMimeLabel } from "./attachmentPreview"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
 import { PreviewFileMessageStore } from "./PreviewFileMessage.store"
+import { formatByteSize } from "../../lib/formatByteSize"
 
 interface Props {
   message: HydratedPreviewFileToolCall
@@ -46,7 +47,7 @@ function PreviewFileMessageInner({ message }: Props) {
 
   const iconKind = classifyAttachmentIcon(attachment)
   const friendlyType = friendlyMimeLabel(iconKind, result.mimeType)
-  const sizeLabel = result.size > 0 ? formatAttachmentSize(result.size) : null
+  const sizeLabel = result.size > 0 ? formatByteSize(result.size) : null
   const meta = (
     <>
       {friendlyType}

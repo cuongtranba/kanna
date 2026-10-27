@@ -1,39 +1,7 @@
 import type { SlashCommand } from "../../shared/types"
 
-const SLASH_TOKEN_PATTERN = /^\/(\S*)$/
-
 export function normalizeCommandName(name: string): string {
   return name.replace(/^\/+/, "")
-}
-
-export function applyCommandToInput(args: {
-  value: string
-  caret: number
-  command: SlashCommand
-}): { value: string; caret: number } {
-  const { command, value, caret } = args
-  const upToCaret = value.slice(0, caret)
-  const afterCaret = value.slice(caret)
-  const match = /^\/(\S*)$/.exec(upToCaret)
-  if (!match) return { value, caret }
-  const tokenLength = match[0].length
-  const before = upToCaret.slice(0, upToCaret.length - tokenLength)
-  const cleanName = normalizeCommandName(command.name)
-  const replacement = command.argumentHint ? `/${cleanName} ` : `/${cleanName}`
-  const nextValue = `${before}${replacement}${afterCaret}`
-  const nextCaret = before.length + replacement.length
-  return { value: nextValue, caret: nextCaret }
-}
-
-export function shouldShowPicker(
-  value: string,
-  caret: number,
-): { open: boolean; query: string } {
-  if (caret <= 0) return { open: false, query: "" }
-  const upToCaret = value.slice(0, caret)
-  const match = SLASH_TOKEN_PATTERN.exec(upToCaret)
-  if (!match) return { open: false, query: "" }
-  return { open: true, query: match[1] ?? "" }
 }
 
 const SCOPE_RANK: Record<string, number> = { project: 0, personal: 0, builtin: 1, plugin: 2 }

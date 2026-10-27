@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { SerializedEditorState } from "lexical"
 import type { UploadedAttachment } from "../../shared/types"
+import { omitKey } from "../lib/recordOps"
 
 
 export interface DraftEntry {
@@ -48,15 +49,13 @@ export const useChatInputStore = create<ChatInputState>()(
 
           if (typeof valueOrState === "string") {
             if (!valueOrState) {
-              const { [chatId]: _, ...rest } = state.drafts
-              return { drafts: rest }
+              return { drafts: omitKey(state.drafts, chatId) }
             }
             entry = { text: valueOrState }
           } else {
             const plainText = text ?? ""
             if (!plainText) {
-              const { [chatId]: _, ...rest } = state.drafts
-              return { drafts: rest }
+              return { drafts: omitKey(state.drafts, chatId) }
             }
             entry = { text: plainText, lexicalState: valueOrState }
           }
@@ -66,8 +65,7 @@ export const useChatInputStore = create<ChatInputState>()(
 
       clearDraft: (chatId) =>
         set((state) => {
-          const { [chatId]: _, ...rest } = state.drafts
-          return { drafts: rest }
+          return { drafts: omitKey(state.drafts, chatId) }
         }),
 
       getDraft: (chatId) => normalizeDraft(get().drafts[chatId]),
@@ -75,8 +73,7 @@ export const useChatInputStore = create<ChatInputState>()(
       setAttachmentDrafts: (chatId, attachments) =>
         set((state) => {
           if (attachments.length === 0) {
-            const { [chatId]: _, ...rest } = state.attachmentDrafts
-            return { attachmentDrafts: rest }
+            return { attachmentDrafts: omitKey(state.attachmentDrafts, chatId) }
           }
           return {
             attachmentDrafts: {
@@ -88,8 +85,7 @@ export const useChatInputStore = create<ChatInputState>()(
 
       clearAttachmentDrafts: (chatId) =>
         set((state) => {
-          const { [chatId]: _, ...rest } = state.attachmentDrafts
-          return { attachmentDrafts: rest }
+          return { attachmentDrafts: omitKey(state.attachmentDrafts, chatId) }
         }),
 
       getAttachmentDrafts: (chatId) => get().attachmentDrafts[chatId] ?? [],

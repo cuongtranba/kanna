@@ -1,14 +1,14 @@
 import { FileText } from "lucide-react"
 import type { ProcessedMemoryLoadedMessage } from "./types"
+import { fileNameOfPath } from "../../lib/pathUtils"
 
 interface Props {
   message: ProcessedMemoryLoadedMessage
 }
 
 export function MemoryLoadedMessage({ message }: Props) {
-  const lastSlash = message.path.lastIndexOf("/")
-  const dir = lastSlash >= 0 ? message.path.slice(0, lastSlash + 1) : ""
-  const base = lastSlash >= 0 ? message.path.slice(lastSlash + 1) : message.path
+  const base = fileNameOfPath(message.path)
+  const dir = message.path.slice(0, message.path.lastIndexOf(base))
 
   return (
     <div className="flex items-center gap-2 text-muted-foreground">

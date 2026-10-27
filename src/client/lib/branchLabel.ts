@@ -1,3 +1,5 @@
+import { fileNameOfPath, shortenHomePath } from "./pathUtils"
+
 export interface BranchLabelInput {
   hasGitRepo?: boolean
   gitStatus?: "unknown" | "ready" | "no_repo"
@@ -6,23 +8,8 @@ export interface BranchLabelInput {
   homeDir?: string
 }
 
-function stripTrailingSep(path: string): string {
-  return path.replace(/[/\\]+$/, "")
-}
-
 function displayPath(localPath: string, homeDir?: string): string {
-  const path = stripTrailingSep(localPath)
-  if (!homeDir) {
-    return path.split(/[/\\]/).filter(Boolean).pop() ?? ""
-  }
-  const home = stripTrailingSep(homeDir)
-  if (path === home) return "~"
-  for (const sep of ["/", "\\"]) {
-    if (path.startsWith(home + sep)) {
-      return `~/${  path.slice(home.length + 1).replace(/\\/g, "/")}`
-    }
-  }
-  return path
+  return homeDir ? shortenHomePath(localPath, homeDir) : fileNameOfPath(localPath)
 }
 
 export function branchLabel({

@@ -3,7 +3,7 @@ import { Button } from "../components/ui/button"
 import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
-import { sendInboxCommand } from "../lib/inboxCommands"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { NO_CHAT_REPLY_REASON } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -36,14 +36,14 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
 
   const handleReply = useCallback(() => {
     runPendingAction(replyKey, async () => {
-      await sendInboxCommand(socket, { type: "inbox.reply", threadId: thread.id, text: draft })
+      await sendCommandWithFeedback(socket, { type: "inbox.reply", threadId: thread.id, text: draft })
       useInboxStore.getState().clearReplyDraft(thread.id)
     })
   }, [draft, replyKey, socket, thread.id])
 
   const handleInstruct = useCallback(() => {
     runPendingAction(instructKey, async () => {
-      await sendInboxCommand(socket, { type: "inbox.instruct", threadId: thread.id, text: draft })
+      await sendCommandWithFeedback(socket, { type: "inbox.instruct", threadId: thread.id, text: draft })
       useInboxStore.getState().clearReplyDraft(thread.id)
     })
   }, [draft, instructKey, socket, thread.id])
@@ -54,7 +54,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
 
   const handleArchive = useCallback(() => {
     runPendingAction(archiveKey, async () => {
-      await sendInboxCommand(socket, { type: "inbox.archive", threadId: thread.id })
+      await sendCommandWithFeedback(socket, { type: "inbox.archive", threadId: thread.id })
       onArchived()
     })
   }, [archiveKey, onArchived, socket, thread.id])

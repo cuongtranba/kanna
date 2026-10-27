@@ -8,6 +8,7 @@ import { SearchableSelect, type SearchableOption } from "../components/ui/search
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
 import { mcpSourceInputFromDraft, mcpSourcePatchFromInput, type McpSourceDraft } from "../lib/mcpSourceDraft"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { mcpSourceModeConsequence, mcpSourceModeLabel } from "../lib/mcpSourcePresentation"
 import { webhookModeConsequence, webhookModeLabel } from "../lib/webhookPresentation"
 import { listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
@@ -114,16 +115,11 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
   const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => patchDraft({ name: event.target.value }), [patchDraft])
   const handleSave = useCallback(() => {
     if (!result.ok) return
-    runPendingAction(saveKey, async () => {
-      setError(null)
-      try {
-        if (editing) await handlers.onUpdate(editing.id, mcpSourcePatchFromInput(result.input))
-        else await handlers.onCreate(result.input)
-        closeEditor()
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Failed to save the MCP source")
-      }
-    })
+    runPendingAction(saveKey, () => surfaceErrorIn(setError, async () => {
+      if (editing) await handlers.onUpdate(editing.id, mcpSourcePatchFromInput(result.input))
+      else await handlers.onCreate(result.input)
+      closeEditor()
+    }))
   }, [closeEditor, editing, handlers, result, saveKey, setError])
 
   return (

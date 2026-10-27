@@ -10,11 +10,11 @@ import { useNow } from "../../hooks/useNow"
 import { statusLabel, statusTone, statusToneClass } from "../../lib/statusLabel"
 import { formatSidebarAgeLabel } from "../../lib/formatters"
 import { cn } from "../../lib/utils"
+import { shortenHomePath } from "../../lib/pathUtils"
 import {
   filterProjects,
   filterSessions,
   isMacUserAgent,
-  shortenHomePath,
   toQuickSwitcherProjects,
   toQuickSwitcherSessions,
   type QuickSwitcherProject,

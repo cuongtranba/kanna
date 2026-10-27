@@ -19,6 +19,8 @@ import { cn } from "../../lib/utils"
 import { classifyAttachmentIcon, type AttachmentIconKind } from "./attachmentPreview"
 import { AttachmentUploadOverlay } from "./AttachmentUploadOverlay"
 import { LucideIconWrapper } from "./shared"
+import { fileNameOfPath, parentDirOfPath } from "../../lib/pathUtils"
+import { formatByteSize } from "../../lib/formatByteSize"
 
 type BaseAttachmentCardProps = {
   attachment: ChatAttachment
@@ -95,7 +97,7 @@ export function AttachmentImageCard({
         >
           <div className={cn("truncate font-medium text-white", isComposer ? "text-xs" : "text-sm")}>{attachment.displayName}</div>
           <div className="truncate text-xs text-white/80">
-            {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+            {attachment.mimeType} · {formatByteSize(attachment.size)}
           </div>
         </div>
       </button>
@@ -128,8 +130,8 @@ export function AttachmentFileCard({
   const iconKind: AttachmentIconKind = attachment.kind === "mention" ? "text" : classifyAttachmentIcon(attachment)
   const Icon = getAttachmentIcon(iconKind)
   const isMention = attachment.kind === "mention"
-  const mentionLabel = isMention ? basename(attachment.displayName) : attachment.displayName
-  const mentionSubtitle = isMention ? parentPath(attachment.displayName) : ""
+  const mentionLabel = isMention ? fileNameOfPath(attachment.displayName) : attachment.displayName
+  const mentionSubtitle = isMention ? parentDirOfPath(attachment.displayName) : ""
   const showUploadOverlay = uploadProgress !== undefined
   const isDisabled = Boolean(disabledReason)
 
@@ -154,7 +156,7 @@ export function AttachmentFileCard({
   } else {
     subtitle = (
       <div className="truncate text-xs text-muted-foreground">
-        {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+        {attachment.mimeType} · {formatByteSize(attachment.size)}
       </div>
     )
   }
@@ -210,18 +212,6 @@ export function AttachmentFileCard({
   )
 }
 
-function basename(relativePath: string): string {
-  const cleaned = relativePath.replace(/\/+$/, "")
-  const idx = cleaned.lastIndexOf("/")
-  return idx >= 0 ? cleaned.slice(idx + 1) : cleaned
-}
-
-function parentPath(relativePath: string): string {
-  const cleaned = relativePath.replace(/\/+$/, "")
-  const idx = cleaned.lastIndexOf("/")
-  return idx >= 0 ? cleaned.slice(0, idx) : ""
-}
-
 function RemoveButton({ displayName, onRemove }: { displayName: string; onRemove: () => void }) {
   return (
     <button
@@ -266,8 +256,3 @@ function getAttachmentIcon(kind: AttachmentIconKind): LucideIcon {
   }
 }
 
-export function formatAttachmentSize(size: number): string {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
-}

@@ -27,7 +27,7 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import { useProviderCatalog } from "./useProviderCatalog"
-import { sendWebhookCommand } from "./webhookCommands"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { selectWebhookDraftFields, WebhookCreateStore } from "./WebhookCreateDialog.store"
 import { WebhookGenericFields } from "./WebhookGenericFields"
 import { WebhookSlackFields } from "./WebhookSlackFields"
@@ -100,7 +100,7 @@ function WebhookEditorForm({ sidebarData, origin, onCreate, editing }: FormProps
     if (errors.length > 0) return
     runPendingAction(submitKey, async () => {
       if (editing) {
-        await sendWebhookCommand(socket, { type: "webhooks.update", id: editing.id, patch: buildWebhookPatch(input) })
+        await sendCommandWithFeedback(socket, { type: "webhooks.update", id: editing.id, patch: buildWebhookPatch(input) })
       } else {
         await onCreate(input)
       }

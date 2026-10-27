@@ -3,11 +3,12 @@ import { probeFileUrl } from "../../api/files"
 import { runDetached } from "../../lib/runDetached"
 import type { HttpPort } from "../../ports/httpPort"
 import type { ChatAttachment, HydratedOfferDownloadToolCall } from "../../../shared/types"
-import { AttachmentFileCard, formatAttachmentSize } from "./AttachmentCard"
+import { AttachmentFileCard } from "./AttachmentCard"
 import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment } from "./file-preview/types"
 import { OfferDownloadMessageStore } from "./OfferDownloadMessage.store"
+import { formatByteSize } from "../../lib/formatByteSize"
 
 interface Props {
   message: HydratedOfferDownloadToolCall
@@ -48,7 +49,7 @@ function OfferDownloadMessageInner({ message, http }: Props) {
 
   const iconKind = classifyAttachmentIcon(attachment)
   const friendlyType = friendlyMimeLabel(iconKind, result.mimeType)
-  const sizeLabel = result.size > 0 ? formatAttachmentSize(result.size) : null
+  const sizeLabel = result.size > 0 ? formatByteSize(result.size) : null
   const meta = (
     <>
       {friendlyType}

@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { BoardsPage } from "../components/boards/BoardsPage"
-import { getPathBasename } from "../lib/formatters"
+import { fileNameOfPath } from "../lib/pathUtils"
 import type { KannaState } from "./useKannaState"
 import type { SidebarProjectGroup } from "../../shared/types"
 
@@ -14,7 +14,7 @@ export function BoardsRoutePage({ projectId }: { projectId: string }) {
     ...state.sidebarData.projectGroups,
   ]
   const group = groups.find((candidate) => candidate.groupKey === projectId)
-  const projectName = group ? getPathBasename(group.localPath) : "Project"
+  const projectName = group ? fileNameOfPath(group.localPath) : "Project"
 
   const handleOpenBoard = useCallback(
     (openedBoardId: string) => {

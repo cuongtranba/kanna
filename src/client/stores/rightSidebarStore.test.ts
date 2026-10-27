@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import {
   DEFAULT_RIGHT_SIDEBAR_SIZE,
-  getDefaultRightSidebarVisibilityState,
+  DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
   migrateRightSidebarStore,
   RIGHT_SIDEBAR_MIN_WIDTH_PX,
   useRightSidebarStore,
@@ -15,7 +15,7 @@ describe("rightSidebarStore", () => {
   })
 
   test("defaults to a closed drawer", () => {
-    const visibility = useRightSidebarStore.getState().projects[PROJECT_ID] ?? getDefaultRightSidebarVisibilityState()
+    const visibility = useRightSidebarStore.getState().projects[PROJECT_ID] ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
     expect(visibility.isVisible).toBe(false)
     expect(useRightSidebarStore.getState().size).toBe(DEFAULT_RIGHT_SIDEBAR_SIZE)
   })
@@ -52,7 +52,7 @@ describe("rightSidebarStore", () => {
     useRightSidebarStore.getState().setViewMode(PROJECT_ID, "changes")
     useRightSidebarStore.getState().clearProject(PROJECT_ID)
 
-    const visibility = useRightSidebarStore.getState().projects[PROJECT_ID] ?? getDefaultRightSidebarVisibilityState()
+    const visibility = useRightSidebarStore.getState().projects[PROJECT_ID] ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
     expect(visibility.isVisible).toBe(false)
     expect(useRightSidebarStore.getState().size).toBe(42)
     expect(useRightSidebarStore.getState().projectUi[PROJECT_ID]).toBeUndefined()

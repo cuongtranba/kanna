@@ -1,5 +1,5 @@
 
-import type { DomPort, ServiceWorkerRegistrationLike, ComputedStyleLike } from "../ports/domPort"
+import type { DomPort, ComputedStyleLike } from "../ports/domPort"
 
 declare global {
   interface Navigator {
@@ -39,10 +39,6 @@ export const domAdapter: DomPort = {
 
   getUserAgent(): string {
     return navigator.userAgent
-  },
-
-  isSecureContext(): boolean {
-    return window.isSecureContext
   },
 
   getInnerWidth(): number {
@@ -124,28 +120,8 @@ export const domAdapter: DomPort = {
     }
   },
 
-  getHostname(): string {
-    return window.location?.hostname ?? ""
-  },
-
   getOrigin(): string {
     return window.location.origin
-  },
-
-  isServiceWorkerSupported(): boolean {
-    return typeof navigator !== "undefined" && "serviceWorker" in navigator
-  },
-
-  isPushManagerSupported(): boolean {
-    return typeof Reflect.get(globalThis, "PushManager") !== "undefined"
-  },
-
-  async registerServiceWorker(url: string): Promise<ServiceWorkerRegistrationLike> {
-    return navigator.serviceWorker.register(url)
-  },
-
-  async getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistrationLike> {
-    return navigator.serviceWorker.ready
   },
 
   upsertHeadMeta(name: string, content: string): void {
@@ -216,8 +192,8 @@ export const domAdapter: DomPort = {
     await navigator.share(data)
   },
 
-  getBaseURI(): string {
-    return document.baseURI
+  resolveUrl(path: string): string {
+    return new URL(path, document.baseURI || window.location.href).toString()
   },
 
   triggerDownload(url: string, filename: string): void {
