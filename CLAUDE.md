@@ -38,10 +38,16 @@ auto-triggering intact.
 
 ```bash
 bun install
-bun run dev              # vite client on :5174 + server on :5175 (client port + 1)
+bun run dev              # Vite+ client (`vp dev`) on :5174 + server on :5175 (client port + 1)
 bun run start            # single-process server, production shape
 bun run install:dev      # build, then install this tree globally as the `kanna` CLI
 ```
+
+The client dev server and build run through Vite+ (`vp dev` / `vp build`, from
+the `vite-plus` devDependency). It needs Node `^22.18.0 || ^24.11.0 || >=26.0.0`
+on PATH, and `vite` is aliased to `@voidzero-dev/vite-plus-core` both as a direct
+devDependency and in `overrides` — Bun needs both. Tests stay on `bun test` and
+lint stays on ESLint.
 
 Verification — `bun run check` is typecheck → lint → build:client → check:bundle:
 

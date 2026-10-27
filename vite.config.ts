@@ -1,4 +1,4 @@
-import { defineConfig } from "vite"
+import { defineConfig } from "vite-plus"
 import react from "@vitejs/plugin-react"
 import { getDefaultDevServerPort } from "./src/shared/dev-ports"
 import { DEV_CLIENT_PORT } from "./src/shared/ports"
