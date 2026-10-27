@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { AuthSettings } from "./auth"
-import type { CloudflareTunnelMode, CloudflareTunnelSettings } from "./cloudflare-tunnel"
+import { CLOUDFLARE_TUNNEL_MODES, type CloudflareTunnelSettings } from "./cloudflare-tunnel"
 import type { PushSettings } from "./push"
 import type { RemoteMcpSettings } from "./remote-mcp"
 import type { TelemetrySettings } from "./telemetry"
@@ -10,7 +10,7 @@ import type { InstalledPluginConfig, PluginSettings } from "../plugins/settings"
 import { FONT_SCALE_STEPS } from "../design/typography"
 import { assertParity } from "../type-parity"
 
-export const cloudflareTunnelModeSchema = z.enum(["always-ask", "auto-expose"])
+export const cloudflareTunnelModeSchema = z.enum(CLOUDFLARE_TUNNEL_MODES)
 
 export const cloudflareTunnelSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -32,7 +32,6 @@ export const installedPluginConfigSchema = z.object({
   enabled: z.boolean(),
 })
 
-assertParity<z.output<typeof cloudflareTunnelModeSchema>, CloudflareTunnelMode>()
 assertParity<z.output<typeof cloudflareTunnelSettingsSchema>, CloudflareTunnelSettings>()
 assertParity<z.output<typeof pushSettingsSchema>, PushSettings>()
 assertParity<z.output<typeof telemetrySettingsSchema>, TelemetrySettings>()

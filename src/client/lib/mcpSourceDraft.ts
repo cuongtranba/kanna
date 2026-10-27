@@ -1,4 +1,10 @@
-import type { InboundHandler, InboundHandlerMode } from "../../shared/inbound/handler"
+import {
+  decodeInboundModelChoice,
+  encodeInboundModelChoice,
+  inboundHandlerTarget,
+  type InboundHandler,
+  type InboundHandlerMode,
+} from "../../shared/inbound/handler"
 import { MCP_SOURCE_PRESETS } from "../../shared/mcp-sources/presets"
 import {
   MCP_SOURCE_INTERVAL_MIN_MS,
@@ -8,7 +14,6 @@ import {
   type McpSourcePatch,
 } from "../../shared/mcp-sources/types"
 import { parseMcpSourceArgs, validateMcpSource } from "../../shared/mcp-sources/validate"
-import { decodeWebhookModel, encodeWebhookModel } from "./webhookTargets"
 
 export interface McpSourceDraft {
   name: string
@@ -68,7 +73,7 @@ function handlerFields(handler: InboundHandler): Pick<McpSourceDraft, "handlerMo
     handlerMode: handler.mode,
     chatId: handler.chatId ?? "",
     projectId: handler.projectId ?? "",
-    modelValue: handler.provider && handler.model ? encodeWebhookModel(handler.provider, handler.model) : "",
+    modelValue: handler.provider && handler.model ? encodeInboundModelChoice(handler.provider, handler.model) : "",
     template: handler.template,
     replyHint: handler.replyHint,
     pushEnabled: handler.pushEnabled,
@@ -117,19 +122,14 @@ export function applyZaloPreset(draft: McpSourceDraft): McpSourceDraft {
   }
 }
 
-function targetFields(draft: McpSourceDraft): Pick<InboundHandler, "chatId" | "projectId"> {
-  if (draft.handlerMode === "spawn") return draft.projectId ? { projectId: draft.projectId } : {}
-  return draft.chatId ? { chatId: draft.chatId } : {}
-}
-
 function handlerFromDraft(draft: McpSourceDraft): InboundHandler {
-  const choice = draft.handlerMode === "notify" ? null : decodeWebhookModel(draft.modelValue)
+  const choice = draft.handlerMode === "notify" ? null : decodeInboundModelChoice(draft.modelValue)
   return {
     mode: draft.handlerMode,
     template: draft.template,
     replyHint: draft.replyHint,
     pushEnabled: draft.pushEnabled,
-    ...targetFields(draft),
+    ...inboundHandlerTarget(draft.handlerMode, draft.chatId, draft.projectId),
     ...(choice ? { provider: choice.provider, model: choice.model } : {}),
   }
 }

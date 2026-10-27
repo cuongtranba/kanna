@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 import { isAgentProvider } from "../../shared/types"
-import { isWebhookMode } from "../../shared/webhooks/validate"
+import { isInboundHandlerMode } from "../../shared/inbound/handler"
 import type { StoredWebhook, WebhookStorePort } from "./webhook-registry"
 
 const FILE_NAME = "webhooks.json"
@@ -21,7 +21,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   if (!isJsonObject(value)) return null
   const { id, name, secret, template, mode, enabled, createdAt, updatedAt } = value
   if (typeof id !== "string" || typeof name !== "string" || typeof secret !== "string") return null
-  if (typeof template !== "string" || typeof mode !== "string" || !isWebhookMode(mode)) return null
+  if (typeof template !== "string" || typeof mode !== "string" || !isInboundHandlerMode(mode)) return null
   if (typeof enabled !== "boolean" || typeof createdAt !== "number" || typeof updatedAt !== "number") return null
   const kind = value.kind === undefined ? "generic" : value.kind
   if (kind !== "generic" && kind !== "slack") return null

@@ -8,8 +8,8 @@ import { FIELD_KIND_LABELS, missingLoadBearingIds } from "../../lib/boards/cardS
 import { loadBearingFieldNote } from "../../../shared/boards/cardSchema"
 import {
   COLUMN_COLOR_TOKENS,
+  FIELD_KINDS,
   type FieldDef,
-  type FieldKind,
   type FieldOption,
 } from "../../../shared/boards/types"
 import { onRejected } from "../../../shared/errors"
@@ -36,8 +36,6 @@ export interface CardSchemaPanelProps {
   socket: CardSchemaPanelSocket
   onClose: () => void
 }
-
-const KINDS: FieldKind[] = ["text", "longtext", "url", "number", "date", "select", "multiselect", "label"]
 
 function store() {
   return useCardSchemaStore.getState()
@@ -131,7 +129,7 @@ export function CardSchemaPanel({ boardId, socket, onClose }: CardSchemaPanelPro
               onChange={handleNewKind}
               className="rounded-md border border-border bg-background px-2 py-1.5 text-13 text-foreground"
             >
-              {KINDS.map((kind) => (
+              {FIELD_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
                   {FIELD_KIND_LABELS[kind]}
                 </option>

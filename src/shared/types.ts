@@ -460,6 +460,3 @@ export interface AutoContinueSchedule {
 }
 
 
-export function isAgentProvider(value: string): value is AgentProvider {
-  return value === "claude" || value === "codex" || value === "openrouter" || value === "custom"
-}

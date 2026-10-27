@@ -1,6 +1,7 @@
 
 import type { Board, BoardColumn, Card, CardDetail, CardLink, FieldValue } from "./types"
 import type { WorktreeCleanupView } from "./worktree-cleanup"
+import { CARD_MOVE_TOOL_NAME } from "../tools"
 
 export type StartWorkStatus =
   | { kind: "idle" }
@@ -13,23 +14,23 @@ export interface StartWorkFacts {
   existingWorktreePaths: ReadonlySet<string>
 }
 
-function newestTarget(
+export function newestLinkTarget(
   links: readonly CardLink[],
   kind: CardLink["kind"],
-  exists: (targetId: string) => boolean,
+  accept: (targetId: string) => boolean,
 ): string | null {
   let best: CardLink | null = null
   for (const candidate of links) {
     if (candidate.kind !== kind) continue
-    if (!exists(candidate.targetId)) continue
+    if (!accept(candidate.targetId)) continue
     if (!best || candidate.createdAt > best.createdAt) best = candidate
   }
   return best?.targetId ?? null
 }
 
 export function deriveStartWorkStatus(facts: StartWorkFacts): StartWorkStatus {
-  const worktreePath = newestTarget(facts.links, "worktree", (path) => facts.existingWorktreePaths.has(path))
-  const chatId = newestTarget(facts.links, "chat", (id) => facts.liveChatIds.has(id))
+  const worktreePath = newestLinkTarget(facts.links, "worktree", (path) => facts.existingWorktreePaths.has(path))
+  const chatId = newestLinkTarget(facts.links, "chat", (id) => facts.liveChatIds.has(id))
   if (chatId) return { kind: "chat", chatId, worktreePath }
   if (worktreePath) return { kind: "worktree", worktreePath }
   return { kind: "idle" }
@@ -120,7 +121,7 @@ export function buildStartWorkPrompt(card: Card, branch: string, advance: CardAd
     lines.push(
       "",
       `When the work is done and verified, move this card to "${advance.columnTitle}":`,
-      `  mcp__kanna__card_move({ card_id: "${advance.cardId}", to_column_id: "${advance.columnId}" })`,
+      `  ${CARD_MOVE_TOOL_NAME}({ card_id: "${advance.cardId}", to_column_id: "${advance.columnId}" })`,
       "If it is unfinished or the checks do not pass, leave the card where it is and say what is blocking.",
     )
   }

@@ -1,4 +1,4 @@
-import { normalizeAnthropicBaseUrl } from "./app-settings-types"
+import { normalizeAnthropicBaseUrl } from "./anthropic-base-url"
 import type { ProviderCatalogEntry } from "./provider-model-types"
 
 export const CUSTOM_PROVIDER_ID_REGEX = /^[a-z][a-z0-9-]{0,31}$/
@@ -7,6 +7,7 @@ export const CUSTOM_PROVIDER_MODEL_ID_MAX = 128
 export const CUSTOM_PROVIDER_MODEL_LABEL_MAX = 64
 export const CUSTOM_PROVIDER_MAX_MODELS = 50
 export const CUSTOM_PROVIDER_API_KEY_MAX = 1024
+export const CUSTOM_PROVIDER_BASE_URL_MAX = 512
 export const CUSTOM_PROVIDER_API_KEY_HINT_MIN_LENGTH = 8
 export const CUSTOM_PROVIDER_API_KEY_HINT_LENGTH = 4
 export const CUSTOM_PROVIDER_CONTEXT_WINDOW_MIN = 4096
@@ -191,7 +192,7 @@ export function validateCustomProviderShape(
   if (entry.label.trim().length === 0 || entry.label.length > CUSTOM_PROVIDER_LABEL_MAX) {
     return { code: "EMPTY_LABEL", field: "label", message: `label must be non-empty and <= ${CUSTOM_PROVIDER_LABEL_MAX} chars` }
   }
-  if (normalizeAnthropicBaseUrl(entry.baseUrl) === null) {
+  if (normalizeAnthropicBaseUrl(entry.baseUrl, CUSTOM_PROVIDER_BASE_URL_MAX) === null) {
     return { code: "INVALID_BASE_URL", field: "baseUrl", message: "base URL must start with http:// or https://" }
   }
   if (entry.apiKey.length === 0 || entry.apiKey.length > CUSTOM_PROVIDER_API_KEY_MAX) {

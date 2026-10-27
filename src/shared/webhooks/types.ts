@@ -1,18 +1,10 @@
 import type { AgentProvider } from "../core-types"
-import {
-  INBOUND_HANDLER_MODES,
-  INBOUND_PROMPT_BODY_MAX_CHARS,
-  type InboundHandlerMode,
-  type InboundHandling,
-} from "../inbound/handler"
+import type { InboundHandlerMode, InboundHandling } from "../inbound/handler"
 
 export type WebhookMode = InboundHandlerMode
 
-export const WEBHOOK_MODES: readonly WebhookMode[] = INBOUND_HANDLER_MODES
-
-export type WebhookKind = "generic" | "slack"
-
-export const WEBHOOK_KINDS: readonly WebhookKind[] = ["generic", "slack"]
+export const WEBHOOK_KINDS = ["generic", "slack"] as const
+export type WebhookKind = (typeof WEBHOOK_KINDS)[number]
 
 export interface WebhookSlackConfig {
   allowedUserIds: string[]
@@ -106,12 +98,7 @@ export interface WebhookPatch {
   filter?: string | null
 }
 
-export const WEBHOOK_NAME_MAX_CHARS = 80
 export const WEBHOOK_MODEL_MAX_CHARS = 200
-export const WEBHOOK_TEMPLATE_MAX_CHARS = 8000
-export const WEBHOOK_PROMPT_BODY_MAX_CHARS = INBOUND_PROMPT_BODY_MAX_CHARS
-export const WEBHOOK_PATH_MAX_CHARS = 200
-export const WEBHOOK_REPLY_HINT_MAX_CHARS = 2000
 export const WEBHOOK_FILTER_MAX_CHARS = 4000
 export const WEBHOOK_BODY_MAX_BYTES = 256 * 1024
 export const WEBHOOK_RATE_LIMIT_PER_MINUTE = 20

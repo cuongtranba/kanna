@@ -8,6 +8,14 @@ import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSett
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
 import { errorMessage } from "../../shared/errors"
+import {
+  STREAM_DISCARDS,
+  STREAM_RETENTIONS,
+  STREAM_STORAGES,
+  type StreamDiscard,
+  type StreamRetention,
+  type StreamStorage,
+} from "../../shared/service-bus/jetstream-config"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
 
@@ -15,19 +23,12 @@ const SAVE_KEY = pendingActionKey("settings.serviceBus", "stream")
 const RECREATE_NOTE = "Changing this requires recreating the stream"
 const LOWER_NOTE = "Lowering this drops older messages"
 
-const RETENTION_OPTIONS = [
-  { value: "limits" as const, label: "Limits" },
-  { value: "interest" as const, label: "Interest" },
-  { value: "workqueue" as const, label: "Work queue" },
-]
-const STORAGE_OPTIONS = [
-  { value: "file" as const, label: "File" },
-  { value: "memory" as const, label: "Memory" },
-]
-const DISCARD_OPTIONS = [
-  { value: "old" as const, label: "Oldest" },
-  { value: "new" as const, label: "Newest" },
-]
+const RETENTION_LABELS: Record<StreamRetention, string> = { limits: "Limits", interest: "Interest", workqueue: "Work queue" }
+const RETENTION_OPTIONS = STREAM_RETENTIONS.map((value) => ({ value, label: RETENTION_LABELS[value] }))
+const STORAGE_LABELS: Record<StreamStorage, string> = { file: "File", memory: "Memory" }
+const STORAGE_OPTIONS = STREAM_STORAGES.map((value) => ({ value, label: STORAGE_LABELS[value] }))
+const DISCARD_LABELS: Record<StreamDiscard, string> = { old: "Oldest", new: "Newest" }
+const DISCARD_OPTIONS = STREAM_DISCARDS.map((value) => ({ value, label: DISCARD_LABELS[value] }))
 
 export function ServiceBusStreamGroup({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
   const settings = useAppSettingsStore(selectServiceBusSettings)

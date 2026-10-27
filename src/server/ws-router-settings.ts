@@ -1,4 +1,5 @@
-import { normalizeAnthropicBaseUrl } from "../shared/types"
+import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
+import { OAUTH_TOKEN_BASE_URL_MAX } from "../shared/app-settings-types"
 import type {
   AppSettingsPatch,
   AppSettingsSnapshot,
@@ -79,7 +80,7 @@ export async function testOAuthToken(
 ): Promise<{ ok: boolean; error: string | null }> {
   const trimmed = typeof token === "string" ? token.trim() : ""
   if (!trimmed) return { ok: false, error: "Token is empty" }
-  const endpoint = (typeof baseUrl === "string" ? normalizeAnthropicBaseUrl(baseUrl) : null)
+  const endpoint = (typeof baseUrl === "string" ? normalizeAnthropicBaseUrl(baseUrl, OAUTH_TOKEN_BASE_URL_MAX) : null)
     ?? ANTHROPIC_DEFAULT_BASE_URL
   try {
     const res = await fetch(`${endpoint}/v1/messages`, {

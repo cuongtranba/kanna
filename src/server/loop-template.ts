@@ -6,7 +6,7 @@ import { LOOP_PARALLEL_STEP_INVARIANTS, LOOP_SECTIONS, LOOP_STEP_INVARIANTS } fr
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 import { renderParallelLoopPrompt } from "./loop-prompt-parallel"
 
-export { decideLoopAction, LOOP_SECTIONS, type LoopAction, type LoopChunkState, type LoopOracleExit } from "../shared/loop-progress"
+export { LOOP_SECTIONS } from "../shared/loop-progress"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 

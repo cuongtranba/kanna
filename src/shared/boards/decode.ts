@@ -1,5 +1,5 @@
 
-import { isJsonObject, type JsonValue } from "../json"
+import { isJsonObject, type JsonObject, type JsonValue } from "../json"
 import {
   isColumnColorToken,
   isColumnSemantic,
@@ -11,6 +11,7 @@ import {
   type CardActor,
   type CardContent,
   type FieldDef,
+  type FieldKind,
   type FieldOption,
   type FieldValue,
 } from "./types"
@@ -84,19 +85,20 @@ export function decodeFieldDefsForWrite(value: JsonValue): FieldDef[] | null {
   return fields
 }
 
-function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
-  if (!isJsonObject(value)) return null
-  const { id, label, kind } = value
-  if (typeof id !== "string" || id === "") return null
-  if (typeof label !== "string" || label.trim() === "") return null
-  if (typeof kind !== "string" || !isFieldKind(kind)) return null
-  if (value.required !== undefined && typeof value.required !== "boolean") return null
+function hasValue(value: JsonValue | undefined): boolean {
+  return value !== undefined && value !== null
+}
 
-  const wantsOptions = kind === "select" || kind === "multiselect"
-  if (!wantsOptions) {
-    if (value.options !== undefined && value.options !== null) return null
-    return { id, label, kind, options: null, required: value.required === true }
-  }
+function offersOptions(kind: FieldKind): boolean {
+  return kind === "select" || kind === "multiselect"
+}
+
+function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
+  const field = decodeFieldDef(value)
+  if (!field || !isJsonObject(value)) return null
+  if (field.id === "" || field.label.trim() === "") return null
+  if (value.required !== undefined && typeof value.required !== "boolean") return null
+  if (!offersOptions(field.kind)) return hasValue(value.options) ? null : { ...field, options: null }
   if (!Array.isArray(value.options)) return null
 
   const options: FieldOption[] = []
@@ -107,32 +109,25 @@ function decodeFieldDefForWrite(value: JsonValue): FieldDef | null {
     optionIds.add(option.id)
     options.push(option)
   }
-  return { id, label, kind, options, required: value.required === true }
+  return { ...field, options }
 }
 
 function decodeFieldOptionForWrite(value: JsonValue): FieldOption | null {
-  if (!isJsonObject(value)) return null
-  const { id, label } = value
-  if (typeof id !== "string" || id === "") return null
-  if (typeof label !== "string" || label.trim() === "") return null
-  if (value.colorToken === undefined || value.colorToken === null) return { id, label, colorToken: null }
-  if (typeof value.colorToken !== "string" || !isColumnColorToken(value.colorToken)) return null
-  return { id, label, colorToken: value.colorToken }
+  const option = decodeFieldOption(value)
+  if (!option || !isJsonObject(value)) return null
+  if (option.id === "" || option.label.trim() === "") return null
+  if (option.colorToken === null && hasValue(value.colorToken)) return null
+  return option
 }
 
+type DecodeStrictness = "lenient" | "strict"
 
-export function decodeFieldValue(value: JsonValue): FieldValue | null {
-  if (!isJsonObject(value)) return null
-  const kind = value.kind
-  if (typeof kind !== "string") return null
-
+function decodeValueOfKind(kind: FieldKind, value: JsonObject, strictness: DecodeStrictness): FieldValue | null {
   switch (kind) {
     case "text":
-      return typeof value.value === "string" ? { kind: "text", value: value.value } : null
     case "longtext":
-      return typeof value.value === "string" ? { kind: "longtext", value: value.value } : null
     case "url":
-      return typeof value.value === "string" ? { kind: "url", value: value.value } : null
+      return typeof value.value === "string" ? { kind, value: value.value } : null
     case "number":
       return typeof value.value === "number" && Number.isFinite(value.value)
         ? { kind: "number", value: value.value }
@@ -141,17 +136,30 @@ export function decodeFieldValue(value: JsonValue): FieldValue | null {
       return typeof value.value === "number" && Number.isInteger(value.value)
         ? { kind: "date", value: value.value }
         : null
-    case "select": {
+    case "select":
       if (value.optionId === null) return { kind: "select", optionId: null }
       return typeof value.optionId === "string" ? { kind: "select", optionId: value.optionId } : null
+    case "multiselect": {
+      const optionIds = decodeStrings(value.optionIds, strictness)
+      return optionIds ? { kind: "multiselect", optionIds } : null
     }
-    case "multiselect":
-      return { kind: "multiselect", optionIds: decodeStringArray(value.optionIds) }
-    case "label":
-      return { kind: "label", values: decodeStringArray(value.values) }
-    default:
-      return null
+    case "label": {
+      const values = decodeStrings(value.values, strictness)
+      return values ? { kind: "label", values } : null
+    }
   }
+}
+
+function decodeStrings(value: JsonValue | undefined, strictness: DecodeStrictness): string[] | null {
+  if (value === undefined) return strictness === "strict" ? null : []
+  return strictness === "strict" ? decodeStrictStringArray(value) : decodeStringArray(value)
+}
+
+export function decodeFieldValue(value: JsonValue): FieldValue | null {
+  if (!isJsonObject(value)) return null
+  const kind = value.kind
+  if (typeof kind !== "string" || !isFieldKind(kind)) return null
+  return decodeValueOfKind(kind, value, "lenient")
 }
 
 export function decodeCardContent(value: JsonValue): CardContent {
@@ -185,39 +193,14 @@ export function decodeContentForFields(
 export function decodeValueForField(field: FieldDef, value: JsonValue): FieldValue | null {
   if (!isJsonObject(value)) return null
   if (value.kind !== field.kind) return null
-
-  switch (field.kind) {
-    case "text":
-      return typeof value.value === "string" ? { kind: "text", value: value.value } : null
-    case "longtext":
-      return typeof value.value === "string" ? { kind: "longtext", value: value.value } : null
-    case "url":
-      return typeof value.value === "string" ? { kind: "url", value: value.value } : null
-    case "number":
-      return typeof value.value === "number" && Number.isFinite(value.value)
-        ? { kind: "number", value: value.value }
-        : null
-    case "date":
-      return typeof value.value === "number" && Number.isInteger(value.value)
-        ? { kind: "date", value: value.value }
-        : null
-    case "select": {
-      if (value.optionId === null) return { kind: "select", optionId: null }
-      if (typeof value.optionId !== "string") return null
-      return offersOption(field, value.optionId) ? { kind: "select", optionId: value.optionId } : null
-    }
-    case "multiselect": {
-      const optionIds = decodeStrictStringArray(value.optionIds)
-      if (!optionIds) return null
-      return optionIds.every((optionId) => offersOption(field, optionId))
-        ? { kind: "multiselect", optionIds }
-        : null
-    }
-    case "label": {
-      const values = decodeStrictStringArray(value.values)
-      return values ? { kind: "label", values } : null
-    }
+  const decoded = decodeValueOfKind(field.kind, value, "strict")
+  if (decoded?.kind === "select" && decoded.optionId !== null) {
+    return offersOption(field, decoded.optionId) ? decoded : null
   }
+  if (decoded?.kind === "multiselect") {
+    return decoded.optionIds.every((optionId) => offersOption(field, optionId)) ? decoded : null
+  }
+  return decoded
 }
 
 function offersOption(field: FieldDef, optionId: string): boolean {

@@ -1,4 +1,4 @@
-import { isPlainObject } from "./plain-object"
+import { readSettingsSection } from "./read-fields"
 
 export interface TelemetrySettings {
   enabled: boolean
@@ -11,29 +11,15 @@ export const TELEMETRY_DEFAULTS: TelemetrySettings = {
 }
 
 export function normalizeTelemetrySettings<T>(value: T, warnings: string[]): TelemetrySettings {
-  const source = isPlainObject(value) ? value : null
-  if (value !== undefined && !source) {
-    warnings.push("telemetry must be an object")
-  }
+  const section = readSettingsSection(value, "telemetry", warnings)
+  const enabled = section.boolean("enabled", TELEMETRY_DEFAULTS.enabled)
 
-  let enabled = TELEMETRY_DEFAULTS.enabled
-  if (source?.enabled !== undefined) {
-    if (typeof source.enabled !== "boolean") {
-      warnings.push("telemetry.enabled must be a boolean")
-    } else {
-      enabled = source.enabled
-    }
+  const rawEndpoint = section.source?.endpoint
+  if (rawEndpoint === undefined) return { enabled, endpoint: TELEMETRY_DEFAULTS.endpoint }
+  const endpoint = typeof rawEndpoint === "string" ? rawEndpoint.trim() : null
+  if (!endpoint || !/^https?:\/\//.test(endpoint)) {
+    section.warn("endpoint", "an http(s) URL")
+    return { enabled, endpoint: TELEMETRY_DEFAULTS.endpoint }
   }
-
-  let endpoint = TELEMETRY_DEFAULTS.endpoint
-  if (source?.endpoint !== undefined) {
-    const raw = typeof source.endpoint === "string" ? source.endpoint.trim() : null
-    if (!raw || !/^https?:\/\//.test(raw)) {
-      warnings.push("telemetry.endpoint must be an http(s) URL")
-    } else {
-      endpoint = raw.replace(/\/+$/, "")
-    }
-  }
-
-  return { enabled, endpoint }
+  return { enabled, endpoint: endpoint.replace(/\/+$/, "") }
 }

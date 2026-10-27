@@ -1,5 +1,5 @@
 import { WEBHOOK_BODY_MAX_BYTES, WEBHOOK_ROUTE_PATTERN } from "../../shared/webhooks/types"
-import type { WebhookBody } from "../../shared/webhooks/template"
+import type { JsonValue } from "../../shared/json"
 import { verifyWebhookRequest } from "./webhook-auth"
 import type { StoredWebhook } from "./webhook-registry"
 import type { WebhookService } from "./webhook-service"
@@ -23,7 +23,7 @@ function pickDeliveryId(headers: Headers): string {
   return crypto.randomUUID()
 }
 
-function parseBody(text: string): WebhookBody {
+function parseBody(text: string): JsonValue {
   try {
     return JSON.parse(text)
   } catch {
@@ -55,7 +55,7 @@ async function deliver(
   service: WebhookService,
   hook: StoredWebhook,
   deliveryId: string,
-  body: WebhookBody,
+  body: JsonValue,
 ): Promise<Response> {
   const { registry } = service
   const outcome = (ok: boolean, status: number, detail: string) =>

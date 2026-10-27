@@ -1,5 +1,4 @@
-
-import type { AgentProvider } from "./types"
+import { AGENT_PROVIDERS, type AgentProvider } from "./core-types"
 
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 
@@ -128,10 +127,11 @@ export interface ProviderCatalogEntry {
   efforts: ProviderEffortOption[]
 }
 
-const ALL_CLAUDE_EFFORTS: readonly ClaudeReasoningEffort[] = ["low", "medium", "high", "xhigh", "max"]
+const ALL_CLAUDE_EFFORTS: readonly ClaudeReasoningEffort[] = CLAUDE_REASONING_OPTIONS.map((option) => option.id)
+const CLAUDE_EFFORTS_STRONGEST_FIRST = [...ALL_CLAUDE_EFFORTS].reverse()
 
-export const PROVIDERS: ProviderCatalogEntry[] = [
-  {
+const PROVIDER_CATALOG: Readonly<Record<AgentProvider, ProviderCatalogEntry>> = {
+  claude: {
     id: "claude",
     label: "Claude",
     defaultModel: "claude-sonnet-4-6",
@@ -189,7 +189,7 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     ],
     efforts: [...CLAUDE_REASONING_OPTIONS],
   },
-  {
+  codex: {
     id: "codex",
     label: "Codex",
     defaultModel: "gpt-5.5",
@@ -202,7 +202,7 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     ],
     efforts: [],
   },
-  {
+  openrouter: {
     id: "openrouter",
     label: "OpenRouter",
     defaultModel: DEFAULT_OPENROUTER_SDK_MODEL,
@@ -210,7 +210,7 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     models: [],
     efforts: [],
   },
-  {
+  custom: {
     id: "custom",
     label: "Custom endpoints",
     defaultModel: "",
@@ -218,14 +218,12 @@ export const PROVIDERS: ProviderCatalogEntry[] = [
     models: [],
     efforts: [],
   },
-]
+}
+
+export const PROVIDERS: ProviderCatalogEntry[] = AGENT_PROVIDERS.map((provider) => PROVIDER_CATALOG[provider])
 
 export function getProviderCatalog(provider: AgentProvider): ProviderCatalogEntry {
-  const entry = PROVIDERS.find((candidate) => candidate.id === provider)
-  if (!entry) {
-    throw new Error(`Unknown provider: ${provider}`)
-  }
-  return entry
+  return PROVIDER_CATALOG[provider]
 }
 
 
@@ -417,11 +415,8 @@ export function normalizeClaudeReasoningEffort(
   const supported = getClaudeModelOption(modelId, customModels)?.supportedEfforts
   if (!supported || supported.length === 0) return effort
   if (supported.includes(effort)) return effort
-  const priority: ClaudeReasoningEffort[] = ["max", "xhigh", "high", "medium", "low"]
-  for (const level of priority) {
-    if (supported.includes(level)) return level
-  }
-  return DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
+  return CLAUDE_EFFORTS_STRONGEST_FIRST.find((level) => supported.includes(level))
+    ?? DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
 }
 
 export function getClaudeContextWindowOptions(
@@ -449,9 +444,7 @@ export function effectiveContextWindowOptions(
   declared?: readonly ProviderContextWindowOption[],
 ): readonly ProviderContextWindowOption[] {
   if (declared) return declared
-  return PROVIDERS
-    .find((p) => p.id === provider)?.models
-    .find((m) => m.id === modelId)?.contextWindowOptions ?? []
+  return PROVIDER_CATALOG[provider].models.find((m) => m.id === modelId)?.contextWindowOptions ?? []
 }
 
 export function resolveClaudeApiModelId(modelId: string, contextWindow?: ClaudeContextWindow): string {

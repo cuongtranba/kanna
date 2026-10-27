@@ -7,7 +7,7 @@ import { selectCustomProviders, useAppSettingsStore } from "../stores/appSetting
 import { useChatInputStore } from "../stores/chatInputStore"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
 import { usePreferencesStore } from "../stores/preferences"
-import type { ChatSnapshot, CloudflareTunnelRecord, ProjectCommandsSnapshot } from "../../shared/types"
+import type { ChatSnapshot, ProjectCommandsSnapshot } from "../../shared/types"
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import type { BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import { withCustomProviders } from "../../shared/custom-providers"
@@ -35,7 +35,7 @@ import { localStorageAdapter, sessionStorageAdapter } from "../adapters/storage.
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { getProjectIdForChat, type ProjectRequest } from "./useAppGlobalState"
-import { sameRuntime } from "../../shared/equality"
+import { sameChatSnapshotCore } from "../../shared/equality"
 import { useAppGlobalContext } from "./AppGlobalProvider"
 import type { ChatNavigatorPort } from "./chatNavigator"
 
@@ -50,13 +50,6 @@ export {
   resolveComposeIntent,
 } from "./useAppGlobalState"
 export type { UiRestartActivity, ProjectRequest, StartChatIntent } from "./useAppGlobalState"
-
-function sameTranscriptEntries(left: ChatSnapshot["messages"] | null | undefined, right: ChatSnapshot["messages"] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.length !== right.length) return false
-  return left.every((entry, index) => entry._id === right[index]?._id)
-}
 
 function mergeOpenRouterModels(
   providers: ProviderCatalogEntry[],
@@ -75,157 +68,12 @@ function mergeOpenRouterModels(
   })
 }
 
-function sameProviders(left: ProviderCatalogEntry[] | null | undefined, right: ProviderCatalogEntry[] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.length !== right.length) return false
-  return left.every((provider, index) => provider.id === right[index]?.id)
-}
-
-function sameHistory(left: ChatSnapshot["history"] | null | undefined, right: ChatSnapshot["history"] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  return left.hasOlder === right.hasOlder
-    && left.olderCursor === right.olderCursor
-    && left.recentLimit === right.recentLimit
-}
-
-function sameQueuedMessage(left: QueuedChatMessage, right: QueuedChatMessage) {
-  return left.id === right.id
-    && left.content === right.content
-    && left.createdAt === right.createdAt
-    && left.provider === right.provider
-    && left.model === right.model
-    && left.planMode === right.planMode
-    && JSON.stringify(left.modelOptions) === JSON.stringify(right.modelOptions)
-    && sameAttachmentArray(left.attachments, right.attachments)
-}
-
-function sameAttachmentArray(left: ChatAttachment[], right: ChatAttachment[]) {
-  if (left === right) return true
-  if (left.length !== right.length) return false
-  return left.every((attachment, index) => {
-    const other = right[index]
-    return Boolean(other)
-      && attachment.id === other.id
-      && attachment.kind === other.kind
-      && attachment.displayName === other.displayName
-      && attachment.absolutePath === other.absolutePath
-      && attachment.relativePath === other.relativePath
-      && attachment.contentUrl === other.contentUrl
-      && attachment.mimeType === other.mimeType
-      && attachment.size === other.size
-  })
-}
-
-function sameQueuedMessages(left: ChatSnapshot["queuedMessages"] | null | undefined, right: ChatSnapshot["queuedMessages"] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.length !== right.length) return false
-  return left.every((message, index) => sameQueuedMessage(message, right[index]!))
-}
-
-function sameSchedules(left: ChatSnapshot["schedules"] | null | undefined, right: ChatSnapshot["schedules"] | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key) => {
-    const l = left[key]
-    const r = right[key]
-    if (!l || !r) return false
-    return l.state === r.state
-      && l.scheduledAt === r.scheduledAt
-      && l.resetAt === r.resetAt
-      && l.detectedAt === r.detectedAt
-      && l.tz === r.tz
-  })
-}
-
-function sameTunnels(left: Record<string, CloudflareTunnelRecord> | null | undefined, right: Record<string, CloudflareTunnelRecord> | null | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key) => {
-    const l = left[key]
-    const r = right[key]
-    if (!l || !r) return false
-    return l.state === r.state
-      && l.url === r.url
-      && l.error === r.error
-      && l.port === r.port
-      && l.activatedAt === r.activatedAt
-      && l.stoppedAt === r.stoppedAt
-  })
-}
-
-function sameSubagentRuns(
-  left: ChatSnapshot["subagentRuns"] | null | undefined,
-  right: ChatSnapshot["subagentRuns"] | null | undefined,
-) {
-  if (left === right) return true
-  if (!left || !right) return false
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-  return leftKeys.every((key) => {
-    const l = left[key]
-    const r = right[key]
-    if (!l || !r) return false
-    return l.status === r.status
-      && l.entries.length === r.entries.length
-      && (l.finalText ?? "") === (r.finalText ?? "")
-      && (l.pendingTool?.toolUseId ?? null) === (r.pendingTool?.toolUseId ?? null)
-      && (l.usage?.outputTokens ?? null) === (r.usage?.outputTokens ?? null)
-      && l.finishedAt === r.finishedAt
-      && (l.error?.code ?? null) === (r.error?.code ?? null)
-  })
-}
-
-function sameLoopProgress(
-  left: ChatSnapshot["loopProgress"],
-  right: ChatSnapshot["loopProgress"],
-) {
-  if (left === right) return true
-  if (left.armed !== right.armed) return false
-  if (left.rows.length !== right.rows.length) return false
-  const rowsMatch = left.rows.every((l, i) => {
-    const r = right.rows[i]
-    return r != null && l.runId === r.runId && l.status === r.status && l.label === r.label
-  })
-  if (!rowsMatch) return false
-  const lr = left.rateLimit
-  const rr = right.rateLimit
-  if ((lr == null) !== (rr == null)) return false
-  if (lr && rr) return lr.resetAt === rr.resetAt && lr.scheduled === rr.scheduled
-  return true
-}
-
 export function applyProjectCommandsSnapshot(
   subscribedProjectId: string,
   snapshot: ProjectCommandsSnapshot | null,
 ): void {
   if (!snapshot || snapshot.projectId !== subscribedProjectId) return
   useSlashCommandsStore.getState().setForProject(snapshot.projectId, snapshot.commands)
-}
-
-export function sameChatSnapshotCore(left: ChatSnapshot | null, right: ChatSnapshot | null) {
-  if (left === right) return true
-  if (!left || !right) return false
-  return sameRuntime(left.runtime, right.runtime)
-    && sameQueuedMessages(left.queuedMessages, right.queuedMessages)
-    && sameTranscriptEntries(left.messages, right.messages)
-    && sameHistory(left.history, right.history)
-    && sameProviders(left.availableProviders, right.availableProviders)
-    && sameSchedules(left.schedules, right.schedules)
-    && left.liveScheduleId === right.liveScheduleId
-    && sameTunnels(left.tunnels, right.tunnels)
-    && left.liveTunnelId === right.liveTunnelId
-    && sameSubagentRuns(left.subagentRuns, right.subagentRuns)
-    && sameLoopProgress(left.loopProgress, right.loopProgress)
 }
 
 function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {

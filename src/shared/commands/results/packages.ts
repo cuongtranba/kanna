@@ -1,8 +1,9 @@
 import { z } from "zod"
-import type {
-  PackageApplyResult,
-  PackageInventorySnapshot,
-  PackageUpdateSnapshot,
+import {
+  PACKAGE_KINDS,
+  type PackageApplyResult,
+  type PackageInventorySnapshot,
+  type PackageUpdateSnapshot,
 } from "../../packages/types"
 import type {
   InstalledSkillsSnapshot,
@@ -57,7 +58,7 @@ export const installedSkillsSnapshotSchema = z.object({
   })),
 })
 
-const packageKindSchema = z.enum(["skill", "claude-plugin", "codex-plugin"])
+const packageKindSchema = z.enum(PACKAGE_KINDS)
 
 const installedPackageShape = {
   id: z.string(),

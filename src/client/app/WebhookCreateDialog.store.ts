@@ -1,6 +1,6 @@
 import { createScopedStore } from "../lib/createScopedStore"
 import type { WebhookDraftFields } from "../lib/webhookDraft"
-import { encodeWebhookModel } from "../lib/webhookTargets"
+import { encodeInboundModelChoice } from "../../shared/inbound/handler"
 import type { InboundHandling } from "../../shared/inbound/handler"
 import type { WebhookKind, WebhookMode, WebhookSummary } from "../../shared/webhooks/types"
 
@@ -61,7 +61,7 @@ export const WebhookCreateStore = createScopedStore<WebhookSummary | undefined, 
     handling: hook?.handling ?? "triage",
     chatId: hook?.chatId ?? "",
     projectId: hook?.projectId ?? "",
-    modelValue: hook?.provider && hook.model ? encodeWebhookModel(hook.provider, hook.model) : "",
+    modelValue: hook?.provider && hook.model ? encodeInboundModelChoice(hook.provider, hook.model) : "",
     template: hook?.template ?? DEFAULT_WEBHOOK_TEMPLATE,
     filter: hook?.filter ?? "",
     threadKeyPath: hook?.threadKeyPath ?? "",

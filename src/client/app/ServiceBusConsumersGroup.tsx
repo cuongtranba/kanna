@@ -1,6 +1,12 @@
 import { useCallback } from "react"
 import { Pencil, Plus, Trash2 } from "lucide-react"
-import type { JetStreamConsumerSettings } from "../../shared/service-bus/jetstream-config"
+import {
+  CONSUMER_ACK_POLICIES,
+  CONSUMER_DELIVER_POLICIES,
+  type ConsumerAckPolicy,
+  type ConsumerDeliverPolicy,
+  type JetStreamConsumerSettings,
+} from "../../shared/service-bus/jetstream-config"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { SegmentedControl } from "../components/ui/segmented-control"
@@ -15,16 +21,10 @@ import { Field, Problems } from "./ServiceBusFields"
 
 const SAVE_KEY = pendingActionKey("settings.serviceBus", "consumers")
 
-const ACK_OPTIONS = [
-  { value: "explicit" as const, label: "Explicit" },
-  { value: "all" as const, label: "All" },
-  { value: "none" as const, label: "None" },
-]
-const DELIVER_OPTIONS = [
-  { value: "all" as const, label: "All" },
-  { value: "new" as const, label: "New" },
-  { value: "last" as const, label: "Last" },
-]
+const ACK_LABELS: Record<ConsumerAckPolicy, string> = { explicit: "Explicit", all: "All", none: "None" }
+const ACK_OPTIONS = CONSUMER_ACK_POLICIES.map((value) => ({ value, label: ACK_LABELS[value] }))
+const DELIVER_LABELS: Record<ConsumerDeliverPolicy, string> = { all: "All", new: "New", last: "Last" }
+const DELIVER_OPTIONS = CONSUMER_DELIVER_POLICIES.map((value) => ({ value, label: DELIVER_LABELS[value] }))
 
 function ConsumerRow({ consumer, onEdit, onRemove }: { consumer: JetStreamConsumerSettings; onEdit: () => void; onRemove: () => void }) {
   const live = useServiceBusStore((s) => s.status.consumers.find((candidate) => candidate.name === consumer.durableName))

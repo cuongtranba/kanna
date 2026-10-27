@@ -1,11 +1,8 @@
+import { oneOf } from "../vocab"
 
-export type CronMode = "inline" | "spawn"
-
-export const CRON_MODES: readonly CronMode[] = ["inline", "spawn"]
-
-export function isCronMode(token: string): token is CronMode {
-  return token === "inline" || token === "spawn"
-}
+export const CRON_MODES = ["inline", "spawn"] as const
+export type CronMode = (typeof CRON_MODES)[number]
+export const isCronMode = oneOf(CRON_MODES)
 
 export type CronField = { kind: "any" } | { kind: "values"; values: readonly number[] }
 

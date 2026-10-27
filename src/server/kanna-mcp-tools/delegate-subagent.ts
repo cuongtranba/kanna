@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseChunkMarker } from "../../shared/loop-progress"
+import { TASK_CLAIM_TOOL_NAME } from "../../shared/tools"
 
 const InputSchema = z.object({
   subagent_id: z.string().min(1).describe(
@@ -17,7 +18,7 @@ const InputSchema = z.object({
     "Launch the subagent without blocking your turn. Returns immediately with {status:'async_launched', run_id}; the subagent's final reply is delivered back to you as a new turn when it finishes. Use for long jobs you don't need to wait on. Mutually exclusive with keep_alive.",
   ),
   claim_id: z.string().optional().describe(
-    "In a parallel loop, the claim_id that claim_tracking_task returned for the task this worker is being given. It binds the task's lease to this run, which is what lets Kanna return the task to the queue if the run dies instead of leaving it parked.",
+    `In a parallel loop, the claim_id that ${TASK_CLAIM_TOOL_NAME} returned for the task this worker is being given. It binds the task's lease to this run, which is what lets Kanna return the task to the queue if the run dies instead of leaving it parked.`,
   ),
 })
 

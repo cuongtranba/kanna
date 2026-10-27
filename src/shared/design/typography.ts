@@ -1,9 +1,10 @@
 
 import type { JsonValue } from "../json"
+import { oneOf } from "../vocab"
 
-export type FontScaleStep = "sm" | "md" | "lg" | "xl" | "xxl"
+export const FONT_SCALE_STEPS = ["sm", "md", "lg", "xl", "xxl"] as const
 
-export const FONT_SCALE_STEPS: readonly FontScaleStep[] = ["sm", "md", "lg", "xl", "xxl"]
+export type FontScaleStep = (typeof FONT_SCALE_STEPS)[number]
 
 export const FONT_SCALE_MULTIPLIERS: Record<FontScaleStep, number> = {
   sm: 0.875,
@@ -19,9 +20,7 @@ export interface TypographyPreference {
   scale: FontScaleStep
 }
 
-export function isFontScaleStep<T>(value: T): value is T & FontScaleStep {
-  return typeof value === "string" && Object.hasOwn(FONT_SCALE_MULTIPLIERS, value)
-}
+export const isFontScaleStep = oneOf(FONT_SCALE_STEPS)
 
 export function resolveFontScale(step: JsonValue | undefined): number {
   if (typeof step !== "string" || !isFontScaleStep(step)) {

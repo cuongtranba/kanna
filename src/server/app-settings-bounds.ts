@@ -12,7 +12,8 @@ import {
   type AuthSettings,
   type UploadSettings,
 } from "../shared/types"
-import { clampToRange, isPlainObject } from "../shared/settings/plain-object"
+import { clampRounded } from "../shared/numeric"
+import { readSettingsSection } from "../shared/settings/read-fields"
 
 export interface NumericBound {
   readonly path: string
@@ -103,16 +104,13 @@ export function normalizeBounded<T>(
   if (!violation) return isFiniteNumber(raw) ? Math.round(raw) : fallback
   warnings.push(violation)
   if (policy === "clamp" && isFiniteNumber(raw)) {
-    return clampToRange(raw, bound.min, bound.max, fallback)
+    return clampRounded(raw, bound, fallback)
   }
   return fallback
 }
 
 export function normalizeAuthSettings<T>(value: T, warnings: string[]): AuthSettings {
-  const source = isPlainObject(value) ? value : null
-  if (value !== undefined && !source) {
-    warnings.push("auth must be an object")
-  }
+  const source = readSettingsSection(value, "auth", warnings).source
   return {
     sessionMaxAgeDays: normalizeBounded(
       AUTH_SESSION_MAX_AGE_DAYS_BOUND,
@@ -125,10 +123,7 @@ export function normalizeAuthSettings<T>(value: T, warnings: string[]): AuthSett
 }
 
 export function normalizeUploadSettings<T>(value: T, warnings: string[]): UploadSettings {
-  const source = isPlainObject(value) ? value : null
-  if (value !== undefined && !source) {
-    warnings.push("uploads must be an object")
-  }
+  const source = readSettingsSection(value, "uploads", warnings).source
   return {
     maxFileSizeMb: normalizeBounded(
       UPLOAD_MAX_FILE_SIZE_MB_BOUND,

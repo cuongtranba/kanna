@@ -1,21 +1,22 @@
-import { isPlainObject } from "../shared/settings/plain-object"
+import { isRecord } from "../shared/errors"
 import {
+  CONSUMER_ACK_POLICIES,
+  CONSUMER_DELIVER_POLICIES,
+  EMBEDDED_LOG_LEVELS,
+  SERVICE_BUS_CONSUMER_DEFAULTS,
   SERVICE_BUS_DEFAULTS,
+  SERVICE_BUS_MODES,
+  STREAM_DISCARDS,
+  STREAM_RETENTIONS,
+  STREAM_STORAGES,
   serviceBusTokenHint,
   validateServiceBusSettings,
-  type ConsumerAckPolicy,
-  type ConsumerDeliverPolicy,
-  type EmbeddedLogLevel,
   type EmbeddedServerSettings,
   type JetStreamConsumerSettings,
   type JetStreamStreamSettings,
-  type ServiceBusMode,
   type ServiceBusSettingsPatch,
   type ServiceBusSettingsPublic,
   type ServiceBusSettingsStored,
-  type StreamDiscard,
-  type StreamRetention,
-  type StreamStorage,
 } from "../shared/service-bus/jetstream-config"
 
 export type { ServiceBusSettingsStored }
@@ -49,27 +50,19 @@ function readPort<T>(raw: T, fallback: EmbeddedServerSettings["port"]): Embedded
   return typeof raw === "number" ? raw : fallback
 }
 
-const RETENTIONS: readonly StreamRetention[] = ["limits", "interest", "workqueue"]
-const STORAGES: readonly StreamStorage[] = ["file", "memory"]
-const DISCARDS: readonly StreamDiscard[] = ["old", "new"]
-const ACK_POLICIES: readonly ConsumerAckPolicy[] = ["explicit", "none", "all"]
-const DELIVER_POLICIES: readonly ConsumerDeliverPolicy[] = ["all", "new", "last"]
-const MODES: readonly ServiceBusMode[] = ["embedded", "external"]
-const LOG_LEVELS: readonly EmbeddedLogLevel[] = ["info", "debug"]
-
 function readStream<T>(raw: T): JetStreamStreamSettings {
   const defaults = SERVICE_BUS_DEFAULTS.stream
-  if (!isPlainObject(raw)) return { ...defaults, extraSubjects: [] }
+  if (!isRecord(raw)) return { ...defaults, extraSubjects: [] }
   return {
     name: readString(raw.name, defaults.name).trim(),
     subjectPrefix: readString(raw.subjectPrefix, defaults.subjectPrefix).trim(),
     extraSubjects: readStringList(raw.extraSubjects),
-    retention: readEnum(raw.retention, RETENTIONS, defaults.retention),
-    storage: readEnum(raw.storage, STORAGES, defaults.storage),
+    retention: readEnum(raw.retention, STREAM_RETENTIONS, defaults.retention),
+    storage: readEnum(raw.storage, STREAM_STORAGES, defaults.storage),
     maxAgeDays: readNumber(raw.maxAgeDays, defaults.maxAgeDays),
     maxBytesMb: readNumber(raw.maxBytesMb, defaults.maxBytesMb),
     maxMsgs: readNumber(raw.maxMsgs, defaults.maxMsgs),
-    discard: readEnum(raw.discard, DISCARDS, defaults.discard),
+    discard: readEnum(raw.discard, STREAM_DISCARDS, defaults.discard),
     duplicateWindowSec: readNumber(raw.duplicateWindowSec, defaults.duplicateWindowSec),
     replicas: readNumber(raw.replicas, defaults.replicas),
   }
@@ -79,14 +72,14 @@ function readConsumers<T>(raw: T): JetStreamConsumerSettings[] {
   if (!Array.isArray(raw)) return []
   const consumers: JetStreamConsumerSettings[] = []
   for (const item of raw) {
-    if (!isPlainObject(item)) continue
+    if (!isRecord(item)) continue
     consumers.push({
       durableName: readString(item.durableName, "").trim(),
       filterSubject: readString(item.filterSubject, "").trim(),
-      ackPolicy: readEnum(item.ackPolicy, ACK_POLICIES, "explicit"),
-      deliverPolicy: readEnum(item.deliverPolicy, DELIVER_POLICIES, "all"),
-      maxAckPending: readNumber(item.maxAckPending, 1000),
-      ackWaitSec: readNumber(item.ackWaitSec, 30),
+      ackPolicy: readEnum(item.ackPolicy, CONSUMER_ACK_POLICIES, SERVICE_BUS_CONSUMER_DEFAULTS.ackPolicy),
+      deliverPolicy: readEnum(item.deliverPolicy, CONSUMER_DELIVER_POLICIES, SERVICE_BUS_CONSUMER_DEFAULTS.deliverPolicy),
+      maxAckPending: readNumber(item.maxAckPending, SERVICE_BUS_CONSUMER_DEFAULTS.maxAckPending),
+      ackWaitSec: readNumber(item.ackWaitSec, SERVICE_BUS_CONSUMER_DEFAULTS.ackWaitSec),
     })
   }
   return consumers
@@ -94,12 +87,12 @@ function readConsumers<T>(raw: T): JetStreamConsumerSettings[] {
 
 function readEmbedded<T>(raw: T): EmbeddedServerSettings {
   const defaults = SERVICE_BUS_DEFAULTS.embedded
-  if (!isPlainObject(raw)) return { ...defaults }
+  if (!isRecord(raw)) return { ...defaults }
   return {
     maxMemoryStoreMb: readNumber(raw.maxMemoryStoreMb, defaults.maxMemoryStoreMb),
     maxFileStoreMb: readNumber(raw.maxFileStoreMb, defaults.maxFileStoreMb),
     port: readPort(raw.port, defaults.port),
-    logLevel: readEnum(raw.logLevel, LOG_LEVELS, defaults.logLevel),
+    logLevel: readEnum(raw.logLevel, EMBEDDED_LOG_LEVELS, defaults.logLevel),
   }
 }
 
@@ -120,14 +113,14 @@ export function defaultServiceBusSettings(): ServiceBusSettingsStored {
 
 export function normalizeServiceBusSettings<T>(value: T, warnings: string[]): ServiceBusSettingsStored {
   if (value === undefined || value === null) return defaultServiceBusSettings()
-  if (!isPlainObject(value)) {
+  if (!isRecord(value)) {
     warnings.push("serviceBus must be an object")
     return defaultServiceBusSettings()
   }
   const token = cleanToken(typeof value.token === "string" ? value.token : null)
   const parsed: ServiceBusSettingsStored = {
     enabled: typeof value.enabled === "boolean" ? value.enabled : SERVICE_BUS_DEFAULTS.enabled,
-    mode: readEnum(value.mode, MODES, SERVICE_BUS_DEFAULTS.mode),
+    mode: readEnum(value.mode, SERVICE_BUS_MODES, SERVICE_BUS_DEFAULTS.mode),
     url: readString(value.url, SERVICE_BUS_DEFAULTS.url).trim(),
     stream: readStream(value.stream),
     consumers: readConsumers(value.consumers),

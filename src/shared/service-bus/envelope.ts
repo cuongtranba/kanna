@@ -1,6 +1,13 @@
 import { isJsonObject, type JsonValue } from "../json"
+import { oneOf } from "../vocab"
 
-export type BusDirection = "inbound" | "internal"
+export const BUS_DIRECTIONS = ["inbound", "internal"] as const
+export type BusDirection = (typeof BUS_DIRECTIONS)[number]
+const isBusDirection = oneOf(BUS_DIRECTIONS)
+
+export const BUS_SOURCE_KINDS = ["store", "transcript", "webhook", "mcp", "inbox"] as const
+export type BusSourceKind = (typeof BUS_SOURCE_KINDS)[number]
+const isBusSourceKind = oneOf(BUS_SOURCE_KINDS)
 
 export type BusSource =
   | { kind: "store"; log: string }
@@ -42,15 +49,13 @@ export function subjectMatches(pattern: string, subject: string): boolean {
   return patternTokens.length === subjectTokens.length
 }
 
-const SOURCE_KINDS: readonly string[] = ["store", "transcript", "webhook", "mcp", "inbox"]
-
 export function isBusEnvelope(value: JsonValue): value is JsonValue & BusEnvelope {
   if (!isJsonObject(value)) return false
   const { v, id, subject, ts, source, direction, idempotencyKey, payload } = value
   if (v !== 1) return false
   if (typeof id !== "string" || typeof subject !== "string" || typeof idempotencyKey !== "string") return false
   if (typeof ts !== "number") return false
-  if (direction !== "inbound" && direction !== "internal") return false
+  if (!isBusDirection(direction)) return false
   if (payload === undefined) return false
-  return isJsonObject(source) && typeof source.kind === "string" && SOURCE_KINDS.includes(source.kind)
+  return isJsonObject(source) && isBusSourceKind(source.kind)
 }

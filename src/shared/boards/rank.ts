@@ -24,7 +24,7 @@ function wrapRankError(error: Error, context: string): never {
   throw new InvalidRankError(`${context}: ${errorMessage(error)}`)
 }
 
-export function rankBetween(above: string | null, below: string | null): string {
+function assertRankBounds(above: string | null, below: string | null): void {
   assertValidRank(above, "above rank")
   assertValidRank(below, "below rank")
   if (above !== null && below !== null && above >= below) {
@@ -32,6 +32,10 @@ export function rankBetween(above: string | null, below: string | null): string 
       `cannot rank between ${JSON.stringify(above)} and ${JSON.stringify(below)}: bounds are not in order`,
     )
   }
+}
+
+export function rankBetween(above: string | null, below: string | null): string {
+  assertRankBounds(above, below)
   try {
     return generateKeyBetween(above, below)
   } catch (error) {
@@ -48,13 +52,7 @@ export function ranksBetween(above: string | null, below: string | null, count: 
     throw new InvalidRankError(`count must be a non-negative integer, received ${String(count)}`)
   }
   if (count === 0) return []
-  assertValidRank(above, "above rank")
-  assertValidRank(below, "below rank")
-  if (above !== null && below !== null && above >= below) {
-    throw new InvalidRankError(
-      `cannot rank between ${JSON.stringify(above)} and ${JSON.stringify(below)}: bounds are not in order`,
-    )
-  }
+  assertRankBounds(above, below)
   try {
     return generateNKeysBetween(above, below, count)
   } catch (error) {

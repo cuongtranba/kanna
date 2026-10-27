@@ -1,12 +1,12 @@
 import { z } from "zod"
-import type { WorkflowRun } from "./workflow-types"
+import { WORKFLOW_STATUSES, type WorkflowRun } from "./workflow-types"
 import { assertParity } from "./type-parity"
 
 export const workflowRunSchema = z.object({
   runId: z.string(),
   taskId: z.string().optional(),
   workflowName: z.string().optional(),
-  status: z.enum(["running", "completed", "failed", "killed", "unknown"]),
+  status: z.enum(WORKFLOW_STATUSES),
   startTime: z.number().optional(),
   durationMs: z.number().optional(),
   agentCount: z.number().optional(),

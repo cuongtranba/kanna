@@ -1,11 +1,11 @@
 import { z } from "zod"
-import type {
-  Subagent,
-  SubagentContextScope,
-  SubagentInput,
-  SubagentPatch,
-  SubagentTriggerMode,
-  SubagentValidationError,
+import {
+  SUBAGENT_CONTEXT_SCOPES,
+  SUBAGENT_TRIGGER_MODES,
+  type Subagent,
+  type SubagentInput,
+  type SubagentPatch,
+  type SubagentValidationError,
 } from "./subagent-types"
 import type { SubagentCommandResult, SubagentDeleteResult } from "./protocol"
 import { agentProviderSchema } from "./core-types.schema"
@@ -18,8 +18,8 @@ import {
 } from "./provider-model-types.schema"
 import { assertParity } from "./type-parity"
 
-export const subagentContextScopeSchema = z.enum(["previous-assistant-reply", "full-transcript"])
-export const subagentTriggerModeSchema = z.enum(["auto", "manual"])
+export const subagentContextScopeSchema = z.enum(SUBAGENT_CONTEXT_SCOPES)
+export const subagentTriggerModeSchema = z.enum(SUBAGENT_TRIGGER_MODES)
 
 export const subagentInputSchema = z.object({
   name: z.string(),
@@ -96,8 +96,6 @@ export const subagentCommandResultSchema = z.discriminatedUnion("ok", [
 
 export const subagentDeleteResultSchema = z.object({ ok: z.literal(true) })
 
-assertParity<z.output<typeof subagentContextScopeSchema>, SubagentContextScope>()
-assertParity<z.output<typeof subagentTriggerModeSchema>, SubagentTriggerMode>()
 assertParity<z.output<typeof subagentInputSchema>, SubagentInput>()
 assertParity<z.output<typeof subagentPatchSchema>, SubagentPatch>()
 assertParity<z.output<typeof subagentSchema>, Subagent>()

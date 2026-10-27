@@ -1,8 +1,12 @@
 import { z } from "zod"
 import {
   boardOwnerKindSchema,
+  cardLinkKindSchema,
   columnColorTokenSchema,
   columnSemanticSchema,
+  conflictResolutionSchema,
+  fieldKindSchema,
+  remoteKindSchema,
   syncDirectionSchema,
 } from "../../boards/types.schema"
 import type { CardDetailView, StartWorkResult } from "../../boards/start-work"
@@ -26,7 +30,7 @@ const fieldOptionSchema = z.object({
 const fieldDefSchema = z.object({
   id: z.string(),
   label: z.string(),
-  kind: z.enum(["text", "longtext", "url", "number", "date", "select", "multiselect", "label"]),
+  kind: fieldKindSchema,
   options: z.array(fieldOptionSchema).readonly().nullable(),
   required: z.boolean(),
 })
@@ -111,7 +115,7 @@ export const boardTemplateSchema = z.object({
     cardFields: z.array(fieldDefSchema).readonly(),
     mappingDefaults: z.array(z.object({
       columnTitle: z.string(),
-      remoteKind: z.enum(["state", "label", "projectField"]),
+      remoteKind: remoteKindSchema,
       remoteValue: z.string(),
     })).readonly(),
   }),
@@ -150,7 +154,7 @@ export const boardSyncStatusSchema = z.object({
     field: z.string(),
     localValue: fieldValueSchema.nullable(),
     remoteValue: fieldValueSchema.nullable(),
-    resolvedAs: z.enum(["local", "remote"]),
+    resolvedAs: conflictResolutionSchema,
     detectedAt: z.number(),
   })).readonly(),
   suggestedRepos: z.array(z.object({
@@ -169,7 +173,7 @@ export const cardDetailViewSchema = z.object({
   card: cardSchema,
   links: z.array(z.object({
     cardId: z.string(),
-    kind: z.enum(["chat", "worktree", "pr", "card", "cleanup_declined", "blocked_by"]),
+    kind: cardLinkKindSchema,
     targetId: z.string(),
     createdAt: z.number(),
   })),

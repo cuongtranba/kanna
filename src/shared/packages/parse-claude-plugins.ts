@@ -1,78 +1,69 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "../json"
+import { isJsonObject, nonEmptyStringField, stringField, type JsonObject, type JsonValue } from "../json"
+import { installedPackage } from "./installed-package"
 import type { InstalledPackage } from "./types"
 
-function asStringOrNull(value: JsonValue): string | null {
-  return typeof value === "string" && value ? value : null
+function claudeVersionLabel(version: string | null): string | null {
+  return version && version !== "unknown" ? version.slice(0, 12) : null
 }
 
-function asString(value: JsonValue): string {
-  return typeof value === "string" ? value : ""
-}
-
-function buildClaudePluginPackage(entry: JsonObject): InstalledPackage | null {
-  const id = asString(entry.id)
-  if (!id) return null
-
-  const version = asStringOrNull(entry.version)
-  const installPath = asStringOrNull(entry.installPath)
-  const installedAt = asStringOrNull(entry.installedAt)
-  const updatedAt = asStringOrNull(entry.lastUpdated) ?? asStringOrNull(entry.updatedAt)
-
-  return {
-    id: `claude-plugin:${id}`,
-    kind: "claude-plugin",
-    name: id,
-    source: id,
-    sourceUrl: null,
+function claudePluginPackage(
+  key: string,
+  source: string,
+  entry: JsonObject,
+  revision: string | null,
+): InstalledPackage {
+  const version = nonEmptyStringField(entry, "version")
+  return installedPackage("claude-plugin", key, {
+    source,
     version,
-    revision: null,
-    installedAt,
-    updatedAt,
-    installPath,
-    versionLabel: version && version !== "unknown" ? version.slice(0, 12) : null,
-    agents: [],
-    pinnedRef: null,
+    revision,
+    installedAt: nonEmptyStringField(entry, "installedAt"),
+    updatedAt: nonEmptyStringField(entry, "lastUpdated") ?? nonEmptyStringField(entry, "updatedAt"),
+    installPath: nonEmptyStringField(entry, "installPath"),
+    versionLabel: claudeVersionLabel(version),
+  })
+}
+
+function isUserScoped(entry: JsonObject): boolean {
+  return stringField(entry, "scope") === "user"
+}
+
+function collectClaudePluginsById(
+  items: readonly JsonValue[],
+  accept: (item: JsonObject) => boolean,
+): InstalledPackage[] {
+  const seen = new Set<string>()
+  const packages: InstalledPackage[] = []
+
+  for (const item of items) {
+    if (!isJsonObject(item) || !accept(item)) continue
+    const id = stringField(item, "id")
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    packages.push(claudePluginPackage(id, id, item, null))
   }
+
+  return packages
 }
 
 export function parseClaudePluginList(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (!Array.isArray(raw)) {
     return { packages: [], error: "claude plugin list: expected a JSON array" }
   }
-
-  const seen = new Set<string>()
-  const packages: InstalledPackage[] = []
-
-  for (const item of raw) {
-    if (!isJsonObject(item)) continue
-    if (asString(item.scope) !== "user") continue
-
-    const id = asString(item.id)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-
-    const pkg = buildClaudePluginPackage(item)
-    if (pkg) packages.push(pkg)
-  }
-
-  return { packages, error: null }
+  return { packages: collectClaudePluginsById(raw, isUserScoped), error: null }
 }
 
 export function parseClaudePluginsFile(raw: JsonValue): { packages: InstalledPackage[]; error: string | null } {
   if (isJsonObject(raw)) {
-    return parseClaudePluginsFileV2(raw)
+    return { packages: parseClaudePluginsFileV2(raw), error: null }
   }
   if (Array.isArray(raw)) {
-    return parseClaudePluginsFileV1(raw)
+    return { packages: collectClaudePluginsById(raw, () => true), error: null }
   }
   return { packages: [], error: "installed_plugins.json: expected an object or array" }
 }
 
-function parseClaudePluginsFileV2(raw: JsonObject): {
-  packages: InstalledPackage[]
-  error: string | null
-} {
-  const seen = new Set<string>()
+function parseClaudePluginsFileV2(raw: JsonObject): InstalledPackage[] {
   const packages: InstalledPackage[] = []
 
   for (const [pluginKey, scopedEntries] of Object.entries(raw)) {
@@ -81,59 +72,20 @@ function parseClaudePluginsFileV2(raw: JsonObject): {
     const atIdx = pluginKey.indexOf("@")
     const pluginName = atIdx >= 0 ? pluginKey.slice(0, atIdx) : pluginKey
     const marketplaceName = atIdx >= 0 ? pluginKey.slice(atIdx + 1) : null
+    if (!pluginName) continue
 
-    if (!pluginName || seen.has(pluginKey)) continue
-    seen.add(pluginKey)
+    const userEntry = scopedEntries.find((entry) => isJsonObject(entry) && isUserScoped(entry))
+    if (userEntry === undefined || !isJsonObject(userEntry)) continue
 
-    let userEntry: JsonObject | null = null
-    for (const entry of scopedEntries) {
-      if (isJsonObject(entry) && asString(entry.scope) === "user") {
-        userEntry = entry
-        break
-      }
-    }
-    if (!userEntry) continue
-
-    const version = asStringOrNull(userEntry.version)
-    const installPath = asStringOrNull(userEntry.installPath)
-    const installedAt = asStringOrNull(userEntry.installedAt)
-    const updatedAt = asStringOrNull(userEntry.lastUpdated) ?? asStringOrNull(userEntry.updatedAt)
-    const revision = asStringOrNull(userEntry.gitCommitSha)
-
-    packages.push({
-      id: `claude-plugin:${pluginKey}`,
-      kind: "claude-plugin",
-      name: pluginKey,
-      source: marketplaceName ?? pluginName,
-      sourceUrl: null,
-      version,
-      revision,
-      installedAt,
-      updatedAt,
-      installPath,
-      versionLabel: version && version !== "unknown" ? version.slice(0, 12) : null,
-      agents: [],
-      pinnedRef: null,
-    })
+    packages.push(
+      claudePluginPackage(
+        pluginKey,
+        marketplaceName ?? pluginName,
+        userEntry,
+        nonEmptyStringField(userEntry, "gitCommitSha"),
+      ),
+    )
   }
 
-  return { packages, error: null }
-}
-
-function parseClaudePluginsFileV1(raw: JsonValue[]): { packages: InstalledPackage[]; error: string | null } {
-  const seen = new Set<string>()
-  const packages: InstalledPackage[] = []
-
-  for (const item of raw) {
-    if (!isJsonObject(item)) continue
-
-    const id = asString(item.id)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-
-    const pkg = buildClaudePluginPackage(item)
-    if (pkg) packages.push(pkg)
-  }
-
-  return { packages, error: null }
+  return packages
 }

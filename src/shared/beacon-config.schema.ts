@@ -1,6 +1,6 @@
 import { z } from "zod"
 import type { BeaconConfig, BeaconMintResult, BeaconPatch, BeaconUpdateResult } from "./beacon-config"
-import type { BeaconOs } from "./beacon-protocol"
+import { BEACON_OSES } from "./beacon-protocol"
 import type { BeaconScope } from "./beacon-scope"
 import { assertParity } from "./type-parity"
 
@@ -16,7 +16,7 @@ export const beaconScopeSchema = z.object({
   maxConcurrent: z.number(),
 })
 
-export const beaconOsSchema = z.enum(["darwin", "linux", "windows"])
+export const beaconOsSchema = z.enum(BEACON_OSES)
 
 export const beaconConfigSchema = z.object({
   id: z.string(),
@@ -49,7 +49,6 @@ export const beaconPatchSchema = z.object({
 
 assertParity<z.output<typeof beaconScopeSchema>, BeaconScope>()
 assertParity<z.output<typeof beaconPatchSchema>, BeaconPatch>()
-assertParity<z.output<typeof beaconOsSchema>, BeaconOs>()
 assertParity<z.output<typeof beaconConfigSchema>, BeaconConfig>()
 assertParity<z.output<typeof beaconMintResultSchema>, BeaconMintResult>()
 assertParity<z.output<typeof beaconUpdateResultSchema>, BeaconUpdateResult>()

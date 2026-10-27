@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { join } from "node:path"
-import { contrastBetween, oklchLuminance } from "../../shared/design/contrast"
+import { contrastRatio, oklchLuminance } from "../../shared/design/contrast"
 import { parseTokens } from "../../shared/design/tokens"
 
 const CSS_PATH = join(import.meta.dir, "../../..", "src/index.css")
@@ -15,7 +15,7 @@ function markContrast(theme: "light" | "dark", slot: number): number {
   const mark = tokens[theme][`chart-${slot}`]
   const card = tokens[theme].card
   if (!mark || !card) throw new Error(`--chart-${slot} or --card missing in ${theme}`)
-  return contrastBetween(oklchLuminance(mark), oklchLuminance(card))
+  return contrastRatio(oklchLuminance(mark), oklchLuminance(card))
 }
 
 test("every chart series slot reaches 3:1 against the card in dark mode", () => {

@@ -1,11 +1,17 @@
-import type {
-  AppThemePreference,
-  ChatSoundPreference,
-  ChatSoundId,
-  EditorPreset,
-  DefaultProviderPreference,
-  LlmProviderKind,
+import {
+  APP_THEME_PREFERENCES,
+  CHAT_SOUND_IDS,
+  CHAT_SOUND_PREFERENCES,
+  DEFAULT_PROVIDER_PREFERENCES,
+  EDITOR_PRESETS,
+  LLM_PROVIDER_KINDS,
+  type AppThemePreference,
+  type ChatSoundPreference,
+  type ChatSoundId,
+  type EditorPreset,
+  type DefaultProviderPreference,
 } from "./core-types"
+import { oneOf } from "./vocab"
 import type { BeaconConfig, BeaconPatch } from "./beacon-config"
 import type { BeaconScope } from "./beacon-scope"
 import type { McpSource, McpSourceInput, McpSourcePatch } from "./mcp-sources/types"
@@ -138,12 +144,6 @@ export const OAUTH_TOKEN_LABEL_MAX = 64
 export const OAUTH_TOKEN_VALUE_MAX = 1024
 export const OAUTH_TOKEN_BASE_URL_MAX = 512
 
-export function normalizeAnthropicBaseUrl(raw: string): string | null {
-  const trimmed = raw.trim().slice(0, OAUTH_TOKEN_BASE_URL_MAX)
-  if (!trimmed) return null
-  if (!/^https?:\/\/\S+$/.test(trimmed)) return null
-  return trimmed.replace(/\/+$/, "")
-}
 
 
 export const GLOBAL_PROMPT_APPEND_MAX_CHARS = 8_000
@@ -181,34 +181,37 @@ export interface ChatSessionStateSnapshot {
 }
 
 
-export type KeybindingAction =
-  | "toggleEmbeddedTerminal"
-  | "toggleRightSidebar"
-  | "openInFinder"
-  | "openInEditor"
-  | "addSplitTerminal"
-  | "jumpToSidebarChat"
-  | "openProjectSwitcher"
-  | "openTabSwitcher"
-  | "jumpToPaneTab"
-  | "createChatInCurrentProject"
-  | "openAddProject"
-  | "newStack"
-  | "newStackChat"
-  | "jumpToStacks"
-  | "focusPaneLeft"
-  | "focusPaneRight"
-  | "focusPaneUp"
-  | "focusPaneDown"
-  | "splitPaneRight"
-  | "splitPaneDown"
-  | "closePaneTab"
-  | "nextPaneTab"
-  | "previousPaneTab"
-  | "resizePaneLeft"
-  | "resizePaneRight"
-  | "resizePaneUp"
-  | "resizePaneDown"
+export const KEYBINDING_ACTIONS = [
+  "toggleEmbeddedTerminal",
+  "toggleRightSidebar",
+  "openInFinder",
+  "openInEditor",
+  "addSplitTerminal",
+  "jumpToSidebarChat",
+  "openProjectSwitcher",
+  "openTabSwitcher",
+  "jumpToPaneTab",
+  "createChatInCurrentProject",
+  "openAddProject",
+  "newStack",
+  "newStackChat",
+  "jumpToStacks",
+  "focusPaneLeft",
+  "focusPaneRight",
+  "focusPaneUp",
+  "focusPaneDown",
+  "splitPaneRight",
+  "splitPaneDown",
+  "closePaneTab",
+  "nextPaneTab",
+  "previousPaneTab",
+  "resizePaneLeft",
+  "resizePaneRight",
+  "resizePaneUp",
+  "resizePaneDown",
+] as const
+
+export type KeybindingAction = (typeof KEYBINDING_ACTIONS)[number]
 
 export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   toggleEmbeddedTerminal: ["cmd+j", "ctrl+`"],
@@ -240,35 +243,6 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   resizePaneDown: ["cmd+ctrl+shift+arrowdown", "ctrl+alt+shift+arrowdown"],
 }
 
-export const KEYBINDING_ACTIONS: readonly KeybindingAction[] = [
-  "toggleEmbeddedTerminal",
-  "toggleRightSidebar",
-  "openInFinder",
-  "openInEditor",
-  "addSplitTerminal",
-  "jumpToSidebarChat",
-  "openProjectSwitcher",
-  "openTabSwitcher",
-  "jumpToPaneTab",
-  "createChatInCurrentProject",
-  "openAddProject",
-  "newStack",
-  "newStackChat",
-  "jumpToStacks",
-  "focusPaneLeft",
-  "focusPaneRight",
-  "focusPaneUp",
-  "focusPaneDown",
-  "splitPaneRight",
-  "splitPaneDown",
-  "closePaneTab",
-  "nextPaneTab",
-  "previousPaneTab",
-  "resizePaneLeft",
-  "resizePaneRight",
-  "resizePaneUp",
-  "resizePaneDown",
-] satisfies KeybindingAction[]
 
 export interface KeybindingsSnapshot {
   bindings: Record<KeybindingAction, string[]>
@@ -348,6 +322,19 @@ export const PACKAGE_UPDATE_SETTINGS_DEFAULTS: PackageUpdateSettings = {
   skillAgents: ["universal", "claude-code", "codex"],
 }
 
+export interface EntityPatch<P> {
+  update?: { id: string; patch: P }
+  delete?: { id: string }
+}
+
+export interface CollectionPatch<I, P> extends EntityPatch<P> {
+  create?: I
+}
+
+interface SetEnabledPatch {
+  setEnabled?: { id: string; enabled: boolean }
+}
+
 export interface AppSettingsPatch {
   analyticsEnabled?: boolean
   browserSettingsMigrated?: boolean
@@ -371,48 +358,20 @@ export interface AppSettingsPatch {
   auth?: Partial<AuthSettings>
   claudeAuth?: Partial<ClaudeAuthSettings>
   uploads?: Partial<UploadSettings>
-  subagents?: {
-    create?: SubagentInput
-    update?: { id: string; patch: SubagentPatch }
-    delete?: { id: string }
-  }
-  customMcpServers?: {
-    create?: McpServerInput
-    update?: { id: string; patch: McpServerPatch }
-    delete?: { id: string }
-    setEnabled?: { id: string; enabled: boolean }
+  subagents?: CollectionPatch<SubagentInput, SubagentPatch>
+  customMcpServers?: CollectionPatch<McpServerInput, McpServerPatch> & SetEnabledPatch & {
     setTestResult?: { id: string; result: McpServerTestResult }
     setOAuthState?: { id: string; oauth: McpOAuthState }
   }
-  customBeacons?: {
-    update?: { id: string; patch: BeaconPatch }
-    delete?: { id: string }
-    setEnabled?: { id: string; enabled: boolean }
+  customBeacons?: EntityPatch<BeaconPatch> & SetEnabledPatch & {
     setScope?: { id: string; scope: BeaconScope }
     addTrustedScript?: { id: string; hash: string }
     removeTrustedScript?: { id: string; hash: string }
   }
-  customModels?: {
-    create?: CustomModelInput
-    update?: { id: string; patch: CustomModelPatch }
-    delete?: { id: string }
-  }
-  mcpSources?: {
-    create?: McpSourceInput
-    update?: { id: string; patch: McpSourcePatch }
-    delete?: { id: string }
-    setEnabled?: { id: string; enabled: boolean }
-  }
-  customProviders?: {
-    create?: CustomProviderInput
-    update?: { id: string; patch: CustomProviderPatch }
-    delete?: { id: string }
-  }
-  textSnippets?: {
-    create?: TextSnippetInput
-    update?: { id: string; patch: TextSnippetPatch }
-    delete?: { id: string }
-  }
+  customModels?: CollectionPatch<CustomModelInput, CustomModelPatch>
+  mcpSources?: CollectionPatch<McpSourceInput, McpSourcePatch> & SetEnabledPatch
+  customProviders?: CollectionPatch<CustomProviderInput, CustomProviderPatch>
+  textSnippets?: CollectionPatch<TextSnippetInput, TextSnippetPatch>
   claudeDriver?: {
     lifecycle?: Partial<ClaudeLifecycleSettings>
   }
@@ -423,37 +382,13 @@ export interface AppSettingsPatch {
   plugins?: Partial<PluginSettings>
   remoteMcp?: Partial<RemoteMcpSettings>
   serviceBus?: ServiceBusSettingsPatch
-  installedPlugins?: {
-    create?: { sourceDir: string; id: string }
-    update?: { id: string; patch: { enabled?: boolean } }
-    delete?: { id: string }
-  }
+  installedPlugins?: CollectionPatch<{ sourceDir: string; id: string }, { enabled?: boolean }>
 }
 
 
-export function isEditorPreset(value: string): value is EditorPreset {
-  return value === "cursor" || value === "vscode" || value === "xcode" || value === "windsurf" || value === "custom"
-}
-
-export function isChatSoundPreference(value: string): value is ChatSoundPreference {
-  return value === "never" || value === "unfocused" || value === "always"
-}
-
-export function isChatSoundId(value: string): value is ChatSoundId {
-  return (
-    value === "blow" || value === "bottle" || value === "frog" || value === "funk" ||
-    value === "glass" || value === "ping" || value === "pop" || value === "purr" || value === "tink"
-  )
-}
-
-export function isCloudFlareTunnelMode(value: string): value is CloudflareTunnelMode {
-  return value === "always-ask" || value === "auto-expose"
-}
-
-export function isLlmProviderKind(value: string): value is LlmProviderKind {
-  return value === "openai" || value === "openrouter" || value === "custom"
-}
-
-export function isAppThemePreference(value: string): value is AppThemePreference {
-  return value === "light" || value === "dark" || value === "system"
-}
+export const isEditorPreset = oneOf(EDITOR_PRESETS)
+export const isChatSoundPreference = oneOf(CHAT_SOUND_PREFERENCES)
+export const isChatSoundId = oneOf(CHAT_SOUND_IDS)
+export const isLlmProviderKind = oneOf(LLM_PROVIDER_KINDS)
+export const isAppThemePreference = oneOf(APP_THEME_PREFERENCES)
+export const isDefaultProviderPreference = oneOf(DEFAULT_PROVIDER_PREFERENCES)

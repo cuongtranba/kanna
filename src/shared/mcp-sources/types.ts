@@ -1,17 +1,14 @@
 import type { InboundHandler } from "../inbound/handler"
 import type { JsonObject, JsonValue } from "../json"
+import { clampRounded } from "../numeric"
+import { oneOf } from "../vocab"
 
-export type McpSourceMode = "subscribe" | "poll"
-
-export const MCP_SOURCE_MODES: readonly McpSourceMode[] = ["subscribe", "poll"]
+export const MCP_SOURCE_MODES = ["subscribe", "poll"] as const
+export type McpSourceMode = (typeof MCP_SOURCE_MODES)[number]
 
 export const MCP_SOURCE_INTERVAL_MIN_MS = 5000
 export const MCP_SOURCE_INTERVAL_MAX_MS = 3_600_000
 export const MCP_SOURCE_DEDUPE_KEYS = 256
-export const MCP_SOURCE_NAME_MAX = 80
-export const MCP_SOURCE_TEMPLATE_MAX = 8000
-export const MCP_SOURCE_REPLY_HINT_MAX = 2000
-export const MCP_SOURCE_PATH_MAX = 200
 
 export interface McpSourceBase {
   id: string
@@ -100,10 +97,12 @@ export interface McpSourcesSnapshot {
   sources: McpSourceStatus[]
 }
 
-export function isMcpSourceMode(value: string): value is McpSourceMode {
-  return MCP_SOURCE_MODES.some((mode) => mode === value)
-}
+export const isMcpSourceMode = oneOf(MCP_SOURCE_MODES)
 
 export function clampMcpSourceInterval(intervalMs: number): number {
-  return Math.min(MCP_SOURCE_INTERVAL_MAX_MS, Math.max(MCP_SOURCE_INTERVAL_MIN_MS, Math.round(intervalMs)))
+  return clampRounded(
+    intervalMs,
+    { min: MCP_SOURCE_INTERVAL_MIN_MS, max: MCP_SOURCE_INTERVAL_MAX_MS },
+    MCP_SOURCE_INTERVAL_MIN_MS,
+  )
 }

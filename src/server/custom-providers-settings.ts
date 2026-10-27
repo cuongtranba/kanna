@@ -1,4 +1,5 @@
 import {
+  CUSTOM_PROVIDER_BASE_URL_MAX,
   customProviderApiKeyHint,
   isValidCustomProviderContextWindow,
   validateCustomProviderShape,
@@ -10,8 +11,8 @@ import {
   type CustomProviderPublic,
   type CustomProviderValidationError,
 } from "../shared/custom-providers"
-import { normalizeAnthropicBaseUrl } from "../shared/app-settings-types"
-import { isPlainObject } from "../shared/settings/plain-object"
+import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
+import { isRecord } from "../shared/errors"
 
 export class CustomProviderValidationException extends Error {
   constructor(readonly validationError: CustomProviderValidationError) {
@@ -25,7 +26,7 @@ function cleanModels(models: readonly CustomProviderModel[]): CustomProviderMode
 }
 
 function cleanBaseUrl(raw: string): string {
-  return normalizeAnthropicBaseUrl(raw) ?? raw.trim()
+  return normalizeAnthropicBaseUrl(raw, CUSTOM_PROVIDER_BASE_URL_MAX) ?? raw.trim()
 }
 
 function withContextWindow(entry: CustomProviderEntry, contextWindow: number | undefined): CustomProviderEntry {
@@ -115,7 +116,7 @@ function readModels<T>(raw: T): CustomProviderModel[] {
   if (!Array.isArray(raw)) return []
   const models: CustomProviderModel[] = []
   for (const item of raw) {
-    if (!isPlainObject(item)) continue
+    if (!isRecord(item)) continue
     models.push({
       id: typeof item.id === "string" ? item.id.trim() : "",
       label: typeof item.label === "string" ? item.label.trim() : "",
@@ -147,7 +148,7 @@ export function normalizeCustomProviders<T>(value: T, warnings: string[]): Custo
   }
   const out: CustomProviderEntry[] = []
   for (const raw of value) {
-    if (!isPlainObject(raw)) continue
+    if (!isRecord(raw)) continue
     const id = readString(raw.id).trim()
     const entry = withContextWindow(
       {

@@ -1,11 +1,11 @@
 import { z } from "zod"
-import type { InboundHandler, InboundHandlerMode, InboundHandling } from "./handler"
+import { INBOUND_HANDLER_MODES, INBOUND_HANDLINGS, type InboundHandler } from "./handler"
 import { agentProviderSchema } from "../core-types.schema"
 import { assertParity } from "../type-parity"
 
-export const inboundHandlerModeSchema = z.enum(["notify", "inline", "spawn"])
+export const inboundHandlerModeSchema = z.enum(INBOUND_HANDLER_MODES)
 
-export const inboundHandlingSchema = z.enum(["triage", "task"])
+export const inboundHandlingSchema = z.enum(INBOUND_HANDLINGS)
 
 export const inboundHandlerSchema = z.object({
   mode: inboundHandlerModeSchema,
@@ -19,6 +19,4 @@ export const inboundHandlerSchema = z.object({
   model: z.string().optional(),
 })
 
-assertParity<z.output<typeof inboundHandlerModeSchema>, InboundHandlerMode>()
-assertParity<z.output<typeof inboundHandlingSchema>, InboundHandling>()
 assertParity<z.output<typeof inboundHandlerSchema>, InboundHandler>()

@@ -2,6 +2,7 @@
 import { cronModeConsequence } from "./arm-summary"
 import { CRON_SHORTCUTS } from "./parse-schedule"
 import type { CronParseError } from "./types"
+import { ARM_CRON_TOOL_NAME, VALIDATE_CRON_TOOL_NAME } from "../tools"
 
 export function formatCronDefect(error: CronParseError): string {
   const parts = [`Invalid /cron (${error.part}): ${error.message}`]
@@ -25,10 +26,10 @@ export function formatCronRepairRequest(error: CronParseError): string {
     `${error.part}: ${error.message}`,
     "Kanna has no deterministic fix for this one, so repairing it is yours. The grammar is:",
     GRAMMAR,
-    "Check any line you are considering with `mcp__kanna__validate_cron` first — it answers with the schedule in words and the next few fire times, which is how you confirm `0 9 * * *` means what the user actually asked for.",
+    `Check any line you are considering with \`${VALIDATE_CRON_TOOL_NAME}\` first — it answers with the schedule in words and the next few fire times, which is how you confirm \`0 9 * * *\` means what the user actually asked for.`,
     "Then finish the job in this turn:",
     [
-      "- If their intent is clear, arm it with `mcp__kanna__arm_cron` and tell them what you scheduled and when it next runs.",
+      `- If their intent is clear, arm it with \`${ARM_CRON_TOOL_NAME}\` and tell them what you scheduled and when it next runs.`,
       "- If it is genuinely ambiguous — the mode is neither stated nor implied, or the time could mean more than one thing — ask with AskUserQuestion first, then arm their answer. Do not guess.",
     ].join("\n"),
     "Do not just reply with a corrected `/cron` line for them to retype; they already tried typing it.",

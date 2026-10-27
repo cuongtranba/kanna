@@ -1,6 +1,6 @@
-import type { AgentProvider } from "../../shared/core-types"
 import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
-import { isAgentProvider, type SidebarData } from "../../shared/types"
+import type { SidebarData } from "../../shared/types"
+import { encodeInboundModelChoice } from "../../shared/inbound/handler"
 import type { WebhookConfig } from "../../shared/webhooks/types"
 import type { SearchableOption } from "../components/ui/searchable-select"
 import { getPathBasename } from "./formatters"
@@ -38,24 +38,6 @@ export function describeWebhookTarget(hook: WebhookConfig, targets: WebhookTarge
   return chat ? chat.label : "Chat no longer available"
 }
 
-export interface WebhookModelChoice {
-  provider: AgentProvider
-  model: string
-}
-
-export function encodeWebhookModel(provider: AgentProvider, model: string): string {
-  return `${provider}:${model}`
-}
-
-export function decodeWebhookModel(value: string): WebhookModelChoice | null {
-  const split = value.indexOf(":")
-  if (split <= 0) return null
-  const provider = value.slice(0, split)
-  const model = value.slice(split + 1)
-  if (!isAgentProvider(provider) || model.length === 0) return null
-  return { provider, model }
-}
-
 export function listWebhookModelOptions(catalog: readonly ProviderCatalogEntry[]): SearchableOption[] {
   const options: SearchableOption[] = [
     {
@@ -67,7 +49,7 @@ export function listWebhookModelOptions(catalog: readonly ProviderCatalogEntry[]
   for (const entry of catalog) {
     for (const model of entry.models) {
       options.push({
-        value: encodeWebhookModel(entry.id, model.id),
+        value: encodeInboundModelChoice(entry.id, model.id),
         label: model.label,
         hint: model.id,
         group: entry.label,
