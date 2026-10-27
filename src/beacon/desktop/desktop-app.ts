@@ -11,8 +11,10 @@ import type {
   BeaconStateStore,
   BeaconUpdateResult,
 } from "../ports"
+import { pairBeacon } from "../pairing"
 import type { BeaconRunner, BeaconRunnerExit, BeaconRunnerSnapshot } from "../runner"
 import type {
+  DesktopAppHandlers,
   DesktopCommandResult,
   DesktopGrant,
   DesktopNotice,
@@ -56,20 +58,11 @@ export interface DesktopAppDeps {
 }
 
 export interface BeaconDesktopApp {
+  handlers: DesktopAppHandlers
   start(): Promise<void>
   view(): DesktopView
   subscribe(listener: (view: DesktopView) => void): () => void
-  submitPairingInput(text: string): DesktopCommandResult
   receiveLink(url: string): void
-  confirmPairing(): Promise<DesktopCommandResult>
-  cancelPairing(): DesktopCommandResult
-  openGrant(): DesktopCommandResult
-  closeGrant(): DesktopCommandResult
-  applyGrant(grant: DesktopGrant): DesktopCommandResult
-  setPaused(paused: boolean): Promise<DesktopCommandResult>
-  setLaunchAtLogin(enabled: boolean): Promise<DesktopCommandResult>
-  unpair(): Promise<DesktopCommandResult>
-  dismissNotice(): DesktopCommandResult
   shutdown(): void
 }
 
@@ -214,30 +207,9 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
       .catch(onRejected((error) => deps.log(`grant timeout failed: ${error.message}`)))
   }
 
-  return {
-    async start() {
-      const [state, storedPrefs, storedActivity] = await Promise.all([
-        deps.stateStore.load(),
-        deps.prefs.load(),
-        deps.activityLog.load(),
-      ])
-      prefs = storedPrefs ?? DEFAULT_PREFS
-      activity = [...storedActivity].reverse().slice(0, ACTIVITY_VIEW_LIMIT)
-      pairing = state
-      if (state !== null) {
-        screen = { kind: "home" }
-        startRunner(state)
-      }
-      publish()
-    },
-    view,
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    submitPairingInput(text) {
+  const handlers: DesktopAppHandlers = {
+    getView: view,
+    submitPairingInput({ text }) {
       const target = parseBeaconPairingInput(text)
       if (target === null) {
         show({ kind: "welcome", inputRejected: true })
@@ -246,36 +218,25 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
       askToConfirm(target)
       return OK
     },
-    receiveLink(url) {
-      const target = parseBeaconPairingInput(url)
-      if (target === null) {
-        deps.log("ignored a link that is not a pairing link")
-        return
-      }
-      if (pairing !== null) {
-        notice = { kind: "already-paired", kannaUrl: pairing.kannaUrl }
-        publish()
-        return
-      }
-      askToConfirm(target)
-    },
     async confirmPairing() {
       const target = confirmTarget()
       if (target === null || pairing !== null) return FAILED
       show({ kind: "confirm", target, pairing: true, error: null })
-      const keyStore = deps.keys.open()
-      const result = await deps.pairClient.pair(target.kannaUrl, {
-        code: target.code,
-        publicKey: keyStore.publicKeySpkiBase64(),
-        label: deps.machine,
-        os: deps.os,
-      })
+      const result = await pairBeacon(
+        {
+          pairClient: deps.pairClient,
+          stateStore: deps.stateStore,
+          keyStore: deps.keys.open(),
+          label: deps.machine,
+          os: deps.os,
+        },
+        target,
+      )
       if (!result.ok) {
         show({ kind: "confirm", target, pairing: false, error: describePairFailure(result) })
         return FAILED
       }
-      const state: BeaconState = { kannaUrl: target.kannaUrl, beaconId: result.beaconId }
-      await deps.stateStore.save(state)
+      const { state } = result
       pairing = state
       notice = null
       prefs = { paused: false, launchAtLogin: true }
@@ -300,7 +261,7 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
       show(pairing === null ? { kind: "welcome", inputRejected: false } : { kind: "home" })
       return OK
     },
-    applyGrant(grant) {
+    applyGrant({ grant }) {
       if (screen.kind !== "grant" || runner === null) return FAILED
       const snapshot = runner.snapshot()
       if (snapshot.status.phase !== "online") {
@@ -322,14 +283,14 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
       waitForGrantEcho()
       return OK
     },
-    async setPaused(paused) {
+    async setPaused({ paused }) {
       if (runner === null) return FAILED
       if (paused) runner.pause()
       else runner.resume()
       await savePrefs({ ...prefs, paused })
       return OK
     },
-    async setLaunchAtLogin(enabled) {
+    async setLaunchAtLogin({ enabled }) {
       savingLoginItem = true
       publish()
       try {
@@ -367,6 +328,45 @@ export function createBeaconDesktopApp(deps: DesktopAppDeps): BeaconDesktopApp {
       notice = null
       publish()
       return OK
+    },
+  }
+
+  return {
+    handlers,
+    async start() {
+      const [state, storedPrefs, storedActivity] = await Promise.all([
+        deps.stateStore.load(),
+        deps.prefs.load(),
+        deps.activityLog.load(),
+      ])
+      prefs = storedPrefs ?? DEFAULT_PREFS
+      activity = [...storedActivity].reverse().slice(0, ACTIVITY_VIEW_LIMIT)
+      pairing = state
+      if (state !== null) {
+        screen = { kind: "home" }
+        startRunner(state)
+      }
+      publish()
+    },
+    view,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+    receiveLink(url) {
+      const target = parseBeaconPairingInput(url)
+      if (target === null) {
+        deps.log("ignored a link that is not a pairing link")
+        return
+      }
+      if (pairing !== null) {
+        notice = { kind: "already-paired", kannaUrl: pairing.kannaUrl }
+        publish()
+        return
+      }
+      askToConfirm(target)
     },
     shutdown() {
       stopRunner()

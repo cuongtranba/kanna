@@ -3,17 +3,16 @@ import { constants } from "node:fs"
 import { access, chmod, open, readdir, rename, rm } from "node:fs/promises"
 import { basename, dirname, join } from "node:path"
 import { errorMessage } from "../shared/errors"
+import { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl } from "../shared/release-sums"
+import { beaconUserAgent, defaultSleep } from "./http"
 import type { BeaconUpdateHooks, BeaconUpdater, BeaconUpdateResult } from "./ports"
 import {
   DEFAULT_RELEASE_BASE,
-  SHA256SUMS_ASSET,
   UPDATE_OLD_SUFFIX,
   UPDATE_STAGING_SUFFIX,
   isBunRuntimePath,
   isReleaseVersion,
-  parseSha256Sums,
   releaseAssetFor,
-  releaseAssetUrl,
 } from "./self-update"
 
 export const SUMS_TIMEOUT_MS = 30_000
@@ -106,7 +105,7 @@ async function swapInto(staged: string, execPath: string, platform: string): Pro
 
 export function createSelfUpdater(options: SelfUpdaterOptions): BeaconUpdater {
   const base = options.releaseBase ?? DEFAULT_RELEASE_BASE
-  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const sleep = options.sleep ?? defaultSleep
   const staged = `${options.execPath}${UPDATE_STAGING_SUFFIX}`
 
   async function fetchReleaseFile(version: string, name: string, timeoutMs: number): Promise<Response> {
@@ -115,7 +114,7 @@ export function createSelfUpdater(options: SelfUpdaterOptions): BeaconUpdater {
     for (let tried = 1; tried <= FETCH_ATTEMPTS; tried += 1) {
       try {
         const response = await fetch(url, {
-          headers: { "user-agent": `kanna-beacon/${options.beaconVersion}` },
+          headers: { "user-agent": beaconUserAgent(options.beaconVersion) },
           signal: AbortSignal.timeout(timeoutMs),
         })
         if (response.status === 404) throw new MissingReleaseFile(`release v${version} has no ${name} yet`)

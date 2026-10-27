@@ -64,6 +64,21 @@ export type BeaconFrame =
   | { kind: "update" }
   | ({ kind: "update_status" } & BeaconUpdateStatus)
 
+export type BeaconResponseFrame = Extract<BeaconFrame, { kind: "stdout" | "stderr" | "result" | "exit" | "error" }>
+
+export function isBeaconResponseFrame(frame: BeaconFrame): frame is BeaconResponseFrame {
+  switch (frame.kind) {
+    case "stdout":
+    case "stderr":
+    case "result":
+    case "exit":
+    case "error":
+      return true
+    default:
+      return false
+  }
+}
+
 export function isSupportedProtocol(version: number): boolean {
   return version >= MIN_BEACON_PROTOCOL && version <= BEACON_PROTOCOL_VERSION
 }

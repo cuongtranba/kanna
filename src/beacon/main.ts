@@ -1,13 +1,7 @@
-import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
+import { BEACON_DOWNLOAD_PAGE, parsePairTarget, type BeaconPairingTarget } from "../shared/beacon-pair-link"
 import { BEACON_PROTOCOL_VERSION, type BeaconOs } from "../shared/beacon-protocol"
-import {
-  backoffMs,
-  beaconSocketUrl,
-  createBeaconRunner,
-  MAX_BACKOFF_MS,
-  type BeaconRunnerStatus,
-  type BeaconTransferContext,
-} from "./runner"
+import { pairBeacon } from "./pairing"
+import { createBeaconRunner, type BeaconRunnerStatus, type BeaconTransferContext } from "./runner"
 import type {
   BeaconFsPort,
   BeaconKeyStore,
@@ -19,17 +13,14 @@ import type {
   BeaconTransport,
   BeaconUpdater,
 } from "./ports"
-
 import { RESTART_EXIT_CODE } from "./supervisor"
-
-export { backoffMs, beaconSocketUrl, MAX_BACKOFF_MS, RESTART_EXIT_CODE }
 
 export const BEACON_USAGE = "usage: kanna-beacon pair <kanna-url> <code> | kanna-beacon run | kanna-beacon version"
 export const INCOMPATIBLE_EXIT_CODE = 2
 export const DESKTOP_APP_HINT = `This is the command-line beacon. To pair and run it from a window instead, install Kanna Beacon: ${BEACON_DOWNLOAD_PAGE}`
 
 export type BeaconCommand =
-  | { command: "pair"; kannaUrl: string; code: string }
+  | ({ command: "pair" } & BeaconPairingTarget)
   | { command: "run" }
   | { command: "version" }
   | { command: "invalid"; reason: string }
@@ -47,10 +38,11 @@ export function parseBeaconArgs(argv: readonly string[]): BeaconCommand {
     if (kannaUrl === undefined || code === undefined || extra.length > 0) {
       return { command: "invalid", reason: "pair needs <kanna-url> and <code>" }
     }
-    if (!/^https?:\/\/[^/\s]+/.test(kannaUrl)) {
-      return { command: "invalid", reason: "kanna-url must start with http:// or https://" }
+    const target = parsePairTarget(kannaUrl, code)
+    if (target === null) {
+      return { command: "invalid", reason: "kanna-url must start with http:// or https:// and code must be the 8-character pairing code" }
     }
-    return { command: "pair", kannaUrl: kannaUrl.replace(/\/+$/, ""), code }
+    return { command: "pair", ...target }
   }
   return { command: "invalid", reason: command === undefined ? "missing command" : `unknown command: ${command}` }
 }
@@ -73,20 +65,22 @@ export interface BeaconCliDeps {
   print: (line: string) => void
 }
 
-async function pairMachine(deps: BeaconCliDeps, kannaUrl: string, code: string): Promise<number> {
-  const keyStore = deps.openKeyStore()
-  const result = await deps.pairClient.pair(kannaUrl, {
-    code,
-    publicKey: keyStore.publicKeySpkiBase64(),
-    label: deps.hostname,
-    os: deps.os,
-  })
+async function pairMachine(deps: BeaconCliDeps, target: BeaconPairingTarget): Promise<number> {
+  const result = await pairBeacon(
+    {
+      pairClient: deps.pairClient,
+      stateStore: deps.stateStore,
+      keyStore: deps.openKeyStore(),
+      label: deps.hostname,
+      os: deps.os,
+    },
+    target,
+  )
   if (!result.ok) {
     deps.log(`pairing failed: ${result.error}`)
     return 1
   }
-  await deps.stateStore.save({ kannaUrl, beaconId: result.beaconId })
-  deps.log(`paired as ${result.beaconId}. Start the beacon with: kanna-beacon run`)
+  deps.log(`paired as ${result.state.beaconId}. Start the beacon with: kanna-beacon run`)
   return 0
 }
 
@@ -168,7 +162,7 @@ export async function runBeaconCli(argv: readonly string[], deps: BeaconCliDeps)
     deps.print(deps.beaconVersion)
     return 0
   }
-  if (parsed.command === "pair") return pairMachine(deps, parsed.kannaUrl, parsed.code)
+  if (parsed.command === "pair") return pairMachine(deps, parsed)
   const state = await deps.stateStore.load()
   if (state === null) {
     deps.log("this machine is not paired. Run: kanna-beacon pair <kanna-url> <code>")

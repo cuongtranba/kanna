@@ -13,6 +13,7 @@ export function unhandledCommandMessage(commandType: string): string {
 }
 
 export interface ClientState {
+  kind?: "browser"
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
   chatOpSeqBySubId?: Map<string, number>
@@ -21,14 +22,30 @@ export interface ClientState {
   pushDeviceId?: string | null
   originHost?: string
   commandOrigin?: CommandOrigin
-  kind?: "beacon"
-  beaconHandshake?: {
-    phase: "awaiting-hello" | "awaiting-auth" | "ready"
-    beaconId?: string
-    nonce?: string
-    beaconVersion?: string
-    protocolVersion?: number
-  }
+}
+
+export interface BeaconHandshake {
+  phase: "awaiting-hello" | "awaiting-auth" | "ready"
+  beaconId?: string
+  nonce?: string
+  beaconVersion?: string
+  protocolVersion?: number
+}
+
+export interface BeaconSocketState {
+  kind: "beacon"
+  originHost?: string
+  beaconHandshake?: BeaconHandshake
+}
+
+export type SocketState = ClientState | BeaconSocketState
+
+export function isBeaconSocket(ws: ServerWebSocket<SocketState>): ws is ServerWebSocket<BeaconSocketState> {
+  return ws.data.kind === "beacon"
+}
+
+export function isBrowserSocket(ws: ServerWebSocket<SocketState>): ws is ServerWebSocket<ClientState> {
+  return ws.data.kind !== "beacon"
 }
 
 export interface SnapshotBroadcastFilter {

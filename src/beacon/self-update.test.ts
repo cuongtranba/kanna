@@ -1,13 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { parseSha256Sums, releaseAssetUrl } from "../shared/release-sums"
 import {
   BEACON_RELEASE_TARGETS,
-  UNSUPPORTED_UPDATER,
   UPDATE_RETRY_BACKOFF_MS,
   decideUpdate,
   isBunRuntimePath,
-  parseSha256Sums,
   releaseAssetFor,
-  releaseAssetUrl,
   type UpdateDecisionInput,
 } from "./self-update"
 
@@ -113,15 +111,5 @@ describe("release assets", () => {
     expect(isBunRuntimePath("/Users/me/.bun/bin/bun")).toBe(true)
     expect(isBunRuntimePath("C:\\bun\\bun.exe")).toBe(true)
     expect(isBunRuntimePath("/usr/local/bin/kanna-beacon")).toBe(false)
-  })
-
-  test("the unsupported updater reports failure instead of pretending", async () => {
-    const steps: string[] = []
-    const result = await UNSUPPORTED_UPDATER.install("1.71.0", {
-      onStep: (step) => void steps.push(step),
-      beforeSwap: async () => {},
-    })
-    expect(result.ok).toBe(false)
-    expect(steps).toEqual([])
   })
 })

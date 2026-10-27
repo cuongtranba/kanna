@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { createBeaconTransfer } from "../beacon/transfer.adapter"
 import type { BeaconConfig } from "../shared/beacon-config"
-import type { BeaconFrame } from "../shared/beacon-protocol"
+import type { BeaconFrame, BeaconResponseFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
 import { TRANSFER_PROTOCOL, type BeaconTransferResult } from "../shared/beacon-transfer"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -37,6 +37,7 @@ let projectDir = ""
 let remoteDir = ""
 let base = ""
 let stopServer: () => Promise<void> = async () => undefined
+let serverTickets: BeaconTransferTickets | undefined
 let toolCallback: ToolCallbackService
 let beacons: BeaconConfig[] = []
 
@@ -53,6 +54,7 @@ beforeAll(async () => {
   })
   base = `http://127.0.0.1:${String(server.port)}`
   stopServer = server.stop
+  serverTickets = server.beaconTransferTickets
   const store = createTestEventStore(path.join(dataDir, "store"))
   await store.initialize()
   toolCallback = createToolCallbackService({ store, serverSecret: "secret", now: () => 1, getBeacons: () => beacons })
@@ -88,8 +90,14 @@ function recordingTool(name: string, _description: string, _schema: object, hand
   return { name, handler }
 }
 
-function connectBeacon(handleRequest: (frame: Extract<BeaconFrame, { kind: "request" }>, reply: (frame: BeaconFrame) => void) => void) {
-  const registry = createBeaconRegistry()
+function connectBeacon(
+  handleRequest: (frame: Extract<BeaconFrame, { kind: "request" }>, reply: (frame: BeaconResponseFrame) => void) => void,
+  tickets?: BeaconTransferTickets,
+) {
+  const hostTickets = tickets ?? serverTickets
+  const registry = createBeaconRegistry(
+    hostTickets === undefined ? {} : { transfer: { tickets: hostTickets, maxPullBytes: () => undefined } },
+  )
   const sent: BeaconFrame[] = []
   registry.connect({
     beaconId: BEACON_ID,
@@ -135,7 +143,7 @@ function realBeaconMachine(config: BeaconConfig) {
 function toolsFor(
   registry: BeaconRegistry,
   config: BeaconConfig,
-  options: { tickets?: BeaconTransferTickets; withProject?: boolean } = {},
+  options: { withProject?: boolean } = {},
 ): Map<string, FakeTool> {
   beacons = [config]
   const list = buildBeaconToolList(
@@ -146,7 +154,6 @@ function toolsFor(
       allowed: true,
       approval: { toolCallback, sessionId: "session-1", cwd: projectDir, chatPolicy: POLICY_DEFAULT },
       projectRoot: options.withProject === false ? undefined : projectDir,
-      transferTickets: options.tickets,
     },
     recordingTool,
   )
@@ -231,9 +238,9 @@ describe("beacon_pull and beacon_push", () => {
   test("a transfer that moves no data fails after the idle timeout and revokes its ticket", async () => {
     let clock = 0
     const tickets = createBeaconTransferTickets({ now: () => clock, idleTimeoutMs: 1000 })
-    const { registry, sent } = connectBeacon(() => undefined)
+    const { registry, sent } = connectBeacon(() => undefined, tickets)
     const config = beaconConfig({})
-    const pull = toolsFor(registry, config, { tickets }).get("beacon_pull")!
+    const pull = toolsFor(registry, config).get("beacon_pull")!
 
     const call = pull.handler({ beaconId: BEACON_ID, path: path.join(remoteDir, "stalled.bin") })
     await until(() => sent.some((frame) => frame.kind === "request"))
@@ -251,9 +258,9 @@ describe("beacon_pull and beacon_push", () => {
 
   test("cancelling the call fails it and revokes the ticket", async () => {
     const tickets = createBeaconTransferTickets()
-    const { registry, sent } = connectBeacon(() => undefined)
+    const { registry, sent } = connectBeacon(() => undefined, tickets)
     const config = beaconConfig({})
-    const pull = toolsFor(registry, config, { tickets }).get("beacon_pull")!
+    const pull = toolsFor(registry, config).get("beacon_pull")!
     const controller = new AbortController()
 
     const call = pull.handler({ beaconId: BEACON_ID, path: path.join(remoteDir, "cancelled.bin") }, { signal: controller.signal })

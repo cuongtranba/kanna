@@ -7,7 +7,7 @@ import type { RemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { handleShareApiRequest } from "./session-share/http-routes"
 import { handleWebhookRequest } from "./webhooks/webhook-http-routes"
 import type { WebhookService } from "./webhooks/webhook-service"
-import type { ClientState } from "./ws-router"
+import type { SocketState } from "./ws-router-utils"
 import {
   handleAttachmentContent,
   handleLocalFileContent,
@@ -19,7 +19,7 @@ import { handlePluginRequest } from "./plugin-http-routes"
 import { configurePluginService, getPluginService } from "./plugins/plugin-service-host"
 import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
 import { getBeaconPairingStore } from "./beacon-pairing-host"
-import { getBeaconTransferTickets } from "./beacon-transfer-host"
+import type { BeaconTransferTickets } from "./beacon-transfer-tickets"
 import { createBeaconTransferHandler } from "./beacon-transfer-http.adapter"
 import { TRANSFER_COMPLETE_ROUTE, TRANSFER_ROUTE } from "../shared/beacon-transfer"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
@@ -40,6 +40,7 @@ export interface HttpDispatcherDeps {
   sessionShare: SessionShareService
   remoteMcp: RemoteMcpRuntime
   webhooks: WebhookService
+  beaconTransferTickets: BeaconTransferTickets
   distDir: string
 }
 
@@ -97,19 +98,19 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
-): (req: Request, server: Server<ClientState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, distDir } = deps
+): (req: Request, server: Server<SocketState>) => Promise<Response | undefined> {
+  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, distDir } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
 
-  const beaconTransfer = createBeaconTransferHandler(getBeaconTransferTickets())
+  const beaconTransfer = createBeaconTransferHandler(beaconTransferTickets)
 
   const tusUploads = createTusUploads(
     (projectId) => store.getProject(projectId) ?? null,
     () => appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB,
   )
 
-  return async function dispatch(req: Request, server: Server<ClientState>): Promise<Response | undefined> {
+  return async function dispatch(req: Request, server: Server<SocketState>): Promise<Response | undefined> {
     const url = new URL(req.url)
 
     if (url.pathname === "/auth/status") {
@@ -164,8 +165,6 @@ export function createHttpDispatcher(
       if (!auth) return new Response("Beacons require a password", { status: 403 })
       const upgraded = server.upgrade(req, {
         data: {
-          subscriptions: new Map(),
-          snapshotSignatures: new Map(),
           kind: "beacon",
           originHost: deriveOriginFromUpgrade(req, url),
         },

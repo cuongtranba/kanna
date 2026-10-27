@@ -22,6 +22,18 @@ export function draftNeedsConsent(draft: GrantDraft): boolean {
   return !draft.askFirst && !draft.consented
 }
 
+const draftForScope = memoizeLast(draftFromScope)
+
+function memoizeLast<TArg, TResult>(compute: (arg: TArg) => TResult): (arg: TArg) => TResult {
+  let last: { arg: TArg; result: TResult } | null = null
+  return (arg) => {
+    if (last !== null && Object.is(last.arg, arg)) return last.result
+    const result = compute(arg)
+    last = { arg, result }
+    return result
+  }
+}
+
 interface DesktopViewState {
   view: DesktopView | null
   liveSince: number
@@ -31,16 +43,20 @@ interface DesktopViewState {
   confirmingUnpair: boolean
   receiveView(view: DesktopView): void
   setPasteText(text: string): void
-  addFolders(base: GrantDraft, paths: readonly string[]): void
-  removeFolder(base: GrantDraft, path: string): void
-  setExec(base: GrantDraft, exec: boolean): void
-  setAskFirst(base: GrantDraft, askFirst: boolean): void
-  setConsented(base: GrantDraft, consented: boolean): void
+  addFolders(paths: readonly string[]): void
+  removeFolder(path: string): void
+  setExec(exec: boolean): void
+  setAskFirst(askFirst: boolean): void
+  setConsented(consented: boolean): void
   clearDraft(): void
   toggleMenu(): void
   closeMenu(): void
   askUnpair(): void
   cancelUnpair(): void
+}
+
+export function selectGrantDraft(state: Pick<DesktopViewState, "draft" | "view">): GrantDraft {
+  return state.draft ?? draftForScope(state.view?.runner?.scope ?? null)
 }
 
 export const useDesktopViewStore = create<DesktopViewState>()((set) => ({
@@ -60,11 +76,23 @@ export const useDesktopViewStore = create<DesktopViewState>()((set) => ({
       confirmingUnpair: view.screen.kind === "home" ? state.confirmingUnpair : false,
     })),
   setPasteText: (pasteText) => set({ pasteText }),
-  addFolders: (base, paths) => set({ draft: { ...base, readRoots: [...new Set([...base.readRoots, ...paths])] } }),
-  removeFolder: (base, path) => set({ draft: { ...base, readRoots: base.readRoots.filter((root) => root !== path) } }),
-  setExec: (base, exec) => set({ draft: { ...base, exec } }),
-  setAskFirst: (base, askFirst) => set({ draft: { ...base, askFirst, consented: askFirst ? false : base.consented } }),
-  setConsented: (base, consented) => set({ draft: { ...base, consented } }),
+  addFolders: (paths) =>
+    set((state) => {
+      const base = selectGrantDraft(state)
+      return { draft: { ...base, readRoots: [...new Set([...base.readRoots, ...paths])] } }
+    }),
+  removeFolder: (path) =>
+    set((state) => {
+      const base = selectGrantDraft(state)
+      return { draft: { ...base, readRoots: base.readRoots.filter((root) => root !== path) } }
+    }),
+  setExec: (exec) => set((state) => ({ draft: { ...selectGrantDraft(state), exec } })),
+  setAskFirst: (askFirst) =>
+    set((state) => {
+      const base = selectGrantDraft(state)
+      return { draft: { ...base, askFirst, consented: askFirst ? false : base.consented } }
+    }),
+  setConsented: (consented) => set((state) => ({ draft: { ...selectGrantDraft(state), consented } })),
   clearDraft: () => set({ draft: null }),
   toggleMenu: () => set((state) => ({ menuOpen: !state.menuOpen, confirmingUnpair: false })),
   closeMenu: () => set({ menuOpen: false, confirmingUnpair: false }),

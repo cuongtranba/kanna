@@ -16,7 +16,7 @@ import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import type { BeaconConfig, BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
 import { beaconDisplayName } from "../../shared/beacon-alias"
-import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
+import { BEACON_DOWNLOAD_PAGE, buildBeaconPairCommand, buildBeaconPairLink } from "../../shared/beacon-pair-link"
 import { isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
 import { STATUS_PILL_CLASS } from "../../shared/design/tone-pairings"
 import { APP_VERSION } from "../../shared/branding"
@@ -189,7 +189,7 @@ function PairingCode({
 }) {
   const remaining = expiresAt - now
   const origin = dom.getOrigin()
-  const command = `kanna-beacon pair ${origin} ${code}`
+  const command = buildBeaconPairCommand({ kannaUrl: origin, code })
   const appLink = buildBeaconPairLink({ kannaUrl: origin, code })
   const copyKey = pendingActionKey("beacons.copyPairCommand", code)
   const copying = usePendingAction(copyKey)

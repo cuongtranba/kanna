@@ -31,7 +31,11 @@ function normalizeCode(raw: string): string | null {
   return CODE_PATTERN.test(code) ? code : null
 }
 
-function toTarget(rawUrl: string | null, rawCode: string | null): BeaconPairingTarget | null {
+export function buildBeaconPairCommand(target: BeaconPairingTarget): string {
+  return `kanna-beacon pair ${target.kannaUrl} ${target.code}`
+}
+
+export function parsePairTarget(rawUrl: string | null, rawCode: string | null): BeaconPairingTarget | null {
   if (rawUrl === null || rawCode === null) return null
   const kannaUrl = normalizeKannaUrl(rawUrl)
   const code = normalizeCode(rawCode)
@@ -48,7 +52,7 @@ function parseLink(text: string): BeaconPairingTarget | null {
   if (parsed.protocol !== `${BEACON_LINK_SCHEME}:`) return null
   const action = parsed.host === "" ? parsed.pathname.replace(/^\/+/, "") : parsed.host
   if (action !== "pair") return null
-  return toTarget(parsed.searchParams.get("url"), parsed.searchParams.get("code"))
+  return parsePairTarget(parsed.searchParams.get("url"), parsed.searchParams.get("code"))
 }
 
 export function parseBeaconPairingInput(input: string): BeaconPairingTarget | null {
@@ -56,5 +60,5 @@ export function parseBeaconPairingInput(input: string): BeaconPairingTarget | nu
   if (text.length === 0) return null
   if (text.toLowerCase().startsWith(`${BEACON_LINK_SCHEME}://`)) return parseLink(text)
   const command = CLI_PAIR.exec(text)
-  return command ? toTarget(command[1] ?? null, command[2] ?? null) : null
+  return command ? parsePairTarget(command[1] ?? null, command[2] ?? null) : null
 }

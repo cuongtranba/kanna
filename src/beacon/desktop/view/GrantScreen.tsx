@@ -1,12 +1,12 @@
-import { useCallback, useMemo, type ChangeEvent } from "react"
+import { useCallback, type ChangeEvent } from "react"
 import { FolderPlus, X } from "lucide-react"
 import { runPendingAction, usePendingAction } from "../../../client/stores/pendingActionsStore"
 import type { DesktopGrantError, DesktopScreen, DesktopView } from "../desktop-types"
 import type { DesktopStrings } from "../strings"
 import { NO_PARAMS } from "./bridge"
 import { splitFolderPath } from "./present"
-import { draftFromScope, draftNeedsConsent, useDesktopViewStore, type GrantDraft } from "./view-store"
-import { ActionButton, KEY, Spinner, type Shared } from "./parts"
+import { draftNeedsConsent, selectGrantDraft, useDesktopViewStore } from "./view-store"
+import { ActionButton, FolderLabel, KEY, LaunchAtLoginToggle, type Shared } from "./parts"
 
 function grantErrorText(error: DesktopGrantError, strings: DesktopStrings): string {
   switch (error) {
@@ -25,9 +25,7 @@ export function GrantScreen({
   bridge,
   strings,
 }: Shared & { screen: Extract<DesktopScreen, { kind: "grant" }>; view: DesktopView }) {
-  const stored = useDesktopViewStore((state) => state.draft)
-  const scope = view.runner?.scope ?? null
-  const draft: GrantDraft = useMemo(() => stored ?? draftFromScope(scope), [stored, scope])
+  const draft = useDesktopViewStore(selectGrantDraft)
   const addFolders = useDesktopViewStore((state) => state.addFolders)
   const removeFolder = useDesktopViewStore((state) => state.removeFolder)
   const setExec = useDesktopViewStore((state) => state.setExec)
@@ -35,32 +33,18 @@ export function GrantScreen({
   const setConsented = useDesktopViewStore((state) => state.setConsented)
   const clearDraft = useDesktopViewStore((state) => state.clearDraft)
   const picking = usePendingAction(KEY.pickFolders)
-  const loginPending = usePendingAction(KEY.login) || view.busy.launchAtLogin
   const online = view.runner?.status.phase === "online"
   const osName = strings.osName[view.os]
 
   const onPick = useCallback(() => {
     runPendingAction(KEY.pickFolders, async () => {
       const { paths } = await bridge.request("pickFolders", NO_PARAMS)
-      if (paths.length > 0) addFolders(draft, paths)
+      if (paths.length > 0) addFolders(paths)
     })
-  }, [addFolders, bridge, draft])
-  const onExec = useCallback((event: ChangeEvent<HTMLInputElement>) => setExec(draft, event.target.checked), [draft, setExec])
-  const onAskFirst = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setAskFirst(draft, event.target.checked),
-    [draft, setAskFirst],
-  )
-  const onConsent = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => setConsented(draft, event.target.checked),
-    [draft, setConsented],
-  )
-  const onLogin = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const enabled = event.target.checked
-      runPendingAction(KEY.login, () => bridge.request("setLaunchAtLogin", { enabled }))
-    },
-    [bridge],
-  )
+  }, [addFolders, bridge])
+  const onExec = useCallback((event: ChangeEvent<HTMLInputElement>) => setExec(event.target.checked), [setExec])
+  const onAskFirst = useCallback((event: ChangeEvent<HTMLInputElement>) => setAskFirst(event.target.checked), [setAskFirst])
+  const onConsent = useCallback((event: ChangeEvent<HTMLInputElement>) => setConsented(event.target.checked), [setConsented])
   const onSave = useCallback(() => {
     runPendingAction(KEY.applyGrant, () =>
       bridge.request("applyGrant", {
@@ -86,7 +70,7 @@ export function GrantScreen({
         ) : (
           <ul className="bd-folders">
             {draft.readRoots.map((root) => (
-              <FolderRow key={root} root={root} label={strings.grant.removeFolder(splitFolderPath(root).name)} onRemove={removeFolder} draft={draft} />
+              <FolderRow key={root} root={root} label={strings.grant.removeFolder(splitFolderPath(root).name)} onRemove={removeFolder} />
             ))}
           </ul>
         )}
@@ -118,11 +102,7 @@ export function GrantScreen({
       </section>
       {screen.firstRun && (
         <section className="bd-group">
-          <label className="bd-check">
-            <input type="checkbox" checked={view.prefs.launchAtLogin} onChange={onLogin} disabled={loginPending} />
-            <span>{strings.grant.launchAtLogin(osName)}</span>
-            {loginPending ? <Spinner /> : null}
-          </label>
+          <LaunchAtLoginToggle view={view} bridge={bridge} label={strings.grant.launchAtLogin(osName)} />
         </section>
       )}
       {screen.saveError !== null && (
@@ -151,25 +131,17 @@ export function GrantScreen({
 function FolderRow({
   root,
   label,
-  draft,
   onRemove,
 }: {
   root: string
   label: string
-  draft: GrantDraft
-  onRemove: (base: GrantDraft, path: string) => void
+  onRemove: (path: string) => void
 }) {
-  const { name, parent } = splitFolderPath(root)
-  const remove = useCallback(() => onRemove(draft, root), [draft, onRemove, root])
+  const remove = useCallback(() => onRemove(root), [onRemove, root])
   return (
     <li className="bd-folder">
       <span className="bd-folder-text">
-        <span className="bd-folder-name">{name}</span>
-        {parent !== "" && (
-                            <span className="bd-folder-parent">
-                              <bdi>{parent}</bdi>
-                            </span>
-                          )}
+        <FolderLabel root={root} />
       </span>
       <button type="button" className="bd-icon-button" onClick={remove} aria-label={label}>
         <X className="bd-icon" aria-hidden />

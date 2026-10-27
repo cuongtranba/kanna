@@ -1,9 +1,4 @@
-import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import { isBeaconBehind } from "../shared/beacon-status"
-import { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl } from "../shared/release-sums"
-import type { BeaconUpdater } from "./ports"
-
-export { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl }
 
 export const DEFAULT_RELEASE_BASE = "https://github.com/cuongtranba/kanna/releases/download"
 export const UPDATE_RETRY_BACKOFF_MS = 30 * 60_000
@@ -71,11 +66,4 @@ export function releaseAssetFor(platform: string, arch: string): string | null {
 export function isBunRuntimePath(execPath: string): boolean {
   const name = execPath.split(/[\\/]/).pop()?.toLowerCase() ?? ""
   return name === "bun" || name === "bun.exe"
-}
-
-export const UNSUPPORTED_UPDATER: BeaconUpdater = {
-  install: async () => ({
-    ok: false,
-    error: `this beacon cannot update itself yet; install the new version from ${BEACON_DOWNLOAD_PAGE}`,
-  }),
 }

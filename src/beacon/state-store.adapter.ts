@@ -15,7 +15,9 @@ export function createStateStore(path: string): BeaconStateStore {
       const parsed = safeJsonParse(text)
       if (parsed === null || !isJsonObject(parsed)) return null
       const { kannaUrl, beaconId } = parsed
-      return typeof kannaUrl === "string" && typeof beaconId === "string" ? { kannaUrl, beaconId } : null
+      return typeof kannaUrl === "string" && typeof beaconId === "string"
+        ? { kannaUrl: kannaUrl.replace(/\/+$/, ""), beaconId }
+        : null
     },
     async save(state) {
       await mkdir(dirname(path), { recursive: true })

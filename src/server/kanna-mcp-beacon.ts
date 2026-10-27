@@ -10,11 +10,9 @@ import { errorMessage } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { BeaconRegistry } from "./beacon-registry"
-import { getBeaconTransferMaxBytes, getBeaconTransferTickets } from "./beacon-transfer-host"
 import type { BeaconTransferFiles } from "./beacon-transfer-files"
 import { createBeaconTransferFiles } from "./beacon-transfer-files.adapter"
 import { toJsonObject } from "./json-boundary"
-import type { BeaconTransferTickets } from "./beacon-transfer-tickets"
 import { buildBeaconTransferTools, type BeaconTransferToolFactory } from "./kanna-mcp-beacon-transfer"
 import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
 import type { ToolCallbackService } from "./tool-callback"
@@ -52,7 +50,6 @@ export interface BeaconToolContext {
   approval?: BeaconApproval
   dispatchOptions?: BeaconDispatchOptions
   projectRoot?: string
-  transferTickets?: BeaconTransferTickets
   transferFiles?: BeaconTransferFiles
 }
 
@@ -225,9 +222,9 @@ export function buildBeaconToolList<TTool, TExtra>(
           {
             chatId: owner,
             projectRoot: deps.projectRoot,
-            tickets: deps.transferTickets ?? getBeaconTransferTickets(),
+            tickets: registry.transfer.tickets,
             files: deps.transferFiles ?? createBeaconTransferFiles(),
-            maxPullBytes: getBeaconTransferMaxBytes,
+            maxPullBytes: registry.transfer.maxPullBytes,
             chatPolicy: deps.approval?.chatPolicy,
             resolveBeacon,
             authorize,

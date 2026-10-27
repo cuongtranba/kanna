@@ -71,6 +71,18 @@ export type DesktopRequests = {
   openExternal: { params: { url: string }; response: DesktopCommandResult }
 }
 
+export type DesktopRequestName = keyof DesktopRequests
+
+export type DesktopShellRequestName = "pickFolders" | "openExternal"
+
+export type DesktopAppRequestName = Exclude<DesktopRequestName, DesktopShellRequestName>
+
+export type DesktopAppHandlers = {
+  [K in DesktopAppRequestName]: (
+    params: DesktopRequests[K]["params"],
+  ) => DesktopRequests[K]["response"] | Promise<DesktopRequests[K]["response"]>
+}
+
 export type DesktopMessages = {
   view: DesktopView
 }
