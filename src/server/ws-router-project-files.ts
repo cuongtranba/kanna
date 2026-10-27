@@ -1,3 +1,4 @@
+import { projectNotFound } from "../shared/errors"
 import type { ProjectPathEntry } from "../shared/commands/results/project"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import { ackResult } from "./ws-router-ack"
@@ -34,7 +35,7 @@ export async function handleProjectPathsCommand(
 ): Promise<boolean> {
   if (command.type !== "project.listPaths") return false
   const project = store.getProject(command.projectId)
-  if (!project) throw new Error("Project not found")
+  if (!project) throw projectNotFound()
   const paths = await listProjectPaths({
     projectId: project.id,
     localPath: project.localPath,
@@ -54,7 +55,7 @@ export async function handleUploadDeleteCommand(
 ): Promise<boolean> {
   if (command.type !== "upload.delete") return false
   const project = store.getProject(command.projectId)
-  if (!project) throw new Error("Project not found")
+  if (!project) throw projectNotFound()
   if (!isSingleFileName(command.storedName)) throw new Error("Invalid attachment path")
   const deleted = await deleteProjectUpload({ localPath: project.localPath, storedName: command.storedName })
   send(ackResult(id, command, { deleted }))

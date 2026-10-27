@@ -1,4 +1,5 @@
 
+import { chatNotFound, projectNotFound, queuedMessageNotFound } from "../shared/errors"
 import path from "node:path"
 import type { AgentProvider, ModelOptions, QueuedChatMessage, StackBinding } from "../shared/types"
 import { STORE_VERSION, DEFAULT_CHAT_TITLE } from "../shared/types"
@@ -22,7 +23,7 @@ import { resolveLocalPath } from "./paths"
 
 function requireChat(chatsById: Map<string, ChatRecord>, chatId: string): ChatRecord {
   const chat = chatsById.get(chatId)
-  if (!chat || chat.deletedAt) throw new Error("Chat not found")
+  if (!chat || chat.deletedAt) throw chatNotFound()
   return chat
 }
 
@@ -61,7 +62,7 @@ export function buildRemoveProjectEvent(
   projectId: string,
 ): ProjectEvent {
   const project = projectsById.get(projectId)
-  if (!project || project.deletedAt) throw new Error("Project not found")
+  if (!project || project.deletedAt) throw projectNotFound()
   return { v: STORE_VERSION, type: "project_removed", timestamp: Date.now(), projectId }
 }
 
@@ -69,7 +70,7 @@ export function buildDeleteProjectEvents(
   state: Pick<StoreState, "projectsById" | "stacksById">,
   projectId: string,
 ): Array<ProjectEvent | StackEvent> {
-  if (!state.projectsById.has(projectId)) throw new Error("Project not found")
+  if (!state.projectsById.has(projectId)) throw projectNotFound()
   const timestamp = Date.now()
   const stackEvents: StackEvent[] = [...state.stacksById.values()]
     .filter((stack) => !stack.deletedAt && stack.projectIds.includes(projectId))
@@ -85,7 +86,7 @@ export function buildSetProjectStarEvent(
   starred: boolean,
 ): ProjectEvent {
   const project = projectsById.get(projectId)
-  if (!project || project.deletedAt) throw new Error("Project not found")
+  if (!project || project.deletedAt) throw projectNotFound()
   const now = Date.now()
   return {
     v: STORE_VERSION,
@@ -149,7 +150,7 @@ export function buildSetProjectInstructionsEvent(
   instructions: string,
 ): ProjectEvent | null {
   const project = projectsById.get(projectId)
-  if (!project || project.deletedAt) throw new Error("Project not found")
+  if (!project || project.deletedAt) throw projectNotFound()
   const next = normalizeInstructionsEdit(project.instructions, instructions)
   if (next === null) return null
   return { v: STORE_VERSION, type: "project_instructions_set", timestamp: Date.now(), projectId, instructions: next }
@@ -185,7 +186,7 @@ export function buildAddProjectToStackEvent(
   const stack = state.stacksById.get(stackId)
   if (!stack || stack.deletedAt) throw new Error("Stack not found")
   const project = state.projectsById.get(projectId)
-  if (!project || project.deletedAt) throw new Error("Project not found")
+  if (!project || project.deletedAt) throw projectNotFound()
   if (stack.projectIds.includes(projectId)) return null
   return { v: STORE_VERSION, type: "stack_project_added", timestamp: Date.now(), stackId, projectId }
 }
@@ -284,7 +285,7 @@ export function buildCreateChatEvent(
   options?: { stackId?: string; stackBindings?: StackBinding[] },
 ): ChatEvent & { chatId: string } {
   const project = state.projectsById.get(projectId)
-  if (!project || project.deletedAt) throw new Error("Project not found")
+  if (!project || project.deletedAt) throw projectNotFound()
 
   if (options?.stackId !== undefined && options.stackBindings === undefined) {
     throw new Error("stackId requires stackBindings")
@@ -456,7 +457,7 @@ export function buildRemoveQueuedMessageEvent(
 ): QueuedMessageEvent {
   requireChat(chatsById, chatId)
   const existing = queuedMessagesByChatId.get(chatId) ?? []
-  if (!existing.some((e) => e.id === queuedMessageId)) throw new Error("Queued message not found")
+  if (!existing.some((e) => e.id === queuedMessageId)) throw queuedMessageNotFound()
   return {
     v: STORE_VERSION, type: "queued_message_removed",
     timestamp: Date.now(), chatId, queuedMessageId,

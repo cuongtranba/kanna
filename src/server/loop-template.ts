@@ -2,24 +2,16 @@
 import path from "node:path"
 
 import { DELEGATE_SUBAGENT_TOOL_NAME, STOP_LOOP_TOOL_NAME, TASK_CREATE_TOOL_NAME, TASK_LIST_TOOL_NAME, TASK_NOTE_TOOL_NAME, TASK_UPDATE_TOOL_NAME } from "../shared/tools"
-import { LOOP_PARALLEL_STEP_INVARIANTS, LOOP_SECTIONS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
+import { LOOP_PARALLEL_STEP_INVARIANTS, LOOP_STEP_INVARIANTS } from "../shared/loop-progress"
+import type { SeedTaskInput } from "../shared/chat-tasks/seed"
 import { confinePathToDir, shellCommandIsParseable } from "./input-validation"
 import { renderParallelLoopPrompt } from "./loop-prompt-parallel"
-
-export { LOOP_SECTIONS } from "../shared/loop-progress"
 
 const DEFAULT_TRACKING_FILE = "PROGRESS.md"
 
 export const MAX_PARALLELISM = 3
 
 export const DEFAULT_INTEGRATION_BRANCH = "HEAD"
-
-export interface LoopSeedTask {
-  subject: string
-  needs?: readonly string[]
-  worktree?: string
-  branch?: string
-}
 
 export interface LoopSetupInput {
   goal: string
@@ -31,7 +23,7 @@ export interface LoopSetupInput {
   parallelism?: number
   integrationBranch?: string
   force?: boolean
-  tasks?: readonly LoopSeedTask[]
+  tasks?: readonly SeedTaskInput[]
 }
 
 export interface LoopSetupContext {
@@ -51,7 +43,6 @@ export interface ResolvedLoopSetup {
   parallelism: number
   integrationBranch: string
   prompt: string
-  skeleton: string
 }
 
 export type LoopSetupValidation =
@@ -69,29 +60,16 @@ function resolveTrackingFile(
   return confinePathToDir(input ?? DEFAULT_TRACKING_FILE, workdir, "trackingFile")
 }
 
-function renderDelegationRule(parallelism: number): string[] {
-  if (parallelism <= 1) {
-    return ["- Exactly ONE delegate_subagent per turn, then END THE TURN immediately."]
-  }
-  return [
-    `- You may delegate up to ${parallelism} chunks in this turn, but ONLY chunks the plan`,
-    "  explicitly marks `[parallel]`, and each one must name its OWN git worktree",
-    "  — two workers sharing a checkout will corrupt each other's edits.",
-    "  If the chunks are not marked, delegate exactly ONE. Then END THE TURN.",
-  ]
-}
-
 function renderLoopPrompt(args: {
   goal: string
   verifyCommand: string
-  trackingFileRel: string
   subagentId: string
   parallelism: number
   workdirRel: string
   integrationBranch?: string
 }): string {
   if (args.parallelism > 1) return renderParallelLoopPrompt(args)
-  const { goal, verifyCommand, subagentId, parallelism, workdirRel } = args
+  const { goal, verifyCommand, subagentId, workdirRel } = args
   const workdirPhrase = workdirRel === "." ? "the project root" : workdirRel
   const workerPrompt = [
     "[chunk: <the subject of the task you are delegating>]",
@@ -181,180 +159,13 @@ function renderLoopPrompt(args: {
     `- Record progress ONLY through ${TASK_UPDATE_TOOL_NAME} and`,
     `  ${TASK_NOTE_TOOL_NAME}. A task's status cannot pile up the way a hand-`,
     "  written log could, which is why completed work never gets redone here.",
-    ...renderDelegationRule(parallelism),
+    "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
     "- All progress lives in the task list, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,
     `Work directory: ${workdirRel}`,
   ].join("\n")
-}
-
-interface SkeletonArgs {
-  goal: string
-  verifyCommand: string
-  chunkHint: string | null
-  parallelism?: number
-}
-
-const DEFAULT_PREAMBLE_LINES: readonly string[] = ["# Loop tracking file", ""]
-
-interface CanonicalSection {
-  heading: string
-  serverOwned: boolean
-  matches: (normalizedHeading: string) => boolean
-  canonicalBodyLines: (args: SkeletonArgs) => string[]
-}
-
-const TASK_QUEUE_SECTION: CanonicalSection = {
-  heading: `## ${LOOP_SECTIONS.taskQueue}`,
-  serverOwned: false,
-  matches: (h) => h.startsWith("task queue"),
-  canonicalBodyLines: (args) => [
-    "",
-    args.chunkHint
-      ?? "- [ ] t1 <first task> | worktree: <path to its own git worktree> | branch: <branch name>",
-    "",
-  ],
-}
-
-const CANONICAL_SECTIONS: readonly CanonicalSection[] = [
-  {
-    heading: "## Goal",
-    serverOwned: true,
-    matches: (h) => h === "goal",
-    canonicalBodyLines: (args) => [args.goal, ""],
-  },
-  {
-    heading: "## Verify command",
-    serverOwned: true,
-    matches: (h) => h === "verify command",
-    canonicalBodyLines: (args) => ["```", args.verifyCommand, "```", ""],
-  },
-  {
-    heading: `## ${LOOP_SECTIONS.progress} (latest first)`,
-    serverOwned: false,
-    matches: (h) => h.startsWith("progress"),
-    canonicalBodyLines: () => ["", "_Subagent appends one row per completed chunk here._", ""],
-  },
-  {
-    heading: `## ${LOOP_SECTIONS.failedApproaches}`,
-    serverOwned: false,
-    matches: (h) => h.startsWith("failed approaches"),
-    canonicalBodyLines: () => ["", "_Subagent appends dead-ends here so future iterations don't repeat them._", ""],
-  },
-  {
-    heading: `## ${LOOP_SECTIONS.nextChunk}`,
-    serverOwned: false,
-    matches: (h) => h.startsWith("next chunk"),
-    canonicalBodyLines: (args) => ["", args.chunkHint ?? "_Describe the first chunk the subagent should do._", ""],
-  },
-]
-
-function canonicalSections(parallelism: number | undefined): readonly CanonicalSection[] {
-  if ((parallelism ?? 1) <= 1) return CANONICAL_SECTIONS
-  return [
-    ...CANONICAL_SECTIONS.filter((s) => s.heading !== `## ${LOOP_SECTIONS.nextChunk}`),
-    TASK_QUEUE_SECTION,
-  ]
-}
-
-function renderSkeleton(args: SkeletonArgs): string {
-  return [
-    ...DEFAULT_PREAMBLE_LINES,
-    ...canonicalSections(args.parallelism).flatMap((s) => [s.heading, ...s.canonicalBodyLines(args)]),
-  ].join("\n")
-}
-
-export interface TrackingFileReconcile {
-  content: string
-  changed: boolean
-  actions: string[]
-}
-
-interface ParsedSection {
-  normalizedHeading: string
-  lines: string[]
-}
-
-function parseSections(existing: string): { preamble: string[]; sections: ParsedSection[] } {
-  const lines = existing.split("\n")
-  const preamble: string[] = []
-  const sections: ParsedSection[] = []
-  let current: ParsedSection | null = null
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      current = { normalizedHeading: line.slice(3).trim().toLowerCase(), lines: [line] }
-      sections.push(current)
-    } else if (current) {
-      current.lines.push(line)
-    } else {
-      preamble.push(line)
-    }
-  }
-  return { preamble, sections }
-}
-
-export function reconcileTrackingFile(existing: string, args: SkeletonArgs): TrackingFileReconcile {
-  const { preamble, sections } = parseSections(existing)
-  const actions: string[] = []
-  const claimed = new Set<ParsedSection>()
-
-  const out: string[] = preamble.some((l) => l.trim() !== "")
-    ? [...preamble]
-    : [...DEFAULT_PREAMBLE_LINES]
-
-  for (const spec of canonicalSections(args.parallelism)) {
-    const match = sections.find((s) => !claimed.has(s) && spec.matches(s.normalizedHeading))
-    if (!match) {
-      out.push(spec.heading, ...spec.canonicalBodyLines(args))
-      actions.push(`inserted "${spec.heading}"`)
-      continue
-    }
-    claimed.add(match)
-    const bodyConforms =
-      !spec.serverOwned
-      || match.lines.slice(1).join("\n").trim() === spec.canonicalBodyLines(args).join("\n").trim()
-    if (bodyConforms) {
-      out.push(...match.lines)
-    } else {
-      out.push(spec.heading, ...spec.canonicalBodyLines(args))
-      actions.push(`rewrote "${spec.heading}"`)
-    }
-  }
-
-  for (const section of sections) {
-    if (!claimed.has(section)) out.push(...section.lines)
-  }
-
-  const content = out.join("\n")
-  const changed = content !== existing
-  if (changed && actions.length === 0) actions.push("normalized formatting")
-  return { content, changed, actions: changed ? actions : [] }
-}
-
-export type TrackingFileSafety = { ok: true } | { ok: false; error: string }
-
-export function assertTrackingFileSafe(
-  existing: string,
-  args: { goal: string; gitTracked: boolean; force: boolean },
-): TrackingFileSafety {
-  if (!args.gitTracked || args.force) return { ok: true }
-
-  const { sections } = parseSections(existing)
-  const goalSection = sections.find((s) => s.normalizedHeading === "goal")
-  if (!goalSection) return { ok: true }
-
-  const existingGoal = goalSection.lines.slice(1).join("\n").trim()
-  if (existingGoal.length === 0 || existingGoal === args.goal.trim()) return { ok: true }
-
-  return {
-    ok: false,
-    error:
-      "refusing to overwrite a git-tracked tracking file that records a different goal"
-      + ` (existing goal: "${existingGoal.split("\n")[0]}").`
-      + " Pass a different trackingFile for this loop, or force: true to overwrite it.",
-  }
 }
 
 export function extractOracleScriptPath(verifyCommand: string): string | null {
@@ -493,7 +304,6 @@ export function validateLoopSetup(
   const prompt = renderLoopPrompt({
     goal,
     verifyCommand,
-    trackingFileRel: resolved.rel,
     subagentId,
     parallelism,
     workdirRel,
@@ -528,9 +338,8 @@ export function validateLoopSetup(
       parallelism,
       integrationBranch,
       prompt,
-      skeleton: renderSkeleton({ goal, verifyCommand, chunkHint, parallelism }),
     },
   }
 }
 
-export const __testing = { renderLoopPrompt, renderSkeleton, resolveTrackingFile }
+export const __testing = { renderLoopPrompt, resolveTrackingFile }

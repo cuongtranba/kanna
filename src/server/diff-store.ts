@@ -1,3 +1,4 @@
+import { fileNoLongerChanged } from "../shared/errors"
 import path from "node:path"
 import { formatGitFailure, summarizeGitFailure } from "./diff-store-io.adapter"
 import { runGit } from "./git-runner.adapter"
@@ -286,7 +287,7 @@ export class DiffStore {
 
     const entry = await findDirtyPath(repo.repoRoot, relativePath)
     if (!entry) {
-      throw new Error(`File is no longer changed: ${relativePath}`)
+      throw fileNoLongerChanged(relativePath)
     }
 
     const beforePath = entry.previousPath ?? relativePath

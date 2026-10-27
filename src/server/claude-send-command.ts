@@ -19,7 +19,7 @@ import {
 } from "./provider-catalog"
 import { buildSteeredMessageContent } from "./claude-prompt-helpers"
 import { isChatBusy } from "./claude-session-state-queries"
-import type { CompactionTurnKind, SessionBackgroundTask } from "./claude-session-state"
+import type { SessionBackgroundTask } from "./claude-session-state"
 import {
   buildCodexCompactPrompt,
   parseBuiltinCommand,
@@ -52,7 +52,6 @@ interface SendCommandStore {
 
 interface ActiveTurnsMap {
   has(chatId: string): boolean
-  get(chatId: string): { compactionTurn?: CompactionTurnKind } | undefined
 }
 
 interface StartingTurnsMap {
@@ -274,10 +273,8 @@ export async function runBuiltinCommand(
     planMode: false,
     appendUserPrompt: false,
     onTurnRecorded: onCommitted,
+    compactionTurn: cliPassthrough ? "user" : "codex_summary",
   })
-
-  const active = deps.activeTurns.get(chatId)
-  if (active) active.compactionTurn = cliPassthrough ? "user" : "codex_summary"
 }
 
 function resolveSlashExpansion(
@@ -372,6 +369,18 @@ export async function maybeStartNextQueuedMessage(
   return true
 }
 
+export async function deliverPrompt(
+  deps: SendCommandDeps,
+  chatId: string,
+  content: string,
+  attachments: ChatAttachment[],
+  options?: SendMessageOptions,
+): Promise<QueuedChatMessage> {
+  const queued = await enqueueMessage(deps, chatId, content, attachments, options)
+  await maybeStartNextQueuedMessage(deps, chatId)
+  return queued
+}
+
 export async function sendCommand(
   deps: SendCommandDeps,
   command: Extract<ClientCommand, { type: "chat.send" }>,
@@ -459,9 +468,8 @@ export async function sendCommand(
       planMode: settings.planMode,
       appendUserPrompt: false,
       profile,
+      compactionTurn: "proactive",
     })
-    const compactActive = deps.activeTurns.get(chatId)
-    if (compactActive) compactActive.compactionTurn = "proactive"
 
     logSendToStartingProfile(profile, "chat_send.proactive_compact_injected", {
       chatId,

@@ -144,18 +144,6 @@ export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
 }
 
 
-const BENIGN_STALE_STATE_MESSAGES = [
-  /^Chat not found$/,
-  /^Queued message not found$/,
-  /^File is no longer changed: /,
-  /^Project not found$/,
-] as const
-
-export function isBenignStaleStateMessage(message: string): boolean {
-  return BENIGN_STALE_STATE_MESSAGES.some((pattern) => pattern.test(message))
-}
-
-
 export interface CommandConnection {
   data: ClientState
   send(payload: string): number

@@ -2,10 +2,7 @@
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
 import type { TokenUnavailability } from "./oauth-pool/oauth-token-pool"
 import { computeWorkflowsDir } from "./claude-projects-path.adapter"
-import {
-  hasPendingBackgroundTask,
-  isSessionInUse,
-} from "./claude-session-state-queries"
+import { isSessionInUse } from "./claude-session-state-queries"
 
 interface LifecycleOAuthPool {
   release(chatId: string): void
@@ -118,7 +115,6 @@ export function enforceClaudeSessionBudget(
     startingTurns: deps.startingTurns,
     pendingTools: deps.pendingTools,
     hasLiveWorkflow: (chatId: string) => hasLiveWorkflow(deps, chatId),
-    hasPendingBackgroundTask,
   }
 
   const candidates = [...deps.claudeSessions.entries()]

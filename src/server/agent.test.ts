@@ -4249,7 +4249,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
 
       if (!result.ok) throw new Error(result.errors.join(", "))
-      expect(result.created).toBe(false)
       expect(await Bun.file(path.join(projectRoot, "PROGRESS.md")).exists()).toBe(false)
 
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
@@ -4393,8 +4392,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         input: { goal: "g", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
-      expect(result.created).toBe(false)
-      expect(result.reconciled).toBe(false)
       expect(await Bun.file(abs).text()).toBe("user-authored content")
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
     } finally {

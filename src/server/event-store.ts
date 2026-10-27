@@ -1,3 +1,4 @@
+import { chatNotFound } from "../shared/errors"
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir } from "../shared/branding"
@@ -546,7 +547,7 @@ export class EventStore implements PushEventStore {
   requireChat(chatId: string) {
     const chat = this.state.chatsById.get(chatId)
     if (!chat || chat.deletedAt) {
-      throw new Error("Chat not found")
+      throw chatNotFound()
     }
     return chat
   }

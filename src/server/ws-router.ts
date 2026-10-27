@@ -1,3 +1,4 @@
+import { chatNotFound, errorMessage, projectNotFound, StaleStateError } from "../shared/errors"
 import { randomUUID } from "node:crypto"
 import type { CommandOrigin } from "../shared/command-origin"
 import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
@@ -76,7 +77,6 @@ import { removeProjectKannaFiles } from "./project-kanna-files.adapter"
 import { removeWorktree } from "./worktree-store.adapter"
 import {
   ensureSnapshotSignatures,
-  isBenignStaleStateMessage,
   logSendToStartingProfile,
   send,
   silentCommandMessage,
@@ -101,7 +101,6 @@ export {
 export { resolveMcpTestBearer } from "./ws-router-settings"
 
 export type { ClientState } from "./ws-router-utils"
-export { isBenignStaleStateMessage } from "./ws-router-utils"
 
 type RouteOutcome = "unclaimed" | "answered" | "silent"
 
@@ -246,9 +245,9 @@ export function createWsRouter({
 
   function resolveChatProject(chatId: string) {
     const chat = store.getChat(chatId)
-    if (!chat) throw new Error("Chat not found")
+    if (!chat) throw chatNotFound()
     const project = store.getProject(chat.projectId)
-    if (!project) throw new Error("Project not found")
+    if (!project) throw projectNotFound()
     return { chat, project }
   }
 
@@ -466,9 +465,8 @@ export function createWsRouter({
   }
 
   function describeCommandFailure(command: ClientCommand, id: string, error: Error | string): ServerEnvelope {
-    const messageText = error instanceof Error ? error.message : String(error)
-    const benign = isBenignStaleStateMessage(messageText)
-    const logFn = benign ? log.info : log.error
+    const messageText = errorMessage(error)
+    const logFn = error instanceof StaleStateError ? log.info : log.error
     logFn("[ws-router] command failed", {
       id,
       type: command.type,

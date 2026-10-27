@@ -31,6 +31,8 @@ import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
 import { timestamped } from "./claude-message-normalizer"
+import { appendTurnError } from "./claude-turn-outcome"
+import { errorMessage, projectNotFound } from "../shared/errors"
 import { logClaudeSteer, logSendToStartingProfile } from "./claude-steer-log"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
@@ -162,7 +164,7 @@ async function startTurnForChatInner(
 
   const project = deps.store.getProject(chat.projectId)
   if (!project) {
-    throw new Error("Project not found")
+    throw projectNotFound()
   }
 
   await attachMentionedProjects(deps, args, chat, project.localPath)
@@ -225,7 +227,7 @@ async function startTurnForChatInner(
       appendedUserMessageId,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
     log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
       chatId: args.chatId,
@@ -238,20 +240,11 @@ async function startTurnForChatInner(
     })
     if (isOAuthRefusal) {
       try {
-        await deps.store.appendMessage(
-          args.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
+        await appendTurnError(deps.store, args.chatId, message)
       } catch (appendErr) {
         log.error(`${LOG_PREFIX} append refusal result entry failed`, {
           chatId: args.chatId,
-          appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
+          appendErr: errorMessage(appendErr),
         })
       }
     }
@@ -260,7 +253,7 @@ async function startTurnForChatInner(
     } catch (recordErr) {
       log.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
         chatId: args.chatId,
-        recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
+        recordErr: errorMessage(recordErr),
       })
     }
     deps.activeTurns.delete(args.chatId)
@@ -436,6 +429,7 @@ async function startTurnAfterTurnStarted(
     profilingStartedAt: args.profile?.startedAt,
     waitStartedAt: null,
     cronRun: args.cronRun,
+    compactionTurn: args.compactionTurn,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
   }
   deps.activeTurns.set(args.chatId, active)
@@ -496,10 +490,7 @@ async function startTurnAfterTurnStarted(
     if (!session) {
       throw new Error("SDK session was not initialized")
     }
-    const promptSeq = session.nextPromptSeq + 1
-    session.nextPromptSeq = promptSeq
-    session.pendingPromptSeqs.push(promptSeq)
-    session.cancelledResultPending = 0
+    const promptSeq = session.beginPrompt()
     active.claudePromptSeq = promptSeq
     logClaudeSteer("claude_prompt_sent", {
       chatId: args.chatId,

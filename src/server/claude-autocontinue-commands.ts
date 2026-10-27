@@ -3,7 +3,8 @@ import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../shar
 import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
 import { deriveChatSchedules } from "./auto-continue/read-model"
 import type { SendMessageOptions } from "./claude-steer-log"
-import { timestamped } from "./claude-message-normalizer"
+import { appendTurnError } from "./claude-turn-outcome"
+import { errorMessage } from "../shared/errors"
 import { addCounter, AUTOCONTINUE_FIRED } from "./observability"
 
 
@@ -30,14 +31,12 @@ export interface AutoContinueCommandDeps {
 
   emitStateChange(chatId: string): void
 
-  enqueueMessage(
+  deliverPrompt(
     chatId: string,
     content: string,
     attachments: ChatAttachment[],
     options?: SendMessageOptions,
   ): Promise<QueuedChatMessage>
-
-  maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
 }
 
 
@@ -88,21 +87,10 @@ export async function fireAutoContinue(
   }
   try {
     await deps.store.appendAutoContinueEvent(event)
-    await deps.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
-    await deps.maybeStartNextQueuedMessage(chatId)
+    await deps.deliverPrompt(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
     addCounter(AUTOCONTINUE_FIRED, 1)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await deps.store.appendMessage(
-      chatId,
-      timestamped({
-        kind: "result",
-        subtype: "error",
-        isError: true,
-        durationMs: 0,
-        result: `Auto-continue failed: ${message}`,
-      }),
-    )
+    await appendTurnError(deps.store, chatId, `Auto-continue failed: ${errorMessage(error)}`)
   }
 
   deps.emitStateChange(chatId)

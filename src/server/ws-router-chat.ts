@@ -1,3 +1,4 @@
+import { chatNotFound } from "../shared/errors"
 import type { JsonObject } from "../shared/json"
 import type { ChatHistoryPage, StackBinding } from "../shared/types"
 import type { ClientCommand, CommandResult, ServerEnvelope } from "../shared/protocol"
@@ -205,7 +206,7 @@ export async function handleChatCommand(
     }
     case "chat.loadHistory": {
       const chat = store.getChat(command.chatId)
-      if (!chat) throw new Error("Chat not found")
+      if (!chat) throw chatNotFound()
       const page = store.getMessagesPageBefore(command.chatId, command.beforeCursor, command.limit)
       send(ackResult(id, command, page))
       return true

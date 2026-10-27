@@ -1,3 +1,4 @@
+import { chatNotFound } from "../shared/errors"
 import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
@@ -52,7 +53,7 @@ function transcriptPath(deps: ChatTranscriptWriteDeps, chatId: string): string {
 
 function requireChat(deps: ChatTranscriptWriteDeps, chatId: string): ChatRecord {
   const chat = deps.chatsById.get(chatId)
-  if (!chat || chat.deletedAt) throw new Error("Chat not found")
+  if (!chat || chat.deletedAt) throw chatNotFound()
   return chat
 }
 

@@ -18,6 +18,7 @@ import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
 import { toJsonObject } from "./json-boundary"
+import { subagentPendingKey } from "./claude-subagent-tool-response"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { resolveSdkEndpoint } from "./sdk-endpoint"
@@ -69,7 +70,6 @@ export interface SubagentWiringDeps {
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   getCustomProviderCredential: (id: string) => CustomProviderCredential | null
-  subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   chatTaskStore?: ChatTaskStorePort
   beaconRegistry?: BeaconRegistry
@@ -136,7 +136,7 @@ export function buildSubagentProviderRunForChat(
       return null
     }
     const toolUseId = request.tool.toolId
-    const key = deps.subagentPendingKey(args.chatId, args.runId, toolUseId)
+    const key = subagentPendingKey(args.chatId, args.runId, toolUseId)
     await deps.store.appendSubagentEvent({
       v: STORE_VERSION,
       type: "subagent_tool_pending",
