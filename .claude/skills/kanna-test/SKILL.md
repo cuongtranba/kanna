@@ -1,180 +1,154 @@
 ---
 name: kanna-test
-description: How to verify a change in the Kanna repo — running tests, and clearing the lint, ast-grep, and design gates that block merges. Use whenever you are about to run tests or report work as done, when a test passes locally but fails on CI, when you hit an ESLint error about node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / a banned empty .catch, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears. Read it before writing a test that mounts a component, and before adding any file that performs IO.
+description: Writes tests the Kanna way and verifies a change against the gates that block merges — bun tests, ESLint, ast-grep, the design gate, and the defect-count ratchets. Use when writing or changing a test, when about to run tests or report work as done, when a test passes locally but fails on CI, when a test reaches for mock(), spyOn, mock.module, a Date.now / fetch / window.confirm / console / process.env patch, a sleep, .skip or `as unknown as`, when check:arch reports a population that "grew to N (pinned at M)" or "dropped to N", when ESLint rejects node:fs / process.env / a raw hex color / backdrop-blur / a native title attribute / no-floating-promises / no-misused-promises / an empty .catch, when ast-grep rejects a hook argument or a store selector, when happy-dom throws "removeChild: The node to be removed is not a child of this node", when bun reports "Export named X not found in module" for an export that plainly exists, or when React error #185 "Maximum update depth exceeded" appears.
 user-invocable: false
 ---
 
-# Verifying a change in Kanna
+# Testing and verifying a change in Kanna
 
-Kanna enforces most of its conventions mechanically, so "it looks right" is not a
-signal. Several of the gates fail in ways that point at the wrong file — or only on
-CI — so knowing what each one guards saves a long hunt.
+Kanna enforces most conventions mechanically, so "it looks right" is not a signal.
+Several gates fail in ways that point at the wrong file, or only on CI.
 
-## The commands
+## Contents
+
+- Commands
+- Verification workflow
+- Writing a test
+- Ratchets: a pin is a defect count
+- React roots, subprocesses, and module mocks
+- Gate reference ([references/gates.md](references/gates.md))
+
+## Commands
 
 ```bash
-bun run test        # bun test --conditions production --timeout 30000
-bun run lint        # eslint src/ --max-warnings=0
-bun run typecheck   # TypeScript 7 native compiler
-bun run lint:usestate   # ast-grep scan (React #185 + store-discipline rules)
-bunx ast-grep test      # the ast-grep rules' own fixture tests
+bun run test                                     # never bare `bun test`
+bun test --conditions production <file>.test.ts  # one suite while iterating
+bun run typecheck                                # TS7 by explicit path, never bare tsc
+bun run lint && bun run lint:comments            # ESLint gates + the no-comments rule
+bun run lint:usestate && bunx ast-grep test      # React #185 + store rules, and their fixtures
+bun run check:arch                               # architecture and test-style ratchets
 ```
 
-`bun run verify:client-arch` chains ast-grep, lint, typecheck, and test — the full
-gate, and what to run before declaring UI work done.
+`--conditions production` is load-bearing: Lexical's dev ESM build has a
+circular-dependency TDZ that crashes a bare `bun test`. Two TypeScript packages
+ship a `tsc` binary, so `bunx tsc` resolves ambiguously. `bun run verify:client-arch`
+chains ast-grep, lint, typecheck, and test for client work.
 
-**Always run tests through `bun run test`, never bare `bun test`.** The
-`--conditions production` flag is load-bearing: Lexical 0.45's dev ESM build has a
-circular-dependency TDZ that crashes the run outright, so a bare `bun test` fails
-for a reason that has nothing to do with your change. For a single suite while
-iterating: `bun test --conditions production src/server/<file>.test.ts`.
+Scope runs to what changed while iterating. A full-suite run from a subagent while
+other agents share the host exhausts it; run the full suite once, from the main
+agent, before pushing.
 
-**Typecheck through the script, never bare `tsc`.** Two TypeScript packages are
-installed — `typescript` (6.x, whose legacy compiler API typescript-eslint still
-needs) and `typescript-7` (the real compiler). Both ship a `tsc` binary, so
-`bunx tsc` resolves ambiguously. `bun run typecheck` calls TS7 by explicit path.
+## Verification workflow
 
-**Scope test runs to what you changed.** A full-suite run from a subagent while
-other agents work the same host exhausts it. Targeted suites plus a typecheck cover
-your change; run the full suite once, from the main agent, before pushing.
-
-## Tests that mount React must unmount
-
-happy-dom gives the whole Bun process **one** document, and the preload wipes
-`document.body` after each test. That wipe cannot reach a React root you left
-mounted — and any portal it opened (Radix Dialog, Popover, Select, or a bare
-`createPortal`) used `document.body` itself as its container. When that root next
-commits, React tries to remove a node the wipe already took, and happy-dom throws:
+Copy this checklist and tick it off:
 
 ```
-removeChild: The node to be removed is not a child of this node
+- [ ] Targeted suites for every touched file pass
+- [ ] bun run typecheck passes
+- [ ] bun run lint, lint:comments, lint:usestate pass
+- [ ] bun run check:arch passes (pins lowered for every population that shrank)
+- [ ] bun run test (full suite) passes once, from the main agent
+- [ ] .c3/ facts and docs updated if a contract or rule changed; c3x check passes
 ```
 
-blaming **whichever test happens to be running at that moment** — a different test,
-in a different file. File order comes from the filesystem, so this reproduces on
-CI's ext4 and not on APFS. One leaked root in `SharePopover` crashed `CardDrawer`
-two files later, with the whole suite green locally.
+When a step fails: read the message, fix the cause it names, rerun that step, and
+only move on once it passes. Report the real output, including anything skipped.
 
-So: call `root.unmount()`, not just `container.remove()`. The `afterEach` sweep now
-fails the test that leaked and names the nodes, so you get told directly instead of
-watching an unrelated file explode. For components with effects that write stores,
-mount through `renderForLoopCheck` (`src/client/lib/testing/`) — it unmounts roots
-whose callers forgot the returned `cleanup`, and asserts no render-loop warnings.
+## Writing a test
 
-**Subprocess-spawning tests** need `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0`,
-or a credential prompt hangs until the timeout, plus an explicit per-test timeout
-(`test(name, fn, 30_000)`) since CI runners are slower than the 5 s default.
+A test exists to catch a realistic regression a user could observe. Before adding
+or keeping one, name the shipped promise it protects and the bug that makes it
+fail. No answer means no test.
 
-## Module mocks poison the whole process
+- **Public seam.** Exercise the module's public API and assert public values,
+  states, events, results, and errors. Never assert private fields, call counts,
+  or call order. Do not test helpers, guards, wiring, generated code, or
+  third-party behavior directly.
+- **No mocks.** Pass a real, in-memory, or deterministic fake through a parameter
+  that defaults to the production value, or through an existing deps or `dom`
+  object. A callback recorder is a plain array the fake pushes into, not `mock()`.
+  This is what the side-effect seal buys: pure domain code takes plain values.
+- **No global patches.** Do not reassign `Date.now`, `fetch`, `window.confirm`,
+  `console.*`, or `process.env`. Every test file shares one bun process, so a
+  failure before the restore line leaks the patch into whichever test runs next.
+  Inject the clock, dialog, logger, fetch, or environment instead.
+- **No sleeps.** Await the promise that produces the state, or poll for the public
+  state with a timeout. A fixed delay is flaky on CI and slow everywhere else.
+- **Flat shape.** `test("does x", …)` at the top level, or one `describe` per file.
+  Titles state behavior; a regression test names the bug. One test proves one
+  cause and one decisive outcome.
+- **Real fixtures.** Build values through public constructors or complete
+  literals. `as unknown as` builds a value production can never hold.
+- **Errors.** Guard for control flow, then assert only the promised payload, never
+  the class, name, or message unless they are stable API.
+- **Never commit `.only` or `.skip`.** Use `test.failing` for a documented known bug.
+  Never weaken, skip, or delete a valid test to get green; say the test is wrong.
 
-`mock.module` rewrites bun's process-wide module registry and nothing restores it
-between files, so a factory that omits an export can kill an UNRELATED suite's
-import with `SyntaxError: Export named '…' not found in module` — the error lands
-on the victim file, which contains no mock, and only in the file orders CI's ext4
-produces, never on APFS. This is what intermittently failed main and blocked the
-v1.58.0 publish (#1141). Do not add one: inject the dependency as a parameter
-defaulting to the production value and hand the fake in from the test.
-`src/ops/testing/module-mock-guard.test.ts` enforces it — a new module mock fails
-the suite, and the legacy allowlist only shrinks (converting a file deletes its
-entry in the same PR). The full mechanism, the incident, and the one sanctioned
-exception (`scripts/test-preload.ts`'s uniform `node:fs` shim) are in CLAUDE.md
-under "Module mocks are banned".
+The injection shape (the remedy #1141 applied):
 
-## The gates, and what each one is protecting
+```ts
+export async function loadContributions(
+  load: typeof loadFromServer = loadFromServer,
+): Promise<Contribution[]> {
+  return normalize(await load())
+}
 
-### Side-effect seal — IO lives in adapters
+test("drops contributions with no id", async () => {
+  const result = await loadContributions(async () => [{ id: "" }, { id: "a" }])
+  expect(result.map((c) => c.id)).toEqual(["a"])
+})
+```
 
-`node:fs`, `chokidar`, sqlite/pg drivers, `node:child_process`, `node:http(s)`,
-`Bun.spawn`/`Bun.$`/`Bun.file`, `new Database`, `process.exit`, and `process.env`
-are errors across `src/shared/**`, `src/client/**`, **and** `src/server/**`
-production code. Browser-native `fetch` is deliberately allowed in shared/client.
+## Ratchets: a pin is a defect count
 
-Exempt in the server layer: `*.test.ts(x)`, `src/server/__fixtures__/**`,
-`src/server/test-helpers/**`, `src/server/adapters/**`, and any
-`src/server/**/*.adapter.ts`.
+Each ratchet pins the size of a defect population. Growing fails, and shrinking
+without lowering the pin also fails, so the pin cannot be reclaimed later.
 
-New IO therefore goes one of two ways: put the call in a file matching an exempt
-glob, or inject the operation as a typed port parameter. A file whose whole job is
-performing one side effect on behalf of a port is named `*.adapter.ts` and sits
-next to that port; a module mixing domain logic with IO extracts the IO into a
-sibling `*-io.adapter.ts` rather than renaming the parent. There is no escape
-valve — do not reach for `eslint-disable`. Keeping the domain pure is what lets
-most of this codebase be tested with plain values instead of mocks.
+| Ratchet | Where | Semantics |
+| --- | --- | --- |
+| `PATTERN_BUDGETS` | `src/ops/architecture/budget.ts` | exact pin over production code |
+| `TEST_PATTERN_BUDGETS` | same file | exact pin over `*.test.ts(x)`: mocks, global patches, sleeps, `.only`, `.skip`, double casts, nested describes (#1375) |
+| `MODULE_ALLOWANCES` | same file | per-module line ceiling over 700; delist when under |
+| `ESLINT_LIMIT_PINS` | same file | equals the configured ESLint ceiling |
+| `LEGACY_MODULE_MOCKS` | `src/ops/testing/module-mock-guard.test.ts` | shrink-only allowlist |
+| `LEGACY_BODY_ALLOWANCES` | `src/ops/skills/skill-authoring.test.ts` | shrink-only SKILL.md body ceiling over 500 lines |
 
-### Design gate — tokens, not literals
+Reading a breach:
 
-Under `src/shared/**` and `src/client/**` these are errors: arbitrary hex Tailwind
-utilities (`bg-[#…]`), raw 6/8-digit hex literals plus the black/white family,
-`backdrop-blur`/`backdrop-filter` (the No-Glassmorphism rule — use a solid
-`bg-background`), and a native `title` attribute on an intrinsic element (use the
-project Tooltip via `TruncatedText` / `HoverHint`; `iframe` is excluded because its
-`title` is an accessibility name). `DESIGN.md` at the repo root is the source of
-truth; live tokens are in `src/index.css`.
+- **`grew to N (pinned at M)`**: the change added a defect. Remove it; do not raise
+  the pin. The message names the issue the change regresses.
+- **`dropped to N`**: the change removed defects. Set `max: N` in the named
+  manifest in the same PR.
+- **`scanned no files`**: the include path is stale. Repoint it; never pin at 0.
 
-One sanctioned exemption exists — `TerminalPane.tsx`, for rule 2 only, because
-xterm's `ITheme` API takes hex strings rather than CSS vars. Do not add others.
+When a breach fires, check whether a rename would satisfy it. If it would, the
+pattern is measuring a spelling, not the defect: widen the pattern instead.
 
-**Tinted pills need a `-text` token.** A semantic surface (`bg-{color}/10`) paired
-with a raw or `-foreground` color fails WCAG AA on at least one theme once
-composited. Derive from `STATUS_PILL_CLASS` or `TONE_PAIRINGS`
-(`src/shared/design/tone-pairings.ts`); `lint:usestate` bans the inline pairing and
-`src/server/design/tone-pairings.test.ts` asserts ≥4.5:1 for every entry across
-both themes. A new tint context means a new `TONE_PAIRINGS` entry, confirmed green
-before you touch a component.
+## React roots, subprocesses, and module mocks
 
-### ast-grep — the React #185 class
+**Unmount every React root.** happy-dom gives the process one document, and the
+preload wipes `document.body` after each test. A root left mounted, with any
+portal it opened, later throws `removeChild: The node to be removed is not a child
+of this node` against whichever test is running then, often in another file and
+only in CI's file order. Call `root.unmount()`, not just `container.remove()`.
+The `afterEach` sweep fails the test that leaked and names the nodes. Mount
+components with store-writing effects through `renderForLoopCheck`
+(`src/client/lib/testing/`).
 
-Four rules, all `error`, with fixtures in `rule-tests/`:
+**Subprocess-spawning tests** need `stdin: "ignore"`, `GIT_TERMINAL_PROMPT=0`, and
+an explicit per-test timeout (`test(name, fn, 30_000)`).
 
-- **`no-unstable-hook-fn-arg`** — an inline arrow passed directly to any custom
-  `use*` hook. A hook that keys an effect on that argument re-runs it every render.
-  Bind with `useCallback`/`useMemo` or hoist. React built-ins that ref-stash or read
-  the argument once are safe-listed; `useSyncExternalStore` stays flagged, because
-  an inline subscribe resubscribes every render.
-- **`no-unstable-selector-fallback`** — a `use*Store` selector returning inline
-  `?? []` / `?? {}` without `useShallow`. A fresh reference every call is exactly
-  what drives "Maximum update depth exceeded". Use a module-level `EMPTY` constant
-  or `useShallow`.
-- **`no-jsx-inline-state-updater`** and **`no-jsx-inline-state-logic`** — state
-  *transitions* belong in the store, not in a JSX attribute. A pure transition
-  becomes one named store action; orchestration over props, refs, or async IO
-  becomes an extracted `useCallback`, since stores never absorb props, refs, or IO.
-  Both are tsx-only by design — `jsx_attribute` does not exist in the typescript
-  grammar, so the missing `-ts` twin is impossible, not an oversight.
+**`mock.module` is banned.** It rewrites bun's process-wide module registry and
+nothing restores it between files, so a factory that omits an export kills an
+unrelated suite's import with `SyntaxError: Export named '…' not found in module`,
+only in CI's file order. Inject the dependency instead (the shape above). The full
+incident and the one sanctioned exception (`scripts/test-preload.ts`'s `node:fs`
+shim) are in CLAUDE.md under "Module mocks are banned".
 
-Never silence a false positive with an `ignores` entry: extract the handler, or add
-a `not:` clause together with a pinning fixture in the same PR. Adding a new rule
-means adding both the tsx and `-ts` variants (where the grammar allows) plus
-`rule-tests/` coverage, in that same PR — a note in a doc is not a gate.
+## Gate reference
 
-### Pending-state gate: a client promise must be settled by someone
-
-`bun run lint` type-checks promises under `src/client/**` (tests excluded):
-
-- **`no-floating-promises` with `ignoreVoid: false`.** `void save()` is an error. A
-  user action goes through `runPendingAction(key, () => save())`
-  (`src/client/stores/pendingActionsStore.ts`) and its trigger renders
-  `usePendingAction(key)`. Background work nobody waits on goes through
-  `runDetached(label, promise)`. Inside an async flow, `await` it.
-- **`no-misused-promises` on JSX attributes.** An async function passed to a prop
-  typed `() => void` is an error. Retype the prop to `() => Promise<void>` and have
-  the child launch it with `runPendingAction`. Do not wrap the call in a sync arrow
-  that drops the promise.
-- **`.catch(() => {})` / `() => undefined` / `() => null` are banned.** They hide
-  the failure and slip past the promise rules.
-
-A sync fake handed to a prop that is now `() => Promise<void>` fails typecheck in
-its test; make it `async () => {}`. The full rationale is in CLAUDE.md under
-**Pending state for side effects**.
-
-### Lint warnings ratchet
-
-`--max-warnings=0` is a cap that only moves down. When warnings drop, lower the cap
-in the same PR so they cannot creep back.
-
-## Before you say it is done
-
-Run the gates, read the output, and state the result honestly — if a suite failed,
-show it; if you skipped a check, name it. A change is finished when the work is
-resolved at its root, its docs and `.c3/` facts are updated, and nothing is left
-for a follow-up.
+[references/gates.md](references/gates.md) covers what each lint gate protects
+and how to satisfy it: the side-effect seal (IO in `*.adapter.ts`), the design
+gate (tokens, contrast pairings), the four ast-grep rules, the pending-state
+promise rules, and the warnings cap. Read the matching section when one of those
+gates fails.

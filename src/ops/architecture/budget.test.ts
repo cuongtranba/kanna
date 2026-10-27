@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
-import { measureModules, measurePatterns, readEslintLimits } from "./budget-scan.adapter"
+import { measureModules, measurePatterns, measureTestSources, readEslintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
@@ -12,6 +12,7 @@ import {
   MODULE_LINE_THRESHOLD,
   PATTERN_BUDGETS,
   SELF_EXCLUDED_PATHS,
+  TEST_PATTERN_BUDGETS,
   type ModuleMeasurement,
   type PatternMeasurement,
 } from "./budget"
@@ -183,6 +184,11 @@ describe("the repository satisfies its architecture budget", () => {
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
+  test("no test-style defect population grew, and none shrank without its pin being lowered", () => {
+    const breaches = checkPatternBudget(measurePatterns(root, measureTestSources(root), TEST_PATTERN_BUDGETS), TEST_PATTERN_BUDGETS)
+    expect(breaches.map(formatBreach).join("\n\n")).toBe("")
+  })
+
   test("the scan reaches real source, so a silently-empty gate cannot pass", () => {
     expect(modules.length).toBeGreaterThan(400)
     expect(modules.some((m) => m.path === "src/server/agent-coordinator.ts")).toBe(true)
@@ -199,20 +205,20 @@ describe("the manifest itself", () => {
   })
 
   test("every pattern budget cites a rationale and a driving issue", () => {
-    for (const budget of PATTERN_BUDGETS) {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
       expect(budget.rationale.length).toBeGreaterThan(20)
       expect(budget.issue).toBeGreaterThan(0)
       expect(budget.include.length).toBeGreaterThan(0)
     }
   })
 
-  test("pattern ids are unique", () => {
-    const ids = PATTERN_BUDGETS.map((b) => b.id)
+  test("pattern ids are unique across both manifests", () => {
+    const ids = [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS].map((b) => b.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   test("every pattern regex compiles", () => {
-    for (const budget of PATTERN_BUDGETS) {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
       expect(() => new RegExp(budget.pattern)).not.toThrow()
     }
   })
@@ -225,6 +231,23 @@ describe("the manifest itself", () => {
     expect(expression.test("export type StartClaudeSessionDeps = {")).toBe(true)
     expect(expression.test("  deps: {")).toBe(true)
     expect(expression.test("  const x: SendCommandDeps = build()")).toBe(false)
+  })
+
+  test("test-mock-functions counts mock functions and spies, and leaves module mocks to their own guard", () => {
+    const budget = TEST_PATTERN_BUDGETS.find((b) => b.id === "test-mock-functions")
+    expect(budget).toBeDefined()
+    const expression = new RegExp(budget?.pattern ?? "")
+    expect(expression.test("  const onSave = mock(async () => {})")).toBe(true)
+    expect(expression.test("  const spy = spyOn(console, \"error\")")).toBe(true)
+    expect(expression.test(`${"mock"}.module("./x", () => ({}))`)).toBe(false)
+    expect(expression.test("  expect(onSave.mock.calls).toHaveLength(1)")).toBe(false)
+  })
+
+  test("no test-style budget scans src/ops, whose gates quote every pattern as a literal", () => {
+    for (const budget of TEST_PATTERN_BUDGETS) {
+      expect({ id: budget.id, covered: coveredBy("src/ops/architecture/budget.test.ts", budget.include) })
+        .toMatchObject({ covered: false })
+    }
   })
 
   test("no budget scans the manifest or the scanner, which quote every regex as a literal", () => {

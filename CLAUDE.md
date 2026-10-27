@@ -20,7 +20,7 @@ task that matches none of them cleanly still lands somewhere.
 | `kanna-beacon` | Beacon file transfer, self-update, the Windows 7 Go port |
 | `kanna-features` | Boards, hide/delete project, tus uploads, package auto-update, plugins, import live-tail |
 | `kanna-react-style` | React + TypeScript conventions for `src/client/**` |
-| `kanna-test` | Running tests; the lint, ast-grep, and design gates |
+| `kanna-test` | Writing tests (no mocks, no sleeps, public seam); running them; the lint, ast-grep, design gates and ratchets |
 | `kanna-loop` | Autonomous loops: `setup_loop`, the oracle, the durable task list, wake recovery |
 | `kanna-subagents` | `delegate_subagent`, the spawn gate, keep-alive and background runs |
 | `release` | Version bump + npm publish |
@@ -33,6 +33,16 @@ These files have two consumers — Claude Code auto-triggers on the frontmatter
 must stay on one line: a folded `>-` block silently becomes an empty description
 in the picker. `user-invocable: false` hides a skill from the picker while leaving
 auto-triggering intact.
+
+Skills follow Anthropic's authoring guidance, and `src/ops/skills/skill-authoring.test.ts`
+enforces its hard limits on every first-party skill (symlinked vendor skills are
+skipped): `name` equals the directory, 1–64 lowercase letters, digits and hyphens;
+`description` is one line, at most 1,024 characters, has no XML tags, and is
+written in the third person ("Writes…; use when…", never "you"); the SKILL.md body
+stays under 500 lines, with detail moved to reference files linked one level deep
+from SKILL.md; and a reference file over 100 lines opens with a `## Contents`
+section. `kanna-sessions` and `kanna-loop` predate the line limit and hold
+shrink-only `LEGACY_BODY_ALLOWANCES`; split them, then delete the entry.
 
 # Commands
 
@@ -428,6 +438,16 @@ compiler is the stronger gate, so the weaker one is retired.
 **A pin is a defect count, never a style preference.** Raising one is a visible
 diff that says the PR made a tracked issue worse; the correct response to a
 breach is almost always to put the new code in a module that owns it.
+
+**Test files have their own ratchet, `TEST_PATTERN_BUDGETS`** (same file, same
+exact-pin semantics, #1375). It counts the test-policy defects the lint does not
+reach: `mock()`/`spyOn` function mocks, global patches (`Date.now =`, `fetch`,
+`window.confirm`, `console.*`, `process.env`), sleeps, `.only`, `.skip`,
+`as unknown as`, and nested `describe`s, over `*.test.ts(x)` in `src/beacon`,
+`src/client`, `src/server` and `src/shared`. `src/ops` is out of scope because its
+gates quote every pattern as a literal. A test that needs a clock, dialog, logger
+or fetch takes it as a parameter defaulting to the production value; see the
+`kanna-test` skill.
 
 **`filesScanned` is load-bearing.** A budget whose `include` no longer resolves
 (target renamed) would otherwise report as a population that shrank to zero —

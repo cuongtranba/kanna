@@ -12,16 +12,8 @@ const REMEDY =
   'default instead; see CLAUDE.md "Module mocks are banned".'
 
 const LEGACY_MODULE_MOCKS = new Set([
-  "src/client/components/lexical/markdown/MessageCodeBlock.test.tsx",
-  "src/client/components/lexical/markdown/renderMessage.test.tsx",
-  "src/client/components/messages/ExitPlanModeMessage.test.tsx",
   "src/client/components/messages/MermaidDiagram.test.tsx",
-  "src/client/components/messages/SubagentTaskMessage.test.tsx",
-  "src/client/components/messages/TextMessage.test.tsx",
-  "src/client/components/messages/ThinkingMessage.test.tsx",
   "src/client/components/messages/file-preview/bodies/CodeBody.test.tsx",
-  "src/client/components/messages/file-preview/bodies/textBodies.test.tsx",
-  "src/client/components/messages/shared.test.tsx",
   "src/server/claude-session-start.test.ts",
 ])
 

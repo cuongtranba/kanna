@@ -1,6 +1,6 @@
 ---
 name: kanna-inbox
-description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/<id>, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
+description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/:id, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
 ---
 
 # Kanna service bus, Inbox, MCP sources, webhooks

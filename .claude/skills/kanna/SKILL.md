@@ -1,6 +1,6 @@
 ---
 name: kanna
-description: Router and shared ground rules for ANY work in the Kanna repo — read this first to find the specialist skill for the task. Use whenever the work touches this codebase: adding a feature or a field, changing a type or contract shared between server and client, wiring a new event or read-model, a chat/session that got stuck or behaved wrong, metrics and performance questions, React or client UI edits, running tests or clearing lint and ast-grep gates, cutting a release, reviewing a PR, or "where does this live" and "what else do I have to update". Use it especially when the task spans several of those, when it starts with "what's the best way to…" or "how do I add…", or when you are unsure which Kanna skill applies — routing costs one short read and prevents guessing at conventions this repo enforces mechanically.
+description: Router and shared ground rules for ANY work in the Kanna repo — read this first to find the specialist skill for the task. Use whenever the work touches this codebase: adding a feature or a field, changing a type or contract shared between server and client, wiring a new event or read-model, a chat/session that got stuck or behaved wrong, metrics and performance questions, React or client UI edits, running tests or clearing lint and ast-grep gates, cutting a release, reviewing a PR, or "where does this live" and "what else do I have to update". Use it especially when the task spans several of those, when it starts with "what's the best way to…" or "how do I add…", or when it is unclear which Kanna skill applies — routing costs one short read and prevents guessing at conventions this repo enforces mechanically.
 ---
 
 # Kanna — start here
@@ -22,7 +22,7 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | A chat/session id, "why did this turn fail", stuck or hung turn, a tool that never returned, wrong model, billing to API instead of subscription | `.claude/skills/kanna-debug/SKILL.md` |
 | Metrics, spans, traces, Grafana, "no telemetry arriving", the OTel collector, "why is it slow", memory growth, RSS, an OOM kill | `.claude/skills/kanna-telemetry/SKILL.md` |
 | Editing `.tsx`/`.ts` under `src/client/**` — components, hooks, formatting helpers, layout, tooltips | `.claude/skills/kanna-react-style/SKILL.md` |
-| Running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
+| Writing a test, running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, a ratchet breach, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
 | `/loop`, `setup_loop`, `run_verify`, an armed loop, a loop that stalled or declared GOAL MET too early, `PROGRESS.md` and the tracking-doc tools | `.claude/skills/kanna-loop/SKILL.md` |
 | `delegate_subagent`, `keep_alive` / `run_in_background`, a run that failed `AUTH_REQUIRED` / `CAP_EXCEEDED` / `MAX_TURNS`, the permit pool | `.claude/skills/kanna-subagents/SKILL.md` |
 | Session/turn lifecycle: `/clear` `/compact`, compaction, a chat stuck busy, a lost queued message, background-task keep-alive, live blocks, the idle reaper, `CLAUDE_TOOLSET` | `.claude/skills/kanna-sessions/SKILL.md` |

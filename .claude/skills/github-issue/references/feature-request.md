@@ -1,5 +1,11 @@
 # Feature request
 
+## Contents
+
+- Template
+- Why each section earns its place
+- Annotated example — issue #851
+
 ## Template
 
 ```markdown
