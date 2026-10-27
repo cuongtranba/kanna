@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "bun run build:client",
-    "build:client": "vite build",
+    "build:client": "vp build",
     "build:beacon-desktop": "bun run ./scripts/build-beacon-desktop.ts",
     "icons:beacon-desktop": "bun run ./scripts/beacon-desktop-icons.ts",
     "typecheck": "node_modules/typescript-7/bin/tsc --noEmit",
@@ -47,7 +47,7 @@
     "lint:comments": "bun run ./scripts/check-no-comments.ts",
     "strip:comments": "bun run ./scripts/strip-comments.ts",
     "dev": "bun run ./scripts/dev.ts",
-    "dev:client": "vite --host 0.0.0.0 --port 5174",
+    "dev:client": "vp dev --host 0.0.0.0 --port 5174",
     "dev:server": "bun run ./scripts/dev-server.ts --no-open --port 5175",
     "install:dev": "bun install && bun run build && bun install -g .",
     "start": "bun run ./src/server/cli.ts",
@@ -176,7 +176,11 @@
     "typescript": "6.0.3",
     "typescript-7": "npm:typescript@^7.0.2",
     "typescript-eslint": "^8.59.3",
-    "vite": "^8.2.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0",
     "zustand": "^5.0.10"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
   }
 }

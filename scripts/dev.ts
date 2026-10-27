@@ -36,7 +36,7 @@ function spawnLabeledProcess(label: string, args: string[]) {
   return child
 }
 
-const client = spawnLabeledProcess("client", ["x", "vite", "--host", "0.0.0.0", "--port", String(clientPort), "--strictPort"])
+const client = spawnLabeledProcess("client", ["x", "vp", "dev", "--host", "0.0.0.0", "--port", String(clientPort), "--strictPort"])
 const fakeLimitSeconds = process.env.KANNA_FAKE_LIMIT_SECONDS
 const serverEntry = fakeLimitSeconds ? "./scripts/dev-fake-limit.ts" : "./scripts/dev-server.ts"
 const serverSpawnArgs = fakeLimitSeconds

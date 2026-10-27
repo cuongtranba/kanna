@@ -17,7 +17,7 @@ bun install
 bun run dev
 ```
 
-This starts **two** processes: the Vite client on `:5174` and the server on
+This starts **two** processes: the Vite+ client (`vp dev`, which needs Node 22.18+ or 24.11+) on `:5174` and the server on
 `:5175` (always the client port + 1). Open the **client** port —
 [`localhost:5174`](http://localhost:5174) — for HMR. `--port` changes the client
 port and the server follows.
