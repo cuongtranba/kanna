@@ -8,6 +8,10 @@ function hasToJson<T>(value: T): value is T & { toJSON: () => JsonValue } {
   return isRecord(value) && typeof value.toJSON === "function"
 }
 
+function ownProperties(error: Error): Record<string, JsonValue | undefined> {
+  return Object.fromEntries(Object.getOwnPropertyNames(error).map((key) => [key, Reflect.get(error, key)]))
+}
+
 function encodeJson<T>(value: T, depth: number): JsonValue | undefined {
   if (value === null) return null
   const kind = typeof value
@@ -21,6 +25,7 @@ function encodeJson<T>(value: T, depth: number): JsonValue | undefined {
   if (depth >= MAX_DEPTH) return null
 
   if (hasToJson(value)) return encodeJson(value.toJSON(), depth + 1)
+  if (value instanceof Error) return encodeJson(ownProperties(value), depth + 1)
 
   if (Array.isArray(value)) {
     const out: JsonValue[] = []

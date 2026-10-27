@@ -1,34 +1,11 @@
 import os from "node:os"
-import path from "node:path"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
 import { DEFAULT_SKILL_AGENTS, assertSafeSkillAgents } from "../shared/skill-agents"
 import type { SkillAgent } from "../shared/skill-agents"
-import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import { spawnCapture } from "./process-utils.adapter"
+import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath, NPX, skillsCliEnv } from "./skills-cli"
+import { readTextFileOrThrow } from "./text-file-io.adapter"
 import type { InstalledSkillsSnapshot, SkillInstallResult, SkillSearchSnapshot, SkillUninstallResult } from "../shared/types"
-
-export function assertSafeSkillSource(source: string) {
-  const normalized = source.trim()
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized)) {
-    throw new Error("Skill source must be an owner/repo pair.")
-  }
-  return normalized
-}
-
-export function assertSafeSkillId(skillId: string) {
-  const normalized = skillId.trim()
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(normalized)) {
-    throw new Error("Skill id is invalid.")
-  }
-  return normalized
-}
-
-export function getGlobalSkillLockPath() {
-  const xdgStateHome = process.env.XDG_STATE_HOME?.trim()
-  if (xdgStateHome) {
-    return path.join(xdgStateHome, "skills", ".skill-lock.json")
-  }
-  return path.join(process.env.HOME ?? os.homedir(), ".agents", ".skill-lock.json")
-}
 
 function asString(value: JsonValue | undefined) {
   return typeof value === "string" ? value : ""
@@ -129,7 +106,7 @@ export function buildInstallSkillCommand(
   agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
 ) {
   return [
-    process.platform === "win32" ? "npx.cmd" : "npx",
+    NPX,
     "skills",
     "add",
     assertSafeSkillSource(source),
@@ -144,7 +121,7 @@ export function buildInstallSkillCommand(
 
 export function buildUninstallSkillCommand(skillId: string) {
   return [
-    process.platform === "win32" ? "npx.cmd" : "npx",
+    NPX,
     "skills",
     "remove",
     assertSafeSkillId(skillId),
@@ -155,10 +132,7 @@ export function buildUninstallSkillCommand(skillId: string) {
 
 async function runSkillCommand(command: string[]) {
   const cwd = os.homedir()
-  const { stdout, stderr, exitCode } = await spawnCommandCapture(command, cwd, {
-    ...process.env,
-    DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY ?? "1",
-  })
+  const { stdout, stderr, exitCode } = await spawnCapture(command, { cwd, env: skillsCliEnv() })
 
   if (exitCode !== 0) {
     throw new Error(stderr.trim() || stdout.trim() || `skills CLI exited with code ${exitCode}.`)

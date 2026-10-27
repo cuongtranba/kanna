@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { JsonObject } from "../../shared/json"
+import { toJsonValue } from "../json-boundary"
 import { fail } from "../kanna-mcp-tool"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { commandTool, mcpOnlyTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
@@ -10,7 +11,6 @@ import {
   readChat,
   readProjectTitles,
   readSidebar,
-  toJson,
   type ChatRow,
   type ProjectRow,
 } from "./remote-mcp-views"
@@ -56,7 +56,7 @@ export const projectTools: readonly RemoteTool[] = [
     handle: (_args, { host }) => {
       const sidebar = readSidebar(host)
       if (!sidebar) return fail("The sidebar snapshot is unavailable.")
-      return jsonResult({ projects: projectRows(sidebar, readProjectTitles(host)), stacks: toJson(sidebar.stacks) })
+      return jsonResult({ projects: projectRows(sidebar, readProjectTitles(host)), stacks: toJsonValue(sidebar.stacks) })
     },
   }),
   commandTool({

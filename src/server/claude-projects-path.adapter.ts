@@ -32,11 +32,15 @@ export function encodeCwd(cwd: string): string {
   return sanitizePath(normalized)
 }
 
+export function claudeProjectsRoot(homeDir: string): string {
+  return path.join(homeDir, ".claude", "projects")
+}
+
 export function computeProjectDir(args: {
   homeDir: string
   cwd: string
 }): string {
-  return path.join(args.homeDir, ".claude", "projects", encodeCwd(args.cwd))
+  return path.join(claudeProjectsRoot(args.homeDir), encodeCwd(args.cwd))
 }
 
 export function computeWorkflowsDir(args: {

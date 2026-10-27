@@ -4,6 +4,7 @@ import type { z } from "zod"
 import { remoteMcpVia, type RemoteMcpOrigin } from "../../shared/command-origin"
 import { isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 import { log } from "../../shared/log"
+import { toJsonValue } from "../json-boundary"
 import type { ToolResult } from "../kanna-mcp-tool"
 import { addCounter, REMOTE_MCP_TOOL_CALL } from "../observability"
 import {
@@ -45,7 +46,7 @@ export interface ToolRegistrarSettings {
 function clientNameOf(envelope: object | undefined): string | undefined {
   if (!envelope) return undefined
   const entry = Object.entries(envelope).find(([key]) => key === CLIENT_INFO_META_KEY)
-  const info = entry ? safeJsonParse(JSON.stringify(entry[1])) : null
+  const info = entry ? toJsonValue(entry[1]) : null
   const name = info !== null && isJsonObject(info) ? info.name : undefined
   return typeof name === "string" && name.trim().length > 0 ? name.trim() : undefined
 }
@@ -109,7 +110,7 @@ export function createToolRegistrar(server: McpServer, settings: ToolRegistrarSe
         const args = config.inputSchema.parse(rawArgs)
         const origin = originOf(name, ctx)
         const started = now()
-        const loggedArgs = safeJsonParse(JSON.stringify(args)) ?? null
+        const loggedArgs = toJsonValue(args)
         try {
           const result = await runInRemoteMcpCall(origin, () => handler(args, ctx))
           const parsed = resultJson(result)

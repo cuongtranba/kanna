@@ -5,10 +5,10 @@ import {
   makeTempDir,
   readTextFileOrThrow,
   rmPathRecursive,
-  runGit,
   statOrNull,
   writeTextFile,
 } from "./diff-store-io.adapter"
+import { runGit } from "./git-runner.adapter"
 import {
   countTextLines,
   getContentDigest,

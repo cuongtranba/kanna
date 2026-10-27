@@ -9,7 +9,7 @@ import {
 } from "./claude-loop-commands"
 import { loopFailureBudget } from "../shared/loop-progress"
 import { log } from "../shared/log"
-import { addCounter } from "./observability"
+import { addCounter, LOOP_WAKE_RECOVERED } from "./observability"
 
 export async function recoverArmedLoopWakes(deps: LoopCommandDeps): Promise<string[]> {
   const recovered: string[] = []
@@ -69,7 +69,7 @@ async function rearmLoopWakeIfLost(
     detectedAt: now,
     prompt: `${REARM_NOTICE[reason]}\n\n${armed.prompt}`,
   })
-  addCounter("kanna.loop.wake.recovered", 1, { reason })
+  addCounter(LOOP_WAKE_RECOVERED, 1, { reason })
   return true
 }
 

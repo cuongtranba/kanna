@@ -1,5 +1,6 @@
 
 import type { CronSkipReason } from "../../shared/cron/types"
+import { cronJobKey, cronJobKeyPrefix } from "./job-key"
 
 export const SKIP_FLUSH_WINDOW_MS = 60_000
 
@@ -28,7 +29,7 @@ export class CronSkipCoalescer implements CronSkipCoalescerPort {
   constructor(private readonly windowMs: number = SKIP_FLUSH_WINDOW_MS) {}
 
   record(chatId: string, jobId: string, reason: CoalescedSkipReason, now: number): CronSkipRecord | null {
-    const key = keyOf(chatId, jobId)
+    const key = cronJobKey(chatId, jobId)
     const state = this.states.get(key)
 
     if (!state) {
@@ -48,18 +49,18 @@ export class CronSkipCoalescer implements CronSkipCoalescerPort {
   }
 
   flushPending(chatId: string, jobId: string, now: number): CronSkipRecord | null {
-    const state = this.states.get(keyOf(chatId, jobId))
+    const state = this.states.get(cronJobKey(chatId, jobId))
     if (!state || state.pending === 0) return null
     if (now - state.lastWriteAt < this.windowMs) return null
     return this.take(state, now)
   }
 
   forget(chatId: string, jobId: string): void {
-    this.states.delete(keyOf(chatId, jobId))
+    this.states.delete(cronJobKey(chatId, jobId))
   }
 
   clearChat(chatId: string): void {
-    const prefix = `${chatId}\u0000`
+    const prefix = cronJobKeyPrefix(chatId)
     for (const key of this.states.keys()) {
       if (key.startsWith(prefix)) this.states.delete(key)
     }
@@ -73,6 +74,3 @@ export class CronSkipCoalescer implements CronSkipCoalescerPort {
   }
 }
 
-function keyOf(chatId: string, jobId: string): string {
-  return `${chatId}\u0000${jobId}`
-}

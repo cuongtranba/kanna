@@ -1,9 +1,11 @@
 import { isJsonObject, safeJsonParse, type JsonValue } from "../../../shared/json"
 import { log } from "../../../shared/log"
-import { busSubject, type BusEnvelope } from "../../../shared/service-bus/envelope"
+import { createBusEnvelope, inboundIdempotencyKey, type BusEnvelope } from "../../../shared/service-bus/envelope"
+import { namedBusSubject, transcriptBusSubject, webhookDeliverySubject } from "../../../shared/service-bus/subjects"
 import type { TranscriptEntry } from "../../../shared/types"
 import type { AgentCoordinator } from "../../agent-coordinator"
 import type { EventStore } from "../../event-store"
+import { createKeyedLanes } from "../../serial-lane"
 import type { ServiceBus } from "../../service-bus/service-bus"
 import { slackCredentialsOf, type SlackCredentials, type StoredWebhook, type WebhookRegistry } from "../webhook-registry"
 import type { SlackApi, SlackThreadMessage } from "./slack-api"
@@ -40,12 +42,12 @@ export type SlackHookRegistry = Pick<
 type TurnOutcome = "finished" | "failed" | "cancelled"
 
 const TURN_SUBJECTS = new Map<string, TurnOutcome>([
-  [busSubject("turn", "finished"), "finished"],
-  [busSubject("turn", "failed"), "failed"],
-  [busSubject("turn", "cancelled"), "cancelled"],
+  [namedBusSubject("turnFinished"), "finished"],
+  [namedBusSubject("turnFailed"), "failed"],
+  [namedBusSubject("turnCancelled"), "cancelled"],
 ])
-const CHAT_DELETED_SUBJECT = busSubject("chat", "deleted")
-const USER_PROMPT_SUBJECT = busSubject("transcript", "user_prompt")
+const CHAT_DELETED_SUBJECT = namedBusSubject("chatDeleted")
+const USER_PROMPT_SUBJECT = transcriptBusSubject("user_prompt")
 const WORKING_REACTION = "eyes"
 const TITLE_EXCERPT_CHARS = 40
 
@@ -71,7 +73,7 @@ function failureText(payload: JsonValue): string {
 
 export class SlackService {
   private readonly tasks = new SlackTaskTracker()
-  private readonly lanes = new Map<string, Promise<void>>()
+  private readonly lanes = createKeyedLanes()
   private readonly currentScheduleIds = new Map<string, string | null>()
   private unsubscribes: Array<() => void> = []
 
@@ -121,7 +123,7 @@ export class SlackService {
     this.record(hook.id, true, 200, "slack mention queued")
     const target = this.targetOf(hook.id, envelope, verdict.mention)
     this.tasks.run(
-      () => this.lane(slackThreadKey(target), () => this.command(hook, credentials, envelope, verdict.mention, target)),
+      () => this.lanes.run(slackThreadKey(target), () => this.command(hook, credentials, envelope, verdict.mention, target)),
       (error) => {
         log.error(`[slack] hook ${hook.id} command failed: ${error.message}`)
         this.record(hook.id, false, 500, `slack command failed: ${error.message}`)
@@ -141,20 +143,6 @@ export class SlackService {
 
   private targetOf(hookId: string, envelope: SlackEventCallback, mention: SlackMention): SlackThreadTarget {
     return { hookId, teamId: envelope.teamId, channel: mention.channel, threadTs: mention.threadTs }
-  }
-
-  private lane(key: string, task: () => Promise<void>): Promise<void> {
-    const run = (this.lanes.get(key) ?? Promise.resolve()).then(task)
-    const tail: Promise<void> = run.then(
-      () => this.release(key, tail),
-      () => this.release(key, tail),
-    )
-    this.lanes.set(key, tail)
-    return run
-  }
-
-  private release(key: string, tail: Promise<void>): void {
-    if (this.lanes.get(key) === tail) this.lanes.delete(key)
   }
 
   private async react(token: string, channel: string, ts: string, name: string, remove = false): Promise<void> {
@@ -195,17 +183,15 @@ export class SlackService {
   }
 
   private publishDelivery(hook: StoredWebhook, envelope: SlackEventCallback, chatId: string): void {
-    this.bus.publish({
-      v: 1,
-      id: crypto.randomUUID(),
-      subject: busSubject("webhook", hook.id, "delivery"),
+    this.bus.publish(createBusEnvelope({
+      subject: webhookDeliverySubject(hook.id),
       ts: this.now(),
       source: { kind: "webhook", hookId: hook.id, hookName: hook.name },
       direction: "inbound",
-      idempotencyKey: `webhook:${hook.id}:${envelope.eventId}`,
+      idempotencyKey: inboundIdempotencyKey("webhook", hook.id, envelope.eventId),
       chatId,
       payload: { event_id: envelope.eventId, team_id: envelope.teamId, event: envelope.event },
-    })
+    }))
   }
 
   private async command(
@@ -258,7 +244,7 @@ export class SlackService {
     if (outcome === undefined) return
     const expected = this.currentScheduleIds.get(chatId)
     if (expected === null) return
-    this.tasks.run(() => this.lane(`chat:${chatId}`, () => this.respond(chatId, outcome, envelope.payload, expected)), onError)
+    this.tasks.run(() => this.lanes.run(`chat:${chatId}`, () => this.respond(chatId, outcome, envelope.payload, expected)), onError)
   }
 
   private textFor(outcome: TurnOutcome, reply: string | null, payload: JsonValue): string {

@@ -14,6 +14,7 @@ import { APP_VERSION } from "../../shared/branding"
 import { toError } from "../../shared/errors"
 import { safeJsonParse, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
+import { toJsonValue } from "../json-boundary"
 import { networkHeaders } from "../mcp-validator"
 import { projectProcessEnv } from "../project-process-env"
 import type {
@@ -81,11 +82,6 @@ interface ToolContentBlock {
   text?: string | undefined
 }
 
-function toJsonValue<T>(value: T): JsonValue | undefined {
-  const text = JSON.stringify(value)
-  return text === undefined ? undefined : (safeJsonParse(text) ?? undefined)
-}
-
 export function toolResultValue<Structured>(result: {
   content?: readonly ToolContentBlock[] | undefined
   structuredContent?: Structured | undefined
@@ -96,7 +92,7 @@ export function toolResultValue<Structured>(result: {
     .map((block) => block.text ?? "")
     .join("\n")
   if (result.isError) throw new Error(text.length > 0 ? text : "tool call failed")
-  const structured = result.structuredContent === undefined ? undefined : toJsonValue(result.structuredContent)
+  const structured = result.structuredContent === undefined ? null : toJsonValue(result.structuredContent)
   return structured ?? textValue(text, undefined)
 }
 

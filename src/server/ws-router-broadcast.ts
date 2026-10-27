@@ -282,8 +282,6 @@ export class BroadcastManager {
 
   private recordMetaOps(chatId: string, cache?: SnapshotComputationCache): void {
     const { store, envelopeBuilder } = this.deps
-    if (typeof store.chatOps?.record !== "function") return
-    if (typeof envelopeBuilder.deriveChatMeta !== "function") return
     if (cache) {
       cache.chatMetaOpsRecordedChatIds ??= new Set()
       if (cache.chatMetaOpsRecordedChatIds.has(chatId)) return

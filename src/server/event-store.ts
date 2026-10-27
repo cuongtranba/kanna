@@ -226,9 +226,7 @@ export class EventStore implements PushEventStore {
       getMessages: (chatId) => this.getMessages(chatId),
       ensureTranscriptLoaded: (chatId) => {
         if (!this.transcriptCache.isSeeded(chatId)) {
-          if (!MessageRead.seedSeenMessageIdsFromTail(this.msgReadDeps, chatId)) {
-            MessageRead.getMessagesView(this.msgReadDeps, chatId)
-          }
+          MessageRead.seedSeenMessageIdsFromTail(this.msgReadDeps, chatId)
         }
       },
       getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),

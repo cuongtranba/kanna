@@ -178,12 +178,6 @@ export function buildBackgroundTasksAbandonedMessage(taskIds: string[]): string 
 }
 
 
-export function positiveIntegerFromEnv(value: string | undefined, fallback: number): number {
-  if (value === undefined || value.trim() === "") return fallback
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
-
 
 export interface UserMessageEntry {
   kind: string

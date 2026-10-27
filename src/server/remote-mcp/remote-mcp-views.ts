@@ -1,7 +1,8 @@
-import { isJsonObject, safeJsonParse, type JsonPrimitive, type JsonValue } from "../../shared/json"
+import { isJsonObject, type JsonPrimitive, type JsonValue } from "../../shared/json"
 import type { ClientCommand } from "../../shared/protocol"
 import type { ChatSnapshot, SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../shared/types"
 import type { TranscriptEntry } from "../../shared/transcript-types"
+import { toJsonValue } from "../json-boundary"
 import { fail, ok, type ToolResult } from "../kanna-mcp-tool"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 
@@ -52,10 +53,6 @@ export function stringFieldOf(value: JsonValue, key: string): string | undefined
   return typeof found === "string" ? found : undefined
 }
 
-export function toJson(value: JsonPrimitive | object): JsonValue {
-  return safeJsonParse(JSON.stringify(value)) ?? null
-}
-
 export function jsonResult(value: JsonPrimitive | object): ToolResult {
   return ok(JSON.stringify(value))
 }
@@ -63,9 +60,9 @@ export function jsonResult(value: JsonPrimitive | object): ToolResult {
 export async function runCommand(host: CommandRunner, command: ClientCommand): Promise<CommandOutcome> {
   const envelope = await host.dispatchCommand(command)
   if (envelope.type === "error") return { ok: false, message: envelope.message }
-  if (envelope.type === "ack") return { ok: true, result: envelope.result === undefined ? { ok: true } : toJson(envelope.result) }
-  if (envelope.type === "snapshot") return { ok: true, result: toJson(envelope.snapshot) }
-  return { ok: true, result: toJson(envelope.event) }
+  if (envelope.type === "ack") return { ok: true, result: envelope.result === undefined ? { ok: true } : toJsonValue(envelope.result) }
+  if (envelope.type === "snapshot") return { ok: true, result: toJsonValue(envelope.snapshot) }
+  return { ok: true, result: toJsonValue(envelope.event) }
 }
 
 export async function commandResult(host: CommandRunner, command: ClientCommand): Promise<ToolResult> {
@@ -199,7 +196,7 @@ export function pendingToolRequests(entries: readonly TranscriptEntry[]): Pendin
     const { tool } = entry
     const interactive = tool.toolKind === "ask_user_question" || tool.toolKind === "exit_plan_mode"
     if (interactive && !answeredToolUses.has(tool.toolId)) {
-      pending.push({ kind: "interactive_tool", toolUseId: tool.toolId, tool: tool.toolName, input: toJson(tool.input) })
+      pending.push({ kind: "interactive_tool", toolUseId: tool.toolId, tool: tool.toolName, input: toJsonValue(tool.input) })
     }
   }
   return pending

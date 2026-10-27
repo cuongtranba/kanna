@@ -1,5 +1,5 @@
 import { isRecord } from "../shared/errors"
-import { isJsonObject, safeJsonParse, type JsonObject } from "../shared/json"
+import { parseJsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import type {
   CollabAgentToolCallItem,
@@ -72,21 +72,12 @@ function matchJsStringField(snippet: string, pattern: RegExp): string | null {
   return body === undefined ? null : unescapeJsString(body)
 }
 
-function parseJsonRecord(raw: string): JsonObject | null {
-  try {
-    const parsed = safeJsonParse(raw)
-    return parsed !== null && isJsonObject(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 function stringOrNull<T>(value: T): string | null {
   return typeof value === "string" ? value : null
 }
 
 function exitCodeOf(rawOutput: string): number | null {
-  const parsed = parseJsonRecord(rawOutput)
+  const parsed = parseJsonObject(rawOutput)
   if (parsed === null) return null
   const metadata = parsed.metadata
   if (!isRecord(metadata)) return null
@@ -99,7 +90,7 @@ function commandExecutionCall(
   onRegexMiss?: () => void,
 ): { command: string; cwd: string | null } | null {
   if (record.family === "function") {
-    const args = parseJsonRecord(record.input)
+    const args = parseJsonObject(record.input)
     if (args === null) return null
     const command = stringOrNull(args.cmd)
     if (command === null) return null
@@ -186,7 +177,7 @@ function planStatus<T>(raw: T): TurnPlanStep["status"] {
 export function parsePlanSteps(
   input: string,
 ): { steps: TurnPlanStep[]; explanation: string | null } | null {
-  const args = parseJsonRecord(input)
+  const args = parseJsonObject(input)
   if (args === null) return null
   const plan = args.plan
   if (!Array.isArray(plan)) return null
@@ -203,7 +194,7 @@ export function parsePlanSteps(
 
 function dynamicArguments(record: CodexToolCallRecord): DynamicToolCallItem["arguments"] {
   if (record.family === "function") {
-    const parsed = parseJsonRecord(record.input)
+    const parsed = parseJsonObject(record.input)
     if (parsed !== null) return parsed
   }
   return record.input
@@ -231,7 +222,7 @@ function dynamicOutput(callId: string, tool: string, rawOutput: string): Dynamic
 }
 
 function collabAgentCall(record: CodexToolCallRecord): CollabAgentToolCallItem {
-  const args = parseJsonRecord(record.input)
+  const args = parseJsonObject(record.input)
   const senderThreadId = stringOrNull(args?.sender_thread_id ?? null) ?? ""
   const rawReceivers = args?.receiver_thread_ids
   const receiverThreadIds = Array.isArray(rawReceivers)

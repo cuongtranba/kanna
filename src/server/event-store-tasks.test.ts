@@ -199,6 +199,8 @@ test("tasks survive a snapshot round trip — the server-restart promise", async
     existsSync: (p: string) => files.has(p),
     size: async (p: string) => (files.get(p) ?? "").length,
     readTextSync: (p: string) => files.get(p) ?? "",
+    sizeSync: (p: string) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p: string, start: number, end: number) => Buffer.from(files.get(p) ?? "").subarray(start, end),
   }
 
   const restored = createEmptyState()

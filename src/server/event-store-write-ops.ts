@@ -1,7 +1,7 @@
 
 import path from "node:path"
 import type { AgentProvider, ModelOptions, QueuedChatMessage, StackBinding } from "../shared/types"
-import { STORE_VERSION } from "../shared/types"
+import { STORE_VERSION, DEFAULT_CHAT_TITLE } from "../shared/types"
 import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type {
@@ -303,7 +303,7 @@ export function buildCreateChatEvent(
     timestamp: Date.now(),
     chatId,
     projectId,
-    title: "New Chat",
+    title: DEFAULT_CHAT_TITLE,
     ...(options?.stackId !== undefined ? { stackId: options.stackId } : {}),
     ...(options?.stackBindings !== undefined
       ? { stackBindings: options.stackBindings.map((b) => ({ ...b })) }
@@ -532,7 +532,7 @@ export function buildPendingForkSessionTokenEvent(
 
 
 export function buildPutToolRequestEvent(req: ToolRequest): ToolRequestEvent {
-  return { v: 3, type: "tool_request_put", timestamp: Date.now(), request: req }
+  return { v: STORE_VERSION, type: "tool_request_put", timestamp: Date.now(), request: req }
 }
 
 export function buildResolveToolRequestEvent(
@@ -547,7 +547,7 @@ export function buildResolveToolRequestEvent(
 ): ToolRequestEvent {
   if (!toolRequestsById.has(id)) throw new Error(`resolveToolRequest: unknown id ${id}`)
   return {
-    v: 3,
+    v: STORE_VERSION,
     type: "tool_request_resolved",
     timestamp: Date.now(),
     id,

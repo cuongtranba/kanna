@@ -163,6 +163,7 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
       },
       getQueuedMessages: (_chatId: string) => queuedMessages,
       getMessages: (_chatId: string) => opts.transcript ?? [],
+      getLatestContextWindowUsage: (_chatId: string) => null,
     },
     activeTurns: {
       has: (chatId: string) => activeChatIds.has(chatId),
@@ -337,24 +338,6 @@ describe("shouldInjectProactiveCompact", () => {
     deps.store.getMessages = () => { throw new Error("must not fall through on a null usage") }
 
     expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(false)
-  })
-
-  test("falls back to getMessages on a store fake without the method", () => {
-    process.env.KANNA_PROACTIVE_COMPACT = "enabled"
-    const deps = makeDeps({
-      chatCompactFailures: 0,
-      transcript: [
-        {
-          _id: "u-1",
-          createdAt: 1,
-          kind: "context_window_updated",
-          usage: { usedTokens: 190_000, maxTokens: 200_000, compactsAutomatically: false },
-        } as TranscriptEntry,
-      ],
-    })
-    expect(deps.store.getLatestContextWindowUsage).toBeUndefined()
-
-    expect(shouldInjectProactiveCompact(deps, "chat-1", "hello")).toBe(true)
   })
 })
 

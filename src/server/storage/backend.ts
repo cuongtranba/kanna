@@ -5,8 +5,8 @@ export interface StorageBackend {
   size(path: string): Promise<number>
   readText(path: string): Promise<string>
   readTextSync(path: string): string
-  sizeSync?(path: string): number
-  readSliceSync?(path: string, start: number, endExclusive: number): Uint8Array
+  sizeSync(path: string): number
+  readSliceSync(path: string, start: number, endExclusive: number): Uint8Array
   writeText(path: string, content: string): Promise<void>
   appendText(path: string, content: string): Promise<void>
   rename(from: string, to: string): Promise<void>

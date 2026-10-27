@@ -1,5 +1,6 @@
 import { QuickResponseAdapter } from "./quick-response"
 import { isJsonObject, type JsonValue } from "../shared/json"
+import { isUntitledChat } from "../shared/types"
 
 const TITLE_SCHEMA = {
   type: "object",
@@ -13,7 +14,7 @@ const TITLE_SCHEMA = {
 function normalizeGeneratedTitle(value: JsonValue | undefined): string | null {
   if (typeof value !== "string") return null
   const normalized = value.replace(/\s+/g, " ").trim().slice(0, 80)
-  if (!normalized || normalized === "New Chat") return null
+  if (!normalized || isUntitledChat(normalized)) return null
   return normalized
 }
 

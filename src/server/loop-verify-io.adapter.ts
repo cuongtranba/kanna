@@ -4,6 +4,8 @@ import type { Readable } from "node:stream"
 import { createHash } from "node:crypto"
 import { stat } from "node:fs/promises"
 import path from "node:path"
+import { tryRunGit } from "./git-runner.adapter"
+import { signalProcessGroup } from "./process-utils.adapter"
 import { projectProcessEnv } from "./project-process-env"
 
 
@@ -57,15 +59,15 @@ export async function runVerifyCommand(
 
 
 export async function computeWorkspaceDigest(cwd: string): Promise<string | null> {
-  const insideWorkTree = await runGit(["rev-parse", "--is-inside-work-tree"], cwd)
+  const insideWorkTree = await tryRunGit(["rev-parse", "--is-inside-work-tree"], cwd, GIT_TIMEOUT_MS)
   if (!insideWorkTree || insideWorkTree.exitCode !== 0) {
     return null
   }
 
-  const head = await runGit(["rev-parse", "HEAD"], cwd)
+  const head = await tryRunGit(["rev-parse", "HEAD"], cwd, GIT_TIMEOUT_MS)
   const headSha = head && head.exitCode === 0 ? head.stdout.trim() : ""
 
-  const status = await runGit(["status", "--porcelain=v1", "--untracked-files=all"], cwd)
+  const status = await tryRunGit(["status", "--porcelain=v1", "--untracked-files=all"], cwd, GIT_TIMEOUT_MS)
   if (!status || status.exitCode !== 0) {
     return null
   }
@@ -121,8 +123,8 @@ function spawnCapture(argv: string[], options: SpawnCaptureOptions): Promise<Spa
 
     const deadlineTimer = setTimeout(() => {
       timedOut = true
-      killTree(child, "SIGTERM")
-      killTimer = setTimeout(() => killTree(child, "SIGKILL"), SIGKILL_GRACE_MS)
+      signalProcessGroup(child, "SIGTERM")
+      killTimer = setTimeout(() => signalProcessGroup(child, "SIGKILL"), SIGKILL_GRACE_MS)
     }, options.timeoutMs)
 
     const cleanup = () => {
@@ -152,35 +154,6 @@ function spawnCapture(argv: string[], options: SpawnCaptureOptions): Promise<Spa
       })
     })
   })
-}
-
-function killTree(child: { pid?: number; kill: (signal: NodeJS.Signals) => boolean }, signal: NodeJS.Signals) {
-  try {
-    if (child.pid) {
-      process.kill(-child.pid, signal)
-      return
-    }
-  } catch {
-  }
-  try {
-    child.kill(signal)
-  } catch {
-  }
-}
-
-interface GitCapture {
-  stdout: string
-  exitCode: number
-}
-
-async function runGit(args: string[], cwd: string): Promise<GitCapture | null> {
-  try {
-    const result = await spawnCapture(["git", ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
-    if (result.timedOut) return null
-    return { stdout: result.stdout, exitCode: result.exitCode }
-  } catch {
-    return null
-  }
 }
 
 function settleWithin<T>(promise: Promise<T>, ms: number): Promise<void> {

@@ -1,31 +1,9 @@
+import { tryRunGit } from "./git-runner.adapter"
+
 export interface MergeOutcome {
   ok: boolean
   conflicts: readonly string[]
   detail: string
-}
-
-async function git(
-  args: string[],
-  cwd: string,
-): Promise<{ stdout: string; stderr: string; exitCode: number } | null> {
-  try {
-    const proc = Bun.spawn({
-      cmd: ["git", ...args],
-      cwd,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    })
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    return { stdout, stderr, exitCode }
-  } catch {
-    return null
-  }
 }
 
 function conflictPathsFromMergeTree(stdout: string): string[] {
@@ -42,7 +20,7 @@ function conflictPathsFromMergeTree(stdout: string): string[] {
 }
 
 export async function previewLoopMerge(workdir: string, branch: string): Promise<MergeOutcome | null> {
-  const preview = await git(["merge-tree", "--write-tree", "--name-only", "HEAD", branch], workdir)
+  const preview = await tryRunGit(["merge-tree", "--write-tree", "--name-only", "HEAD", branch], workdir)
   if (!preview) return null
   if (preview.exitCode === 0) return { ok: true, conflicts: [], detail: "" }
   if (preview.exitCode !== 1) {
@@ -57,7 +35,7 @@ export async function previewLoopMerge(workdir: string, branch: string): Promise
 }
 
 export async function mergeLoopBranch(workdir: string, branch: string): Promise<MergeOutcome> {
-  const exists = await git(["rev-parse", "--verify", `${branch}^{commit}`], workdir)
+  const exists = await tryRunGit(["rev-parse", "--verify", `${branch}^{commit}`], workdir)
   if (!exists || exists.exitCode !== 0) {
     return { ok: false, conflicts: [], detail: `branch ${branch} does not exist` }
   }
@@ -65,13 +43,13 @@ export async function mergeLoopBranch(workdir: string, branch: string): Promise<
   const preview = await previewLoopMerge(workdir, branch)
   if (preview && !preview.ok) return preview
 
-  const merged = await git(["merge", "--no-edit", branch], workdir)
+  const merged = await tryRunGit(["merge", "--no-edit", branch], workdir)
   if (!merged) return { ok: false, conflicts: [], detail: `git merge ${branch} timed out` }
   if (merged.exitCode === 0) {
     return { ok: true, conflicts: [], detail: merged.stdout.trim() }
   }
 
-  await git(["merge", "--abort"], workdir)
+  await tryRunGit(["merge", "--abort"], workdir)
   return {
     ok: false,
     conflicts: [],
@@ -80,7 +58,7 @@ export async function mergeLoopBranch(workdir: string, branch: string): Promise<
 }
 
 export async function currentBranchName(workdir: string): Promise<string | null> {
-  const result = await git(["rev-parse", "--abbrev-ref", "HEAD"], workdir)
+  const result = await tryRunGit(["rev-parse", "--abbrev-ref", "HEAD"], workdir)
   if (!result || result.exitCode !== 0) return null
   const name = result.stdout.trim()
   return name.length > 0 && name !== "HEAD" ? name : null

@@ -3,8 +3,6 @@ import type {
   PolicyVerdict,
 } from "../shared/permission-policy"
 import { parse as shellParse } from "shell-quote"
-import path from "node:path"
-import { homedir } from "node:os"
 import { minimatch } from "minimatch"
 import { log } from "../shared/log"
 import { isRecord } from "../shared/errors"
@@ -12,6 +10,9 @@ import type { JsonObject } from "../shared/json"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { evaluateBeaconRequest, type BeaconEvalContext } from "../shared/beacon-scope"
 import { beaconScriptHash } from "./beacon-crypto"
+import { currentHomeDir } from "./home-dir.adapter"
+import { expandHomePrefix, resolveUserPath } from "./home-path"
+import { isInsideAny } from "./path-containment"
 import { buildBeaconRequest } from "../shared/beacon-tool-request"
 import { BEACON_LIST_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../shared/beacon-tools"
 
@@ -22,15 +23,6 @@ export interface EvaluateArgs {
   cwd: string
   restrictedAllowedPaths?: readonly string[]
   beacons?: readonly BeaconConfig[]
-}
-
-export function pathInsideAllowedRoots(absPath: string, roots: readonly string[]): boolean {
-  for (const root of roots) {
-    if (absPath === root) return true
-    const rel = path.relative(root, absPath)
-    if (rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)) return true
-  }
-  return false
 }
 
 export interface EvaluateResult {
@@ -94,11 +86,7 @@ function parseSimpleBash(
   for (const arg of rest.slice(argsStart)) {
     const isPathLike = arg.startsWith("~") || arg.includes("/") || arg.startsWith(".")
     if (!isPathLike) continue
-    const expanded = arg.startsWith("~")
-      ? path.join(homedir(), arg.slice(1).replace(/^\//, ""))
-      : arg
-    const resolved = path.resolve(cwd, expanded)
-    paths.push(resolved)
+    paths.push(resolveUserPath(arg, cwd, currentHomeDir()))
   }
   return { verb, paths, hadEnvPrefix }
 }
@@ -120,9 +108,7 @@ function getPathArg(args: JsonObject): string | null {
 
 export function pathMatchesDeny(absPath: string, deny: string[]): string | null {
   for (const pattern of deny) {
-    let expanded = pattern.startsWith("~")
-      ? path.join(homedir(), pattern.slice(1).replace(/^\//, ""))
-      : pattern
+    let expanded = expandHomePrefix(pattern, currentHomeDir())
     if (expanded.endsWith("/") && expanded !== "/") expanded = expanded.slice(0, -1)
     const matchPattern = expanded.endsWith("/**") || expanded.includes("*")
       ? expanded
@@ -184,11 +170,7 @@ export const policy = {
       : null
     const checkRestrictedPath = (p: string): EvaluateResult | null => {
       if (!roots) return null
-      const expanded = p.startsWith("~")
-        ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
-        : p
-      const resolved = path.resolve(args.cwd, expanded)
-      if (!pathInsideAllowedRoots(resolved, roots)) {
+      if (!isInsideAny(roots, resolveUserPath(p, args.cwd, currentHomeDir()))) {
         return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
       }
       return null
@@ -198,10 +180,7 @@ export const policy = {
       if (p !== null) {
         const restricted = checkRestrictedPath(p)
         if (restricted) return restricted
-        const expanded = p.startsWith("~")
-          ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
-          : p
-        const resolved = path.resolve(args.cwd, expanded)
+        const resolved = resolveUserPath(p, args.cwd, currentHomeDir())
         const denied = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
         if (denied) {
           return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
@@ -213,10 +192,7 @@ export const policy = {
       if (p !== null) {
         const restricted = checkRestrictedPath(p)
         if (restricted) return restricted
-        const expanded = p.startsWith("~")
-          ? path.join(homedir(), p.slice(1).replace(/^\//, ""))
-          : p
-        const resolved = path.resolve(args.cwd, expanded)
+        const resolved = resolveUserPath(p, args.cwd, currentHomeDir())
         const deniedW = pathMatchesDeny(resolved, args.chatPolicy.writePathDeny)
         const deniedR = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
         if (deniedW) return { verdict: "auto-deny", reason: `writePathDeny: ${deniedW}` }
@@ -250,7 +226,7 @@ export const policy = {
         return { verdict: fallback, reason: "bash command has env prefix" }
       }
       for (const p of parsed.paths) {
-        if (roots && !pathInsideAllowedRoots(p, roots)) {
+        if (roots && !isInsideAny(roots, p)) {
           return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
         }
         const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)

@@ -1,3 +1,5 @@
+import { OAUTH_CONSENT_PATH, OAUTH_LOGIN_PATH } from "./oauth-paths"
+
 export interface OAuthLoginPageArgs {
   clientName: string
   oauthQuery: string
@@ -123,7 +125,7 @@ export function renderOAuthLoginPage({ clientName, oauthQuery, error }: OAuthLog
   const errorBlock = error ? `<p class="error" role="alert">${escapeHtml(error)}</p>\n` : ""
   return renderPage("Sign in to Kanna", `<h1>Sign in to Kanna</h1>
 <p><strong>${escapeHtml(clientName)}</strong> wants to connect to your Kanna server. Enter your Kanna password to continue.</p>
-${errorBlock}<form method="post" action="/oauth/login">
+${errorBlock}<form method="post" action="${OAUTH_LOGIN_PATH}">
 <input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}">
 <label for="password">Password</label>
 <input id="password" type="password" name="password" autocomplete="current-password" autofocus required>
@@ -137,7 +139,7 @@ export function renderOAuthConsentPage({ clientName, redirectUri, scopes, oauthQ
   return renderPage("Authorize access to Kanna", `<h1>Authorize access</h1>
 <p><strong>${escapeHtml(clientName)}</strong> wants to control Kanna on your behalf: read projects and chats, send prompts and change settings.</p>
 ${scopeBlock}<p class="uri">Returns to ${escapeHtml(redirectUri)}</p>
-<form method="post" action="/oauth/consent">
+<form method="post" action="${OAUTH_CONSENT_PATH}">
 <input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}">
 <div class="actions">
 <button type="submit" name="accept" value="false">Deny</button>

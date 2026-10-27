@@ -1,4 +1,5 @@
 
+import { STORE_VERSION } from "../shared/types"
 import type { JsonObject, JsonValue } from "../shared/json"
 import type { SubagentRunEvent } from "./events"
 
@@ -92,7 +93,7 @@ export async function respondSubagentTool(
   }
   deps.subagentPendingResolvers.delete(key)
   await deps.store.appendSubagentEvent({
-    v: 3,
+    v: STORE_VERSION,
     type: "subagent_tool_resolved",
     timestamp: Date.now(),
     chatId: command.chatId,

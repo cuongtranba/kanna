@@ -7,12 +7,13 @@ import { buildBeaconStatusRows } from "../shared/beacon-status"
 import { buildBeaconRequest } from "../shared/beacon-tool-request"
 import type { BeaconToolOp } from "../shared/tool-call-types"
 import { errorMessage } from "../shared/errors"
-import type { JsonObject, JsonValue } from "../shared/json"
+import type { JsonValue } from "../shared/json"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { BeaconRegistry } from "./beacon-registry"
 import { getBeaconTransferMaxBytes, getBeaconTransferTickets } from "./beacon-transfer-host"
 import type { BeaconTransferFiles } from "./beacon-transfer-files"
 import { createBeaconTransferFiles } from "./beacon-transfer-files.adapter"
+import { toJsonObject } from "./json-boundary"
 import type { BeaconTransferTickets } from "./beacon-transfer-tickets"
 import { buildBeaconTransferTools, type BeaconTransferToolFactory } from "./kanna-mcp-beacon-transfer"
 import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
@@ -145,11 +146,6 @@ export function dispatchBeaconRequest(
     cancel = dispatched.cancel
     if (settled) cancel()
   })
-}
-
-function toJsonObject(input: ToolArgs): JsonObject {
-  const entries = Object.entries(input).filter((entry): entry is [string, JsonValue] => entry[1] !== undefined)
-  return Object.fromEntries(entries)
 }
 
 function describeBeacon(beacon: BeaconConfig): string {

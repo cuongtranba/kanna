@@ -1,10 +1,20 @@
 import type { AgentProvider } from "../shared/types"
-import { isCodexReasoningEffort, isEndpointProvider, providerUsesSdkSession } from "../shared/types"
+import {
+  isCodexReasoningEffort,
+  isEndpointProvider,
+  providerUsesSdkSession,
+  DEFAULT_CHAT_TITLE,
+  isUntitledChat,
+} from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord } from "./events"
 import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import type { JsonValue } from "../shared/json"
-import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
+import {
+  interruptWithGrace,
+  type HarnessTurn,
+  type HarnessToolRequest,
+} from "./harness-types"
 import type {
   StartTurnAfterTurnStartedCtx,
   StartTurnDeps,
@@ -138,7 +148,7 @@ async function startTurnForChatInner(
 
   const loadExistingMessages = () => deps.store.getRecentRawEntries(args.chatId, PRIMER_TAIL_LIMIT)
   const shouldGenerateTitle = args.appendUserPrompt
-    && chat.title === "New Chat"
+    && isUntitledChat(chat.title)
     && !loadExistingMessages().some((entry) => entry.kind === "user_prompt")
   const optimisticTitle = shouldGenerateTitle ? fallbackTitleFromMessage(args.content) : null
 
@@ -268,7 +278,7 @@ async function startTurnAfterTurnStarted(
 ): Promise<void> {
   const { args, starting, chat, project, loadExistingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
   if (shouldGenerateTitle) {
-    void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
+    void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? DEFAULT_CHAT_TITLE)
   }
 
   const onToolRequest = async (request: HarnessToolRequest): Promise<JsonValue> => {
@@ -402,13 +412,7 @@ async function startTurnAfterTurnStarted(
       chatId: args.chatId,
       provider: args.provider,
     })
-    try {
-      await Promise.race([
-        turn.interrupt(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ])
-    } catch {
-    }
+    await interruptWithGrace(turn)
     turn.close()
     return
   }

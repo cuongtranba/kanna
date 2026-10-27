@@ -2,9 +2,8 @@ import { isJsonObject, safeJsonParse } from "../../shared/json"
 import type { AuthBackend } from "../auth-backend"
 import type { AuthManager } from "../auth"
 import { renderOAuthConsentPage, renderOAuthLoginPage } from "./oauth-pages"
+import { OAUTH_CONSENT_PATH, OAUTH_LOGIN_PATH } from "./oauth-paths"
 
-const LOGIN_PATH = "/oauth/login"
-const CONSENT_PATH = "/oauth/consent"
 const DEFAULT_SCOPES = ["kanna"]
 const UNKNOWN_CLIENT_NAME = "An application"
 const PAGE_HEADERS: Readonly<Record<string, string>> = {
@@ -104,7 +103,7 @@ async function submitLogin(req: Request, services: OAuthPageServices): Promise<R
 
 async function showConsent(req: Request, url: URL, services: OAuthPageServices): Promise<Response> {
   const query = signedQuery(url)
-  if (!(await services.auth.isAuthenticated(req))) return redirectResponse(`${LOGIN_PATH}?${query}`)
+  if (!(await services.auth.isAuthenticated(req))) return redirectResponse(`${OAUTH_LOGIN_PATH}?${query}`)
   const clientId = url.searchParams.get("client_id")
   if (!clientId) return textResponse("Invalid authorization request", 400)
   const client = await services.backend.describeOAuthClient({ headers: sessionHeaders(req), clientId, oauthQuery: query })
@@ -135,12 +134,12 @@ export async function handleOAuthPageRequest(
   url: URL,
   services: OAuthPageServices,
 ): Promise<Response | null> {
-  if (url.pathname === LOGIN_PATH) {
+  if (url.pathname === OAUTH_LOGIN_PATH) {
     if (req.method === "GET") return showLogin(url, services)
     if (req.method === "POST") return submitLogin(req, services)
     return textResponse("Method not allowed", 405)
   }
-  if (url.pathname === CONSENT_PATH) {
+  if (url.pathname === OAUTH_CONSENT_PATH) {
     if (req.method === "GET") return showConsent(req, url, services)
     if (req.method === "POST") return submitConsent(req, services)
     return textResponse("Method not allowed", 405)

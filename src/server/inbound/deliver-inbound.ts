@@ -6,7 +6,8 @@ import {
   renderInboundMessage,
   renderInboundPrompt,
 } from "../../shared/inbound/template"
-import { busSubject, type BusEnvelope, type BusSource } from "../../shared/service-bus/envelope"
+import { createBusEnvelope, inboundIdempotencyKey, inboundSourceId, type BusEnvelope, type InboundBusSource } from "../../shared/service-bus/envelope"
+import { mcpMessageSubject, webhookDeliverySubject } from "../../shared/service-bus/subjects"
 import type { AgentCoordinator } from "../agent-coordinator"
 import { timestamped } from "../claude-message-normalizer"
 import type { EventStore } from "../event-store"
@@ -16,7 +17,7 @@ import type { BusSink } from "../service-bus/service-bus"
 export type InboundDeliveryStore = Pick<EventStore, "getChat" | "getProject" | "createChat" | "appendMessage" | "renameChat">
 export type InboundDeliveryAgent = Pick<AgentCoordinator, "enqueueMessage" | "maybeStartNextQueuedMessage" | "emitStateChange">
 
-export type InboundSource = Extract<BusSource, { kind: "webhook" | "mcp" }>
+export type InboundSource = InboundBusSource
 
 export interface InboundDelivery {
   source: InboundSource
@@ -33,10 +34,6 @@ export type InboundDeliveryResult = { ok: true; chatId?: string; threadId: strin
 
 type ChatTarget = { ok: true; chatId: string } | { ok: false; detail: string }
 
-function sourceId(source: InboundSource): string {
-  return source.kind === "webhook" ? source.hookId : source.sourceId
-}
-
 export function inboundScheduleId(source: InboundSource, deliveryId: string): string {
   return source.kind === "webhook" ? `webhook-${source.hookId}-${deliveryId}` : `mcp-${source.sourceId}-${deliveryId}`
 }
@@ -47,17 +44,15 @@ function noticeFor(delivery: InboundDelivery): string {
 
 function inboundEnvelope(delivery: InboundDelivery): BusEnvelope {
   const { source } = delivery
-  const id = sourceId(source)
-  return {
-    v: 1,
-    id: crypto.randomUUID(),
-    subject: source.kind === "webhook" ? busSubject("webhook", id, "delivery") : busSubject("mcp", id, "message"),
+  const id = inboundSourceId(source)
+  return createBusEnvelope({
+    subject: source.kind === "webhook" ? webhookDeliverySubject(id) : mcpMessageSubject(id),
     ts: delivery.at,
     source,
     direction: "inbound",
-    idempotencyKey: `${source.kind}:${id}:${delivery.deliveryId}`,
+    idempotencyKey: inboundIdempotencyKey(source.kind, id, delivery.deliveryId),
     payload: delivery.body,
-  }
+  })
 }
 
 function checkTarget(store: InboundDeliveryStore, handler: InboundHandler): string | null {

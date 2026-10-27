@@ -1,7 +1,8 @@
 import { z } from "zod"
 import { readdir, readFile, lstat, stat } from "node:fs/promises"
 import path from "node:path"
-import { homedir } from "node:os"
+import { currentHomeDir } from "../home-dir.adapter"
+import { resolveUserPath } from "../home-path"
 import type { ToolCallbackService } from "../tool-callback"
 import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
 import { gatedToolCall } from "./tool-callback-shim"
@@ -17,11 +18,6 @@ export interface GrepTool {
   name: "grep"
   schema: typeof InputSchema
   handler: (input: GrepInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
-}
-
-function resolvePath(p: string, cwd: string): string {
-  if (p.startsWith("~")) return path.join(homedir(), p.slice(1).replace(/^\//, ""))
-  return path.resolve(cwd, p)
 }
 
 const SKIP_DIRS = new Set(["node_modules", ".git"])
@@ -99,7 +95,7 @@ export function createGrepTool(deps: { toolCallback: ToolCallbackService }): Gre
               isError: true,
             }
           }
-          const root = resolvePath(input.path, ctx.cwd)
+          const root = resolveUserPath(input.path, ctx.cwd, currentHomeDir())
           const results: string[] = []
           try {
             await grepWithTimeout(root, re, results)

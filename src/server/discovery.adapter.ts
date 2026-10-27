@@ -2,8 +2,10 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, readdirSync, s
 import { homedir } from "node:os"
 import path from "node:path"
 import type { AgentProvider } from "../shared/types"
-import { isJsonObject, safeJsonParse, type JsonObject } from "../shared/json"
+import { isJsonObject, parseJsonObject, type JsonObject } from "../shared/json"
 import { resolveLocalPath } from "./paths"
+import { claudeProjectsRoot } from "./claude-projects-path.adapter"
+import { codexDir, scanCodexSessions } from "./codex-session-scanner.adapter"
 
 export interface DiscoveredProject {
   localPath: string
@@ -97,7 +99,7 @@ export class ClaudeProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
   readonly provider = "claude" as const
 
   scan(homeDir: string = homedir()): ProviderDiscoveredProject[] {
-    const projectsDir = path.join(homeDir, ".claude", "projects")
+    const projectsDir = claudeProjectsRoot(homeDir)
     if (!existsSync(projectsDir)) {
       return []
     }
@@ -132,11 +134,6 @@ export class ClaudeProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
   }
 }
 
-function parseJsonRecord(line: string): JsonObject | null {
-  const parsed = safeJsonParse(line)
-  return parsed !== null && isJsonObject(parsed) ? parsed : null
-}
-
 function readCodexSessionIndex(indexPath: string) {
   const updatedAtById = new Map<string, number>()
   if (!existsSync(indexPath)) {
@@ -145,7 +142,7 @@ function readCodexSessionIndex(indexPath: string) {
 
   for (const line of readFileSync(indexPath, "utf8").split("\n")) {
     if (!line.trim()) continue
-    const record = parseJsonRecord(line)
+    const record = parseJsonObject(line)
     if (!record) continue
 
     const id = typeof record.id === "string" ? record.id : null
@@ -159,25 +156,6 @@ function readCodexSessionIndex(indexPath: string) {
   }
 
   return updatedAtById
-}
-
-function collectCodexSessionFiles(directory: string): string[] {
-  if (!existsSync(directory)) {
-    return []
-  }
-
-  const files: string[] = []
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const fullPath = path.join(directory, entry.name)
-    if (entry.isDirectory()) {
-      files.push(...collectCodexSessionFiles(fullPath))
-      continue
-    }
-    if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-      files.push(fullPath)
-    }
-  }
-  return files
 }
 
 function readCodexConfiguredProjects(configPath: string) {
@@ -229,7 +207,7 @@ function parseCodexSessionMetadata(sessionFile: string, mtimeMs: number): CodexS
   const firstLine = readFirstLine(sessionFile)
   if (!firstLine?.trim()) return null
 
-  const record = parseJsonRecord(firstLine)
+  const record = parseJsonObject(firstLine)
   if (!record || record.type !== "session_meta") return null
 
   const payload = record.payload
@@ -247,11 +225,11 @@ function parseCodexSessionMetadata(sessionFile: string, mtimeMs: number): CodexS
   return { sessionId, cwd, modifiedAt }
 }
 
-function readCodexSessionMetadata(sessionsDir: string) {
+function readCodexSessionMetadata(sessionFiles: readonly string[]) {
   const metadataById = new Map<string, { cwd: string; modifiedAt: number }>()
   const seenFiles = new Set<string>()
 
-  for (const sessionFile of collectCodexSessionFiles(sessionsDir)) {
+  for (const sessionFile of sessionFiles) {
     seenFiles.add(sessionFile)
     const fileStat = statSync(sessionFile)
     const cached = codexSessionMetadataCache.get(sessionFile)
@@ -278,11 +256,10 @@ export class CodexProjectDiscoveryAdapter implements ProjectDiscoveryAdapter {
   readonly provider = "codex" as const
 
   scan(homeDir: string = homedir()): ProviderDiscoveredProject[] {
-    const indexPath = path.join(homeDir, ".codex", "session_index.jsonl")
-    const sessionsDir = path.join(homeDir, ".codex", "sessions")
-    const configPath = path.join(homeDir, ".codex", "config.toml")
+    const indexPath = path.join(codexDir(homeDir), "session_index.jsonl")
+    const configPath = path.join(codexDir(homeDir), "config.toml")
     const updatedAtById = readCodexSessionIndex(indexPath)
-    const metadataById = readCodexSessionMetadata(sessionsDir)
+    const metadataById = readCodexSessionMetadata(scanCodexSessions(homeDir))
     const configuredProjects = readCodexConfiguredProjects(configPath)
     const projects: ProviderDiscoveredProject[] = []
 

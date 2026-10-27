@@ -14,12 +14,8 @@ interface ChatLike {
   policyOverride?: ChatPermissionPolicyOverride | null
 }
 
-interface ChatsByIdLike {
-  get(chatId: string): ChatLike | undefined
-}
-
 interface StoreLike {
-  state?: { chatsById?: ChatsByIdLike } | null
+  getChat(chatId: string): ChatLike | null
 }
 
 export interface ClaudeSessionConfigHelpersDeps {
@@ -37,10 +33,7 @@ export interface ClaudeSessionConfigHelpersDeps {
 export function getEnabledCustomMcpServers(
   deps: ClaudeSessionConfigHelpersDeps,
 ): readonly McpServerConfig[] {
-  const snap = deps.getAppSettingsSnapshot()
-  const list = snap.customMcpServers
-  if (!Array.isArray(list)) return []
-  return list.filter((s) => s.enabled)
+  return (deps.getAppSettingsSnapshot().customMcpServers ?? []).filter((s) => s.enabled)
 }
 
 export interface OAuthBearers {
@@ -83,6 +76,6 @@ export function resolveChatPolicy(
   deps: ClaudeSessionConfigHelpersDeps,
   chatId: string,
 ): ChatPermissionPolicy {
-  const override = deps.store.state?.chatsById?.get(chatId)?.policyOverride ?? null
+  const override = deps.store.getChat(chatId)?.policyOverride ?? null
   return mergePolicyOverride(deps.chatPolicy, override)
 }

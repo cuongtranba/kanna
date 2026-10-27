@@ -28,7 +28,7 @@ function makeDeps(overrides: Partial<ClaudeSessionConfigHelpersDeps> = {}): Clau
   return {
     getAppSettingsSnapshot: () => ({}),
     chatPolicy: POLICY_DEFAULT,
-    store: { state: null },
+    store: { getChat: () => null },
     ensureFreshToken: async () => "test-token",
     persistOAuthState: null,
     ...overrides,
@@ -164,8 +164,8 @@ describe("buildOAuthBearers", () => {
 
 
 describe("resolveChatPolicy", () => {
-  test("returns base chatPolicy when store has no state", () => {
-    const deps = makeDeps({ store: { state: null } })
+  test("returns base chatPolicy when the store has no such chat", () => {
+    const deps = makeDeps({ store: { getChat: () => null } })
     const result = resolveChatPolicy(deps, "chat-1")
     expect(result).toBe(POLICY_DEFAULT)
   })
@@ -173,9 +173,7 @@ describe("resolveChatPolicy", () => {
   test("returns base chatPolicy when chat has no policyOverride", () => {
     const deps = makeDeps({
       store: {
-        state: {
-          chatsById: new Map([["chat-1", { policyOverride: null }]]),
-        },
+        getChat: (chatId) => (chatId === "chat-1" ? { policyOverride: null } : null),
       },
     })
     const result = resolveChatPolicy(deps, "chat-1")
@@ -186,9 +184,7 @@ describe("resolveChatPolicy", () => {
     const override = { defaultAction: "auto-allow" as const }
     const deps = makeDeps({
       store: {
-        state: {
-          chatsById: new Map([["chat-1", { policyOverride: override }]]),
-        },
+        getChat: (chatId) => (chatId === "chat-1" ? { policyOverride: override } : null),
       },
     })
     const result = resolveChatPolicy(deps, "chat-1")
@@ -197,9 +193,7 @@ describe("resolveChatPolicy", () => {
 
   test("falls back to base policy when chat id not in store", () => {
     const deps = makeDeps({
-      store: {
-        state: { chatsById: new Map() },
-      },
+      store: { getChat: () => null },
     })
     const result = resolveChatPolicy(deps, "nonexistent")
     expect(result).toEqual(POLICY_DEFAULT)

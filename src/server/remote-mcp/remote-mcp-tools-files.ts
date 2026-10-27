@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
-import { isWithinRoot, resolveProjectFilePath } from "../project-file-path"
+import { isPathInside } from "../path-containment"
+import { resolveProjectFilePath } from "../project-file-path"
 import { getServerFile, realPathOrNull, statFile } from "../server-io.adapter"
 import { inferProjectFileContentType, persistProjectUpload } from "../uploads"
 import { mcpOnlyTool, type RemoteTool } from "./remote-mcp-tool-spec"
@@ -66,7 +67,7 @@ export const fileTools: readonly RemoteTool[] = [
       if (!resolved) return fail("Invalid project file path.")
       const [realRoot, realFile] = await Promise.all([realPathOrNull(project.localPath), realPathOrNull(resolved.filePath)])
       if (realRoot === null || realFile === null) return fail(`File ${resolved.relativePath} was not found.`)
-      if (!isWithinRoot(realRoot, realFile)) return fail("Invalid project file path.")
+      if (!isPathInside(realRoot, realFile)) return fail("Invalid project file path.")
       const info = await statFile(realFile).catch(() => null)
       if (!info?.isFile()) return fail(`File ${resolved.relativePath} was not found.`)
       const limit = Math.min(maxBytes ?? DEFAULT_READ_BYTES, MAX_READ_BYTES)

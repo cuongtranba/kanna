@@ -104,6 +104,7 @@ function createFakeStore() {
       this.queuedMessages.push(queuedMessage)
       return queuedMessage
     },
+    async setChatModel() {},
     getQueuedMessages() { return [...this.queuedMessages] },
     getQueuedMessage(_chatId: string, queuedMessageId: string) {
       return this.queuedMessages.find((entry) => entry.id === queuedMessageId) ?? null

@@ -1,11 +1,12 @@
 
-import type { JsonValue } from "../shared/json"
-import type {
-  CustomModelEntry,
-  LlmProviderSnapshot,
-  McpServerConfig,
-  Subagent,
+import {
+  STORE_VERSION,
+  type CustomModelEntry,
+  type LlmProviderSnapshot,
+  type McpServerConfig,
+  type Subagent,
 } from "../shared/types"
+import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
 import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
@@ -21,7 +22,7 @@ import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } f
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { resolveSdkEndpoint } from "./sdk-endpoint"
 import { parseCustomModelId, type CustomProviderCredential } from "../shared/custom-providers"
-import { OAuthPoolUnavailableError } from "./oauth-errors"
+import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import type { BeaconRegistry } from "./beacon-registry"
@@ -137,7 +138,7 @@ export function buildSubagentProviderRunForChat(
     const toolUseId = request.tool.toolId
     const key = deps.subagentPendingKey(args.chatId, args.runId, toolUseId)
     await deps.store.appendSubagentEvent({
-      v: 3,
+      v: STORE_VERSION,
       type: "subagent_tool_pending",
       timestamp: Date.now(),
       chatId: args.chatId,
@@ -214,13 +215,11 @@ export function buildSubagentProviderRunForChat(
       return true
     },
     pickOauthToken: () => {
-      const picked = deps.oauthPool?.pickActive(args.chatId) ?? null
-      if (deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
-        throw new OAuthPoolUnavailableError(
-          deps.buildPoolUnavailableMessage(args.chatId, " for subagent run"),
-        )
-      }
-      if (picked) deps.oauthPool!.markUsed(picked.id)
+      const picked = pickOAuthTokenOrRefuse(
+        deps.oauthPool,
+        args.chatId,
+        () => deps.buildPoolUnavailableMessage(args.chatId, " for subagent run"),
+      )
       if (!picked) return null
       return { token: picked.token, baseUrl: picked.baseUrl }
     },

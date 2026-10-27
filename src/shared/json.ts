@@ -14,6 +14,11 @@ export function isJsonArray(value: JsonValue): value is JsonArray {
   return Array.isArray(value)
 }
 
+export function parseJsonObject(text: string): JsonObject | null {
+  const parsed = safeJsonParse(text)
+  return parsed !== null && isJsonObject(parsed) ? parsed : null
+}
+
 export function safeJsonParse(text: string): JsonValue | null {
   try {
     return JSON.parse(text)

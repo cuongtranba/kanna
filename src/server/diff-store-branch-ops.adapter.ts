@@ -1,8 +1,5 @@
-import {
-  formatGitFailure,
-  runGit,
-  summarizeGitFailure,
-} from "./diff-store-io.adapter"
+import { formatGitFailure, summarizeGitFailure } from "./diff-store-io.adapter"
+import { runGit } from "./git-runner.adapter"
 import {
   createBranchActionFailure,
   createMergeActionFailure,

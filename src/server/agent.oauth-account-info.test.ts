@@ -102,6 +102,7 @@ function createFakeStore() {
     async enqueueMessage() {
       return { id: crypto.randomUUID(), content: "" }
     },
+    async setChatModel() {},
     getQueuedMessages() {
       return [...this.queuedMessages]
     },

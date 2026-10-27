@@ -123,6 +123,7 @@ function createFakeStore() {
       this.queuedMessages.push(q)
       return q
     },
+    async setChatModel() {},
     getQueuedMessages() {
       return [...this.queuedMessages]
     },

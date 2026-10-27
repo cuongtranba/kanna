@@ -1,3 +1,11 @@
+import {
+  STORE_VERSION,
+  type AgentProvider,
+  type ProviderUsage,
+  type Subagent,
+  type SubagentErrorCode,
+  type TranscriptEntry,
+} from "../shared/types"
 import crypto from "node:crypto"
 import { LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
@@ -11,13 +19,6 @@ import {
 } from "./observability"
 import { splitBilledTokens } from "../shared/token-pricing"
 import { deriveChunkLabel } from "../shared/loop-progress"
-import type {
-  AgentProvider,
-  ProviderUsage,
-  Subagent,
-  SubagentErrorCode,
-  TranscriptEntry,
-} from "../shared/types"
 import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
@@ -200,7 +201,7 @@ export class SubagentOrchestrator {
     for (const run of this.deps.store.runningSubagentRuns()) {
       try {
         await this.deps.store.appendSubagentEvent({
-          v: 3,
+          v: STORE_VERSION,
           type: "subagent_run_failed",
           timestamp: this.now(),
           chatId: run.chatId,
@@ -359,7 +360,7 @@ export class SubagentOrchestrator {
       if (mention.kind === "unknown-subagent") {
         const runId = crypto.randomUUID()
         await this.deps.store.appendSubagentEvent({
-          v: 3,
+          v: STORE_VERSION,
           type: "subagent_run_started",
           timestamp: this.now(),
           chatId: args.chatId,
@@ -379,7 +380,7 @@ export class SubagentOrchestrator {
       if (!subagent) {
         const runId = crypto.randomUUID()
         await this.deps.store.appendSubagentEvent({
-          v: 3,
+          v: STORE_VERSION,
           type: "subagent_run_started",
           timestamp: this.now(),
           chatId: args.chatId,
@@ -431,7 +432,7 @@ export class SubagentOrchestrator {
     if (!subagent) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_started",
         timestamp: this.now(),
         chatId: args.chatId,
@@ -449,7 +450,7 @@ export class SubagentOrchestrator {
     if (subagent.triggerMode === "manual" && !args.mentionedSubagentIds.includes(subagent.id)) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_started",
         timestamp: this.now(),
         chatId: args.chatId,
@@ -472,7 +473,7 @@ export class SubagentOrchestrator {
     if (args.depth > this.maxDepth()) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_started",
         timestamp: this.now(),
         chatId: args.chatId,
@@ -495,7 +496,7 @@ export class SubagentOrchestrator {
     if (args.ancestorSubagentIds.includes(subagent.id)) {
       const runId = crypto.randomUUID()
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_started",
         timestamp: this.now(),
         chatId: args.chatId,
@@ -631,7 +632,7 @@ export class SubagentOrchestrator {
     const runId = args.runId
     const label = args.label?.trim() || deriveChunkLabel(args.userInstruction)
     await this.deps.store.appendSubagentEvent({
-      v: 3,
+      v: STORE_VERSION,
       type: "subagent_run_started",
       timestamp: this.now(),
       chatId: args.chatId,
@@ -736,7 +737,7 @@ export class SubagentOrchestrator {
         runState.timeout?.reset()
         this.deps.store
           .appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_message_delta",
             timestamp: this.now(),
             chatId: args.chatId,
@@ -770,7 +771,7 @@ export class SubagentOrchestrator {
         }
         this.deps.store
           .appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_entry_appended",
             timestamp: this.now(),
             chatId: args.chatId,
@@ -845,7 +846,7 @@ export class SubagentOrchestrator {
       }
 
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_completed",
         timestamp: this.now(),
         chatId: args.chatId,
@@ -871,7 +872,7 @@ export class SubagentOrchestrator {
         if (childDepth > this.maxDepth()) {
           const childRunId = crypto.randomUUID()
           await this.deps.store.appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_run_started",
             timestamp: this.now(),
             chatId: args.chatId,
@@ -890,7 +891,7 @@ export class SubagentOrchestrator {
         if ([...args.ancestorSubagentIds, args.subagent.id].includes(chainSubagent.id)) {
           const childRunId = crypto.randomUUID()
           await this.deps.store.appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_run_started",
             timestamp: this.now(),
             chatId: args.chatId,
@@ -967,7 +968,7 @@ export class SubagentOrchestrator {
         if (!chunk) return
         this.deps.store
           .appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_message_delta",
             timestamp: this.now(),
             chatId,
@@ -987,7 +988,7 @@ export class SubagentOrchestrator {
       const onEntry = (entry: TranscriptEntry) => {
         this.deps.store
           .appendSubagentEvent({
-            v: 3,
+            v: STORE_VERSION,
             type: "subagent_entry_appended",
             timestamp: this.now(),
             chatId,
@@ -1060,7 +1061,7 @@ export class SubagentOrchestrator {
     log.warn(`${LOG_PREFIX} subagent run failed`, { chatId, runId, code, message })
     try {
       await this.deps.store.appendSubagentEvent({
-        v: 3,
+        v: STORE_VERSION,
         type: "subagent_run_failed",
         timestamp: this.now(),
         chatId,

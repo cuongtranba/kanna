@@ -1,7 +1,8 @@
 import { z } from "zod"
 import { readdir, lstat } from "node:fs/promises"
 import path from "node:path"
-import { homedir } from "node:os"
+import { currentHomeDir } from "../home-dir.adapter"
+import { resolveUserPath } from "../home-path"
 import { minimatch } from "minimatch"
 import type { ToolCallbackService } from "../tool-callback"
 import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
@@ -18,11 +19,6 @@ export interface GlobTool {
   name: "glob"
   schema: typeof InputSchema
   handler: (input: GlobInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
-}
-
-function resolvePath(p: string, cwd: string): string {
-  if (p.startsWith("~")) return path.join(homedir(), p.slice(1).replace(/^\//, ""))
-  return path.resolve(cwd, p)
 }
 
 const SKIP_DIRS = new Set(["node_modules", ".git"])
@@ -65,7 +61,7 @@ export function createGlobTool(deps: { toolCallback: ToolCallbackService }): Glo
         ctx,
         args: input,
         formatAnswer: async () => {
-          const root = resolvePath(input.path, ctx.cwd)
+          const root = resolveUserPath(input.path, ctx.cwd, currentHomeDir())
           const allFiles: string[] = []
           await walkDir(root, allFiles)
           const matches = allFiles

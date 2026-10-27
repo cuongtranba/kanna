@@ -2,23 +2,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
+import { tryRunGit } from "./git-runner.adapter"
 import { confinePathToDir } from "./input-validation"
 
 async function git(args: string[], cwd: string): Promise<{ ok: boolean; stdout: string }> {
-  try {
-    const proc = Bun.spawn(["git", ...args], {
-      cwd,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    })
-    const stdout = await new Response(proc.stdout).text()
-    const exitCode = await proc.exited
-    return { ok: exitCode === 0, stdout: stdout.trim() }
-  } catch {
-    return { ok: false, stdout: "" }
-  }
+  const run = await tryRunGit(args, cwd)
+  return run === null ? { ok: false, stdout: "" } : { ok: run.exitCode === 0, stdout: run.stdout.trim() }
 }
 
 export interface TrackingFileInspection {

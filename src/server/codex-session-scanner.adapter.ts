@@ -28,8 +28,12 @@ function collectFiles(dir: string): string[] {
   return files
 }
 
+export function codexDir(homeDir: string): string {
+  return path.join(homeDir, ".codex")
+}
+
 export function scanCodexSessions(homeDir: string = homedir()): string[] {
-  return collectFiles(path.join(homeDir, ".codex", "sessions"))
+  return collectFiles(path.join(codexDir(homeDir), "sessions"))
 }
 
 export function locateCodexRolloutFile(homeDir: string, sessionId: string): string | null {

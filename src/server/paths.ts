@@ -1,5 +1,6 @@
 import { homedir } from "node:os"
 import path from "node:path"
+import { isPathInside } from "./path-containment"
 
 export type RealpathFn = (p: string) => string
 
@@ -15,11 +16,6 @@ export class SubagentRootsError extends Error {
     super(message)
     this.name = "SubagentRootsError"
   }
-}
-
-const isInside = (parent: string, child: string) => {
-  const rel = path.relative(parent, child)
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
 }
 
 export function resolveSubagentRoots(
@@ -42,11 +38,11 @@ export function resolveSubagentRoots(
       throw new SubagentRootsError("INVALID_PATH", `Path must be relative to parent cwd: ${trimmed}`, trimmed)
     }
     const joined = path.resolve(canonicalParent, trimmed)
-    if (!isInside(canonicalParent, joined)) {
+    if (!isPathInside(canonicalParent, joined)) {
       throw new SubagentRootsError("PATH_ESCAPE", `Path escapes parent cwd: ${trimmed}`, trimmed)
     }
     const real = realpath(joined)
-    if (!isInside(canonicalParent, real)) {
+    if (!isPathInside(canonicalParent, real)) {
       throw new SubagentRootsError("PATH_ESCAPE", `Path resolves outside parent cwd: ${trimmed}`, trimmed)
     }
     return real
@@ -81,10 +77,28 @@ export function resolveLocalPath(localPath: string) {
   return path.resolve(trimmed)
 }
 
+const PROJECT_KANNA_DIR = ".kanna"
+
+const PROJECT_KANNA_SUBDIRS = ["uploads", "exports", "outputs"] as const
+
+export type ProjectKannaSubdir = (typeof PROJECT_KANNA_SUBDIRS)[number]
+
+export function projectKannaDir(localPath: string) {
+  return path.join(resolveLocalPath(localPath), PROJECT_KANNA_DIR)
+}
+
+export function projectKannaSubdir(localPath: string, subdir: ProjectKannaSubdir) {
+  return path.join(projectKannaDir(localPath), subdir)
+}
+
+export function projectKannaSubdirs(localPath: string): string[] {
+  return PROJECT_KANNA_SUBDIRS.map((subdir) => projectKannaSubdir(localPath, subdir))
+}
+
 export function getProjectUploadDir(localPath: string) {
-  return path.join(resolveLocalPath(localPath), ".kanna", "uploads")
+  return projectKannaSubdir(localPath, "uploads")
 }
 
 export function getProjectExportDir(localPath: string) {
-  return path.join(resolveLocalPath(localPath), ".kanna", "exports")
+  return projectKannaSubdir(localPath, "exports")
 }

@@ -246,7 +246,7 @@ describe("beacon_pull and beacon_push", () => {
 
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain("idle timeout")
-    expect(tickets.lookup(ticket, "upload")).toBeNull()
+    expect(tickets.claim(ticket, "upload")).toBeNull()
   })
 
   test("cancelling the call fails it and revokes the ticket", async () => {
@@ -265,6 +265,6 @@ describe("beacon_pull and beacon_push", () => {
 
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain("cancelled")
-    expect(tickets.lookup(requestFrame.request.ticket, "upload")).toBeNull()
+    expect(tickets.claim(requestFrame.request.ticket, "upload")).toBeNull()
   })
 })
