@@ -2,88 +2,17 @@ import { Bot, X } from "lucide-react"
 import type {
   AskUserQuestionAnswerMap,
   AskUserQuestionItem,
-  NormalizedToolCall,
   SubagentRunSnapshot,
 } from "../../../shared/types"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "../../app/chatFocusPolicy"
-import { formatBashCommandTitle, truncateEndEllipsis } from "../../lib/formatters"
+import { toolActivity } from "../../lib/toolPresentation"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
-import { stripWorkspacePath } from "../../lib/pathUtils"
 import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
 import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
 import { Spinner } from "../ui/spinner"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
-
-const ACTIVITY_MAX_LEN = 40
-
-function truncateActivity(s: string): string {
-  return truncateEndEllipsis(s, ACTIVITY_MAX_LEN)
-}
-
-function toolActivityLabel(tool: NormalizedToolCall, localPath: string): string {
-  switch (tool.toolKind) {
-    case "bash": {
-      const title = tool.input.description
-        || (tool.input.command ? formatBashCommandTitle(tool.input.command) : "")
-      return title ? `$ ${truncateActivity(title)}` : "running bash..."
-    }
-    case "read_file": {
-      const p = stripWorkspacePath(tool.input.filePath, localPath)
-      return p ? `reading ${truncateActivity(p)}` : "reading file..."
-    }
-    case "write_file": {
-      const p = stripWorkspacePath(tool.input.filePath, localPath)
-      return p ? `writing ${truncateActivity(p)}` : "writing file..."
-    }
-    case "edit_file": {
-      const p = stripWorkspacePath(tool.input.filePath, localPath)
-      return p ? `editing ${truncateActivity(p)}` : "editing file..."
-    }
-    case "delete_file": {
-      const p = stripWorkspacePath(tool.input.filePath, localPath)
-      return p ? `deleting ${truncateActivity(p)}` : "deleting file..."
-    }
-    case "glob":
-      return tool.input.pattern ? `globbing ${truncateActivity(tool.input.pattern)}` : "globbing..."
-    case "grep":
-      return tool.input.pattern ? `grepping ${truncateActivity(tool.input.pattern)}` : "grepping..."
-    case "web_search":
-      return tool.input.query ? `searching: ${truncateActivity(tool.input.query)}` : "searching web..."
-    case "skill":
-      return tool.input.skill ? `skill ${truncateActivity(tool.input.skill)}` : "running skill..."
-    case "todo_write":
-      return "updating todos..."
-    case "task_create":
-      return "creating task..."
-    case "task_update":
-      return "updating task..."
-    case "task_get":
-    case "task_list":
-      return "reading tasks..."
-    case "subagent_task":
-      return tool.input.subagentType
-        ? `delegating ${truncateActivity(tool.input.subagentType)}`
-        : "delegating..."
-    case "ask_user_question":
-      return "asking..."
-    case "exit_plan_mode":
-      return "presenting plan..."
-    case "offer_download":
-      return "preparing download..."
-    case "image_generation":
-      return "generating image..."
-    case "image_view":
-      return "viewing image..."
-    case "mcp_generic":
-      return truncateActivity(`${tool.input.server}.${tool.input.tool}`)
-    case "unknown_tool":
-      return `running ${truncateActivity(tool.toolName)}`
-    default:
-      return "running..."
-  }
-}
 
 function deriveSubagentActivity(run: SubagentRunSnapshot, localPath: string): string {
   if (run.pendingTool) return "waiting for input..."
@@ -94,7 +23,7 @@ function deriveSubagentActivity(run: SubagentRunSnapshot, localPath: string): st
     if (e.kind === "tool_result") {
       resolved.add(e.toolId)
     } else if (e.kind === "tool_call" && !resolved.has(e.tool.toolId)) {
-      return toolActivityLabel(e.tool, localPath)
+      return toolActivity(e.tool, localPath)
     }
   }
   const last = entries[entries.length - 1]

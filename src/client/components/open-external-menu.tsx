@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react"
 import { OpenExternalSelectStore } from "./OpenExternalSelect.store"
+import { withScopedStoreInit } from "../lib/createScopedStore"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
 import { isEditorPreset } from "../../shared/types"
@@ -274,6 +275,12 @@ function OpenExternalSelectInner({
   )
 }
 
+const OpenExternalSelectScope = withScopedStoreInit(
+  OpenExternalSelectStore,
+  OpenExternalSelectInner,
+  ({ editorPreset }): { initialTarget: OpenAppTarget } => ({ initialTarget: editorTarget(editorPreset) }),
+)
+
 export function OpenExternalSelect({
   onOpenExternal,
   pending,
@@ -285,14 +292,12 @@ export function OpenExternalSelect({
 }) {
   const editorPreset = useAppSettingsStore(selectEditorPreset)
   return (
-    <OpenExternalSelectStore.Provider init={{ initialTarget: editorTarget(editorPreset) }}>
-      <OpenExternalSelectInner
-        editorPreset={editorPreset}
-        onOpenExternal={onOpenExternal}
-        pending={pending}
-        ports={ports}
-      />
-    </OpenExternalSelectStore.Provider>
+    <OpenExternalSelectScope
+      editorPreset={editorPreset}
+      onOpenExternal={onOpenExternal}
+      pending={pending}
+      ports={ports}
+    />
   )
 }
 

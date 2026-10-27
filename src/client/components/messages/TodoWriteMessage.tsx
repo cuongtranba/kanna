@@ -1,6 +1,6 @@
 import { Check, Circle, ListChecks, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import type { ProcessedToolCall } from "./types"
+import type { HydratedToolCall } from "../../../shared/types"
 
 const STATUS_CONFIG = {
   completed:   { Icon: Check,   iconClass: "text-success-text",                textClass: "text-muted-foreground" },
@@ -9,7 +9,7 @@ const STATUS_CONFIG = {
 } as const
 
 interface Props {
-  message: Extract<ProcessedToolCall, { toolKind: "todo_write" }>
+  message: Extract<HydratedToolCall, { toolKind: "todo_write" }>
 }
 
 export function TodoWriteMessage({ message }: Props) {

@@ -1,23 +1,9 @@
 import { useMemo } from "react"
 import { LayoutDashboard } from "lucide-react"
-import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../../shared/json"
-
-const ACTION_LABELS: Readonly<Record<string, string>> = {
-  "agent.ask": "Question from a view",
-  "agent.investigate": "Investigation request from a view",
-  "agent.fix": "Fix request from a view",
-  "financial.explainVariance": "Variance explanation request from a report",
-}
-
-function describe(payload: JsonValue | null): { label: string; context: JsonObject | null } {
-  if (payload === null || !isJsonObject(payload)) return { label: "Context from a view", context: null }
-  const action = typeof payload.action === "string" ? payload.action : ""
-  const context = payload.context !== undefined && isJsonObject(payload.context) ? payload.context : null
-  return { label: ACTION_LABELS[action] ?? "Context from a view", context }
-}
+import { describeIntentPayload } from "../../../shared/genui/intent"
 
 export function KannaUiIntentChip({ source }: { source: string }) {
-  const { label, context } = useMemo(() => describe(safeJsonParse(source)), [source])
+  const { label, context } = useMemo(() => describeIntentPayload(source), [source])
   return (
     <details className="not-prose my-1 w-fit max-w-full rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
       <summary className="flex cursor-pointer select-none items-center gap-1.5">

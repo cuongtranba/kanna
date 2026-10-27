@@ -1,4 +1,3 @@
-import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
 import type { JsonObject } from "../shared/json"
 import { log } from "../shared/log"
@@ -9,6 +8,7 @@ import type { ChatEvent, ChatRecord, StoreEvent } from "./events"
 import { cloneTranscriptEntries } from "./events"
 import { isSendToStartingProfilingEnabled } from "./claude-steer-log"
 import { requireLiveChat } from "./event-store-lookup"
+import { subagentResultsDir } from "./paths"
 import type { LogWriter } from "./event-store-writer"
 import { messageIdOf } from "./seen-message-ids"
 import {
@@ -47,9 +47,7 @@ export async function removeSubagentResultsDir(
   projectId: string,
   chatId: string,
 ): Promise<void> {
-  const dir = path.join(
-    deps.read.layout.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
-  )
+  const dir = subagentResultsDir(deps.read.layout.dataDir, projectId, chatId)
   try {
     await deps.read.storage.remove(dir, { recursive: true })
   } catch (err) {

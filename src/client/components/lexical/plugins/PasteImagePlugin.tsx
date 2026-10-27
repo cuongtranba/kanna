@@ -3,19 +3,11 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import {
   COMMAND_PRIORITY_HIGH,
   PASTE_COMMAND,
-  $insertNodes,
   type PasteCommandType,
-  type LexicalEditor,
 } from "lexical"
 import { uploadFile } from "../../../lib/uploadFile.adapter"
-import { $createAttachmentNode } from "../nodes"
 import { runInlineUpload } from "./inlineUploadPending"
-import type { ChatAttachment } from "../../../../shared/types"
-import { errorMessage } from "../../../../shared/errors"
-
-
-export const MAX_FILES_PER_PASTE = 50
-export const MAX_CONCURRENT_UPLOADS = 3
+import { uploadFilesIntoEditor, type UploadFileFn } from "./inlineUploads"
 
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
@@ -72,55 +64,6 @@ export function hasClipboardTextPayload(clipboardData: DataTransfer | null | und
 }
 
 
-export type UploadFileFn = typeof uploadFile
-
-export async function uploadAndInsertFiles(
-  files: File[],
-  editor: LexicalEditor,
-  projectId: string,
-  uploadFileFn: UploadFileFn,
-  onUploadError?: (msg: string) => void,
-): Promise<void> {
-  if (files.length === 0 || files.length > MAX_FILES_PER_PASTE) return
-
-  let index = 0
-
-  async function processNext(): Promise<void> {
-    if (index >= files.length) return
-    const file = files[index++]
-
-    try {
-      const handle = uploadFileFn({
-        projectId,
-        file,
-        onProgress: () => {
-        },
-      })
-      const { attachments } = await handle.promise
-      const attachment: ChatAttachment | undefined = attachments[0]
-      if (!attachment) {
-        onUploadError?.("Upload failed: no attachment returned")
-        return
-      }
-      editor.update(() => {
-        $insertNodes([$createAttachmentNode(attachment)])
-      })
-    } catch (err) {
-      if (err instanceof Error && err.name === "UploadAbortedError") return
-      onUploadError?.(errorMessage(err))
-    }
-
-    await processNext()
-  }
-
-  const chains: Promise<void>[] = []
-  for (let i = 0; i < Math.min(MAX_CONCURRENT_UPLOADS, files.length); i++) {
-    chains.push(processNext())
-  }
-  await Promise.all(chains)
-}
-
-
 export interface PasteImagePluginProps {
   projectId: string | null
   uploadOwnerId: string
@@ -150,7 +93,7 @@ export function PasteImagePlugin({
         const hasText = hasClipboardTextPayload(clipboardData)
 
         if (projectId) {
-          runInlineUpload(uploadOwnerId, () => uploadAndInsertFiles(files, editor, projectId, uploadFileFn, onUploadError))
+          runInlineUpload(uploadOwnerId, () => uploadFilesIntoEditor(files, editor, projectId, uploadFileFn, onUploadError))
         }
 
         return !hasText

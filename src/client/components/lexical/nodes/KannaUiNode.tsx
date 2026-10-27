@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import type { DomPort } from "../../../ports/domPort"
 import { domAdapter } from "../../../adapters/dom.adapter"
+import { KANNA_UI_FENCE_LANGUAGE } from "../../../../shared/genui/fences"
 import { KannaUiBlock } from "../../genui/KannaUiBlock"
 import { KannaUiIntentChip } from "../../genui/KannaUiIntentChip"
 
@@ -23,7 +24,7 @@ export class KannaUiNode extends DecoratorNode<ReactNode> {
   }
 
   static getType(): string {
-    return "kanna-ui"
+    return KANNA_UI_FENCE_LANGUAGE
   }
 
   static clone(node: KannaUiNode): KannaUiNode {

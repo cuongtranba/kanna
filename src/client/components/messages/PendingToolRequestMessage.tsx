@@ -1,6 +1,6 @@
-import type { HydratedTranscriptMessage, AskUserQuestionItem } from "../../../shared/types"
+import type { HydratedTranscriptMessage } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
-import { isJsonArray, isJsonObject, type JsonObject } from "../../../shared/json"
+import { isJsonArray, type JsonObject } from "../../../shared/json"
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 import { encodeAskUserQuestionResult } from "../../lib/askUserQuestionJson"
@@ -9,6 +9,7 @@ import { useCallback } from "react"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { selectBeaconById, useBeaconsStore } from "../../stores/beaconsStore"
 import { BEACON_SCRIPT_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../../../shared/beacon-tools"
+import { ASK_USER_QUESTION_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME, normalizeToolCall } from "../../../shared/tools"
 
 export type PendingToolRequestHydrated = Extract<HydratedTranscriptMessage, { kind: "pending_tool_request" }>
 
@@ -208,31 +209,10 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   const { toolRequestId, toolName, arguments: args } = entry
   const responder = useToolRequestResponder(toolRequestId, onAnswer)
 
-  if (toolName === "mcp__kanna__ask_user_question") {
-    const rawQuestions: JsonObject[] = isJsonArray(args.questions) ? args.questions.filter(isJsonObject) : []
-    const questions: AskUserQuestionItem[] = rawQuestions.map((q) => {
-      let question: string
-      if (typeof q.question === "string") {
-        question = q.question
-      } else if (typeof q.text === "string") {
-        question = q.text
-      } else {
-        question = ""
-      }
-      return {
-        id: typeof q.id === "string" ? q.id : undefined,
-        question,
-        header: typeof q.header === "string" ? q.header : undefined,
-        options: isJsonArray(q.options)
-          ? q.options.filter(isJsonObject).flatMap((o) => (
-            typeof o.label === "string"
-              ? [{ label: o.label, description: typeof o.description === "string" ? o.description : undefined }]
-              : []
-          ))
-          : undefined,
-        multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
-      }
-    })
+  const call = normalizeToolCall({ toolName, toolId: toolRequestId, input: args })
+
+  if (toolName === ASK_USER_QUESTION_TOOL_NAME && call.toolKind === "ask_user_question") {
+    const questions = call.input.questions
     return (
       <AskUserQuestionInteractive
         questions={questions}
@@ -249,10 +229,9 @@ export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
     )
   }
 
-  if (toolName === "mcp__kanna__exit_plan_mode") {
-    const plan = typeof args.plan === "string" ? args.plan : ""
+  if (toolName === EXIT_PLAN_MODE_TOOL_NAME && call.toolKind === "exit_plan_mode") {
     return (
-      <ExitPlanModePending plan={plan} responder={responder} />
+      <ExitPlanModePending plan={call.input.plan ?? ""} responder={responder} />
     )
   }
 

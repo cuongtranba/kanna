@@ -3,11 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { TranscriptEntry, ToolResultEntry } from "../shared/types"
 import { isRecord } from "../shared/errors"
+import { PERSISTED_OUTPUT_THRESHOLD_BYTES, wrapPersistedOutput } from "../shared/persisted-output"
+import { subagentResultsDir } from "./paths"
 
-export const SUBAGENT_RESULT_THRESHOLD = 50_000
-export const PREVIEW_SIZE = 2000
-const PERSISTED_OPEN_TAG = "<persisted-output>"
-const PERSISTED_CLOSE_TAG = "</persisted-output>"
 
 interface CapArgs {
   entry: TranscriptEntry
@@ -47,49 +45,12 @@ function safeBasename(toolId: string): string {
   return cleaned.length > 0 ? cleaned : "tool"
 }
 
-function buildPreview(serialized: string): { preview: string; hasMore: boolean } {
-  const buf = Buffer.from(serialized, "utf8")
-  if (buf.byteLength <= PREVIEW_SIZE) {
-    return { preview: serialized, hasMore: false }
-  }
-  let cutBytes = PREVIEW_SIZE
-  let preview = buf.subarray(0, cutBytes).toString("utf8")
-  while (preview.endsWith("�") && cutBytes > 0) {
-    cutBytes -= 1
-    preview = buf.subarray(0, cutBytes).toString("utf8")
-  }
-  const lastNewline = preview.lastIndexOf("\n")
-  if (lastNewline > preview.length * 0.5) {
-    preview = preview.slice(0, lastNewline)
-  }
-  return { preview, hasMore: true }
-}
-
 function shortContentHash(serialized: string): string {
   return createHash("sha256").update(serialized).digest("hex").slice(0, 8)
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(2)} MB`
-}
-
-function buildMessage(filePath: string, originalSize: number, preview: string, hasMore: boolean): string {
-  let msg = `${PERSISTED_OPEN_TAG}\n`
-  msg += `Output too large (${formatBytes(originalSize)}). Full output saved to: ${filePath}\n\n`
-  msg += `Preview (first ${formatBytes(PREVIEW_SIZE)}):\n`
-  msg += preview
-  msg += hasMore ? "\n...\n" : "\n"
-  msg += PERSISTED_CLOSE_TAG
-  return msg
-}
-
 function dirFor(args: CapArgs): string {
-  return path.join(
-    args.kannaRoot, "projects", args.projectId, "chats", args.chatId,
-    "subagent-results", args.runId,
-  )
+  return subagentResultsDir(args.kannaRoot, args.projectId, args.chatId, args.runId)
 }
 
 function isToolResultEntry(entry: TranscriptEntry): entry is ToolResultEntry {
@@ -100,7 +61,7 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
   if (!isToolResultEntry(args.entry)) return args.entry
   const entry = args.entry
   const info = measureContent(entry.content)
-  if (!info || info.size <= SUBAGENT_RESULT_THRESHOLD) return entry
+  if (!info || info.size <= PERSISTED_OUTPUT_THRESHOLD_BYTES) return entry
 
   const dir = dirFor(args)
   await mkdir(dir, { recursive: true })
@@ -113,8 +74,7 @@ export async function capTranscriptEntry(args: CapArgs): Promise<TranscriptEntry
     const code = isRecord(err) && typeof err.code === "string" ? err.code : undefined
     if (code !== "EEXIST") throw err
   }
-  const { preview, hasMore } = buildPreview(info.serialized)
-  const message = buildMessage(filePath, info.size, preview, hasMore)
+  const message = wrapPersistedOutput({ filePath, originalSize: info.size, serialized: info.serialized })
   return {
     ...entry,
     content: message,

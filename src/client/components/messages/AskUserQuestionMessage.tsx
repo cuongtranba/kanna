@@ -1,9 +1,9 @@
 import { useCallback } from "react"
 import { MessageCircleQuestion } from "lucide-react"
-import type { ProcessedToolCall, AskUserQuestionItem } from "./types"
-import type { AskUserQuestionAnswerMap } from "../../../shared/types"
+import type { HydratedToolCall, AskUserQuestionItem, AskUserQuestionAnswerMap } from "../../../shared/types"
 import { errorMessage } from "../../../shared/errors"
 import { cn } from "../../lib/utils"
+import { askUserQuestionAnswerFor, askUserQuestionKey } from "../../lib/askUserQuestionJson"
 import { useTranscriptRenderOptions } from "./render-context"
 import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
 import { AskUserQuestionMessageStore } from "./AskUserQuestionMessage.store"
@@ -11,19 +11,15 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../../stor
 import { Spinner } from "../ui/spinner"
 
 interface Props {
-  message: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+  message: Extract<HydratedToolCall, { toolKind: "ask_user_question" }>
   onSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void | Promise<void>
   isLatest: boolean
 }
 
 function parseAnswersFromResult(
-  result: Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>["result"]
+  result: Extract<HydratedToolCall, { toolKind: "ask_user_question" }>["result"]
 ): AskUserQuestionAnswerMap | undefined {
   return result?.answers
-}
-
-function getQuestionKey(question: AskUserQuestionItem): string {
-  return question.id || question.question
 }
 
 function QuestionSummaryCard({
@@ -44,7 +40,7 @@ function QuestionSummaryCard({
         </div>
         {questions.map((question, index) => (
           <div
-            key={getQuestionKey(question)}
+            key={askUserQuestionKey(question)}
             className={cn(
               "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
               index < questions.length - 1 && "border-b border-border",
@@ -107,7 +103,7 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
             </p>
           </div>
           {questions.map((question, index) => {
-            const answerValue = displayAnswers[getQuestionKey(question)] || displayAnswers[question.question] || []
+            const answerValue = askUserQuestionAnswerFor(question, displayAnswers)
             const isLast = index === questions.length - 1
             const selectedDescriptions = question.options
               ? answerValue
@@ -117,7 +113,7 @@ function AskUserQuestionMessageInner({ message, onSubmit, isLatest }: Props) {
 
             return (
               <div
-                key={getQuestionKey(question)}
+                key={askUserQuestionKey(question)}
                 className={cn(
                   "w-full p-3 pt-2.5 pl-4 pr-5 bg-background flex items-start justify-between gap-3",
                   !isLast && "border-b border-border"

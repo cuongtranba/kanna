@@ -17,7 +17,7 @@ import {
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
-import { buildSteeredMessageContent } from "./claude-prompt-helpers"
+import { wrapSteeredMessage } from "../shared/steered-message"
 import { isChatBusy } from "./claude-session-state-queries"
 import type { SessionBackgroundTask } from "./claude-session-state"
 import {
@@ -341,7 +341,7 @@ export async function dequeueAndStartQueuedMessage(
   await deps.startTurnForChat({
     chatId,
     provider,
-    content: options?.steered ? buildSteeredMessageContent(queuedMessage.content) : queuedMessage.content,
+    content: options?.steered ? wrapSteeredMessage(queuedMessage.content) : queuedMessage.content,
     ...expansionTurnArgs(expansion),
     attachments: queuedMessage.attachments,
     model: settings.model,

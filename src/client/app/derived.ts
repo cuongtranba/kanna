@@ -1,43 +1,53 @@
-import type { HydratedTranscriptMessage, KannaStatus } from "../../shared/types"
-import type { ProcessedToolCall } from "../components/messages/types"
+import {
+  CLAUDE_ASK_USER_QUESTION_TOOL_NAME,
+  CLAUDE_EXIT_PLAN_MODE_TOOL_NAME,
+  CLAUDE_TODO_WRITE_TOOL_NAME,
+} from "../../shared/tools"
+import type { HydratedTranscriptMessage, HydratedToolCall, KannaStatus } from "../../shared/types"
 
-function isProcessedToolCall(m: HydratedTranscriptMessage): m is ProcessedToolCall {
+function isProcessedToolCall(m: HydratedTranscriptMessage): m is HydratedToolCall {
   return m.kind === "tool"
 }
 
-const SPECIAL_TOOL_NAMES = ["AskUserQuestion", "ExitPlanMode", "TodoWrite"] as const
-const RESOLVED_TOOL_NAMES = new Set<string>(["TodoWrite"])
+export const SPECIAL_TRANSCRIPT_TOOL_NAMES = {
+  askUserQuestion: CLAUDE_ASK_USER_QUESTION_TOOL_NAME,
+  exitPlanMode: CLAUDE_EXIT_PLAN_MODE_TOOL_NAME,
+  todoWrite: CLAUDE_TODO_WRITE_TOOL_NAME,
+} as const
 
-function findLatestUnresolvedToolId(messages: HydratedTranscriptMessage[], toolName: string): string | null {
+export interface LatestToolIds {
+  askUserQuestion: string | null
+  exitPlanMode: string | null
+  todoWrite: string | null
+}
+
+export const NO_LATEST_TOOL_IDS: LatestToolIds = {
+  askUserQuestion: null,
+  exitPlanMode: null,
+  todoWrite: null,
+}
+
+function findLatestToolId(
+  messages: HydratedTranscriptMessage[],
+  toolName: string,
+  includeResolved: boolean,
+): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (!isProcessedToolCall(message)) continue
-    if (message.toolName === toolName && !message.result) {
+    if (message.toolName === toolName && (includeResolved || !message.result)) {
       return message.id
     }
   }
   return null
 }
 
-function findLatestToolId(messages: HydratedTranscriptMessage[], toolName: string): string | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (!isProcessedToolCall(message)) continue
-    if (message.toolName === toolName) {
-      return message.id
-    }
+export function getLatestToolIds(messages: HydratedTranscriptMessage[]): LatestToolIds {
+  return {
+    askUserQuestion: findLatestToolId(messages, SPECIAL_TRANSCRIPT_TOOL_NAMES.askUserQuestion, false),
+    exitPlanMode: findLatestToolId(messages, SPECIAL_TRANSCRIPT_TOOL_NAMES.exitPlanMode, false),
+    todoWrite: findLatestToolId(messages, SPECIAL_TRANSCRIPT_TOOL_NAMES.todoWrite, true),
   }
-  return null
-}
-
-export function getLatestToolIds(messages: HydratedTranscriptMessage[]) {
-  const ids: Record<string, string | null> = {}
-  for (const toolName of SPECIAL_TOOL_NAMES) {
-    ids[toolName] = RESOLVED_TOOL_NAMES.has(toolName)
-      ? findLatestToolId(messages, toolName)
-      : findLatestUnresolvedToolId(messages, toolName)
-  }
-  return ids
 }
 
 export function isPrimaryChatInstance(chatId: string | null, activeChatId: string | null): boolean {

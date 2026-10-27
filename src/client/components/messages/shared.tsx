@@ -6,25 +6,10 @@ import {
 } from "react"
 import { Button } from "../ui/button"
 import {
-  ArrowDownToLine,
-  CheckLine,
   ChevronRight,
-  ListTodo,
-  Map,
-  MessageCircleQuestion,
-  Pencil,
-  Search,
-  Sparkles,
-  SquareX,
-  Terminal,
-  ToyBrick,
-  type LucideIcon,
-  File,
-  FilePen,
-  FilePlusCorner,
-  FileX,
   Copy,
   Check,
+  type LucideIcon,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { runDetached } from "../../lib/runDetached"
@@ -59,41 +44,6 @@ export function OpenLocalLinkProvider({
       {children}
     </OpenLocalLinkContext.Provider>
   )
-}
-
-export const toolIcons: Record<string, LucideIcon> = {
-  Task: ListTodo,
-  TaskOutput: ListTodo,
-  Bash: Terminal,
-  Glob: Search,
-  Grep: Search,
-  ExitPlanMode: Map,
-  Read: File,
-  Edit: FilePen,
-  Write: FilePlusCorner,
-  Delete: FileX,
-  NotebookEdit: Pencil,
-  WebFetch: ArrowDownToLine,
-  TodoWrite: CheckLine,
-  TaskCreate: CheckLine,
-  TaskUpdate: CheckLine,
-  TaskGet: CheckLine,
-  TaskList: CheckLine,
-  WebSearch: Search,
-  KillShell: SquareX,
-  TaskStop: SquareX,
-  AskUserQuestion: MessageCircleQuestion,
-  Skill: Sparkles,
-  EnterPlanMode: Map,
-}
-
-export const defaultToolIcon: LucideIcon = ToyBrick
-
-export function getToolIcon(toolName: string): LucideIcon {
-  if (toolIcons[toolName]) {
-    return toolIcons[toolName]
-  }
-  return defaultToolIcon
 }
 
 export function LucideIconWrapper({ icon: Icon, className }: { icon: LucideIcon; className?: string }) {

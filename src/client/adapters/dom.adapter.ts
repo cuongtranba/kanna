@@ -1,5 +1,6 @@
 
 import type { DomPort, ComputedStyleLike } from "../ports/domPort"
+import { TYPEAHEAD_MENU_ATTRIBUTE } from "../lib/typeaheadMenuAttribute"
 
 declare global {
   interface Navigator {
@@ -255,7 +256,7 @@ export const domAdapter: DomPort = {
   },
 
   hasTypeaheadMenuOpen(): boolean {
-    return document.querySelector("[data-kanna-typeahead-menu]") != null
+    return document.querySelector(`[${TYPEAHEAD_MENU_ATTRIBUTE}]`) != null
   },
 
   getBodyElement(): Element {

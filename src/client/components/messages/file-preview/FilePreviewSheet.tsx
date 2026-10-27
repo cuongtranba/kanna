@@ -1,3 +1,4 @@
+import { withScopedStore } from "../../../lib/createScopedStore"
 import { createElement, useCallback, useRef } from "react"
 import { Share2, Download } from "lucide-react"
 import {
@@ -7,8 +8,7 @@ import {
   DialogTitle,
 } from "../../ui/dialog"
 import { Button } from "../../ui/button"
-import { classifyAttachmentPreview, classifyAttachmentIcon, friendlyMimeLabel } from "../attachmentPreview"
-import type { ChatAttachment } from "../../../../shared/types"
+import { classifyAttachmentPreview, classifyAttachmentIcon, describeFile } from "../attachmentPreview"
 import { ImageBody } from "./bodies/ImageBody"
 import { PdfBody } from "./bodies/PdfBody"
 import { MarkdownBody } from "./bodies/MarkdownBody"
@@ -143,26 +143,10 @@ function SheetBodyInner({ source, onClose }: { source: PreviewSource; onClose: (
   )
 }
 
-export function SheetBody({ source, onClose }: { source: PreviewSource; onClose: () => void }) {
-  return (
-    <SheetBodyStore.Provider init={undefined}>
-      <SheetBodyInner source={source} onClose={onClose} />
-    </SheetBodyStore.Provider>
-  )
-}
+export const SheetBody = withScopedStore(SheetBodyStore, SheetBodyInner)
 
 function pickBody(source: PreviewSource): React.ComponentType<{ source: PreviewSource }> {
-  const attachmentLike: ChatAttachment = {
-    id: source.id,
-    kind: "file",
-    displayName: source.displayName,
-    mimeType: source.mimeType,
-    size: source.size ?? 0,
-    contentUrl: source.contentUrl,
-    relativePath: source.relativePath ?? "",
-    absolutePath: "",
-  }
-  const iconKind = classifyAttachmentIcon(attachmentLike)
+  const iconKind = classifyAttachmentIcon(source)
   if (iconKind === "image") return ImageBody
   if (iconKind === "pdf") return PdfBody
   if (iconKind === "audio") return AudioBody
@@ -172,24 +156,13 @@ function pickBody(source: PreviewSource): React.ComponentType<{ source: PreviewS
   if (iconKind === "json") return JsonBody
   if (iconKind === "mermaid") return MermaidBody
   if (iconKind === "code") return CodeBody
-  const target = classifyAttachmentPreview(attachmentLike)
+  const target = classifyAttachmentPreview(source)
   if (target.kind === "external") return PdfBody
   return TextBody
 }
 
 function describeMeta(source: PreviewSource): string {
-  const attachmentLike: ChatAttachment = {
-    id: source.id,
-    kind: "file",
-    displayName: source.displayName,
-    mimeType: source.mimeType,
-    size: source.size ?? 0,
-    contentUrl: source.contentUrl,
-    relativePath: source.relativePath ?? "",
-    absolutePath: "",
-  }
-  const iconKind = classifyAttachmentIcon(attachmentLike)
-  const label = friendlyMimeLabel(iconKind, source.mimeType)
+  const { friendlyType } = describeFile(source)
   const size = source.size ? ` · ${formatByteSize(source.size)}` : ""
-  return `${label}${size}`
+  return `${friendlyType}${size}`
 }

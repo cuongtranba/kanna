@@ -69,6 +69,9 @@ export const PLUGIN_INSTALL_TOOL_NAME = kannaToolName("plugin_install")
 export const PLUGIN_RELOAD_TOOL_NAME = kannaToolName("plugin_reload")
 export const ASK_USER_QUESTION_TOOL_NAME = kannaToolName("ask_user_question")
 export const EXIT_PLAN_MODE_TOOL_NAME = kannaToolName("exit_plan_mode")
+export const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
+export const CLAUDE_EXIT_PLAN_MODE_TOOL_NAME = "ExitPlanMode"
+export const CLAUDE_TODO_WRITE_TOOL_NAME = "TodoWrite"
 export const CARD_MOVE_TOOL_NAME = kannaToolName("card_move")
 
 function asRecord(value: JsonValue | undefined): JsonObject | null {
@@ -106,17 +109,28 @@ function optionalStringInput(input: JsonObject, key: string): string | undefined
   return typeof value === "string" ? value : undefined
 }
 
-function kannaAskUserQuestions(input: JsonObject): AskUserQuestionItem[] {
+function parseAskUserQuestionOptions(value: JsonValue | undefined): AskUserQuestionOption[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.flatMap((option) => {
+    if (!isJsonObject(option) || typeof option.label !== "string") return []
+    return [{ label: option.label, description: typeof option.description === "string" ? option.description : undefined }]
+  })
+}
+
+function askUserQuestionText(q: JsonObject): string {
+  if (typeof q.question === "string") return q.question
+  return typeof q.text === "string" ? q.text : ""
+}
+
+function parseAskUserQuestions(input: JsonObject): AskUserQuestionItem[] {
   if (!Array.isArray(input.questions)) return []
   return input.questions.flatMap((q) => {
     if (!isJsonObject(q)) return []
-    const options: AskUserQuestionOption[] | undefined = Array.isArray(q.options)
-      ? q.options.filter((o: JsonValue): o is JsonValue & AskUserQuestionOption => isJsonObject(o) && typeof o.label === "string")
-      : undefined
     return [{
-      question: typeof q.text === "string" ? q.text : String(q.text ?? ""),
+      id: typeof q.id === "string" ? q.id : undefined,
+      question: askUserQuestionText(q),
       header: typeof q.header === "string" ? q.header : undefined,
-      options,
+      options: parseAskUserQuestionOptions(q.options),
       multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
     }]
   })
@@ -138,21 +152,16 @@ export function normalizeToolCall(args: {
   })
 
   switch (toolName) {
-    case "AskUserQuestion":
-      return call("ask_user_question", {
-        questions: Array.isArray(input.questions)
-          ? input.questions.filter((q): q is AskUserQuestionItem => isJsonObject(q) && typeof q.question === "string")
-          : [],
-      })
+    case CLAUDE_ASK_USER_QUESTION_TOOL_NAME:
     case ASK_USER_QUESTION_TOOL_NAME:
-      return call("ask_user_question", { questions: kannaAskUserQuestions(input) })
-    case "ExitPlanMode":
+      return call("ask_user_question", { questions: parseAskUserQuestions(input) })
+    case CLAUDE_EXIT_PLAN_MODE_TOOL_NAME:
     case EXIT_PLAN_MODE_TOOL_NAME:
       return call("exit_plan_mode", {
         plan: optionalStringInput(input, "plan"),
         summary: optionalStringInput(input, "summary"),
       })
-    case "TodoWrite":
+    case CLAUDE_TODO_WRITE_TOOL_NAME:
       return call("todo_write", {
         todos: Array.isArray(input.todos)
           ? input.todos.filter(

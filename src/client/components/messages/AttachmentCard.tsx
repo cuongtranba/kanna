@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import type { ChatAttachment } from "../../../shared/types"
 import { cn } from "../../lib/utils"
-import { classifyAttachmentIcon, type AttachmentIconKind } from "./attachmentPreview"
+import { classifyAttachmentIcon, type AttachmentIconKind, type FileDescription } from "./attachmentPreview"
 import { AttachmentUploadOverlay } from "./AttachmentUploadOverlay"
 import { LucideIconWrapper } from "./shared"
 import { fileNameOfPath, parentDirOfPath } from "../../lib/pathUtils"
@@ -38,6 +38,20 @@ type AttachmentFileCardProps = BaseAttachmentCardProps & {
   meta?: ReactNode
   ariaLabel?: string
   disabledReason?: string
+}
+
+export function FileMetaLabel({ description }: { description: FileDescription }) {
+  return (
+    <>
+      {description.friendlyType}
+      {description.sizeLabel ? (
+        <>
+          {" · "}
+          <span className="tabular-nums">{description.sizeLabel}</span>
+        </>
+      ) : null}
+    </>
+  )
 }
 
 type AttachmentImageCardProps = BaseAttachmentCardProps & {

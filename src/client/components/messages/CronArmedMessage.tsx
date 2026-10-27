@@ -6,10 +6,11 @@ import { usePendingAction } from "../../stores/pendingActionsStore"
 import { cronActionKey } from "../../lib/cronActions"
 import { Spinner } from "../ui/spinner"
 import { TruncatedText } from "../ui/truncated-text"
-import type { ProcessedCronArmedMessage } from "./types"
+import { formatCronCommand } from "../../../shared/cron/parse-command"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronArmedMessage
+  message: TranscriptMessageOf<"cron_armed">
   chatId?: string
   onRemove?: (jobId: string) => void
 }
@@ -17,7 +18,7 @@ interface Props {
 export function CronArmedMessage({ message, chatId, onRemove }: Props) {
   const { copied, copy } = useCopyFeedback()
 
-  const editCommand = `/cron ${message.instruction} ${message.mode} ${message.scheduleText}`
+  const editCommand = formatCronCommand(message)
 
   const handleCopyEdit = useCallback(() => { runDetached("copy cron edit command", copy(editCommand)) }, [copy, editCommand])
 

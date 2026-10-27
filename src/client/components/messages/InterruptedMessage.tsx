@@ -1,8 +1,8 @@
 import { CircleSlash } from "lucide-react"
-import type { ProcessedInterruptedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedInterruptedMessage
+  message: TranscriptMessageOf<"interrupted">
 }
 
 export function InterruptedMessage({ message: _message }: Props) {

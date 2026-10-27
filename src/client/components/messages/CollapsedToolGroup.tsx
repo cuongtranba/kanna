@@ -3,41 +3,11 @@ import { ChevronRight } from "lucide-react"
 import { ToolCallMessage } from "./ToolCallMessage"
 import { MetaRow, MetaLabel } from "./shared"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
-import type { ProcessedToolCall } from "./types"
-import type { HydratedTranscriptMessage } from "../../../shared/types"
+import { toolCategory, type ToolCategory } from "../../lib/toolPresentation"
+import type { HydratedToolCall, HydratedTranscriptMessage } from "../../../shared/types"
 
-function isProcessedToolCall(msg: HydratedTranscriptMessage): msg is ProcessedToolCall {
+function isProcessedToolCall(msg: HydratedTranscriptMessage): msg is HydratedToolCall {
   return msg.kind === "tool"
-}
-
-interface ToolCategory {
-  key: string
-  singular: string
-  plural: string
-}
-
-const TOOL_CATEGORIES: Record<string, ToolCategory> = {
-  read_file: { key: "read", singular: "read", plural: "reads" },
-  edit_file: { key: "edit", singular: "edit", plural: "edits" },
-  write_file: { key: "write", singular: "write", plural: "writes" },
-  delete_file: { key: "delete", singular: "delete", plural: "deletes" },
-  bash: { key: "bash", singular: "command", plural: "commands" },
-  grep: { key: "grep", singular: "search", plural: "searches" },
-  glob: { key: "glob", singular: "glob", plural: "globs" },
-  subagent_task: { key: "task", singular: "agent", plural: "agents" },
-  web_search: { key: "websearch", singular: "web search", plural: "web searches" },
-  skill: { key: "skill", singular: "skill", plural: "skills" },
-  todo_write: { key: "todo", singular: "todo update", plural: "todo updates" },
-  task_create: { key: "task", singular: "task update", plural: "task updates" },
-  task_update: { key: "task", singular: "task update", plural: "task updates" },
-  task_get: { key: "task", singular: "task update", plural: "task updates" },
-  task_list: { key: "task", singular: "task update", plural: "task updates" },
-}
-
-const OTHER_CATEGORY: ToolCategory = { key: "other", singular: "tool call", plural: "tool calls" }
-
-function getToolCategory(toolKind: string): ToolCategory {
-  return TOOL_CATEGORIES[toolKind] ?? OTHER_CATEGORY
 }
 
 function getToolGroupLabel(messages: HydratedTranscriptMessage[]): string {
@@ -46,8 +16,7 @@ function getToolGroupLabel(messages: HydratedTranscriptMessage[]): string {
 
   for (const msg of messages) {
     if (!isProcessedToolCall(msg)) continue
-    const toolKind = msg.toolKind
-    const category = getToolCategory(toolKind)
+    const category = toolCategory(msg.toolKind)
 
     const existing = counts.get(category.key)
     if (existing) {

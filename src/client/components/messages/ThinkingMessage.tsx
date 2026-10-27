@@ -1,9 +1,9 @@
 import { memo } from "react"
-import type { ProcessedThinkingMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { ThinkingBlock } from "./ThinkingBlock"
 
 interface Props {
-  message: ProcessedThinkingMessage
+  message: TranscriptMessageOf<"assistant_thinking">
 }
 
 export const ThinkingMessage = memo(({ message }: Props) => {

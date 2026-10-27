@@ -1,8 +1,8 @@
 import { SkipForward } from "lucide-react"
-import type { ProcessedCronRunSkippedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronRunSkippedMessage
+  message: TranscriptMessageOf<"cron_run_skipped">
 }
 
 export function CronRunSkippedMessage({ message }: Props) {
@@ -20,7 +20,7 @@ export function CronRunSkippedMessage({ message }: Props) {
   )
 }
 
-function describeSkip(reason: ProcessedCronRunSkippedMessage["reason"]): string {
+function describeSkip(reason: TranscriptMessageOf<"cron_run_skipped">["reason"]): string {
   switch (reason) {
     case "chat_busy":
       return "chat was busy"

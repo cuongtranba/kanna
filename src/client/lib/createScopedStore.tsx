@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, type ReactNode } from "react"
+import { createContext, useContext, useRef, type ComponentType, type ReactNode } from "react"
 import { createStore, useStore, type StateCreator, type StoreApi } from "zustand"
 
 export interface ScopedStore<TProps, TState> {
@@ -34,4 +34,25 @@ export function createScopedStore<TProps, TState>(
   }
 
   return { Provider, useScopedStore, useScopedStoreApi }
+}
+
+export function withScopedStoreInit<TInit, TState, TProps extends object>(
+  store: ScopedStore<TInit, TState>,
+  Inner: ComponentType<TProps>,
+  initFor: (props: TProps) => TInit,
+): ComponentType<TProps> {
+  return function Scoped(props: TProps) {
+    return (
+      <store.Provider init={initFor(props)}>
+        <Inner {...props} />
+      </store.Provider>
+    )
+  }
+}
+
+export function withScopedStore<TState, TProps extends object>(
+  store: ScopedStore<undefined, TState>,
+  Inner: ComponentType<TProps>,
+): ComponentType<TProps> {
+  return withScopedStoreInit(store, Inner, () => undefined)
 }

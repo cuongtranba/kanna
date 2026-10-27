@@ -1,9 +1,9 @@
 import { FileText } from "lucide-react"
-import type { ProcessedMemoryLoadedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { fileNameOfPath } from "../../lib/pathUtils"
 
 interface Props {
-  message: ProcessedMemoryLoadedMessage
+  message: TranscriptMessageOf<"memory_loaded">
 }
 
 export function MemoryLoadedMessage({ message }: Props) {

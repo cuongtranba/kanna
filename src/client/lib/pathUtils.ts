@@ -135,6 +135,8 @@ export function shouldOpenLocalFileLinkInEditor(filePath: string) {
 
 const ABSOLUTE_LOCAL_PATH_PREFIXES = ["/Users/", "/home/", "/private/", "/tmp/", "/var/", "/opt/", "/root/"]
 
+export const LOCAL_FILE_HREF_PREFIX_PATTERN = `(?:file://|${ABSOLUTE_LOCAL_PATH_PREFIXES.join("|")})`
+
 export function isAbsoluteLocalFilePath(value: string): boolean {
   if (!value) return false
   if (value.startsWith("file://")) return true

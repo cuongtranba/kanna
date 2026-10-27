@@ -35,3 +35,16 @@ export function toPreviewSourceFromAttachment(
     origin,
   }
 }
+
+export function attachmentFromPreviewSource(source: PreviewSource): ChatAttachment {
+  return {
+    id: source.id,
+    kind: "file",
+    displayName: source.displayName,
+    mimeType: source.mimeType,
+    size: source.size ?? 0,
+    contentUrl: source.contentUrl,
+    relativePath: source.relativePath ?? "",
+    absolutePath: "",
+  }
+}

@@ -1,9 +1,10 @@
 import { useMemo, type ReactNode } from "react"
 import { Asterisk, ChevronRight, Slash, UserRound } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import type { ProcessedSystemMessage } from "./types"
-import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer, toolIcons, defaultToolIcon, getToolIcon } from "./shared"
+import type { TranscriptMessageOf } from "../../../shared/types"
+import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer } from "./shared"
 import { toTitleCase } from "../../lib/formatters"
+import { toolIconByName } from "../../lib/toolPresentation"
 import { cn } from "../../lib/utils"
 import { mcpToolName, parseMcpToolName } from "../../../shared/tools"
 import { createToggleStore } from "../../lib/createToggleStore"
@@ -13,7 +14,7 @@ const ExpandableMcpServerStore = createToggleStore("ExpandableMcpServer")
 const RawMessageSectionStore = createToggleStore("RawMessageSection")
 
 interface Props {
-  message: ProcessedSystemMessage
+  message: TranscriptMessageOf<"system_init">
   rawJson?: string
 }
 
@@ -123,7 +124,7 @@ function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
       {open && server.tools.length > 0 && (
         <div className="flex flex-wrap gap-1.5 ml-5">
           {server.tools.map((tool) => (
-            <MetaPill key={tool} icon={getToolIcon(mcpToolName(server.name, tool))}>{tool}</MetaPill>
+            <MetaPill key={tool} icon={toolIconByName(mcpToolName(server.name, tool))}>{tool}</MetaPill>
           ))}
         </div>
       )}
@@ -225,7 +226,7 @@ export function SystemMessage({ message, rawJson }: Props) {
           <VerticalLineContainer className="my-4 text-xs">
             <div className="flex flex-col gap-3">
               <MetaText>{message.model}</MetaText>
-              <PillSection title="Tools" items={coreTools} getIcon={(tool) => toolIcons[tool] ?? defaultToolIcon} />
+              <PillSection title="Tools" items={coreTools} getIcon={(tool) => toolIconByName(tool)} />
               <PillSection title="Agents" items={message.agents} icon={UserRound} />
               <PillSection title="Commands" items={message.slashCommands} icon={Slash} />
               <McpServerSection servers={mcpServersWithTools} />

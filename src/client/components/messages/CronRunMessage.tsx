@@ -4,11 +4,11 @@ import type { CronJobSnapshot, CronRunStatus } from "../../../shared/cron/types"
 import { formatStartedClock } from "../../lib/formatters"
 import { cronRunLabel, cronRunTone } from "../../lib/statusLabel"
 import { StateMarkLabel } from "../ui/state-mark"
-import type { ProcessedCronRunMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { chatPath } from "../../lib/paneTree"
 
 interface Props {
-  message: ProcessedCronRunMessage
+  message: TranscriptMessageOf<"cron_run">
   cronJobs?: readonly CronJobSnapshot[]
 }
 

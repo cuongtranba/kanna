@@ -4,6 +4,7 @@ import { hasActiveRun, type CronArmSummary, type CronParseError, type CronParseR
 import type { CronRepair } from "./repair"
 import type { CronConfirm } from "./confirm"
 import { cronModeConsequence } from "../../shared/cron/arm-summary"
+import { formatCronCommand } from "../../shared/cron/parse-command"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { nextFireAt } from "./next-fire"
 import type { AutoContinueEvent } from "../auto-continue/events"
@@ -66,7 +67,7 @@ export async function runCronCommand(
         await refuseCronCommand(deps, chatId, {
           part: "schedule",
           message: `schedule "${command.scheduleText}" never fires (no matching date exists) — not armed`,
-          input: `/cron ${command.instruction} ${command.mode} ${command.scheduleText}`,
+          input: formatCronCommand(command),
         })
         return null
       }

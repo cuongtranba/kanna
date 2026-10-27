@@ -1,30 +1,44 @@
 import type { EditorThemeClasses, Klass, LexicalNode } from "lexical"
 
-export const HEADING_CLASS_MAP: Record<string, string> = {
-  h1: "text-20 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-  h2: "text-18 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-  h3: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-  h4: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-  h5: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-  h6: "text-16 font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0",
-}
+const HEADING_CLASS = "font-normal leading-tight mt-5 mb-3 first:mt-0 last:mb-0"
 
-export const kannaEditorTheme: EditorThemeClasses = {
+export const HEADING_CLASS_MAP = {
+  h1: `text-20 ${HEADING_CLASS}`,
+  h2: `text-18 ${HEADING_CLASS}`,
+  h3: `text-16 ${HEADING_CLASS}`,
+  h4: `text-16 ${HEADING_CLASS}`,
+  h5: `text-16 ${HEADING_CLASS}`,
+  h6: `text-16 ${HEADING_CLASS}`,
+} as const satisfies Record<string, string>
+
+export const MARKDOWN_CLASSES = {
   paragraph: "break-words mt-5 mb-3 first:mt-0 last:mb-0",
   quote: "my-2 mt-5 mb-3 first:mt-0 last:mb-0 border-l-2 border-border/80 pl-2 text-muted-foreground",
+  ul: "list-disc ml-5 my-2",
+  ol: "list-decimal ml-5 my-2",
+  listitem: "my-0.5",
+  bold: "font-semibold",
+  italic: "italic",
+  strikethrough: "line-through",
+  inlineCode: "break-all px-1 bg-border/60 py-0.5 rounded text-sm",
+} as const
+
+export const kannaEditorTheme: EditorThemeClasses = {
+  paragraph: MARKDOWN_CLASSES.paragraph,
+  quote: MARKDOWN_CLASSES.quote,
   heading: HEADING_CLASS_MAP,
   list: {
-    ul: "list-disc ml-5 my-2",
-    ol: "list-decimal ml-5 my-2",
-    listitem: "my-0.5",
+    ul: MARKDOWN_CLASSES.ul,
+    ol: MARKDOWN_CLASSES.ol,
+    listitem: MARKDOWN_CLASSES.listitem,
     nested: { listitem: "list-none" },
   },
   link: "text-primary underline underline-offset-2",
   text: {
-    bold: "font-semibold",
-    italic: "italic",
-    strikethrough: "line-through",
-    code: "break-all px-1 bg-border/60 py-0.5 rounded text-sm",
+    bold: MARKDOWN_CLASSES.bold,
+    italic: MARKDOWN_CLASSES.italic,
+    strikethrough: MARKDOWN_CLASSES.strikethrough,
+    code: MARKDOWN_CLASSES.inlineCode,
   },
   code: "block text-xs whitespace-pre",
 }

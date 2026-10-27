@@ -1,6 +1,6 @@
 import "../../../../lib/testing/setupHappyDom"
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { renderThemed } from "../../../../lib/testing/renderThemed"
 import { CodeBody } from "./CodeBody"
 
 beforeEach(() => {
@@ -13,7 +13,7 @@ afterEach(() => {
 
 describe("CodeBody", () => {
   test("server-render outputs a <pre> wrapper (fallback markup before Shiki resolves)", () => {
-    const html = renderToStaticMarkup(<CodeBody source={{
+    const html = renderThemed(<CodeBody source={{
       id: "c", contentUrl: "/u/x.ts", displayName: "x.ts", fileName: "x.ts",
       mimeType: "text/plain", size: 10, origin: "user_attachment",
     }} />)

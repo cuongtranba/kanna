@@ -1,29 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { HEADING_CLASS_MAP as configHeadingClassMap } from "./config"
-import { HEADING_CLASS_MAP as renderMessageHeadingClassMap } from "./markdown/renderMessage"
-import { HEADING_CLASS_MAP as lexicalToReactHeadingClassMap } from "./markdown/lexicalToReact"
+import { HEADING_CLASS_MAP, kannaEditorTheme } from "./config"
 
-describe("Lexical heading className map — drift lock", () => {
-  test("renderMessage.tsx's copy matches config.ts's copy", () => {
-    expect(renderMessageHeadingClassMap).toEqual(configHeadingClassMap)
+describe("Lexical heading className map", () => {
+  test("declares the h1-h6 keys", () => {
+    expect(Object.keys(HEADING_CLASS_MAP).sort()).toEqual(["h1", "h2", "h3", "h4", "h5", "h6"])
   })
 
-  test("lexicalToReact.tsx's copy matches config.ts's copy", () => {
-    expect(lexicalToReactHeadingClassMap).toEqual(configHeadingClassMap)
-  })
-
-  test("all three copies declare the same h1-h6 keys", () => {
-    const keys = ["h1", "h2", "h3", "h4", "h5", "h6"]
-    expect(Object.keys(configHeadingClassMap).sort()).toEqual(keys)
-    expect(Object.keys(renderMessageHeadingClassMap).sort()).toEqual(keys)
-    expect(Object.keys(lexicalToReactHeadingClassMap).sort()).toEqual(keys)
+  test("the editor theme and the static renderer read the same map", () => {
+    expect(kannaEditorTheme.heading).toBe(HEADING_CLASS_MAP)
   })
 
   test("headings use the scalable --text-N tokens, not arbitrary px utilities", () => {
-    for (const map of [configHeadingClassMap, renderMessageHeadingClassMap, lexicalToReactHeadingClassMap]) {
-      for (const cls of Object.values(map)) {
-        expect(cls).not.toMatch(/text-\[\d+px\]/)
-      }
+    for (const cls of Object.values(HEADING_CLASS_MAP)) {
+      expect(cls).not.toMatch(/text-\[\d+px\]/)
     }
   })
 })
