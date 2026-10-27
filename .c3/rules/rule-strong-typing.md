@@ -1,6 +1,6 @@
 ---
 id: rule-strong-typing
-c3-seal: e7e2a6050dc3dd2cef2272c7201fbb8acba0ad9629fa5fcf8f04d525b5b360c1
+c3-seal: 92f8f4bd0d77e2f1a9fbb7e337f430512455fff67aee0c96130430975ddbd89f
 title: strong-typing
 type: rule
 goal: All values crossing a Kanna boundary (client↔server WebSocket envelopes, JSONL events↔read-models, provider adapter↔agent coordinator, shared module exports) must have a named TypeScript type. No `any`, no `unknown` without narrowing, no untyped object literals at boundaries. This is a project-wide standard for every package in `src/`.
@@ -57,7 +57,7 @@ File: `src/shared/types.ts`
 **Applies to:**
 
 - `src/shared/**/*.ts` — wire protocol, shared domain types
-- `src/server/events.ts`, `src/server/read-models.ts`, `src/server/agent.ts`, `src/server/codex-app-server.ts`, `src/server/provider-catalog.ts`, `src/server/process-utils.ts`, `src/server/update-manager.ts`, `src/server/cloudflare-tunnel/**/*.ts`
+- `src/server/events.ts`, `src/server/read-models.ts`, `src/server/agent-coordinator.ts`, `src/server/codex-app-server.ts`, `src/server/provider-catalog.ts`, `src/server/process-utils.adapter.ts`, `src/server/update-manager.ts`, `src/server/cloudflare-tunnel/**/*.ts`
 - `src/client/app/socket.ts`, `src/client/components/messages/**/*.tsx`, `src/client/components/ui/**/*.tsx`, `src/client/stores/**/*.ts`
 
 **Does NOT apply to:**

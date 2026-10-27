@@ -3,7 +3,6 @@ claim: "UI primitives are under src/client/components/ui/ excluding testing help
 code:
   - src/client/components/editor-icons.tsx
   - src/client/components/ui/**/*.tsx
-  - src/client/components/CopyButton.store.ts
   - src/client/components/OpenExternalSelect.store.ts
   - src/client/components/ui/searchable-select.store.ts
   - src/client/components/ui/searchable-select.test.ts

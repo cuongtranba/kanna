@@ -98,7 +98,7 @@ task_update status completed then terminate"}). End this turn.
 
 Instead of writing the recurring prompt by hand, the user can say "set up a
 /loop with goal X, verify command Y" and the model calls
-`mcp__kanna__setup_loop({ goal, verify_command, chunk_hint?, tasks?, tracking_file? })`.
+`mcp__kanna__setup_loop({ goal, verify_command, chunk_hint?, tracking_file?, subagent_id?, workdir?, parallelism?, force? })`.
 The server owns the template so the prompt is deterministic.
 
 - **Pure validator** (`src/server/loop-template.ts`): rejects blank goal /
@@ -107,10 +107,10 @@ The server owns the template so the prompt is deterministic.
   surfaces the list as `isError`. (There is intentionally NO length cap on
   `goal` / `chunkHint`.)
 - **Seeds the task list, writes no file.** The arm path creates the plan as
-  tasks: `tasks?` seeds a plan written in advance
-  (`{ subject, needs?, worktree?, branch? }[]`), else `chunk_hint` seeds a
-  single task, else the plan starts empty and the orchestrator writes the first
-  step itself. `reconcileTrackingFile` / `assertTrackingFileSafe` /
+  tasks: the internal `tasks?` input (`{ subject, worktree?, branch? }[]`, no
+  `needs`; not an MCP parameter) seeds a plan in advance, else `chunk_hint`
+  seeds a single task, else the plan starts empty and the orchestrator writes
+  the first step itself. `reconcileTrackingFile` / `assertTrackingFileSafe` /
   `ensureTrackingFile` are gone from arming — there is no file to reconcile or
   clobber.
 - **`tracking_file` is a one-time import hint, kept for back-compat.** If it is
@@ -218,7 +218,7 @@ foundation phase degenerates to one worker.
 **The claim is atomic in one process** — `EventStore.decideChatTaskEvents` runs
 the read-decide-append inside the store's per-chat write chain, so two concurrent
 `task_claim` calls can never lease the same task. This replaces the old
-`withFileLock` read-modify-write, which existed only because the markdown tools
+file-lock read-modify-write, which existed only because the markdown tools
 had an `await` between reading and writing the file.
 
 **Reclaim is keyed on run liveness, NEVER on a wall clock** — this is the defect
@@ -399,8 +399,8 @@ tracking-document tools remain for the durable-document use kanna-sessions docum
   an extension registry (`resolveStructuredDoc(ext)`). NO IO — allowed in
   `src/shared/**` under the side-effect seal.
 - **IO leaf** (`src/server/structured-doc-io.adapter.ts`): `readDoc` /
-  `writeDoc` byte IO only. `withFileLock` (`tracking-file-lock.ts`) still guards
-  the read-modify-write.
+  `writeDoc` byte IO only. `kanna-mcp.ts` serializes each read-modify-write on
+  the confined absolute path with `createKeyedLanes()` from `serial-lane.ts`.
 - **MCP tools** (`kanna-mcp.ts`, `buildTrackingDocToolList`): `query_tracking_file`,
   `append_tracking_row`, `replace_tracking_section`, registered whenever a
   `chatId` is present. Outside a loop a missing file is seeded from
@@ -488,8 +488,8 @@ transport error matches neither `detectFromResultText` nor the auth detector, so
 `handleLimitDetection` — the only other path that re-arms a failed main turn —
 never fires.
 
-It hangs off `AgentCoordinator`'s `onTurnTerminal` on `outcome === "failed"`, the
-choke point every provider terminal path already funnels through. Four things
+It hangs off `AgentCoordinator.handleTurnTerminal` (a `subscribeTurnTerminal`
+listener) on `outcome === "failed"`, the choke point every provider terminal path already funnels through. Four things
 about it are load-bearing:
 
 - **The re-arm is DEFERRED** (injectable `RearmScheduler`, default `setTimeout`).

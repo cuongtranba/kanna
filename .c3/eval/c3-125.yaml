@@ -6,7 +6,6 @@ code:
   - src/client/app/WebhookCreateDialog.tsx
   - src/client/app/WebhookCreateDialog.store.ts
   - src/client/app/WebhookSecretDialog.tsx
-  - src/client/app/WebhookTargetSelect.tsx
   - src/client/app/WebhookCopyButton.tsx
   - src/client/app/webhookCommands.ts
   - src/client/stores/webhooksStore.ts
@@ -20,4 +19,5 @@ code:
   - src/client/app/webhookCommands.test.ts
   - src/client/lib/webhookDraft.ts
   - src/client/lib/webhookDraft.test.ts
-  - src/client/components/messages/WebhookDeliveryMessage.tsx
+  - src/client/app/InboundHandlerFields.tsx
+  - src/client/components/messages/DeliveryMessage.tsx

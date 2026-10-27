@@ -36,7 +36,7 @@ watch for first.
 | Red flag | What it looked like here | The fix |
 | --- | --- | --- |
 | Repetition | "send command, set or clear `commandError`" written ~50 times in the client | One helper the callers call |
-| Information leakage | `"kind" in event` probed in three modules to spot the auto-continue variant | `isAutoContinueEvent` in `events.ts`, which owns the union |
+| Information leakage | `"kind" in event` probed in three modules to spot the auto-continue variant | `isChatAutomationEvent` in `events.ts`, which owns the union |
 | Pass-through method | 49 `AgentCoordinator` methods whose body is `return xFn(this.xDeps(), …)` | Callers reach the owning module; delete the forward |
 | Pass-through variable | 38 handlers threaded through `KannaSidebar` props it never reads | A context or store read where the value is used |
 | Errors not defined away | A WS setter throws on a bound that the file loader clamps | One bound definition; each boundary derives its policy from it |

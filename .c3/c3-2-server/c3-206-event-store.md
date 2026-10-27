@@ -1,7 +1,7 @@
 ---
 id: c3-206
 c3-version: 4
-c3-seal: 27998b5efe4179be3e8591934ba8adfcd299976030e4836d05e6fb9b77b63e1c
+c3-seal: 847e9729a2bb4a2d1d42f0eea131b59decdc3071a05f18c65712fa2926ec5577
 title: event-store
 type: component
 category: foundation
@@ -72,6 +72,7 @@ Owns the JSONL event log: append-only writes, in-order replay on boot, snapshot 
 | replay() | OUT | Yields events in order | c3-207 | src/server/event-store.ts |
 | compact() | OUT | Writes snapshot.json + truncates JSONL | c3-206 | src/server/event-store.ts |
 | tap (EventStoreTap) | OUT | Optional slot called after applyStoreEvent for every applied event and after the transcript write for every appended entry; set by server boot after initialize so replay publishes nothing | c3-246 | src/server/event-store.ts |
+| Log catalogue and route table | OUT | event-logs.ts names every log (REPLAYED_LOGS, PERIPHERAL_LOGS) and its on-disk layout; event-routes.ts maps each event family to its log and replay priority; event-store-writer.ts LogWriter serializes appends through one serial queue | c3-207 | src/server/event-routes.ts |
 
 ## Change Safety
 
@@ -119,7 +120,7 @@ call `invalidateTail` explicitly (the fork path does); `invalidate` /
 `invalidateAll` clear both caches.
 
 The recent page is bounded by BYTES as well as by `recentLimit`:
-`fitLimitToByteBudget` (`event-store-helpers.ts`) trims the newest window to
+`fitLimitToByteBudget` (`history-paging.ts`, which also owns the opaque history cursors) trims the newest window to
 `RECENT_PAGE_BYTE_BUDGET` (1 MB) with a floor of `MIN_RECENT_PAGE_ENTRIES`
 (10). Entry count says nothing about payload size — on the real corpus a
 19.1 MB transcript ships 0.85 MB while a 14.9 MB one shipped 3.89 MB and

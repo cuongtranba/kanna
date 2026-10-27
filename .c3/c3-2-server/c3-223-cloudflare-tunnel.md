@@ -1,6 +1,6 @@
 ---
 id: c3-223
-c3-seal: bd7bf4e9e01fb47581b4e618625ba8a2c00fb7a0fdddee117a46b4c4476e83ba
+c3-seal: 62be330a6c11e030f8b8d3fe5dfa10795c7366ae94f0c88b2dc95162974744cf
 title: cloudflare-tunnel
 type: component
 category: feature
@@ -85,7 +85,7 @@ Exposes a Kanna MCP tool (`mcp__kanna__expose_port`) that the agent calls proact
 | --- | --- | --- | --- |
 | src/server/cloudflare-tunnel/events.ts | c3-223 Contract | Event payload detail | src/server/cloudflare-tunnel/events.ts |
 | src/server/cloudflare-tunnel/read-model.ts | c3-223 Contract | Projection detail | src/server/cloudflare-tunnel/read-model.ts |
-| src/server/cloudflare-tunnel/tunnel-manager.ts | c3-223 Contract | Spawner detail | src/server/cloudflare-tunnel/tunnel-manager.ts |
+| src/server/cloudflare-tunnel/tunnel-manager.adapter.ts | c3-223 Contract | Spawner detail | src/server/cloudflare-tunnel/tunnel-manager.adapter.ts |
 | src/server/cloudflare-tunnel/gateway.ts | c3-223 Contract | WS command + propose API | src/server/cloudflare-tunnel/gateway.ts |
 | src/server/kanna-mcp.ts | c3-223 Contract | expose_port MCP tool wiring | src/server/kanna-mcp.ts |
 | src/server/cloudflare-tunnel/e2e.test.ts | c3-223 Contract | Integration test | src/server/cloudflare-tunnel/e2e.test.ts |

@@ -38,3 +38,7 @@ code:
   - scripts/build-beacon-desktop.ts
   - scripts/beacon-desktop-icons.ts
   - apps/beacon-win7/**/*
+  - src/beacon/http.ts
+  - src/beacon/pairing.ts
+  - src/beacon/paths.ts
+  - src/beacon/paths.test.ts

@@ -46,3 +46,16 @@ code:
   - src/shared/terminal-scrollback.ts
   - src/shared/tool-call-types.ts
   - src/shared/transcript-types.ts
+  - src/shared/chat-status.ts
+  - src/shared/markdown-fences.ts
+  - src/shared/markdown-fences.test.ts
+  - src/shared/numeric.ts
+  - src/shared/persisted-output.ts
+  - src/shared/persisted-output.test.ts
+  - src/shared/sidebar-data.ts
+  - src/shared/sidebar-data.test.ts
+  - src/shared/steered-message.ts
+  - src/shared/steered-message.test.ts
+  - src/shared/terminal-column-width.ts
+  - src/shared/transcript-entry.ts
+  - src/shared/vocab.ts

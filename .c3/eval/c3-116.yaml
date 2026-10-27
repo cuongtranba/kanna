@@ -21,7 +21,7 @@ code:
   - src/client/app/TextSnippetsSection.tsx
   - src/client/app/TextSnippetsSection.test.tsx
   - src/client/app/appSettingsCrud.ts
-  - src/client/app/llmProviderDraft.ts
+  - src/client/lib/llmProviderDraft.ts
   - src/client/app/settingsEditorForm.ts
   - src/client/components/settings/SettingsList.tsx
   - src/client/app/BeaconsSection.tsx
@@ -33,6 +33,25 @@ code:
   - src/client/app/KeybindingsSection.tsx
   - src/client/app/SkillsSection.tsx
   - src/client/app/legacyProviderDefaults.ts
-  - src/client/components/settings/PluginsSection.tsx
+  - src/client/components/settings/CliPluginPackagesSection.tsx
   - src/client/components/settings/SkillCard.tsx
   - src/client/components/settings/PushNotificationsSection.tsx
+  - src/client/app/AutoResumeToggleSection.tsx
+  - src/client/app/AutoResumeToggleSection.test.tsx
+  - src/client/app/ChangelogSection.tsx
+  - src/client/app/ChangelogSection.test.tsx
+  - src/client/app/ChangelogSettingsBranch.tsx
+  - src/client/app/GeneralAppearanceRows.tsx
+  - src/client/app/GeneralAppearanceRows.test.tsx
+  - src/client/app/GeneralPrivacyRows.tsx
+  - src/client/app/GeneralSettingsBranch.tsx
+  - src/client/app/GeneralShareRow.tsx
+  - src/client/app/GeneralTerminalRows.tsx
+  - src/client/app/GeneralTunnelRows.tsx
+  - src/client/app/GlobalInstructionsSection.tsx
+  - src/client/app/ProvidersSettingsBranch.tsx
+  - src/client/app/QuickResponseRow.tsx
+  - src/client/app/SettingsNumberRow.tsx
+  - src/client/app/useAppSettingsWriter.ts
+  - src/client/app/useChangelog.ts
+  - src/client/components/settings/PackageUpdateBadge.tsx

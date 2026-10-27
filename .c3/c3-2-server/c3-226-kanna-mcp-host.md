@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: 72157e1ca5b8fa8c6f75d6cce4782854043fb454507bfab7c759462cdaf7573a
+c3-seal: 63aef6a18d21b2dc7ae3f8ef27230fd1cc9596578ae91e0c329e52396e636620
 title: kanna-mcp-host
 type: component
 category: feature
@@ -91,7 +91,7 @@ the approval protocol clears.
 | mcp__kanna__* tool surface | OUT | Set of MCP tools published to Claude/Codex; envelope matches MCP spec; KANNA_MCP_TOOL_CALLBACKS flag selects which shims register | c3-210 | src/server/kanna-mcp.ts |
 | In-process MCP server | IN | createKannaMcpServer builds an SDK MCP server that startClaudeSession passes in options.mcpServers beside the user's custom servers; there is no HTTP endpoint and no port | c3-210 | src/server/kanna-mcp.ts |
 | Durable approval protocol | IN/OUT | Register pending request, push to UI, await resolution; pendings survive process restart and replay as pending_tool_request entries. Surface methods: submit, answer, cancel, cancelAllForChat, recoverOnStartup. createToolCallbackService accepts an onStateChange(chatId) hook fired after every persisted state change inside submit's persistPut and answer/cancel/cancelAllForChat's persistResolve; server.ts wires this to router.scheduleChatStateBroadcast so the UI receives pending_tool_request the same tick the model emits the tool_use. Pendings resolve through three explicit paths: user answer, ws-router cancelAllForChat triggered by chat.cancel and chat.delete, or recoverOnStartup fail-close on server boot. | c3-208 | src/server/tool-callback.ts |
-| Path deny enforcement | IN | readPathDeny + writePathDeny reject paths outside allowed roots before shim execution; layered with per-run KannaMcpArgs.restrictedAllowedPaths so folder-restricted subagent spawns auto-deny any path resolving outside their allowed roots BEFORE the chat-level deny check (permission-gate pathInsideAllowedRoots) | c3-204 | src/server/permission-gate.ts |
+| Path deny enforcement | IN | readPathDeny + writePathDeny reject paths outside allowed roots before shim execution; layered with per-run KannaMcpArgs.restrictedAllowedPaths so folder-restricted subagent spawns auto-deny any path resolving outside their allowed roots BEFORE the chat-level deny check (permission-gate, through isInsideAny from path-containment.ts) | c3-204 | src/server/permission-gate.ts |
 | delegate_subagent keep_alive param | OUT | keep_alive boolean on delegate_subagent. When true and the target is a Claude subagent, the run stays live and the reply text carries the live run_id; non-claude targets return isError. Routes to c3-210 delegateRun with keepAlive | c3-210 | src/server/kanna-mcp.ts, src/server/kanna-mcp-tools/delegate-subagent.ts |
 | send_subagent_message tool | OUT | Takes run_id plus prompt, drives one follow-up turn into a live keep-alive session, blocks until that turn finishes, returns the subagent reply text or isError NO_LIVE_SESSION. Routes to c3-210 sendToLiveRun | c3-210 | src/server/kanna-mcp.ts |
 | close_subagent tool | OUT | Takes run_id, closes a live keep-alive session and frees its process. Routes to c3-210 closeLiveRun | c3-210 | src/server/kanna-mcp.ts |

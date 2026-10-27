@@ -2,7 +2,6 @@ fact: c3-202
 claim: "HTTP+WS server is composed in src/server/server.ts with HTTP dispatch in http-dispatcher.ts, route handlers in http-api-routes.ts, and static serving in http-static.ts"
 code:
   - src/server/app-settings.ts
-  - src/server/app-settings-bounds.ts
   - src/server/server.ts
   - src/server/http-dispatcher.ts
   - src/server/http-api-routes.ts
@@ -21,7 +20,6 @@ code:
   - src/server/beacon-pairing.test.ts
   - src/server/beacon-pairing-host.ts
   - src/server/beacon-transfer-tickets.ts
-  - src/server/beacon-transfer-host.ts
   - src/server/beacon-transfer-files.ts
   - src/server/beacon-transfer-files.adapter.ts
   - src/server/beacon-transfer-http.adapter.ts
@@ -35,3 +33,8 @@ code:
   - src/server/analytics.ts
   - src/server/http-route-inventory.test.ts
   - src/server/server-data-dir.test.ts
+  - src/server/env-int.ts
+  - src/server/env-int.test.ts
+  - src/server/json-settings-file.adapter.ts
+  - src/server/lifetime.ts
+  - src/server/lifetime.test.ts

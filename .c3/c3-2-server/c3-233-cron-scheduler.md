@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 65efaa66738a9db79eb60e33f39920fe9ea7e3f7791bedf8eee5dd3baad846b9
+c3-seal: 72f979cf209219d1ce0a755594fc3cfd87aae2193d926b65eec95ae127011a4b
 title: cron-scheduler
 type: component
 category: feature
@@ -92,9 +92,13 @@ Shutdown: `CronScheduler.shutdown()` is async — it sets a `stopped` flag
 clears all timers, then drains every in-flight `runFire` call under
 `SHUTDOWN_DRAIN_TIMEOUT_MS` (5 s, shorter than Docker's 10 s kill grace).
 `AgentCoordinator.drainCronOutcomes()` awaits the `cron_run_outcome` writes
-that the cancel loop triggers via `onTurnTerminal` before the event log is
-truncated. `EventStore.flush()` is called immediately before
-`snapshotAndTruncateLogs()` so no in-flight append races the truncation.
+that the cancel loop triggers through the `EventStore.subscribeTurnTerminal`
+listener before the event log is truncated. `Lifetime` (`src/server/lifetime.ts`)
+sequences it: `CronScheduler.shutdown()` is deferred in the quiesce phase, the
+cancel loop, `drainCronOutcomes()` and the scheduler drain in the settle phase,
+and the store's `flush()` followed by `snapshotAndTruncateLogs()` is the first
+step deferred in teardown, so it runs last and no in-flight append races the
+truncation.
 Fires that outlive the drain deadline are abandoned and their runs are
 reconciled as `orphaned` at next boot by `reconcileCronRunsAtBoot`.
 Non-goals: turn orchestration (c3-210), the one-shot rate-limit resume
@@ -119,7 +123,7 @@ scheduler (c3-227), UI rendering (c3-120).
 | Cron events | OUT | cron_armed/cron_disarmed/cron_paused/cron_resumed/cron_run_started/cron_run_outcome/cron_run_skipped on the auto-continue JSONL log; scheduleId doubles as job id | c3-227 | src/server/auto-continue/events.ts, src/server/cron/commands.ts |
 | /cron dispatch | IN | runBuiltinCommand routes every parsed /cron message (valid or error) to runCronCommand; never starts a turn | c3-210 | src/server/claude-send-command.ts, src/server/cron/commands.ts |
 | Fire | IN | CronScheduler fire callback invokes AgentCoordinator.fireCronJob(chatId, jobId); inline clears context then enqueues; spawn creates a chat then enqueues there; a skipped tick writes only what CronSkipCoalescer hands back, and both fire paths flush the pending streak before starting a run | c3-210 | src/server/cron/scheduler.ts, src/server/cron/fire.ts, src/server/cron/skip-coalescer.ts |
-| Run outcome | IN | EventStore.onTurnTerminal (the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
+| Run outcome | IN | The EventStore.subscribeTurnTerminal listener AgentCoordinator.handleTurnTerminal (fed by the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |
 | Cron read model | OUT | deriveCronJobs projects CronJobSnapshot[] onto ChatSnapshot.cronJobs; the cron-jobs WS topic aggregates every chat for the global page; cron.remove/pause/resume WS commands reuse the /cron dispatch | c3-207 | src/server/cron/read-model.ts, src/server/ws-router-envelope.ts, src/server/ws-router-agent-ctrl.ts |
 | Refusal + model escalation | OUT | refuseCronCommand is the one path a /cron line is refused on: it appends the cron_command_error card carrying the typed line AND offers the error to createCronRepair, which enqueues a repair prompt and drains the queue only when the parser had no suggestion, for arm-shaped parts, once per line per chat, standing aside for a queued user message. A schedule that parses but never fires escalates too, on a reconstructed canonical line. KANNA_CRON_REPAIR=disabled turns it off | c3-226 | src/server/cron/commands.ts, src/server/cron/repair.ts |
 | Success + model confirm escalation | OUT | After a typed /cron arm succeeds, createCronConfirm enqueues a formatCronConfirmRequest prompt and drains the queue so the model presents the full CronArmSummary and confirms via AskUserQuestion; bounded to one ask per jobId per chat, standing aside for a queued user message, swallowing its own failures. Does not fire for arm_cron calls. KANNA_CRON_CONFIRM=disabled turns it off | c3-226 | src/server/cron/confirm.ts, src/server/cron/commands.ts |
@@ -130,14 +134,14 @@ scheduler (c3-227), UI rendering (c3-120).
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Missed outcome wedges the overlap guard into skipping forever | A turn finalize path that bypasses the onTurnTerminal observer | fireCronJob's orphan self-heal settles a running run whose chat is idle; reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned and uses findRunningCronRuns (unbounded scan) instead of the display-capped recentRuns | bun test src/server/cron/fire.test.ts |
+| Missed outcome wedges the overlap guard into skipping forever | A turn finalize path that bypasses the subscribeTurnTerminal listeners | fireCronJob's orphan self-heal settles a running run whose chat is idle; reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned and uses findRunningCronRuns (unbounded scan) instead of the display-capped recentRuns | bun test src/server/cron/fire.test.ts |
 | Boot fires a storm of missed runs | Rehydrate replaying past fires instead of skipping | Scheduler rehydrate test asserts skip + future arm | bun test src/server/cron/scheduler.test.ts |
 | Occurrence semantics drift from the engine | node-cron upgrade changing day-matching or strictly-after behavior | Behavioral next-fire table pins vixie OR, leap years, impossible-date null | bun test src/server/cron/next-fire.test.ts |
 | A skip streak outlives the job it belongs to, or is never reported | A fire path that starts a run without flushing, or a lifecycle event that does not forget the streak | fire.test.ts asserts the tail lands before the run it waited on, and that a pause drops the folded count | bun test src/server/cron/fire.test.ts src/server/cron/skip-coalescer.test.ts |
-| In-flight cron event lost when log is truncated at shutdown | A new write path in fire.ts or server.ts that bypasses flush() before snapshotAndTruncateLogs(), or a cancel path that drops the drainCronOutcomes() await | scheduler.test.ts shutdown drain test asserts in-flight fire completes before shutdown returns; EventStore.flush() call in server.ts shutdown is the choke point | bun test src/server/cron/scheduler.test.ts |
+| In-flight cron event lost when log is truncated at shutdown | A new write path in fire.ts or server.ts that bypasses flush() before snapshotAndTruncateLogs(), or a cancel path that drops the drainCronOutcomes() await | scheduler.test.ts shutdown drain test asserts in-flight fire completes before shutdown returns; the store flush and snapshotAndTruncateLogs step that server.ts defers first in the Lifetime teardown phase is the choke point | bun test src/server/cron/scheduler.test.ts |
 | Boot reconcile double-settles a queued run | reconcileCronRunsAtBoot orphans a run whose tagged message survived in the durable queue; recoverQueuedMessages then re-drains it and emits a second cron_run_outcome for the same runId | reconcileCronRunsAtBoot checks getQueuedMessages before emitting orphaned — a run with a surviving queued message is skipped | bun test src/server/cron/fire.test.ts |
 | cron_run_outcome corrupt row from double-settle | two outcome events for the same runId; errorCode set by the orphaned event is never cleared when the success event lands | deriveCronJobs cron_run_outcome handler is first-terminal-wins — only settles a run still in running status, so a second outcome is ignored | bun test src/server/cron/read-model.test.ts |
-| Cron run never settles because its tag is lost before the turn starts | A queued-message write path that does not carry CronRunTag verbatim; the tag is the only link from a fired run to the turn that answers it, and onTurnTerminal reads it off the ActiveTurn | Absence of any cron_run_outcome ok:true while turn_finished events exist — every run then settles via fireCronJob's orphan self-heal or skips as previous_run_active. The cron fire suite fakes enqueueMessage and hand-preserves the tag, so it cannot detect this; the round-trip is pinned against the real EventStore | bun test src/server/event-store.test.ts src/server/event-store-write-ops.test.ts |
+| Cron run never settles because its tag is lost before the turn starts | A queued-message write path that does not carry CronRunTag verbatim; the tag is the only link from a fired run to the turn that answers it, and the subscribeTurnTerminal listener reads it off the ActiveTurn | Absence of any cron_run_outcome ok:true while turn_finished events exist — every run then settles via fireCronJob's orphan self-heal or skips as previous_run_active. The cron fire suite fakes enqueueMessage and hand-preserves the tag, so it cannot detect this; the round-trip is pinned against the real EventStore | bun test src/server/event-store.test.ts src/server/event-store-write-ops.test.ts |
 | Retention drops a run the readers still need | compactCronRunEvents evicting an unsettled start (the overlap guard inverts and inline mode clears the context of a live turn), splitting a start/outcome pair (boot writes a bogus orphaned outcome every boot), or dropping the newest record (boot claims up to 100 missed fires) | compact.test.ts asserts deriveCronJobs and findRunningCronRuns are unchanged over a compacted log across nine log shapes, one case per invariant, and scheduler.test.ts asserts rehydrate reports the same missed count; retention is derived from MAX_RECENT_CRON_RUNS so it cannot be set below the display cap | bun test src/server/cron/compact.test.ts src/server/cron/scheduler.test.ts src/server/event-store.test.ts |
 
 ## Derived Materials

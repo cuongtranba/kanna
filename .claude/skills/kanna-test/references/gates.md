@@ -82,8 +82,9 @@ noted.
 - **`no-raw-fetch`**: `fetch` / `XMLHttpRequest` outside `src/client/api/**` and
   `*.adapter.ts`. Add a queryFn under `src/client/api/` and call it through React
   Query.
-- **`no-raw-websocket`**: `new WebSocket`. Go through `socketStore` actions, fed by
-  `SocketBridge`.
+- **`no-raw-websocket`**: `new WebSocket`. Go through the one `KannaSocket`
+  (`src/client/app/socket.ts`), supplied by `KannaSocketProvider`; only
+  `src/client/adapters/websocket.adapter.ts` constructs a socket.
 - **`no-clientside-effects`**: raw `localStorage`, `sessionStorage`, timers,
   `requestAnimationFrame`, `document`, `window`, or `navigator`. Reach them through
   the storage, timer, and dom adapters in `src/client/adapters/`.

@@ -20,8 +20,6 @@ code:
   - src/client/hooks/useBeaconSuggestions.ts
   - src/client/lib/beaconMentionChips.ts
   - src/client/app/useAppGlobalState.test.ts
-  - src/client/app/bulkChatRemoval.ts
-  - src/client/app/useToggleChatPin.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx
   - src/client/app/useKannaState.test.ts
@@ -40,3 +38,8 @@ code:
   - src/client/app/share-view/**/*.tsx
   - src/client/app/drawerVisual.ts
   - src/vite-env.d.ts
+  - src/client/app/chatLifecycle.ts
+  - src/client/app/chatLifecycle.test.ts
+  - src/client/app/useSidebarActions.ts
+  - src/client/lib/testing/TestThemeProvider.tsx
+  - src/client/lib/testing/renderThemed.tsx

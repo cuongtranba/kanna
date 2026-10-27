@@ -15,7 +15,7 @@ the main model then synthesizes it into its own response.
 - **Roster injection:** `buildKannaSystemPromptAppend(subagents)` in
   `src/shared/kanna-system-prompt.ts` builds a dynamic system-prompt
   suffix listing every configured subagent's `name`, `id`, and
-  `description`. Computed per-spawn in `agent.ts` and passed to the Claude
+  `description`. Computed per-spawn in `claude-session-spawner.ts` and passed to the Claude
   session via `systemPrompt.append`. Truncated at 20 entries by `updatedAt`
   descending; remainder surfaced as "(N more subagents omitted ...)".
 - **MCP tool:** registered in `kanna-mcp.ts` only when the spawn
@@ -121,7 +121,8 @@ calling these tools.
   - `close_subagent({ run_id })` — tears down + frees the process.
 - **Env vars:** `KANNA_SUBAGENT_MAX_LIVE` (default 5),
   `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — both wired into the
-  orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
+  orchestrator deps at `AgentCoordinator` construction (`agent-coordinator.ts`,
+  env read in `agent-runtime-config.ts`); the
   orchestrator itself reads only its deps (side-effect seal).
 
 ## Background subagents (`delegate_subagent run_in_background`)
@@ -146,7 +147,7 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   is wired as `onBackgroundRunComplete`. Every delivery emits
   `auto_continue_accepted { source: "subagent_background", delayMs: 0 }` whose
   prompt is the structured `<task-notification>` XML (`buildTaskNotification`
-  in `agent.ts` — same format Claude Code's LocalAgentTask uses, so the model
+  in `claude-session-config.ts` — same format Claude Code's LocalAgentTask uses, so the model
   parses task identity/status natively). An ARMED loop delivery first (1) wipes
   the chat's Claude `session_token` (main /clear equivalent — same machinery
   `exit_plan_mode`'s clearContext branch uses) and (2) appends a

@@ -2,7 +2,6 @@ fact: c3-210
 claim: "agent coordinator and subagent orchestration are at src/server/agent.ts, subagent-orchestrator.ts, and related files"
 code:
   - src/server/agent.test.ts
-  - src/server/agent.ts
   - src/server/claude-send-command.test.ts
   - src/server/claude-send-command.ts
   - src/server/history-primer.test.ts
@@ -37,8 +36,6 @@ code:
   - src/server/project-mention-attach.test.ts
   - src/server/loop-integrate-io.adapter.ts
   - src/server/loop-prompt-parallel.ts
-  - src/server/tracking-file-lock.test.ts
-  - src/server/tracking-file-lock.ts
   - src/server/claude-live-block.ts
   - src/server/claude-live-publisher.ts
   - src/server/agent-coordinator.ts
@@ -79,3 +76,15 @@ code:
   - src/server/subagent-transcript-registry.ts
   - src/server/subagent-transcript-io.adapter.ts
   - src/server/project-process-env.ts
+  - src/server/agent-runtime-config.ts
+  - src/server/agent-runtime-config.test.ts
+  - src/server/chat-teardown.ts
+  - src/server/chat-teardown.test.ts
+  - src/server/claude-turn-failure.ts
+  - src/server/claude-turn-failure.test.ts
+  - src/server/claude-turn-outcome.ts
+  - src/server/context-usage-snapshot.ts
+  - src/server/serial-lane.ts
+  - src/server/serial-lane.test.ts
+  - src/server/test-helpers/failing-claude-session.ts
+  - src/server/test-helpers/sdk-tool.ts

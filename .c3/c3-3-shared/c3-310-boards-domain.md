@@ -1,6 +1,6 @@
 ---
 id: c3-310
-c3-seal: e5633ca86a638540a717847cc0c298e34462f91329dd9b4462dab471422f8f13
+c3-seal: ea83fce841ff3abd84509b6ed97b62113e097a05dd9cd6f04367b2f7b2f79b59
 title: boards-domain
 type: component
 category: feature
@@ -37,7 +37,7 @@ Owns the board vocabulary (`Board`, `BoardColumn`, `Card`, `FieldDef`, `FieldVal
 | --- | --- | --- | --- | --- |
 | ref-strong-typing | ref | Every board shape is an explicit discriminated union; decoders return typed values, never any | must follow | FieldValue is a tagged union; a decoder narrows, it never asserts |
 | rule-strong-typing | rule | Compliance target for the board wire types | wired compliance target beats uncited local prose | Stored JSON is decoded, not cast — see adr-20260810-boards-sqlite-store |
-| ref-colocated-bun-test | ref | Every pure module here carries a sibling .test.ts | must follow | rank, decode, start-work, worktree-cleanup, cardSchema, repo-slug all colocate |
+| ref-colocated-bun-test | ref | Every pure module here carries a sibling .test.ts | must follow | rank, decode, start-work, worktree-cleanup, well-known-fields, repo-slug all colocate |
 | rule-colocated-bun-test | rule | Compliance target for colocated tests | wired compliance target beats uncited local prose | bun test --conditions production src/shared/boards/ |
 
 ## Contract
@@ -47,10 +47,10 @@ Owns the board vocabulary (`Board`, `BoardColumn`, `Card`, `FieldDef`, `FieldVal
 | Domain types | OUT | Board / BoardColumn / Card / CardLink / CardActor / FieldDef / FieldValue / SyncBinding shapes | c3-2 | src/shared/boards/types.ts |
 | ColumnSemantic routing | OUT | findActiveColumn, findStartColumn, findDoneColumn, columnForRemoteState, remoteStateOfColumn — the ONLY mapping between tracker state and a user's columns | c3-2 | src/shared/boards/types.ts |
 | Rank algebra | OUT | Fractional indexing for column and card order; a move names neighbours, never an index | c3-1 | src/shared/boards/rank.ts |
-| Wire decoders | OUT | decodeContentForFields strict on the wire, lenient over stored rows; decodeFieldDefsForWrite | c3-2 | src/shared/boards/decode.ts |
+| Wire decoders | OUT | decodeContentForFields strict on the wire, lenient over stored rows; validateFieldDefsForWrite | c3-2 | src/shared/boards/decode.ts |
 | Start-work decisions | OUT | deriveStartWorkStatus, startWorkLabel, resolveStartWorkProjectId, findAdvanceColumn, buildStartWorkPrompt | c3-2 | src/shared/boards/start-work.ts |
 | Cleanup decision | OUT | pendingCleanupWorktree — derived from a card sitting in done with a live worktree, never from a move event | c3-2 | src/shared/boards/worktree-cleanup.ts |
-| Card schema notes | OUT | LOAD_BEARING_FIELD_NOTES — which field ids the start-work prompt reads by name | c3-1 | src/shared/boards/cardSchema.ts |
+| Card schema notes | OUT | WELL_KNOWN_FIELDS and WELL_KNOWN_FIELD_NOTES (read through loadBearingFieldNote) — which field ids GitHub sync and the start-work prompt read by name | c3-1 | src/shared/boards/well-known-fields.ts |
 
 ## Derived Materials
 
@@ -85,6 +85,6 @@ Owns the board vocabulary (`Board`, `BoardColumn`, `Card`, `FieldDef`, `FieldVal
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Routing split-brain | A caller reimplements a semantic lookup locally instead of calling the finder | Review; a second semantic === "done" comparison outside this module | bun test --conditions production src/server/board-sync.test.ts |
-| Prompt field drift | A card field the start-work prompt reads by name is deleted from a board schema | cardSchema.test.ts probes every id the prompt reads | bun test --conditions production src/shared/boards/cardSchema.test.ts |
+| Prompt field drift | A card field the start-work prompt reads by name is deleted from a board schema | well-known-fields.test.ts probes every id the prompt reads | bun run test src/shared/boards/well-known-fields.test.ts |
 | Rank collision | Two concurrent moves derive the same fractional key | Column or card order flickers after a drag | bun test --conditions production src/shared/boards/rank.test.ts |
 | Decoder strictness inversion | Wire decoding relaxed to match storage leniency | A malformed client payload reaches the store | bun test --conditions production src/shared/boards/decode.test.ts |

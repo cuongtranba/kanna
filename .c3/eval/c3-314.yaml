@@ -3,3 +3,4 @@ claim: "the pure stack activity fold lives in src/shared/stack-activity.ts"
 code:
   - src/shared/stack-activity.ts
   - src/shared/stack-activity.test.ts
+  - src/shared/stacks.ts

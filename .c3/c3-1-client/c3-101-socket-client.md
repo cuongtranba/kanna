@@ -1,7 +1,7 @@
 ---
 id: c3-101
 c3-version: 4
-c3-seal: fa7078ba7c257a926037e49e5dad4c7cb4d0a64aa8957bd3cdd8ccc85becd96c
+c3-seal: 02925e78fbd5b742b6e877512f60703c1376b507f44bc8cbf1a1680bd9cf1b6e
 title: socket-client
 type: component
 category: foundation
@@ -69,7 +69,7 @@ Owns the browser-side WebSocket: opens it, reconnects with backoff, decodes inbo
 | subscribe(topic, listener) | OUT | Listener receives typed snapshot pushes until unsubscribed | c3-110 | src/client/app/socket.ts |
 | command(envelope) | OUT | Returns the result type its registry entry declares, keyed by correlation id; no overload takes a type argument | c3-110 | src/client/app/socket.ts |
 | auth.required event | OUT | Fires when server rejects with 401 | c3-110 | src/client/app/socket.ts |
-| SocketBridge | IN | Mounts useWebSocket (react-use-websocket) with filter:()=>false+onMessage; writes sendMessage+readyState into socketStore | c3-110 | src/client/app/SocketBridge.tsx |
+| KannaSocketProvider | IN | Owns the one KannaSocket for the page: builds it from wsUrl(dom), start() on mount and dispose() on unmount, and hands it to the tree through context (useKannaSocketInstance, useOptionalKannaSocket); feeds each inbound frame to sendToStartingProfiler.observeFrame | c3-110 | src/client/app/KannaSocketProvider.tsx |
 
 ## Change Safety
 

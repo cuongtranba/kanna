@@ -1,6 +1,6 @@
 ---
 id: rule-mcp-name-reserved
-c3-seal: 9f87b8e5f2c1b172773bc02d1615696426dcfcfd8c23513d87d94632ebbbd8d5
+c3-seal: 3d0e7f0da6a97bd7ccf91bbe86d5c06f02e95579a3472dcb1c5f78348b728a94
 title: mcp-name-reserved
 type: rule
 goal: |-
@@ -28,26 +28,26 @@ and in the SDK session build (`buildUserMcpServers` filter).
 ## Golden Example
 
 ```ts
-// src/shared/app-settings.ts
-const KANNA_MCP_SERVER_NAME = "kanna"
+// src/shared/settings/validation.ts
+export const MCP_RESERVED_NAMES: ReadonlySet<string> = new Set(["kanna"])
 
-export function validateMcpShape(entry: unknown): McpServerConfig {
-  const parsed = McpServerConfigSchema.parse(entry)
-  if (parsed.name === KANNA_MCP_SERVER_NAME) {
-    throw new Error(`MCP server name "${KANNA_MCP_SERVER_NAME}" is reserved`)
-  }
-  return parsed
+export function mcpServerNameIssue(name: string): McpServerNameIssue | null {
+  if (!MCP_SERVER_NAME_PATTERN.test(name)) return "INVALID_NAME"
+  if (MCP_RESERVED_NAMES.has(name)) return "RESERVED_NAME"
+  return null
 }
 ```
 
 ```ts
-// src/server/agent.ts
-export function buildUserMcpServers(servers: McpServerConfig[]): McpServersMap {
-  return Object.fromEntries(
-    servers
-      .filter((s) => s.enabled && s.name !== KANNA_MCP_SERVER_NAME) // belt-and-suspenders
-      .map((s) => [s.name, toSdkTransportConfig(s)]),
-  )
+// src/server/claude-session-config.ts
+export function buildUserMcpServers(servers: readonly McpServerConfig[], oauthBearers = new Map()) {
+  const out: Record<string, SdkMcpEntry> = {}
+  for (const s of servers) {
+    if (!s.enabled) continue
+    if (s.name === KANNA_MCP_SERVER_NAME) continue
+    out[s.name] = toSdkEntry(s, oauthBearers)
+  }
+  return out
 }
 ```
 
@@ -63,8 +63,8 @@ export function buildUserMcpServers(servers: McpServerConfig[]): McpServersMap {
 
 **Applies to:**
 
-- `src/shared/app-settings.ts` — `validateMcpShape` storage guard
-- `src/server/agent.ts` — `buildUserMcpServers` SDK session filter
+- `src/shared/settings/validation.ts` — `mcpServerNameIssue` reserved-name check, called by `validateMcpShape` in `src/server/app-settings.ts` at storage
+- `src/server/claude-session-config.ts` — `buildUserMcpServers` SDK session filter
 
 **Does NOT apply to:**
 

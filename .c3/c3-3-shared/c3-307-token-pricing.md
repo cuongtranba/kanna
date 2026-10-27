@@ -1,6 +1,6 @@
 ---
 id: c3-307
-c3-seal: d248be2fc7a96b90ad3b0b698974e8e530474aafdd26b36d10e9f94c7598869f
+c3-seal: e95a8d2ff63e4ebc61bff63a2b24c752e81a05ab1b12928e1dcf5342ee6e7308
 title: token-pricing
 type: component
 category: foundation
@@ -39,7 +39,7 @@ Owns the USD cost arithmetic for per-turn token usage and model-price resolution
 | Input — model price | ModelPrice (inputPerMTok, outputPerMTok, cachedInputPerMTok?) constructed by resolveModelPrice or passed directly | c3-307 |
 | Input — OpenRouter pricing | OpenRouterPricing struct (promptPerTok, completionPerTok) sourced from the live OpenRouter model catalog; c3-210 passes it when listOpenRouterModels is configured, otherwise passes null | c3-230 |
 | Internal state | STATIC_PRICES is a read-only const array in src/shared/token-pricing.ts; all functions are stateless and referentially transparent | c3-301 |
-| Initialization | ES module imported by c3-210 at src/server/agent.ts line 52 and c3-110 at src/client/lib/contextWindow.ts; no runtime init required | c3-210 |
+| Initialization | ES module imported by c3-210 at src/server/agent-coordinator.ts and the Claude session runners and c3-110 at src/client/lib/contextWindow.ts; no runtime init required | c3-210 |
 
 ## Business Flow
 

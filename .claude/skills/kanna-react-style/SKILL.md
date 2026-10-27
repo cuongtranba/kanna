@@ -31,7 +31,7 @@ If a type doesn't exist yet, add it. Co-locate single-use types with the compone
 ```ts
 // Yes
 interface Props {
-  message: ProcessedResultMessage
+  message: TranscriptMessageOf<"result">
 }
 
 // No
@@ -107,7 +107,7 @@ Signs you should extract:
 Before writing a fresh component, scan the relevant `shared.tsx` (or `ui/`) for primitives that already cover the pattern. Two primitive registries to check:
 
 - **Generic UI**: `src/client/components/ui/` — `card.tsx`, `button.tsx`, `tooltip.tsx`, `dialog.tsx`, `popover.tsx`, `kbd.tsx`, `select.tsx`, `scroll-area.tsx`, `segmented-control.tsx`, `input.tsx`, `textarea.tsx`, `context-menu.tsx`, `app-dialog.tsx`, `animated-shiny-text.tsx`, `resizable.tsx`, `settings-header-button.tsx`.
-- **Message rendering**: `src/client/components/messages/shared.tsx` — `MetaRow`, `MetaContent`, `MetaSeparator`, `MetaLabel`, `MetaText`, `RuledLabel`, `ExpandableRow`, `MetaCodeBlock`, `VerticalLineContainer`, `getToolIcon`.
+- **Message rendering**: `src/client/components/messages/shared.tsx` — `MetaRow`, `MetaContent`, `MetaSeparator`, `MetaLabel`, `MetaText`, `RuledLabel`, `ExpandableRow`, `MetaCodeBlock`, `MetaPill`, `VerticalLineContainer`.
 
 Two-tier rule:
 1. **If a primitive already fits**, use it directly. No new file.

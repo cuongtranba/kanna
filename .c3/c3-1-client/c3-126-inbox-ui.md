@@ -1,6 +1,6 @@
 ---
 id: c3-126
-c3-seal: 21ca48e3ac82ef388986650cdb4483de1466994725a4ae015913255ec9ee934f
+c3-seal: fd9d77f23c5ca771bf1308e62a6aa99a0d958efef8b46a4f65c2404c7629f3bf
 title: inbox-ui
 type: component
 category: feature
@@ -36,7 +36,7 @@ Owns the Inbox page with its Inbox and Activity tabs, the thread and activity ro
 | --- | --- | --- | --- | --- |
 | ref-zustand-store | ref | View state lives in inboxStore with stable selectors; no useState in components | Mandatory | Day labels use the snapshot time recorded in the store so render stays pure. |
 | ref-ws-subscription | ref | The inbox topic is read once through the global subscription in useAppGlobalState; every control sends a typed command and waits for the next snapshot | Mandatory | Send, instruct, archive, mark-read and load-older render pending state through runPendingAction and usePendingAction. |
-| ref-strong-typing | ref | Snapshots and command acks are typed from src/shared/inbox and src/shared/protocol; the raw payload is JsonValue rendered as a fenced block | Mandatory | readInboxPage narrows the page ack field by field. |
+| ref-strong-typing | ref | Snapshots and command acks are typed from src/shared/inbox and src/shared/protocol; the raw payload is JsonValue rendered as a fenced block | Mandatory | The inbox.page ack is typed by inboxPageSchema in src/shared/inbox/types.schema.ts, so the store takes it without narrowing. |
 | rule-zustand-store | rule | Transitions such as select, setTab, setFilter and the reply drafts are named store actions, never inline JSX updaters | Mandatory | The page reads selectors and calls actions through useInboxStore.getState(). |
 
 ## Contract
@@ -59,7 +59,7 @@ Owns the Inbox page with its Inbox and Activity tabs, the thread and activity ro
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| A toast fires for every snapshot instead of a new needs_you thread | Dropping the known-id diff in useInboxToasts | The toast test replays the same snapshot twice and expects one toast | bun test --conditions production src/client/app/useInboxToasts.test.ts |
+| A toast fires for every snapshot instead of a new needs_you thread | Dropping the known-id diff in useInboxToasts | The toast test replays the same snapshot twice and expects one toast | bun test --conditions production src/client/app/useInboxToasts.test.tsx |
 | Send runs while the thread has no handler chat | Removing the chatId guard in the composer | The composer test asserts the disabled state and its hint | bun test --conditions production src/client/app/InboxReplyComposer.test.tsx |
 | The Inbox page lands in the entry bundle | Replacing the lazy import in PageTabContent | check:bundle reports the entry over budget | bun test --conditions production src/ops/architecture/budget.test.ts |
 | A selector returns a fresh array each render | Inline fallbacks in inboxStore selectors | The store test asserts EMPTY identity | bun test --conditions production src/client/stores/inboxStore.test.ts |

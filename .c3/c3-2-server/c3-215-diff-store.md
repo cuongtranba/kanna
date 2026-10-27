@@ -1,7 +1,7 @@
 ---
 id: c3-215
 c3-version: 4
-c3-seal: 5fc35c53fbad01f497a90133bbcd4620e19b7d5c82a2c7e121554e3862d48fcc
+c3-seal: 2e91027087c892db5a2bdb5179d5a7d008fe76c66bf6204608c7fafd810d7a60
 title: diff-store
 type: component
 category: feature
@@ -61,6 +61,7 @@ Maintains a per-chat map of file paths → cumulative diff state, hydrated from 
 | --- | --- | --- | --- | --- |
 | diffsForChat(chatId) | OUT | Returns typed diff snapshot | c3-207 | src/server/diff-store.ts |
 | Hydrate hook | IN | Tool hydration writes into store | c3-303 | src/server/diff-store.ts |
+| Git runner | OUT | runGit(args, cwd, signal?) and tryRunGit(args, cwd, timeoutMs?) run git through spawnCapture with the non-interactive env (GIT_TERMINAL_PROMPT=0 and askpass stubs) on top of projectProcessEnv; tryRunGit returns null on spawn failure or timeout | c3-209 | src/server/git-runner.adapter.ts |
 
 ## Change Safety
 

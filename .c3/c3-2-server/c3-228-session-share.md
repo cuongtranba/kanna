@@ -1,6 +1,6 @@
 ---
 id: c3-228
-c3-seal: 23ec857b059f5a7fb6e320d17b1036fe485dd8b97f3a7a967731ef34d371fc25
+c3-seal: 5c10b2a645071420f50dd1ca8d2ba449e114ed923f06f54b50e64acdc9c0828f
 title: session-share
 type: component
 category: feature
@@ -85,8 +85,8 @@ Owns the complete lifecycle of a read-only session share: receive mint request f
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Auth bypass widened | /share/ prefix extended or middleware ordering changed | Unauthenticated requests reach protected routes | bun test share-route.test.ts: non-share paths still return 401 |
-| Snapshot disk leak | sweep timer stopped or share.token_expired not appended on expiry | ~/.kanna/shares/ grows unbounded | bun test src/server/session-share/snapshot-sweep.test.ts: asserts file deleted after TTL |
-| Stale snapshot served | GET route reads file without checking projection expiry | Expired token returns 200 instead of 410 | bun test src/server/session-share/share-route.test.ts: expired fixture returns 410 |
+| Snapshot disk leak | sweep timer stopped or share.token_expired not appended on expiry | ~/.kanna/shares/ grows unbounded | bun test src/server/session-share/sweep.test.ts: asserts file deleted after TTL |
+| Stale snapshot served | GET route reads file without checking projection expiry | Expired token returns 200 instead of 410 | bun test src/server/session-share/http-routes.test.ts: expired fixture returns 410 |
 | Event schema drift | New share event kind added without projection handler | Replay corrupts in-memory map | bun test share-projection.test.ts covers all event kinds |
 | Token collision | PRNG weakness produces duplicate 256-bit token | Two chats share same file | Token uniqueness assertion in token.ts unit test |
 | Private data published | An entry kind or field added to the snapshot without review | A public link shows an email, attachment path, or raw provider payload | bun run test src/server/session-share/snapshot-builder.test.ts |

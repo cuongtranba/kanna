@@ -1,6 +1,6 @@
 ---
 id: c3-125
-c3-seal: 0b8a7efe0dc9e0c55877f736943da91686534de79030b85e876c83cd22e1a29f
+c3-seal: c53f585176989b18c9205cc4f21d17983ab701a69ce8ef0b03e3116bfd60fa01
 title: webhooks-ui
 type: component
 category: feature
@@ -46,7 +46,7 @@ Lets the user create and edit hooks of two kinds chosen with a Kind control when
 | webhooks commands | OUT | create, update, delete and rotateSecret sent through runPendingAction with a key per hook | Failures surface through setCommandError; the trigger renders pending | src/client/app/WebhookRow.tsx |
 | Slack hook form | OUT | The Kind control, WebhookSlackFields, WebhookSlackSetup and WebhookGenericFields draft a WebhookInput of kind slack or generic; the draft helper buildWebhookInput turns the scoped store into the create payload and buildWebhookPatch builds the update patch, which includes a signing secret or bot token only when the user typed one | Secrets are password inputs and live in the scoped dialog store only; the saved hints come from the snapshot | src/client/lib/webhookDraft.ts |
 | One-time secret | IN | create and rotateSecret acks carry the secret; the dialog shows it and dismissing clears it from the store. A null secret, as for a Slack create, opens no dialog | The secret is never written to localStorage or a persisted layout | src/client/app/WebhookSecretDialog.tsx |
-| Delivery card | IN | webhook_delivery entries render as an icon, hook name, mode label and delivery id | No tinted pill pairs; mode is plain text | src/client/components/messages/WebhookDeliveryMessage.tsx |
+| Delivery card | IN | webhook_delivery and inbound_delivery entries render through one DeliveryMessage as an icon, title, name, mode label, clock time and delivery id | No tinted pill pairs; mode is plain text | src/client/components/messages/DeliveryMessage.tsx |
 
 ## Derived Materials
 
@@ -60,7 +60,7 @@ Lets the user create and edit hooks of two kinds chosen with a Kind control when
 | --- | --- | --- |
 | Precondition | The socket is connected and the webhooks topic has delivered a snapshot | N.A - no governing entity |
 | Input | User actions on the page and the webhooks snapshot | N.A - no governing entity |
-| State | hooks, secretReveal, editor (create, or edit with a hook id) and copiedId in webhooksStore; the create or edit form draft in WebhookCreateStore | N.A - no governing entity |
+| State | hooks, secretReveal and editor (create, or edit with a hook id) in webhooksStore, with copy feedback in copyFeedbackStore; the create or edit form draft in WebhookCreateStore | N.A - no governing entity |
 | Shared dependency | sidebarData from kannaStateStore supplies the chat and project pickers | N.A - no governing entity |
 
 ## Business Flow
@@ -77,4 +77,4 @@ Lets the user create and edit hooks of two kinds chosen with a Kind control when
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | The secret outlives its dialog | Moving secretReveal into a persisted store | The dismiss action no longer clears it | src/client/stores/webhooksStore.ts |
-| A trigger shows no pending state | Calling sendWebhookCommand outside runPendingAction | no-floating-promises in the client lint gate | src/client/app/WebhookRow.tsx |
+| A trigger shows no pending state | Calling sendCommandWithFeedback outside runPendingAction | no-floating-promises in the client lint gate | src/client/app/WebhookRow.tsx |

@@ -1,6 +1,6 @@
 ---
 id: c3-120
-c3-seal: bd4f1d1f64a3398f5da73d8de12e82408c374fbb1b65a7658b15e8ccd76b16bb
+c3-seal: 310dcae5e39d976899f3e68933a0968ac7dc20d527e86ab4b132d111948614d2
 title: cron-ui
 type: component
 category: feature
@@ -41,7 +41,7 @@ up to 3 upcoming timestamps in tabular-nums; falls back to nextFireAt for older
 entries; cwd for spawn mode; Edit copies the reconstructed /cron command to the
 clipboard; Disarm issues cron.remove), CronCommandErrorMessage (field-level
 error + the ready-to-send corrected command behind the sanctioned
-CopyStateStore + clipboard adapter), CronRunMessage (spawn-mode run card whose
+useCopyFeedback from copyFeedbackStore + clipboard adapter), CronRunMessage (spawn-mode run card whose
 LIVE status pill joins ChatSnapshot.cronJobs by runId — the entry itself stays
 immutable), CronRunSkippedMessage and CronJobChangeMessage one-liners, and
 CronListMessage (renders the CURRENT job list, not a frozen copy).
@@ -58,7 +58,7 @@ per arm; falls back to nextFireAt for older entries).
 
 | Reference | Type | Governs | Precedence | Notes |
 | --- | --- | --- | --- | --- |
-| rule-zustand-store | rule | cronJobsStore + CopyStateStore usage; no useState for application state | wired compliance target | stable EMPTY refs on selectors |
+| rule-zustand-store | rule | cronJobsStore + copyFeedbackStore usage; no useState for application state | wired compliance target | stable EMPTY refs on selectors |
 | rule-strong-typing | rule | Processed* message types and snapshot props are fully typed | wired compliance target | no any on component props |
 | rule-colocated-bun-test | rule | Cron components covered by colocated renderToStaticMarkup tests | wired compliance target | CronMessages.test.tsx |
 

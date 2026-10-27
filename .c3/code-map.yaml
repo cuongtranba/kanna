@@ -3,6 +3,7 @@ c3-101:
   - src/client/app/socket.ts
   - src/client/api/**/*.ts
   - src/client/query/**/*.ts
+  - src/client/app/sendToStartingProfiler.ts
 c3-102:
   - src/client/stores/**/*.ts
   - src/client/lib/createScopedStore.tsx
@@ -10,7 +11,6 @@ c3-103:
   - _exclude:src/client/lib/testing/**
   - src/client/components/editor-icons.tsx
   - src/client/components/ui/**/*.tsx
-  - src/client/components/CopyButton.store.ts
   - src/client/components/OpenExternalSelect.store.ts
   - src/client/components/ui/searchable-select.store.ts
   - src/client/components/ui/searchable-select.test.ts
@@ -35,8 +35,6 @@ c3-110:
   - src/client/hooks/useBeaconSuggestions.ts
   - src/client/lib/beaconMentionChips.ts
   - src/client/app/useAppGlobalState.test.ts
-  - src/client/app/bulkChatRemoval.ts
-  - src/client/app/useToggleChatPin.ts
   - src/client/app/useAppGlobalState.ts
   - src/client/app/useKannaState.scrollback.test.tsx
   - src/client/app/useKannaState.test.ts
@@ -53,6 +51,11 @@ c3-110:
   - src/client/app/share-view/**/*.tsx
   - src/client/app/drawerVisual.ts
   - src/vite-env.d.ts
+  - src/client/app/chatLifecycle.ts
+  - src/client/app/chatLifecycle.test.ts
+  - src/client/app/useSidebarActions.ts
+  - src/client/lib/testing/TestThemeProvider.tsx
+  - src/client/lib/testing/renderThemed.tsx
 c3-111:
   - src/client/app/KannaSidebar.tsx
   - src/client/app/sidebarNumberJump.test.ts
@@ -62,9 +65,7 @@ c3-112:
   - src/client/app/ChatPage.test.ts
   - src/client/app/ChatPage/**/*.ts
   - src/client/app/ChatPage/**/*.tsx
-  - src/client/app/useRightSidebarToggleAnimation.ts
   - src/client/app/useStickyChatFocus.ts
-  - src/client/app/useTerminalToggleAnimation.ts
   - src/client/components/messages/LoopDisarmedMessage.test.tsx
   - src/client/components/messages/LoopDisarmedMessage.tsx
   - src/client/components/panes/PageTabContent.tsx
@@ -108,11 +109,11 @@ c3-116:
   - src/client/app/SubagentScopeFields.tsx
   - src/client/app/TextSnippetsSection.tsx
   - src/client/app/appSettingsCrud.ts
-  - src/client/app/llmProviderDraft.ts
+  - src/client/lib/llmProviderDraft.ts
   - src/client/app/settingsEditorForm.ts
   - src/client/components/settings/SettingsList.tsx
-  - src/client/components/settings/PluginsSection.tsx
-  - src/client/components/settings/PluginsSection.test.tsx
+  - src/client/components/settings/CliPluginPackagesSection.tsx
+  - src/client/components/settings/CliPluginPackagesSection.test.tsx
   - src/client/app/BeaconsSection.tsx
   - src/client/app/BeaconsSection.test.tsx
   - src/client/app/BeaconScopeEditor.tsx
@@ -124,16 +125,36 @@ c3-116:
   - src/client/app/legacyProviderDefaults.ts
   - src/client/components/settings/SkillCard.tsx
   - src/client/components/settings/PushNotificationsSection.tsx
+  - src/client/app/AutoResumeToggleSection.tsx
+  - src/client/app/AutoResumeToggleSection.test.tsx
+  - src/client/app/ChangelogSection.tsx
+  - src/client/app/ChangelogSection.test.tsx
+  - src/client/app/ChangelogSettingsBranch.tsx
+  - src/client/app/GeneralAppearanceRows.tsx
+  - src/client/app/GeneralAppearanceRows.test.tsx
+  - src/client/app/GeneralPrivacyRows.tsx
+  - src/client/app/GeneralSettingsBranch.tsx
+  - src/client/app/GeneralShareRow.tsx
+  - src/client/app/GeneralTerminalRows.tsx
+  - src/client/app/GeneralTunnelRows.tsx
+  - src/client/app/GlobalInstructionsSection.tsx
+  - src/client/app/ProvidersSettingsBranch.tsx
+  - src/client/app/QuickResponseRow.tsx
+  - src/client/app/SettingsNumberRow.tsx
+  - src/client/app/useAppSettingsWriter.ts
+  - src/client/app/useChangelog.ts
+  - src/client/components/settings/PackageUpdateBadge.tsx
 c3-117:
   - src/client/app/LocalProjectsPage.tsx
   - src/client/components/NewProjectModal.tsx
   - src/client/components/ImportSessionsDialog.tsx
 c3-118:
-  - src/client/app/ChatPage/TerminalWorkspaceShell.tsx
-  - src/client/app/terminalLayoutResize.test.ts
-  - src/client/app/terminalLayoutResize.ts
-  - src/client/app/terminalToggleAnimation.test.ts
-  - src/client/app/terminalToggleAnimation.ts
+  - src/client/components/chat-ui/TerminalWorkspace.tsx
+  - src/client/components/chat-ui/TerminalWorkspace.store.ts
+  - src/client/components/chat-ui/TerminalWorkspaceLayout.ts
+  - src/client/components/chat-ui/TerminalPane.tsx
+  - src/client/components/chat-ui/TerminalPane.store.ts
+  - src/client/components/chat-ui/TerminalPane.test.ts
 c3-119:
   - src/client/app/BoardsRoutePage.test.tsx
   - src/client/app/BoardsRoutePage.tsx
@@ -151,7 +172,6 @@ c3-201:
   - src/types/bun-process-signals.d.ts
 c3-202:
   - src/server/app-settings.ts
-  - src/server/app-settings-bounds.ts
   - src/server/server.ts
   - src/server/http-dispatcher.ts
   - src/server/http-api-routes.ts
@@ -171,7 +191,6 @@ c3-202:
   - src/server/beacon-pairing.test.ts
   - src/server/beacon-pairing-host.ts
   - src/server/beacon-transfer-tickets.ts
-  - src/server/beacon-transfer-host.ts
   - src/server/beacon-transfer-files.ts
   - src/server/beacon-transfer-files.adapter.ts
   - src/server/beacon-transfer-http.adapter.ts
@@ -184,6 +203,11 @@ c3-202:
   - src/server/analytics.ts
   - src/server/http-route-inventory.test.ts
   - src/server/server-data-dir.test.ts
+  - src/server/env-int.ts
+  - src/server/env-int.test.ts
+  - src/server/json-settings-file.adapter.ts
+  - src/server/lifetime.ts
+  - src/server/lifetime.test.ts
 c3-203:
   - src/server/auth.test.ts
   - src/server/auth.ts
@@ -199,6 +223,11 @@ c3-204:
   - src/server/project-paths-io.adapter.ts
   - src/server/project-directory.adapter.ts
   - src/server/projectFileRelocation.adapter.ts
+  - src/server/home-dir.adapter.ts
+  - src/server/home-path.ts
+  - src/server/path-containment.ts
+  - src/server/path-containment.test.ts
+  - src/shared/home-path.ts
 c3-205:
   - src/server/events.ts
   - src/server/harness-types.ts
@@ -217,6 +246,16 @@ c3-206:
   - src/server/storage/backend.ts
   - src/server/storage/fs-storage.adapter.ts
   - src/server/storage/in-memory-storage.ts
+  - src/server/event-logs.ts
+  - src/server/event-logs.test.ts
+  - src/server/event-routes.ts
+  - src/server/event-routes.test.ts
+  - src/server/history-paging.ts
+  - src/server/history-paging.test.ts
+  - src/server/jsonl-log.ts
+  - src/server/jsonl-log.test.ts
+  - src/server/seen-message-ids.ts
+  - src/server/seen-message-ids.test.ts
 c3-207:
   - src/server/read-models.test.ts
   - src/server/read-models.ts
@@ -237,7 +276,6 @@ c3-208:
   - src/server/ws-router-defaults.ts
   - src/server/ws-router-diff.ts
   - src/server/ws-router-envelope.ts
-  - src/server/ws-router-io.adapter.ts
   - src/server/ws-router-misc.ts
   - src/server/ws-router-project.ts
   - src/server/ws-router-settings.ts
@@ -253,7 +291,6 @@ c3-209:
   - src/server/process-utils.test.ts
 c3-210:
   - src/server/agent.test.ts
-  - src/server/agent.ts
   - src/server/claude-context-commands.test.ts
   - src/server/claude-context-commands.ts
   - src/server/compaction.test.ts
@@ -279,8 +316,6 @@ c3-210:
   - src/server/project-mention-attach.test.ts
   - src/server/loop-integrate-io.adapter.ts
   - src/server/loop-prompt-parallel.ts
-  - src/server/tracking-file-lock.test.ts
-  - src/server/tracking-file-lock.ts
   - src/server/mention-parser.test.ts
   - src/server/mention-parser.ts
   - src/server/proactive-compact.test.ts
@@ -330,6 +365,18 @@ c3-210:
   - src/server/subagent-transcript-registry.ts
   - src/server/subagent-transcript-io.adapter.ts
   - src/server/project-process-env.ts
+  - src/server/agent-runtime-config.ts
+  - src/server/agent-runtime-config.test.ts
+  - src/server/chat-teardown.ts
+  - src/server/chat-teardown.test.ts
+  - src/server/claude-turn-failure.ts
+  - src/server/claude-turn-failure.test.ts
+  - src/server/claude-turn-outcome.ts
+  - src/server/context-usage-snapshot.ts
+  - src/server/serial-lane.ts
+  - src/server/serial-lane.test.ts
+  - src/server/test-helpers/failing-claude-session.ts
+  - src/server/test-helpers/sdk-tool.ts
 c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
@@ -340,6 +387,8 @@ c3-211:
   - src/server/codex-spawn.adapter.ts
   - src/server/codex-tool-payloads.ts
   - src/server/codex-transcript-translator.ts
+  - src/server/codex-plan-steps.ts
+  - src/server/codex-plan-steps.test.ts
 c3-212:
   - src/server/provider-catalog.test.ts
   - src/server/provider-catalog.ts
@@ -347,7 +396,8 @@ c3-212:
   - src/shared/custom-providers.ts
   - src/shared/custom-providers.test.ts
   - src/shared/custom-provider-presets.ts
-  - src/server/llm-provider-store.adapter.ts
+  - src/shared/anthropic-base-url.ts
+  - src/shared/anthropic-base-url.test.ts
 c3-213:
   - src/server/generate-commit-message.test.ts
   - src/server/generate-commit-message.ts
@@ -373,10 +423,12 @@ c3-214:
   - src/server/followed-session-registry.ts
   - src/server/followed-session-io.adapter.ts
   - src/server/imported-subagents-dir.ts
+  - src/server/claude-session-decode.ts
 c3-215:
   - src/server/diff-store.test.ts
   - src/server/diff-store.ts
   - src/server/diff-store-*.ts
+  - src/server/git-runner.adapter.ts
 c3-216:
   - src/server/terminal-manager.test.ts
   - src/server/terminal-manager.ts
@@ -414,6 +466,7 @@ c3-223:
   - src/server/cloudflare-tunnel/**/*.ts
 c3-224:
   - src/server/oauth-pool/**/*.ts
+  - src/server/claude-oauth-probe.adapter.ts
 c3-226:
   - src/server/mcp-oauth.adapter.ts
   - src/server/mcp-validator.ts
@@ -434,6 +487,7 @@ c3-226:
   - src/server/canonical-args.ts
   - src/server/structured-doc-io.adapter.ts
   - src/shared/structured-doc/**/*.ts
+  - src/server/mcp-server-test.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-228:
@@ -471,6 +525,8 @@ c3-229:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+  - src/client/app/WorkflowRunSelection.store.ts
+  - src/client/app/useWorkflowRunSelection.ts
 c3-231:
   - src/server/local-catalog.ts
   - src/server/local-catalog.test.ts
@@ -537,6 +593,19 @@ c3-301:
   - src/shared/terminal-scrollback.ts
   - src/shared/tool-call-types.ts
   - src/shared/transcript-types.ts
+  - src/shared/chat-status.ts
+  - src/shared/markdown-fences.ts
+  - src/shared/markdown-fences.test.ts
+  - src/shared/numeric.ts
+  - src/shared/persisted-output.ts
+  - src/shared/persisted-output.test.ts
+  - src/shared/sidebar-data.ts
+  - src/shared/sidebar-data.test.ts
+  - src/shared/steered-message.ts
+  - src/shared/steered-message.test.ts
+  - src/shared/terminal-column-width.ts
+  - src/shared/transcript-entry.ts
+  - src/shared/vocab.ts
 c3-302:
   - src/shared/chat-ops.test.ts
   - src/shared/chat-ops.ts
@@ -584,6 +653,8 @@ c3-302:
   - src/shared/http-routes.ts
   - src/shared/http-routes.test.ts
   - src/ops/parity/http-route-inventory.test.ts
+  - src/shared/protocol.schema.ts
+  - src/shared/protocol.schema.test.ts
 c3-303:
   - src/shared/tools.test.ts
   - src/shared/tools.ts
@@ -604,6 +675,7 @@ c3-310:
 c3-314:
   - src/shared/stack-activity.ts
   - src/shared/stack-activity.test.ts
+  - src/shared/stacks.ts
 c3-239:
   - src/server/claude-session-config.ts
   - src/server/event-store.stack-methods.test.ts
@@ -659,10 +731,13 @@ c3-236:
   - src/ops/lint/oxlint-run.adapter.ts
   - src/ops/architecture/cjs-interop.ts
   - src/ops/architecture/cjs-interop-scan.adapter.ts
+  - src/ops/architecture/duplication.ts
+  - scripts/test-setup.ts
 c3-311:
   - src/shared/cron/**/*.ts
 c3-312:
   - src/shared/packages/**/*.ts
+  - src/shared/packages/installed-package.ts
 c3-237:
   - src/server/package-update-manager.ts
   - src/server/package-update-manager.test.ts
@@ -678,13 +753,16 @@ c3-237:
   - src/server/codex-plugin-update-applier.adapter.ts
   - src/server/app-settings-package-updates.ts
   - src/server/claude-plugin-update-applier.adapter.ts
+  - src/server/package-apply-command.adapter.ts
+  - src/server/skills-cli.ts
+  - src/server/skills-cli.test.ts
 c3-121:
   - src/client/app/KannaPluginsSettingsBranch.tsx
   - src/client/app/PluginSidebarItems.tsx
   - src/client/app/PluginsFooterSection.tsx
   - src/client/app/PluginsFooterSlot.test.tsx
   - src/client/app/PluginsFooterSlot.tsx
-  - src/client/app/PluginsSection.tsx
+  - src/client/app/KannaPluginsSection.tsx
   - src/client/plugins/**
   - src/client/stores/pluginContributionsStore.ts
 c3-238:
@@ -743,6 +821,10 @@ c3-241:
   - scripts/build-beacon-desktop.ts
   - scripts/beacon-desktop-icons.ts
   - apps/beacon-win7/**/*
+  - src/beacon/http.ts
+  - src/beacon/pairing.ts
+  - src/beacon/paths.ts
+  - src/beacon/paths.test.ts
 c3-123:
   - src/client/components/genui/**/*.ts
   - src/client/components/genui/**/*.tsx
@@ -803,17 +885,16 @@ c3-243:
   - src/server/test-helpers/webhook-harness.ts
   - src/server/ws-router-webhooks.ts
   - src/shared/webhooks/types.ts
-  - src/shared/webhooks/template.ts
-  - src/shared/webhooks/template.test.ts
   - src/shared/webhooks/validate.ts
   - src/shared/webhooks/validate.test.ts
+  - src/server/secret-json-store.adapter.ts
+  - src/server/webhooks/webhook-response.ts
 c3-125:
   - src/client/app/WebhooksPage.tsx
   - src/client/app/WebhookRow.tsx
   - src/client/app/WebhookCreateDialog.tsx
   - src/client/app/WebhookCreateDialog.store.ts
   - src/client/app/WebhookSecretDialog.tsx
-  - src/client/app/WebhookTargetSelect.tsx
   - src/client/app/WebhookCopyButton.tsx
   - src/client/app/webhookCommands.ts
   - src/client/stores/webhooksStore.ts
@@ -827,7 +908,8 @@ c3-125:
   - src/client/app/webhookCommands.test.ts
   - src/client/lib/webhookDraft.ts
   - src/client/lib/webhookDraft.test.ts
-  - src/client/components/messages/WebhookDeliveryMessage.tsx
+  - src/client/app/InboundHandlerFields.tsx
+  - src/client/components/messages/DeliveryMessage.tsx
 c3-230:
   - src/server/openrouter-models.ts
   - src/server/openrouter-models-io.adapter.ts
@@ -855,6 +937,8 @@ c3-246:
   - src/server/ws-router-service-bus.ts
   - src/client/app/ServiceBus*.tsx
   - src/client/stores/serviceBus*.ts
+  - src/server/service-bus/scheduler.ts
+  - src/shared/service-bus/subjects.ts
 c3-247:
   - src/shared/inbox/*.ts
   - src/shared/inbound/*.ts
@@ -873,7 +957,6 @@ c3-126:
   - src/client/stores/inboxStore.ts
   - src/client/lib/inboxFilter.ts
   - src/client/lib/inboxPresentation.ts
-  - src/client/lib/inboxCommands.ts
 c3-248:
   - src/shared/mcp-sources/*.ts
   - src/server/mcp-sources/*.ts

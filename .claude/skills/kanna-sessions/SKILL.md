@@ -452,7 +452,7 @@ failed at runtime — the field simply vanished.
 `cronRun` was lost exactly that way, and the queue is the only place it could
 be lost: the tag is the sole link between a fired cron run and the turn that
 answers it (`fireCronJob` → `enqueueMessage` → dequeue → `ActiveTurn.cronRun`
-→ `store.onTurnTerminal` → `cron_run_outcome`). With no tag, **every cron run
+→ the `store.subscribeTurnTerminal` listener → `cron_run_outcome`). With no tag, **every cron run
 finished unattributed and stayed `running` forever**, so each later tick either
 orphan-healed it (`errorCode: "orphaned"`) or skipped it as
 `previous_run_active` — and on the inline path each orphan-then-restart ran
@@ -474,7 +474,7 @@ only signal that a chat is live. All three teardown gates — `enforceClaudeSess
 (`/clear` and inline cron fire) — now delegate to **`isSessionInUse`**
 (`claude-session-state-queries.ts`), the single predicate that covers all seven
 in-use conditions (activeTurns, startingTurns, pendingTools, pendingPromptSeqs,
-hasLiveWorkflow, hasPendingBackgroundTask, selfWakeActive). The eviction case
+hasLiveWorkflow, `session.isHoldingWork`, selfWakeActive). The eviction case
 is the sharpest: a **warm** session reused for a follow-up still carries the
 *previous* turn's `lastUsedAt`, so it sorts **first** in LRU — without the
 `startingTurns` guard the prime eviction victim is the chat the user has just
@@ -585,7 +585,7 @@ event (`applySubagentEvent`, `event-store-subagent.ts`); running runs are never
 evicted. The `entries[]` array inside each retained snapshot is capped at
 `MAX_SUBAGENT_ENTRIES_PER_RUN` (2000) — oldest entries are spliced out when the
 cap is exceeded, keeping the most recent interactions in memory.
-`seenMessageIdsByChatId` (dedup gate in `EventStore`) is capped at
+`SeenMessageIds` (`seen-message-ids.ts`, the dedup gate `EventStore` consults) is capped at
 `MAX_SEEN_MESSAGE_IDS` (2000) per chat via FIFO eviction — oldest entries
 dropped first using Set insertion order. Safe because Claude API always generates
 fresh `messageId`s per response; historical ids that age out will never repeat.
@@ -766,8 +766,8 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   LEVEL event — the full set of live background tasks after every membership
   change, REPLACE semantics (a missed edge bookend can never wedge a stale
   set). Normalized to a hidden `status` entry carrying
-  `backgroundTaskIdsSnapshot`; the runner swaps `session.backgroundTaskIds`
-  for each snapshot. `in_process_teammate` tasks are filtered (long-lived by
+  `backgroundTaskIdsSnapshot`; the runner hands each snapshot to
+  `session.applyLevelSnapshot`, which replaces `session.backgroundTasks`. `in_process_teammate` tasks are filtered (long-lived by
   design; claude-code gh-30008 excludes them from its own wait loop too).
   `system/task_notification` remains the per-task edge clear.
 - **Fallback detection.** The stream consumer parses each `tool_result`
@@ -790,7 +790,7 @@ is the real filename, a `c3x add adr` defect, not a typo here).
   what let the reaper silently kill a healthy long-running watch ~10 min after
   any user message; `adr-20260801` inverted it.
 - **Bound.** `KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS` (default 1_800_000 = 30 min,
-  via `positiveIntegerFromEnv`; the former name `KANNA_PTY_BACKGROUND_TASK_MAX_MS`
+  via `readIntEnv` in `env-int.ts`, read by `agent-runtime-config.ts`; the former name `KANNA_PTY_BACKGROUND_TASK_MAX_MS`
   is still read when the new one is unset) caps how long a hung/never-completing
   task can pin a process — but ONLY for a session with no level signal (old CLI /
   pre-first-snapshot). There is deliberately no ceiling on a level-sourced

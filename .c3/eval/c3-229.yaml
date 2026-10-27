@@ -15,7 +15,6 @@ code:
   - src/client/app/WorkflowsPage.store.ts
   - src/client/app/WorkflowsPage.test.tsx
   - src/client/app/WorkflowsPage.tsx
-  - src/client/app/WorkflowsSection.store.ts
   - src/client/app/WorkflowsSection.tsx
   - src/client/components/messages/WorkflowMessage.tsx
   - src/client/lib/workflowGrouping.test.ts
@@ -29,3 +28,5 @@ code:
   - src/server/workflow-watch-io.adapter.ts
   - src/shared/workflow-types.test.ts
   - src/shared/workflow-types.ts
+  - src/client/app/WorkflowRunSelection.store.ts
+  - src/client/app/useWorkflowRunSelection.ts

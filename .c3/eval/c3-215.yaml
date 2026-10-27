@@ -4,3 +4,4 @@ code:
   - src/server/diff-store.test.ts
   - src/server/diff-store.ts
   - src/server/diff-store-*.ts
+  - src/server/git-runner.adapter.ts

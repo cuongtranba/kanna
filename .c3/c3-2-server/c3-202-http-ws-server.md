@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: d293493a07b722edd80a00fa7fc33780219b8f9d899c63b7626775364bc43a53
+c3-seal: b12bce7353d815013780827dba4f801f71cb76c19015ce993047303fd082d5aa
 title: http-ws-server
 type: component
 category: foundation
@@ -65,10 +65,11 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | HTTP listener | IN | Serves static assets + API + upgrade; a request whose last path segment carries a non-.html extension is an asset request and 404s when the file is absent — only extensionless navigation paths fall back to index.html | c3-101 | src/server/server.ts |
-| WS upgrade hookup | OUT | Hands socket to ws-router | c3-208 | src/server/http.ts |
-| /health | OUT | Liveness probe | c3-2 | src/server/http.ts |
-| /share/:token | OUT | Public read-only snapshot endpoint dispatched BEFORE the auth gate; serves frozen chat snapshot JSON | c3-228 | src/server/http.ts |
-| /assets/share-view/* | OUT | Reserved static path for the share viewer bundle, also pre-auth | c3-228 | src/server/http.ts |
+| WS upgrade hookup | OUT | Hands socket to ws-router | c3-208 | src/server/http-dispatcher.ts |
+| /health | OUT | Liveness probe | c3-2 | src/server/http-dispatcher.ts |
+| Shutdown | OUT | Lifetime collects every stop through defer(phase, stop) and disposeAll runs the quiesce, settle and teardown phases in that order, each phase last-registered first; a stop that throws is logged and the rest still run. server.ts defers the event store flush and snapshotAndTruncateLogs first in teardown so it runs last | c3-206 | src/server/lifetime.ts, src/server/server.ts |
+| /share/:token | OUT | Public read-only snapshot endpoint dispatched BEFORE the auth gate; serves frozen chat snapshot JSON | c3-228 | src/server/http-dispatcher.ts |
+| /assets/share-view/* | OUT | Reserved static path for the share viewer bundle, also pre-auth | c3-228 | src/server/http-dispatcher.ts |
 | /beacon scope sync | IN/OUT | Persists a validated set-scope, deletes the beacon on unpair, refuses unknown or disabled beacons before the challenge, and pushes the stored scope to connected protocol-2 beacons on every settings change | c3-241 | src/server/beacon-connection.ts |
 | /beacon update | IN/OUT | Sends the server version in ready and incompatible, keeps each beacon's last update_status until it reconnects, and answers beacons.update with a field-less update frame, refusing a beacon that is offline or below protocol 4; it never sends a URL or a version | c3-241 | src/server/beacon-registry.ts |
 | HTTP route inventory | IN | Every route and method listed in HTTP_ROUTES is answered by the dispatcher itself rather than falling through to the client bundle, proven against a real server with a signed-in session | c3-302 | src/server/http-route-inventory.test.ts, src/shared/http-routes.ts |
@@ -78,11 +79,11 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Auth bypass | Middleware order regression | Unauthenticated requests succeed | bun run check + smoke src/server/http.ts with --password |
+| Auth bypass | Middleware order regression | Unauthenticated requests succeed | bun run check + smoke src/server/http-dispatcher.ts with --password |
 | Static asset 404 | Build path drift, or a tab left open across a deploy requesting a deleted hashed chunk | Asset request answers 200 text/html instead of 404, so the browser reports "Failed to fetch dynamically imported module" | bun test --conditions production src/server/static-serve.test.ts |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/http.ts | c3-202 Contract | Listener detail | src/server/http.ts |
+| src/server/http-dispatcher.ts | c3-202 Contract | Listener detail | src/server/http-dispatcher.ts |

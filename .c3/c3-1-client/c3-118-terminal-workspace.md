@@ -1,12 +1,12 @@
 ---
 id: c3-118
 c3-version: 4
-c3-seal: ae80c9943ef2f3236c67075f626fe562f51944e9360398c8378cd2bbced01400
+c3-seal: 21a9b702381f740fa2aece90a97150cbe5fd60f45612443dc66a318d42101e2b
 title: terminal-workspace
 type: component
 category: feature
 parent: c3-1
-goal: Host the embedded xterm terminal panel with layout animation + resize + preference persistence.
+goal: Host the embedded xterm terminal panel with resizable split panes + resize + preference persistence.
 uses:
     - ref-ws-subscription
     - ref-zustand-store
@@ -17,7 +17,7 @@ uses:
 
 ## Goal
 
-Host the embedded xterm terminal panel with layout animation + resize + preference persistence.
+Host the embedded xterm terminal panel with resizable split panes + resize + preference persistence.
 
 ## Parent Fit
 
@@ -31,7 +31,7 @@ Host the embedded xterm terminal panel with layout animation + resize + preferen
 
 ## Purpose
 
-Hosts the embedded xterm.js panel inside chat-page: bidirectional PTY streaming, layout animation, resizable splitter, preference persistence. Non-goals: server-side PTY allocation, agent integration, scrollback persistence.
+Hosts the embedded xterm.js panel inside chat-page: bidirectional PTY streaming, resizable split panes, preference persistence. Non-goals: server-side PTY allocation, agent integration, scrollback persistence.
 
 ## Foundational Flow
 
@@ -41,7 +41,7 @@ Hosts the embedded xterm.js panel inside chat-page: bidirectional PTY streaming,
 | Input — terminal layout store | Sizes, last-open state | c3-102 |
 | Input — primitives | Splitter, kbd | c3-103 |
 | Input — server terminal manager | PTY stream over WS | c3-216 |
-| Internal state | xterm instance, resize observer, animation state | c3-118 |
+| Internal state | xterm instance, resize observer, per-terminal path and clear version in TerminalWorkspaceStore | c3-118 |
 
 ## Business Flow
 
@@ -65,21 +65,21 @@ Hosts the embedded xterm.js panel inside chat-page: bidirectional PTY streaming,
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| <TerminalWorkspaceShell> | OUT | Renders xterm + splitter | c3-112 | src/client/app/ChatPage/TerminalWorkspaceShell.tsx |
-| Resize callback | OUT | Reports rows/cols to server | c3-216 | src/client/app/terminalLayoutResize.ts |
-| Toggle animation | IN/OUT | Driven by chat-page hook | c3-112 | src/client/app/terminalToggleAnimation.ts |
+| <TerminalWorkspace> | OUT | Renders one TerminalPane per terminal in a ResizablePanelGroup; ChatPage mounts it directly as the terminal pane tab | c3-112 | src/client/components/chat-ui/TerminalWorkspace.tsx |
+| Resize callback | OUT | TerminalPane reports xterm rows/cols to the server as terminal.resize | c3-216 | src/client/components/chat-ui/TerminalPane.tsx |
+| Minimum pane width | OUT | getMinimumTerminalWidth and getMinimumTerminalWorkspaceWidth turn the minimum column width setting into pane and workspace minimums | c3-112 | src/client/components/chat-ui/TerminalWorkspaceLayout.ts |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Resize drift | Resize observer + xterm fit mismatch | Wrapping or ghost cursor | bun run test src/client/app/terminalLayoutResize.test.ts |
-| Animation jank on toggle | Timing edit | Visible flash | bun run test src/client/app/terminalToggleAnimation.test.ts |
+| Resize drift | Resize observer + xterm fit mismatch | Wrapping or ghost cursor | bun run test src/client/components/chat-ui/TerminalPane.test.ts |
+| Pane minimum width drift | Padding or column-width edit | Terminal columns clipped or the splitter locks early | bun run test src/client/components/chat-ui/TerminalPane.test.ts |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/client/app/ChatPage/TerminalWorkspaceShell.tsx | c3-118 Contract | Layout detail | src/client/app/ChatPage/TerminalWorkspaceShell.tsx |
-| src/client/app/terminalLayoutResize.ts | c3-118 Contract | Resize math detail | src/client/app/terminalLayoutResize.ts |
-| src/client/app/terminalToggleAnimation.ts | c3-118 Contract | Animation timing detail | src/client/app/terminalToggleAnimation.ts |
+| src/client/components/chat-ui/TerminalWorkspace.tsx | c3-118 Contract | Layout detail | src/client/components/chat-ui/TerminalWorkspace.tsx |
+| src/client/components/chat-ui/TerminalPane.tsx | c3-118 Contract | Resize math detail | src/client/components/chat-ui/TerminalPane.tsx |
+| src/client/components/chat-ui/TerminalWorkspaceLayout.ts | c3-118 Contract | Minimum width math detail | src/client/components/chat-ui/TerminalWorkspaceLayout.ts |

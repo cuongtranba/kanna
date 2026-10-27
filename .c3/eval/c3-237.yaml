@@ -15,3 +15,6 @@ code:
   - src/server/codex-plugin-update-applier.adapter.ts
   - src/server/app-settings-package-updates.ts
   - src/server/claude-plugin-update-applier.adapter.ts
+  - src/server/package-apply-command.adapter.ts
+  - src/server/skills-cli.ts
+  - src/server/skills-cli.test.ts
