@@ -42,15 +42,13 @@ export function parseKeybindingInput(value: string) {
     .filter(Boolean)
 }
 
-type ParsedBinding = {
-  key: string
-  ctrl: boolean
-  meta: boolean
-  alt: boolean
-  shift: boolean
-}
+type Modifier = "ctrl" | "meta" | "alt" | "shift"
 
-const MODIFIER_TOKENS = new Map([
+type ModifierSet = Record<Modifier, boolean>
+
+type ParsedBinding = ModifierSet & { key: string }
+
+const MODIFIER_TOKENS: ReadonlyMap<string, Modifier> = new Map<string, Modifier>([
   ["cmd", "meta"],
   ["meta", "meta"],
   ["ctrl", "ctrl"],
@@ -59,6 +57,44 @@ const MODIFIER_TOKENS = new Map([
   ["option", "alt"],
   ["shift", "shift"],
 ])
+
+function bindingTokens(binding: string): string[] {
+  return binding
+    .split("+")
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function readBinding(binding: string): { modifiers: ModifierSet; keys: string[] } {
+  const modifiers: ModifierSet = { ctrl: false, meta: false, alt: false, shift: false }
+  const keys: string[] = []
+  for (const token of bindingTokens(binding)) {
+    const modifier = MODIFIER_TOKENS.get(token)
+    if (modifier) modifiers[modifier] = true
+    else keys.push(token)
+  }
+  return { modifiers, keys }
+}
+
+function parseModifiers(binding: string): ModifierSet {
+  return readBinding(binding).modifiers
+}
+
+function parseBinding(binding: string): ParsedBinding | null {
+  const { modifiers, keys } = readBinding(binding)
+  const [key] = keys
+  if (keys.length !== 1 || key === undefined) return null
+  return { ...modifiers, key }
+}
+
+export function bindingHasModifier(binding: string): boolean {
+  const modifiers = parseModifiers(binding)
+  return modifiers.ctrl || modifiers.meta || modifiers.alt || modifiers.shift
+}
+
+export function bindingHasShift(binding: string): boolean {
+  return parseModifiers(binding).shift
+}
 
 export function bindingMatchesEvent(binding: string, event: KeyboardEvent) {
   const parsed = parseBinding(binding)
@@ -176,68 +212,11 @@ const KEY_GLYPHS: Readonly<Record<string, string>> = {
 
 export function formatBindingKeys(binding: string, isMac: boolean): string[] {
   const glyphs = isMac ? MAC_GLYPHS : PC_GLYPHS
-  return binding
-    .split("+")
-    .map((token) => token.trim().toLowerCase())
-    .filter(Boolean)
-    .map((token) => {
-      const modifier = MODIFIER_TOKENS.get(token)
-      if (modifier === "ctrl" || modifier === "meta" || modifier === "alt" || modifier === "shift") {
-        return glyphs[modifier]
-      }
-      return KEY_GLYPHS[token] ?? (token.length === 1 ? token.toUpperCase() : token)
-    })
-}
-
-function parseModifiers(binding: string): Omit<ParsedBinding, "key"> {
-  const parsed = { ctrl: false, meta: false, alt: false, shift: false }
-  for (const part of binding.split("+")) {
-    const modifier = MODIFIER_TOKENS.get(part.trim().toLowerCase())
-    if (modifier === "ctrl" || modifier === "meta" || modifier === "alt" || modifier === "shift") {
-      parsed[modifier] = true
-    }
-  }
-  return parsed
-}
-
-function parseBinding(binding: string): ParsedBinding | null {
-  const parts = binding.split("+").map((part) => part.trim()).filter(Boolean)
-  if (parts.length === 0) return null
-
-  const parsed: ParsedBinding = {
-    key: "",
-    ctrl: false,
-    meta: false,
-    alt: false,
-    shift: false,
-  }
-
-  for (const part of parts) {
-    const token = part.toLowerCase()
+  return bindingTokens(binding).map((token) => {
     const modifier = MODIFIER_TOKENS.get(token)
-    if (modifier === "ctrl") {
-      parsed.ctrl = true
-      continue
-    }
-    if (modifier === "meta") {
-      parsed.meta = true
-      continue
-    }
-    if (modifier === "alt") {
-      parsed.alt = true
-      continue
-    }
-    if (modifier === "shift") {
-      parsed.shift = true
-      continue
-    }
-    if (parsed.key) {
-      return null
-    }
-    parsed.key = token
-  }
-
-  return parsed.key ? parsed : null
+    if (modifier) return glyphs[modifier]
+    return KEY_GLYPHS[token] ?? (token.length === 1 ? token.toUpperCase() : token)
+  })
 }
 
 function eventMatchesParsedKey(event: KeyboardEvent, key: string) {

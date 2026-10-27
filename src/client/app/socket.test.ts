@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { KannaSocket } from "./socket"
-import type { ComputedStyleLike, DomPort, ServiceWorkerRegistrationLike } from "../ports/domPort"
+import type { ComputedStyleLike, DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import type { StoragePort } from "../ports/storagePort"
 import type { WebSocketPort, WebSocketLike, WsEventPayload } from "../ports/webSocketPort"
@@ -134,7 +134,6 @@ class FakeDomPort implements DomPort {
   getSearch(): string { return "" }
   reload(): void { }
   getUserAgent(): string { return "FakeBrowser/1.0" }
-  isSecureContext(): boolean { return true }
   getInnerWidth(): number { return 1024 }
   getInnerHeight(): number { return 768 }
   setBodyStyle(_property: string, _value: string): void { }
@@ -165,17 +164,6 @@ class FakeDomPort implements DomPort {
     return () => { }
   }
 
-  getHostname(): string { return "localhost" }
-  isServiceWorkerSupported(): boolean { return true }
-  isPushManagerSupported(): boolean { return true }
-
-  async registerServiceWorker(): Promise<ServiceWorkerRegistrationLike> {
-    return { pushManager: { subscribe: async () => { throw new Error("not used in socket tests") }, getSubscription: async () => null } }
-  }
-
-  async getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistrationLike> {
-    return { pushManager: { subscribe: async () => { throw new Error("not used in socket tests") }, getSubscription: async () => null } }
-  }
 
   upsertHeadMeta(_name: string, _content: string): void { }
   getComputedBackgroundColor(): string { return "" }
@@ -189,7 +177,7 @@ class FakeDomPort implements DomPort {
 
   isWebShareSupported(): boolean { return false }
   webShare(_data: { title?: string; url?: string }): Promise<void> { return Promise.resolve() }
-  getBaseURI(): string { return "http://localhost/" }
+  resolveUrl(path: string): string { return new URL(path, "http://localhost/").toString() }
   triggerDownload(_url: string, _filename: string): void { }
   getCssVar(_name: string, fallback: string): string { return fallback }
   measureTextWidth(): number | null { return null }

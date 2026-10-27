@@ -159,7 +159,6 @@ function McpServerEditor({
     url,
     headersText,
     error,
-    submitting,
     oauthEnabled,
     authFlowUrl,
     callbackInput,
@@ -175,6 +174,8 @@ function McpServerEditor({
 
   const currentOauth = initial !== null && initial.transport !== "stdio" ? initial.oauth : undefined
   const serverKeyId = initial?.id ?? NEW_SERVER_ID
+  const saveKey = pendingActionKey("mcpServers.save", serverKeyId)
+  const submitting = usePendingAction(saveKey)
   const toggleOAuthKey = pendingActionKey("mcpServers.toggleOAuth", serverKeyId)
   const toggleOAuthPending = usePendingAction(toggleOAuthKey)
   const copyAuthUrlKey = pendingActionKey("mcpServers.copyAuthUrl", serverKeyId)
@@ -292,7 +293,6 @@ function McpServerEditor({
         }
       },
       onDone: onCancel,
-      fallbackMessage: "Failed to save MCP server",
     })
   }, [
     argsText,
@@ -311,8 +311,8 @@ function McpServerEditor({
   ])
 
   const onSubmitClick = useCallback(() => {
-    runPendingAction(pendingActionKey("mcpServers.save", serverKeyId), submit)
-  }, [serverKeyId, submit])
+    runPendingAction(saveKey, submit)
+  }, [saveKey, submit])
 
   const submitLabel = editorSubmitLabel({
     submitting,

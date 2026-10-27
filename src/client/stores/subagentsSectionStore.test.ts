@@ -21,27 +21,26 @@ beforeEach(() => {
 })
 
 describe("subagentsSectionStore", () => {
-  test("resetForm seeds the draft and clears error/pending/confirm", () => {
+  test("resetForm seeds the draft and clears error/confirm", () => {
     useSubagentsSectionStore
       .getState()
-      .patchForm({ pending: true, confirmDelete: true, error: { field: "name", message: "taken" } })
+      .patchForm({ confirmDelete: true, error: { field: "name", message: "taken" } })
 
     useSubagentsSectionStore.getState().resetForm(draft({ name: "planner" }))
 
     const form = useSubagentsSectionStore.getState().form
     expect(form.draft.name).toBe("planner")
     expect(form.error).toBeNull()
-    expect(form.pending).toBe(false)
     expect(form.confirmDelete).toBe(false)
   })
 
   test("patchForm merges top-level fields and leaves the draft alone", () => {
-    useSubagentsSectionStore.getState().patchForm({ pending: true })
+    useSubagentsSectionStore.getState().patchForm({ confirmDelete: true })
 
     const form = useSubagentsSectionStore.getState().form
-    expect(form.pending).toBe(true)
+    expect(form.confirmDelete).toBe(true)
     expect(form.draft.name).toBe("reviewer")
-    expect(form.confirmDelete).toBe(false)
+    expect(form.error).toBeNull()
   })
 
   test("patchFormDraft reaches the nested draft that patchForm cannot", () => {

@@ -3,7 +3,7 @@ import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
 import { isAgentProvider, type SidebarData } from "../../shared/types"
 import type { WebhookConfig } from "../../shared/webhooks/types"
 import type { SearchableOption } from "../components/ui/searchable-select"
-import { getPathBasename } from "./formatters"
+import { fileNameOfPath } from "./pathUtils"
 
 export interface WebhookTargetOption {
   value: string
@@ -20,7 +20,7 @@ export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
   const chats: WebhookTargetOption[] = []
   const projects: WebhookTargetOption[] = []
   for (const group of [...sidebar.starredProjectGroups, ...sidebar.projectGroups]) {
-    const projectName = getPathBasename(group.localPath)
+    const projectName = fileNameOfPath(group.localPath)
     projects.push({ value: group.groupKey, label: projectName, hint: group.localPath })
     for (const chat of group.chats) {
       chats.push({ value: chat.chatId, label: `${projectName} / ${chat.title || "Untitled chat"}`, hint: group.localPath })

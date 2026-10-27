@@ -386,17 +386,6 @@ describe("isStopAffordance", () => {
 })
 
 
-describe("mention picker wiring", () => {
-  test("shouldShowMentionPicker trigger produces the expected shape for mid-input @", async () => {
-    const { shouldShowMentionPicker } = await import("../../lib/mention-suggestions")
-    expect(shouldShowMentionPicker("hello @src", 10)).toEqual({
-      open: true,
-      query: "src",
-      tokenStart: 6,
-    })
-  })
-})
-
 
 describe("agent mention pattern composer compatibility", () => {
   test("plain text contains no agent mentions", () => {

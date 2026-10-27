@@ -1,5 +1,6 @@
 import type { KeybindingsSnapshot } from "../../shared/types"
 import {
+  bindingHasShift,
   bindingMatchesEventIgnoringShift,
   bindingModifiersMatch,
   getBindingsForAction,
@@ -70,8 +71,7 @@ export function matchTabSwitcherTrigger(
   const binding = getBindingsForAction(keybindings, "openTabSwitcher")
     .find((candidate) => bindingMatchesEventIgnoringShift(candidate, event))
   if (!binding) return null
-  const bindingHasShift = binding.split("+").some((token) => token.trim().toLowerCase() === "shift")
-  return { binding, reverse: event.shiftKey && !bindingHasShift }
+  return { binding, reverse: event.shiftKey && !bindingHasShift(binding) }
 }
 
 export function shouldShowTabJumpHints(

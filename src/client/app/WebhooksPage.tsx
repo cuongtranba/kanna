@@ -12,7 +12,8 @@ import { useProviderCatalog } from "./useProviderCatalog"
 import { WebhookCreateDialog } from "./WebhookCreateDialog"
 import { WebhookRow } from "./WebhookRow"
 import { WebhookSecretDialog } from "./WebhookSecretDialog"
-import { readCreatedWebhook, sendWebhookCommand } from "./webhookCommands"
+import { revealCreatedWebhookSecret } from "./webhookCommands"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 
 export function WebhooksPage() {
   const socket = useOptionalKannaSocket()
@@ -25,8 +26,8 @@ export function WebhooksPage() {
 
   const handleCreate = useCallback(
     async (input: WebhookInput) => {
-      const created = await sendWebhookCommand(socket, { type: "webhooks.create", input })
-      const reveal = readCreatedWebhook(created)
+      const created = await sendCommandWithFeedback(socket, { type: "webhooks.create", input })
+      const reveal = revealCreatedWebhookSecret(created)
       if (reveal) useWebhooksStore.getState().revealSecret(reveal)
     },
     [socket],

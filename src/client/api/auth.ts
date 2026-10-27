@@ -17,16 +17,24 @@ export interface AuthLoginResponse {
   ok: boolean
 }
 
+export type AuthStatusResult =
+  | { kind: "ok"; status: Partial<AuthStatusResponse> }
+  | { kind: "retry" }
+
 export async function fetchAuthStatus(
   signal?: AbortSignal,
   http: HttpPort = httpAdapter,
-): Promise<Partial<AuthStatusResponse>> {
-  const result = await http.getJson<Partial<AuthStatusResponse>>(HTTP_ROUTES.authStatus.path, {
-    cache: "no-store",
-    signal,
-  })
-  if (!result.ok) return {}
-  return result.data
+): Promise<AuthStatusResult> {
+  try {
+    const result = await http.getJson<Partial<AuthStatusResponse> | null>(HTTP_ROUTES.authStatus.path, {
+      cache: "no-store",
+      signal,
+    })
+    if (!result.ok || result.data === null) return { kind: "retry" }
+    return { kind: "ok", status: result.data }
+  } catch {
+    return { kind: "retry" }
+  }
 }
 
 export async function postAuthLogin(

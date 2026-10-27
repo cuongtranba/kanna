@@ -8,7 +8,6 @@ import {
 } from "../../ui/dialog"
 import { Button } from "../../ui/button"
 import { classifyAttachmentPreview, classifyAttachmentIcon, friendlyMimeLabel } from "../attachmentPreview"
-import { formatAttachmentSize } from "../AttachmentCard"
 import type { ChatAttachment } from "../../../../shared/types"
 import { ImageBody } from "./bodies/ImageBody"
 import { PdfBody } from "./bodies/PdfBody"
@@ -24,6 +23,7 @@ import { downloadFile, shareViaWebShare } from "./actions"
 import type { PreviewSource } from "./types"
 import { SheetBodyStore } from "./SheetBody.store"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { formatByteSize } from "../../../lib/formatByteSize"
 
 interface Props {
   source: PreviewSource | null
@@ -190,6 +190,6 @@ function describeMeta(source: PreviewSource): string {
   }
   const iconKind = classifyAttachmentIcon(attachmentLike)
   const label = friendlyMimeLabel(iconKind, source.mimeType)
-  const size = source.size ? ` · ${formatAttachmentSize(source.size)}` : ""
+  const size = source.size ? ` · ${formatByteSize(source.size)}` : ""
   return `${label}${size}`
 }

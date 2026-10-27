@@ -3,7 +3,7 @@ import { JSONUIProvider, Renderer, useActions, type Spec } from "@json-render/re
 import { AlertTriangle, MessageSquareText, X } from "lucide-react"
 import type { GenUISpec } from "../../../shared/genui"
 import { probeFileUrl } from "../../api/files"
-import { toLocalFileUrl } from "../../lib/pathUtils"
+import { fileNameOfPath, toLocalFileUrl } from "../../lib/pathUtils"
 import { runDetached } from "../../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { FilePreviewSheet } from "../messages/file-preview/FilePreviewSheet"
@@ -86,11 +86,6 @@ function ViewNotice() {
   )
 }
 
-function basename(path: string): string {
-  const index = path.lastIndexOf("/")
-  return index >= 0 ? path.slice(index + 1) : path
-}
-
 function GenUIFilePreview() {
   const previewPath = GenUIViewStore.useScopedStore((state) => state.previewPath)
   const probe = GenUIViewStore.useScopedStore((state) => state.previewProbe)
@@ -106,7 +101,7 @@ function GenUIFilePreview() {
       if (result.kind === "ready") setProbe(result)
       else {
         closePreview()
-        showNotice(`"${basename(previewPath)}" could not be opened`)
+        showNotice(`"${fileNameOfPath(previewPath)}" could not be opened`)
       }
     }))
     return () => controller.abort()
@@ -118,7 +113,7 @@ function GenUIFilePreview() {
     return toPreviewSourceFromAttachment({
       id: `genui-file-${contentUrl}`,
       kind: "file",
-      displayName: basename(previewPath),
+      displayName: fileNameOfPath(previewPath),
       absolutePath: previewPath,
       relativePath: previewPath,
       contentUrl,

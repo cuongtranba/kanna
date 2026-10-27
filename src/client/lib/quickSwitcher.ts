@@ -6,7 +6,7 @@ import type {
   SidebarProjectGroup,
 } from "../../shared/types"
 import { actionMatchesEvent } from "./keybindings"
-import { getPathBasename } from "./formatters"
+import { fileNameOfPath } from "./pathUtils"
 
 export const TERMINAL_CONTAINER_SELECTOR = ".kanna-terminal"
 
@@ -81,7 +81,7 @@ export function toQuickSwitcherProjects(
     const sessions = selectableChats(group)
     projects.push({
       projectId: group.groupKey,
-      name: getPathBasename(group.localPath),
+      name: fileNameOfPath(group.localPath),
       localPath: group.localPath,
       starred: group.starredAt !== undefined,
       sessionCount: sessions.length,
@@ -94,7 +94,7 @@ export function toQuickSwitcherProjects(
     seenPaths.add(project.localPath)
     projects.push({
       projectId: null,
-      name: getPathBasename(project.localPath),
+      name: fileNameOfPath(project.localPath),
       localPath: project.localPath,
       starred: false,
       sessionCount: 0,
@@ -204,14 +204,6 @@ export function shouldToggleQuickSwitcher(
 ): boolean {
   if (isTerminalEventTarget(event.target)) return false
   return actionMatchesEvent(keybindings, "openProjectSwitcher", event)
-}
-
-export function shortenHomePath(localPath: string, homeDir: string): string {
-  if (homeDir === "" || !localPath.startsWith(homeDir)) return localPath
-  const remainder = localPath.slice(homeDir.length)
-  if (remainder === "") return "~"
-  if (!remainder.startsWith("/")) return localPath
-  return `~${remainder}`
 }
 
 export function isMacUserAgent(userAgent: string): boolean {

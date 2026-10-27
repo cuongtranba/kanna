@@ -3,10 +3,9 @@ import { Blocks } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { StatusPill } from "../components/ui/status-pill"
 import { SettingsEmptyState, SettingsList } from "../components/settings/SettingsList"
-import { errorMessage } from "../../shared/errors"
 import type { CommandPort } from "../ports/commandPort"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
-import { useKannaStateStore } from "../stores/kannaStateStore"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 
 export interface PluginsSectionHandlers {
@@ -16,8 +15,7 @@ export interface PluginsSectionHandlers {
 export function buildPluginsSectionHandlers(commands: CommandPort | null): PluginsSectionHandlers {
   return {
     async onReload(id) {
-      if (!commands) throw new Error("Not connected to the server")
-      await commands.command({ type: "plugins.reload", pluginId: id })
+      await sendCommandWithFeedback(commands, { type: "plugins.reload", pluginId: id })
     },
   }
 }
@@ -54,15 +52,7 @@ function PluginRow({
   const reloadKey = pendingActionKey("plugins.reload", plugin.id)
   const reloading = usePendingAction(reloadKey)
   const handleReload = useCallback(() => {
-    runPendingAction(reloadKey, async () => {
-      try {
-        await onReload(plugin.id)
-        useKannaStateStore.getState().setCommandError(null)
-      } catch (error) {
-        useKannaStateStore.getState().setCommandError(errorMessage(error))
-        throw error
-      }
-    })
+    runPendingAction(reloadKey, () => onReload(plugin.id))
   }, [onReload, plugin.id, reloadKey])
 
   return (

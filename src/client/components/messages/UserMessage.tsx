@@ -66,7 +66,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
 
     const target = classifyAttachmentPreview(attachment)
     if (target.openInNewTab) {
-      dom.openWindow(new URL(attachment.contentUrl, dom.getBaseURI() || dom.getHref()).toString(), "_blank", "noopener,noreferrer")
+      dom.openWindow(dom.resolveUrl(attachment.contentUrl), "_blank", "noopener,noreferrer")
       return
     }
 

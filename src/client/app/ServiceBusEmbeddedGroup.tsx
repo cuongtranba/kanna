@@ -6,11 +6,10 @@ import { draftToEmbedded, embeddedToDraft, problemsOf } from "../lib/serviceBusD
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
-import { errorMessage } from "../../shared/errors"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
-import { sendWebhookCommand } from "./webhookCommands"
+import { sendCommandWithFeedback, surfaceErrorIn } from "../lib/commandFeedback"
 
 const SAVE_KEY = pendingActionKey("settings.serviceBus", "embedded")
 const RESET_KEY = pendingActionKey("serviceBus.resetStore")
@@ -39,25 +38,16 @@ export function ServiceBusEmbeddedGroup({ state }: { state: Pick<KannaState, "ha
   const dirty = JSON.stringify(saved) !== JSON.stringify(draft)
   const edit = (patch: Partial<typeof draft>) => editEmbedded(saved, patch)
 
-  const save = useCallback(async () => {
-    setError(null)
-    try {
-      await state.handleWriteAppSettings({ serviceBus: { embedded: draftToEmbedded(draft) } })
-      discardEmbedded()
-    } catch (caught) {
-      setError(errorMessage(caught))
-    }
-  }, [state, draft, discardEmbedded, setError])
+  const save = useCallback(() => surfaceErrorIn(setError, async () => {
+    await state.handleWriteAppSettings({ serviceBus: { embedded: draftToEmbedded(draft) } })
+    discardEmbedded()
+  }), [state, draft, discardEmbedded, setError])
 
   const resetStore = useCallback(async () => {
-    setError(null)
-    try {
-      await sendWebhookCommand(socket, { type: "serviceBus.resetStore" })
-    } catch (caught) {
-      setError(errorMessage(caught))
-    } finally {
-      cancelResetConfirm()
-    }
+    await surfaceErrorIn(setError, async () => {
+      await sendCommandWithFeedback(socket, { type: "serviceBus.resetStore" })
+    })
+    cancelResetConfirm()
   }, [socket, cancelResetConfirm, setError])
 
   return (

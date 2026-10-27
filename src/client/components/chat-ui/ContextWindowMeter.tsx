@@ -1,19 +1,11 @@
 import { cn } from "../../lib/utils"
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "../../lib/contextWindow"
+import { type ContextWindowSnapshot, formatContextWindowTokens, formatPercentage } from "../../lib/contextWindow"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
 
-function formatPercentage(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value)) {
-    return null
-  }
-  if (value < 10) {
-    return `${value.toFixed(1).replace(/\.0$/, "")}%`
-  }
-  return `${Math.round(value)}%`
-}
-
 export function ContextWindowMeter({ usage }: { usage: ContextWindowSnapshot }) {
-  const usedPercentage = formatPercentage(usage.usedPercentage)
+  const usedPercentage = usage.usedPercentage !== null && Number.isFinite(usage.usedPercentage)
+    ? formatPercentage(usage.usedPercentage)
+    : null
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0))
   const radius = 9.75
   const circumference = 2 * Math.PI * radius

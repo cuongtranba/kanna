@@ -8,19 +8,13 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../../stor
 import { useTranscriptRenderOptions } from "./render-context"
 import { renderMarkdownDocument } from "../lexical/markdown/renderMessage"
 import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
-import type { ClipboardPort, TimerPort } from "../../ports"
-import { clipboardAdapter, timerAdapter } from "../../adapters"
-
-interface ExitPlanModeMessagePorts {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
+import { useCopyFeedback, type CopyFeedbackPorts } from "../../stores/copyFeedbackStore"
 
 interface Props {
   message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
   onConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
   isLatest: boolean
-  ports?: ExitPlanModeMessagePorts
+  ports?: CopyFeedbackPorts
 }
 
 export function useExitPlanModeResponding(toolId: string): boolean {
@@ -32,15 +26,12 @@ export function useExitPlanModeResponding(toolId: string): boolean {
 
 function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: Props) {
   const renderOptions = useTranscriptRenderOptions()
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
+  const { copied, copy } = useCopyFeedback(ports)
   const isComplete = Boolean(message.result)
   const expanded = ExitPlanModeMessageStore.useScopedStore((s) => s.expanded)
-  const copied = ExitPlanModeMessageStore.useScopedStore((s) => s.copied)
   const showEditInput = ExitPlanModeMessageStore.useScopedStore((s) => s.showEditInput)
   const editMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.editMessage)
   const setExpanded = ExitPlanModeMessageStore.useScopedStore((s) => s.setExpanded)
-  const setCopied = ExitPlanModeMessageStore.useScopedStore((s) => s.setCopied)
   const setEditMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.setEditMessage)
   const openEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.openEdit)
   const cancelEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.cancelEdit)
@@ -84,13 +75,10 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
     }
   }, [showEditInput])
 
-  const copyPlan = async () => {
+  const handleCopy = () => {
     if (!input?.plan) return
-    await clipboard.writeText(input.plan)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
+    runDetached("copy plan", copy(input.plan))
   }
-  const handleCopy = () => { runDetached("copy plan", copyPlan()) }
 
   const result = isComplete ? message.result : null
   const isDiscarded = result?.discarded === true

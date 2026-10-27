@@ -3,11 +3,10 @@ import { ExternalLink, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "../ui/button"
 import { STATUS_PILL_CLASS } from "../../../shared/design/tone-pairings"
 import { errorMessage } from "../../../shared/errors"
-import type { ClientCommand } from "../../../shared/protocol"
-import type { InstalledPackage, PackageInventorySnapshot, PackageKind, PackageUpdateEntry, UpdateAvailability } from "../../../shared/packages/types"
+import type { InstalledPackage, PackageKind, PackageUpdateEntry, UpdateAvailability } from "../../../shared/packages/types"
 import { cn } from "../../lib/utils"
 import { runDetached } from "../../lib/runDetached"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { sendCommandWithFeedback } from "../../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useSettingsPageStore } from "../../stores/settingsPageStore"
 import type { KannaState } from "../../app/useKannaState"
@@ -18,24 +17,10 @@ function packageUpdateKey(id: string): string {
   return pendingActionKey("packages.update", id)
 }
 
-async function sendPackageCommand(socket: KannaState["socket"], command: ClientCommand): Promise<void> {
-  try {
-    await socket.command(command)
-    useKannaStateStore.getState().setCommandError(null)
-  } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
-    throw error
-  }
-}
-
 const EMPTY_PACKAGES: InstalledPackage[] = []
 const EMPTY_ERRORS: Array<{ kind: PackageKind; message: string }> = []
 const EMPTY_UPDATE_ENTRIES: PackageUpdateEntry[] = []
 const EMPTY_APPLYING: string[] = []
-
-function isPackageInventorySnapshot<T>(v: T): v is T & PackageInventorySnapshot {
-  return typeof v === "object" && v !== null && "packages" in v && "errors" in v
-}
 
 const AVAILABILITY_LABEL: Record<UpdateAvailability, string> = {
   up_to_date: "Up to date",
@@ -252,12 +237,9 @@ export function PluginsSection({
     try {
       setPluginInventoryLoading(true)
       setPluginInventoryError(null)
-      const raw = await socket.command({ type: "packages.listInstalled" })
-      if (!isPackageInventorySnapshot(raw)) throw new Error("packages.listInstalled: unexpected response")
-      const inv = raw
-      setPluginInventory(inv)
+      setPluginInventory(await socket.command({ type: "packages.listInstalled" }))
     } catch (err) {
-      setPluginInventoryError(err instanceof Error ? err.message : "Unable to load plugins.")
+      setPluginInventoryError(errorMessage(err))
     } finally {
       setPluginInventoryLoading(false)
     }
@@ -268,12 +250,12 @@ export function PluginsSection({
   }, [loadPlugins])
 
   const checkUpdates = useCallback(() => {
-    runPendingAction(CHECK_UPDATES_KEY, () => sendPackageCommand(socket, { type: "packages.checkUpdates" }))
+    runPendingAction(CHECK_UPDATES_KEY, () => sendCommandWithFeedback(socket, { type: "packages.checkUpdates" }))
   }, [socket])
 
   const updatePlugin = useCallback(
     (id: string) => {
-      runPendingAction(packageUpdateKey(id), () => sendPackageCommand(socket, { type: "packages.update", id }))
+      runPendingAction(packageUpdateKey(id), () => sendCommandWithFeedback(socket, { type: "packages.update", id }))
     },
     [socket],
   )

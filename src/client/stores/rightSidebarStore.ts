@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { isJsonObject, type JsonObject, type JsonValue } from "../../shared/json"
 import { asJsonValue } from "../lib/asJsonValue"
+import { omitKey, reconcileFlags } from "../lib/recordOps"
 
 export interface ProjectRightSidebarVisibilityState {
   isVisible: boolean
@@ -39,10 +40,12 @@ function clampSize(size: number) {
   return Math.max(RIGHT_SIDEBAR_MIN_SIZE_PERCENT, size)
 }
 
+export const DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE: ProjectRightSidebarVisibilityState = {
+  isVisible: false,
+}
+
 function createDefaultProjectVisibilityState(): ProjectRightSidebarVisibilityState {
-  return {
-    isVisible: false,
-  }
+  return { ...DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE }
 }
 
 function createDefaultProjectUiState(): ProjectRightSidebarUiState {
@@ -52,6 +55,17 @@ function createDefaultProjectUiState(): ProjectRightSidebarUiState {
     summary: "",
     description: "",
   }
+}
+
+function updateProjectUi(
+  state: RightSidebarState,
+  projectId: string,
+  update: (current: ProjectRightSidebarUiState) => ProjectRightSidebarUiState,
+): RightSidebarState | Pick<RightSidebarState, "projectUi"> {
+  const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
+  const next = update(current)
+  if (next === current) return state
+  return { projectUi: { ...state.projectUi, [projectId]: next } }
 }
 
 function getProjectVisibilityState(
@@ -130,101 +144,33 @@ export const useRightSidebarStore = create<RightSidebarState>()(
           },
         })),
       setSize: (size) => set({ size: clampSize(size) }),
-      reconcileCollapsedPaths: (projectId, paths) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        const nextCollapsedPaths = Object.fromEntries(paths.map((path) => [path, current.collapsedPaths[path] ?? true]))
-        if (
-          Object.keys(current.collapsedPaths).length === Object.keys(nextCollapsedPaths).length
-          && Object.entries(nextCollapsedPaths).every(([path, collapsed]) => current.collapsedPaths[path] === collapsed)
-        ) {
-          return state
-        }
-        return {
-          projectUi: {
-            ...state.projectUi,
-            [projectId]: {
-              ...current,
-              collapsedPaths: nextCollapsedPaths,
-            },
-          },
-        }
-      }),
-      toggleCollapsedPath: (projectId, path) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        return {
-          projectUi: {
-            ...state.projectUi,
-            [projectId]: {
-              ...current,
-              collapsedPaths: {
-                ...current.collapsedPaths,
-                [path]: !(current.collapsedPaths[path] ?? true),
-              },
-            },
-          },
-        }
-      }),
-      setViewMode: (projectId, viewMode) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        if (current.viewMode === viewMode) return state
-        return {
-          projectUi: {
-            ...state.projectUi,
-            [projectId]: {
-              ...current,
-              viewMode,
-            },
-          },
-        }
-      }),
-      setCommitDraft: (projectId, draft) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        if (current.summary === draft.summary && current.description === draft.description) return state
-        return {
-          projectUi: {
-            ...state.projectUi,
-            [projectId]: {
-              ...current,
-              summary: draft.summary,
-              description: draft.description,
-            },
-          },
-        }
-      }),
-      setCommitSummary: (projectId, summary) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        if (current.summary === summary) return state
-        return {
-          projectUi: { ...state.projectUi, [projectId]: { ...current, summary } },
-        }
-      }),
-      setCommitDescription: (projectId, description) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        if (current.description === description) return state
-        return {
-          projectUi: { ...state.projectUi, [projectId]: { ...current, description } },
-        }
-      }),
-      clearCommitDraft: (projectId) => set((state) => {
-        const current = state.projectUi[projectId] ?? createDefaultProjectUiState()
-        if (!current.summary && !current.description) return state
-        return {
-          projectUi: {
-            ...state.projectUi,
-            [projectId]: {
-              ...current,
-              summary: "",
-              description: "",
-            },
-          },
-        }
-      }),
+      reconcileCollapsedPaths: (projectId, paths) => set((state) => updateProjectUi(state, projectId, (current) => {
+        const collapsedPaths = reconcileFlags(current.collapsedPaths, paths, true)
+        return collapsedPaths === current.collapsedPaths ? current : { ...current, collapsedPaths }
+      })),
+      toggleCollapsedPath: (projectId, path) => set((state) => updateProjectUi(state, projectId, (current) => ({
+        ...current,
+        collapsedPaths: { ...current.collapsedPaths, [path]: !(current.collapsedPaths[path] ?? true) },
+      }))),
+      setViewMode: (projectId, viewMode) => set((state) => updateProjectUi(state, projectId, (current) => (
+        current.viewMode === viewMode ? current : { ...current, viewMode }
+      ))),
+      setCommitDraft: (projectId, draft) => set((state) => updateProjectUi(state, projectId, (current) => (
+        current.summary === draft.summary && current.description === draft.description
+          ? current
+          : { ...current, summary: draft.summary, description: draft.description }
+      ))),
+      setCommitSummary: (projectId, summary) => set((state) => updateProjectUi(state, projectId, (current) => (
+        current.summary === summary ? current : { ...current, summary }
+      ))),
+      setCommitDescription: (projectId, description) => set((state) => updateProjectUi(state, projectId, (current) => (
+        current.description === description ? current : { ...current, description }
+      ))),
+      clearCommitDraft: (projectId) => set((state) => updateProjectUi(state, projectId, (current) => (
+        !current.summary && !current.description ? current : { ...current, summary: "", description: "" }
+      ))),
       clearProject: (projectId) =>
-        set((state) => {
-          const { [projectId]: _removedLayout, ...restProjects } = state.projects
-          const { [projectId]: _removedUi, ...restProjectUi } = state.projectUi
-          return { projects: restProjects, projectUi: restProjectUi }
-        }),
+        set((state) => ({ projects: omitKey(state.projects, projectId), projectUi: omitKey(state.projectUi, projectId) })),
     }),
     {
       name: "right-sidebar-layouts",
@@ -233,13 +179,3 @@ export const useRightSidebarStore = create<RightSidebarState>()(
     }
   )
 )
-
-export const DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE: ProjectRightSidebarVisibilityState = {
-  isVisible: false,
-}
-
-export function getDefaultRightSidebarVisibilityState() {
-  return {
-    ...DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
-  }
-}

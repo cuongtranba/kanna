@@ -15,6 +15,7 @@ import type { JsonValue } from "../../../shared/json"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { usePreferencesStore } from "../../stores/preferences"
 import { runDetached } from "../../lib/runDetached"
+import { errorMessage } from "../../../shared/errors"
 
 export interface TerminalPanePorts {
   dom?: DomPort
@@ -286,7 +287,7 @@ function TerminalPaneInner({
       terminalId,
       data,
     }).catch((commandError) => {
-      storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
+      storeSetError(errorMessage(commandError))
     })
     if (data.includes("\r") || data.includes("\n")) {
       onCommandSentRef.current?.()
@@ -444,7 +445,7 @@ function TerminalPaneInner({
       type: "terminal.close",
       terminalId,
     }).catch((commandError) => {
-      storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
+      storeSetError(errorMessage(commandError))
     })
   }, [clearVersion, socket, terminalId, resetTerminal, storeSetError])
 
@@ -509,7 +510,7 @@ function TerminalPaneInner({
         applySnapshot(snapshot)
         scheduleResizeSync()
       }).catch((commandError) => {
-        storeSetError(commandError instanceof Error ? commandError.message : String(commandError))
+        storeSetError(errorMessage(commandError))
       })
     }
 

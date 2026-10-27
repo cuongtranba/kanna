@@ -3,9 +3,10 @@ import { Link } from "react-router-dom"
 import { CalendarClock, ExternalLink } from "lucide-react"
 import { useCronJobsStore } from "../stores/cronJobsStore"
 import type { CronJobsGlobalRow } from "../../shared/cron/types"
-import { getPathBasename } from "../lib/formatters"
+import { fileNameOfPath } from "../lib/pathUtils"
 import { SHELL_PAGE_SCROLL_CLASS } from "../lib/shellChrome"
 import { CronJobRow } from "./CronJobRow"
+import { chatPath } from "../lib/paneTree"
 
 export function CronJobsPage() {
   const rows = useCronJobsStore((s) => s.rows)
@@ -38,7 +39,7 @@ export function CronJobsPage() {
             {groups.map((group) => (
               <div key={group.projectPath} className="rounded-2xl border border-border overflow-hidden">
                 <h2 className="border-b border-border bg-card p-3 px-4 text-sm font-medium text-foreground">
-                  {getPathBasename(group.projectPath)}
+                  {fileNameOfPath(group.projectPath)}
                   <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">{group.projectPath}</span>
                 </h2>
                 <div>
@@ -50,7 +51,7 @@ export function CronJobsPage() {
                       divider={index < group.rows.length - 1}
                       trailing={
                         <Link
-                          to={`/chat/${row.chatId}`}
+                          to={chatPath(row.chatId)}
                           className="inline-flex items-center gap-1 text-primary hover:underline"
                         >
                           <ExternalLink className="h-3 w-3" aria-hidden="true" />

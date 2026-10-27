@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { InboxActivityItem, InboxFilter, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
 import { EMPTY_FILTER, type InboxTabId } from "../lib/inboxFilter"
+import { omitKeyOrEmpty } from "../lib/recordOps"
 
 const EMPTY_THREADS: readonly InboxThread[] = []
 const EMPTY_ITEMS: readonly InboxActivityItem[] = []
@@ -94,8 +95,7 @@ export const useInboxStore = create<InboxState>()((set) => ({
   toggleRaw: (messageId) =>
     set((state) => {
       if (state.rawOpen[messageId]) {
-        const rest = Object.fromEntries(Object.entries(state.rawOpen).filter(([id]) => id !== messageId))
-        return { rawOpen: Object.keys(rest).length > 0 ? rest : NO_RAW_OPEN }
+        return { rawOpen: omitKeyOrEmpty(state.rawOpen, messageId, NO_RAW_OPEN) }
       }
       return { rawOpen: { ...state.rawOpen, [messageId]: true } }
     }),

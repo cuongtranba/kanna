@@ -44,8 +44,8 @@ import { BoardPane } from "../../components/boards/BoardPane"
 import { ChatTabContent } from "./ChatTabContent"
 import { gitInitializeKey, projectOpenExternalKey } from "./utils"
 import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
 import { errorMessage, onRejected } from "../../../shared/errors"
+import { reportCommandFailure } from "../../lib/commandFeedback"
 
 export {
   getIgnoreFolderEntryFromDiffPath,
@@ -318,7 +318,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
         (confirmed) => {
           if (confirmed) runPendingAction(gitInitializeKey(projectId), initializeGitAndOpen)
         },
-        onRejected((error) => useKannaStateStore.getState().setCommandError(error.message)),
+        onRejected(reportCommandFailure),
       )
       return
     }
@@ -333,7 +333,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
       try {
         await socket.command({ type: "terminal.close", terminalId })
       } catch (error) {
-        useKannaStateStore.getState().setCommandError(`Failed to close terminal: ${errorMessage(error)}`)
+        reportCommandFailure(new Error(`Failed to close terminal: ${errorMessage(error)}`))
       }
     })
     removeTerminal(currentProjectId, terminalId)

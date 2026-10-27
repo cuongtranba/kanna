@@ -7,7 +7,7 @@ import { draftToStream, lowersLimits, problemsOf, recreateFields, sameStream, st
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
-import { errorMessage } from "../../shared/errors"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
 
@@ -45,15 +45,10 @@ export function ServiceBusStreamGroup({ state }: { state: Pick<KannaState, "hand
   const lowers = lowersLimits(settings.stream, next)
   const edit = (patch: Partial<typeof draft>) => editStream(saved, patch)
 
-  const save = useCallback(async () => {
-    setError(null)
-    try {
-      await state.handleWriteAppSettings({ serviceBus: { stream: draftToStream(draft) } })
-      discardStream()
-    } catch (caught) {
-      setError(errorMessage(caught))
-    }
-  }, [state, draft, discardStream, setError])
+  const save = useCallback(() => surfaceErrorIn(setError, async () => {
+    await state.handleWriteAppSettings({ serviceBus: { stream: draftToStream(draft) } })
+    discardStream()
+  }), [state, draft, discardStream, setError])
 
   return (
     <details className="rounded-lg border border-border">

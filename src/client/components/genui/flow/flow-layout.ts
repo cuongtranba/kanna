@@ -1,6 +1,7 @@
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api"
 import type { FlowDiagramProps, FlowEdge, FlowNode } from "../../../../shared/genui"
 import { domAdapter } from "../../../adapters/dom.adapter"
+import { fileNameOfPath } from "../../../lib/pathUtils"
 
 export type FlowDirection = "LR" | "TB"
 
@@ -67,7 +68,7 @@ function textWidth(text: string, font: string, perChar: number): number {
 }
 
 function fileName(path: string, line: number | undefined): string {
-  const name = path.split("/").pop() ?? path
+  const name = fileNameOfPath(path)
   return line ? `${name}:${line}` : name
 }
 

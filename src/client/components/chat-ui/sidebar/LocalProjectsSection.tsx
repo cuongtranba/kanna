@@ -28,7 +28,7 @@ import { AnimatePresence, MotionReveal } from "../../ui/motion-reveal"
 import { MOTION_DURATION } from "../../../lib/motion"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { APP_NAME } from "../../../../shared/branding"
-import { getPathBasename } from "../../../lib/formatters"
+import { fileNameOfPath } from "../../../lib/pathUtils"
 import { cn } from "../../../lib/utils"
 import { ProjectSectionMenu } from "./Menus"
 import { InstructionsDialog } from "./InstructionsDialog"
@@ -289,7 +289,7 @@ const SortableProjectGroup = memo(({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
-              {getPathBasename(localPath)}
+              {fileNameOfPath(localPath)}
             </span>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={4}>
@@ -384,7 +384,7 @@ const SortableProjectGroup = memo(({
         <InstructionsDialog
           open={instructionsOpen}
           onOpenChange={handleInstructionsOpenChange}
-          title={getPathBasename(localPath)}
+          title={fileNameOfPath(localPath)}
           description="Conventions for this project. Every chat that can write it — including a stack chat rooted elsewhere — is told these."
           initialValue={group.instructions ?? ""}
           onSave={handleSaveInstructions}

@@ -6,7 +6,6 @@ import {
   filterSessions,
   isMacUserAgent,
   scoreMatch,
-  shortenHomePath,
   shouldToggleQuickSwitcher,
   toQuickSwitcherProjects,
   toQuickSwitcherSessions,
@@ -238,20 +237,6 @@ describe("shouldToggleQuickSwitcher", () => {
     } finally {
       textarea.remove()
     }
-  })
-})
-
-describe("shortenHomePath", () => {
-  test("replaces the home directory with a tilde", () => {
-    expect(shortenHomePath("/home/dev/kanna", "/home/dev")).toBe("~/kanna")
-  })
-
-  test("leaves a path outside the home directory alone", () => {
-    expect(shortenHomePath("/srv/app", "/home/dev")).toBe("/srv/app")
-  })
-
-  test("does not shorten a sibling directory that merely shares a prefix", () => {
-    expect(shortenHomePath("/home/developer/app", "/home/dev")).toBe("/home/developer/app")
   })
 })
 

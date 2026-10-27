@@ -95,6 +95,7 @@ import type { DomPort } from "../../ports/domPort"
 import type { CommandPort } from "../../ports/commandPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { useOptionalKannaSocket } from "../../app/KannaSocketProvider"
+import { errorMessage } from "../../../shared/errors"
 
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
@@ -621,7 +622,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                 : a,
             ),
           )
-          setUploadError(error instanceof Error ? error.message : String(error))
+          setUploadError(errorMessage(error))
         } finally {
           activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1)
           processUploadQueueRef.current?.()

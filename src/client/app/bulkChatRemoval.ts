@@ -1,6 +1,6 @@
 import { useCallback } from "react"
 import type { SidebarData } from "../../shared/types"
-import { useKannaStateStore } from "../stores/kannaStateStore"
+import { surfaceCommandError } from "../lib/commandFeedback"
 import type { ChatNavigatorPort } from "./chatNavigator"
 import type { KannaSocket } from "./socket"
 
@@ -23,7 +23,7 @@ export function useBulkArchiveChats(
 ) {
   return useCallback(async (chatIds: string[]) => {
     if (!chatIds.length) return
-    try {
+    await surfaceCommandError(async () => {
       for (const chatId of chatIds) {
         await socket.command({ type: "chat.archive", chatId })
       }
@@ -35,9 +35,6 @@ export function useBulkArchiveChats(
           chatNavigator.closeChat()
         }
       }
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 }

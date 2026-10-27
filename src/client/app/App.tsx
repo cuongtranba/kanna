@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Input } from "../components/ui/input"
 import { TooltipProvider } from "../components/ui/tooltip"
 import { Toaster } from "../components/ui/toaster"
-import { APP_NAME, SDK_CLIENT_APP } from "../../shared/branding"
+import { APP_NAME, APP_VERSION } from "../../shared/branding"
 import type { ChatSoundPreference } from "../stores/chatSoundPreferencesStore"
 import { selectChatSoundId, selectChatSoundPreference, useAppSettingsStore } from "../stores/appSettingsStore"
 import { usePluginContributions } from "../plugins/usePluginContributions"
@@ -47,10 +47,11 @@ import type { StoragePort } from "../ports/storagePort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { localStorageAdapter } from "../adapters/storage.adapter"
-import { fetchAuthStatus, postAuthLogin } from "../api/auth"
+import { fetchAuthStatus, postAuthLogin, type AuthStatusResponse } from "../api/auth"
 import { runDetached } from "../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { createChatKey, openProjectKey } from "../components/chat-ui/sidebar/sidebarPendingActions"
+import { chatPath, CHAT_ROUTE_PATTERN } from "../lib/paneTree"
 
 const drawerVisual = createDrawerVisual()
 
@@ -70,11 +71,6 @@ export interface AppPorts {
   storage?: StoragePort
 }
 
-interface AuthStatusResponse {
-  enabled: boolean
-  authenticated: boolean
-}
-
 type AppAuthState =
   | { status: "checking" }
   | { status: "ready" }
@@ -86,10 +82,6 @@ export function getAppAuthStateFromStatus(payload: Partial<AuthStatusResponse>):
   }
 
   return { status: "locked", error: null }
-}
-
-export function shouldRetryAuthStatusRequest(responseOk: boolean | null) {
-  return responseOk !== true
 }
 
 function PasswordScreenInner({
@@ -196,25 +188,15 @@ function useAppAuthState(ports: AppPorts = {}) {
     const { authStatus: current, setAuthStatus } = useAppShellStore.getState()
     setAuthStatus(current.status === "ready" ? current : { status: "checking" })
 
-    let payload: Partial<AuthStatusResponse>
-    try {
-      payload = await fetchAuthStatus()
-    } catch {
+    const result = await fetchAuthStatus()
+    if (result.kind === "retry") {
       retryTimeoutRef.current = timer.setTimeout(() => {
         runDetached("auth status retry", refreshRef.current())
       }, AUTH_STATUS_RETRY_DELAY_MS)
       return
     }
 
-    const responseOk = Object.keys(payload).length > 0 ? true : null
-    if (shouldRetryAuthStatusRequest(responseOk)) {
-      retryTimeoutRef.current = timer.setTimeout(() => {
-        runDetached("auth status retry", refreshRef.current())
-      }, AUTH_STATUS_RETRY_DELAY_MS)
-      return
-    }
-
-    useAppShellStore.getState().setAuthStatus(getAppAuthStateFromStatus(payload))
+    useAppShellStore.getState().setAuthStatus(getAppAuthStateFromStatus(result.status))
   }, [timer])
 
   useLayoutEffect(() => {
@@ -279,7 +261,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const chatSoundId = useAppSettingsStore(selectChatSoundId)
   const appSettings = useAppSettingsStore((s) => s.settings)
   const showMobileOpenButton = location.pathname === "/"
-  const currentVersion = SDK_CLIENT_APP.split("/")[1] ?? "unknown"
+  const currentVersion = APP_VERSION
   const viewportWidth = useViewportStore((viewport) => viewport.width)
   const mobileSidebarModalOpen = state.sidebarOpen && isMobileViewport(viewportWidth)
   const isSpawningChat = useNewSessionStore(selectIsAnySpawning)
@@ -346,7 +328,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
           description: failures.map((f) => `${f.sessionId}: ${f.error}`).join("\n"),
         })
       }
-      if (firstChat?.chatId) navigate(`/chat/${firstChat.chatId}`)
+      if (firstChat?.chatId) navigate(chatPath(firstChat.chatId))
     } catch (error) {
       log.error("[kanna/import] failed", String(error))
       await dialog.alert({ title: "Import failed", description: "See console for details." })
@@ -358,7 +340,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
   const handleSidebarEditPermissions = useCallback((chatId: string) => {
     setPermissionsChatId(chatId)
     if (state.activeChatId !== chatId) {
-      navigate(`/chat/${chatId}`)
+      navigate(chatPath(chatId))
     }
   }, [navigate, setPermissionsChatId, state.activeChatId])
   const policyApplyKey = pendingActionKey("chat.setPolicyOverride", permissionsChatId ?? "")
@@ -377,7 +359,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
 
   useQuickSwitcherHotkey(state.keybindings, dom)
   const handleQuickSwitcherOpenChat = useCallback((chatId: string) => {
-    navigate(`/chat/${chatId}`)
+    navigate(chatPath(chatId))
   }, [navigate])
   const handleQuickSwitcherCreateChat = useCallback((projectId: string) => {
     runPendingAction(createChatKey(projectId), () => handleCreateChat(projectId))
@@ -602,7 +584,7 @@ function AuthedApp() {
           <Route path="/" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:sectionId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
-          <Route path="/chat/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
+          <Route path={CHAT_ROUTE_PATTERN} element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/workflows/:chatId" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/cron" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />
           <Route path="/webhooks" element={<DeferredRoute><WorkspacePage /></DeferredRoute>} />

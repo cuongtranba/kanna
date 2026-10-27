@@ -2,6 +2,7 @@ import {
   type SessionTotals,
   formatContextWindowTokens,
   formatCostUsd,
+  formatPercentage,
 } from "../../lib/contextWindow"
 import { cn } from "../../lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover"
@@ -16,7 +17,7 @@ export function SessionTokenPill({ totals, className }: SessionTokenPillProps) {
 
   const cacheLabel = totals.cacheHitPercentage === null
     ? null
-    : formatCachePercentage(totals.cacheHitPercentage)
+    : formatPercentage(Math.max(0, Math.min(100, totals.cacheHitPercentage)))
 
   const hasCost = totals.costUsd > 0
   const costLabel = hasCost ? formatCostUsd(totals.costUsd) : null
@@ -90,14 +91,6 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="font-medium tabular-nums text-foreground">{value}</span>
     </div>
   )
-}
-
-function formatCachePercentage(value: number): string {
-  const clamped = Math.max(0, Math.min(100, value))
-  if (clamped < 10) {
-    return `${clamped.toFixed(1).replace(/\.0$/, "")}%`
-  }
-  return `${Math.round(clamped)}%`
 }
 
 function buildAriaLabel(

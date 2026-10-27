@@ -11,6 +11,7 @@ import {
   parseKeybindingInput,
 } from "../lib/keybindings"
 import { handleTextInputKeyDown } from "../lib/settings-input"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
 import type { KannaState } from "./useKannaState"
@@ -105,15 +106,12 @@ export function KeybindingsSection({ state }: { state: KannaState }) {
   }, [resolvedKeybindings, setKeybindingDrafts])
 
   async function writeKeybindings(drafts: Record<string, string>) {
-    try {
-      setKeybindingsError(null)
+    await surfaceErrorIn(setKeybindingsError, async () => {
       await state.socket.command({
         type: "settings.writeKeybindings",
         bindings: buildKeybindingPayload(drafts),
       })
-    } catch (error) {
-      setKeybindingsError(error instanceof Error ? error.message : "Unable to save keybindings.")
-    }
+    })
   }
 
   async function commitKeybindings() {

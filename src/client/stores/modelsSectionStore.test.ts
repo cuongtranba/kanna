@@ -8,7 +8,7 @@ beforeEach(() => {
 
 describe("modelsSectionStore", () => {
   test("resetEditorForm seeds the draft and clears submit state", () => {
-    useModelsSectionStore.getState().patchEditorForm({ submitting: true, error: "stale" })
+    useModelsSectionStore.getState().patchEditorForm({ label: "stale", error: "stale" })
     useModelsSectionStore.getState().resetEditorForm({ id: "gpt-5.5", label: "GPT-5.5", modelProvider: "codex", supportedEfforts: [], offersOneMillionContext: false })
 
     expect(useModelsSectionStore.getState().editorForm).toEqual({
@@ -17,7 +17,6 @@ describe("modelsSectionStore", () => {
       modelProvider: "codex",
       supportedEfforts: [],
       offersOneMillionContext: false,
-      submitting: false,
       error: null,
     })
   })
@@ -34,12 +33,12 @@ describe("modelsSectionStore", () => {
   })
 
   test("patchEditorForm applies every key of a multi-field patch at once", () => {
-    useModelsSectionStore.getState().patchEditorForm({ submitting: true, error: null })
-    expect(useModelsSectionStore.getState().editorForm.submitting).toBe(true)
+    useModelsSectionStore.getState().patchEditorForm({ label: "first", error: null })
+    expect(useModelsSectionStore.getState().editorForm.label).toBe("first")
 
-    useModelsSectionStore.getState().patchEditorForm({ submitting: false, error: "boom" })
+    useModelsSectionStore.getState().patchEditorForm({ label: "second", error: "boom" })
     const form = useModelsSectionStore.getState().editorForm
-    expect(form.submitting).toBe(false)
+    expect(form.label).toBe("second")
     expect(form.error).toBe("boom")
   })
 

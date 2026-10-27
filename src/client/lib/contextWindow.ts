@@ -145,3 +145,10 @@ export function formatContextWindowTokens(value: number | null | undefined): str
   }
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`
 }
+
+export function formatPercentage(value: number): string {
+  if (value < 10) {
+    return `${value.toFixed(1).replace(/\.0$/, "")}%`
+  }
+  return `${Math.round(value)}%`
+}

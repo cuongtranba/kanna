@@ -8,7 +8,6 @@ export type SnippetEditingState =
 export interface SnippetEditorFormState {
   shortcut: string
   expansion: string
-  submitting: boolean
   error: string | null
 }
 
@@ -19,7 +18,6 @@ function createEditorFormFromInitial(
   return {
     shortcut,
     expansion,
-    submitting: false,
     error: null,
   }
 }

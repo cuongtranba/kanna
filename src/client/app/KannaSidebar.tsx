@@ -14,7 +14,7 @@ import { HoverHint } from "../components/ui/truncated-text"
 import { SidebarUtilityNav } from "./SidebarUtilityNav"
 import { usePluginContributionsStore, selectPluginSidebarItems } from "../stores/pluginContributionsStore"
 import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
-import { getPathBasename } from "../lib/formatters"
+import { fileNameOfPath } from "../lib/pathUtils"
 import { cn, normalizeChatId } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow, type SelectionGesture } from "../components/chat-ui/sidebar/ChatRow"
@@ -55,6 +55,7 @@ import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { isMobileViewport } from "../lib/viewport"
+import { chatPath } from "../lib/paneTree"
 
 export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
 
@@ -288,7 +289,7 @@ function KannaSidebarImpl({
   )
 
   const stackProjects = useMemo(
-    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: getPathBasename(group.localPath) })),
+    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: fileNameOfPath(group.localPath) })),
     [data.projectGroups]
   )
 
@@ -435,7 +436,7 @@ function KannaSidebarImpl({
         shortcutHint={visibleIndex ? getSidebarNumberJumpHint(resolvedKeybindings, visibleIndex) : null}
         showShortcutHint={showNumberJumpHints}
         onSelectChat={(chatId) => {
-          navigate(`/chat/${chatId}`)
+          navigate(chatPath(chatId))
           onClose()
         }}
         onRenameChat={() => onRenameChat(chat)}
@@ -512,7 +513,7 @@ function KannaSidebarImpl({
 
       event.preventDefault()
       useComposerFocusStore.getState().requestComposerFocus(targetChat.chatId)
-      navigate(`/chat/${targetChat.chatId}`)
+      navigate(chatPath(targetChat.chatId))
       onClose()
     }
 

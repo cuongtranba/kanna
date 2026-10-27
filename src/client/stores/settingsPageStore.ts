@@ -16,7 +16,6 @@ const EMPTY_KEYBINDING_DRAFTS: Record<string, string> = {}
 const EMPTY_INSTALL_MESSAGES: Record<string, string> = {}
 
 interface SettingsPageState {
-  changelogPendingAction: string | null
 
   skillQuery: string
   skillResults: SkillSearchResult[]
@@ -27,8 +26,6 @@ interface SettingsPageState {
   installedLoading: boolean
   installedError: string | null
   skillOperationError: string | null
-  installingSkillId: string | null
-  uninstallingSkillId: string | null
   installMessages: Record<string, string>
   packageUpdateSnapshot: PackageUpdateSnapshot | null
 
@@ -38,11 +35,9 @@ interface SettingsPageState {
 
   globalInstructionsDraft: string
   globalInstructionsPersistedAtMount: string
-  globalInstructionsSaving: boolean
   globalInstructionsError: string | null
 
   changelogStatus: ChangelogStatus
-  signingOut: boolean
   authEnabled: boolean
   releases: GithubRelease[]
   changelogError: string | null
@@ -70,7 +65,6 @@ interface SettingsPageState {
   llmValidationError: JsonValue | null
   llmValidationDialogOpen: boolean
 
-  setChangelogPendingAction: (action: string | null) => void
 
   setSkillQuery: (query: string) => void
   setSkillResults: (results: SkillSearchResult[]) => void
@@ -83,8 +77,6 @@ interface SettingsPageState {
   setInstalledLoading: (loading: boolean) => void
   setInstalledError: (error: string | null) => void
   setSkillOperationError: (error: string | null) => void
-  setInstallingSkillId: (id: string | null) => void
-  setUninstallingSkillId: (id: string | null) => void
   setInstallMessages: (messages: Record<string, string>) => void
   setInstallMessage: (skillId: string, message: string) => void
   clearInstallMessage: (skillId: string) => void
@@ -97,11 +89,9 @@ interface SettingsPageState {
 
   setGlobalInstructionsDraft: (draft: string) => void
   setGlobalInstructionsPersistedAtMount: (value: string) => void
-  setGlobalInstructionsSaving: (saving: boolean) => void
   setGlobalInstructionsError: (error: string | null) => void
 
   setChangelogStatus: (status: ChangelogStatus) => void
-  setSigningOut: (signingOut: boolean) => void
   setAuthEnabled: (enabled: boolean) => void
   setReleases: (releases: GithubRelease[]) => void
   setChangelogError: (error: string | null) => void
@@ -132,7 +122,6 @@ interface SettingsPageState {
 }
 
 export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
-  changelogPendingAction: null,
 
   skillQuery: "",
   skillResults: EMPTY_SKILL_RESULTS,
@@ -143,8 +132,6 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   installedLoading: false,
   installedError: null,
   skillOperationError: null,
-  installingSkillId: null,
-  uninstallingSkillId: null,
   installMessages: EMPTY_INSTALL_MESSAGES,
   packageUpdateSnapshot: null,
 
@@ -154,11 +141,9 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
 
   globalInstructionsDraft: "",
   globalInstructionsPersistedAtMount: "",
-  globalInstructionsSaving: false,
   globalInstructionsError: null,
 
   changelogStatus: "idle",
-  signingOut: false,
   authEnabled: false,
   releases: EMPTY_RELEASES,
   changelogError: null,
@@ -191,7 +176,6 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   llmValidationError: null,
   llmValidationDialogOpen: false,
 
-  setChangelogPendingAction: (action) => set({ changelogPendingAction: action }),
 
   setSkillQuery: (query) => set({ skillQuery: query }),
   setSkillResults: (results) => set({ skillResults: results }),
@@ -214,8 +198,6 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
   setInstalledLoading: (loading) => set({ installedLoading: loading }),
   setInstalledError: (error) => set({ installedError: error }),
   setSkillOperationError: (error) => set({ skillOperationError: error }),
-  setInstallingSkillId: (id) => set({ installingSkillId: id }),
-  setUninstallingSkillId: (id) => set({ uninstallingSkillId: id }),
   setInstallMessages: (messages) => set({ installMessages: messages }),
   setInstallMessage: (skillId, message) => {
     const current = get().installMessages
@@ -245,11 +227,9 @@ export const useSettingsPageStore = create<SettingsPageState>()((set, get) => ({
 
   setGlobalInstructionsDraft: (draft) => set({ globalInstructionsDraft: draft }),
   setGlobalInstructionsPersistedAtMount: (value) => set({ globalInstructionsPersistedAtMount: value }),
-  setGlobalInstructionsSaving: (saving) => set({ globalInstructionsSaving: saving }),
   setGlobalInstructionsError: (error) => set({ globalInstructionsError: error }),
 
   setChangelogStatus: (status) => set({ changelogStatus: status }),
-  setSigningOut: (signingOut) => set({ signingOut }),
   setAuthEnabled: (enabled) => set({ authEnabled: enabled }),
   setReleases: (releases) => set({ releases }),
   setChangelogError: (error) => set({ changelogError: error }),

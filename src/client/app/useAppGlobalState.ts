@@ -35,8 +35,9 @@ import { gitSnapshotKey, useKannaStateStore } from "../stores/kannaStateStore"
 import { usePaneLayoutStore } from "../stores/paneLayoutStore"
 import { collectPanes } from "../lib/paneTree"
 import { useSlashCommandsStore } from "../stores/slashCommandsStore"
-import { onRejected } from "../../shared/errors"
-import { getPathBasename } from "../lib/formatters"
+import { errorMessage, onRejected } from "../../shared/errors"
+import { reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
+import { fileNameOfPath } from "../lib/pathUtils"
 import { forgetDeletedLocally } from "./forgetDeletedLocally"
 import { getNewestRemainingChatId, useBulkArchiveChats } from "./bulkChatRemoval"
 import { runDetached } from "../lib/runDetached"
@@ -49,7 +50,6 @@ import type { ClipboardPort } from "../ports/clipboardPort"
 import { postAuthLogout, fetchAuthStatus } from "../api/auth"
 import type { KannaSocket, SocketStatus } from "./socket"
 import { useStackCommands, type StackCommands } from "./useStackCommands"
-import { useToggleChatPin } from "./useToggleChatPin"
 import { sameDiffs, shouldPreserveExistingProjectDiffs, UpdateRestartRuntime } from "./appRuntime"
 import type { OpenLocalLinkTarget } from "../components/messages/shared"
 import { HTTP_ROUTES } from "../../shared/http-routes"
@@ -405,10 +405,7 @@ export function useAppGlobalState(
         },
       },
       {
-        isServerReady: async () => {
-          const result = await fetchAuthStatus()
-          return Object.keys(result).length > 0
-        },
+        isServerReady: async () => (await fetchAuthStatus()).kind === "ok",
       },
     )
     updateRestartRuntimeRef.current = rt
@@ -614,9 +611,7 @@ export function useAppGlobalState(
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
-    void socket.command({ type: "update.check", force: true }).catch((error) => {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    })
+    void socket.command({ type: "update.check", force: true }).catch(onRejected(reportCommandFailure))
   }, [connectionStatus, socket])
 
 
@@ -624,9 +619,7 @@ export function useAppGlobalState(
     function handleWindowFocus() {
       if (!updateSnapshot?.lastCheckedAt) return
       if (Date.now() - updateSnapshot.lastCheckedAt <= 60 * 60 * 1000) return
-      void socket.command({ type: "update.check" }).catch((error) => {
-        useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      })
+      void socket.command({ type: "update.check" }).catch(onRejected(reportCommandFailure))
     }
 
     return dom.addWindowListener("focus", handleWindowFocus)
@@ -648,25 +641,18 @@ export function useAppGlobalState(
 
 
   const handleReadAppSettings = useCallback(async () => {
-    try {
-      useAppSettingsStore.getState().setHydrationStatus("loading")
-      const snapshot = await socket.command({ type: "settings.readAppSettings" })
+    useAppSettingsStore.getState().setHydrationStatus("loading")
+    const snapshot = await surfaceCommandError(() => socket.command({ type: "settings.readAppSettings" }))
+    if (snapshot) {
       applyAppSettingsSnapshot(snapshot)
-    } catch (error) {
+    } else {
       useAppSettingsStore.getState().setHydrationStatus("error")
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [socket])
 
   const handleReadLlmProvider = useCallback(async () => {
-    try {
-      const snapshot = await socket.command({ type: "settings.readLlmProvider" })
-      const store = useKannaStateStore.getState()
-      store.setLlmProvider(snapshot)
-      store.setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    const snapshot = await surfaceCommandError(() => socket.command({ type: "settings.readLlmProvider" }))
+    if (snapshot) useKannaStateStore.getState().setLlmProvider(snapshot)
   }, [socket])
 
   useEffect(() => {
@@ -689,20 +675,20 @@ export function useAppGlobalState(
       }))
   }, [connectionStatus, socket])
 
-  const handleWriteAppSettings = useCallback(async (patch: AppSettingsPatch) => {
+  const writeAppSettings = useCallback(async (optimistic: AppSettingsPatch, send: () => Promise<AppSettingsSnapshot>) => {
     try {
-      useAppSettingsStore.getState().applyOptimisticPatch(patch)
-      const snapshot = await socket.command({
-        type: "settings.writeAppSettingsPatch",
-        patch,
-      })
-      applyAppSettingsSnapshot(snapshot)
+      useAppSettingsStore.getState().applyOptimisticPatch(optimistic)
+      applyAppSettingsSnapshot(await withCommandFeedback(send))
     } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
       await handleReadAppSettings()
       throw error
     }
-  }, [handleReadAppSettings, socket])
+  }, [handleReadAppSettings])
+
+  const handleWriteAppSettings = useCallback(
+    (patch: AppSettingsPatch) => writeAppSettings(patch, () => socket.command({ type: "settings.writeAppSettingsPatch", patch })),
+    [socket, writeAppSettings],
+  )
 
   useEffect(() => {
     if (connectionStatus !== "connected") return
@@ -731,20 +717,14 @@ export function useAppGlobalState(
 
 
   const handleTestMcpServer = useCallback(async (id: string) => {
-    try {
-      await socket.command({ type: "settings.testMcpServer", id })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      throw error
-    }
+    await withCommandFeedback(() => socket.command({ type: "settings.testMcpServer", id }))
   }, [socket])
 
   const handleMintBeaconPairingCode = useCallback(async (): Promise<BeaconMintResult> => {
     try {
       return await socket.command({ type: "beacons.mintPairingCode" })
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      return { ok: false, error: errorMessage(error) }
     }
   }, [socket])
 
@@ -752,80 +732,45 @@ export function useAppGlobalState(
     try {
       return await socket.command({ type: "beacons.update", beaconId })
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      return { ok: false, error: errorMessage(error) }
     }
   }, [socket])
 
   const handleStartMcpOAuth = useCallback(async (id: string) => {
     try {
-      const result = await socket.command({
-        type: "settings.startMcpOAuth",
-        id,
-      })
-      useKannaStateStore.getState().setCommandError(null)
-      return result
+      return await withCommandFeedback(() => socket.command({ type: "settings.startMcpOAuth", id }))
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      useKannaStateStore.getState().setCommandError(msg)
-      return { ok: false, error: msg }
+      return { ok: false, error: errorMessage(error) }
     }
   }, [socket])
 
   const handleCompleteMcpOAuth = useCallback(async (id: string, callbackUrl: string) => {
     try {
-      const result = await socket.command({
-        type: "settings.completeMcpOAuth",
-        id,
-        callbackUrl,
-      })
-      useKannaStateStore.getState().setCommandError(null)
-      return result
+      return await withCommandFeedback(() => socket.command({ type: "settings.completeMcpOAuth", id, callbackUrl }))
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      useKannaStateStore.getState().setCommandError(msg)
-      return { ok: false, error: msg }
+      return { ok: false, error: errorMessage(error) }
     }
   }, [socket])
 
   const handleSetChatPolicyOverride = useCallback(async (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => {
-    try {
-      await socket.command({ type: "chat.setPolicyOverride", chatId, policyOverride })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      throw error
-    }
+    await withCommandFeedback(() => socket.command({ type: "chat.setPolicyOverride", chatId, policyOverride }))
   }, [socket])
 
-  const handleWriteCloudflareTunnel = useCallback(async (patch: Partial<CloudflareTunnelSettings>) => {
-    try {
-      useAppSettingsStore.getState().applyOptimisticPatch({ cloudflareTunnel: patch })
-      const snapshot = await socket.command({
-        type: "appSettings.setCloudflareTunnel",
-        patch,
-      })
-      applyAppSettingsSnapshot(snapshot)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      await handleReadAppSettings()
-      throw error
-    }
-  }, [handleReadAppSettings, socket])
+  const handleWriteCloudflareTunnel = useCallback(
+    (patch: Partial<CloudflareTunnelSettings>) => writeAppSettings(
+      { cloudflareTunnel: patch },
+      () => socket.command({ type: "appSettings.setCloudflareTunnel", patch }),
+    ),
+    [socket, writeAppSettings],
+  )
 
-  const handleWriteClaudeAuth = useCallback(async (patch: Partial<ClaudeAuthSettings>) => {
-    try {
-      useAppSettingsStore.getState().applyOptimisticPatch({ claudeAuth: patch })
-      const snapshot = await socket.command({
-        type: "appSettings.setClaudeAuth",
-        patch,
-      })
-      applyAppSettingsSnapshot(snapshot)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      await handleReadAppSettings()
-      throw error
-    }
-  }, [handleReadAppSettings, socket])
+  const handleWriteClaudeAuth = useCallback(
+    (patch: Partial<ClaudeAuthSettings>) => writeAppSettings(
+      { claudeAuth: patch },
+      () => socket.command({ type: "appSettings.setClaudeAuth", patch }),
+    ),
+    [socket, writeAppSettings],
+  )
 
   const handleTestOAuthToken = useCallback(async (token: string, baseUrl?: string) => {
     return await socket.command({
@@ -838,21 +783,14 @@ export function useAppGlobalState(
   const handleWriteLlmProvider = useCallback(async (
     value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">
   ) => {
-    try {
-      const snapshot = await socket.command({
-        type: "settings.writeLlmProvider",
-        provider: value.provider,
-        apiKey: value.apiKey,
-        model: value.model,
-        baseUrl: value.baseUrl,
-      })
-      const store = useKannaStateStore.getState()
-      store.setLlmProvider(snapshot)
-      store.setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      throw error
-    }
+    const snapshot = await withCommandFeedback(() => socket.command({
+      type: "settings.writeLlmProvider",
+      provider: value.provider,
+      apiKey: value.apiKey,
+      model: value.model,
+      baseUrl: value.baseUrl,
+    }))
+    useKannaStateStore.getState().setLlmProvider(snapshot)
   }, [socket])
 
   const handleValidateLlmProvider = useCallback(async (
@@ -868,77 +806,53 @@ export function useAppGlobalState(
   }, [socket])
 
   const handleSignOut = useCallback(async () => {
-    try {
+    await surfaceCommandError(async () => {
       await postAuthLogout()
-      useKannaStateStore.getState().setCommandError(null)
       dom.reload()
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [dom])
 
 
   const handleCheckForUpdates = useCallback(async (options?: { force?: boolean }) => {
-    try {
-      await socket.command({ type: "update.check", force: options?.force })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({ type: "update.check", force: options?.force }))
   }, [socket])
 
   const handleInstallUpdate = useCallback(async (version?: string) => {
     markUiRestartPhase("awaiting_disconnect")
-    try {
-      const result = await socket.command({ type: "update.install", version })
-      if (!result.ok) {
-        clearUiRestartPhase()
-        useKannaStateStore.getState().setCommandError(null)
-        await dialog.alert({
-          title: result.userTitle ?? "Update failed",
-          description: result.userMessage ?? "Kanna could not install the update. Try again later.",
-          closeLabel: "OK",
-        })
-        return
-      }
-
-      if (result.ok && result.action === "reload") {
-        dom.reload()
-        return
-      }
-
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
+    const result = await surfaceCommandError(() => socket.command({ type: "update.install", version }))
+    if (!result) {
       clearUiRestartPhase()
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+      return
     }
+    if (!result.ok) {
+      clearUiRestartPhase()
+      await dialog.alert({
+        title: result.userTitle ?? "Update failed",
+        description: result.userMessage ?? "Kanna could not install the update. Try again later.",
+        closeLabel: "OK",
+      })
+      return
+    }
+    if (result.action === "reload") dom.reload()
   }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
 
   const handleForceReload = useCallback(async () => {
     markUiRestartPhase("awaiting_disconnect")
-    try {
-      const result = await socket.command({ type: "update.reload" })
-      if (!result.ok) {
-        clearUiRestartPhase()
-        useKannaStateStore.getState().setCommandError(null)
-        await dialog.alert({
-          title: result.userTitle ?? "Re-deploy failed",
-          description: result.userMessage ?? "Kanna could not re-deploy. Try again later.",
-          closeLabel: "OK",
-        })
-        return
-      }
-
-      if (result.action === "reload") {
-        dom.reload()
-        return
-      }
-
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
+    const result = await surfaceCommandError(() => socket.command({ type: "update.reload" }))
+    if (!result) {
       clearUiRestartPhase()
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+      return
     }
+    if (!result.ok) {
+      clearUiRestartPhase()
+      await dialog.alert({
+        title: result.userTitle ?? "Re-deploy failed",
+        description: result.userMessage ?? "Kanna could not re-deploy. Try again later.",
+        closeLabel: "OK",
+      })
+      return
+    }
+    if (result.action === "reload") dom.reload()
   }, [clearUiRestartPhase, dialog, dom, markUiRestartPhase, socket])
 
 
@@ -984,26 +898,22 @@ export function useAppGlobalState(
   }, [socket])
 
   const startChatFromIntent = useCallback(async (intent: StartChatIntent) => {
-    try {
-      let localPath: string | null
-      if (intent.kind === "project_id") {
-        localPath = null
-      } else if (intent.kind === "local_path") {
-        localPath = intent.localPath
-      } else {
-        localPath = intent.project.localPath
-      }
-      if (localPath) {
-        useKannaStateStore.getState().setStartingLocalPath(localPath)
-      }
-
+    let localPath: string | null
+    if (intent.kind === "project_id") {
+      localPath = null
+    } else if (intent.kind === "local_path") {
+      localPath = intent.localPath
+    } else {
+      localPath = intent.project.localPath
+    }
+    if (localPath) {
+      useKannaStateStore.getState().setStartingLocalPath(localPath)
+    }
+    await surfaceCommandError(async () => {
       const { projectId } = await resolveProjectIdForStartChat(intent)
       await createChatForProject(projectId)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    } finally {
-      useKannaStateStore.getState().setStartingLocalPath(null)
-    }
+    })
+    useKannaStateStore.getState().setStartingLocalPath(null)
   }, [createChatForProject, resolveProjectIdForStartChat])
 
   const handleCreateChat = useCallback(async (projectId: string) => {
@@ -1011,7 +921,7 @@ export function useAppGlobalState(
   }, [startChatFromIntent])
 
   const handleForkChat = useCallback(async (chat: SidebarChatRow) => {
-    try {
+    await surfaceCommandError(async () => {
       const result = await socket.command({
         type: "chat.fork",
         chatId: chat.chatId,
@@ -1024,10 +934,7 @@ export function useAppGlobalState(
       store.setPendingChatId(result.chatId)
       chatNavigator.openChat(result.chatId)
       store.setSidebarOpen(false)
-      store.setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [chatNavigator, socket])
 
   const handleOpenLocalProject = useCallback(async (localPath: string) => {
@@ -1045,12 +952,7 @@ export function useAppGlobalState(
       confirmLabel: "Rename",
     })
     if (!title || title === chat.title) return
-    try {
-      await socket.command({ type: "chat.rename", chatId: chat.chatId, title })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({ type: "chat.rename", chatId: chat.chatId, title }))
   }, [dialog, socket])
 
   const handleDeleteChat = useCallback(async (chat: SidebarChatRow) => {
@@ -1061,7 +963,7 @@ export function useAppGlobalState(
       confirmVariant: "destructive",
     })
     if (!confirmed) return
-    try {
+    await surfaceCommandError(async () => {
       await socket.command({ type: "chat.delete", chatId: chat.chatId })
       forgetDeletedLocally({ chatIds: [chat.chatId] })
       if (chat.chatId === activeChatId) {
@@ -1072,9 +974,7 @@ export function useAppGlobalState(
           chatNavigator.closeChat()
         }
       }
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
   const handleDeleteBulkChats = useCallback(async (chatIds: string[]) => {
@@ -1083,17 +983,17 @@ export function useAppGlobalState(
     const ok = await dialog.confirm({ title: "Delete Chats", description: `Delete ${n} chat${n === 1 ? "" : "s"}? This cannot be undone.`, confirmLabel: "Delete", confirmVariant: "destructive" })
     if (!ok) return
     const deletingActive = activeChatId != null && chatIds.includes(activeChatId)
-    try {
+    await surfaceCommandError(async () => {
       for (const chatId of chatIds) {
         await socket.command({ type: "chat.delete", chatId })
         forgetDeletedLocally({ chatIds: [chatId] })
       }
       if (deletingActive) { const next = getNewestRemainingChatId(sidebarProjectGroups, activeChatId, chatIds); if (next) chatNavigator.openChat(next); else chatNavigator.closeChat() }
-    } catch (err) { useKannaStateStore.getState().setCommandError(err instanceof Error ? err.message : String(err)) }
+    })
   }, [activeChatId, chatNavigator, dialog, sidebarProjectGroups, socket])
 
   const handleArchiveChat = useCallback(async (chat: SidebarChatRow) => {
-    try {
+    await surfaceCommandError(async () => {
       await socket.command({ type: "chat.archive", chatId: chat.chatId })
       if (chat.chatId === activeChatId) {
         const nextChatId = getNewestRemainingChatId(sidebarProjectGroups, chat.chatId)
@@ -1103,23 +1003,18 @@ export function useAppGlobalState(
           chatNavigator.closeChat()
         }
       }
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [activeChatId, chatNavigator, sidebarProjectGroups, socket])
 
   const handleArchiveBulkChats = useBulkArchiveChats(socket, chatNavigator, activeChatId, sidebarProjectGroups)
 
   const handleOpenArchivedChat = useCallback(async (chatId: string) => {
+    useKannaStateStore.getState().setPendingChatId(chatId)
     try {
-      useKannaStateStore.getState().setPendingChatId(chatId)
-      await socket.command({ type: "chat.unarchive", chatId })
+      await withCommandFeedback(() => socket.command({ type: "chat.unarchive", chatId }))
       chatNavigator.openChat(chatId)
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
+    } catch {
       useKannaStateStore.getState().setPendingChatId(null)
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [chatNavigator, socket])
 
@@ -1132,18 +1027,15 @@ export function useAppGlobalState(
   }, [chatNavigator, runtime])
 
   const handleHideProject = useCallback(async (projectId: string) => {
-    try {
+    await surfaceCommandError(async () => {
       await socket.command({ type: "project.remove", projectId })
       forgetProjectLayout(projectId)
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [forgetProjectLayout, socket])
 
   const handleDeleteProject = useCallback(async (projectId: string) => {
     const group = sidebarProjectGroups.find((candidate) => candidate.groupKey === projectId)
-    const name = group ? getPathBasename(group.localPath) : "this project"
+    const name = group ? fileNameOfPath(group.localPath) : "this project"
     const chatIds = [...(group?.chats ?? []), ...(group?.archivedChats ?? [])].map((chat) => chat.chatId)
     const confirmed = await dialog.confirm({
       title: "Delete Project",
@@ -1152,35 +1044,29 @@ export function useAppGlobalState(
       confirmVariant: "destructive",
     })
     if (!confirmed) return
-    try {
-      const result = await socket.command({ type: "project.delete", projectId })
-      forgetProjectLayout(projectId)
-      forgetDeletedLocally({ chatIds, boardIds: result.deletedBoardIds, projectId })
-      useKannaStateStore.getState().setCommandError(
-        result.failures.length > 0 ? `Project deleted, but some data could not be removed: ${result.failures.join("; ")}` : null,
-      )
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
+    const result = await surfaceCommandError(() => socket.command({ type: "project.delete", projectId }))
+    if (!result) return
+    forgetProjectLayout(projectId)
+    forgetDeletedLocally({ chatIds, boardIds: result.deletedBoardIds, projectId })
+    if (result.failures.length > 0) {
+      reportCommandFailure(new Error(`Project deleted, but some data could not be removed: ${result.failures.join("; ")}`))
     }
   }, [dialog, forgetProjectLayout, sidebarProjectGroups, socket])
 
   const handleToggleProjectStar = useCallback(async (projectId: string, starred: boolean) => {
-    try {
-      await socket.command({ type: "project.setStar", projectId, starred })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command({ type: "project.setStar", projectId, starred }))
+  }, [socket])
+
+  const handleToggleChatPin = useCallback(async (chatId: string, pinned: boolean) => {
+    await surfaceCommandError(() => socket.command({ type: "chat.setPin", chatId, pinned }))
   }, [socket])
 
   const handleReorderProjectGroups = useCallback(async (projectIds: string[]) => {
     useKannaStateStore.getState().setOptimisticSidebarProjectOrder(projectIds)
     try {
-      await socket.command({ type: "sidebar.reorderProjectGroups", projectIds })
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
+      await withCommandFeedback(() => socket.command({ type: "sidebar.reorderProjectGroups", projectIds }))
+    } catch {
       useKannaStateStore.getState().setOptimisticSidebarProjectOrder(null)
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
     }
   }, [socket])
 
@@ -1192,7 +1078,7 @@ export function useAppGlobalState(
     stackId: string,
     stackBindings: Array<{ projectId: string; worktreePath: string; role: "primary" | "additional" }>,
   ) => {
-    try {
+    await surfaceCommandError(async () => {
       const chatPreferences = useChatPreferencesStore.getState()
       const sourceComposerState = activeChatId
         ? chatPreferences.getComposerState(activeChatId)
@@ -1209,21 +1095,12 @@ export function useAppGlobalState(
       store.setPendingChatId(result.chatId)
       chatNavigator.openChat(result.chatId)
       store.setSidebarOpen(false)
-      store.setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    })
   }, [activeChatId, chatNavigator, socket])
 
   const handleListStackWorktrees = useCallback(async (projectId: string): Promise<GitWorktree[]> => {
-    try {
-      const result = await socket.command({ type: "stack.listWorktrees", projectId })
-      useKannaStateStore.getState().setCommandError(null)
-      return result.worktrees
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-      return []
-    }
+    const result = await surfaceCommandError(() => socket.command({ type: "stack.listWorktrees", projectId }))
+    return result?.worktrees ?? []
   }, [socket])
 
 
@@ -1261,24 +1138,11 @@ export function useAppGlobalState(
   const handleOpenExternal = useCallback(async (action: OpenExternalAction, editor?: EditorOpenSettings) => {
     const localPath = runtime?.localPath ?? localProjects?.projects[0]?.localPath ?? sidebarProjectGroups[0]?.localPath
     if (!localPath) return
-    try {
-      await openExternal({
-        action,
-        localPath,
-        editor,
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => openExternal({ action, localPath, editor }))
   }, [localProjects?.projects, openExternal, runtime?.localPath, sidebarProjectGroups])
 
   const handleCopyPath = useCallback(async (localPath: string) => {
-    try {
-      await clipboard.writeText(localPath)
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => clipboard.writeText(localPath))
   }, [clipboard])
 
   const handleOpenLocalLink = useCallback(async (
@@ -1286,28 +1150,17 @@ export function useAppGlobalState(
     action: OpenExternalAction = "open_editor",
     editor?: EditorOpenSettings,
   ) => {
-    try {
-      await openExternal({
-        action,
-        localPath: target.path,
-        line: target.line,
-        column: target.column,
-        editor,
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => openExternal({
+      action,
+      localPath: target.path,
+      line: target.line,
+      column: target.column,
+      editor,
+    }))
   }, [openExternal])
 
   const handleOpenExternalPath = useCallback(async (action: "open_finder" | "open_editor", localPath: string) => {
-    try {
-      await openExternal({
-        action,
-        localPath,
-      })
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => openExternal({ action, localPath }))
   }, [openExternal])
 
 
@@ -1394,7 +1247,7 @@ export function useAppGlobalState(
     handleHideProject,
     handleDeleteProject,
     handleToggleProjectStar,
-    handleToggleChatPin: useToggleChatPin(socket),
+    handleToggleChatPin,
     handleReorderProjectGroups,
     ...stackCommands,
     handleCreateStackChat,

@@ -11,14 +11,13 @@ export type CustomProvidersEditingState =
   | { kind: "edit"; id: string }
 
 export interface CustomProviderEditorForm extends CustomProviderDraft {
-  submitting: boolean
   error: string | null
 }
 
 export type ModelRowField = "id" | "label"
 
 function createEditorForm(draft: CustomProviderDraft): CustomProviderEditorForm {
-  return { ...draft, submitting: false, error: null }
+  return { ...draft, error: null }
 }
 
 interface CustomProvidersSectionState {

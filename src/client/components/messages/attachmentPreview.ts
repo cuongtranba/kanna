@@ -170,7 +170,7 @@ export async function fetchTextPreview(
     : null
 
   try {
-    return await fetchFileTextPreview(resolvePreviewUrl(url, dom), limitBytes, {
+    return await fetchFileTextPreview(dom.resolveUrl(url), limitBytes, {
       signal: controller?.signal,
       http: ports.http,
     })
@@ -235,10 +235,6 @@ const MERMAID_EXTENSIONS = new Set([".mmd", ".mermaid"])
 function isMermaidAttachment(attachment: ChatAttachment): boolean {
   if (mimeEssence(attachment.mimeType) === "text/vnd.mermaid") return true
   return attachmentExtensions(attachment).some((ext) => MERMAID_EXTENSIONS.has(ext))
-}
-
-function resolvePreviewUrl(url: string, dom: DomPort) {
-  return new URL(url, dom.getBaseURI() || dom.getHref()).toString()
 }
 
 function isPreviewTimeout(error: Error) {

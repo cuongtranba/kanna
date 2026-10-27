@@ -9,18 +9,14 @@ import {
 import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { AtSign, Bot, Folder, FileText, FolderGit2, Radio } from "lucide-react"
 import { useMentionSuggestions } from "../../../hooks/useMentionSuggestions"
-import {
-  AGENT_MENTION_PREFIX,
-  useSubagentSuggestions,
-} from "../../../hooks/useSubagentSuggestions"
+import { useSubagentSuggestions } from "../../../hooks/useSubagentSuggestions"
 import { useProjectSuggestions } from "../../../hooks/useProjectSuggestions"
 import { useBeaconSuggestions } from "../../../hooks/useBeaconSuggestions"
 import type { BeaconSuggestion } from "../../../hooks/useBeaconSuggestions"
 import type { SubagentSuggestion } from "../../../hooks/useSubagentSuggestions"
 import type { ProjectSuggestion } from "../../../hooks/useProjectSuggestions"
 import type { ProjectPath } from "../../../hooks/useMentionSuggestions"
-import { PROJECT_MENTION_PREFIX } from "../../../../shared/project-mention"
-import { BEACON_MENTION_PREFIX } from "../../../../shared/beacon-alias"
+import { formatMentionLabel, matchNamespacedQuery, type MentionNamespace } from "../../../lib/mentionNamespaces"
 import { StateMarkLabel } from "../../ui/state-mark"
 import { selectBeaconRows, useBeaconsStore } from "../../../stores/beaconsStore"
 import { $createMentionNode, type CreateMentionNodeArgs } from "../nodes/MentionNode"
@@ -66,14 +62,14 @@ export function createMentionArgs(data: MentionOption): CreateMentionNodeArgs {
     return {
       mentionKind: "project",
       value: data.project.slug,
-      label: `project/${data.project.slug}`,
+      label: formatMentionLabel("project", data.project.slug),
     }
   }
   if (data.kind === "beacon") {
     return {
       mentionKind: "beacon",
       value: data.beacon.handle,
-      label: `${BEACON_MENTION_PREFIX}${data.beacon.handle}`,
+      label: formatMentionLabel("beacon", data.beacon.handle),
     }
   }
   return { mentionKind: "path", value: data.path.path, label: data.path.path }
@@ -91,16 +87,13 @@ export class MentionMenuOption extends MenuOption {
 
 export const NAMESPACE_PREVIEW_LIMIT = 3
 
-function isListingEverything(query: string, prefix: string): boolean {
-  return query.length < prefix.length && prefix.startsWith(query)
-}
-
 function namespacedGroup<T>(
   items: readonly T[],
   query: string,
-  prefix: string,
+  namespace: MentionNamespace,
 ): readonly T[] {
-  return isListingEverything(query, prefix) ? items.slice(0, NAMESPACE_PREVIEW_LIMIT) : items
+  const { namespaced, listsEverything } = matchNamespacedQuery(query, namespace)
+  return listsEverything && !namespaced ? items.slice(0, NAMESPACE_PREVIEW_LIMIT) : items
 }
 
 export function composeMentionOptions(args: {
@@ -111,9 +104,9 @@ export function composeMentionOptions(args: {
   paths: readonly ProjectPath[]
 }): MentionOption[] {
   const query = args.query.toLowerCase()
-  const agents = namespacedGroup(args.agents, query, AGENT_MENTION_PREFIX)
-  const projects = namespacedGroup(args.projects, query, PROJECT_MENTION_PREFIX)
-  const beacons = namespacedGroup(args.beacons, query, BEACON_MENTION_PREFIX)
+  const agents = namespacedGroup(args.agents, query, "agent")
+  const projects = namespacedGroup(args.projects, query, "project")
+  const beacons = namespacedGroup(args.beacons, query, "beacon")
   return [
     ...agents.map((agent): MentionOption => ({ kind: "agent", subagent: agent.subagent })),
     ...projects.map((project): MentionOption => ({ kind: "project", project })),
@@ -265,7 +258,7 @@ export function MentionTypeaheadPlugin({
                     <>
                       <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-mono truncate">
-                        agent/{data.subagent.name}
+                        {formatMentionLabel("agent", data.subagent.name)}
                       </span>
                       {data.subagent.description ? (
                         <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -279,7 +272,7 @@ export function MentionTypeaheadPlugin({
                     <>
                       <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-mono truncate">
-                        project/{data.project.slug}
+                        {formatMentionLabel("project", data.project.slug)}
                       </span>
                       <span className="min-w-0 truncate text-xs text-muted-foreground">
                         {data.project.localPath}
@@ -291,7 +284,7 @@ export function MentionTypeaheadPlugin({
                     <>
                       <Radio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="font-mono truncate">
-                        beacon/{data.beacon.handle}
+                        {formatMentionLabel("beacon", data.beacon.handle)}
                       </span>
                       {data.beacon.alias !== null ? (
                         <span className="min-w-0 truncate text-xs font-mono text-muted-foreground">

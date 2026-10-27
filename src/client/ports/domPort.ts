@@ -1,21 +1,4 @@
 
-export interface PushSubscriptionLike {
-  endpoint: string
-  options?: { applicationServerKey?: ArrayBuffer | null }
-  toJSON(): { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
-  unsubscribe(): Promise<boolean>
-}
-
-export interface ServiceWorkerRegistrationLike {
-  pushManager: {
-    subscribe(options: {
-      userVisibleOnly: boolean
-      applicationServerKey: Uint8Array<ArrayBuffer>
-    }): Promise<PushSubscriptionLike>
-    getSubscription(): Promise<PushSubscriptionLike | null>
-  }
-}
-
 export interface DomPort {
   getTitle(): string
   setTitle(title: string): void
@@ -29,8 +12,6 @@ export interface DomPort {
   reload(): void
 
   getUserAgent(): string
-
-  isSecureContext(): boolean
 
   getInnerWidth(): number
 
@@ -66,17 +47,7 @@ export interface DomPort {
 
   addWindowCustomListener(type: string, handler: () => void): () => void
 
-  getHostname(): string
-
   getOrigin(): string
-
-  isServiceWorkerSupported(): boolean
-
-  isPushManagerSupported(): boolean
-
-  registerServiceWorker(url: string): Promise<ServiceWorkerRegistrationLike>
-
-  getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistrationLike>
 
   upsertHeadMeta(name: string, content: string): void
 
@@ -102,7 +73,7 @@ export interface DomPort {
 
   webShare(data: { title?: string; url?: string }): Promise<void>
 
-  getBaseURI(): string
+  resolveUrl(path: string): string
 
   triggerDownload(url: string, filename: string): void
 

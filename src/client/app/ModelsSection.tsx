@@ -203,7 +203,9 @@ function ModelEditor({
     if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
   }, [patchEditorForm])
 
-  const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, submitting, error } = editorForm
+  const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, error } = editorForm
+  const saveKey = pendingActionKey("models.save", initial?.id ?? "new")
+  const submitting = usePendingAction(saveKey)
 
   const contextWindowOptions: readonly ProviderContextWindowOption[] = offersOneMillionContext
     ? CLAUDE_CONTEXT_WINDOW_OPTIONS
@@ -241,7 +243,6 @@ function ModelEditor({
         }
       },
       onDone,
-      fallbackMessage: "Failed to save model",
     })
 
   const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add model" })
@@ -328,7 +329,7 @@ function ModelEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            runPendingAction(pendingActionKey("models.save", initial?.id ?? "new"), onSubmit)
+            runPendingAction(saveKey, onSubmit)
           }}
           pending={submitting}
           disabled={!canSave}

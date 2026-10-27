@@ -26,7 +26,7 @@ import { useStickyState } from "../../hooks/useStickyState"
 import { runDetached } from "../../lib/runDetached"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { reportCommandFailure } from "../../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
 import { useRightSidebarUiStore } from "../../stores/rightSidebarUiStore"
@@ -304,7 +304,7 @@ function GitHubPublishModal({
         setDescription("")
       }, onRejected((error) => {
         if (cancelled) return
-        useKannaStateStore.getState().setCommandError(errorMessage(error))
+        reportCommandFailure(error)
       }))
       .finally(() => {
         if (cancelled) return
@@ -633,7 +633,7 @@ function MergeBranchModal({
       })
       .catch((error) => {
         if (cancelled) return
-        setPreviewError(error instanceof Error ? error.message : String(error))
+        setPreviewError(errorMessage(error))
       })
       .finally(() => {
         if (cancelled) return
@@ -828,7 +828,7 @@ function BranchSwitcher({
     void onListBranches()
       .then((result) => setBranchList(result))
       .catch((loadError) => {
-        setError(loadError instanceof Error ? loadError.message : String(loadError))
+        setError(errorMessage(loadError))
       })
       .finally(() => {
         setIsLoading(false)
@@ -1389,16 +1389,17 @@ function RightSidebarImpl({
     onCopyRelativePath,
   }), [onOpenFile, onOpenInFinder, onDiscardFile, onIgnoreFile, onIgnoreFolder, onCopyFilePath, onCopyRelativePath])
   const hasChanges = diffs.files.length > 0
-  const isGenerating = useRightSidebarUiStore((store) => store.isGenerating)
+  const gitActionScope = projectId ?? ""
+  const generateKey = pendingActionKey("chat.generateCommitMessage", gitActionScope)
+  const syncKey = pendingActionKey("chat.syncBranch", gitActionScope)
+  const isGenerating = usePendingAction(generateKey)
   const commitModeInFlight = useRightSidebarUiStore((store) => store.commitModeInFlight)
-  const isSyncing = useRightSidebarUiStore((store) => store.isSyncing)
+  const isSyncing = usePendingAction(syncKey)
   const isGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.isGitHubPublishModalOpen)
   const patchesByPath = useRightSidebarUiStore((store) => store.patchesByPath)
   const patchErrorsByPath = useRightSidebarUiStore((store) => store.patchErrorsByPath)
   const loadingPatchPaths = useRightSidebarUiStore((store) => store.loadingPatchPaths)
-  const setIsGenerating = useRightSidebarUiStore((store) => store.setIsGenerating)
   const setCommitModeInFlight = useRightSidebarUiStore((store) => store.setCommitModeInFlight)
-  const setIsSyncing = useRightSidebarUiStore((store) => store.setIsSyncing)
   const setIsGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.setIsGitHubPublishModalOpen)
   const reconcilePatches = useRightSidebarUiStore((store) => store.reconcilePatches)
   const setPatchLoading = useRightSidebarUiStore((store) => store.setPatchLoading)
@@ -1540,21 +1541,15 @@ function RightSidebarImpl({
 
   async function handleGenerate() {
     if (!canGenerate) return
-    setIsGenerating(true)
-    try {
-      const result = await onGenerateCommitMessage({ paths: selectedPaths })
-      if (projectId) {
-        setCommitDraft(projectId, {
-          summary: result.subject,
-          description: result.body,
-        })
-      }
-    } finally {
-      setIsGenerating(false)
+    const result = await onGenerateCommitMessage({ paths: selectedPaths })
+    if (projectId) {
+      setCommitDraft(projectId, {
+        summary: result.subject,
+        description: result.body,
+      })
     }
   }
 
-  const gitActionScope = projectId ?? ""
   const initGitKey = pendingActionKey("chat.initGit", gitActionScope)
   const isInitializingGit = usePendingAction(initGitKey)
 
@@ -1563,7 +1558,7 @@ function RightSidebarImpl({
   }
 
   function launchGenerate() {
-    runPendingAction(pendingActionKey("chat.generateCommitMessage", gitActionScope), handleGenerate)
+    runPendingAction(generateKey, handleGenerate)
   }
 
   function launchPrimaryCommitAction() {
@@ -1575,7 +1570,7 @@ function RightSidebarImpl({
   }
 
   function launchSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
-    runPendingAction(pendingActionKey("chat.syncBranch", gitActionScope), () => handleSync(action))
+    runPendingAction(syncKey, () => handleSync(action))
   }
 
   function launchInitGit() {
@@ -1591,13 +1586,8 @@ function RightSidebarImpl({
   }
 
   async function handleSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
-    if (diffs.status !== "ready" || isSyncing) return
-    setIsSyncing(true)
-    try {
-      await onSyncWithRemote(action)
-    } finally {
-      setIsSyncing(false)
-    }
+    if (diffs.status !== "ready") return
+    await onSyncWithRemote(action)
   }
 
   const handleLoadPatch = useCallback(async (path: string) => {
@@ -1621,7 +1611,7 @@ function RightSidebarImpl({
       }
       return patch
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       setPatchError(path, message)
       throw error
     } finally {

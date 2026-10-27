@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { omitKey } from "../lib/recordOps"
 
 export interface TokenRowState {
   testResult: string | null
@@ -60,8 +61,7 @@ export const useOAuthTokenPoolCardStore = create<OAuthTokenPoolCardState>()((set
 
   clearTokenRowState: (id) =>
     set((state) => {
-      const { [id]: _, ...rest } = state.tokenRowStates
-      return { tokenRowStates: rest }
+      return { tokenRowStates: omitKey(state.tokenRowStates, id) }
     }),
 
   setBaseUrlDraft: (id, value) =>
@@ -69,7 +69,6 @@ export const useOAuthTokenPoolCardStore = create<OAuthTokenPoolCardState>()((set
 
   clearBaseUrlDraft: (id) =>
     set((state) => {
-      const { [id]: _, ...rest } = state.baseUrlDrafts
-      return { baseUrlDrafts: rest }
+      return { baseUrlDrafts: omitKey(state.baseUrlDrafts, id) }
     }),
 }))

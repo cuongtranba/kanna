@@ -1,6 +1,4 @@
 import type { ShareError } from "../../../shared/session-share/types"
-import { errorMessage } from "../../../shared/errors"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
 
 export function describeShareFailure(error: ShareError): string {
   switch (error.kind) {
@@ -17,14 +15,5 @@ export function describeShareFailure(error: ShareError): string {
       return "That share link was already revoked."
     case "expired":
       return "That share link has expired."
-  }
-}
-
-export async function surfaceCommandError<T>(run: () => Promise<T>): Promise<void> {
-  try {
-    await run()
-    useKannaStateStore.getState().setCommandError(null)
-  } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
   }
 }

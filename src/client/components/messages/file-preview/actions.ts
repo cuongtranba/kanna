@@ -17,7 +17,7 @@ export async function shareViaWebShare(
 ): Promise<ShareOutcome> {
   const dom = ports.dom ?? domAdapter
   const clipboard = ports.clipboard ?? clipboardAdapter
-  const absolute = toAbsoluteUrl(source.contentUrl, dom)
+  const absolute = dom.resolveUrl(source.contentUrl)
   if (dom.isWebShareSupported()) {
     try {
       await dom.webShare({ title: source.displayName, url: absolute })
@@ -37,8 +37,4 @@ export async function shareViaWebShare(
 export function downloadFile(source: PreviewSource, ports: FilePreviewActionsPorts = {}): void {
   const dom = ports.dom ?? domAdapter
   dom.triggerDownload(source.contentUrl, source.fileName)
-}
-
-function toAbsoluteUrl(path: string, dom: DomPort): string {
-  return new URL(path, dom.getBaseURI() || dom.getHref()).toString()
 }

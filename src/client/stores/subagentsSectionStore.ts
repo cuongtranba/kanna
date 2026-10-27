@@ -11,7 +11,6 @@ export type { SubagentsEditingState }
 export interface SubagentFormState {
   draft: SubagentInput
   error: SubagentFieldError | null
-  pending: boolean
   confirmDelete: boolean
 }
 
@@ -31,7 +30,6 @@ function createDefaultFormState(): SubagentFormState {
   return {
     draft: createDefaultDraft(),
     error: null,
-    pending: false,
     confirmDelete: false,
   }
 }
@@ -67,8 +65,7 @@ export const useSubagentsSectionStore = create<SubagentsSectionState>()((set) =>
       form: {
         draft,
         error: null,
-        pending: false,
-        confirmDelete: false,
+            confirmDelete: false,
       },
     }),
 

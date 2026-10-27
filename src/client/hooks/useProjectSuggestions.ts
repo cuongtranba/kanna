@@ -1,7 +1,8 @@
 import { useMemo } from "react"
 import type { SidebarData } from "../../shared/types"
-import { PROJECT_MENTION_PREFIX, buildProjectMentionIndex } from "../../shared/project-mention"
-import { getPathBasename } from "../lib/formatters"
+import { buildProjectMentionIndex } from "../../shared/project-mention"
+import { matchNamespacedQuery } from "../lib/mentionNamespaces"
+import { fileNameOfPath } from "../lib/pathUtils"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 
 export interface ProjectSuggestion {
@@ -32,17 +33,14 @@ export function filterProjectSuggestions(
   excludeProjectId: string | null,
 ): ProjectSuggestion[] {
   const { slugByProjectId } = buildProjectMentionIndex(projects)
-  const normalized = query.toLowerCase()
-  const namespaced = normalized.startsWith(PROJECT_MENTION_PREFIX)
-  const listsEverything = normalized === "" || PROJECT_MENTION_PREFIX.startsWith(normalized)
-  const nameQuery = namespaced ? normalized.slice(PROJECT_MENTION_PREFIX.length) : normalized
+  const { listsEverything, nameQuery } = matchNamespacedQuery(query, "project")
 
   const matches: ProjectSuggestion[] = []
   for (const project of projects) {
     if (project.id === excludeProjectId) continue
     const slug = slugByProjectId.get(project.id)
     if (slug === undefined) continue
-    const title = getPathBasename(project.localPath)
+    const title = fileNameOfPath(project.localPath)
     const hit = listsEverything
       || slug.includes(nameQuery)
       || title.toLowerCase().includes(nameQuery)

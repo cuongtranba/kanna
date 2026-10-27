@@ -4,8 +4,6 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
 } from "react"
-import { ExpandableRowStore } from "./ExpandableRow.store"
-import { CopyStateStore } from "./CopyState.store"
 import { Button } from "../ui/button"
 import {
   ArrowDownToLine,
@@ -30,13 +28,10 @@ import {
 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { runDetached } from "../../lib/runDetached"
-import type { ClipboardPort, TimerPort } from "../../ports"
-import { clipboardAdapter, timerAdapter } from "../../adapters"
+import { useCopyFeedback, type CopyFeedbackPorts } from "../../stores/copyFeedbackStore"
+import { createToggleStore } from "../../lib/createToggleStore"
 
-type SharedCopyPorts = {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
+const ExpandableRowStore = createToggleStore("ExpandableRow")
 
 export type OpenLocalLinkTarget = {
   path: string
@@ -152,8 +147,8 @@ interface ExpandableRowProps {
 }
 
 function ExpandableRowInner({ children, expandedContent }: Omit<ExpandableRowProps, "defaultExpanded">) {
-  const expanded = ExpandableRowStore.useScopedStore((s) => s.expanded)
-  const setExpanded = ExpandableRowStore.useScopedStore((s) => s.setExpanded)
+  const expanded = ExpandableRowStore.useScopedStore((s) => s.value)
+  const setExpanded = ExpandableRowStore.useScopedStore((s) => s.set)
 
   return (
     <div className="flex flex-col w-full">
@@ -176,35 +171,26 @@ function ExpandableRowInner({ children, expandedContent }: Omit<ExpandableRowPro
 
 export function ExpandableRow({ children, expandedContent, defaultExpanded = false }: ExpandableRowProps) {
   return (
-    <ExpandableRowStore.Provider init={{ defaultExpanded }}>
+    <ExpandableRowStore.Provider init={defaultExpanded}>
       <ExpandableRowInner expandedContent={expandedContent}>{children}</ExpandableRowInner>
     </ExpandableRowStore.Provider>
   )
 }
 
-function MetaCodeBlockInner({
+export function MetaCodeBlock({
   label,
   children,
   copyText,
-  ports = {},
+  ports,
 }: {
   label: ReactNode
   children: ReactNode
   copyText?: string
-  ports?: SharedCopyPorts
+  ports?: CopyFeedbackPorts
 }) {
-  const copied = CopyStateStore.useScopedStore((s) => s.copied)
-  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
+  const { copied, copy } = useCopyFeedback(ports)
   const textContent = copyText ?? extractText(children)
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
-
-  const copyToClipboard = useCallback(async () => {
-    await clipboard.writeText(textContent)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
-  }, [textContent, setCopied, clipboard, timer])
-  const handleCopy = useCallback(() => { runDetached("copy code", copyToClipboard()) }, [copyToClipboard])
+  const handleCopy = useCallback(() => { runDetached("copy code", copy(textContent)) }, [copy, textContent])
 
   return (
     <div>
@@ -228,24 +214,6 @@ function MetaCodeBlockInner({
         </Button>
       </div>
     </div>
-  )
-}
-
-export function MetaCodeBlock({
-  label,
-  children,
-  copyText,
-  ports,
-}: {
-  label: ReactNode
-  children: ReactNode
-  copyText?: string
-  ports?: SharedCopyPorts
-}) {
-  return (
-    <CopyStateStore.Provider init={undefined}>
-      <MetaCodeBlockInner label={label} copyText={copyText} ports={ports}>{children}</MetaCodeBlockInner>
-    </CopyStateStore.Provider>
   )
 }
 
@@ -292,24 +260,15 @@ function extractText(node: ReactNode): string {
   return ""
 }
 
-function PreBlockInner({
+function PreBlock({
   children,
-  ports = {},
+  ports,
   copyText,
   ...props
-}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts; copyText?: string }) {
-  const copied = CopyStateStore.useScopedStore((s) => s.copied)
-  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
+}: ComponentPropsWithoutRef<"pre"> & { ports?: CopyFeedbackPorts; copyText?: string }) {
+  const { copied, copy } = useCopyFeedback(ports)
   const textContent = copyText ?? extractText(children)
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
-
-  const copyToClipboard = async () => {
-    await clipboard.writeText(textContent)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
-  }
-  const handleCopy = () => { runDetached("copy code", copyToClipboard()) }
+  const handleCopy = () => { runDetached("copy code", copy(textContent)) }
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
@@ -331,26 +290,13 @@ function PreBlockInner({
   )
 }
 
-function PreBlock({
-  children,
-  ports,
-  copyText,
-  ...props
-}: ComponentPropsWithoutRef<"pre"> & { ports?: SharedCopyPorts; copyText?: string }) {
-  return (
-    <CopyStateStore.Provider init={undefined}>
-      <PreBlockInner ports={ports} copyText={copyText} {...props}>{children}</PreBlockInner>
-    </CopyStateStore.Provider>
-  )
-}
-
 export function MermaidFallbackCodeBlock({
   source,
   ports,
   highlightLine,
 }: {
   source: string
-  ports?: SharedCopyPorts
+  ports?: CopyFeedbackPorts
   highlightLine?: number
 }) {
   if (highlightLine === undefined) {

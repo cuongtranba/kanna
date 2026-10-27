@@ -10,11 +10,15 @@ import { errorMessage } from "../../shared/errors"
 import { Button } from "../components/ui/button"
 import { InstalledSkillCard } from "../components/settings/SkillCard"
 import { runDetached } from "../lib/runDetached"
-import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { pendingActionKey, runPendingAction, usePendingAction, usePendingActionsStore } from "../stores/pendingActionsStore"
 import { useSettingsPageStore } from "../stores/settingsPageStore"
 import { timerAdapter } from "../adapters/timer.adapter"
 import type { TimerPort } from "../ports/timerPort"
 import type { KannaState } from "./useKannaState"
+
+function installSkillKey(skillId: string): string {
+  return pendingActionKey("skills.install", skillId)
+}
 
 function formatInstallCount(count: number) {
   if (!count || count <= 0) return "0 installs"
@@ -33,14 +37,12 @@ function skillPackageId(skillName: string): string {
 function InstalledSkillEntry({
   skill,
   packageEntry,
-  uninstalling,
   applying,
   onUninstall,
   onUpdate,
 }: {
   skill: InstalledSkillSummary
   packageEntry: PackageUpdateEntry | null
-  uninstalling: boolean
   applying: boolean
   onUninstall: (skill: InstalledSkillSummary) => void
   onUpdate: (id: string) => void
@@ -52,7 +54,7 @@ function InstalledSkillEntry({
     <InstalledSkillCard
       skill={skill}
       packageEntry={packageEntry}
-      uninstalling={uninstalling || uninstallPending}
+      uninstalling={uninstallPending}
       applying={applying || updatePending}
       onUninstall={() => onUninstall(skill)}
       onUpdate={() => onUpdate(packageId)}
@@ -152,10 +154,7 @@ export function SkillsSection({
   const setInstalledError = useSettingsPageStore((s) => s.setInstalledError)
   const operationError = useSettingsPageStore((s) => s.skillOperationError)
   const setOperationError = useSettingsPageStore((s) => s.setSkillOperationError)
-  const installingSkillId = useSettingsPageStore((s) => s.installingSkillId)
-  const setInstallingSkillId = useSettingsPageStore((s) => s.setInstallingSkillId)
-  const uninstallingSkillId = useSettingsPageStore((s) => s.uninstallingSkillId)
-  const setUninstallingSkillId = useSettingsPageStore((s) => s.setUninstallingSkillId)
+  const pendingActions = usePendingActionsStore((s) => s.inFlight)
   const installMessages = useSettingsPageStore((s) => s.installMessages)
   const setInstallMessage = useSettingsPageStore((s) => s.setInstallMessage)
   const clearInstallMessage = useSettingsPageStore((s) => s.clearInstallMessage)
@@ -200,7 +199,7 @@ export function SkillsSection({
   }
 
   function launchInstallSkill(skill: SkillSearchResult) {
-    runPendingAction(pendingActionKey("skills.install", skill.id), () => installSkill(skill))
+    runPendingAction(installSkillKey(skill.id), () => installSkill(skill))
   }
 
   function launchUninstallSkill(skill: InstalledSkillSummary) {
@@ -225,7 +224,7 @@ export function SkillsSection({
     } catch (error) {
       setInstalledSkills([])
       setInstalledSkillIds(new Set())
-      setInstalledError(error instanceof Error ? error.message : "Unable to read installed skills.")
+      setInstalledError(errorMessage(error))
     } finally {
       setInstalledLoading(false)
     }
@@ -268,7 +267,7 @@ export function SkillsSection({
         .catch((error) => {
           if (cancelled) return
           setResults([])
-          setSearchError(error instanceof Error ? error.message : "Unable to search skills.")
+          setSearchError(errorMessage(error))
         })
         .finally(() => {
           if (cancelled) return
@@ -289,7 +288,6 @@ export function SkillsSection({
     }
 
     try {
-      setInstallingSkillId(skill.id)
       setOperationError(null)
       clearInstallMessage(skill.id)
       await socket.command({
@@ -301,9 +299,7 @@ export function SkillsSection({
       setInstallMessage(skill.id, "Installed globally")
       runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : "Install failed.")
-    } finally {
-      setInstallingSkillId(null)
+      setOperationError(errorMessage(error))
     }
   }
 
@@ -314,7 +310,6 @@ export function SkillsSection({
     }
 
     try {
-      setUninstallingSkillId(skill.name)
       setOperationError(null)
       await socket.command({
         type: "skills.uninstall",
@@ -325,9 +320,7 @@ export function SkillsSection({
       clearInstallMessagesForSkill(skill.name)
       runDetached("skills.listInstalled", loadInstalledSkills())
     } catch (error) {
-      setOperationError(error instanceof Error ? error.message : "Uninstall failed.")
-    } finally {
-      setUninstallingSkillId(null)
+      setOperationError(errorMessage(error))
     }
   }
 
@@ -340,7 +333,6 @@ export function SkillsSection({
             key={`${skill.source}/${skill.name}`}
             skill={skill}
             packageEntry={packageUpdateSnapshot?.packages.find((p) => p.kind === "skill" && p.name === skill.name) ?? null}
-            uninstalling={uninstallingSkillId === skill.name}
             applying={packageUpdateSnapshot?.applying.includes(skillPackageId(skill.name)) ?? false}
             onUninstall={launchUninstallSkill}
             onUpdate={updateSkill}
@@ -408,7 +400,7 @@ export function SkillsSection({
             <SkillResultCard
               key={skill.id}
               skill={skill}
-              installing={installingSkillId === skill.id}
+              installing={pendingActions[installSkillKey(skill.id)] === true}
               installed={installedSkillIds.has(skill.skillId)}
               message={installMessages[skill.id]}
               onInstall={() => { launchInstallSkill(skill) }}
