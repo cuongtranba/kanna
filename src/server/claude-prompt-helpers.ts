@@ -41,17 +41,6 @@ export function buildPromptText(content: string, attachments: ChatAttachment[]) 
 }
 
 
-const STEERED_MESSAGE_PREFIX = `<system-message>
-The user would like to inform you of something while you continue to work. Acknowledge receipt immediately with a text response, then continue with the task at hand, incorporating the user's feedback if needed.
-</system-message>`
-
-export function buildSteeredMessageContent(content: string) {
-  return content.trim().length > 0
-    ? `${STEERED_MESSAGE_PREFIX}\n\n${content}`
-    : STEERED_MESSAGE_PREFIX
-}
-
-
 export function isPromptTooLongMessage(message: string): boolean {
   return /\bprompt\b.*\btoo\s+long\b/i.test(message)
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)

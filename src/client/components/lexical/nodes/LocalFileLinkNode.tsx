@@ -96,11 +96,14 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   }
 
 
+  toHref(): string {
+    if (this.__line === undefined) return this.__path
+    const column = this.__column === undefined ? "" : `:${this.__column}`
+    return `${this.__path}:${this.__line}${column}`
+  }
+
   decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
-    const linkText =
-      this.__line !== undefined
-        ? `${this.__path}:${this.__line}${this.__column !== undefined ? `:${this.__column}` : ""}`
-        : undefined
+    const linkText = this.__line === undefined ? undefined : this.toHref()
 
     return <LocalFileLinkCard path={this.__path} linkText={linkText} />
   }

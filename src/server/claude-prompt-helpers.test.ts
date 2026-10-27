@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   buildAttachmentHintText,
   buildPromptText,
-  buildSteeredMessageContent,
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
   toSdkEffort,
@@ -86,29 +85,6 @@ describe("buildPromptText", () => {
 })
 
 
-describe("buildSteeredMessageContent", () => {
-  test("prepends STEERED_MESSAGE_PREFIX to non-empty content", () => {
-    const result = buildSteeredMessageContent("keep going")
-    expect(result).toContain("<system-message>")
-    expect(result).toContain("keep going")
-    expect(result.indexOf("<system-message>")).toBeLessThan(result.indexOf("keep going"))
-  })
-
-  test("returns just the prefix for empty content", () => {
-    const result = buildSteeredMessageContent("")
-    expect(result).toContain("<system-message>")
-    expect(result).toContain("</system-message>")
-    const afterTag = result.slice(result.lastIndexOf("</system-message>") + "</system-message>".length)
-    expect(afterTag.trim()).toBe("")
-  })
-
-  test("returns just the prefix for whitespace-only content", () => {
-    const result = buildSteeredMessageContent("   ")
-    expect(result.indexOf("</system-message>")).toBeGreaterThan(0)
-    const afterTag = result.slice(result.lastIndexOf("</system-message>") + "</system-message>".length)
-    expect(afterTag.trim()).toBe("")
-  })
-})
 
 
 describe("isPromptTooLongMessage", () => {

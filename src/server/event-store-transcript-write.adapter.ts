@@ -7,6 +7,7 @@ import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatEvent, ChatRecord, StoreEvent } from "./events"
 import { cloneTranscriptEntries } from "./events"
 import type { StorageBackend } from "./storage/backend"
+import { subagentResultsDir } from "./paths"
 import { getForkedChatTitle, logSendToStartingProfile } from "./event-store-helpers"
 import {
   buildArchiveChatEvent,
@@ -62,9 +63,7 @@ export async function removeSubagentResultsDir(
   projectId: string,
   chatId: string,
 ): Promise<void> {
-  const dir = path.join(
-    deps.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
-  )
+  const dir = subagentResultsDir(deps.dataDir, projectId, chatId)
   try {
     await deps.storage.remove(dir, { recursive: true })
   } catch (err) {

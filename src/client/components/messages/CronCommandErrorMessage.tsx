@@ -2,10 +2,10 @@ import { useCallback } from "react"
 import { CalendarX2, Check, Copy } from "lucide-react"
 import { useCopyFeedback } from "../../stores/copyFeedbackStore"
 import { runDetached } from "../../lib/runDetached"
-import type { ProcessedCronCommandErrorMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronCommandErrorMessage
+  message: TranscriptMessageOf<"cron_command_error">
 }
 
 export function CronCommandErrorMessage({ message }: Props) {

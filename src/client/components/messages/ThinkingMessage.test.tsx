@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { renderThemed } from "../../lib/testing/renderThemed"
 
 import { ThinkingMessage } from "./ThinkingMessage"
-import type { ProcessedThinkingMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
-function buildMessage(text: string): ProcessedThinkingMessage {
+function buildMessage(text: string): TranscriptMessageOf<"assistant_thinking"> {
   return {
     kind: "assistant_thinking",
     text,

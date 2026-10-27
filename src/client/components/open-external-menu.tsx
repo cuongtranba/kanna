@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from "react"
 import { OpenExternalSelectStore } from "./OpenExternalSelect.store"
+import { withScopedStoreInit } from "../lib/createScopedStore"
 import { ChevronDown } from "lucide-react"
 import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../shared/protocol"
 import { isEditorPreset } from "../../shared/types"
@@ -267,41 +268,11 @@ function OpenExternalSelectInner({
   )
 }
 
-export function OpenExternalSelect({
-  isMac,
-  editorPreset,
-  editorCommandTemplate,
-  finderShortcut,
-  editorShortcut,
-  onOpenExternal,
-  pending,
-  ports,
-}: {
-  isMac: boolean
-  editorPreset: EditorPreset
-  editorCommandTemplate?: string
-  finderShortcut?: string[]
-  editorShortcut?: string[]
-  onOpenExternal: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
-  pending?: boolean
-  ports?: OpenExternalSelectPorts
-}) {
-  const initialValue: OpenAppValue = `editor:${editorPreset}`
-  return (
-    <OpenExternalSelectStore.Provider init={{ initialValue }}>
-      <OpenExternalSelectInner
-        isMac={isMac}
-        editorPreset={editorPreset}
-        editorCommandTemplate={editorCommandTemplate}
-        finderShortcut={finderShortcut}
-        editorShortcut={editorShortcut}
-        onOpenExternal={onOpenExternal}
-        pending={pending}
-        ports={ports}
-      />
-    </OpenExternalSelectStore.Provider>
-  )
-}
+export const OpenExternalSelect = withScopedStoreInit(
+  OpenExternalSelectStore,
+  OpenExternalSelectInner,
+  ({ editorPreset }): { initialValue: OpenAppValue } => ({ initialValue: `editor:${editorPreset}` }),
+)
 
 export function OpenExternalContextMenuContent({
   isMac,

@@ -1,70 +1,23 @@
-import { useEffect } from "react"
+import { withScopedStore } from "../../../../lib/createScopedStore"
 import { useTextBodyContent } from "./textLoader"
+import { PREVIEW_PRE_CLASS, TextBodyFrame } from "./TextBodyFrame"
 import type { PreviewSource } from "../types"
-import { log } from "../../../../../shared/log"
-import { CodeBodyStore } from "./CodeBody.store"
-
-const SHIKI_SIZE_CEILING = 200 * 1024
-
-function extToLang(name: string): string {
-  const i = name.lastIndexOf(".")
-  if (i < 0) return "text"
-  const ext = name.slice(i + 1).toLowerCase()
-  const map: Record<string, string> = {
-    ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", py: "python", go: "go",
-    rs: "rust", java: "java", rb: "ruby", sh: "bash", zsh: "bash", yml: "yaml", yaml: "yaml",
-    css: "css", scss: "scss", html: "html", json: "json", md: "markdown", sql: "sql",
-    cpp: "cpp", c: "c", h: "c", swift: "swift", kt: "kotlin", php: "php", toml: "toml",
-  }
-  return map[ext] ?? "text"
-}
+import { ShikiHtmlStore } from "../../useShikiHtml.store"
+import { shikiLangOfFileName, useShikiHtml } from "../../useShikiHtml"
 
 function CodeBodyInner({ source }: { source: PreviewSource }) {
   const state = useTextBodyContent(source)
-  const shouldHighlight = state.status === "ready" && state.content.length <= SHIKI_SIZE_CEILING
-  const highlightKey = shouldHighlight
-    ? `${source.id}|${source.contentUrl}|${source.size ?? 0}|${state.content.length}`
-    : null
+  const ready = state.status === "ready"
+  const html = useShikiHtml(ready ? state.content : "", ready ? shikiLangOfFileName(source.fileName) : null)
 
-  const highlighted = CodeBodyStore.useScopedStore((s) => s.highlighted)
-  const setHighlighted = CodeBodyStore.useScopedStore((s) => s.setHighlighted)
-
-  useEffect(() => {
-    if (!shouldHighlight || state.status !== "ready" || highlightKey === null) return
-    let cancelled = false
-    const myKey = highlightKey
-    import("shiki")
-      .then(async (mod) => {
-        if (cancelled) return
-        const html = await mod.codeToHtml(state.content, { lang: extToLang(source.fileName), theme: "github-dark" })
-        if (!cancelled) setHighlighted({ key: myKey, html })
-      })
-      .catch(() => {
-        log.warn("[file-preview] Shiki unavailable; falling back to plain text")
-      })
-    return () => { cancelled = true }
-  }, [shouldHighlight, highlightKey, state, source.fileName, setHighlighted])
-
-  if (state.status === "loading") return <div className="p-4 text-sm text-muted-foreground"><pre className="sr-only" /> Loading…</div>
-  if (state.status === "error") return <div className="p-4 text-sm text-destructive"><pre className="sr-only" /> {state.message}</div>
-
-  if (highlighted && highlighted.key === highlightKey) {
-    return (
-      <div className="overflow-x-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: highlighted.html }} />
-    )
+  if (ready && html !== null) {
+    return <div className="overflow-x-auto p-3 text-xs" dangerouslySetInnerHTML={{ __html: html }} />
   }
   return (
-    <div className="space-y-2 p-3">
-      {state.truncated ? <div className="rounded-xl border border-border bg-background px-3 py-2 text-xs text-muted-foreground">Preview truncated to 1024 KB.</div> : null}
-      <pre className="whitespace-pre-wrap break-words rounded-xl border border-border bg-background p-3 text-xs">{state.content}</pre>
-    </div>
+    <TextBodyFrame state={state} shell={<pre className="sr-only" />}>
+      {(content) => <pre className={PREVIEW_PRE_CLASS}>{content}</pre>}
+    </TextBodyFrame>
   )
 }
 
-export function CodeBody({ source }: { source: PreviewSource }) {
-  return (
-    <CodeBodyStore.Provider init={undefined}>
-      <CodeBodyInner source={source} />
-    </CodeBodyStore.Provider>
-  )
-}
+export const CodeBody = withScopedStore(ShikiHtmlStore, CodeBodyInner)

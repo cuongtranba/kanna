@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { capTranscriptEntry, SUBAGENT_RESULT_THRESHOLD, PREVIEW_SIZE } from "./subagent-entry-cap.adapter"
+import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
+import { PERSISTED_OUTPUT_THRESHOLD_BYTES as SUBAGENT_RESULT_THRESHOLD, PERSISTED_PREVIEW_BYTES as PREVIEW_SIZE } from "../shared/persisted-output"
 import type { TranscriptEntry } from "../shared/types"
 
 describe("capTranscriptEntry", () => {

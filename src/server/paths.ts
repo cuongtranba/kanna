@@ -4,6 +4,11 @@ import { isPathInside } from "./path-containment"
 
 export type RealpathFn = (p: string) => string
 
+export function subagentResultsDir(dataDir: string, projectId: string, chatId: string, runId?: string): string {
+  const chatResults = path.join(dataDir, "projects", projectId, "chats", chatId, "subagent-results")
+  return runId === undefined ? chatResults : path.join(chatResults, runId)
+}
+
 export interface ResolvedSubagentRoots {
   cwd: string
   allowedPaths: string[]

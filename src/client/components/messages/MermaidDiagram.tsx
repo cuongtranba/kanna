@@ -1,3 +1,4 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useCallback, useEffect, useId } from "react"
 import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw, Wrench } from "lucide-react"
 import { Button } from "../ui/button"
@@ -214,13 +215,7 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   )
 }
 
-export function MermaidDiagram({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
-  return (
-    <MermaidDiagramStore.Provider init={undefined}>
-      <MermaidDiagramInner source={source} ports={ports} />
-    </MermaidDiagramStore.Provider>
-  )
-}
+export const MermaidDiagram = withScopedStore(MermaidDiagramStore, MermaidDiagramInner)
 
 function MermaidControls({
   showSource,

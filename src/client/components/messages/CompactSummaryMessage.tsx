@@ -1,10 +1,10 @@
 import {  Minimize } from "lucide-react"
-import type { ProcessedCompactSummaryMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { MetaRow, MetaLabel, ExpandableRow, VerticalLineContainer } from "./shared"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 
 interface Props {
-  message: ProcessedCompactSummaryMessage
+  message: TranscriptMessageOf<"compact_summary">
 }
 
 export function CompactSummaryMessage({ message }: Props) {

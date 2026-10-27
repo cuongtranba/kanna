@@ -96,6 +96,7 @@ import type { CommandPort } from "../../ports/commandPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { useOptionalKannaSocket } from "../../app/KannaSocketProvider"
 import { errorMessage } from "../../../shared/errors"
+import { INLINE_UPLOAD_LIMITS } from "../lexical/plugins/inlineUploads"
 
 
 const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
@@ -158,7 +159,7 @@ export function willExceedAttachmentLimit(args: {
   incomingAttachmentCount: number
   maxAttachments?: number
 }): boolean {
-  const maxAttachments = args.maxAttachments ?? MAX_FILES_PER_DROP
+  const maxAttachments = args.maxAttachments ?? INLINE_UPLOAD_LIMITS.maxFiles
   return (
     args.currentAttachmentCount + args.queuedAttachmentCount + args.incomingAttachmentCount >
     maxAttachments
@@ -176,8 +177,6 @@ export function shouldRefreshPickerOnSelection(isTouchDevice: boolean): boolean 
 
 
 const EMPTY_SUBAGENTS: Subagent[] = []
-const MAX_FILES_PER_DROP = 50
-const MAX_CONCURRENT_UPLOADS = 3
 
 
 type ComposerAttachment = StoreComposerAttachment
@@ -529,7 +528,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     if (!projectId) return
 
     while (
-      activeUploadsRef.current < MAX_CONCURRENT_UPLOADS &&
+      activeUploadsRef.current < INLINE_UPLOAD_LIMITS.maxConcurrent &&
       uploadQueueRef.current.length > 0
     ) {
       const file = uploadQueueRef.current.shift()
@@ -648,7 +647,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           incomingAttachmentCount: files.length,
         })
       ) {
-        setUploadError(`You can upload up to ${MAX_FILES_PER_DROP} files at a time.`)
+        setUploadError(`You can upload up to ${INLINE_UPLOAD_LIMITS.maxFiles} files at a time.`)
         return
       }
 

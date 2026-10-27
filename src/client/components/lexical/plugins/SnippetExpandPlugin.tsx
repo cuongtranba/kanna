@@ -8,11 +8,13 @@ import {
   KEY_TAB_COMMAND,
 } from "lexical"
 import type { TextSnippet } from "../../../../shared/types"
-import { isTypeaheadMenuOpen } from "./SubmitPlugin"
+import type { DomPort } from "../../../ports/domPort"
+import { domAdapter } from "../../../adapters/dom.adapter"
 
 
 export interface SnippetExpandPluginProps {
   snippets: readonly TextSnippet[]
+  dom?: DomPort
 }
 
 
@@ -56,7 +58,7 @@ export function decideTab(
 }
 
 
-export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): null {
+export function SnippetExpandPlugin({ snippets, dom = domAdapter }: SnippetExpandPluginProps): null {
   const [editor] = useLexicalComposerContext()
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
     return editor.registerCommand(
       KEY_TAB_COMMAND,
       (event: KeyboardEvent) => {
-        const decision = decideTab(event, isTypeaheadMenuOpen(), snippets.length, lastPressExpanded)
+        const decision = decideTab(event, dom.hasTypeaheadMenuOpen(), snippets.length, lastPressExpanded)
         if (!event.repeat) lastPressExpanded = false
         if (decision === "ignore") return false
         if (decision === "swallow-repeat") {
@@ -123,7 +125,7 @@ export function SnippetExpandPlugin({ snippets }: SnippetExpandPluginProps): nul
       },
       COMMAND_PRIORITY_LOW,
     )
-  }, [editor, snippets])
+  }, [editor, snippets, dom])
 
   return null
 }

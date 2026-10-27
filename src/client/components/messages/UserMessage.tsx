@@ -1,5 +1,7 @@
 import { memo, useMemo } from "react"
+import { withScopedStore } from "../../lib/createScopedStore"
 import { originDetail, originLabel, type CommandOrigin } from "../../../shared/command-origin"
+import { unwrapSteeredMessage } from "../../../shared/steered-message"
 import type { ChatAttachment, SlashCommandKind } from "../../../shared/types"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { classifyAttachmentPreview } from "./attachmentPreview"
@@ -27,24 +29,12 @@ interface Props {
   ports?: UserMessagePorts
 }
 
-function parseSystemMessage(content: string) {
-  const match = content.match(/^<system-message>\s*([\s\S]*?)\s*<\/system-message>\s*([\s\S]*)$/)
-  if (!match) {
-    return { systemMessage: null, body: content }
-  }
-
-  return {
-    systemMessage: match[1]?.trim() || null,
-    body: match[2] ?? "",
-  }
-}
-
 function UserMessageInner({ content, attachments = [], steered = false, autoContinue, expandedCommand, origin, ports }: Props) {
   const dom = ports?.dom ?? domAdapter
   const selectedAttachmentId = UserMessageStore.useScopedStore((s) => s.selectedAttachmentId)
   const setSelectedAttachmentId = UserMessageStore.useScopedStore((s) => s.setSelectedAttachmentId)
   const renderOptions = useTranscriptRenderOptions()
-  const parsedContent = useMemo(() => parseSystemMessage(content), [content])
+  const parsedContent = useMemo(() => unwrapSteeredMessage(content), [content])
   const canInteractWithAttachments = !renderOptions.readonly
   const imageAttachments = useMemo(
     () => attachments.filter((attachment) => attachment.kind === "image" && attachment.contentUrl),
@@ -132,18 +122,4 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
   )
 }
 
-export const UserMessage = memo(({ content, attachments = [], steered = false, autoContinue, expandedCommand, origin, ports }: Props) => {
-  return (
-    <UserMessageStore.Provider init={undefined}>
-      <UserMessageInner
-        content={content}
-        attachments={attachments}
-        steered={steered}
-        autoContinue={autoContinue}
-        expandedCommand={expandedCommand}
-        origin={origin}
-        ports={ports}
-      />
-    </UserMessageStore.Provider>
-  )
-})
+export const UserMessage = memo(withScopedStore(UserMessageStore, UserMessageInner))

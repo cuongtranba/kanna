@@ -3,16 +3,16 @@ import { describe, expect, test } from "bun:test"
 import { renderThemed } from "../../lib/testing/renderThemed"
 
 import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
-import type { ProcessedToolCall } from "./types"
+import type { HydratedToolCall } from "../../../shared/types"
 
-function planMessage(plan: string): Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }> {
+function planMessage(plan: string): Extract<HydratedToolCall, { toolKind: "exit_plan_mode" }> {
   return {
     kind: "tool",
     toolKind: "exit_plan_mode",
     toolName: "ExitPlanMode",
     toolId: "tool-1",
     input: { plan },
-  } as Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
+  } as Extract<HydratedToolCall, { toolKind: "exit_plan_mode" }>
 }
 
 function render(plan: string): string {

@@ -20,11 +20,6 @@ export interface SubmitPluginProps {
 }
 
 
-export function isTypeaheadMenuOpen(dom: Pick<DomPort, "hasTypeaheadMenuOpen"> = domAdapter): boolean {
-  return dom.hasTypeaheadMenuOpen()
-}
-
-
 export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPluginProps): null {
   const [editor] = useLexicalComposerContext()
   const isComposingRef = useRef(false)
@@ -61,7 +56,7 @@ export function SubmitPlugin({ onSubmit, disabled, dom = domAdapter }: SubmitPlu
 
         if (event.shiftKey) return false
 
-        if (isTypeaheadMenuOpen(dom)) return false
+        if (dom.hasTypeaheadMenuOpen()) return false
 
         if (dom.isTouchDevice() && !dom.matchesMediaQuery("(hover: hover) and (pointer: fine)")) return false
 

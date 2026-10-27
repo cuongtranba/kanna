@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react"
-import type { ProcessedAccountInfoMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { MetaCodeBlock, MetaRow, VerticalLineContainer } from "./shared"
 import { cn } from "../../lib/utils"
 import { createToggleStore } from "../../lib/createToggleStore"
@@ -7,7 +7,7 @@ import { createToggleStore } from "../../lib/createToggleStore"
 const AccountInfoMessageStore = createToggleStore("AccountInfoMessage")
 
 interface Props {
-  message: ProcessedAccountInfoMessage
+  message: TranscriptMessageOf<"account_info">
 }
 
 const TOKEN_SOURCE_LABEL: Record<string, string> = {

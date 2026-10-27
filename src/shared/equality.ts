@@ -17,6 +17,34 @@ function strictEqual<T>(a: T, b: T): boolean {
   return a === b
 }
 
+function isPlainFieldRecord<V>(value: V): value is V & object {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function sameFieldValue<V>(left: V, right: V): boolean {
+  if (Object.is(left, right)) return true
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => sameFieldValue(item, right[index]))
+  }
+  if (isPlainFieldRecord(left) && isPlainFieldRecord(right)) return sameFields(left, right)
+  return false
+}
+
+export function sameFields<T extends object>(left: T, right: T, ignoredKeys: readonly string[] = []): boolean {
+  if (left === right) return true
+  let leftCount = 0
+  for (const key in left) {
+    if (ignoredKeys.includes(key)) continue
+    leftCount += 1
+    if (!(key in right) || !sameFieldValue(left[key], right[key])) return false
+  }
+  let rightCount = 0
+  for (const key in right) {
+    if (!ignoredKeys.includes(key)) rightCount += 1
+  }
+  return leftCount === rightCount
+}
+
 function sameByMap<T extends object>(map: EqualityMap<T>, a: T, b: T): boolean {
   for (const key in map) {
     if (!map[key](a[key], b[key])) return false

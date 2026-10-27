@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { safeJsonParse, type JsonObject } from "../json"
+import { isJsonObject, safeJsonParse, type JsonObject } from "../json"
 import { describeDatasetSource, metricLabel, type DatasetDecl } from "./datasets"
 import { extractKannaUiIntentFences, fenceBlock, KANNA_UI_INTENT_FENCE_LANGUAGE } from "./fences"
 import { computeVariance, formatMetricValue, valueFormatOf } from "./format"
@@ -9,6 +9,29 @@ import { describeCompareMode, describePeriodSpec, type CompareMode, type PeriodS
 
 export const AGENT_INTENT_ACTIONS = ["agent.ask", "agent.investigate", "agent.fix", "financial.explainVariance"] as const
 export type AgentIntentAction = (typeof AGENT_INTENT_ACTIONS)[number]
+
+export const AGENT_INTENT_LABELS: Readonly<Record<AgentIntentAction, string>> = {
+  "agent.ask": "Question from a view",
+  "agent.investigate": "Investigation request from a view",
+  "agent.fix": "Fix request from a view",
+  "financial.explainVariance": "Variance explanation request from a report",
+}
+
+export const GENERIC_INTENT_LABEL = "Context from a view"
+
+export interface IntentPayloadSummary {
+  label: string
+  context: JsonObject | null
+}
+
+export function describeIntentPayload(source: string): IntentPayloadSummary {
+  const payload = safeJsonParse(source)
+  if (payload === null || !isJsonObject(payload)) return { label: GENERIC_INTENT_LABEL, context: null }
+  const action = AGENT_INTENT_ACTIONS.find((candidate) => candidate === payload.action)
+  const label = action === undefined ? GENERIC_INTENT_LABEL : AGENT_INTENT_LABELS[action]
+  const context = payload.context !== undefined && isJsonObject(payload.context) ? payload.context : null
+  return { label, context }
+}
 
 export interface AgentIntent {
   action: AgentIntentAction

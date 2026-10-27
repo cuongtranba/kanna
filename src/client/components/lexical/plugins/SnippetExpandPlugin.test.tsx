@@ -11,7 +11,6 @@ import {
 import { KANNA_COMPOSER_NODES } from "../nodes"
 import { serializeEditorToWire } from "../serialize/editorToWireString"
 import { decideTab, findSnippetForCaret } from "./SnippetExpandPlugin"
-import { isTypeaheadMenuOpen } from "./SubmitPlugin"
 import type { TextSnippet } from "../../../../shared/types"
 
 function snippet(shortcut: string, expansion: string): TextSnippet {
@@ -143,10 +142,6 @@ describe("SnippetExpandPlugin — Tab guard", () => {
 
   it("ignores Tab when there are no snippets", () => {
     expect(shouldAttempt(plainTab, false, 0)).toBe(false)
-  })
-
-  it("isTypeaheadMenuOpen detects the menu marker", () => {
-    expect(isTypeaheadMenuOpen({ hasTypeaheadMenuOpen: () => true })).toBe(true)
   })
 })
 

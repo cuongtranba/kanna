@@ -1,134 +1,43 @@
-import { useEffect, useMemo } from "react"
-import { probeFileUrl } from "../../api/files"
-import { runDetached } from "../../lib/runDetached"
+import { useMemo } from "react"
 import type { ChatAttachment } from "../../../shared/types"
 import { middleTruncate } from "../../lib/middleTruncate"
 import { fileNameOfPath, toLocalFileUrl } from "../../lib/pathUtils"
-import { AttachmentFileCard } from "./AttachmentCard"
-import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
-import { toPreviewSourceFromAttachment } from "./file-preview/types"
-import { classifyAttachmentIcon, classifyAttachmentPreview, friendlyMimeLabel } from "./attachmentPreview"
-import { LocalFileLinkCardStore } from "./LocalFileLinkCard.store"
-import { formatByteSize } from "../../lib/formatByteSize"
+import { ProbedFileCard } from "./ProbedFileCard"
 
 interface Props {
   path: string
   linkText?: string
 }
 
-function LocalFileLinkCardInner({ path, linkText }: Props) {
+const UNPROBED_MIME_TYPE = "application/octet-stream"
+
+export function LocalFileLinkCard({ path, linkText }: Props) {
   const contentUrl = useMemo(() => toLocalFileUrl(path), [path])
-  const probe = LocalFileLinkCardStore.useScopedStore((s) => s.probe)
-  const previewOpen = LocalFileLinkCardStore.useScopedStore((s) => s.previewOpen)
-  const setProbe = LocalFileLinkCardStore.useScopedStore((s) => s.setProbe)
-  const setPreviewOpen = LocalFileLinkCardStore.useScopedStore((s) => s.setPreviewOpen)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    runDetached("probe local file link", probeFileUrl(contentUrl, { signal: controller.signal }).then((probe) => {
-      if (controller.signal.aborted) return
-      setProbe(probe)
-    }))
-    return () => controller.abort()
-  }, [contentUrl, setProbe])
-
   const fileName = fileNameOfPath(path)
   const rawDisplayName = linkText || fileName
-  const displayName = middleTruncate(rawDisplayName, 28)
-
-  const mimeType = probe.kind === "ready" ? probe.mimeType : "application/octet-stream"
-  const size = probe.kind === "ready" ? probe.size : 0
 
   const attachment: ChatAttachment = {
     id: `local-file-${contentUrl}`,
     kind: "file",
-    displayName,
+    displayName: middleTruncate(rawDisplayName, 28),
     absolutePath: path,
     relativePath: path,
     contentUrl,
-    mimeType,
-    size,
-  }
-
-  if (probe.kind === "missing") {
-    return (
-      <span className="inline-flex align-bottom" data-testid="local-file-link">
-        <AttachmentFileCard attachment={attachment} disabledReason="File no longer available" />
-      </span>
-    )
-  }
-
-  const iconKind = classifyAttachmentIcon(attachment)
-  const friendlyType = friendlyMimeLabel(iconKind, mimeType)
-  const sizeLabel = size > 0 ? formatByteSize(size) : null
-  const isLoading = probe.kind === "loading"
-  const isError = probe.kind === "error"
-
-  let meta: React.ReactNode
-  if (isLoading) {
-    meta = <span className="text-muted-foreground">Fetching…</span>
-  } else if (isError) {
-    meta = <span className="text-muted-foreground">Unable to load</span>
-  } else {
-    meta = (
-      <>
-        {friendlyType}
-        {sizeLabel ? (
-          <>
-            {" · "}
-            <span className="tabular-nums">{sizeLabel}</span>
-          </>
-        ) : null}
-      </>
-    )
-  }
-
-  const previewTarget = probe.kind === "ready" ? classifyAttachmentPreview(attachment) : null
-  const canPreviewInModal = previewTarget !== null && !previewTarget.openInNewTab
-  const ariaLabelParts = [
-    canPreviewInModal ? "Preview" : "Download",
-    rawDisplayName,
-    friendlyType,
-    sizeLabel,
-  ].filter((s): s is string => Boolean(s))
-
-  if (canPreviewInModal) {
-    return (
-      <>
-        <span className="inline-flex align-bottom" data-testid="local-file-link">
-          <AttachmentFileCard
-            attachment={attachment}
-            onClick={() => setPreviewOpen(true)}
-            meta={meta}
-            ariaLabel={ariaLabelParts.join(", ")}
-          />
-        </span>
-        <FilePreviewSheet
-          source={previewOpen ? toPreviewSourceFromAttachment(attachment, "local_file_link") : null}
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-        />
-      </>
-    )
+    mimeType: UNPROBED_MIME_TYPE,
+    size: 0,
   }
 
   return (
-    <span className="inline-flex align-bottom" data-testid="local-file-link">
-      <AttachmentFileCard
-        attachment={attachment}
-        href={contentUrl}
-        download={fileName}
-        meta={meta}
-        ariaLabel={ariaLabelParts.join(", ")}
-      />
-    </span>
-  )
-}
-
-export function LocalFileLinkCard({ path, linkText }: Props) {
-  return (
-    <LocalFileLinkCardStore.Provider init={undefined}>
-      <LocalFileLinkCardInner path={path} linkText={linkText} />
-    </LocalFileLinkCardStore.Provider>
+    <ProbedFileCard
+      attachment={attachment}
+      origin="local_file_link"
+      testId="local-file-link"
+      previewPolicy="when-previewable-and-reachable"
+      inline
+      downloadName={fileName}
+      labelName={rawDisplayName}
+      adoptProbeMetadata
+      showProbeStatus
+    />
   )
 }

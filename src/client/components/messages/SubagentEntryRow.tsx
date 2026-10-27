@@ -7,6 +7,7 @@ import { ThinkingMessage } from "./ThinkingMessage"
 import { ToolCallMessage } from "./ToolCallMessage"
 import { ResultMessage } from "./ResultMessage"
 import { formatByteSize } from "../../lib/formatByteSize"
+import { stripPersistedOutput } from "../../../shared/persisted-output"
 
 interface SubagentEntryRowProps {
   message: HydratedTranscriptMessage
@@ -20,15 +21,9 @@ function asString(v: RawToolResult): string {
   return typeof v === "string" ? v : JSON.stringify(v, null, 2)
 }
 
-function stripPersistedTags(s: string): string {
-  return s
-    .replace(/<persisted-output>\n?/g, "")
-    .replace(/\n?<\/persisted-output>/g, "")
-}
-
 export function SubagentEntryRow({ message, localPath, isRunning = false }: SubagentEntryRowProps) {
   if (message.kind === "tool" && message.persisted) {
-    const previewBody = stripPersistedTags(asString(message.rawResult ?? ""))
+    const previewBody = stripPersistedOutput(asString(message.rawResult ?? ""))
     return (
       <div className="animate-in fade-in-0 duration-200 rounded-md border border-border bg-muted/30 p-2 space-y-1 text-xs">
         <div className="font-medium">

@@ -341,3 +341,5 @@ export type HydratedTranscriptMessage =
   })
   | (HydratedMessageBase & { kind: "unknown"; json: string })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
+
+export type TranscriptMessageOf<K extends HydratedTranscriptMessage["kind"]> = Extract<HydratedTranscriptMessage, { kind: K }>

@@ -1,3 +1,4 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useCallback } from "react"
 import { UserRound, ArrowUp, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
@@ -127,10 +128,4 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
   )
 }
 
-export function SubagentTaskMessage({ subagentType, result, isError, localPath }: Props) {
-  return (
-    <SubagentTaskMessageStore.Provider init={undefined}>
-      <SubagentTaskMessageInner subagentType={subagentType} result={result} isError={isError} localPath={localPath} />
-    </SubagentTaskMessageStore.Provider>
-  )
-}
+export const SubagentTaskMessage = withScopedStore(SubagentTaskMessageStore, SubagentTaskMessageInner)

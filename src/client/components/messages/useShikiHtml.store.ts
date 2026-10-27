@@ -7,13 +7,13 @@ interface HighlightedState {
   html: string
 }
 
-interface HighlightedCodeState {
+interface ShikiHtmlState {
   highlighted: HighlightedState | null
   setHighlighted: (highlighted: HighlightedState | null) => void
 }
 
-export const HighlightedCodeStore = createScopedStore<void, HighlightedCodeState>(
-  "HighlightedCode",
+export const ShikiHtmlStore = createScopedStore<void, ShikiHtmlState>(
+  "ShikiHtml",
   () => (set) => ({
     highlighted: null,
     setHighlighted: (highlighted) => set({ highlighted }),

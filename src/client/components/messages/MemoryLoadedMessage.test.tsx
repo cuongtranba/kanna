@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryLoadedMessage } from "./MemoryLoadedMessage"
-import type { ProcessedMemoryLoadedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
-function buildMessage(overrides: Partial<ProcessedMemoryLoadedMessage> = {}): ProcessedMemoryLoadedMessage {
+function buildMessage(overrides: Partial<TranscriptMessageOf<"memory_loaded">> = {}): TranscriptMessageOf<"memory_loaded"> {
   return {
     kind: "memory_loaded",
     path: "/repo/.claude/rules/pattern_id.md",

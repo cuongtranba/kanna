@@ -19,17 +19,17 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import { useTranscriptActions } from "../transcriptActionsContext"
+import type { LatestToolIds } from "../derived"
 import { CronJobsSection } from "../CronJobsSection"
 import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
-import type { SubagentRunSnapshot } from "../../../shared/types"
+import type { SubagentRunSnapshot, HydratedToolCall } from "../../../shared/types"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
 import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
 import { GenUIHostProvider } from "../../components/genui/host"
 import { useChatGenUIHost } from "../../components/genui/useChatGenUIHost"
-import type { ProcessedToolCall } from "../../components/messages/types"
 import { renderChatLinks } from "../../components/messages/renderChatLinks"
 import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
@@ -64,7 +64,7 @@ export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
 }
 
-export type PendingMainQuestion = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+export type PendingMainQuestion = Extract<HydratedToolCall, { toolKind: "ask_user_question" }>
 
 interface ScrollEventLike {
   readonly currentTarget?: EventTarget | null
@@ -76,9 +76,9 @@ const INLINE_SURFACE_OPTIONS = { askUserQuestionSurface: "inline" } as const
 
 export function selectPendingMainQuestion(
   messages: readonly KannaState["messages"][number][],
-  latestToolIds: Record<string, string | null>,
+  latestToolIds: Pick<LatestToolIds, "askUserQuestion">,
 ): PendingMainQuestion | null {
-  const id = latestToolIds.AskUserQuestion
+  const id = latestToolIds.askUserQuestion
   if (!id) return null
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]

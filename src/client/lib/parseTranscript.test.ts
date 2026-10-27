@@ -253,6 +253,36 @@ describe("processTranscriptMessages", () => {
   })
 })
 
+describe("processTranscriptMessages — pass-through entries", () => {
+  test("compact_boundary keeps compactMetadata", () => {
+    const messages = processTranscriptMessages([
+      entry({ kind: "compact_boundary", compactMetadata: { trigger: "auto", preTokens: 900, postTokens: 100 } }),
+    ])
+
+    const boundary = messages[0]
+    if (boundary?.kind !== "compact_boundary") throw new Error("unexpected message")
+    expect(boundary.compactMetadata).toEqual({ trigger: "auto", preTokens: 900, postTokens: 100 })
+  })
+
+  test("storage-only fields do not reach the hydrated message", () => {
+    const messages = processTranscriptMessages([
+      entry({ kind: "assistant_text", text: "hi", debugRaw: "{\"raw\":true}" }),
+    ])
+
+    expect(messages[0]).toBeDefined()
+    expect(messages[0] && "debugRaw" in messages[0]).toBe(false)
+    expect(messages[0] && "createdAt" in messages[0]).toBe(false)
+  })
+
+  test("an unrecognised entry kind is kept as raw json", () => {
+    const messages = processTranscriptMessages([
+      { _id: "x", createdAt: 0, kind: "from_the_future" } as unknown as TranscriptEntry,
+    ])
+
+    expect(messages[0]?.kind).toBe("unknown")
+  })
+})
+
 describe("getLatestToolIds", () => {
   test("returns the latest unresolved special tool ids", () => {
     const messages = processTranscriptMessages([
@@ -283,9 +313,9 @@ describe("getLatestToolIds", () => {
     ])
 
     expect(getLatestToolIds(messages)).toEqual({
-      AskUserQuestion: messages[0]?.kind === "tool" ? messages[0].id : null,
-      ExitPlanMode: null,
-      TodoWrite: messages[1]?.kind === "tool" ? messages[1].id : null,
+      askUserQuestion: messages[0]?.kind === "tool" ? messages[0].id : null,
+      exitPlanMode: null,
+      todoWrite: messages[1]?.kind === "tool" ? messages[1].id : null,
     })
   })
 
@@ -328,9 +358,9 @@ describe("getLatestToolIds", () => {
     ])
 
     expect(getLatestToolIds(messages)).toEqual({
-      AskUserQuestion: null,
-      ExitPlanMode: null,
-      TodoWrite: null,
+      askUserQuestion: null,
+      exitPlanMode: null,
+      todoWrite: null,
     })
   })
 })

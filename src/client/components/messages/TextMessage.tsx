@@ -1,9 +1,9 @@
 import { memo } from "react"
-import type { ProcessedTextMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { renderMessageMarkdown } from "../lexical/markdown/renderMessage"
 
 interface Props {
-  message: ProcessedTextMessage
+  message: TranscriptMessageOf<"assistant_text">
 }
 
 export const TextMessage = memo(({ message }: Props) => {

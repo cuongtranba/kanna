@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ApiErrorMessage } from "./ApiErrorMessage"
-import type { ProcessedApiErrorMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
-function buildMessage(overrides: Partial<ProcessedApiErrorMessage> = {}): ProcessedApiErrorMessage {
+function buildMessage(overrides: Partial<TranscriptMessageOf<"api_error">> = {}): TranscriptMessageOf<"api_error"> {
   return {
     kind: "api_error",
     status: 529,

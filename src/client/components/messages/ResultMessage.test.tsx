@@ -4,12 +4,12 @@ import { createRoot } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import "../../lib/testing/setupHappyDom"
-import type { ProcessedResultMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { ResultMessage } from "./ResultMessage"
 
 const NOOP_RETRY = (_resultMessageId: string): void => {}
 
-function makeMessage(overrides: Partial<ProcessedResultMessage> = {}): ProcessedResultMessage {
+function makeMessage(overrides: Partial<TranscriptMessageOf<"result">> = {}): TranscriptMessageOf<"result"> {
   return {
     kind: "result",
     id: "result-1",
@@ -19,7 +19,7 @@ function makeMessage(overrides: Partial<ProcessedResultMessage> = {}): Processed
     result: "",
     durationMs: 0,
     ...overrides,
-  } as ProcessedResultMessage
+  } as TranscriptMessageOf<"result">
 }
 
 describe("ResultMessage", () => {

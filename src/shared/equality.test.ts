@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sameChatSnapshotCore } from "./equality"
+import { sameChatSnapshotCore, sameFields } from "./equality"
 import type { ChatSnapshot } from "./types"
 
 function createMinimalChatSnapshot(overrides: Partial<ChatSnapshot> = {}): ChatSnapshot {
@@ -233,5 +233,32 @@ describe("sameChatSnapshotCore loop progress rows", () => {
     const pending = { runId: "next", label: "chunk two", status: "pending" as const, startedAt: 0, finishedAt: null }
     const running = { runId: "r1", label: "chunk two", status: "running" as const, startedAt: 5, finishedAt: null }
     expect(sameChatSnapshotCore(progress([doneRow, pending]), progress([doneRow, running]))).toBe(false)
+  })
+})
+
+describe("sameFields", () => {
+  test("compares nested arrays and records structurally", () => {
+    const left = { id: "a", tools: ["x", "y"], attachment: { name: "n", size: 1 } }
+    const right = { id: "a", tools: ["x", "y"], attachment: { name: "n", size: 1 } }
+    expect(sameFields(left, right)).toBe(true)
+  })
+
+  test("detects a changed nested value", () => {
+    const left = { items: [{ name: "a" }] }
+    const right = { items: [{ name: "b" }] }
+    expect(sameFields(left, right)).toBe(false)
+  })
+
+  test("treats a key present on one side only as a difference", () => {
+    const left: { id: string; note?: string } = { id: "a" }
+    const right: { id: string; note?: string } = { id: "a", note: "x" }
+    expect(sameFields(left, right)).toBe(false)
+    expect(sameFields(right, left)).toBe(false)
+  })
+
+  test("ignores the listed keys on both sides", () => {
+    const left: { id: string; timestamp?: string } = { id: "a", timestamp: "1" }
+    const right: { id: string; timestamp?: string } = { id: "a" }
+    expect(sameFields(left, right, ["timestamp"])).toBe(true)
   })
 })

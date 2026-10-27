@@ -1,6 +1,8 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { Check, ChevronLeft } from "lucide-react"
 import type { AskUserQuestionAnswerMap, AskUserQuestionItem, AskUserQuestionOption } from "../../../shared/types"
 import { cn } from "../../lib/utils"
+import { askUserQuestionKey, effectiveAskUserQuestionAnswers } from "../../lib/askUserQuestionJson"
 import { Button } from "../ui/button"
 import { AskUserQuestionInteractiveStore } from "./AskUserQuestionInteractive.store"
 import type { TimerPort } from "../../ports"
@@ -178,25 +180,16 @@ function AskUserQuestionInteractiveInner(
 
   if (questions.length === 0) return null
 
-  const getQuestionKey = (q: AskUserQuestionItem): string => q.id || q.question
-
-  const getEffectiveAnswers = (questionKey: string, question?: AskUserQuestionItem) => {
-    const custom = customInputs[questionKey]?.trim()
-    const selected = selections[questionKey] ?? EMPTY_SELECTION
-    const q = question || questions.find((c) => getQuestionKey(c) === questionKey)
-    if (q?.multiSelect) {
-      const customParts = custom ? custom.split(", ").filter(Boolean) : []
-      return [...selected, ...customParts]
-    }
-    const value = custom || selected[0]
-    return value ? [value] : []
+  const getEffectiveAnswers = (question: AskUserQuestionItem) => {
+    const key = askUserQuestionKey(question)
+    return effectiveAskUserQuestionAnswers(question, selections[key] ?? EMPTY_SELECTION, customInputs[key])
   }
 
   const getSelectedOptions = (question: AskUserQuestionItem) =>
-    selections[getQuestionKey(question)] ?? EMPTY_SELECTION
+    selections[askUserQuestionKey(question)] ?? EMPTY_SELECTION
 
   const handleOptionSelect = (question: AskUserQuestionItem, label: string) => {
-    const key = getQuestionKey(question)
+    const key = askUserQuestionKey(question)
     if (question.multiSelect) {
       toggleSelection(key, label)
     } else {
@@ -209,7 +202,7 @@ function AskUserQuestionInteractiveInner(
   }
 
   const handleCustomInputChange = (question: AskUserQuestionItem, value: string) => {
-    const key = getQuestionKey(question)
+    const key = askUserQuestionKey(question)
     setCustomInputs({ ...customInputs, [key]: value })
     if (value && !question.multiSelect) {
       clearSelection(key)
@@ -217,18 +210,18 @@ function AskUserQuestionInteractiveInner(
   }
 
   const clearCustomInput = (question: AskUserQuestionItem) => {
-    const key = getQuestionKey(question)
+    const key = askUserQuestionKey(question)
     if (question.multiSelect && customInputs[key]) {
       setCustomInputs({ ...customInputs, [key]: "" })
     }
   }
 
   const allQuestionsAnswered = questions.every(
-    (q) => getEffectiveAnswers(getQuestionKey(q), q).length > 0,
+    (q) => getEffectiveAnswers(q).length > 0,
   )
   const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)]!
   const isLastQuestion = currentIndex >= questions.length - 1
-  const currentHasAnswer = getEffectiveAnswers(getQuestionKey(currentQuestion), currentQuestion).length > 0
+  const currentHasAnswer = getEffectiveAnswers(currentQuestion).length > 0
 
   const handleNext = () => {
     if (currentIndex < questions.length - 1) setCurrentIndex(currentIndex + 1)
@@ -242,8 +235,8 @@ function AskUserQuestionInteractiveInner(
     if (!allQuestionsAnswered) return
     const finalAnswers: AskUserQuestionAnswerMap = {}
     for (const q of questions) {
-      const key = getQuestionKey(q)
-      finalAnswers[key] = getEffectiveAnswers(key, q)
+      const key = askUserQuestionKey(q)
+      finalAnswers[key] = getEffectiveAnswers(q)
     }
     onSubmit(finalAnswers)
   }
@@ -260,7 +253,7 @@ function AskUserQuestionInteractiveInner(
   }
 
   const selectedOptions = getSelectedOptions(currentQuestion)
-  const customInput = customInputs[getQuestionKey(currentQuestion)] || ""
+  const customInput = customInputs[askUserQuestionKey(currentQuestion)] || ""
 
   return (
     <div className="w-full space-y-3">
@@ -326,19 +319,4 @@ function AskUserQuestionInteractiveInner(
   )
 }
 
-export function AskUserQuestionInteractive(
-  { questions, onSubmit, onCancel, submitPending, cancelPending, ports }: AskUserQuestionInteractiveProps,
-): React.ReactElement | null {
-  return (
-    <AskUserQuestionInteractiveStore.Provider init={undefined}>
-      <AskUserQuestionInteractiveInner
-        questions={questions}
-        onSubmit={onSubmit}
-        onCancel={onCancel}
-        submitPending={submitPending}
-        cancelPending={cancelPending}
-        ports={ports}
-      />
-    </AskUserQuestionInteractiveStore.Provider>
-  )
-}
+export const AskUserQuestionInteractive = withScopedStore(AskUserQuestionInteractiveStore, AskUserQuestionInteractiveInner)

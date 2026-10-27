@@ -1,12 +1,10 @@
 import { useCallback, useMemo } from "react"
-import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { $createTextNode, $insertNodes, TextNode } from "lexical"
-import type { LexicalEditor } from "lexical"
 import {
   LexicalTypeaheadMenuPlugin,
   MenuOption,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
-import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { AtSign, Bot, Folder, FileText, FolderGit2, Radio } from "lucide-react"
 import { useMentionSuggestions } from "../../../hooks/useMentionSuggestions"
 import { useSubagentSuggestions } from "../../../hooks/useSubagentSuggestions"
@@ -20,26 +18,12 @@ import { formatMentionLabel, matchNamespacedQuery, type MentionNamespace } from 
 import { StateMarkLabel } from "../../ui/state-mark"
 import { selectBeaconRows, useBeaconsStore } from "../../../stores/beaconsStore"
 import { $createMentionNode, type CreateMentionNodeArgs } from "../nodes/MentionNode"
-import { cn } from "../../../lib/utils"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
+import { TypeaheadMenu, useRegexTypeaheadTrigger } from "./typeahead-menu"
 
 
 const MENTION_TRIGGER_RE = /(?:^|\s)(@((?:[^@\s]){0,200}))$/
-
-function useMentionTrigger(): TriggerFn {
-  return useCallback((text: string, _editor: LexicalEditor): MenuTextMatch | null => {
-    const match = MENTION_TRIGGER_RE.exec(text)
-    if (match === null) return null
-    const leadOffset = match.index + (match[0].length - match[1].length)
-    return {
-      leadOffset,
-      matchingString: match[2] ?? "",
-      replaceableString: match[1],
-    }
-  }, [])
-}
-
 
 export type MentionOption =
   | { kind: "agent"; subagent: SubagentSuggestion["subagent"] }
@@ -116,6 +100,61 @@ export function composeMentionOptions(args: {
 }
 
 
+function MentionMenuSkeleton() {
+  return Array.from({ length: 4 }).map((_, i) => (
+    <li key={i} className="flex items-center gap-2 px-3 py-1.5" aria-hidden="true">
+      <span className="h-3.5 w-3.5 rounded bg-muted animate-pulse" />
+      <span className="h-3 w-40 max-w-full rounded bg-muted animate-pulse" />
+    </li>
+  ))
+}
+
+function MentionRowContent({ data, onlineBeaconIds }: { data: MentionOption; onlineBeaconIds: ReadonlySet<string> }) {
+  if (data.kind === "agent") {
+    return (
+      <>
+        <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="font-mono truncate">{formatMentionLabel("agent", data.subagent.name)}</span>
+        {data.subagent.description ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground">{data.subagent.description}</span>
+        ) : null}
+      </>
+    )
+  }
+  if (data.kind === "project") {
+    return (
+      <>
+        <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="font-mono truncate">{formatMentionLabel("project", data.project.slug)}</span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">{data.project.localPath}</span>
+      </>
+    )
+  }
+  if (data.kind === "beacon") {
+    const online = onlineBeaconIds.has(data.beacon.beaconId)
+    return (
+      <>
+        <Radio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="font-mono truncate">{formatMentionLabel("beacon", data.beacon.handle)}</span>
+        {data.beacon.alias !== null ? (
+          <span className="min-w-0 truncate text-xs font-mono text-muted-foreground">{data.beacon.hostname}</span>
+        ) : null}
+        <span className="ml-auto text-xs">
+          <StateMarkLabel tone={online ? "active" : "muted"} label={online ? "Online" : "Offline"} />
+        </span>
+      </>
+    )
+  }
+  const Icon = data.path.kind === "dir" ? Folder : FileText
+  return (
+    <>
+      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="font-mono truncate">{data.path.path}</span>
+    </>
+  )
+}
+
+
 export interface MentionTypeaheadPluginProps {
   projectId: string | null
 }
@@ -127,7 +166,7 @@ export function MentionTypeaheadPlugin({
   const query = ChatTabScopedStore.useScopedStore((state) => state.mentionQuery)
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setMentionQuery)
 
-  const triggerFn = useMentionTrigger()
+  const triggerFn = useRegexTypeaheadTrigger(MENTION_TRIGGER_RE)
 
   const enabled = query !== null
 
@@ -170,10 +209,6 @@ export function MentionTypeaheadPlugin({
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
-  const onQueryChange = useCallback((matchingString: string | null) => {
-    setQuery(matchingString)
-  }, [setQuery])
-
   const onSelectOption = useCallback(
     (
       option: MentionMenuOption,
@@ -215,120 +250,23 @@ export function MentionTypeaheadPlugin({
       if (anchorElementRef.current == null) return null
       if (menuOptions.length === 0 && !mentionState.loading) return null
 
-      const handleOptionMouseDown = (
-        event: ReactMouseEvent<HTMLLIElement>,
-        option: MentionMenuOption,
-      ) => {
-        event.preventDefault()
-        selectOptionAndCleanUp(option)
-      }
-
-      const handleOptionMouseMove = (
-        event: ReactMouseEvent<HTMLLIElement>,
-        index: number,
-      ) => {
-        highlightOnPointerMove(event, index, setHighlightedIndex)
-      }
-
       return (
-        <ul
-          role="listbox"
-          data-kanna-typeahead-menu="mention"
-          className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-80 overflow-auto rounded-md border border-border bg-popover shadow-md"
-        >
-          {mentionState.loading && menuOptions.length === 0
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <li
-                  key={i}
-                  className="flex items-center gap-2 px-3 py-1.5"
-                  aria-hidden="true"
-                >
-                  <span className="h-3.5 w-3.5 rounded bg-muted animate-pulse" />
-                  <span className="h-3 w-40 max-w-full rounded bg-muted animate-pulse" />
-                </li>
-              ))
-            : menuOptions.map((option, i) => {
-                const isActive = i === selectedIndex
-                const data = option.data
-                const path = data.kind === "path" ? data.path : null
-                const Icon = path?.kind === "dir" ? Folder : FileText
-                let mentionContent: React.ReactNode
-                if (data.kind === "agent") {
-                  mentionContent = (
-                    <>
-                      <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono truncate">
-                        {formatMentionLabel("agent", data.subagent.name)}
-                      </span>
-                      {data.subagent.description ? (
-                        <span className="min-w-0 truncate text-xs text-muted-foreground">
-                          {data.subagent.description}
-                        </span>
-                      ) : null}
-                    </>
-                  )
-                } else if (data.kind === "project") {
-                  mentionContent = (
-                    <>
-                      <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono truncate">
-                        {formatMentionLabel("project", data.project.slug)}
-                      </span>
-                      <span className="min-w-0 truncate text-xs text-muted-foreground">
-                        {data.project.localPath}
-                      </span>
-                    </>
-                  )
-                } else if (data.kind === "beacon") {
-                  mentionContent = (
-                    <>
-                      <Radio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono truncate">
-                        {formatMentionLabel("beacon", data.beacon.handle)}
-                      </span>
-                      {data.beacon.alias !== null ? (
-                        <span className="min-w-0 truncate text-xs font-mono text-muted-foreground">
-                          {data.beacon.hostname}
-                        </span>
-                      ) : null}
-                      <span className="ml-auto text-xs">
-                        <StateMarkLabel
-                          tone={onlineBeaconIds.has(data.beacon.beaconId) ? "active" : "muted"}
-                          label={onlineBeaconIds.has(data.beacon.beaconId) ? "Online" : "Offline"}
-                        />
-                      </span>
-                    </>
-                  )
-                } else if (path) {
-                  mentionContent = (
-                    <>
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="font-mono truncate">{path.path}</span>
-                    </>
-                  )
-                } else {
-                  mentionContent = null
-                }
-
-                return (
-                  <li
-                    key={option.key}
-                    ref={option.setRefElement}
-                    role="option"
-                    aria-selected={isActive}
-                    onMouseDown={(e) => handleOptionMouseDown(e, option)}
-                    onMouseMove={(e) => handleOptionMouseMove(e, i)}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm",
-                      isActive && "bg-accent text-accent-foreground",
-                    )}
-                  >
-                    <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    {mentionContent}
-                  </li>
-                )
-              })}
-        </ul>
+        <TypeaheadMenu
+          kind="mention"
+          maxHeightClass="max-h-80"
+          rowClassName="flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm"
+          options={menuOptions}
+          selectedIndex={selectedIndex}
+          onPick={selectOptionAndCleanUp}
+          onRowPointerMove={(event, index) => highlightOnPointerMove(event, index, setHighlightedIndex)}
+          placeholder={mentionState.loading && menuOptions.length === 0 ? <MentionMenuSkeleton /> : undefined}
+          renderRow={(option) => (
+            <>
+              <AtSign className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <MentionRowContent data={option.data} onlineBeaconIds={onlineBeaconIds} />
+            </>
+          )}
+        />
       )
     },
     [mentionState.loading, highlightOnPointerMove, onlineBeaconIds],
@@ -337,7 +275,7 @@ export function MentionTypeaheadPlugin({
   return (
     <LexicalTypeaheadMenuPlugin<MentionMenuOption>
       options={options}
-      onQueryChange={onQueryChange}
+      onQueryChange={setQuery}
       onSelectOption={onSelectOption}
       triggerFn={triggerFn}
       menuRenderFn={menuRenderFn}

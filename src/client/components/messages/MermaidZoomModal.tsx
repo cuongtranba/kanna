@@ -1,3 +1,4 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useEffect, type PointerEvent as ReactPointerEvent } from "react"
 import { createPortal } from "react-dom"
 import { Minus, Plus, RotateCcw, X } from "lucide-react"
@@ -75,10 +76,4 @@ function MermaidZoomModalInner({ svg, onClose, ports }: Props) {
   )
 }
 
-export function MermaidZoomModal({ svg, onClose, ports }: Props) {
-  return (
-    <MermaidZoomModalStore.Provider init={undefined}>
-      <MermaidZoomModalInner svg={svg} onClose={onClose} ports={ports} />
-    </MermaidZoomModalStore.Provider>
-  )
-}
+export const MermaidZoomModal = withScopedStore(MermaidZoomModalStore, MermaidZoomModalInner)
