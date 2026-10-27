@@ -2,6 +2,7 @@ import type { ServerWebSocket } from "bun"
 import type { JsonValue } from "../shared/json"
 import {
   BEACON_PROTOCOL_VERSION,
+  isBeaconResponseFrame,
   isSupportedProtocol,
   MIN_BEACON_PROTOCOL,
   parseBeaconFrame,
@@ -16,9 +17,9 @@ import { log } from "../shared/log"
 import type { BeaconRegistry } from "./beacon-registry"
 import { generateChallengeNonce, verifyBeaconSignature } from "./beacon-crypto"
 import type { AppSettingsManager } from "./app-settings"
-import type { ClientState } from "./ws-router-utils"
+import type { BeaconSocketState } from "./ws-router-utils"
 
-export type BeaconConnectionSocket = Pick<ServerWebSocket<ClientState>, "data" | "send" | "close">
+export type BeaconConnectionSocket = Pick<ServerWebSocket<BeaconSocketState>, "data" | "send" | "close">
 
 export interface BeaconConnection {
   handleOpen(ws: BeaconConnectionSocket): void
@@ -149,15 +150,8 @@ export function createBeaconConnection(deps: { registry: BeaconRegistry; appSett
         registry.setUpdateStatus(beaconId, status)
         return
       }
-      case "stdout":
-      case "stderr":
-      case "result":
-      case "exit":
-      case "error":
-        registry.routeInbound(beaconId, frame)
-        break
       default:
-        break
+        if (isBeaconResponseFrame(frame)) registry.routeInbound(beaconId, frame)
     }
   }
 

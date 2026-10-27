@@ -7,7 +7,7 @@ import type { DesktopStrings } from "../strings"
 import { NO_PARAMS } from "./bridge"
 import { presentStatus } from "./present"
 import { useDesktopViewStore } from "./view-store"
-import { ActionButton, hostOf, KEY, MarkLabel, unbreakable, type Shared } from "./parts"
+import { ActionButton, hostOf, KEY, MarkLabel, unbreakable, useUnpairBusy, type Shared } from "./parts"
 import { ConfirmScreen, WelcomeScreen } from "./PairingScreens"
 import { GrantScreen } from "./GrantScreen"
 import { HomeScreen } from "./HomeScreen"
@@ -20,7 +20,7 @@ export function BeaconDesktopView({ bridge, strings, locale }: Shared) {
   useEffect(() => bridge.onView(receiveView), [bridge, receiveView])
   useEffect(() => {
     bridge.announceLocale(locale)
-    runPendingAction("beacon.getView", async () => receiveView(await bridge.request("getView", NO_PARAMS)))
+    runPendingAction(KEY.getView, async () => receiveView(await bridge.request("getView", NO_PARAMS)))
   }, [bridge, locale, receiveView])
 
   if (view === null) {
@@ -70,7 +70,7 @@ function StatusBlock({ view, bridge, strings, locale }: Shared & { view: Desktop
   const onDownload = useCallback(() => {
     runPendingAction(KEY.external, () => bridge.request("openExternal", { url: BEACON_DOWNLOAD_PAGE }))
   }, [bridge])
-  const unpairing = usePendingAction(KEY.unpair)
+  const unpairing = useUnpairBusy(view)
   if (pairing === null) return null
   const presented = view.runner === null ? null : presentStatus(view.runner, strings, now, locale)
   const phase = view.runner?.status.phase

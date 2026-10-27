@@ -58,7 +58,8 @@ import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
-import { createWsRouter, type ClientState } from "./ws-router"
+import { createWsRouter } from "./ws-router"
+import type { SocketState } from "./ws-router-utils"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
@@ -619,7 +620,7 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
   })
 }
 
-async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
+async function shutdownServices(services: ApplicationServices, server: Server<SocketState>): Promise<void> {
   await services.lifetime.disposeAll()
   server.stop(true)
 }
@@ -632,19 +633,19 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
   const distDir = options.distDir ?? path.join(import.meta.dir, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets })
 
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
   const development = getRuntimeProfile() === "dev"
 
-  let server!: Server<ClientState>
+  let server!: Server<SocketState>
   let actualPort = port
 
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
     try {
-      server = serveHttp<ClientState>({
+      server = serveHttp<SocketState>({
         port: actualPort,
         hostname,
         development,
@@ -677,6 +678,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     diffStore,
     updateManager,
     appSettings,
+    beaconTransferTickets: beacon.registry.transfer.tickets,
     stop: () => remoteMcp.stop().then(() => shutdownServices(services, server)),
   }
 }

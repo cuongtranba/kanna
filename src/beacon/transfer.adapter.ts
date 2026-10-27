@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { createReadStream } from "node:fs"
-import { lstat, mkdir, open, realpath, rename, rm, stat } from "node:fs/promises"
-import { basename, dirname, join } from "node:path"
+import { lstat, mkdir, open, rename, rm, stat } from "node:fs/promises"
+import { dirname, join } from "node:path"
 import { isPathInsideRoots } from "../shared/beacon-scope"
 import {
   TRANSFER_CHUNK_ATTEMPTS,
@@ -17,8 +17,9 @@ import {
 } from "../shared/beacon-transfer"
 import { errorMessage } from "../shared/errors"
 import { isJsonObject, safeJsonParse } from "../shared/json"
-import { BeaconScopeError, type BeaconTransferPort } from "./ports"
-import { containedRealpath, denied, realRoots } from "./fs.adapter"
+import { containedRealpath, denied, isMissingPathError, nearestExistingAncestor, realRoots } from "./fs.adapter"
+import { beaconUserAgent, defaultSleep, failureReason } from "./http"
+import type { BeaconTransferPort } from "./ports"
 
 export interface BeaconTransferDeps {
   kannaUrl: string
@@ -45,15 +46,9 @@ class TransferResumeError extends Error {
   }
 }
 
-function isMissing(error: Error): boolean {
-  return "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
-}
-
 async function describeFailure(response: Response): Promise<string> {
-  const text = await response.text()
-  const parsed = safeJsonParse(text)
-  const reason = parsed !== null && isJsonObject(parsed) && typeof parsed.error === "string" ? parsed.error : text.trim()
-  return reason === "" ? `HTTP ${String(response.status)}` : `HTTP ${String(response.status)}: ${reason}`
+  const reason = failureReason(await response.text())
+  return reason === null ? `HTTP ${String(response.status)}` : `HTTP ${String(response.status)}: ${reason}`
 }
 
 async function readReceived(response: Response): Promise<number | null> {
@@ -75,29 +70,11 @@ async function digestOf(path: string, onPiece?: () => Promise<void>): Promise<{ 
   return { bytes, sha256: hash.digest("hex") }
 }
 
-interface WriteTarget {
-  target: string
-}
-
-async function resolveWriteTarget(path: string, roots: readonly string[]): Promise<WriteTarget> {
+async function resolveWriteTarget(path: string, roots: readonly string[]): Promise<string> {
   const allowed = await realRoots(roots)
-  const rest: string[] = []
-  let current = path
-  for (;;) {
-    try {
-      const real = await realpath(current)
-      const target = join(real, ...rest)
-      if (!isPathInsideRoots(real, allowed)) throw denied(path, "write")
-      return { target }
-    } catch (error) {
-      if (error instanceof BeaconScopeError) throw error
-      if (!(error instanceof Error) || !isMissing(error)) throw error
-      const parent = dirname(current)
-      if (parent === current) throw denied(path, "write")
-      rest.unshift(basename(current))
-      current = parent
-    }
-  }
+  const ancestor = await nearestExistingAncestor(path)
+  if (ancestor === null || !isPathInsideRoots(ancestor.real, allowed)) throw denied(path, "write")
+  return join(ancestor.real, ...ancestor.rest)
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -105,25 +82,24 @@ async function exists(path: string): Promise<boolean> {
     await lstat(path)
     return true
   } catch (error) {
-    if (error instanceof Error && isMissing(error)) return false
+    if (error instanceof Error && isMissingPathError(error)) return false
     throw error
   }
 }
 
 export function createBeaconTransfer(deps: BeaconTransferDeps): BeaconTransferPort {
-  const base = deps.kannaUrl.replace(/\/+$/, "")
   const chunkBytes = deps.chunkBytes ?? TRANSFER_CHUNK_BYTES
   const requestTimeoutMs = deps.requestTimeoutMs ?? TRANSFER_REQUEST_TIMEOUT_MS
   const keepAliveMs = deps.keepAliveMs ?? TRANSFER_KEEPALIVE_MS
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const sleep = deps.sleep ?? defaultSleep
 
   function request(ticket: string, route: string, init: RequestInit): Promise<Response> {
-    return fetch(`${base}${route}`, {
+    return fetch(`${deps.kannaUrl}${route}`, {
       ...init,
       headers: {
         ...init.headers,
         authorization: `Bearer ${ticket}`,
-        "user-agent": `kanna-beacon/${deps.beaconVersion}`,
+        "user-agent": beaconUserAgent(deps.beaconVersion),
       },
       signal: AbortSignal.timeout(requestTimeoutMs),
     })
@@ -263,7 +239,7 @@ export function createBeaconTransfer(deps: BeaconTransferDeps): BeaconTransferPo
     sha256: string
     overwrite: boolean
   }): Promise<BeaconTransferResult> {
-    const { target } = await resolveWriteTarget(args.path, deps.getWriteRoots())
+    const target = await resolveWriteTarget(args.path, deps.getWriteRoots())
     if (await exists(target)) {
       if ((await stat(target)).isDirectory()) throw new Error(`the destination is a directory: ${args.path}`)
       if (!args.overwrite) throw new Error(`the destination already exists: ${args.path}`)

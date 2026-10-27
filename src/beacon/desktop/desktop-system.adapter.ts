@@ -3,7 +3,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import type { BeaconOs } from "../../shared/beacon-protocol"
 import {
-  BEACON_APP_IDENTIFIER,
+  LINK_MIME_TYPE,
+  MAC_LOGIN_LABEL,
   linuxAutostartEntry,
   linuxUrlHandlerEntry,
   macLaunchAgentPlist,
@@ -39,7 +40,7 @@ export function createLoginItem(input: { os: BeaconOs; launcherPath: string; hom
           return
         case "darwin":
           await writeOrRemove(
-            join(input.homeDir, "Library", "LaunchAgents", `${BEACON_APP_IDENTIFIER}.login.plist`),
+            join(input.homeDir, "Library", "LaunchAgents", `${MAC_LOGIN_LABEL}.plist`),
             enabled ? macLaunchAgentPlist() : null,
           )
           return
@@ -68,6 +69,6 @@ export async function registerLinkHandler(input: {
       join(input.homeDir, ".local", "share", "applications", LINUX_LINK_ENTRY),
       linuxUrlHandlerEntry(input.bunPath, input.helperPath),
     )
-    await run("xdg-mime", ["default", LINUX_LINK_ENTRY, "x-scheme-handler/kanna-beacon"])
+    await run("xdg-mime", ["default", LINUX_LINK_ENTRY, LINK_MIME_TYPE])
   }
 }

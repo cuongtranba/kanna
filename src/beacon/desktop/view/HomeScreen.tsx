@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type ChangeEvent } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import { MoreHorizontal } from "lucide-react"
 import { useNow } from "../../../client/hooks/useNow"
 import { runPendingAction, usePendingAction } from "../../../client/stores/pendingActionsStore"
@@ -6,9 +6,20 @@ import type { BeaconActivity } from "../../activity"
 import type { DesktopView } from "../desktop-types"
 import type { DesktopLocale, DesktopStrings } from "../strings"
 import { NO_PARAMS } from "./bridge"
-import { formatClock, groupActivityByDay, presentGrant, presentOutcome, splitFolderPath } from "./present"
+import { formatClock, groupActivityByDay, presentGrant, presentOutcome } from "./present"
 import { useDesktopViewStore } from "./view-store"
-import { ActionButton, cx, hostOf, KEY, MarkLabel, Spinner, StateMark, type Shared } from "./parts"
+import {
+  ActionButton,
+  cx,
+  FolderLabel,
+  hostOf,
+  KEY,
+  LaunchAtLoginToggle,
+  MarkLabel,
+  StateMark,
+  useUnpairBusy,
+  type Shared,
+} from "./parts"
 
 export function HomeScreen({ view, bridge, strings, locale }: Shared & { view: DesktopView }) {
   const openPending = usePendingAction(KEY.openGrant)
@@ -39,19 +50,11 @@ export function HomeScreen({ view, bridge, strings, locale }: Shared & { view: D
                   <span className="bd-muted">{strings.grantSummary.nothingShared}</span>
                 ) : (
                   <ul className="bd-grant-folders">
-                    {grant.folders.map((root) => {
-                      const { name, parent } = splitFolderPath(root)
-                      return (
-                        <li key={root}>
-                          <span className="bd-folder-name">{name}</span>
-                          {parent !== "" && (
-                            <span className="bd-folder-parent">
-                              <bdi>{parent}</bdi>
-                            </span>
-                          )}
-                        </li>
-                      )
-                    })}
+                    {grant.folders.map((root) => (
+                      <li key={root}>
+                        <FolderLabel root={root} />
+                      </li>
+                    ))}
                   </ul>
                 )}
               </dd>
@@ -148,21 +151,13 @@ function HomeFooter({ view, bridge, strings }: Shared & { view: DesktopView }) {
   const askUnpair = useDesktopViewStore((state) => state.askUnpair)
   const cancelUnpair = useDesktopViewStore((state) => state.cancelUnpair)
   const pausedPending = usePendingAction(KEY.paused)
-  const loginPending = usePendingAction(KEY.login) || view.busy.launchAtLogin
-  const unpairing = usePendingAction(KEY.unpair) || view.busy.unpairing
+  const unpairing = useUnpairBusy(view)
   const paused = view.prefs.paused
   const osName = strings.osName[view.os]
 
   const onPause = useCallback(() => {
     runPendingAction(KEY.paused, () => bridge.request("setPaused", { paused: !paused }))
   }, [bridge, paused])
-  const onLogin = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const enabled = event.target.checked
-      runPendingAction(KEY.login, () => bridge.request("setLaunchAtLogin", { enabled }))
-    },
-    [bridge],
-  )
   const onUnpair = useCallback(() => {
     runPendingAction(KEY.unpair, () => bridge.request("unpair", NO_PARAMS))
   }, [bridge])
@@ -193,11 +188,7 @@ function HomeFooter({ view, bridge, strings }: Shared & { view: DesktopView }) {
             </div>
           ) : (
             <>
-              <label className="bd-check">
-                <input type="checkbox" checked={view.prefs.launchAtLogin} onChange={onLogin} disabled={loginPending} />
-                <span>{strings.footer.launchAtLogin(osName)}</span>
-                {loginPending ? <Spinner /> : null}
-              </label>
+              <LaunchAtLoginToggle view={view} bridge={bridge} label={strings.footer.launchAtLogin(osName)} />
               <button type="button" className="bd-menu-danger" onClick={askUnpair}>
                 {strings.footer.unpair}
               </button>

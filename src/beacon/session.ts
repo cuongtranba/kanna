@@ -34,7 +34,7 @@ export interface BeaconSessionDeps {
   shell: BeaconShellPort
   transfer: BeaconTransferPort
   now?: () => number
-  onReady?: (scope: BeaconScope, serverProtocol: number, serverVersion: string | null) => void
+  onReady?: (scope: BeaconScope) => void
   onScope?: (scope: BeaconScope) => void
   onActivity?: (activity: BeaconActivity) => void
   onRefused?: (reason: BeaconRefusal) => void
@@ -48,7 +48,7 @@ export interface BeaconSession {
   requestUnpair(): boolean
   sendUpdateStatus(status: BeaconUpdateStatus): boolean
   serverVersion(): string | null
-  inFlight(): number
+  canSyncScope(): boolean
   quiesce(): Promise<void>
   resumeServing(): void
 }
@@ -113,7 +113,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
     throw new Error("unsupported operation")
   }
 
-  function runFs(request: BeaconRequest): Promise<JsonValue> {
+  function runDataRequest(request: BeaconRequest): Promise<JsonValue> {
     switch (request.op) {
       case "read":
         return deps.fs.read(request.path, request.offset, request.limit)
@@ -148,7 +148,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         record(id, request, { kind: "exit", code })
         return
       }
-      const result = await runFs(request)
+      const result = await runDataRequest(request)
       transport.send({ kind: "result", id, result })
       record(id, request, { kind: "done" })
     } catch (error) {
@@ -216,7 +216,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
         serverProtocol = frame.protocolVersion ?? MIN_BEACON_PROTOCOL
         serverVersion = frame.serverVersion ?? null
         adoptScope(frame.scope)
-        deps.onReady?.(frame.scope, serverProtocol, serverVersion)
+        deps.onReady?.(frame.scope)
         return
       case "scope":
         if (phase === "ready") adoptScope(frame.scope)
@@ -274,7 +274,7 @@ export function createBeaconSession(deps: BeaconSessionDeps): BeaconSession {
       return true
     },
     serverVersion: () => serverVersion,
-    inFlight: () => running + queue.length,
+    canSyncScope,
     quiesce() {
       quiescing = true
       const idle = new Promise<void>((resolve) => idleWaiters.push(resolve))

@@ -1,7 +1,5 @@
-import type { DesktopRequests, DesktopView } from "../desktop-types"
+import type { DesktopRequestName, DesktopRequests, DesktopView } from "../desktop-types"
 import type { DesktopLocale } from "../strings"
-
-export type DesktopRequestName = keyof DesktopRequests
 
 export interface DesktopBridge {
   request<K extends DesktopRequestName>(

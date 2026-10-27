@@ -1,6 +1,6 @@
 import { createHash, type Hash } from "node:crypto"
 import { open, readdir, realpath, stat } from "node:fs/promises"
-import { dirname, join, resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import { isPathInsideRoots } from "../shared/beacon-scope"
 import type { JsonValue } from "../shared/json"
 import { BeaconScopeError, type BeaconFsPort } from "./ports"
@@ -21,7 +21,7 @@ interface HashProgress {
   position: number
 }
 
-function isMissing(error: Error): boolean {
+export function isMissingPathError(error: Error): boolean {
   return "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
 }
 
@@ -37,15 +37,22 @@ export async function realRoots(roots: readonly string[]): Promise<string[]> {
   return resolved
 }
 
-export async function nearestExistingRealpath(path: string): Promise<string | null> {
+export interface ExistingAncestor {
+  real: string
+  rest: string[]
+}
+
+export async function nearestExistingAncestor(path: string): Promise<ExistingAncestor | null> {
+  const rest: string[] = []
   let current = resolve(path)
   for (;;) {
     try {
-      return await realpath(current)
+      return { real: await realpath(current), rest }
     } catch (error) {
-      if (!(error instanceof Error) || !isMissing(error)) throw error
+      if (!(error instanceof Error) || !isMissingPathError(error)) throw error
       const parent = dirname(current)
       if (parent === current) return null
+      rest.unshift(basename(current))
       current = parent
     }
   }
@@ -61,9 +68,9 @@ export async function containedRealpath(path: string, roots: readonly string[]):
   try {
     real = await realpath(path)
   } catch (error) {
-    if (!(error instanceof Error) || !isMissing(error)) throw error
-    const ancestor = await nearestExistingRealpath(path)
-    if (ancestor === null || !isPathInsideRoots(ancestor, allowed)) throw denied(path)
+    if (!(error instanceof Error) || !isMissingPathError(error)) throw error
+    const ancestor = await nearestExistingAncestor(path)
+    if (ancestor === null || !isPathInsideRoots(ancestor.real, allowed)) throw denied(path)
     throw new Error(`no such file or directory: ${path}`, { cause: error })
   }
   if (!isPathInsideRoots(real, allowed)) throw denied(path)

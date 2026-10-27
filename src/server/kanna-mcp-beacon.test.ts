@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import type { JsonValue } from "../shared/json"
 import type { BeaconConfig } from "../shared/beacon-config"
-import type { BeaconFrame, BeaconRequest } from "../shared/beacon-protocol"
+import type { BeaconFrame, BeaconRequest, BeaconResponseFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { ToolArgs, ToolResult } from "./kanna-mcp-tool"
@@ -15,7 +15,7 @@ import { createTestEventStore } from "./storage/test-helpers"
 import { createToolCallbackService, type ToolCallbackService } from "./tool-callback"
 
 type SendPayload = Parameters<BeaconSocket["send"]>[0]
-type Responder = (request: BeaconRequest, id: string) => BeaconFrame[]
+type Responder = (request: BeaconRequest, id: string) => BeaconResponseFrame[]
 
 interface FakeTool {
   name: string
@@ -105,7 +105,7 @@ function textOf(result: ToolResult): string {
   return result.content[0].text
 }
 
-function resultFrame(id: string, result: JsonValue): BeaconFrame {
+function resultFrame(id: string, result: JsonValue): BeaconResponseFrame {
   return { kind: "result", id, result }
 }
 

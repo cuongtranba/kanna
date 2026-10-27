@@ -1,10 +1,11 @@
 import { hostname, homedir, platform } from "node:os"
-import { join } from "node:path"
 import { createBeaconFs } from "./fs.adapter"
 import { beaconOsFor } from "./host-os"
 import { createKeyStore } from "./key-store.adapter"
+import { defaultSleep } from "./http"
 import { runBeaconCli } from "./main"
 import { createPairClient } from "./pair-client.adapter"
+import { beaconFilePaths, beaconHome } from "./paths"
 import { DEFAULT_RELEASE_BASE } from "./self-update"
 import { cleanupUpdateLeftovers, createSelfUpdater } from "./self-update.adapter"
 import { createBeaconShell } from "./shell.adapter"
@@ -53,16 +54,17 @@ function processSupervisorPort(argv: readonly string[]): SupervisorPort {
 }
 
 async function main(): Promise<void> {
-  const home = process.env.KANNA_BEACON_HOME ?? join(homedir(), ".kanna-beacon")
+  const os = beaconOsFor(platform())
+  const files = beaconFilePaths(os, beaconHome(os, process.env.KANNA_BEACON_HOME, homedir()))
   const argv = process.argv.slice(2)
   const execPath = process.execPath
   if (argv[0] === "run") await cleanupUpdateLeftovers(execPath)
   const exitCode = await runBeaconCli(argv, {
-    os: beaconOsFor(platform()),
+    os,
     hostname: hostname(),
     beaconVersion: BEACON_VERSION,
-    openKeyStore: () => createKeyStore(join(home, "key.der")),
-    stateStore: createStateStore(join(home, "state.json")),
+    openKeyStore: () => createKeyStore(files.keyFile),
+    stateStore: createStateStore(files.stateFile),
     pairClient: createPairClient(),
     openTransport: (url) => createWebSocketTransport({ url }),
     createFs: createBeaconFs,
@@ -76,7 +78,7 @@ async function main(): Promise<void> {
       releaseBase: process.env.KANNA_BEACON_RELEASE_BASE || DEFAULT_RELEASE_BASE,
     }),
     autoUpdate: process.env.KANNA_BEACON_AUTO_UPDATE !== "disabled",
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    sleep: defaultSleep,
     log: (line) => process.stderr.write(`${line}\n`),
     print: (line) => process.stdout.write(`${line}\n`),
   })

@@ -30,6 +30,11 @@ export interface TransferTicket extends TransferTicketSpec {
   outcome?: TransferOutcome
 }
 
+export interface BeaconTransferHost {
+  tickets: BeaconTransferTickets
+  maxPullBytes: () => number | undefined
+}
+
 export type TicketEndListener = (reason: TicketEndReason) => void
 
 export interface BeaconTransferTickets {

@@ -170,9 +170,9 @@ describe("beacon desktop app", () => {
   test("pasted text that is not a pairing link is rejected, a link asks for confirmation", async () => {
     const { app } = createHarness()
     await app.start()
-    expect(app.submitPairingInput("hello")).toEqual({ ok: false })
+    expect(app.handlers.submitPairingInput({ text: "hello" })).toEqual({ ok: false })
     expect(app.view().screen).toEqual({ kind: "welcome", inputRejected: true })
-    expect(app.submitPairingInput(LINK)).toEqual({ ok: true })
+    expect(app.handlers.submitPairingInput({ text: LINK })).toEqual({ ok: true })
     expect(app.view().screen).toEqual({
       kind: "confirm",
       target: { kannaUrl: KANNA, code: "ABCD2345" },
@@ -185,7 +185,7 @@ describe("beacon desktop app", () => {
     const harness = createHarness()
     await harness.app.start()
     harness.app.receiveLink(LINK)
-    expect(await harness.app.confirmPairing()).toEqual({ ok: true })
+    expect(await harness.app.handlers.confirmPairing({})).toEqual({ ok: true })
     expect(harness.saved.pairs).toEqual([{ code: "ABCD2345", publicKey: "PUB", label: "DESKTOP-ADMIN", os: "windows" }])
     expect(harness.state).toEqual({ kannaUrl: KANNA, beaconId: "b-new" })
     expect(harness.runners).toHaveLength(1)
@@ -198,7 +198,7 @@ describe("beacon desktop app", () => {
     const harness = createHarness({ pairResult: { ok: false, error: "Beacons require a password", status: 403 } })
     await harness.app.start()
     harness.app.receiveLink(LINK)
-    expect(await harness.app.confirmPairing()).toEqual({ ok: false })
+    expect(await harness.app.handlers.confirmPairing({})).toEqual({ ok: false })
     expect(harness.app.view().screen).toMatchObject({ kind: "confirm", pairing: false, error: { kind: "needs-password" } })
     expect(harness.state).toBeNull()
     expect(harness.runners).toHaveLength(0)
@@ -208,12 +208,12 @@ describe("beacon desktop app", () => {
     const expired = createHarness({ pairResult: { ok: false, error: "expired", status: 400 } })
     await expired.app.start()
     expired.app.receiveLink(LINK)
-    await expired.app.confirmPairing()
+    await expired.app.handlers.confirmPairing({})
     expect(expired.app.view().screen).toMatchObject({ error: { kind: "expired" } })
     const offline = createHarness({ pairResult: { ok: false, error: "Unable to connect", status: null } })
     await offline.app.start()
     offline.app.receiveLink(LINK)
-    await offline.app.confirmPairing()
+    await offline.app.handlers.confirmPairing({})
     expect(offline.app.view().screen).toMatchObject({ error: { kind: "unreachable", detail: "Unable to connect" } })
   })
 
@@ -228,8 +228,8 @@ describe("beacon desktop app", () => {
   test("a saved grant is sent to Kanna and the record returns once Kanna echoes it", async () => {
     const harness = createHarness({ state: PAIRED })
     await harness.app.start()
-    harness.app.openGrant()
-    expect(harness.app.applyGrant(GRANT)).toEqual({ ok: true })
+    harness.app.handlers.openGrant({})
+    expect(harness.app.handlers.applyGrant({ grant: GRANT })).toEqual({ ok: true })
     expect(harness.runners[0]?.scopeChanges).toEqual([GRANT])
     expect(harness.app.view().screen).toMatchObject({ kind: "grant", saving: true })
     const echoed: BeaconScope = { ...DEFAULT_BEACON_SCOPE, ...GRANT }
@@ -240,8 +240,8 @@ describe("beacon desktop app", () => {
   test("a grant Kanna does not take keeps the editor open and says so", async () => {
     const harness = createHarness({ state: PAIRED })
     await harness.app.start()
-    harness.app.openGrant()
-    harness.app.applyGrant(GRANT)
+    harness.app.handlers.openGrant({})
+    harness.app.handlers.applyGrant({ grant: GRANT })
     harness.runners[0]?.emit({ ...ONLINE, scope: { ...DEFAULT_BEACON_SCOPE } })
     expect(harness.app.view().screen).toEqual({ kind: "grant", firstRun: false, saving: false, saveError: "rejected" })
   })
@@ -252,13 +252,13 @@ describe("beacon desktop app", () => {
       runnerSnapshot: { status: { phase: "offline", attempt: 1, retryAt: 9, reason: "unreachable" }, scope: null, scopeSync: false },
     })
     await offline.app.start()
-    offline.app.openGrant()
-    expect(offline.app.applyGrant(GRANT)).toEqual({ ok: false })
+    offline.app.handlers.openGrant({})
+    expect(offline.app.handlers.applyGrant({ grant: GRANT })).toEqual({ ok: false })
     expect(offline.app.view().screen).toMatchObject({ saveError: "offline" })
     const legacy = createHarness({ state: PAIRED, runnerSnapshot: { ...ONLINE, scopeSync: false } })
     await legacy.app.start()
-    legacy.app.openGrant()
-    legacy.app.applyGrant(GRANT)
+    legacy.app.handlers.openGrant({})
+    legacy.app.handlers.applyGrant({ grant: GRANT })
     expect(legacy.app.view().screen).toMatchObject({ saveError: "needs-newer-kanna" })
   })
 
@@ -276,10 +276,10 @@ describe("beacon desktop app", () => {
   test("pausing stops answering and is remembered", async () => {
     const harness = createHarness({ state: PAIRED })
     await harness.app.start()
-    await harness.app.setPaused(true)
+    await harness.app.handlers.setPaused({ paused: true })
     expect(harness.runners[0]?.calls).toEqual(["pause"])
     expect(harness.saved.prefs.at(-1)).toMatchObject({ paused: true })
-    await harness.app.setPaused(false)
+    await harness.app.handlers.setPaused({ paused: false })
     expect(harness.runners[0]?.calls).toEqual(["pause", "resume"])
   })
 
@@ -287,7 +287,7 @@ describe("beacon desktop app", () => {
     const harness = createHarness({ state: PAIRED, prefs: { paused: false, launchAtLogin: true } })
     await harness.app.start()
     harness.activity({ id: "1", at: 1, verb: "read", target: "a", outcome: { kind: "done" } })
-    expect(await harness.app.unpair()).toEqual({ ok: true })
+    expect(await harness.app.handlers.unpair({})).toEqual({ ok: true })
     expect(harness.runners[0]?.calls).toEqual(["unpair", "stop"])
     expect(harness.state).toBeNull()
     expect(harness.saved.erased).toBe(1)
@@ -301,7 +301,7 @@ describe("beacon desktop app", () => {
   test("a new pairing link clears the note left by the last unpair", async () => {
     const harness = createHarness({ state: PAIRED })
     await harness.app.start()
-    await harness.app.unpair()
+    await harness.app.handlers.unpair({})
     expect(harness.app.view().notice?.kind).toBe("unpaired")
     harness.app.receiveLink(LINK)
     expect(harness.app.view().notice).toBeNull()
