@@ -2,7 +2,8 @@ import { tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 import { formatGenUIIssues, type DatasetDecl } from "../../shared/genui"
 import { fail, ok, type ToolResult } from "../kanna-mcp-tool"
-import { resolveDatasetFile } from "./dataset-file.adapter"
+import { datasetFileReader } from "./dataset-file.adapter"
+import { checkFileDatasetInCwd } from "./dataset-service"
 import { reviewGenUISpec } from "./genui-guard"
 
 export const VALIDATE_UI_DESCRIPTION =
@@ -24,19 +25,10 @@ export async function runValidateUi(
   return fail(`INVALID — fix these and validate again:\n${formatGenUIIssues(review.issues)}`)
 }
 
-export async function checkFileDatasetInCwd(cwd: string, decl: DatasetDecl): Promise<string | null> {
-  if (decl.source !== "file") return null
-  const resolved = await resolveDatasetFile(cwd, decl.path)
-  if (resolved.ok) return null
-  return resolved.reason === "outside_root"
-    ? `"${decl.path}" resolves outside the working directory`
-    : `"${decl.path}" does not exist in ${cwd} — embed the rows inline instead, or point at a file that exists`
-}
-
 export function buildValidateUiToolList(chatId: string | null, cwd: string) {
   if (!chatId) return []
   return [
     tool("validate_ui", VALIDATE_UI_DESCRIPTION, validateUiInputShape, async (input) =>
-      await runValidateUi(input.spec, (decl) => checkFileDatasetInCwd(cwd, decl))),
+      await runValidateUi(input.spec, (decl) => checkFileDatasetInCwd(datasetFileReader, cwd, decl))),
   ]
 }

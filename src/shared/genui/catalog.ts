@@ -62,10 +62,29 @@ function drilldownDimension(props: JsonObject): string[] {
   return isJsonObject(drilldown) && typeof drilldown.dimension === "string" ? [drilldown.dimension] : []
 }
 
-const tone = z.enum(["neutral", "positive", "negative", "attention", "info"])
-const compareWith = z.enum([...COMPARE_MODES, "none"])
-const filters = z.array(datasetFilterSchema).max(12)
+export const FLOW_NODE_KINDS = ["start", "end", "process", "decision", "store", "external"] as const
+export const FLOW_EDGE_TYPES = ["static", "flow"] as const
+
+export const alternatives = (values: readonly string[]) => values.join("|")
+
+const STACK_DIRECTIONS = ["vertical", "horizontal"] as const
+const GAPS = ["sm", "md", "lg"] as const
+const HEIGHTS = ["sm", "md", "lg"] as const
+const TONES = ["neutral", "positive", "negative", "attention", "info"] as const
+const TEXT_VARIANTS = ["body", "muted", "heading", "label"] as const
+const BUTTON_VARIANTS = ["primary", "secondary", "ghost"] as const
+const FILE_STATUSES = ["added", "modified", "deleted", "renamed"] as const
+const DIAGNOSTIC_SEVERITIES = ["error", "warning", "info"] as const
+const FLOW_DIRECTIONS = ["auto", "LR", "TB"] as const
+const FLOW_EDGE_STYLES = ["solid", "dashed"] as const
+const TABLE_VARIANTS = ["detail", "statement", "comparison"] as const
+const TABLE_COLUMN_LAYOUTS = ["period", "metrics"] as const
+const COMPARE_OPTIONS = [...COMPARE_MODES, "none"] as const
 const chartKinds = ["line", "bar", "area", "stacked-bar", "waterfall", "combo", "composition"] as const
+
+const tone = z.enum(TONES)
+const compareWith = z.enum(COMPARE_OPTIONS)
+const filters = z.array(datasetFilterSchema).max(12)
 const statementTotals = z.array(z.strictObject({ label: shortText, groups: z.array(z.string().min(1).max(120)).min(1).max(20) })).max(10)
 
 const financialTableProps = {
@@ -74,7 +93,7 @@ const financialTableProps = {
   metrics: z.array(identifier).min(1).max(8).optional(),
   rows: identifier.optional(),
   groupRows: identifier.optional(),
-  columns: z.enum(["period", "metrics"]).optional(),
+  columns: z.enum(TABLE_COLUMN_LAYOUTS).optional(),
   period: periodSpecSchema.optional(),
   compareWith: compareWith.optional(),
   filters: filters.optional(),
@@ -97,8 +116,6 @@ const statementProps = z.strictObject({
 
 const STATEMENT_SIGNATURE = "dataset, metric, rows, groupRows?, period?, compareWith?, filters?, totals?: [{label, groups[]}], title?"
 
-export const FLOW_NODE_KINDS = ["start", "end", "process", "decision", "store", "external"] as const
-export const FLOW_EDGE_TYPES = ["static", "flow"] as const
 export const FLOW_MAX_NODES = 120
 export const FLOW_MAX_EDGES = 240
 export const FLOW_MAX_GROUPS = 16
@@ -122,14 +139,14 @@ const flowEdgeSchema = z.strictObject({
   to: flowId,
   label: z.string().min(1).max(40).optional(),
   type: z.enum(FLOW_EDGE_TYPES).optional(),
-  style: z.enum(["solid", "dashed"]).optional(),
+  style: z.enum(FLOW_EDGE_STYLES).optional(),
   tone: tone.optional(),
 })
 
 const flowDiagramProps = z.strictObject({
   title: shortText.optional(),
-  direction: z.enum(["auto", "LR", "TB"]).optional(),
-  height: z.enum(["sm", "md", "lg"]).optional(),
+  direction: z.enum(FLOW_DIRECTIONS).optional(),
+  height: z.enum(HEIGHTS).optional(),
   groups: z.array(z.strictObject({ id: flowId, label: z.string().min(1).max(60) })).max(FLOW_MAX_GROUPS).optional(),
   nodes: z.array(flowNodeSchema).min(1).max(FLOW_MAX_NODES),
   edges: z.array(flowEdgeSchema).max(FLOW_MAX_EDGES),
@@ -159,16 +176,16 @@ export type FlowEdge = FlowDiagramProps["edges"][number]
 
 export const GENUI_COMPONENTS = {
   Stack: {
-    props: z.strictObject({ direction: z.enum(["vertical", "horizontal"]).optional(), gap: z.enum(["sm", "md", "lg"]).optional() }),
+    props: z.strictObject({ direction: z.enum(STACK_DIRECTIONS).optional(), gap: z.enum(GAPS).optional() }),
     description: "Lays children out in a column (default) or a wrapping row.",
-    signature: "direction?: vertical|horizontal, gap?: sm|md|lg",
+    signature: `direction?: ${alternatives(STACK_DIRECTIONS)}, gap?: ${alternatives(GAPS)}`,
     children: true,
     events: [],
   },
   Grid: {
-    props: z.strictObject({ columns: z.number().int().min(1).max(4).optional(), gap: z.enum(["sm", "md", "lg"]).optional() }),
+    props: z.strictObject({ columns: z.number().int().min(1).max(4).optional(), gap: z.enum(GAPS).optional() }),
     description: "Responsive grid; columns is the maximum on a wide screen and collapses to one on a phone.",
-    signature: "columns?: 1-4, gap?: sm|md|lg",
+    signature: `columns?: 1-4, gap?: ${alternatives(GAPS)}`,
     children: true,
     events: [],
   },
@@ -197,23 +214,23 @@ export const GENUI_COMPONENTS = {
     events: [],
   },
   Text: {
-    props: z.strictObject({ text: z.string().max(4000), variant: z.enum(["body", "muted", "heading", "label"]).optional() }),
+    props: z.strictObject({ text: z.string().max(4000), variant: z.enum(TEXT_VARIANTS).optional() }),
     description: "A paragraph, heading, or label of plain text (no markdown).",
-    signature: "text, variant?: body|muted|heading|label",
+    signature: `text, variant?: ${alternatives(TEXT_VARIANTS)}`,
     children: false,
     events: [],
   },
   Badge: {
     props: z.strictObject({ label: z.string().min(1).max(60), tone: tone.optional() }),
     description: "A short status label. Tone is always paired with the label text.",
-    signature: "label, tone?: neutral|positive|negative|attention|info",
+    signature: `label, tone?: ${alternatives(TONES)}`,
     children: false,
     events: [],
   },
   Button: {
-    props: z.strictObject({ label: z.string().min(1).max(60), variant: z.enum(["primary", "secondary", "ghost"]).optional() }),
+    props: z.strictObject({ label: z.string().min(1).max(60), variant: z.enum(BUTTON_VARIANTS).optional() }),
     description: "Fires its on.press action binding.",
-    signature: "label, variant?: primary|secondary|ghost; on: {press: action}",
+    signature: `label, variant?: ${alternatives(BUTTON_VARIANTS)}; on: {press: action}`,
     children: false,
     events: ["press"],
   },
@@ -258,18 +275,18 @@ export const GENUI_COMPONENTS = {
       files: z.array(z.strictObject({
         path: workspacePath,
         description: z.string().max(200).optional(),
-        status: z.enum(["added", "modified", "deleted", "renamed"]).optional(),
+        status: z.enum(FILE_STATUSES).optional(),
       })).min(1).max(100),
     }),
     description: "Files with an optional change status; each row opens the file.",
-    signature: "files: [{path, description?, status?: added|modified|deleted|renamed}]",
+    signature: `files: [{path, description?, status?: ${alternatives(FILE_STATUSES)}}]`,
     children: false,
     events: [],
   },
   DiagnosticList: {
     props: z.strictObject({
       items: z.array(z.strictObject({
-        severity: z.enum(["error", "warning", "info"]),
+        severity: z.enum(DIAGNOSTIC_SEVERITIES),
         message: z.string().min(1).max(1000),
         path: workspacePath.optional(),
         line: z.number().int().min(1).optional(),
@@ -278,7 +295,7 @@ export const GENUI_COMPONENTS = {
       })).min(1).max(200),
     }),
     description: "Compiler, linter, or type-checker findings; rows with a path open the file at the line.",
-    signature: "items: [{severity: error|warning|info, message, path?, line?, column?, source?}]",
+    signature: `items: [{severity: ${alternatives(DIAGNOSTIC_SEVERITIES)}, message, path?, line?, column?, source?}]`,
     children: false,
     events: [],
   },
@@ -318,7 +335,7 @@ export const GENUI_COMPONENTS = {
   FlowDiagram: {
     props: flowDiagramProps,
     description: "A read-only node-and-edge diagram that Kanna lays out (never give coordinates): architecture, data flow, a pipeline or run with per-step status. Edge type is intent: static (default) for a relationship that simply exists; flow, animated, only for a path work is moving along right now. Clicking a step opens its path or asks the agent about it; an Outline view reads it as a list.",
-    signature: "nodes: [{id, label, description?, kind?: start|end|process|decision|store|external, tone?, status?, group?, path?, line?}], edges: [{from, to, label?, type?: static|flow, style?: solid|dashed, tone?}], groups?: [{id, label}], title?, direction?: auto|LR|TB, height?: sm|md|lg",
+    signature: `nodes: [{id, label, description?, kind?: ${alternatives(FLOW_NODE_KINDS)}, tone?, status?, group?, path?, line?}], edges: [{from, to, label?, type?: ${alternatives(FLOW_EDGE_TYPES)}, style?: ${alternatives(FLOW_EDGE_STYLES)}, tone?}], groups?: [{id, label}], title?, direction?: ${alternatives(FLOW_DIRECTIONS)}, height?: ${alternatives(HEIGHTS)}`,
     children: false,
     events: [],
   },
@@ -353,19 +370,19 @@ export const GENUI_COMPONENTS = {
       totalLabel: z.string().min(1).max(60).optional(),
       drilldown: z.strictObject({ dimension: identifier }).optional(),
       explain: z.boolean().optional(),
-      height: z.enum(["sm", "md", "lg"]).optional(),
+      height: z.enum(HEIGHTS).optional(),
       limit: z.number().int().min(1).max(200).optional(),
     }),
     description: "A chart over a dataset. line/area/bar for trends and comparisons, stacked-bar with series for composition, waterfall for a bridge (steps along dimension, closed by totalLabel), combo for a bar metric plus a secondaryMetric line, composition for a small part-to-whole. drilldown makes points clickable; explain adds an \"Explain variance\" action.",
-    signature: "chart: line|bar|area|stacked-bar|waterfall|combo|composition, dataset, metric (or up to 4), dimension, series?, secondaryMetric?, period?, compareWith?, filters?, title?, totalLabel?, drilldown?: {dimension}, explain?, height?: sm|md|lg, limit?",
+    signature: `chart: ${alternatives(chartKinds)}, dataset, metric (or up to 4), dimension, series?, secondaryMetric?, period?, compareWith?, filters?, title?, totalLabel?, drilldown?: {dimension}, explain?, height?: ${alternatives(HEIGHTS)}, limit?`,
     children: false,
     events: [],
     datasetRefs: refsFor(["metric", "secondaryMetric"], ["dimension", "series"]),
   },
   FinancialTable: {
-    props: z.strictObject({ variant: z.enum(["detail", "statement", "comparison"]).optional(), ...financialTableProps }),
+    props: z.strictObject({ variant: z.enum(TABLE_VARIANTS).optional(), ...financialTableProps }),
     description: "A financial table. detail: metrics by the rows dimension. comparison: metric with variance columns. statement: line items (rows) under groups (groupRows) with subtotals and totals.",
-    signature: "variant?: detail|statement|comparison, dataset, metric?, metrics?, rows?, groupRows?, columns?: period|metrics, period?, compareWith?, filters?, totals?: [{label, groups[]}], title?, limit?",
+    signature: `variant?: ${alternatives(TABLE_VARIANTS)}, dataset, metric?, metrics?, rows?, groupRows?, columns?: ${alternatives(TABLE_COLUMN_LAYOUTS)}, period?, compareWith?, filters?, totals?: [{label, groups[]}], title?, limit?`,
     children: false,
     events: [],
     datasetRefs: refsFor(["metric", "metrics"], ["rows", "groupRows"]),
@@ -404,7 +421,7 @@ export const GENUI_COMPONENTS = {
   CompareSelector: {
     props: z.strictObject({ value: z.string().max(40).optional(), options: z.array(compareWith).min(1).max(5).optional(), label: shortText.optional() }),
     description: "Picks the comparison baseline. Bind value with $bindState.",
-    signature: "value (bind), options?: previous-period|previous-year|budget|forecast|none, label?",
+    signature: `value (bind), options?: ${alternatives(COMPARE_OPTIONS)}, label?`,
     children: false,
     events: [],
   },
@@ -535,6 +552,16 @@ export function isGenUIComponentName(name: string): name is GenUIComponentName {
 export function isGenUIActionName(name: string): name is GenUIActionName {
   return Object.hasOwn(GENUI_ACTIONS, name)
 }
+
+export type AgentActionName = {
+  [Name in GenUIActionName]: (typeof GENUI_ACTIONS)[Name]["class"] extends "agent" ? Name : never
+}[GenUIActionName]
+
+function isAgentActionName(name: string): name is AgentActionName {
+  return isGenUIActionName(name) && GENUI_ACTIONS[name].class === "agent"
+}
+
+export const AGENT_ACTION_NAMES: readonly AgentActionName[] = Object.keys(GENUI_ACTIONS).filter(isAgentActionName)
 
 export function componentDef(name: GenUIComponentName): GenUIComponentDef {
   return GENUI_COMPONENTS[name]

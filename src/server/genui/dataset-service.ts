@@ -17,7 +17,7 @@ import {
   withSpan,
 } from "../observability"
 import { policy } from "../permission-gate"
-import type { DatasetFileReader, GenUIDataScope, McpDataClient, McpToolDescriptor } from "./dataset-ports"
+import { mcpServerKey, type DatasetFileReader, type GenUIDataScope, type McpDataClient, type McpToolDescriptor, type ResolvedDatasetFile } from "./dataset-ports"
 
 export const DATASET_FILE_MAX_BYTES = 20 * 1024 * 1024
 export const FROZEN_DATASET_MAX_BYTES = 8 * 1024 * 1024
@@ -47,8 +47,46 @@ type Loaded =
 
 type ToolAccess = "allowed" | "ask" | "missing" | "unavailable"
 
+interface DatasetProblem {
+  code: DatasetErrorCode
+  message: string
+}
+
+type Located<T> = { ok: true; value: T } | { ok: false; problem: DatasetProblem }
+
+type ResolvedFile = Extract<ResolvedDatasetFile, { ok: true }>
+
 function failure(code: DatasetErrorCode, message: string): Loaded {
   return { ok: false, outcome: { status: "error", code, message } }
+}
+
+function problemOutcome(problem: DatasetProblem): Loaded {
+  return failure(problem.code, problem.message)
+}
+
+async function locateDatasetFile(
+  files: DatasetFileReader,
+  cwd: string,
+  relativePath: string,
+): Promise<Located<ResolvedFile>> {
+  const resolved = await files.resolve(cwd, relativePath)
+  if (resolved.ok) return { ok: true, value: resolved }
+  if (resolved.reason === "outside_root") {
+    return { ok: false, problem: { code: "unauthorized", message: `"${relativePath}" resolves outside the working directory` } }
+  }
+  return {
+    ok: false,
+    problem: {
+      code: "not_found",
+      message: `"${relativePath}" does not exist in ${cwd} — embed the rows inline instead, or point at a file that exists`,
+    },
+  }
+}
+
+export async function checkFileDatasetInCwd(files: DatasetFileReader, cwd: string, decl: DatasetDecl): Promise<string | null> {
+  if (decl.source !== "file") return null
+  const located = await locateDatasetFile(files, cwd, decl.path)
+  return located.ok ? null : located.problem.message
 }
 
 export function stableStringify(value: JsonValue): string {
@@ -108,17 +146,22 @@ export class GenUIDatasetService {
   async checkResolvable(chatId: string, decl: DatasetDecl): Promise<string | null> {
     if (decl.source === "inline") return null
     if (decl.source === "mcp") {
-      const server = this.sources.mcpServers().find((candidate) => candidate.name === decl.server)
-      if (!server) return `no MCP server named "${decl.server}" is configured in Kanna's Settings`
-      return server.enabled ? null : `the MCP server "${decl.server}" is disabled in Settings`
+      const located = this.locateMcpServer(decl)
+      return located.ok ? null : located.problem.message
     }
     const scope = this.sources.scopeOf(chatId)
-    if (!scope) return null
-    const resolved = await this.sources.files.resolve(scope.cwd, decl.path)
-    if (resolved.ok) return null
-    return resolved.reason === "outside_root"
-      ? `"${decl.path}" resolves outside the chat's working directory`
-      : `"${decl.path}" does not exist in ${scope.cwd} — embed the rows inline instead, or point at a file that exists`
+    return scope ? await checkFileDatasetInCwd(this.sources.files, scope.cwd, decl) : null
+  }
+
+  private locateMcpServer(decl: Extract<DatasetDecl, { source: "mcp" }>): Located<McpServerConfig> {
+    const server = this.sources.mcpServers().find((candidate) => candidate.name === decl.server)
+    if (!server) {
+      return { ok: false, problem: { code: "not_found", message: `No MCP server named "${decl.server}" is configured in Kanna's Settings` } }
+    }
+    if (!server.enabled) {
+      return { ok: false, problem: { code: "source_unavailable", message: `The MCP server "${decl.server}" is disabled in Settings` } }
+    }
+    return { ok: true, value: server }
   }
 
   private async run(chatId: string, decl: DatasetDecl, query: DatasetQuery, refresh: boolean): Promise<DatasetQueryOutcome> {
@@ -143,12 +186,9 @@ export class GenUIDatasetService {
   private async loadFile(chatId: string, decl: Extract<DatasetDecl, { source: "file" }>): Promise<Loaded> {
     const scope = this.sources.scopeOf(chatId)
     if (!scope) return failure("not_found", "This chat no longer exists")
-    const resolved = await this.sources.files.resolve(scope.cwd, decl.path)
-    if (!resolved.ok) {
-      return resolved.reason === "outside_root"
-        ? failure("unauthorized", `"${decl.path}" is outside the chat's working directory`)
-        : failure("not_found", `"${decl.path}" was not found`)
-    }
+    const located = await locateDatasetFile(this.sources.files, scope.cwd, decl.path)
+    if (!located.ok) return problemOutcome(located.problem)
+    const resolved = located.value
     if (policyDeniesRead(scope, [path.resolve(scope.cwd, decl.path), resolved.absolutePath])) {
       return failure("unauthorized", `The chat's permission policy blocks reading "${decl.path}"`)
     }
@@ -167,9 +207,9 @@ export class GenUIDatasetService {
   }
 
   private async loadMcp(chatId: string, decl: Extract<DatasetDecl, { source: "mcp" }>, refresh: boolean): Promise<Loaded> {
-    const server = this.sources.mcpServers().find((candidate) => candidate.name === decl.server)
-    if (!server) return failure("not_found", `No MCP server named "${decl.server}" is configured`)
-    if (!server.enabled) return failure("source_unavailable", `The MCP server "${decl.server}" is disabled`)
+    const located = this.locateMcpServer(decl)
+    if (!located.ok) return problemOutcome(located.problem)
+    const server = located.value
 
     const access = await this.toolAccess(chatId, server, decl.tool)
     if (access === "missing") return failure("not_found", `The MCP server "${decl.server}" has no tool "${decl.tool}"`)
@@ -215,7 +255,7 @@ export class GenUIDatasetService {
   }
 
   private async listTools(server: McpServerConfig): Promise<McpToolDescriptor[] | null> {
-    const key = `${server.id}\u0001${server.updatedAt}`
+    const key = mcpServerKey(server)
     const cached = this.toolLists.get(key)
     if (cached && this.now() - cached.at < TOOL_LIST_TTL_MS) return cached.tools
     try {

@@ -21,6 +21,7 @@ import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
+import { QuickResponseAdapter } from "./quick-response"
 import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
 import { readIntEnv } from "./env-int"
@@ -290,7 +291,9 @@ export class AgentCoordinator {
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
-    this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
+    this.generateTitle = args.generateTitle
+      ?? ((messageContent, cwd) =>
+        generateTitleForChatDetailed(messageContent, cwd, new QuickResponseAdapter({ oauthPool: args.oauthPool })))
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()

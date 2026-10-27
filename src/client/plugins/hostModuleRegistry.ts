@@ -23,7 +23,7 @@ export function createPluginHostRegistry(): PluginHostRegistry {
   return {
     require(name: string): LoadedModule {
       if (!CLIENT_HOST_MODULES.includes(name) || !(name in HOST_MODULE_INSTANCES)) {
-        throw new Error(hostModuleUnavailableMessage(name))
+        throw new Error(hostModuleUnavailableMessage(name, "client"))
       }
       return HOST_MODULE_INSTANCES[name]
     },

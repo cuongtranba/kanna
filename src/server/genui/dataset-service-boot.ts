@@ -1,7 +1,7 @@
 import type { AppSettingsPatch, AppSettingsSnapshot } from "../../shared/types"
 import type { ChatPermissionPolicy } from "../../shared/permission-policy"
 import { resolveChatCwd, type ChatCwdStore } from "../claude-session-config"
-import { resolveMcpTestBearer } from "../ws-router-settings"
+import { resolveMcpBearer } from "../mcp-bearer"
 import { datasetFileReader } from "./dataset-file.adapter"
 import { GenUIDatasetService } from "./dataset-service"
 import { createMcpDataClient } from "./mcp-data-client.adapter"
@@ -13,7 +13,7 @@ export function createGenUIDatasetService<TWriteResult>(
 ): GenUIDatasetService {
   return new GenUIDatasetService({
     files: datasetFileReader,
-    mcp: createMcpDataClient((server) => resolveMcpTestBearer(server, appSettings)),
+    mcp: createMcpDataClient((server) => resolveMcpBearer(server, appSettings)),
     scopeOf: (chatId) => {
       const cwd = resolveChatCwd(store, chatId)
       return cwd ? { cwd, policy: resolveChatPolicy(chatId) } : null

@@ -10,7 +10,7 @@ if (shouldRunLiveTests) {
   describe("live title generation", () => {
     test("generates a title with Claude", async () => {
       const adapter = new QuickResponseAdapter({
-        runClaudeStructured,
+        runClaudeStructured: async (args) => runClaudeStructured(null, args),
         runCodexStructured: async () => {
           throw new Error("Codex fallback should not be used in the Claude live title test")
         },

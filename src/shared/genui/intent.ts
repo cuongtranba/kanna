@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { safeJsonParse, type JsonObject } from "../json"
+import { AGENT_ACTION_NAMES, type AgentActionName } from "./catalog"
 import { describeDatasetSource, metricLabel, type DatasetDecl } from "./datasets"
 import { extractKannaUiIntentFences, fenceBlock, KANNA_UI_INTENT_FENCE_LANGUAGE } from "./fences"
 import { computeVariance, formatMetricValue, valueFormatOf } from "./format"
@@ -7,8 +8,8 @@ import { jsonObjectSchema } from "./json-schema"
 import type { DatasetFilter, QueryResult } from "./query"
 import { describeCompareMode, describePeriodSpec, type CompareMode, type PeriodSpec } from "./period"
 
-export const AGENT_INTENT_ACTIONS = ["agent.ask", "agent.investigate", "agent.fix", "financial.explainVariance"] as const
-export type AgentIntentAction = (typeof AGENT_INTENT_ACTIONS)[number]
+export const AGENT_INTENT_ACTIONS = AGENT_ACTION_NAMES
+export type AgentIntentAction = AgentActionName
 
 export interface AgentIntent {
   action: AgentIntentAction

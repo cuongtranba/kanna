@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
+import { PLUGIN_LOG_DEFAULT_TAIL, tailLogEntries } from "../shared/plugins/log-ring"
 import type { PluginService } from "./plugins/plugin-service"
 import { join } from "node:path"
 
@@ -37,16 +38,16 @@ describe("P0 — manifest, paths, settings collection", () => {
   })
 
   test("an installed plugin round-trips through the settings collection", async () => {
-    const { applyAppSettingsPatchForTest } = await import("./plugins/plugin-settings")
-    const created = applyAppSettingsPatchForTest([], {
+    const { applyInstalledPluginsPatch } = await import("./plugins/plugin-settings")
+    const created = applyInstalledPluginsPatch([], {
       create: { sourceDir: HELLO, id: "hello" },
     })
     expect(created).toMatchObject([{ id: "hello", sourceDir: HELLO, enabled: false }])
 
-    const enabled = applyAppSettingsPatchForTest(created, { update: { id: "hello", patch: { enabled: true } } })
+    const enabled = applyInstalledPluginsPatch(created, { update: { id: "hello", patch: { enabled: true } } })
     expect(enabled[0].enabled).toBe(true)
 
-    expect(applyAppSettingsPatchForTest(enabled, { delete: { id: "hello" } })).toEqual([])
+    expect(applyInstalledPluginsPatch(enabled, { delete: { id: "hello" } })).toEqual([])
   })
 })
 
@@ -210,7 +211,7 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
 
   test("GET :id/logs honours tail", async () => {
     const many = Array.from({ length: 5 }, (_, i) => ({ stream: "out" as const, text: `l${i}`, at: i }))
-    const res = await call("GET", "/api/plugins/hello/logs?tail=2", { service: fakeService({ logs: () => many }) })
+    const res = await call("GET", "/api/plugins/hello/logs?tail=2", { service: fakeService({ logs: (_id, tail = PLUGIN_LOG_DEFAULT_TAIL) => tailLogEntries(many, tail) }) })
     expect(res?.status).toBe(200)
     const body = await res?.json() as { logs: { text: string }[] }
     expect(body.logs.map((l) => l.text)).toEqual(["l3", "l4"])

@@ -110,6 +110,20 @@ async function appendCard(
   agent.emitStateChange(chatId)
 }
 
+export async function queueHandlerTurn(
+  agent: Pick<InboundDeliveryAgent, "enqueueMessage" | "maybeStartNextQueuedMessage">,
+  chatId: string,
+  handler: InboundHandler | null,
+  prompt: string,
+  scheduleId: string,
+): Promise<void> {
+  await agent.enqueueMessage(chatId, prompt, [], {
+    autoContinue: { scheduleId },
+    ...(handler?.provider && handler.model ? { provider: handler.provider, model: handler.model } : {}),
+  })
+  await agent.maybeStartNextQueuedMessage(chatId)
+}
+
 async function queuePrompt(
   agent: InboundDeliveryAgent,
   inbox: InboxRegistry,
@@ -129,11 +143,7 @@ async function queuePrompt(
     }),
   ].join("\n\n")
   await inbox.markPending(threadId, scheduleId)
-  await agent.enqueueMessage(chatId, prompt, [], {
-    autoContinue: { scheduleId },
-    ...(handler.provider && handler.model ? { provider: handler.provider, model: handler.model } : {}),
-  })
-  await agent.maybeStartNextQueuedMessage(chatId)
+  await queueHandlerTurn(agent, chatId, handler, prompt, scheduleId)
 }
 
 export async function deliverInbound(

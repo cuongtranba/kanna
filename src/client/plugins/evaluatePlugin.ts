@@ -1,8 +1,7 @@
 import { type HostBag, type LoadedModule } from "../../shared/dynamic-module"
 import { isRecord } from "../../shared/errors"
+import { PLUGIN_HOST_GLOBAL } from "../../shared/plugins/host-modules"
 import type { createPluginHostRegistry } from "./hostModuleRegistry"
-
-const HOST_GLOBAL_KEY = "__KANNA_PLUGIN_HOST__"
 
 type HostGlobal = HostBag
 
@@ -26,9 +25,9 @@ async function importWithHostRegistry(
   pluginId: string,
 ): Promise<PluginModule> {
   const host: HostGlobal = globalThis
-  const hadPrevious = HOST_GLOBAL_KEY in host
-  const previous = host[HOST_GLOBAL_KEY]
-  host[HOST_GLOBAL_KEY] = registry
+  const hadPrevious = PLUGIN_HOST_GLOBAL in host
+  const previous = host[PLUGIN_HOST_GLOBAL]
+  host[PLUGIN_HOST_GLOBAL] = registry
 
   try {
     const loaded: LoadedModule = await import(/* @vite-ignore */ url)
@@ -37,8 +36,8 @@ async function importWithHostRegistry(
     }
     return loaded
   } finally {
-    if (hadPrevious) host[HOST_GLOBAL_KEY] = previous
-    else delete host[HOST_GLOBAL_KEY]
+    if (hadPrevious) host[PLUGIN_HOST_GLOBAL] = previous
+    else delete host[PLUGIN_HOST_GLOBAL]
   }
 }
 

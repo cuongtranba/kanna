@@ -32,6 +32,7 @@ import {
 export const QUERY_DEFAULT_LIMIT = 200
 export const QUERY_MAX_LIMIT = 1000
 export const SCENARIOS = ["actual", "budget", "forecast"] as const
+export const DATASET_FILTER_OPS = ["eq", "neq", "in", "not-in"] as const
 
 const identifier = z.string().regex(GENUI_IDENTIFIER)
 
@@ -42,7 +43,7 @@ export const periodSpecSchema = z.union([
 
 export const datasetFilterSchema = z.strictObject({
   dimension: identifier,
-  op: z.enum(["eq", "neq", "in", "not-in"]).optional(),
+  op: z.enum(DATASET_FILTER_OPS).optional(),
   value: z.union([z.string().max(200), z.number(), z.array(z.union([z.string().max(200), z.number()])).max(100)]),
 })
 

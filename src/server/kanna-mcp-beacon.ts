@@ -4,9 +4,10 @@ import type { BeaconConfig } from "../shared/beacon-config"
 import type { BeaconRequest } from "../shared/beacon-protocol"
 import { beaconDisplayName, buildBeaconMentionIndex, BEACON_MENTION_PREFIX } from "../shared/beacon-alias"
 import { buildBeaconStatusRows } from "../shared/beacon-status"
-import { buildBeaconRequest } from "../shared/beacon-tool-request"
+import { buildBeaconRequest, type BeaconToolArgs } from "../shared/beacon-tool-request"
 import type { BeaconToolOp } from "../shared/tool-call-types"
 import { errorMessage } from "../shared/errors"
+import { kannaToolName } from "../shared/tools"
 import type { JsonValue } from "../shared/json"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { BeaconRegistry } from "./beacon-registry"
@@ -15,8 +16,8 @@ import type { BeaconTransferFiles } from "./beacon-transfer-files"
 import { createBeaconTransferFiles } from "./beacon-transfer-files.adapter"
 import { toJsonObject } from "./json-boundary"
 import type { BeaconTransferTickets } from "./beacon-transfer-tickets"
-import { buildBeaconTransferTools, type BeaconTransferToolFactory } from "./kanna-mcp-beacon-transfer"
-import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
+import { beaconIdField, buildBeaconTransferTools } from "./kanna-mcp-beacon-transfer"
+import { ok, fail, type KannaToolFactory, type ToolResult } from "./kanna-mcp-tool"
 import type { ToolCallbackService } from "./tool-callback"
 
 export const BEACON_CAPTURE_BYTES = 100_000
@@ -163,25 +164,23 @@ function formatOutcome(beacon: BeaconConfig, op: BeaconToolOp, outcome: BeaconDi
   return `${head}: exit ${String(outcome.exit)}${formatStream("stdout", outcome.stdout)}${formatStream("stderr", outcome.stderr)}${note}`
 }
 
-export type BeaconToolFactory<TTool, TExtra> = BeaconTransferToolFactory<TTool, TExtra>
-
 export function buildBeaconToolList<TTool, TExtra>(
   deps: BeaconToolContext,
-  tool: BeaconToolFactory<TTool, TExtra>,
+  tool: KannaToolFactory<TTool, TExtra>,
 ): TTool[] {
   const { beaconRegistry, chatId } = deps
   if (!deps.allowed || !beaconRegistry || !chatId) return []
   const registry = beaconRegistry
   const owner = chatId
 
-  async function authorize(beacon: BeaconConfig, name: string, input: ToolArgs): Promise<string | null> {
+  async function authorize(beacon: BeaconConfig, name: string, input: BeaconToolArgs): Promise<string | null> {
     const approval = deps.approval
     if (!approval) return `Beacon ${describeBeacon(beacon)}: no approval service is available, so ${name} was not run`
     const decision = await approval.toolCallback.submit({
       chatId: owner,
       sessionId: approval.sessionId,
       toolUseId: randomUUID(),
-      toolName: `mcp__kanna__${name}`,
+      toolName: kannaToolName(name),
       args: toJsonObject(input),
       chatPolicy: approval.chatPolicy,
       cwd: approval.cwd,
@@ -191,16 +190,15 @@ export function buildBeaconToolList<TTool, TExtra>(
     return `Beacon ${describeBeacon(beacon)}: ${name} was denied (${decision.decision.reason ?? "no reason given"})`
   }
 
-  function resolveBeacon(input: ToolArgs): BeaconConfig | string {
-    const beaconId = typeof input.beaconId === "string" ? input.beaconId : ""
-    const beacon = deps.getBeacons().find((candidate) => candidate.id === beaconId)
-    if (!beacon) return `unknown beacon: ${beaconId}`
+  function resolveBeacon(input: { beaconId: string }): BeaconConfig | string {
+    const beacon = deps.getBeacons().find((candidate) => candidate.id === input.beaconId)
+    if (!beacon) return `unknown beacon: ${input.beaconId}`
     if (!beacon.enabled) return `Beacon ${describeBeacon(beacon)} is disabled`
     if (!registry.isOnline(beacon.id)) return `Beacon ${describeBeacon(beacon)} is offline`
     return beacon
   }
 
-  async function run(name: string, op: BeaconToolOp, input: ToolArgs): Promise<ToolResult> {
+  async function run(name: string, op: BeaconToolOp, input: BeaconToolArgs & { beaconId: string }): Promise<ToolResult> {
     const beacon = resolveBeacon(input)
     if (typeof beacon === "string") return fail(beacon)
     const request = buildBeaconRequest(op, input)
@@ -215,7 +213,7 @@ export function buildBeaconToolList<TTool, TExtra>(
     }
   }
 
-  const beaconId = z.string().min(1).describe("Id of the beacon, from beacon_list")
+  const beaconId = beaconIdField
   const path = z.string().min(1)
 
   const transferTools =

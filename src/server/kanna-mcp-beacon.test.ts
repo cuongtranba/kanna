@@ -2,16 +2,17 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import type { JsonValue } from "../shared/json"
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import type { JsonObject, JsonValue } from "../shared/json"
 import type { BeaconConfig } from "../shared/beacon-config"
 import type { BeaconFrame, BeaconRequest } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
-import type { ToolArgs, ToolResult } from "./kanna-mcp-tool"
 import { createBeaconRegistry, type BeaconRegistry, type BeaconSocket } from "./beacon-registry"
 import { buildBeaconToolList, dispatchBeaconRequest } from "./kanna-mcp-beacon"
 import { buildKannaMcpTools, type KannaMcpDelegationContext } from "./kanna-mcp"
 import { createTestEventStore } from "./storage/test-helpers"
+import { invokeTool, sdkToolFactory, toolText } from "./test-helpers/sdk-tool"
 import { createToolCallbackService, type ToolCallbackService } from "./tool-callback"
 
 type SendPayload = Parameters<BeaconSocket["send"]>[0]
@@ -20,7 +21,7 @@ type Responder = (request: BeaconRequest, id: string) => BeaconFrame[]
 interface FakeTool {
   name: string
   description: string
-  handler: (input: ToolArgs) => Promise<ToolResult>
+  handler: (input: JsonObject) => Promise<CallToolResult>
 }
 
 const BEACON_ID = "beacon-1"
@@ -52,10 +53,6 @@ function beaconConfig(scope: Partial<BeaconScope>, enabled = true): BeaconConfig
     createdAt: "2026-10-08T00:00:00.000Z",
     updatedAt: "2026-10-08T00:00:00.000Z",
   }
-}
-
-function recordingTool(name: string, description: string, _schema: object, handler: FakeTool["handler"]): FakeTool {
-  return { name, description, handler }
 }
 
 function connectedRegistry(responder: Responder): { registry: BeaconRegistry; sent: BeaconFrame[] } {
@@ -96,13 +93,22 @@ function toolsFor(registry: BeaconRegistry, config: BeaconConfig, allowed = true
         ? { toolCallback, sessionId: "session-1", cwd: dataDir, chatPolicy: POLICY_DEFAULT }
         : undefined,
     },
-    recordingTool,
+    sdkToolFactory,
   )
-  return new Map(list.map((entry) => [entry.name, entry]))
+  return new Map(
+    list.map((entry): [string, FakeTool] => [
+      entry.name,
+      {
+        name: entry.name,
+        description: entry.description,
+        handler: (input) => invokeTool(entry, input),
+      },
+    ]),
+  )
 }
 
-function textOf(result: ToolResult): string {
-  return result.content[0].text
+function textOf(result: CallToolResult): string {
+  return toolText(result)
 }
 
 function resultFrame(id: string, result: JsonValue): BeaconFrame {

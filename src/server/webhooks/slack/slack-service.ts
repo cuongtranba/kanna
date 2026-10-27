@@ -8,6 +8,7 @@ import type { EventStore } from "../../event-store"
 import { createKeyedLanes } from "../../serial-lane"
 import type { ServiceBus } from "../../service-bus/service-bus"
 import { slackCredentialsOf, type SlackCredentials, type StoredWebhook, type WebhookRegistry } from "../webhook-registry"
+import { admissionResponse, jsonReject } from "../webhook-response"
 import type { SlackApi, SlackThreadMessage } from "./slack-api"
 import {
   classifySlackEvent,
@@ -36,7 +37,7 @@ export type SlackStore = Pick<EventStore, "getChat" | "getProject" | "createChat
 export type SlackAgent = Pick<AgentCoordinator, "enqueueMessage" | "maybeStartNextQueuedMessage">
 export type SlackHookRegistry = Pick<
   WebhookRegistry,
-  "resolve" | "claimDelivery" | "releaseDelivery" | "takeToken" | "recordDelivery"
+  "resolve" | "admit" | "recordDelivery"
 >
 
 type TurnOutcome = "finished" | "failed" | "cancelled"
@@ -50,10 +51,6 @@ const CHAT_DELETED_SUBJECT = namedBusSubject("chatDeleted")
 const USER_PROMPT_SUBJECT = transcriptBusSubject("user_prompt")
 const WORKING_REACTION = "eyes"
 const TITLE_EXCERPT_CHARS = 40
-
-function reject(status: number, error: string, headers?: Record<string, string>): Response {
-  return Response.json({ ok: false, error }, { status, headers })
-}
 
 function titleExcerpt(instruction: string): string {
   const line = instruction.replace(/\s+/g, " ").trim()
@@ -107,19 +104,15 @@ export class SlackService {
   handleRequest(hook: StoredWebhook, headers: Headers, raw: Uint8Array): Response {
     const credentials = slackCredentialsOf(hook)
     if (credentials === null || verifySlackSignature(credentials.signingSecret, headers, raw, this.now()) !== "ok") {
-      return reject(401, "unauthorized")
+      return jsonReject(401, "unauthorized")
     }
     const envelope = parseSlackEnvelope(safeJsonParse(new TextDecoder().decode(raw)))
     if (envelope.kind === "url_verification") return Response.json({ challenge: envelope.challenge })
     if (envelope.kind === "other") return this.ignored(hook.id, "unsupported payload")
-    if (!this.registry.claimDelivery(hook.id, envelope.eventId)) return Response.json({ ok: true, duplicate: true })
     const verdict = classifySlackEvent(envelope, credentials.allowedUserIds)
     if (verdict.kind === "ignore") return this.ignored(hook.id, verdict.reason)
-    const decision = this.registry.takeToken(hook.id)
-    if (!decision.allowed) {
-      this.registry.releaseDelivery(hook.id, envelope.eventId)
-      return reject(429, "rate limited", { "Retry-After": String(decision.retryAfterSeconds) })
-    }
+    const refusal = admissionResponse(this.registry.admit(hook.id, envelope.eventId))
+    if (refusal) return refusal
     this.record(hook.id, true, 200, "slack mention queued")
     const target = this.targetOf(hook.id, envelope, verdict.mention)
     this.tasks.run(

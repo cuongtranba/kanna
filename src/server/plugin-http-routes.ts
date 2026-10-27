@@ -1,10 +1,9 @@
 import { isValidPluginId } from "../shared/plugins/manifest"
+import { parseLogTail } from "./plugin-cli"
 import type { PluginService } from "./plugins/plugin-service"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 
 const PLUGIN_PATH_PATTERN = /^\/api\/plugins(?:\/([^/]+)((?:\/[^/]+)*))?\/?$/
-
-const DEFAULT_LOG_TAIL = 100
 
 function jsonError(status: number, error: string): Response {
   return Response.json({ error }, { status })
@@ -36,11 +35,9 @@ async function handleClientBundle(service: PluginService, id: string): Promise<R
 
 function handleLogs(service: PluginService, id: string, url: URL): Response {
   if (!service.status(id)) return notInstalled()
-  const raw = url.searchParams.get("tail")
-  const parsed = raw === null ? DEFAULT_LOG_TAIL : Number(raw)
-  if (!Number.isInteger(parsed) || parsed < 0) return jsonError(400, "Invalid tail")
-  const logs = service.logs(id)
-  return Response.json({ logs: parsed === 0 ? [] : logs.slice(-parsed) })
+  const tail = parseLogTail(url.searchParams.get("tail") ?? undefined)
+  if (tail === null) return jsonError(400, "Invalid tail")
+  return Response.json({ logs: service.logs(id, tail) })
 }
 
 async function handleRpc(service: PluginService, id: string, request: Request): Promise<Response> {

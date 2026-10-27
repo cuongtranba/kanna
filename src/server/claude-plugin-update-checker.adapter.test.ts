@@ -48,7 +48,6 @@ function makeDeps(overrides: Partial<ClaudePluginCheckerDeps> = {}): ClaudePlugi
       return null
     },
     spawnFn: async () => ({ stdout: "latest-sha-5678\n", exitCode: 0 }),
-    claudeBinary: "/usr/local/bin/claude",
     pluginsDir: PLUGINS_DIR,
     nowFn: () => 1000000,
     refreshThrottleMs: 3_600_000,
@@ -217,6 +216,29 @@ describe("createClaudePluginUpdateChecker", () => {
     await checker.check([pkg], makeAbortSignal())
     await checker.check([pkg], makeAbortSignal())
     expect(fetchCallCount).toBe(1)
+  })
+
+  test("re-reads the latest sha once the throttle window lets a fetch through", async () => {
+    let now = 1_000_000
+    let fetches = 0
+    const deps = makeDeps({
+      spawnFn: async (cmd) => {
+        if (cmd[0] === "git" && cmd[1] === "fetch") {
+          fetches += 1
+          return { stdout: "", exitCode: 0 }
+        }
+        return { stdout: `sha-after-fetch-${fetches}\n`, exitCode: 0 }
+      },
+      nowFn: () => now,
+      refreshThrottleMs: 3_600_000,
+    })
+    const checker = createClaudePluginUpdateChecker(deps)
+    const pkg = makePlugin({ revision: "sha-after-fetch-1" })
+    const first = await checker.check([pkg], makeAbortSignal())
+    expect(first[0]!.latestRevision).toBe("sha-after-fetch-1")
+    now += 3_600_001
+    const second = await checker.check([pkg], makeAbortSignal())
+    expect(second[0]!.latestRevision).toBe("sha-after-fetch-2")
   })
 
   test("checkedAt reflects the time the check ran", async () => {

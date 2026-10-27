@@ -3,7 +3,7 @@ import { fail } from "../kanna-mcp-tool"
 import { isPathInside } from "../path-containment"
 import { resolveProjectFilePath } from "../project-file-path"
 import { getServerFile, realPathOrNull, statFile } from "../server-io.adapter"
-import { inferProjectFileContentType, persistProjectUpload } from "../uploads"
+import { inferAttachmentContentType, persistProjectUpload } from "../uploads"
 import { mcpOnlyTool, type RemoteTool } from "./remote-mcp-tool-spec"
 import { jsonResult } from "./remote-mcp-views"
 
@@ -75,7 +75,7 @@ export const fileTools: readonly RemoteTool[] = [
       const bytes = new Uint8Array(await file.slice(0, limit).arrayBuffer())
       const base = {
         path: resolved.relativePath,
-        contentType: inferProjectFileContentType(resolved.relativePath, file.type),
+        contentType: inferAttachmentContentType(resolved.relativePath, file.type),
         size: info.size,
         truncated: info.size > limit,
       }

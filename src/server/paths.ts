@@ -99,6 +99,10 @@ export function getProjectUploadDir(localPath: string) {
   return projectKannaSubdir(localPath, "uploads")
 }
 
+export function projectUploadRelativePath(storedName: string) {
+  return `./${PROJECT_KANNA_DIR}/uploads/${storedName}`
+}
+
 export function getProjectExportDir(localPath: string) {
   return projectKannaSubdir(localPath, "exports")
 }

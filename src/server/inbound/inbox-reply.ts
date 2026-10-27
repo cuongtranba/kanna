@@ -2,7 +2,7 @@ import type { InboundHandler } from "../../shared/inbound/handler"
 import { renderInstructPrompt, renderReplyPrompt } from "../../shared/inbound/reply-prompt"
 import type { InboxThread } from "../../shared/inbox/types"
 import type { InboxRegistry } from "../inbox/inbox-registry"
-import type { InboundDeliveryAgent, InboundDeliveryStore } from "./deliver-inbound"
+import { queueHandlerTurn, type InboundDeliveryAgent, type InboundDeliveryStore } from "./deliver-inbound"
 
 export type InboxReplyStore = Pick<InboundDeliveryStore, "getChat">
 export type InboxReplyAgent = Pick<InboundDeliveryAgent, "enqueueMessage" | "maybeStartNextQueuedMessage">
@@ -33,20 +33,6 @@ function latestPayload(thread: InboxThread) {
   return thread.messages.at(-1)?.payload ?? null
 }
 
-async function queue(
-  agent: InboxReplyAgent,
-  target: ThreadTarget,
-  prompt: string,
-  scheduleId: string,
-): Promise<void> {
-  const { handler } = target
-  await agent.enqueueMessage(target.chatId, prompt, [], {
-    autoContinue: { scheduleId },
-    ...(handler?.provider && handler.model ? { provider: handler.provider, model: handler.model } : {}),
-  })
-  await agent.maybeStartNextQueuedMessage(target.chatId)
-}
-
 export async function replyToInboxThread(
   store: InboxReplyStore,
   agent: InboxReplyAgent,
@@ -64,7 +50,7 @@ export async function replyToInboxThread(
     latestMessage: latestPayload(target.thread),
     text,
   })
-  await queue(agent, target, prompt, scheduleId)
+  await queueHandlerTurn(agent, target.chatId, target.handler, prompt, scheduleId)
   await inbox.markReplied(threadId, target.chatId, scheduleId)
   return { ok: true, chatId: target.chatId }
 }
@@ -89,6 +75,6 @@ export async function instructInboxThread(
     text,
   })
   await inbox.markPending(threadId, scheduleId)
-  await queue(agent, target, prompt, scheduleId)
+  await queueHandlerTurn(agent, target.chatId, target.handler, prompt, scheduleId)
   return { ok: true, chatId: target.chatId }
 }

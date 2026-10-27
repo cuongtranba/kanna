@@ -160,6 +160,67 @@ function evaluateBeaconTool(args: EvaluateArgs): EvaluateResult | null {
   }
 }
 
+function firstMatchingRule(rules: ChatPermissionPolicy["toolDenyList"], toolName: string, args: JsonObject): string | null {
+  const text = argsToText(args)
+  for (const rule of rules) {
+    if (rule.tool !== toolName) continue
+    let re: RegExp
+    try {
+      re = new RegExp(rule.pattern)
+    } catch {
+      log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
+      continue
+    }
+    if (re.test(text)) return rule.pattern
+  }
+  return null
+}
+
+function evaluatePathTool(args: EvaluateArgs, roots: readonly string[] | null): EvaluateResult | null {
+  const isRead = READ_PATH_TOOLS.has(args.toolName)
+  if (!isRead && !WRITE_PATH_TOOLS.has(args.toolName)) return null
+  const p = getPathArg(args.args)
+  if (p === null) return null
+  const resolved = resolveUserPath(p, args.cwd, currentHomeDir())
+  if (roots && !isInsideAny(roots, resolved)) {
+    return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
+  }
+  if (!isRead) {
+    const deniedWrite = pathMatchesDeny(resolved, args.chatPolicy.writePathDeny)
+    if (deniedWrite) return { verdict: "auto-deny", reason: `writePathDeny: ${deniedWrite}` }
+  }
+  const deniedRead = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
+  if (deniedRead) return { verdict: "auto-deny", reason: `readPathDeny: ${deniedRead}` }
+  return null
+}
+
+function evaluateBash(args: EvaluateArgs, roots: readonly string[] | null): EvaluateResult {
+  const command = typeof args.args.command === "string" ? args.args.command : ""
+  const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
+  const fallback = args.chatPolicy.defaultAction
+  const deniedPattern = firstMatchingRule(args.chatPolicy.toolDenyList, args.toolName, args.args)
+  if (deniedPattern !== null) return { verdict: "auto-deny", reason: `matched denylist: ${deniedPattern}` }
+  if (!parsed) {
+    return { verdict: fallback, reason: "bash command uses shell features" }
+  }
+  if (parsed.hadEnvPrefix) {
+    return { verdict: fallback, reason: "bash command has env prefix" }
+  }
+  for (const p of parsed.paths) {
+    if (roots && !isInsideAny(roots, p)) {
+      return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
+    }
+    const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)
+    if (denied) {
+      return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
+    }
+  }
+  if (args.chatPolicy.bash.autoAllowVerbs.includes(parsed.verb)) {
+    return { verdict: "auto-allow", reason: `verb in autoAllowVerbs: ${parsed.verb}` }
+  }
+  return { verdict: fallback, reason: "bash verb not on autoAllowVerbs" }
+}
+
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
     if (INTERACTIVE_TOOLS.has(args.toolName)) {
@@ -168,109 +229,21 @@ export const policy = {
     const roots = args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
       ? args.restrictedAllowedPaths
       : null
-    const checkRestrictedPath = (p: string): EvaluateResult | null => {
-      if (!roots) return null
-      if (!isInsideAny(roots, resolveUserPath(p, args.cwd, currentHomeDir()))) {
-        return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
-      }
-      return null
-    }
-    if (READ_PATH_TOOLS.has(args.toolName)) {
-      const p = getPathArg(args.args)
-      if (p !== null) {
-        const restricted = checkRestrictedPath(p)
-        if (restricted) return restricted
-        const resolved = resolveUserPath(p, args.cwd, currentHomeDir())
-        const denied = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
-        if (denied) {
-          return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
-        }
-      }
-    }
-    if (WRITE_PATH_TOOLS.has(args.toolName)) {
-      const p = getPathArg(args.args)
-      if (p !== null) {
-        const restricted = checkRestrictedPath(p)
-        if (restricted) return restricted
-        const resolved = resolveUserPath(p, args.cwd, currentHomeDir())
-        const deniedW = pathMatchesDeny(resolved, args.chatPolicy.writePathDeny)
-        const deniedR = pathMatchesDeny(resolved, args.chatPolicy.readPathDeny)
-        if (deniedW) return { verdict: "auto-deny", reason: `writePathDeny: ${deniedW}` }
-        if (deniedR) return { verdict: "auto-deny", reason: `readPathDeny: ${deniedR}` }
-      }
-    }
 
-    if (args.toolName === "mcp__kanna__bash") {
-      const command = typeof args.args.command === "string" ? args.args.command : ""
-      const parsed = parseSimpleBash(command, args.cwd, args.chatPolicy.bash.autoAllowVerbs)
-      const fallback: PolicyVerdict = args.chatPolicy.defaultAction === "ask"
-        ? "ask"
-        : args.chatPolicy.defaultAction
-      for (const rule of args.chatPolicy.toolDenyList) {
-        if (rule.tool !== args.toolName) continue
-        let re: RegExp
-        try {
-          re = new RegExp(rule.pattern)
-        } catch {
-          log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
-          continue
-        }
-        if (re.test(argsToText(args.args))) {
-          return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
-        }
-      }
-      if (!parsed) {
-        return { verdict: fallback, reason: "bash command uses shell features" }
-      }
-      if (parsed.hadEnvPrefix) {
-        return { verdict: fallback, reason: "bash command has env prefix" }
-      }
-      for (const p of parsed.paths) {
-        if (roots && !isInsideAny(roots, p)) {
-          return { verdict: "auto-deny", reason: `restrictedAllowedPaths: ${p}` }
-        }
-        const denied = pathMatchesDeny(p, args.chatPolicy.readPathDeny)
-        if (denied) {
-          return { verdict: "auto-deny", reason: `readPathDeny: ${denied}` }
-        }
-      }
-      if (args.chatPolicy.bash.autoAllowVerbs.includes(parsed.verb)) {
-        return { verdict: "auto-allow", reason: `verb in autoAllowVerbs: ${parsed.verb}` }
-      }
-      return { verdict: fallback, reason: "bash verb not on autoAllowVerbs" }
-    }
+    const pathVerdict = evaluatePathTool(args, roots)
+    if (pathVerdict) return pathVerdict
 
-    for (const rule of args.chatPolicy.toolDenyList) {
-      if (rule.tool !== args.toolName) continue
-      let re: RegExp
-      try {
-        re = new RegExp(rule.pattern)
-      } catch {
-        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
-        continue
-      }
-      if (re.test(argsToText(args.args))) {
-        return { verdict: "auto-deny", reason: `matched denylist: ${rule.pattern}` }
-      }
-    }
+    if (args.toolName === "mcp__kanna__bash") return evaluateBash(args, roots)
+
+    const deniedPattern = firstMatchingRule(args.chatPolicy.toolDenyList, args.toolName, args.args)
+    if (deniedPattern !== null) return { verdict: "auto-deny", reason: `matched denylist: ${deniedPattern}` }
 
     const beaconVerdict = evaluateBeaconTool(args)
     if (beaconVerdict) return beaconVerdict
 
-    for (const rule of args.chatPolicy.toolAllowList) {
-      if (rule.tool !== args.toolName) continue
-      let re: RegExp
-      try {
-        re = new RegExp(rule.pattern)
-      } catch {
-        log.warn(`[permission-gate] invalid regex pattern: ${rule.pattern}`)
-        continue
-      }
-      if (re.test(argsToText(args.args))) {
-        return { verdict: "auto-allow", reason: `matched allowlist: ${rule.pattern}` }
-      }
-    }
+    const allowedPattern = firstMatchingRule(args.chatPolicy.toolAllowList, args.toolName, args.args)
+    if (allowedPattern !== null) return { verdict: "auto-allow", reason: `matched allowlist: ${allowedPattern}` }
 
-    return { verdict: args.chatPolicy.defaultAction === "ask" ? "ask" : args.chatPolicy.defaultAction }
+    return { verdict: args.chatPolicy.defaultAction }
   },
 }

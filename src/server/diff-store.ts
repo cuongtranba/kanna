@@ -63,6 +63,7 @@ import {
   ignoreFile,
 } from "./diff-store-commit-ops.adapter"
 import type { DiffStoreCommitOpsDeps } from "./diff-store-commit-ops.adapter"
+import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 
 export { runGit, formatGitFailure, extractGitHubRepoSlug, fetchGitHubPullRequests, fetchGitHubReleases }
 export { appendGitIgnoreEntry } from "./diff-store-parse"
@@ -72,8 +73,15 @@ export class DiffStore {
 
   private readonly fetchPullRequests: typeof fetchGitHubPullRequests
 
-  constructor(_: string, fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests) {
+  private readonly oauthPool: OAuthTokenPool | null
+
+  constructor(
+    _: string,
+    fetchPullRequests: typeof fetchGitHubPullRequests = fetchGitHubPullRequests,
+    oauthPool: OAuthTokenPool | null = null,
+  ) {
     this.fetchPullRequests = fetchPullRequests
+    this.oauthPool = oauthPool
   }
 
   async initialize() {}
@@ -386,6 +394,7 @@ export class DiffStore {
   private buildCommitOpsDeps(): DiffStoreCommitOpsDeps {
     return {
       refreshSnapshot: (repoPath) => this.refreshSnapshot(repoPath),
+      oauthPool: this.oauthPool,
     }
   }
 

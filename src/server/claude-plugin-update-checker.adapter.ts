@@ -5,6 +5,7 @@ import { spawnCapture } from "./process-utils.adapter"
 import { safeJsonParse } from "../shared/json"
 import type { InstalledPackage, PackageUpdateChecker, PackageUpdateStatus } from "../shared/packages/types"
 import {
+  parseClaudePluginName,
   parseKnownMarketplaces,
   classifyClaudePluginUpdate,
 } from "../shared/packages/parse-claude-plugin-marketplace"
@@ -22,7 +23,6 @@ export interface ClaudePluginCheckerDeps {
     cwd: string,
     env: NodeJS.ProcessEnv,
   ) => Promise<ClaudePluginCheckerSpawnResult>
-  claudeBinary: string | null
   pluginsDir: string
   refreshThrottleMs?: number
   nowFn?: () => number
@@ -33,11 +33,6 @@ interface ThrottleEntry {
   lastRefreshedAt: number
 }
 
-
-function pluginNameFromPackage(pkg: InstalledPackage): string {
-  const atIdx = pkg.name.indexOf("@")
-  return atIdx >= 0 ? pkg.name.slice(0, atIdx) : pkg.name
-}
 
 async function gitLogLatestSha(
   deps: ClaudePluginCheckerDeps,
@@ -92,6 +87,7 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
     const entry = throttle.get(marketplaceName)
     if (entry && now - entry.lastRefreshedAt < refreshThrottleMs) return
     throttle.set(marketplaceName, { lastRefreshedAt: now })
+    shaCache.delete(installLocation)
     await gitFetch(deps, installLocation)
   }
 
@@ -142,8 +138,8 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
       const noMarketplace: InstalledPackage[] = []
 
       for (const pkg of claudePlugins) {
-        const marketplace = pkg.source
-        if (!marketplace || marketplace === pluginNameFromPackage(pkg)) {
+        const { marketplace } = parseClaudePluginName(pkg.name)
+        if (!marketplace) {
           noMarketplace.push(pkg)
         } else {
           const list = byMarketplace.get(marketplace)
@@ -180,7 +176,7 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
           continue
         }
 
-        const pluginNames = marketplacePkgs.map(pluginNameFromPackage)
+        const pluginNames = marketplacePkgs.map((pkg) => parseClaudePluginName(pkg.name).plugin)
         let shaMap: Map<string, string | null>
         try {
           shaMap = await getShasForMarketplace(
@@ -196,7 +192,7 @@ export function createClaudePluginUpdateChecker(deps: ClaudePluginCheckerDeps): 
         }
 
         for (const pkg of marketplacePkgs) {
-          const pluginName = pluginNameFromPackage(pkg)
+          const pluginName = parseClaudePluginName(pkg.name).plugin
           const latestSha = shaMap.get(pluginName) ?? null
           const classification = classifyClaudePluginUpdate(pkg.revision, latestSha)
 
@@ -223,7 +219,7 @@ export function findClaudeBinary(): string | null {
   return Bun.which("claude") ?? null
 }
 
-export function buildClaudePluginCheckerDeps(claudeBinary: string | null): ClaudePluginCheckerDeps {
+export function buildClaudePluginCheckerDeps(): ClaudePluginCheckerDeps {
   const home = currentHomeDir()
   return {
     readFileFn: async (p) => {
@@ -237,7 +233,6 @@ export function buildClaudePluginCheckerDeps(claudeBinary: string | null): Claud
       const { stdout, exitCode } = await spawnCapture(cmd, { cwd, env })
       return { stdout, exitCode }
     },
-    claudeBinary,
     pluginsDir: path.join(home, ".claude", "plugins"),
   }
 }

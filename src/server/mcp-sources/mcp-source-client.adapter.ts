@@ -15,8 +15,7 @@ import { toError } from "../../shared/errors"
 import { safeJsonParse, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import { toJsonValue } from "../json-boundary"
-import { networkHeaders } from "../mcp-validator"
-import { projectProcessEnv } from "../project-process-env"
+import { networkHeaders, stdioEnv } from "../mcp-validator"
 import type {
   McpSourceCloseReason,
   McpSourceConnection,
@@ -102,11 +101,6 @@ function withHeaders(headers: Record<string, string>): (url: string | URL, init?
     for (const [name, value] of Object.entries(headers)) merged.set(name, value)
     return fetch(url, { ...init, headers: merged })
   }
-}
-
-function stdioEnv(server: Extract<McpServerConfig, { transport: "stdio" }>): Record<string, string> {
-  const inherited = Object.entries(projectProcessEnv(process.env)).filter((entry): entry is [string, string] => entry[1] !== undefined)
-  return { ...Object.fromEntries(inherited), ...server.env }
 }
 
 export function buildSourceTransport(server: McpServerConfig, bearer: string | undefined): Transport {

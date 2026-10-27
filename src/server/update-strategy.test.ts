@@ -79,7 +79,6 @@ describe("GitChecker", () => {
 
   test("reports update when HEAD differs from upstream", async () => {
     const checker = new GitChecker({
-      repoDir: "/tmp/repo",
       branch: "main",
       runGit: makeRunGit({
         "fetch origin main": "",
@@ -93,7 +92,6 @@ describe("GitChecker", () => {
 
   test("reports no update when HEAD matches upstream", async () => {
     const checker = new GitChecker({
-      repoDir: "/tmp/repo",
       branch: "main",
       runGit: makeRunGit({
         "fetch origin main": "",
@@ -107,7 +105,6 @@ describe("GitChecker", () => {
 
   test("propagates git fetch errors", async () => {
     const checker = new GitChecker({
-      repoDir: "/tmp/repo",
       branch: "main",
       runGit: async () => { throw new Error("fetch failed: network") },
     })
@@ -147,7 +144,6 @@ describe("Pm2Reloader", () => {
   } = {}) {
     const calls: string[] = []
     const reloader = new Pm2Reloader({
-      repoDir: "/tmp/repo",
       runCommand: async (command, args) => {
         const line = [command, ...args].join(" ")
         calls.push(line)

@@ -22,6 +22,11 @@ export function networkHeaders(
   return { ...config.headers, Authorization: `Bearer ${bearer}` }
 }
 
+export function stdioEnv(config: Extract<McpServerConfig, { transport: "stdio" }>): Record<string, string> {
+  const inherited = Object.entries(projectProcessEnv(process.env)).filter((entry): entry is [string, string] => entry[1] !== undefined)
+  return { ...Object.fromEntries(inherited), ...config.env }
+}
+
 export async function validateMcpServer(
   config: McpServerConfig,
   opts: ValidateMcpOptions = {},
@@ -72,7 +77,7 @@ export function buildTransport(config: McpServerConfig, bearer?: string) {
       return new StdioClientTransport({
         command: config.command,
         args: config.args,
-        env: { ...(Object.fromEntries(Object.entries(projectProcessEnv(process.env)).filter((e): e is [string, string] => e[1] !== undefined))), ...config.env },
+        env: stdioEnv(config),
         cwd: config.cwd,
       })
     case "http":

@@ -27,17 +27,83 @@ interface CacheRow {
   expiresAt: number
 }
 
+export interface CatalogLocations {
+  projectSkills: string
+  projectCommands: string
+  projectSettings: string
+  projectLocalSettings: string
+  personalSkills: string
+  personalCommands: string
+  personalSettings: string
+  installedPlugins: string
+}
+
+export function catalogLocations(args: { cwd: string; homeDir: string }): CatalogLocations {
+  return {
+    projectSkills: path.join(args.cwd, ".claude", "skills"),
+    projectCommands: path.join(args.cwd, ".claude", "commands"),
+    projectSettings: path.join(args.cwd, ".claude", "settings.json"),
+    projectLocalSettings: path.join(args.cwd, ".claude", "settings.local.json"),
+    personalSkills: path.join(args.homeDir, ".claude", "skills"),
+    personalCommands: path.join(args.homeDir, ".claude", "commands"),
+    personalSettings: path.join(args.homeDir, ".claude", "settings.json"),
+    installedPlugins: path.join(args.homeDir, ".claude", "plugins", "installed_plugins.json"),
+  }
+}
+
 export function catalogRootDirs(args: { cwd: string; homeDir: string }): string[] {
-  return [
-    path.join(args.cwd, ".claude", "skills"),
-    path.join(args.cwd, ".claude", "commands"),
-    path.join(args.cwd, ".claude", "settings.json"),
-    path.join(args.cwd, ".claude", "settings.local.json"),
-    path.join(args.homeDir, ".claude", "skills"),
-    path.join(args.homeDir, ".claude", "commands"),
-    path.join(args.homeDir, ".claude", "settings.json"),
-    path.join(args.homeDir, ".claude", "plugins", "installed_plugins.json"),
-  ]
+  return Object.values(catalogLocations(args))
+}
+
+export interface ParsedFrontmatter {
+  name: string | null
+  description: string
+  argumentHint: string
+  userInvocable: boolean
+}
+
+export function parseFrontmatter(head: string): ParsedFrontmatter {
+  const empty: ParsedFrontmatter = { name: null, description: "", argumentHint: "", userInvocable: true }
+  if (!head.startsWith("---")) return empty
+  const closingIdx = head.indexOf("\n---", 3)
+  if (closingIdx < 0) return empty
+  const body = head.slice(3, closingIdx).replace(/^\r?\n/, "")
+  let name: string | null = null
+  let description = ""
+  let argumentHint = ""
+  let userInvocable = true
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trimEnd()
+    if (!line || line.startsWith("#")) continue
+    const colon = line.indexOf(":")
+    if (colon < 0) continue
+    const key = line.slice(0, colon).trim().toLowerCase()
+    let value = line.slice(colon + 1).trim()
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      value = value.slice(1, -1)
+    } else if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
+      value = value.slice(1, -1)
+    }
+    switch (key) {
+      case "name":
+        name = value || null
+        break
+      case "description":
+        description = value
+        break
+      case "argument-hint":
+      case "argument_hint":
+      case "argumenthint":
+        argumentHint = value
+        break
+      case "user-invocable":
+      case "user_invocable":
+      case "userinvocable":
+        userInvocable = !/^(false|no|0)$/i.test(value)
+        break
+    }
+  }
+  return { name, description, argumentHint, userInvocable }
 }
 
 const SCOPE_PRIORITY: Record<CatalogScope, number> = {

@@ -24,13 +24,13 @@ export interface ShareEventSink {
 export interface SessionShareDeps {
   events: ShareEventSink
   snapshotStore: SnapshotStore
-  buildSnapshot: (chatId: string) => Promise<ChatSnapshot>
+  buildSnapshot: (chatId: string) => Promise<ChatSnapshot | null>
   getDefaultTtlHours: () => number
   now?: () => number
   owner: () => string
 }
 
-export type Result<T> = { ok: true; data: T } | { ok: false; error: ShareError }
+export type ShareResult<T> = { ok: true; data: T } | { ok: false; error: ShareError }
 
 const HARD_SIZE_CAP = 50 * 1024 * 1024
 
@@ -45,17 +45,9 @@ export class SessionShareService {
     this.projection = buildShareProjection(deps.events.getShareEvents())
   }
 
-  async mintToken(req: MintRequest, baseUrl: string): Promise<Result<MintResponse>> {
-    let snapshot: ChatSnapshot
-    try {
-      snapshot = await this.deps.buildSnapshot(req.chatId)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.startsWith("chat_not_found:")) {
-        return { ok: false, error: { kind: "chat_not_found", chatId: req.chatId } }
-      }
-      throw err
-    }
+  async mintToken(req: MintRequest, baseUrl: string): Promise<ShareResult<MintResponse>> {
+    const snapshot = await this.deps.buildSnapshot(req.chatId)
+    if (snapshot === null) return { ok: false, error: { kind: "chat_not_found", chatId: req.chatId } }
 
     const bodyBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8")
     if (bodyBytes > HARD_SIZE_CAP) {
@@ -96,7 +88,7 @@ export class SessionShareService {
     return { ok: true, data: { summary } }
   }
 
-  async revokeToken(req: RevokeRequest): Promise<Result<{ tokenId: string }>> {
+  async revokeToken(req: RevokeRequest): Promise<ShareResult<{ tokenId: string }>> {
     const record = this.projection.get(req.tokenId)
     if (!record) return { ok: false, error: { kind: "not_found" } }
     const event: ShareEvent = {
@@ -121,7 +113,7 @@ export class SessionShareService {
   async getShare(
     tokenId: string,
     now: number = this.now(),
-  ): Promise<Result<{ snapshot: ChatSnapshot }>> {
+  ): Promise<ShareResult<{ snapshot: ChatSnapshot }>> {
     const status = classifyShare(this.projection, tokenId, now)
     if (status.kind === "not_found") return { ok: false, error: { kind: "not_found" } }
     if (status.kind === "revoked") return { ok: false, error: { kind: "revoked" } }

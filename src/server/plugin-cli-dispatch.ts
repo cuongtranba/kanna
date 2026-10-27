@@ -2,7 +2,7 @@
 import { CLI_COMMAND } from "../shared/branding"
 import { errorMessage } from "../shared/errors"
 import type { PluginLogEntry } from "../shared/plugins/log-ring"
-import { parsePluginCommand, type PluginCliCommand } from "./plugin-cli"
+import { parsePluginCommand, PLUGIN_COMMAND_USAGE, type PluginCliCommand } from "./plugin-cli"
 import type { PluginService, PluginSummary } from "./plugins/plugin-service"
 import { getPluginService } from "./plugins/plugin-service-host"
 
@@ -15,10 +15,7 @@ type PluginCliAction = Exclude<PluginCliCommand, { kind: "error" }>
 
 export const PLUGIN_CLI_USAGE = [
   "Usage:",
-  `  ${CLI_COMMAND} plugin install <sourceDir>`,
-  `  ${CLI_COMMAND} plugin ls`,
-  `  ${CLI_COMMAND} plugin reload <id>`,
-  `  ${CLI_COMMAND} plugin logs <id> [--tail <n>]`,
+  ...Object.values(PLUGIN_COMMAND_USAGE).map((usage) => `  ${CLI_COMMAND} ${usage}`),
 ].join("\n")
 
 export async function runPluginCli(
@@ -64,7 +61,7 @@ async function dispatchPluginCommand(
       return
     }
     case "logs": {
-      for (const line of formatPluginLogs(service.logs(command.id), command.tail)) out.log(line)
+      for (const line of formatPluginLogs(service.logs(command.id, command.tail))) out.log(line)
     }
   }
 }
@@ -97,8 +94,7 @@ export function formatPluginTable(plugins: readonly PluginSummary[]): string[] {
   )
 }
 
-export function formatPluginLogs(entries: readonly PluginLogEntry[], tail: number): string[] {
-  const selected = tail <= 0 ? [] : entries.slice(-tail)
-  if (selected.length === 0) return ["No log entries."]
-  return selected.map((entry) => `${new Date(entry.at).toISOString()} ${entry.stream} ${entry.text}`)
+export function formatPluginLogs(entries: readonly PluginLogEntry[]): string[] {
+  if (entries.length === 0) return ["No log entries."]
+  return entries.map((entry) => `${new Date(entry.at).toISOString()} ${entry.stream} ${entry.text}`)
 }

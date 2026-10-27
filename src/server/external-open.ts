@@ -21,153 +21,126 @@ const DEFAULT_EDITOR_SETTINGS: EditorOpenSettings = {
   commandTemplate: "cursor {path}",
 }
 
+type OpenAction = OpenExternalCommand["action"]
+type ShellAction = Exclude<OpenAction, "open_editor">
+type OpenPlatform = "darwin" | "win32" | "wsl" | "linux"
+
+interface OpenTarget {
+  path: string
+  isDirectory: boolean
+}
+
+type ShellPlan = (target: OpenTarget) => CommandSpec
+
+function openPlatformOf(platform: NodeJS.Platform): OpenPlatform {
+  if (platform === "darwin" || platform === "win32") return platform
+  return platform === "linux" && isWsl() ? "wsl" : "linux"
+}
+
+function previewUnavailable(): CommandSpec {
+  throw new Error("Preview is only available on macOS")
+}
+
+function wslPlan(action: "open_finder" | "open_default" | "open_terminal"): ShellPlan {
+  return (target) => {
+    const windowsPath = toWindowsPath(target.path)
+    if (!windowsPath) {
+      throw new Error(`Unable to resolve Windows path for: ${target.path}`)
+    }
+    return buildWslOpenCommand({
+      action,
+      windowsPath,
+      isDirectory: target.isDirectory,
+      explorerBinary: resolveWindowsExecutable(WIN_EXPLORER) ?? "explorer.exe",
+      cmdBinary: action === "open_terminal" ? resolveWindowsExecutable(WIN_CMD) : null,
+    })
+  }
+}
+
+function darwinTerminalCommand(target: OpenTarget): CommandSpec {
+  if (!canOpenMacApp("Terminal")) {
+    throw new Error("Terminal is not installed")
+  }
+  return { command: "open", args: ["-a", "Terminal", target.path] }
+}
+
+function darwinPreviewCommand(target: OpenTarget): CommandSpec {
+  if (!canOpenMacApp("Preview")) {
+    throw new Error("Preview is not installed")
+  }
+  return buildPreviewCommand({ localPath: target.path, isDirectory: target.isDirectory, platform: "darwin" })
+}
+
+function windowsTerminalCommand(target: OpenTarget): CommandSpec {
+  if (hasCommand("wt")) return { command: "wt", args: ["-d", target.path] }
+  return { command: "cmd", args: ["/c", "start", "", "cmd", "/K", `cd /d ${target.path}`] }
+}
+
+function linuxTerminalCommand(target: OpenTarget): CommandSpec {
+  for (const terminal of ["x-terminal-emulator", "gnome-terminal", "konsole"]) {
+    if (!hasCommand(terminal)) continue
+    return { command: terminal, args: [terminal === "konsole" ? "--workdir" : "--working-directory", target.path] }
+  }
+  return { command: "xdg-open", args: [target.path] }
+}
+
+const SHELL_PLANS: Record<OpenPlatform, Record<ShellAction, ShellPlan>> = {
+  darwin: {
+    open_default: (target) => buildDefaultOpenCommand({ localPath: target.path, platform: "darwin" }),
+    open_preview: darwinPreviewCommand,
+    open_finder: (target) => ({ command: "open", args: target.isDirectory ? [target.path] : ["-R", target.path] }),
+    open_terminal: darwinTerminalCommand,
+  },
+  win32: {
+    open_default: (target) => buildDefaultOpenCommand({ localPath: target.path, platform: "win32" }),
+    open_preview: previewUnavailable,
+    open_finder: (target) => ({ command: "explorer", args: target.isDirectory ? [target.path] : ["/select,", target.path] }),
+    open_terminal: windowsTerminalCommand,
+  },
+  wsl: {
+    open_default: wslPlan("open_default"),
+    open_preview: previewUnavailable,
+    open_finder: wslPlan("open_finder"),
+    open_terminal: wslPlan("open_terminal"),
+  },
+  linux: {
+    open_default: (target) => buildDefaultOpenCommand({ localPath: target.path, platform: "linux" }),
+    open_preview: previewUnavailable,
+    open_finder: (target) => ({ command: "xdg-open", args: [target.isDirectory ? target.path : path.dirname(target.path)] }),
+    open_terminal: linuxTerminalCommand,
+  },
+}
+
+function requiresExistingPath(action: OpenAction, platform: OpenPlatform): boolean {
+  return action === "open_editor" || action === "open_default" || (action === "open_preview" && platform === "darwin")
+}
+
 export async function openExternal(command: OpenExternalCommand) {
   const resolvedPath = resolveLocalPath(command.localPath)
-  const platform = process.platform
-  const info = command.action === "open_editor" || command.action === "open_finder" || command.action === "open_preview" || command.action === "open_default"
-    ? await statPathOrNull(resolvedPath)
-    : null
+  const platform = openPlatformOf(process.platform)
+  const info = command.action === "open_terminal" ? null : await statPathOrNull(resolvedPath)
+  if (!info && requiresExistingPath(command.action, platform)) {
+    throw new Error(`Path not found: ${resolvedPath}`)
+  }
 
   if (command.action === "open_editor") {
-    if (!info) {
-      throw new Error(`Path not found: ${resolvedPath}`)
-    }
     const editorCommand = buildEditorCommand({
       localPath: resolvedPath,
-      isDirectory: info.isDirectory(),
+      isDirectory: info?.isDirectory() ?? false,
       line: command.line,
       column: command.column,
       editor: command.editor ?? DEFAULT_EDITOR_SETTINGS,
-      platform,
+      platform: process.platform,
     })
     await spawnDetached(editorCommand.command, editorCommand.args)
     return
   }
 
-  if (platform === "darwin") {
-    if (command.action === "open_default") {
-      if (!info) {
-        throw new Error(`Path not found: ${resolvedPath}`)
-      }
-      const defaultCommand = buildDefaultOpenCommand({ localPath: resolvedPath, platform })
-      await spawnDetached(defaultCommand.command, defaultCommand.args)
-      return
-    }
-    if (command.action === "open_preview") {
-      if (!info) {
-        throw new Error(`Path not found: ${resolvedPath}`)
-      }
-      if (!canOpenMacApp("Preview")) {
-        throw new Error("Preview is not installed")
-      }
-      const previewCommand = buildPreviewCommand({
-        localPath: resolvedPath,
-        isDirectory: info.isDirectory(),
-        platform,
-      })
-      await spawnDetached(previewCommand.command, previewCommand.args)
-      return
-    }
-    if (command.action === "open_finder") {
-      if (info?.isDirectory()) {
-        await spawnDetached("open", [resolvedPath])
-      } else {
-        await spawnDetached("open", ["-R", resolvedPath])
-      }
-      return
-    }
-    if (command.action === "open_terminal") {
-      if (!canOpenMacApp("Terminal")) {
-        throw new Error("Terminal is not installed")
-      }
-      await spawnDetached("open", ["-a", "Terminal", resolvedPath])
-      return
-    }
-  }
-
-  if (platform === "win32") {
-    if (command.action === "open_default") {
-      if (!info) {
-        throw new Error(`Path not found: ${resolvedPath}`)
-      }
-      const defaultCommand = buildDefaultOpenCommand({ localPath: resolvedPath, platform })
-      await spawnDetached(defaultCommand.command, defaultCommand.args)
-      return
-    }
-    if (command.action === "open_finder") {
-      if (info?.isDirectory()) {
-        await spawnDetached("explorer", [resolvedPath])
-      } else {
-        await spawnDetached("explorer", ["/select,", resolvedPath])
-      }
-      return
-    }
-    if (command.action === "open_terminal") {
-      if (hasCommand("wt")) {
-        await spawnDetached("wt", ["-d", resolvedPath])
-        return
-      }
-      await spawnDetached("cmd", ["/c", "start", "", "cmd", "/K", `cd /d ${resolvedPath}`])
-      return
-    }
-  }
-
-  if (
-    platform === "linux"
-    && isWsl()
-    && (command.action === "open_finder" || command.action === "open_default" || command.action === "open_terminal")
-  ) {
-    if (command.action === "open_default" && !info) {
-      throw new Error(`Path not found: ${resolvedPath}`)
-    }
-    const windowsPath = toWindowsPath(resolvedPath)
-    if (!windowsPath) {
-      throw new Error(`Unable to resolve Windows path for: ${resolvedPath}`)
-    }
-    const explorerBinary = resolveWindowsExecutable(WIN_EXPLORER) ?? "explorer.exe"
-    const cmdBinary = command.action === "open_terminal" ? resolveWindowsExecutable(WIN_CMD) : null
-    const wslCommand = buildWslOpenCommand({
-      action: command.action,
-      windowsPath,
-      isDirectory: info?.isDirectory() ?? false,
-      explorerBinary,
-      cmdBinary,
-    })
-    await spawnDetached(wslCommand.command, wslCommand.args)
-    return
-  }
-
-  if (command.action === "open_preview") {
-    throw new Error("Preview is only available on macOS")
-  }
-
-  if (command.action === "open_default") {
-    if (!info) {
-      throw new Error(`Path not found: ${resolvedPath}`)
-    }
-    const defaultCommand = buildDefaultOpenCommand({ localPath: resolvedPath, platform })
-    await spawnDetached(defaultCommand.command, defaultCommand.args)
-    return
-  }
-
-  if (command.action === "open_finder") {
-    await spawnDetached("xdg-open", [info?.isDirectory() ? resolvedPath : path.dirname(resolvedPath)])
-    return
-  }
-  if (command.action === "open_terminal") {
-    for (const terminalCommand of ["x-terminal-emulator", "gnome-terminal", "konsole"]) {
-      if (!hasCommand(terminalCommand)) continue
-      if (terminalCommand === "gnome-terminal") {
-        await spawnDetached(terminalCommand, ["--working-directory", resolvedPath])
-      } else if (terminalCommand === "konsole") {
-        await spawnDetached(terminalCommand, ["--workdir", resolvedPath])
-      } else {
-        await spawnDetached(terminalCommand, ["--working-directory", resolvedPath])
-      }
-      return
-    }
-    await spawnDetached("xdg-open", [resolvedPath])
-  }
+  const shellCommand = SHELL_PLANS[platform][command.action]({
+    path: resolvedPath,
+    isDirectory: info?.isDirectory() ?? false,
+  })
+  await spawnDetached(shellCommand.command, shellCommand.args)
 }
 
 export function buildEditorCommand(args: {
@@ -266,46 +239,19 @@ function buildPresetEditorCommand(
   return { command: opener.command, args: [...opener.args, "--goto", gotoTarget] }
 }
 
-function resolveEditorExecutable(preset: Exclude<EditorPreset, "custom">, platform: NodeJS.Platform) {
-  if (preset === "cursor") {
-    if (hasCommand("cursor")) return { command: "cursor", args: [] }
-    if (platform === "darwin" && canOpenMacApp("Cursor")) return { command: "open", args: ["-a", "Cursor"] }
-  }
-  if (preset === "vscode") {
-    if (hasCommand("code")) return { command: "code", args: [] }
-    if (platform === "darwin" && canOpenMacApp("Visual Studio Code")) return { command: "open", args: ["-a", "Visual Studio Code"] }
-  }
-  if (preset === "windsurf") {
-    if (hasCommand("windsurf")) return { command: "windsurf", args: [] }
-    if (platform === "darwin" && canOpenMacApp("Windsurf")) return { command: "open", args: ["-a", "Windsurf"] }
-  }
-  if (preset === "xcode") {
-    if (hasCommand("xed")) return { command: "xed", args: [] }
-    if (platform === "darwin" && canOpenMacApp("Xcode")) return { command: "open", args: ["-a", "Xcode"] }
-  }
+const EDITOR_PRESETS: Record<Exclude<EditorPreset, "custom">, { cli: string; macApp: string; label: string }> = {
+  cursor: { cli: "cursor", macApp: "Cursor", label: "Cursor" },
+  vscode: { cli: "code", macApp: "Visual Studio Code", label: "Visual Studio Code" },
+  windsurf: { cli: "windsurf", macApp: "Windsurf", label: "Windsurf" },
+  xcode: { cli: "xed", macApp: "Xcode", label: "Xcode" },
+}
 
-  if (platform === "darwin") {
-    switch (preset) {
-      case "cursor":
-        throw new Error("Cursor is not installed")
-      case "vscode":
-        throw new Error("Visual Studio Code is not installed")
-      case "windsurf":
-        throw new Error("Windsurf is not installed")
-      case "xcode":
-        throw new Error("Xcode is not installed")
-    }
-  }
-
-  let command: string
-  if (preset === "vscode") {
-    command = "code"
-  } else if (preset === "xcode") {
-    command = "xed"
-  } else {
-    command = preset
-  }
-  return { command, args: [] }
+function resolveEditorExecutable(preset: Exclude<EditorPreset, "custom">, platform: NodeJS.Platform): CommandSpec {
+  const { cli, macApp, label } = EDITOR_PRESETS[preset]
+  if (hasCommand(cli)) return { command: cli, args: [] }
+  if (platform !== "darwin") return { command: cli, args: [] }
+  if (canOpenMacApp(macApp)) return { command: "open", args: ["-a", macApp] }
+  throw new Error(`${label} is not installed`)
 }
 
 function buildCustomEditorCommand(args: {

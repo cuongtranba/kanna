@@ -1,6 +1,5 @@
 import { z } from "zod"
-import type { JsonValue } from "../../shared/json"
-import { ok, fail, type ToolArgs, type ToolResult } from "../kanna-mcp-tool"
+import { ok, fail, type KannaToolFactory } from "../kanna-mcp-tool"
 import type { ChatTaskProjection } from "../../shared/chat-tasks/read-model"
 import {
   isBlockedByNeeds,
@@ -418,30 +417,20 @@ export async function integrateChatTasks(deps: ChatTaskToolDeps): Promise<Integr
   return { kind: "integrated", taskIds: integrated }
 }
 
-export type ChatTaskToolFactory<TTool> = (
-  name: string,
-  description: string,
-  schema: Record<string, z.ZodType<JsonValue | undefined>>,
-  handler: (input: ToolArgs) => Promise<ToolResult>,
-) => TTool
-
-function str(value: JsonValue | undefined): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined
+function nonBlank(value: string | undefined): string | undefined {
+  return value !== undefined && value.trim().length > 0 ? value : undefined
 }
 
-function strList(value: JsonValue | undefined): string[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  return value.filter((entry): entry is string => typeof entry === "string")
-}
-
-function statusOf(value: JsonValue | undefined): ChatTaskStatus | "deleted" | undefined {
-  if (value === "pending" || value === "in_progress" || value === "completed" || value === "deleted") return value
-  return undefined
+function optionalText<TKey extends string>(key: TKey, value: string | undefined): { [K in TKey]?: string } {
+  const text = nonBlank(value)
+  const entry: { [K in TKey]?: string } = {}
+  if (text !== undefined) entry[key] = text
+  return entry
 }
 
 export function buildChatTaskToolList<TTool>(
   deps: ChatTaskToolDeps | null,
-  tool: ChatTaskToolFactory<TTool>,
+  tool: KannaToolFactory<TTool>,
 ): TTool[] {
   if (!deps) return []
   const bound = deps
@@ -455,12 +444,12 @@ export function buildChatTaskToolList<TTool>(
       branch: z.string().optional().describe("Branch name for this task's work"),
     }, async (input) => {
       const result = await createChatTask(bound, {
-        subject: str(input.subject) ?? "",
-        ...(str(input.description) ? { description: str(input.description) ?? "" } : {}),
-        ...(str(input.active_form) ? { activeForm: str(input.active_form) ?? "" } : {}),
-        ...(strList(input.needs) ? { needs: strList(input.needs) ?? [] } : {}),
-        ...(str(input.worktree) ? { worktree: str(input.worktree) ?? "" } : {}),
-        ...(str(input.branch) ? { branch: str(input.branch) ?? "" } : {}),
+        subject: nonBlank(input.subject) ?? "",
+        ...optionalText("description", input.description),
+        ...optionalText("activeForm", input.active_form),
+        ...(input.needs ? { needs: input.needs } : {}),
+        ...optionalText("worktree", input.worktree),
+        ...optionalText("branch", input.branch),
       })
       return result.ok ? ok(JSON.stringify(result.task)) : fail(result.error)
     }),
@@ -475,14 +464,14 @@ export function buildChatTaskToolList<TTool>(
       branch: z.string().optional(),
     }, async (input) => {
       const result = await updateChatTask(bound, {
-        taskId: str(input.task_id) ?? "",
-        ...(statusOf(input.status) ? { status: statusOf(input.status) ?? "pending" } : {}),
-        ...(str(input.subject) !== undefined ? { subject: str(input.subject) ?? "" } : {}),
-        ...(str(input.description) !== undefined ? { description: str(input.description) ?? "" } : {}),
-        ...(str(input.active_form) !== undefined ? { activeForm: str(input.active_form) ?? "" } : {}),
-        ...(strList(input.needs) ? { needs: strList(input.needs) ?? [] } : {}),
-        ...(str(input.worktree) !== undefined ? { worktree: str(input.worktree) ?? "" } : {}),
-        ...(str(input.branch) !== undefined ? { branch: str(input.branch) ?? "" } : {}),
+        taskId: nonBlank(input.task_id) ?? "",
+        ...(input.status ? { status: input.status } : {}),
+        ...optionalText("subject", input.subject),
+        ...optionalText("description", input.description),
+        ...optionalText("activeForm", input.active_form),
+        ...(input.needs ? { needs: input.needs } : {}),
+        ...optionalText("worktree", input.worktree),
+        ...optionalText("branch", input.branch),
       })
       if (!result.ok) return fail(result.error)
       return ok(result.task ? JSON.stringify(result.task) : "deleted")
@@ -491,17 +480,16 @@ export function buildChatTaskToolList<TTool>(
       status: z.enum(["pending", "in_progress", "completed"]).optional().describe("Restrict to one status"),
       limit: z.number().int().min(1).max(200).optional(),
     }, async (input) => {
-      const status = statusOf(input.status)
       const listed = listChatTasks(bound, {
-        ...(status && status !== "deleted" ? { status } : {}),
-        ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.limit !== undefined ? { limit: input.limit } : {}),
       })
       return ok(JSON.stringify(listed))
     }),
     tool("task_get", TASK_GET_DESCRIPTION, {
       task_id: z.string().describe("Task id from task_list"),
     }, async (input) => {
-      const result = getChatTask(bound, str(input.task_id) ?? "")
+      const result = getChatTask(bound, nonBlank(input.task_id) ?? "")
       return result.ok ? ok(JSON.stringify({ task: result.task, notes: result.notes })) : fail(result.error)
     }),
     tool("task_note", TASK_NOTE_DESCRIPTION, {
@@ -509,14 +497,10 @@ export function buildChatTaskToolList<TTool>(
       text: z.string().describe("The note itself"),
       task_id: z.string().optional().describe("Task this note belongs to; omit for a plan-wide note"),
     }, async (input) => {
-      const kind = input.kind
-      if (kind !== "progress" && kind !== "failed_approach" && kind !== "decision") {
-        return fail("kind must be progress, failed_approach or decision")
-      }
       const result = await noteChatTask(bound, {
-        kind,
-        text: str(input.text) ?? "",
-        ...(str(input.task_id) ? { taskId: str(input.task_id) ?? "" } : {}),
+        kind: input.kind,
+        text: nonBlank(input.text) ?? "",
+        ...optionalText("taskId", input.task_id),
       })
       return result.ok ? ok("recorded") : fail(result.error)
     }),
@@ -537,9 +521,8 @@ export function buildChatTaskToolList<TTool>(
       claim_id: z.string().describe("The claim_id task_claim returned"),
       outcome: z.enum(["done", "release"]).describe("'done' completes the task; 'release' returns it to the plan"),
     }, async (input) => {
-      const outcome = input.outcome === "release" ? "release" : "done"
-      const result = await settleChatTask(bound, { claimId: str(input.claim_id) ?? "", outcome })
-      return result.ok ? ok(`${result.taskId} ${outcome}`) : fail(result.error)
+      const result = await settleChatTask(bound, { claimId: nonBlank(input.claim_id) ?? "", outcome: input.outcome })
+      return result.ok ? ok(`${result.taskId} ${input.outcome}`) : fail(result.error)
     }),
     tool("task_integrate", TASK_INTEGRATE_DESCRIPTION, {}, async () => {
       const result = await integrateChatTasks(bound)
