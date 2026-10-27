@@ -80,6 +80,7 @@ export interface MarkdownDialect {
   namespace: string
   nodes: ReadonlyArray<Klass<LexicalNode>>
   transformers: Array<Transformer>
+  renderDecorator?: (node: LexicalNode) => ReactNode | null
 }
 
 const PLAIN_MARKDOWN_DIALECT: MarkdownDialect = {
@@ -102,6 +103,7 @@ interface RenderContext {
   editor: LexicalEditor
   config: EditorConfig
   caret: CaretTarget | null
+  renderDecorator: ((node: LexicalNode) => ReactNode | null) | undefined
 }
 
 function headingElement(tag: string, key: string, children: ReactNode[]): ReactNode {
@@ -210,6 +212,8 @@ function isReactDecorator(node: LexicalNode): node is DecoratorNode<ReactNode> {
 
 function walkNode(node: LexicalNode, ctx: RenderContext): ReactNode {
   if (isReactDecorator(node)) {
+    const custom = ctx.renderDecorator?.(node) ?? null
+    if (custom !== null) return <span key={ctx.nextKey()}>{custom}</span>
     return <span key={ctx.nextKey()}>{node.decorate(ctx.editor, ctx.config)}</span>
   }
 
@@ -351,6 +355,7 @@ export function renderLexicalMarkdown(
       editor,
       config,
       caret: resolveCaretTarget(caret),
+      renderDecorator: dialect.renderDecorator,
     }
     return walkChildren($getRoot(), ctx)
   })

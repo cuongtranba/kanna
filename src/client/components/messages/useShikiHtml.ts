@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { useTheme } from "../../hooks/useTheme"
+import { useOptionalResolvedTheme } from "../../hooks/useTheme"
 import { log } from "../../../shared/log"
 import { ShikiHtmlStore } from "./useShikiHtml.store"
 
@@ -75,8 +75,7 @@ export function stripShikiWrappers(html: string): string {
 }
 
 export function useShikiHtml(source: string, lang: string | null): string | null {
-  const { resolvedTheme } = useTheme()
-  const theme = resolvedTheme === "dark" ? "github-dark" : "github-light"
+  const theme = useOptionalResolvedTheme() === "dark" ? "github-dark" : "github-light"
   const shouldHighlight = lang !== null && source.length <= SHIKI_SIZE_CEILING
   const highlighted = ShikiHtmlStore.useScopedStore((s) => s.highlighted)
   const setHighlighted = ShikiHtmlStore.useScopedStore((s) => s.setHighlighted)
