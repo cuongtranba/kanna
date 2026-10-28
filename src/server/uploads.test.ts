@@ -516,7 +516,8 @@ describe("resumable uploads (tus)", () => {
       await interrupted.then(undefined, () => undefined)
 
       let offset = 0
-      for (let attempt = 0; attempt < 200 && offset === 0; attempt += 1) {
+      const deadline = Date.now() + 15_000
+      while (offset === 0 && Date.now() < deadline) {
         const head = await fetch(created.url, { method: "HEAD", headers: tusHeaders() })
         offset = head.status === 200 ? Number(head.headers.get("upload-offset")) : 0
       }
