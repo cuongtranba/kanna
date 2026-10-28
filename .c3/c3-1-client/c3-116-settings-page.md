@@ -1,7 +1,7 @@
 ---
 id: c3-116
 c3-version: 4
-c3-seal: 173858394cc1e1e19f2f517a7900cb07035864f4f1c630c587a32a5e1dbade65
+c3-seal: eda9ce0161de88941d37b2f9d39cda44027526c07db0b6a46330390449302ad7
 title: settings-page
 type: component
 category: feature
@@ -72,14 +72,14 @@ Typography scale is a root-font-size UI zoom: the row writes `typography.scale` 
 | Provider key form | IN/OUT | Reads/writes provider config via server | c3-203 | src/client/app/SettingsPage.tsx |
 | Share expiry row | IN/OUT | "Default share link expiry (hours)" input wired through settings.writeAppSettingsPatch | c3-228 | src/client/app/SettingsPage.tsx |
 | Typography Scale row | IN/OUT | Five-step UI zoom (sm/md/lg/xl/xxl). Shows the effective step, flags a device override, offers "Use account default". Writes the account default via settings.writeAppSettingsPatch ({ typography: { scale } }) | c3-102 | src/client/app/SettingsPage.tsx |
-| Plugins section | IN/OUT | Surfaces PackageUpdateSnapshot from c3-237; manual check + apply buttons; auto-update toggle + per-kind opt-in; last-50 auto-apply history | c3-237 | src/client/components/settings/PluginsSection.tsx |
+| Plugins section | IN/OUT | Surfaces PackageUpdateSnapshot from c3-237; manual check + apply buttons; auto-update toggle + per-kind opt-in; last-50 auto-apply history | c3-237 | src/client/components/settings/CliPluginPackagesSection.tsx |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Lost preferences on schema bump | Persist field rename | Settings reset after upgrade | Add migrate in src/client/stores/ + bun run check |
-| Blank settings route with a green suite | Every test mounts the page by hand; none renders the real router | Blank white page at /settings only in the real app | src/client/app/SettingsPage.route.test.tsx must mount MemoryRouter + the real outlet context; enforced by scripts/verify-typography-scale.sh |
+| Blank settings route with a green suite | Every test mounts the page by hand; none renders the real router | Blank white page at /settings only in the real app | src/client/app/SettingsPage.route.test.tsx must mount MemoryRouter + the real outlet context |
 | Typography scale stops reaching the document | Applier, DomPort method, or --kanna-font-scale rule removed | UI type size stops responding to the setting | bun test --conditions production src/client/hooks/useTypography.test.tsx + src/server/design/typography-css.test.ts |
 | Font-size flash on load | Pre-paint snippet in index.html drifts from the pure resolver | Whole layout reflows after hydration | src/server/design/prePaint.test.ts pins the shipped index.html snippet to resolveTypographyVars/resolveEffectiveScaleStep across the input matrix |
 | Arbitrary-px text creeps back | New text-[Npx] utility added under src/client | Type stops scaling on that element only | rules/no-arbitrary-px-text*.yml (bun run lint:usestate) + the CAP-0 ratchet in src/server/design/px-text-ratchet.test.ts |

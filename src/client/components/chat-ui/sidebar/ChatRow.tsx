@@ -5,7 +5,7 @@ import { Button } from "../../ui/button"
 import { Kbd } from "../../ui/kbd"
 import { HoverHint } from "../../ui/truncated-text"
 import { SessionMark } from "../../ui/session-mark"
-import { cn, normalizeChatId } from "../../../lib/utils"
+import { cn } from "../../../lib/utils"
 import { formatCompactDuration, formatLiveDuration } from "../../../lib/formatDuration"
 import { statusLabel } from "../../../lib/statusLabel"
 import { formatBackgroundWork } from "../../../../shared/stack-activity"
@@ -79,12 +79,11 @@ function ChatRowImpl({
 
   const trailingLabel = showShortcutHint && shortcutHint ? shortcutHint : stampLabel
   const showShortcutKeycap = showShortcutHint && Boolean(shortcutHint)
-  const normalizedChatId = normalizeChatId(chat.chatId)
-  const isActive = activeChatId === normalizedChatId
+  const isActive = activeChatId === chat.chatId
 
   const tone = indicator?.tone ?? null
   const minSlotWidth = chat.canFork ? "min-w-12" : "min-w-6"
-  const isSpawning = useNewSessionStore(selectIsSpawning(normalizedChatId))
+  const isSpawning = useNewSessionStore(selectIsSpawning(chat.chatId))
   const rowPending = useChatRowPending(chat.chatId)
   const forkPending = usePendingAction(chatRowActionKey("chat.fork", chat.chatId))
   const archivePending = usePendingAction(chatRowActionKey("chat.archive", chat.chatId))
@@ -190,6 +189,7 @@ function ChatRowImpl({
       ) : null}
       {chat.pinnedAt !== undefined ? <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" /> : null}
       <span
+        data-flip-title
         className={cn(
           "min-w-0 flex-1 truncate text-sm",
           isActive ? "font-medium text-foreground" : "text-foreground/90",
@@ -206,7 +206,7 @@ function ChatRowImpl({
   const row = (
     <div
       key={chat._id}
-      data-chat-id={normalizedChatId}
+      data-chat-id={chat.chatId}
       aria-busy={rowPending || undefined}
       className={cn(
         "group relative flex items-center rounded-md pr-1 transition-colors duration-[var(--motion-quick)]",

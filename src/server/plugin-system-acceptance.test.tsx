@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { PluginSurfaceComponent, PluginSurfaceProps } from "../client/plugins/contributionRegistry"
+import { PLUGIN_LOG_DEFAULT_TAIL, tailLogEntries } from "../shared/plugins/log-ring"
 import type { PluginService } from "./plugins/plugin-service"
 import { join } from "node:path"
 
@@ -30,23 +31,23 @@ describe("P0 — manifest, paths, settings collection", () => {
   })
 
   test("plugins are globally OFF by default", async () => {
-    const { buildInitialAppSettingsSnapshot } = await import("./ws-router-defaults")
-    const snapshot = buildInitialAppSettingsSnapshot()
+    const { defaultAppSettingsSnapshot } = await import("./app-settings")
+    const snapshot = defaultAppSettingsSnapshot()
     expect(snapshot.plugins.enabled).toBe(false)
     expect(snapshot.installedPlugins).toEqual([])
   })
 
   test("an installed plugin round-trips through the settings collection", async () => {
-    const { applyAppSettingsPatchForTest } = await import("./plugins/plugin-settings")
-    const created = applyAppSettingsPatchForTest([], {
+    const { applyInstalledPluginsPatch } = await import("./plugins/plugin-settings")
+    const created = applyInstalledPluginsPatch([], {
       create: { sourceDir: HELLO, id: "hello" },
     })
     expect(created).toMatchObject([{ id: "hello", sourceDir: HELLO, enabled: false }])
 
-    const enabled = applyAppSettingsPatchForTest(created, { update: { id: "hello", patch: { enabled: true } } })
+    const enabled = applyInstalledPluginsPatch(created, { update: { id: "hello", patch: { enabled: true } } })
     expect(enabled[0].enabled).toBe(true)
 
-    expect(applyAppSettingsPatchForTest(enabled, { delete: { id: "hello" } })).toEqual([])
+    expect(applyInstalledPluginsPatch(enabled, { delete: { id: "hello" } })).toEqual([])
   })
 })
 
@@ -210,7 +211,7 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
 
   test("GET :id/logs honours tail", async () => {
     const many = Array.from({ length: 5 }, (_, i) => ({ stream: "out" as const, text: `l${i}`, at: i }))
-    const res = await call("GET", "/api/plugins/hello/logs?tail=2", { service: fakeService({ logs: () => many }) })
+    const res = await call("GET", "/api/plugins/hello/logs?tail=2", { service: fakeService({ logs: (_id, tail = PLUGIN_LOG_DEFAULT_TAIL) => tailLogEntries(many, tail) }) })
     expect(res?.status).toBe(200)
     const body = await res?.json() as { logs: { text: string }[] }
     expect(body.logs.map((l) => l.text)).toEqual(["l3", "l4"])
@@ -384,7 +385,7 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
       "../client/plugins/contributionRegistry"
     )
     const { PluginBoundary } = await import("../client/plugins/PluginBoundary")
-    const { renderToStaticMarkup } = await import("react-dom/server")
+    const { renderForLoopCheck } = await import("../client/lib/testing/renderForLoopCheck")
 
     const hostRegistry = createPluginHostRegistry()
     const mod = await evaluatePluginModule({ code: built.client, registry: hostRegistry, pluginId: "throwing" })
@@ -396,37 +397,39 @@ describe("P9a — a throwing plugin panel is isolated by PluginBoundary", () => 
     if (!Component) return
 
     const theme: PluginSurfaceProps["theme"] = { colors: { foreground: "var(--foreground)" } }
-    let html = ""
-    expect(() => {
-      html = renderToStaticMarkup(
-        <div>
-          <span>sibling content survives</span>
-          <PluginBoundary pluginId="throwing">
-            <Component theme={theme} />
-          </PluginBoundary>
-        </div>,
-      )
-    }).not.toThrow()
-
-    expect(html).toContain("sibling content survives")
-    expect(html).not.toContain("THROWING_PANEL_DELIBERATE_FAILURE")
-    expect(html).toContain("throwing")
+    const rendered = await renderForLoopCheck(
+      <div>
+        <span>sibling content survives</span>
+        <PluginBoundary pluginId="throwing">
+          <Component theme={theme} />
+        </PluginBoundary>
+      </div>,
+    )
+    try {
+      expect(rendered.thrown).toBeNull()
+      const html = document.body.innerHTML
+      expect(html).toContain("sibling content survives")
+      expect(html).not.toContain("THROWING_PANEL_DELIBERATE_FAILURE")
+      expect(html).toContain("throwing")
+    } finally {
+      await rendered.cleanup()
+    }
   }, 60_000)
 })
 
 describe("P9a — Settings → Plugins page", () => {
   test("lists installed plugins and its reload action sends the plugins.reload command", async () => {
-    const { PluginsSection, buildPluginsSectionHandlers } = await import("../client/app/PluginsSection")
+    const { KannaPluginsSection, buildKannaPluginsSectionHandlers } = await import("../client/app/KannaPluginsSection")
     const { renderToStaticMarkup } = await import("react-dom/server")
     const { makeFakeCommandPort } = await import("../client/adapters/testing/makeFakePorts")
 
     const commands = makeFakeCommandPort(() => undefined)
-    const handlers = buildPluginsSectionHandlers(commands)
+    const handlers = buildKannaPluginsSectionHandlers(commands)
     await handlers.onReload("hello")
     expect(commands.calls).toEqual([{ type: "plugins.reload", pluginId: "hello" }])
 
     const plugin = { id: "hello", sourceDir: HELLO, enabled: false }
-    const html = renderToStaticMarkup(<PluginsSection plugins={[plugin]} handlers={handlers} />)
+    const html = renderToStaticMarkup(<KannaPluginsSection plugins={[plugin]} handlers={handlers} />)
     expect(html).toContain("hello")
   }, 30_000)
 })

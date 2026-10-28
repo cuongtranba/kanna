@@ -1,9 +1,10 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useCallback } from "react"
 import { UserRound, ArrowUp, ChevronRight, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { formatCompactDuration } from "../../lib/formatDuration"
 import { type StatusTone } from "../../lib/statusLabel"
-import { StatusPill } from "../ui/status-pill"
+import { StateMarkLabel } from "../ui/state-mark"
 import { formatContextWindowTokens } from "../../lib/contextWindow"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
 import { onRejected } from "../../../shared/errors"
@@ -85,7 +86,7 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
       )}
       <div className="flex flex-1 items-center gap-2 min-w-0 overflow-hidden">
         <span className="font-medium text-foreground/80 text-sm truncate">{name}</span>
-        {result?.status && <StatusPill tone={tone} label={result.status} />}
+        {result?.status && <StateMarkLabel tone={tone} label={result.status} />}
         {result?.totalTokens != null && result.totalTokens > 0 && (
           <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
             <ArrowUp className="size-3" aria-hidden />
@@ -127,10 +128,4 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
   )
 }
 
-export function SubagentTaskMessage({ subagentType, result, isError, localPath }: Props) {
-  return (
-    <SubagentTaskMessageStore.Provider init={undefined}>
-      <SubagentTaskMessageInner subagentType={subagentType} result={result} isError={isError} localPath={localPath} />
-    </SubagentTaskMessageStore.Provider>
-  )
-}
+export const SubagentTaskMessage = withScopedStore(SubagentTaskMessageStore, SubagentTaskMessageInner)

@@ -169,12 +169,6 @@ describe("the bundled client survives rolldown's CommonJS interop", () => {
     expect(scan.imports.some((site) => site.specifier === "react")).toBe(true)
   })
 
-  test("react-use-websocket is still the transpiled-CommonJS package this gate was built for", () => {
-    const site = scan.imports.find((entry) => entry.specifier === "react-use-websocket")
-    expect(site?.interop.kind).toBe("transpiled_cjs")
-    expect(site?.path).toBe("src/client/lib/useWebSocket.ts")
-  })
-
   test("every sanction cites a reason", () => {
     for (const entry of SANCTIONED_INTEROP) {
       expect(entry.reason.length).toBeGreaterThan(40)

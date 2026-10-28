@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test"
 import type { StorageBackend } from "./storage/backend"
 import type { SnapshotFile } from "./events"
 import { createEmptyState } from "./events"
+import { REPLAYED_LOGS, storeLayoutFor } from "./event-logs"
 import { STORE_VERSION } from "../shared/types"
 import {
   buildSnapshotFile,
@@ -15,10 +16,9 @@ import {
   truncateLogsAfterSnapshot,
   writeSidebarOrderFile,
   type LegacyTranscriptStats,
-  type SnapshotLogPaths,
 } from "./event-store-snapshot"
 import type { TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { deriveCronJobs } from "./cron/read-model"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import type { StoreEvent } from "./events"
@@ -50,6 +50,8 @@ function makeStorage(initial: Record<string, string> = {}): StorageBackend & {
       if (content === undefined) throw new Error(`File not found: ${p}`)
       return content
     },
+    sizeSync: (p) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p, start, end) => Buffer.from(files.get(p) ?? "").subarray(start, end),
     readTextSync: (p) => {
       const content = files.get(p)
       if (content === undefined) throw new Error(`File not found: ${p}`)
@@ -78,18 +80,7 @@ function makeStorage(initial: Record<string, string> = {}): StorageBackend & {
   }
 }
 
-const PATHS: SnapshotLogPaths = {
-  snapshotPath: "/data/snapshot.json",
-  projectsLogPath: "/data/projects.jsonl",
-  chatsLogPath: "/data/chats.jsonl",
-  messagesLogPath: "/data/messages.jsonl",
-  queuedMessagesLogPath: "/data/queued-messages.jsonl",
-  turnsLogPath: "/data/turns.jsonl",
-  schedulesLogPath: "/data/schedules.jsonl",
-  stacksLogPath: "/data/stacks.jsonl",
-  toolRequestsLogPath: "/data/tool-requests.jsonl",
-  chatTasksLogPath: "/data/chat-tasks.jsonl",
-}
+const LAYOUT = storeLayoutFor("/data")
 
 describe("loadSnapshotIntoState", () => {
   test("returns empty result when snapshot file does not exist", async () => {
@@ -176,7 +167,7 @@ describe("loadSnapshotIntoState", () => {
   })
 
   test("converges an already-bloated cron history from the snapshot", async () => {
-    const events: AutoContinueEvent[] = [{
+    const events: ChatAutomationEvent[] = [{
       v: 3,
       kind: "cron_armed",
       chatId: "chat-1",
@@ -332,7 +323,7 @@ describe("truncateLogsAfterSnapshot", () => {
       "/data/stacks.jsonl": "data",
       "/data/tool-requests.jsonl": "data",
     })
-    await truncateLogsAfterSnapshot(storage, PATHS, '{"v":3}')
+    await truncateLogsAfterSnapshot(storage, LAYOUT, '{"v":3}')
     expect(storage.written.get("/data/snapshot.json")).toBe('{"v":3}')
     expect(storage.written.get("/data/projects.jsonl")).toBe("")
     expect(storage.written.get("/data/chats.jsonl")).toBe("")
@@ -344,23 +335,23 @@ describe("truncateLogsAfterSnapshot", () => {
 describe("calcShouldTruncateLogs", () => {
   test("returns false when combined size is below threshold", async () => {
     const storage = makeStorage(
-      Object.fromEntries(Object.values(PATHS).map((p) => [p, "small"])),
+      Object.fromEntries(REPLAYED_LOGS.map((name) => [LAYOUT.logPath(name), "small"])),
     )
-    const result = await calcShouldTruncateLogs(storage, PATHS)
+    const result = await calcShouldTruncateLogs(storage, LAYOUT)
     expect(result).toBe(false)
   })
 
   test("returns true when combined size meets 2 MiB threshold", async () => {
     const bigData = "x".repeat(2 * 1024 * 1024)
     const storage = makeStorage({ "/data/projects.jsonl": bigData })
-    const result = await calcShouldTruncateLogs(storage, PATHS)
+    const result = await calcShouldTruncateLogs(storage, LAYOUT)
     expect(result).toBe(true)
   })
 
   test("counts the chat-tasks log toward the truncation threshold", async () => {
     const bigData = "x".repeat(2 * 1024 * 1024)
-    const storage = makeStorage({ [PATHS.chatTasksLogPath]: bigData })
-    const result = await calcShouldTruncateLogs(storage, PATHS)
+    const storage = makeStorage({ [LAYOUT.logPath("chat-tasks")]: bigData })
+    const result = await calcShouldTruncateLogs(storage, LAYOUT)
     expect(result).toBe(true)
   })
 })
@@ -368,13 +359,13 @@ describe("calcShouldTruncateLogs", () => {
 describe("readSidebarOrderFromProjectsLog", () => {
   test("returns empty array if file does not exist", async () => {
     const storage = makeStorage()
-    const result = await readSidebarOrderFromProjectsLog(storage, "/data/projects.jsonl")
+    const result = await readSidebarOrderFromProjectsLog(storage, LAYOUT)
     expect(result).toEqual([])
   })
 
   test("returns empty array if file is empty", async () => {
     const storage = makeStorage({ "/data/projects.jsonl": "" })
-    const result = await readSidebarOrderFromProjectsLog(storage, "/data/projects.jsonl")
+    const result = await readSidebarOrderFromProjectsLog(storage, LAYOUT)
     expect(result).toEqual([])
   })
 
@@ -384,7 +375,7 @@ describe("readSidebarOrderFromProjectsLog", () => {
       timestamp: 1, projectIds: ["p2", "p1"],
     })
     const storage = makeStorage({ "/data/projects.jsonl": `${event}\n` })
-    const result = await readSidebarOrderFromProjectsLog(storage, "/data/projects.jsonl")
+    const result = await readSidebarOrderFromProjectsLog(storage, LAYOUT)
     expect(result).toEqual(["p2", "p1"])
   })
 
@@ -392,15 +383,23 @@ describe("readSidebarOrderFromProjectsLog", () => {
     const e1 = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 1, projectIds: ["p1"] })
     const e2 = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 2, projectIds: ["p2", "p1"] })
     const storage = makeStorage({ "/data/projects.jsonl": `${e1}\n${e2}\n` })
-    const result = await readSidebarOrderFromProjectsLog(storage, "/data/projects.jsonl")
+    const result = await readSidebarOrderFromProjectsLog(storage, LAYOUT)
     expect(result).toEqual(["p2", "p1"])
+  })
+
+  test("a literal null line never throws out of the migration", async () => {
+    const sidebarEvent = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 2, projectIds: ["p1"] })
+    const trailing = makeStorage({ "/data/projects.jsonl": `${sidebarEvent}\nnull\n` })
+    expect(await readSidebarOrderFromProjectsLog(trailing, LAYOUT)).toEqual(["p1"])
+    const mid = makeStorage({ "/data/projects.jsonl": `null\n${sidebarEvent}\n` })
+    expect(await readSidebarOrderFromProjectsLog(mid, LAYOUT)).toEqual([])
   })
 
   test("skips non-sidebar events", async () => {
     const projectEvent = JSON.stringify({ v: STORE_VERSION, type: "project_opened", timestamp: 1, projectId: "p1", localPath: "/", title: "t" })
     const sidebarEvent = JSON.stringify({ v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 2, projectIds: ["p1"] })
     const storage = makeStorage({ "/data/projects.jsonl": `${projectEvent}\n${sidebarEvent}\n` })
-    const result = await readSidebarOrderFromProjectsLog(storage, "/data/projects.jsonl")
+    const result = await readSidebarOrderFromProjectsLog(storage, LAYOUT)
     expect(result).toEqual(["p1"])
   })
 })
@@ -408,7 +407,7 @@ describe("readSidebarOrderFromProjectsLog", () => {
 describe("writeSidebarOrderFile", () => {
   test("writes projectIds as JSON to the sidebar order file", async () => {
     const storage = makeStorage()
-    await writeSidebarOrderFile(storage, "/data", "/data/sidebar-order.json", ["p1", "p2"])
+    await writeSidebarOrderFile(storage, LAYOUT, ["p1", "p2"])
     const written = storage.written.get("/data/sidebar-order.json")
     expect(written).toBeDefined()
     const parsed = JSON.parse(written!)
@@ -421,13 +420,13 @@ describe("loadSidebarOrder", () => {
     const storage = makeStorage({
       "/data/sidebar-order.json": JSON.stringify(["p3", "p1", "p2"]),
     })
-    const result = await loadSidebarOrder(storage, "/data/sidebar-order.json", "/data/projects.jsonl", "/data", [])
+    const result = await loadSidebarOrder(storage, LAYOUT, [])
     expect(result).toEqual(["p3", "p1", "p2"])
   })
 
   test("returns empty array if sidebar-order.json is blank", async () => {
     const storage = makeStorage({ "/data/sidebar-order.json": "   " })
-    const result = await loadSidebarOrder(storage, "/data/sidebar-order.json", "/data/projects.jsonl", "/data", [])
+    const result = await loadSidebarOrder(storage, LAYOUT, [])
     expect(result).toEqual([])
   })
 
@@ -436,14 +435,14 @@ describe("loadSidebarOrder", () => {
       v: STORE_VERSION, type: "sidebar_project_order_set", timestamp: 1, projectIds: ["p2", "p1"],
     })
     const storage = makeStorage({ "/data/projects.jsonl": `${sidebarEvent}\n` })
-    const result = await loadSidebarOrder(storage, "/data/sidebar-order.json", "/data/projects.jsonl", "/data", [])
+    const result = await loadSidebarOrder(storage, LAYOUT, [])
     expect(result).toEqual(["p2", "p1"])
     expect(storage.written.has("/data/sidebar-order.json")).toBe(true)
   })
 
   test("falls back to legacySidebarProjectOrder when no file or log events", async () => {
     const storage = makeStorage()
-    const result = await loadSidebarOrder(storage, "/data/sidebar-order.json", "/data/projects.jsonl", "/data", ["p4"])
+    const result = await loadSidebarOrder(storage, LAYOUT, ["p4"])
     expect(result).toEqual(["p4"])
   })
 })
@@ -451,21 +450,21 @@ describe("loadSidebarOrder", () => {
 describe("computeLegacyTranscriptStats", () => {
   test("returns hasLegacyData false when nothing present", async () => {
     const storage = makeStorage({ "/data/messages.jsonl": "" })
-    const result = await computeLegacyTranscriptStats(storage, "/data/messages.jsonl", false, new Map())
+    const result = await computeLegacyTranscriptStats(storage, LAYOUT, false, new Map())
     expect(result.hasLegacyData).toBe(false)
     expect(result.sources).toEqual([])
   })
 
   test("includes snapshot source when snapshotHasLegacyMessages is true", async () => {
     const storage = makeStorage({ "/data/messages.jsonl": "" })
-    const result = await computeLegacyTranscriptStats(storage, "/data/messages.jsonl", true, new Map())
+    const result = await computeLegacyTranscriptStats(storage, LAYOUT, true, new Map())
     expect(result.hasLegacyData).toBe(true)
     expect(result.sources).toContain("snapshot")
   })
 
   test("includes messages_log source when messages.jsonl is non-empty", async () => {
     const storage = makeStorage({ "/data/messages.jsonl": "some content" })
-    const result = await computeLegacyTranscriptStats(storage, "/data/messages.jsonl", false, new Map())
+    const result = await computeLegacyTranscriptStats(storage, LAYOUT, false, new Map())
     expect(result.hasLegacyData).toBe(true)
     expect(result.sources).toContain("messages_log")
   })
@@ -479,7 +478,7 @@ describe("computeLegacyTranscriptStats", () => {
         { _id: "c", createdAt: 3, kind: "user_prompt", content: "" },
       ]],
     ])
-    const result = await computeLegacyTranscriptStats(storage, "/data/messages.jsonl", false, legacyMessages)
+    const result = await computeLegacyTranscriptStats(storage, LAYOUT, false, legacyMessages)
     expect(result.chatCount).toBe(2)
     expect(result.entryCount).toBe(3)
     expect(result.hasLegacyData).toBe(true)
@@ -491,8 +490,8 @@ describe("migrateLegacyTranscripts", () => {
     const storage = makeStorage()
     const stats: LegacyTranscriptStats = { hasLegacyData: false, sources: [], chatCount: 0, entryCount: 0 }
     const result = await migrateLegacyTranscripts(
-      storage, "/data/transcripts", stats,
-      new Map(), (_id) => `/data/transcripts/${_id}.jsonl`,
+      storage, LAYOUT, stats,
+      new Map(),
       () => {}, async () => {}, () => {},
     )
     expect(result).toBe(false)
@@ -516,10 +515,9 @@ describe("migrateLegacyTranscripts", () => {
 
     const result = await migrateLegacyTranscripts(
       storage,
-      "/data/transcripts",
+      LAYOUT,
       stats,
       legacyMessages,
-      (id) => `/data/transcripts/${id}.jsonl`,
       () => { clearCalled = true },
       async () => { snapshotCalled = true },
       () => { cacheCalled = true },
@@ -542,7 +540,7 @@ describe("loadAndReplayLogs", () => {
     const storage = makeStorage()
     let applied = 0
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => true,
       () => { applied++ },
       async () => {},
@@ -561,7 +559,7 @@ describe("loadAndReplayLogs", () => {
 
     const applied: StoreEvent[] = []
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => false,
       (event) => { applied.push(event) },
       async () => {},
@@ -580,7 +578,7 @@ describe("loadAndReplayLogs", () => {
     let clearCalled = false
     let storageReset = false
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => storageReset,
       () => {},
       async () => { clearCalled = true; storageReset = true },
@@ -593,7 +591,7 @@ describe("loadAndReplayLogs", () => {
     const storage = makeStorage()
     let cleared = false
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => false,
       () => {},
       async () => {},
@@ -617,7 +615,7 @@ describe("loadAndReplayLogs", () => {
     const applied: StoreEvent[] = []
     let clearCalled = false
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => false,
       (event) => { applied.push(event) },
       async () => { clearCalled = true },
@@ -645,7 +643,7 @@ describe("loadAndReplayLogs", () => {
     const applied: StoreEvent[] = []
     let clearCalled = false
     await loadAndReplayLogs(
-      storage, PATHS,
+      storage, LAYOUT,
       () => false,
       (event) => { applied.push(event) },
       async () => { clearCalled = true },

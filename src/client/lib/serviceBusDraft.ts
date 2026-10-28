@@ -1,4 +1,5 @@
 import {
+  SERVICE_BUS_CONSUMER_DEFAULTS,
   validateServiceBusSettings,
   type ConsumerAckPolicy,
   type ConsumerDeliverPolicy,
@@ -101,10 +102,10 @@ export function newConsumerDraft(streamPrefix: string): ConsumerDraft {
   return {
     durableName: "",
     filterSubject: `${streamPrefix}.>`,
-    ackPolicy: "explicit",
-    deliverPolicy: "all",
-    maxAckPending: "1000",
-    ackWaitSec: "30",
+    ackPolicy: SERVICE_BUS_CONSUMER_DEFAULTS.ackPolicy,
+    deliverPolicy: SERVICE_BUS_CONSUMER_DEFAULTS.deliverPolicy,
+    maxAckPending: String(SERVICE_BUS_CONSUMER_DEFAULTS.maxAckPending),
+    ackWaitSec: String(SERVICE_BUS_CONSUMER_DEFAULTS.ackWaitSec),
   }
 }
 

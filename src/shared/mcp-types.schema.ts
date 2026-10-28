@@ -39,24 +39,29 @@ export const mcpOAuthStateSchema = z.object({
   flow: mcpOAuthFlowStateSchema.optional(),
 })
 
-const mcpServerStdioFieldsSchema = z.object({
+const mcpServerStdioShape = {
   transport: z.literal("stdio"),
   command: z.string(),
   args: z.array(z.string()),
   env: stringRecordSchema,
   cwd: z.string().optional(),
-  name: z.string(),
-  enabled: z.boolean().optional(),
-})
+}
 
-const mcpServerNetworkFieldsSchema = z.object({
+const mcpServerNetworkShape = {
   transport: z.enum(["http", "sse", "ws"]),
   url: z.string(),
   headers: stringRecordSchema,
   oauth: mcpOAuthStateSchema.optional(),
+}
+
+const mcpServerInputIdentityShape = {
   name: z.string(),
   enabled: z.boolean().optional(),
-})
+}
+
+const mcpServerStdioFieldsSchema = z.object({ ...mcpServerStdioShape, ...mcpServerInputIdentityShape })
+
+const mcpServerNetworkFieldsSchema = z.object({ ...mcpServerNetworkShape, ...mcpServerInputIdentityShape })
 
 export const mcpServerInputSchema = z.union([mcpServerStdioFieldsSchema, mcpServerNetworkFieldsSchema])
 
@@ -83,21 +88,8 @@ const mcpServerBaseShape = {
 }
 
 export const mcpServerConfigSchema = z.union([
-  z.object({
-    ...mcpServerBaseShape,
-    transport: z.literal("stdio"),
-    command: z.string(),
-    args: z.array(z.string()),
-    env: stringRecordSchema,
-    cwd: z.string().optional(),
-  }),
-  z.object({
-    ...mcpServerBaseShape,
-    transport: z.enum(["http", "sse", "ws"]),
-    url: z.string(),
-    headers: stringRecordSchema,
-    oauth: mcpOAuthStateSchema.optional(),
-  }),
+  z.object({ ...mcpServerBaseShape, ...mcpServerStdioShape }),
+  z.object({ ...mcpServerBaseShape, ...mcpServerNetworkShape }),
 ])
 
 export const mcpServerTestCommandResultSchema = z.object({
@@ -116,6 +108,9 @@ export const mcpOAuthCompleteResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), testResult: mcpServerTestResultSchema }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ])
+
+export type McpOAuthStartResult = z.output<typeof mcpOAuthStartResultSchema>
+export type McpOAuthCompleteResult = z.output<typeof mcpOAuthCompleteResultSchema>
 
 assertParity<z.output<typeof mcpServerTestResultSchema>, McpServerTestResult>()
 assertParity<z.output<typeof mcpOAuthStateSchema>, McpOAuthState>()

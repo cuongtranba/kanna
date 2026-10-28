@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vite-plus/test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { HarnessEvent } from "./harness-types"
 import type { OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -92,8 +92,8 @@ function createFakeStore() {
       this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {
@@ -152,6 +152,7 @@ function createFakeStore() {
       this.queuedMessages.push(queuedMessage)
       return queuedMessage
     },
+    async setChatModel() {},
     getQueuedMessages() {
       return [...this.queuedMessages]
     },
@@ -161,6 +162,7 @@ function createFakeStore() {
     async removeQueuedMessage(_chatId: string, queuedMessageId: string) {
       this.queuedMessages = this.queuedMessages.filter((entry) => entry.id !== queuedMessageId)
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

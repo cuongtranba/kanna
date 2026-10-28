@@ -3,13 +3,13 @@ import {
   ALLOW_FOCUS_RETAIN_ATTRIBUTE,
   CHAT_INPUT_ATTRIBUTE,
   CHAT_SELECTION_ZONE_ATTRIBUTE,
-  FOCUS_FALLBACK_IGNORE_ATTRIBUTE,
   focusNextChatInput,
   hasActiveFocusOverlay,
   hasActiveTextSelection,
   isTextEntryTarget,
   resolveChatFocusAction,
 } from "./chatFocusPolicy"
+import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE } from "../lib/focusOverlay"
 
 class FakeElement {
   parent: FakeElement | null

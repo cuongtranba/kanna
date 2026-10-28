@@ -1,6 +1,4 @@
 import {
-  MIN_BEACON_PROTOCOL,
-  SCOPE_SYNC_PROTOCOL,
   type BeaconFrame,
   type BeaconOs,
   type BeaconScopeChange,
@@ -131,7 +129,6 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
   const listeners = new Set<(snapshot: BeaconRunnerSnapshot) => void>()
   let status: BeaconRunnerStatus = deps.startPaused ? { phase: "paused" } : { phase: "connecting", attempt: 1 }
   let scope: BeaconScope | null = null
-  let serverProtocol = MIN_BEACON_PROTOCOL
   let paused = deps.startPaused === true
   let stopped = false
   let unpairing = false
@@ -144,8 +141,7 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
   let restartReady = false
 
   function snapshot(): BeaconRunnerSnapshot {
-    const connected = connectedSince !== null
-    return { status, scope, scopeSync: connected && serverProtocol >= SCOPE_SYNC_PROTOCOL }
+    return { status, scope, scopeSync: live?.session.canSyncScope() ?? false }
   }
 
   function publish(): void {
@@ -275,10 +271,9 @@ export function createBeaconRunner(deps: BeaconRunnerDeps): BeaconRunner {
       shell,
       transfer,
       now: deps.now,
-      onReady: (granted, protocol) => {
+      onReady: (granted) => {
         wasOnline = true
         scope = granted
-        serverProtocol = protocol
         connectedSince = deps.now()
         showConnected()
         considerUpdate("auto")

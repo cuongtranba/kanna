@@ -1,11 +1,9 @@
 ---
 name: kanna-inbox
-description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/<id>, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
+description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/:id, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
 ---
 
 # Kanna service bus, Inbox, MCP sources, webhooks
-
-Moved verbatim from the root `CLAUDE.md`.
 
 ## Service bus — every durable fact is published once, after it is on disk
 
@@ -44,9 +42,11 @@ stays the store of record; the bus persists nothing.
   `subjectMatches`). `idempotencyKey` is deterministic
   (`store:<kind>:<entity>:<timestamp>`, `transcript:<chatId>:<entryId>`) so a
   mirror can dedupe; it is the planned JetStream `Nats-Msg-Id`.
-- **`event-store.ts` is at the 700-line budget.** The tap cost three lines,
-  paid for by three removed blank lines. A second call site or a new import
-  line there fails `check:arch`; put new bus logic in `src/server/service-bus/`.
+- **`event-store.ts` is under the 700-line threshold** since the log catalogue,
+  route table and writer moved out (`event-logs.ts`, `event-routes.ts`,
+  `event-store-writer.ts`). Growing back past it fails `check:arch` as
+  `module_unlisted`; keep the tap to one call site and put new bus logic in
+  `src/server/service-bus/`.
 
 ### Embedded NATS mirror
 
@@ -255,13 +255,14 @@ and `inbox.instruct` need nothing new.
   `mcp-sources-settings.ts`, which drops invalid entries with a warning. The
   `serverId` is checked against `customMcpServers` only when a source is created
   or edited; deleting a server leaves its sources in place and the runner reports
-  `MCP server not found`. `app-settings.ts` is pinned at its 1900-line ceiling,
-  so everything but the glue lives in that module.
+  `MCP server not found`. `app-settings.ts` sits under a `MODULE_ALLOWANCES` ceiling in the
+  architecture budget, so everything but the glue lives in that module.
 - **The runner reconciles; it does not watch.** `McpSourceRunner.reconcile`
   restarts a source only when its `updatedAt` or its server's `updatedAt` or
   `enabled` changes, so an OAuth token refresh (which does not touch
   `updatedAt`) never restarts a connection. `startMcpSources` calls it on every
-  `appSettings.onChange`, and `router.dispose()` awaits `stop()`.
+  `appSettings.onChange`, and the `Lifetime` teardown phase unsubscribes and awaits
+  `runner.stop()`.
 - **A stdio server started here is a separate process** from the one a chat's
   session starts, with its own state. Prefer `http` or `sse`; the form says so.
   `ws` is not offered, because `@modelcontextprotocol/client` 2.x ships no

@@ -19,6 +19,8 @@ import {
   useNewProjectExistingPath,
   type NewProjectModalTab,
 } from "../stores/newProjectModalStore"
+import { fileNameOfPath } from "../lib/pathUtils"
+import type { ProjectRequest } from "../lib/projectRequest"
 
 export interface NewProjectModalPorts {
   timer?: TimerPort
@@ -27,7 +29,7 @@ export interface NewProjectModalPorts {
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (project: { mode: NewProjectModalTab; localPath: string; title: string }) => void
+  onConfirm: (project: ProjectRequest) => void
   ports?: NewProjectModalPorts
 }
 
@@ -79,7 +81,7 @@ export function NewProjectModal({ open, onOpenChange, onConfirm, ports = {} }: P
     if (tab === "new") {
       onConfirm({ mode: "new", localPath: newPath, title: name.trim() })
     } else {
-      const folderName = trimmedExisting.split("/").pop() || trimmedExisting
+      const folderName = fileNameOfPath(trimmedExisting)
       onConfirm({ mode: "existing", localPath: trimmedExisting, title: folderName })
     }
     onOpenChange(false)

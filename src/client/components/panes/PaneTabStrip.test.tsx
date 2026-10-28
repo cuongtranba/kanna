@@ -57,6 +57,12 @@ describe("PaneTabStrip", () => {
     expect(html).toContain('aria-selected="true"')
   })
 
+  test("highlights the first tab when the pane has no focused tab, matching the content the shell shows", () => {
+    const html = render({ kind: "pane", id: "p", tabs: [chat, t1], focusedTabId: null })
+    expect(html).toContain('aria-selected="true"')
+    expect(html.indexOf('data-tab-active="true"')).toBeLessThan(html.indexOf(`data-tab-id="${t1.tabId}"`))
+  })
+
   test("tints the active tab indicator by pane focus", () => {
     expect(render(createPane("p", [chat]), true)).toContain('data-tab-indicator="focused"')
     expect(render(createPane("p", [chat]), false)).toContain('data-tab-indicator="unfocused"')

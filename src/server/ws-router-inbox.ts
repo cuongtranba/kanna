@@ -1,4 +1,4 @@
-import { INBOX_REPLY_MAX_CHARS, type InboxFilter } from "../shared/inbox/types"
+import { INBOX_REPLY_MAX_CHARS } from "../shared/inbox/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import { ackResult } from "./ws-router-ack"
 import type { InboxReplyResult } from "./inbound/inbox-reply"
@@ -9,31 +9,20 @@ export type InboxReplyAction = (threadId: string, text: string) => Promise<Inbox
 const PAGE_LIMIT_MAX = 200
 const PAGE_LIMIT_DEFAULT = 50
 
-function sanitizeFilter(filter: InboxFilter | undefined): InboxFilter {
-  if (!filter) return {}
-  const sourceKinds: readonly string[] = ["store", "transcript", "webhook", "mcp", "inbox"]
-  return {
-    ...(typeof filter.sourceKind === "string" && sourceKinds.includes(filter.sourceKind) ? { sourceKind: filter.sourceKind } : {}),
-    ...(typeof filter.projectId === "string" ? { projectId: filter.projectId } : {}),
-    ...(typeof filter.chatId === "string" ? { chatId: filter.chatId } : {}),
-    ...(filter.attentionOnly === true ? { attentionOnly: true } : {}),
-  }
-}
-
 function clampLimit(value: number): number {
   if (!Number.isFinite(value)) return PAGE_LIMIT_DEFAULT
   return Math.min(PAGE_LIMIT_MAX, Math.max(1, Math.floor(value)))
 }
 
 function requireText(text: string): string {
-  const trimmed = typeof text === "string" ? text.trim() : ""
+  const trimmed = text.trim()
   if (trimmed.length === 0) throw new Error("Text is required")
   if (trimmed.length > INBOX_REPLY_MAX_CHARS) throw new Error(`Text must be at most ${INBOX_REPLY_MAX_CHARS} characters`)
   return trimmed
 }
 
 function requireId(value: string, name: string): string {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`${name} is required`)
+  if (value.length === 0) throw new Error(`${name} is required`)
   return value
 }
 
@@ -51,19 +40,19 @@ async function run(
 ): Promise<ServerEnvelope | null> {
   switch (command.type) {
     case "inbox.markRead":
-      await registry.markRead(Array.isArray(command.ids) ? command.ids.filter((id) => typeof id === "string") : [])
+      await registry.markRead(command.ids)
       return ackResult(id, command, { ok: true })
     case "inbox.markAllRead":
-      await registry.markAllRead(typeof command.beforeTs === "number" ? command.beforeTs : undefined)
+      await registry.markAllRead(command.beforeTs)
       return ackResult(id, command, { ok: true })
     case "inbox.archive":
       await registry.archive(requireId(command.threadId, "threadId"))
       return ackResult(id, command, { ok: true })
     case "inbox.page":
       return ackResult(id, command, registry.page(
-        typeof command.beforeTs === "number" ? command.beforeTs : Number.MAX_SAFE_INTEGER,
+        command.beforeTs,
         clampLimit(command.limit),
-        sanitizeFilter(command.filter),
+        command.filter ?? {},
       ))
     case "inbox.reply":
       return ackResult(id, command, unwrap(await reply(requireId(command.threadId, "threadId"), requireText(command.text))))

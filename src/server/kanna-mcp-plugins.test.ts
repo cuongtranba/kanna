@@ -2,29 +2,25 @@ import { afterAll, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { ZodTypeAny } from "zod"
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { z } from "zod"
 import type { JsonObject } from "../shared/json"
+import { PLUGIN_LOG_DEFAULT_TAIL, tailLogEntries } from "../shared/plugins/log-ring"
 import { KANNA_PLUGIN_MANIFEST_FILENAME } from "../shared/plugins/manifest"
-import { buildPluginToolList, type PluginToolFactory } from "./kanna-mcp-plugins"
-import type { ToolResult } from "./kanna-mcp-tool"
+import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { buildPluginScaffoldFiles } from "./plugins/plugin-scaffold"
 import type { PluginSummary } from "./plugins/plugin-service"
+import { invokeTool, sdkToolFactory, toolText } from "./test-helpers/sdk-tool"
 
 
 interface CapturedTool {
   readonly name: string
-  readonly schema: Record<string, ZodTypeAny>
-  run(input: JsonObject): Promise<ToolResult>
+  readonly inputSchema: z.ZodRawShape
+  run(input: JsonObject): Promise<CallToolResult>
 }
 
-const capture: PluginToolFactory<CapturedTool> = (name, _description, schema, handler) => ({
-  name,
-  schema,
-  run: handler,
-})
-
-function textOf(result: ToolResult): string {
-  return result.content.map((block) => block.text).join("\n")
+function textOf(result: CallToolResult): string {
+  return toolText(result)
 }
 
 interface FakeCalls {
@@ -40,7 +36,7 @@ function fakeService(plugins: PluginSummary[], logs: Record<string, { stream: "o
       plugins.push({ id: "installed-one", sourceDir, enabled: false, state: "stopped" })
     },
     list: () => plugins,
-    logs: (id: string) => logs[id] ?? [],
+    logs: (id: string, tail = PLUGIN_LOG_DEFAULT_TAIL) => tailLogEntries(logs[id] ?? [], tail),
     reload: async (id: string) => {
       calls.reloaded.push(id)
     },
@@ -49,7 +45,12 @@ function fakeService(plugins: PluginSummary[], logs: Record<string, { stream: "o
 }
 
 function toolsAt(depth: number, service: object): Map<string, CapturedTool> {
-  return new Map(buildPluginToolList(service, "chat-1", depth, capture).map((entry) => [entry.name, entry]))
+  return new Map(
+    buildPluginToolList(service, "chat-1", depth, sdkToolFactory).map((entry): [string, CapturedTool] => [
+      entry.name,
+      { name: entry.name, inputSchema: entry.inputSchema, run: (input) => invokeTool(entry, input) },
+    ]),
+  )
 }
 
 const tempDirs: string[] = []
@@ -67,8 +68,8 @@ afterAll(async () => {
 
 describe("buildPluginToolList — shape", () => {
   test("the family is absent without a service or a chatId", () => {
-    expect(buildPluginToolList(null, "chat-1", 0, capture)).toEqual([])
-    expect(buildPluginToolList({}, null, 0, capture)).toEqual([])
+    expect(buildPluginToolList(null, "chat-1", 0, sdkToolFactory)).toEqual([])
+    expect(buildPluginToolList({}, null, 0, sdkToolFactory)).toEqual([])
   })
 
   test("depth 0 exposes all six tools", () => {
@@ -147,9 +148,15 @@ describe("plugin_logs", () => {
     expect(textOf(result ?? { content: [] })).toContain('No log lines recorded for plugin "nope"')
   })
 
-  test("a missing id fails instead of throwing out of the handler", async () => {
+  test("a missing id is refused by the tool schema", () => {
     const { service } = fakeService([], logs)
-    const result = await toolsAt(0, service).get("plugin_logs")?.run({})
+    const schema = toolsAt(0, service).get("plugin_logs")?.inputSchema ?? {}
+    expect(z.object(schema).safeParse({}).success).toBe(false)
+  })
+
+  test("a blank id fails instead of throwing out of the handler", async () => {
+    const { service } = fakeService([], logs)
+    const result = await toolsAt(0, service).get("plugin_logs")?.run({ id: "  " })
     expect(result?.isError).toBe(true)
     expect(textOf(result ?? { content: [] })).toContain("id is required")
   })

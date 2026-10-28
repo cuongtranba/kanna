@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import { MCP_SOURCE_PRESETS } from "./presets"
-import { MCP_SOURCE_NAME_MAX, type McpSourceInput } from "./types"
+import { INBOUND_LIMITS } from "../inbound/handler"
+import type { McpSourceInput } from "./types"
 import { parseMcpSourceArgs, validateMcpSource } from "./validate"
 
 const handler = { mode: "spawn" as const, projectId: "p1", template: "New message", replyHint: "", pushEnabled: true }
@@ -56,7 +57,7 @@ describe("validateMcpSource", () => {
     expect(errors).toContain("Name is required")
     expect(errors).toContain("An MCP server is required")
     expect(errors).toContain("A project is required for spawn hooks")
-    expect(validateMcpSource({ ...subscribe, name: "x".repeat(MCP_SOURCE_NAME_MAX + 1) })[0]).toContain("at most")
+    expect(validateMcpSource({ ...subscribe, name: "x".repeat(INBOUND_LIMITS.nameMaxChars + 1) })[0]).toContain("at most")
   })
 
   test("the Zalo preset fills a form that validates once a server and project are picked", () => {

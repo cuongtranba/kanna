@@ -11,6 +11,7 @@ import {
   type StableResolvedTranscriptRowsState,
 } from "./KannaTranscript"
 import { TranscriptActionsProvider, type TranscriptActionsContextValue } from "./transcriptActionsContext"
+import { NO_LATEST_TOOL_IDS } from "./derived"
 import {
   extractDelegateCalls,
   matchRunsToDelegateCalls,
@@ -47,14 +48,14 @@ const DEFAULT_ACTIONS: TranscriptActionsContextValue = {
   onSteerQueuedMessage: ASYNC_NOOP,
   onRemoveQueuedMessage: ASYNC_NOOP,
   localPath: undefined,
-  latestToolIds: {},
+  latestToolIds: NO_LATEST_TOOL_IDS,
   isProcessing: false,
 }
 
 function renderTranscript(messages: HydratedTranscriptMessage[]) {
   const rows = buildResolvedTranscriptRows(messages, {
     isLoading: false,
-    latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+    latestToolIds: NO_LATEST_TOOL_IDS,
   })
   return renderToStaticMarkup(
     <TranscriptActionsProvider value={DEFAULT_ACTIONS}>
@@ -363,7 +364,7 @@ Please check the latest error first.`,
   })
 
   test("keeps tool-group row ids stable when the grouped run grows", () => {
-    const latestToolIds = { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }
+    const latestToolIds = NO_LATEST_TOOL_IDS
     const initialRows = buildResolvedTranscriptRows([
       createToolMessage("tool-1"),
       createToolMessage("tool-2"),
@@ -400,7 +401,7 @@ Please check the latest error first.`,
       createToolMessage("tool-2"),
     ], {
       isLoading: true,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
 
     expect(rows).toHaveLength(1)
@@ -427,7 +428,7 @@ Please check the latest error first.`,
       },
     ], {
       isLoading: true,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
 
     expect(rows).toHaveLength(2)
@@ -452,7 +453,7 @@ Please check the latest error first.`,
       createToolMessage("tool-2"),
     ], {
       isLoading: true,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
 
     expect(rows).toHaveLength(1)
@@ -467,7 +468,7 @@ Please check the latest error first.`,
       createOfferDownloadMessage("offer-1"),
     ], {
       isLoading: false,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
 
     expect(rows).toHaveLength(2)
@@ -499,7 +500,7 @@ Please check the latest error first.`,
       createToolMessage("tool-2"),
     ], {
       isLoading: true,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
 
     expect(rows).toHaveLength(3)
@@ -542,7 +543,7 @@ Please check the latest error first.`,
   })
 
   test("reuses unchanged single row objects across streaming updates", () => {
-    const latestToolIds = { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }
+    const latestToolIds = NO_LATEST_TOOL_IDS
     const previousRows = buildResolvedTranscriptRows([
       {
         id: "user-1",
@@ -589,7 +590,7 @@ Please check the latest error first.`,
   })
 
   test("replaces a user row when attachment content changes", () => {
-    const latestToolIds = { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }
+    const latestToolIds = NO_LATEST_TOOL_IDS
     const previousRows = buildResolvedTranscriptRows([
       {
         id: "user-attachment",
@@ -643,7 +644,7 @@ Please check the latest error first.`,
   })
 
   test("reuses unchanged tool-group rows across grouped run growth elsewhere", () => {
-    const latestToolIds = { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null }
+    const latestToolIds = NO_LATEST_TOOL_IDS
     const toolMsg1 = createToolMessage("tool-1")
     const toolMsg2 = createToolMessage("tool-2")
     const assistantMsg = {
@@ -751,7 +752,7 @@ function renderTranscriptWithRuns(
 
   const rows = buildResolvedTranscriptRows(messages, {
     isLoading: false,
-    latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+    latestToolIds: NO_LATEST_TOOL_IDS,
   })
 
   return renderToStaticMarkup(

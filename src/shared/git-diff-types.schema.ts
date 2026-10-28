@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { GIT_REPO_VISIBILITIES, GIT_SYNC_ACTIONS } from "./git-diff-types"
 import type {
   BranchActionFailure,
   BranchActionSuccess,
@@ -32,7 +33,8 @@ export const chatBranchRefSchema = z.discriminatedUnion("kind", [
   }),
 ])
 
-export const gitSyncActionSchema = z.enum(["fetch", "pull", "push", "publish"])
+export const gitSyncActionSchema = z.enum(GIT_SYNC_ACTIONS)
+export const gitRepoVisibilitySchema = z.enum(GIT_REPO_VISIBILITIES)
 
 assertParity<z.output<typeof diffCommitModeSchema>, DiffCommitMode>()
 

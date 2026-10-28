@@ -1,6 +1,7 @@
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "./json"
 import type { BeaconScope } from "./beacon-scope"
 import { SHA256_HEX, TRANSFER_PROTOCOL } from "./beacon-transfer"
+import { oneOf } from "./vocab"
 
 export const UPDATE_PROTOCOL = TRANSFER_PROTOCOL + 1
 export const BEACON_PROTOCOL_VERSION = UPDATE_PROTOCOL
@@ -17,7 +18,9 @@ export interface BeaconUpdateStatus {
   message?: string
 }
 
-export type BeaconOs = "darwin" | "linux" | "windows"
+export const BEACON_OSES = ["darwin", "linux", "windows"] as const
+export type BeaconOs = (typeof BEACON_OSES)[number]
+const isBeaconOs = oneOf(BEACON_OSES)
 
 export type BeaconScopeChange = {
   readRoots?: readonly string[]
@@ -25,7 +28,9 @@ export type BeaconScopeChange = {
   autoRunScripts?: boolean
 }
 
-export type BeaconRefusal = "unknown-beacon" | "disabled"
+export const BEACON_REFUSALS = ["unknown-beacon", "disabled"] as const
+export type BeaconRefusal = (typeof BEACON_REFUSALS)[number]
+const isBeaconRefusal = oneOf(BEACON_REFUSALS)
 
 export type BeaconRequest =
   | { op: "exec"; cmd: string; args: readonly string[]; cwd?: string }
@@ -58,6 +63,21 @@ export type BeaconFrame =
   | { kind: "error"; id: string; message: string }
   | { kind: "update" }
   | ({ kind: "update_status" } & BeaconUpdateStatus)
+
+export type BeaconResponseFrame = Extract<BeaconFrame, { kind: "stdout" | "stderr" | "result" | "exit" | "error" }>
+
+export function isBeaconResponseFrame(frame: BeaconFrame): frame is BeaconResponseFrame {
+  switch (frame.kind) {
+    case "stdout":
+    case "stderr":
+    case "result":
+    case "exit":
+    case "error":
+      return true
+    default:
+      return false
+  }
+}
 
 export function isSupportedProtocol(version: number): boolean {
   return version >= MIN_BEACON_PROTOCOL && version <= BEACON_PROTOCOL_VERSION
@@ -100,51 +120,29 @@ function readOptionalNumber(object: JsonObject, key: string): number | undefined
 
 function readOs(object: JsonObject): BeaconOs | null {
   const value = readString(object, "os")
-  switch (value) {
-    case "darwin":
-    case "linux":
-    case "windows":
-      return value
-    default:
-      return null
-  }
+  return isBeaconOs(value) ? value : null
+}
+
+type BeaconScopeFieldsRead = { [K in keyof BeaconScope]: BeaconScope[K] | null }
+
+function isCompleteScope(fields: BeaconScopeFieldsRead): fields is BeaconScopeFieldsRead & BeaconScope {
+  return Object.values(fields).every((field) => field !== null)
 }
 
 function parseBeaconScope(value: JsonValue): BeaconScope | null {
   if (!isJsonObject(value)) return null
-  const exec = readBoolean(value, "exec")
-  const execAllowlist = readStringList(value, "execAllowlist")
-  const autoRunScripts = readBoolean(value, "autoRunScripts")
-  const trustedScriptHashes = "trustedScriptHashes" in value ? readStringList(value, "trustedScriptHashes") : []
-  const readRoots = readStringList(value, "readRoots")
-  const writeRoots = readStringList(value, "writeRoots")
-  const perCallTimeoutMs = readNumber(value, "perCallTimeoutMs")
-  const outputByteCap = readNumber(value, "outputByteCap")
-  const maxConcurrent = readNumber(value, "maxConcurrent")
-  if (
-    exec === null ||
-    execAllowlist === null ||
-    autoRunScripts === null ||
-    trustedScriptHashes === null ||
-    readRoots === null ||
-    writeRoots === null ||
-    perCallTimeoutMs === null ||
-    outputByteCap === null ||
-    maxConcurrent === null
-  ) {
-    return null
+  const fields: BeaconScopeFieldsRead = {
+    exec: readBoolean(value, "exec"),
+    execAllowlist: readStringList(value, "execAllowlist"),
+    autoRunScripts: readBoolean(value, "autoRunScripts"),
+    trustedScriptHashes: "trustedScriptHashes" in value ? readStringList(value, "trustedScriptHashes") : [],
+    readRoots: readStringList(value, "readRoots"),
+    writeRoots: readStringList(value, "writeRoots"),
+    perCallTimeoutMs: readNumber(value, "perCallTimeoutMs"),
+    outputByteCap: readNumber(value, "outputByteCap"),
+    maxConcurrent: readNumber(value, "maxConcurrent"),
   }
-  return {
-    exec,
-    execAllowlist,
-    autoRunScripts,
-    trustedScriptHashes,
-    readRoots,
-    writeRoots,
-    perCallTimeoutMs,
-    outputByteCap,
-    maxConcurrent,
-  }
+  return isCompleteScope(fields) ? fields : null
 }
 
 function parseExecRequest(object: JsonObject): BeaconRequest | null {
@@ -320,7 +318,7 @@ function parseSetScope(object: JsonObject): BeaconFrame | null {
 
 function parseRefused(object: JsonObject): BeaconFrame | null {
   const reason = readString(object, "reason")
-  return reason === "unknown-beacon" || reason === "disabled" ? { kind: "refused", reason } : null
+  return isBeaconRefusal(reason) ? { kind: "refused", reason } : null
 }
 
 function parseRequestFrame(object: JsonObject): BeaconFrame | null {

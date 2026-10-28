@@ -4,10 +4,10 @@ import "../../../client/lib/testing/setupHappyDom"
 import { renderForLoopCheck } from "../../../client/lib/testing/renderForLoopCheck"
 import { DEFAULT_BEACON_SCOPE } from "../../../shared/beacon-scope"
 import type { BeaconActivity } from "../../activity"
-import type { DesktopRequests, DesktopView } from "../desktop-types"
+import type { DesktopRequestName, DesktopRequests, DesktopView } from "../desktop-types"
 import { desktopStrings } from "../strings"
 import { BeaconDesktopView } from "./BeaconDesktopView"
-import type { DesktopBridge, DesktopRequestName } from "./bridge"
+import type { DesktopBridge } from "./bridge"
 import { useDesktopViewStore } from "./view-store"
 
 const OLD: BeaconActivity = { id: "old", at: 1_000, verb: "read", target: "C:\\notes.txt", outcome: { kind: "done" } }

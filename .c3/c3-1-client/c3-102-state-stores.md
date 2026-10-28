@@ -1,7 +1,7 @@
 ---
 id: c3-102
 c3-version: 4
-c3-seal: 959cf6f369d7d3f5022a525187f8a9768036fdfb40da273d3ad3aa65ec484c50
+c3-seal: 676df927bee4e0f97f0750673805ac4d660ac10a485414dd14410781a119faec
 title: state-stores
 type: component
 category: foundation
@@ -34,7 +34,7 @@ Hold UI-local state (chat input, terminal layout, sidebar, preferences) in small
 
 ## Purpose
 
-Owns the browser-side state surface as Zustand stores in three forms: singleton per-concern stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware, the WS-fed `kannaStateStore` holding server snapshots (written exclusively by the `useKannaState` socket pipeline), and the `createScopedStore` factory (`src/client/lib/createScopedStore.tsx`) backing per-instance stores colocated as `<Component>.store.ts` beside their components. Additionally owns the `socketStore` singleton (`src/client/stores/socketStore.ts`) for raw WebSocket transport state (readyState + sendMessage), written exclusively by `SocketBridge`, and the `queryClient` server-cache surface (`src/client/query/queryClient.ts`, React Query) used by Zustand actions for imperative HTTP cache access. Raw `useState` is banned outside the frozen allowlist by the `no-react-usestate` ast-grep gate. Non-goals: route state and derived render caches — those live elsewhere.
+Owns the browser-side state surface as Zustand stores in three forms: singleton per-concern stores (chat input, sidebar order, terminal layout, preferences) with selective `persist` middleware, the WS-fed `kannaStateStore` holding server snapshots (written exclusively by the `useKannaState` socket pipeline), and the `createScopedStore` factory (`src/client/lib/createScopedStore.tsx`) backing per-instance stores colocated as `<Component>.store.ts` beside their components. Additionally owns the `queryClient` server-cache surface (`src/client/query/queryClient.ts`, React Query) used by Zustand actions for imperative HTTP cache access. Raw `useState` is banned outside the frozen allowlist by the `no-react-usestate` ast-grep gate. Non-goals: route state and derived render caches — those live elsewhere.
 
 ## Foundational Flow
 
@@ -73,7 +73,6 @@ Owns the browser-side state surface as Zustand stores in three forms: singleton 
 | useSidebarStore | OUT | Project order, drag state, persistence | c3-111 | src/client/stores |
 | useTerminalStore | OUT | Layout sizes, visibility, persistence | c3-118 | src/client/stores |
 | usePreferencesStore | OUT | Theme, notifications, provider keys | c3-116 | src/client/stores |
-| useSocketStore | OUT | Raw WS transport state (readyState + sendMessage); written only by SocketBridge | c3-101 | src/client/stores/socketStore.ts |
 | useViewportStore | OUT | Measured window size behind one shell-mounted resize subscription; 0 until first measurement | c3-110, c3-111 | src/client/stores/viewportStore.ts |
 | usePaneLayoutStore | OUT | ONE persisted pane tree for the whole app — not keyed by project — seeded from the pre-rewrite layout keys on first read; per-pane UI slices are scoped off it by the pane-scoped store factory | c3-104 | src/client/stores/paneLayoutStore.ts |
 | usePaneDragStore | OUT | Transient tab-drag state (dragged tab, hovered pane, drop intent); every write is value-guarded so a drag does not publish a snapshot per pointer move | c3-104 | src/client/stores/paneDragStore.ts |

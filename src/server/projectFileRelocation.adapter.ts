@@ -1,16 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync } from "node:fs"
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path"
+import { isPathInside } from "./path-containment"
+import { projectKannaSubdir } from "./paths"
 
 export interface RelocationResult {
   relativePath: string
   relocated: boolean
-}
-
-export const RELOCATED_OUTPUT_DIR = ".kanna/outputs"
-
-function isInside(parent: string, child: string): boolean {
-  const rel = relative(parent, child)
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
 }
 
 function pickNonCollidingPath(destDir: string, fileName: string): string {
@@ -34,11 +29,11 @@ export function relocateExternalFileIntoProject(
 
   const resolvedProjectRoot = resolve(projectRoot)
   const resolvedSource = resolve(rawPath)
-  if (isInside(resolvedProjectRoot, resolvedSource)) {
+  if (isPathInside(resolvedProjectRoot, resolvedSource)) {
     return { relativePath: rawPath, relocated: false }
   }
 
-  const destDir = join(resolvedProjectRoot, RELOCATED_OUTPUT_DIR)
+  const destDir = projectKannaSubdir(resolvedProjectRoot, "outputs")
   const fileName = basename(resolvedSource)
   if (!fileName) return { relativePath: rawPath, relocated: false }
 

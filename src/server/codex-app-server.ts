@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { resolveModelPrice } from "../shared/token-pricing"
+import { DEFAULT_CODEX_CHAT_MODEL } from "../shared/provider-model-types"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
@@ -7,6 +8,7 @@ import type {
   CodexReasoningEffort,
   ContextWindowUsageSnapshot,
   ServiceTier,
+  TranscriptEntry,
 } from "../shared/types"
 import { relocateExternalFileIntoProject } from "./projectFileRelocation.adapter"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
@@ -40,13 +42,14 @@ import {
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
-import { safeJsonParse } from "../shared/json"
+import { isJsonObject, safeJsonParse } from "../shared/json"
+import { parsePlanSteps } from "./codex-plan-steps"
+import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
 import { type CodexErrorInfo } from "../shared/codex-error-classification"
 import {
   type TranslationContext,
-  asRecord,
   buildResultEntry,
   codexSystemInitEntry,
   normalizeCodexTokenUsage,
@@ -58,8 +61,8 @@ import {
   webSearchQuery,
   DEFERRED_DYNAMIC_TOOLS,
 } from "./codex-transcript-translator"
-import { createTranscriptEntry, dynamicToolPayload, genericDynamicToolCall, toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
-import { decodeThreadId, decodeTurnId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
+import { dynamicToolPayload, genericDynamicToolCall, toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { decodeNestedId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
 export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
 export interface CodexAppServerProcess {
@@ -77,6 +80,15 @@ export interface CodexAppServerProcess {
 export type SpawnCodexAppServer = (cwd: string) => CodexAppServerProcess
 
 const CODEX_THREAD_CONFIG: JsonObject = { "tools.update_plan": { enabled: true } }
+
+const KANNA_THREAD_POLICY = {
+  approvalPolicy: "never",
+  sandbox: "danger-full-access",
+  persistExtendedHistory: false,
+  config: CODEX_THREAD_CONFIG,
+} as const
+
+const QUICK_SERVICE_TIER = "fast"
 
 interface PendingRequest<TResult> {
   method: string
@@ -97,7 +109,6 @@ interface PendingTurn {
   planTextByItemId: Map<string, string>
   todoSequence: number
   pendingWebSearchResultToolId: string | null
-  resolved: boolean
   lastUsageSnapshot?: ContextWindowUsageSnapshot
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   onApprovalRequest?: (
@@ -279,50 +290,41 @@ export class CodexAppServerManager {
     })
 
     const threadParams = {
+      ...KANNA_THREAD_POLICY,
       model: args.model,
       cwd: args.cwd,
       serviceTier: args.serviceTier,
-      approvalPolicy: "never",
-      sandbox: "danger-full-access",
       experimentalRawEvents: false,
-      persistExtendedHistory: false,
       developerInstructions: args.developerInstructions?.trim() || null,
-      config: CODEX_THREAD_CONFIG,
     } satisfies ThreadStartParams
 
     let threadId: string
     if (args.pendingForkSessionToken) {
-      threadId = decodeThreadId("thread/fork", await this.sendRequest(context, "thread/fork", {
+      threadId = await this.requestThreadId(context, "thread/fork", {
+        ...KANNA_THREAD_POLICY,
         threadId: args.pendingForkSessionToken,
         model: args.model,
         cwd: args.cwd,
         serviceTier: args.serviceTier,
-        approvalPolicy: "never",
-        sandbox: "danger-full-access",
-        persistExtendedHistory: false,
-        config: CODEX_THREAD_CONFIG,
-      } satisfies ThreadForkParams))
+      } satisfies ThreadForkParams)
     } else if (args.sessionToken) {
       try {
-        threadId = decodeThreadId("thread/resume", await this.sendRequest(context, "thread/resume", {
+        threadId = await this.requestThreadId(context, "thread/resume", {
+          ...KANNA_THREAD_POLICY,
           threadId: args.sessionToken,
           model: args.model,
           cwd: args.cwd,
           serviceTier: args.serviceTier,
-          approvalPolicy: "never",
-          sandbox: "danger-full-access",
-          persistExtendedHistory: false,
-          config: CODEX_THREAD_CONFIG,
-        } satisfies ThreadResumeParams))
+        } satisfies ThreadResumeParams)
       } catch (error) {
         if (!isRecoverableResumeError(toError(error))) {
           this.stopSession(args.chatId, scope)
           throw error
         }
-        threadId = decodeThreadId("thread/start", await this.sendRequest(context, "thread/start", threadParams))
+        threadId = await this.requestThreadId(context, "thread/start", threadParams)
       }
     } else {
-      threadId = decodeThreadId("thread/start", await this.sendRequest(context, "thread/start", threadParams))
+      threadId = await this.requestThreadId(context, "thread/start", threadParams)
     }
 
     context.sessionToken = threadId
@@ -355,14 +357,13 @@ export class CodexAppServerManager {
       planTextByItemId: new Map(),
       todoSequence: 0,
       pendingWebSearchResultToolId: null,
-      resolved: false,
       onToolRequest: args.onToolRequest,
       onApprovalRequest: args.onApprovalRequest,
     }
     context.pendingTurn = pendingTurn
 
     try {
-      const turnId = decodeTurnId("turn/start", await this.sendRequest(context, "turn/start", {
+      const turnId = decodeNestedId("turn/start", await this.sendRequest(context, "turn/start", {
         threadId: context.sessionToken ?? "",
         input: [
           {
@@ -375,15 +376,14 @@ export class CodexAppServerManager {
         model: args.model,
         effort: args.effort,
         serviceTier: args.serviceTier,
-      } satisfies TurnStartParams))
+      } satisfies TurnStartParams), "turn")
       if (context.pendingTurn) {
         context.pendingTurn.turnId = turnId
       } else {
         pendingTurn.turnId = turnId
       }
     } catch (error) {
-      context.pendingTurn = null
-      queue.finish()
+      this.settleTurn(context, pendingTurn)
       throw error
     }
 
@@ -394,9 +394,7 @@ export class CodexAppServerManager {
         const pendingTurn = context.pendingTurn
         if (!pendingTurn) return
 
-        context.pendingTurn = null
-        pendingTurn.resolved = true
-        pendingTurn.queue.finish()
+        this.settleTurn(context, pendingTurn)
 
         if (!pendingTurn.turnId || !context.sessionToken) return
 
@@ -415,20 +413,23 @@ export class CodexAppServerManager {
     let assistantText = ""
     let resultText = ""
 
+    const model = args.model ?? DEFAULT_CODEX_CHAT_MODEL
+    const serviceTier = args.serviceTier ?? QUICK_SERVICE_TIER
+
     try {
       await this.startSession({
         chatId,
         cwd: args.cwd,
-        model: args.model ?? "gpt-5.5",
-        serviceTier: args.serviceTier ?? "fast",
+        model,
+        serviceTier,
         sessionToken: null,
       })
 
       turn = await this.startTurn({
         chatId,
-        model: args.model ?? "gpt-5.5",
+        model,
         effort: args.effort,
-        serviceTier: args.serviceTier ?? "fast",
+        serviceTier,
         content: args.prompt,
         planMode: false,
         onToolRequest: async () => ({}),
@@ -592,7 +593,7 @@ export class CodexAppServerManager {
       }
       pendingTurn.queue.push({
         type: "transcript",
-        entry: createTranscriptEntry({
+        entry: timestamped({
           kind: "tool_call",
           tool: toolRequest.tool,
         }),
@@ -609,37 +610,19 @@ export class CodexAppServerManager {
     if (request.method === "item/tool/call") {
       pendingTurn.handledDynamicToolIds.add(request.params.callId)
       if (request.params.tool === "update_plan") {
-        const args = asRecord(request.params.arguments)
-        const plan = Array.isArray(args?.plan) ? args.plan : []
-        const steps: TurnPlanStep[] = plan
-          .map((entry) => asRecord(entry))
-          .filter((entry) => entry !== null)
-          .map((entry) => {
-            let status: TurnPlanStep["status"]
-            if (entry.status === "completed") {
-              status = "completed"
-            } else if (entry.status === "inProgress" || entry.status === "in_progress") {
-              status = "inProgress"
-            } else {
-              status = "pending"
-            }
-            return {
-              step: typeof entry.step === "string" ? entry.step : "",
-              status,
-            }
-          })
-          .filter((step) => step.step.length > 0)
+        const rawArguments = request.params.arguments
+        const plan = rawArguments !== undefined && isJsonObject(rawArguments) ? parsePlanSteps(rawArguments) : null
 
-        if (steps.length > 0) {
-          pendingTurn.latestPlanSteps = steps
-          pendingTurn.latestPlanExplanation = typeof args?.explanation === "string" ? args.explanation : pendingTurn.latestPlanExplanation
+        if (plan !== null) {
+          pendingTurn.latestPlanSteps = plan.steps
+          pendingTurn.latestPlanExplanation = plan.explanation ?? pendingTurn.latestPlanExplanation
           pendingTurn.queue.push({
             type: "transcript",
-            entry: todoToolCall(request.params.callId, steps),
+            entry: todoToolCall(request.params.callId, plan.steps),
           })
           pendingTurn.queue.push({
             type: "transcript",
-            entry: createTranscriptEntry({
+            entry: timestamped({
               kind: "tool_result",
               toolId: request.params.callId,
               content: "",
@@ -665,7 +648,7 @@ export class CodexAppServerManager {
       const errorMessage = `Unsupported dynamic tool call: ${request.params.tool}`
       pendingTurn.queue.push({
         type: "transcript",
-        entry: createTranscriptEntry({
+        entry: timestamped({
           kind: "tool_result",
           toolId: request.params.callId,
           content: errorMessage,
@@ -807,7 +790,7 @@ export class CodexAppServerManager {
       }
       pendingTurn.queue.push({
         type: "transcript",
-        entry: createTranscriptEntry({
+        entry: timestamped({
           kind: "assistant_text",
           text: notification.item.text,
         }),
@@ -815,7 +798,7 @@ export class CodexAppServerManager {
       if (pendingTurn.pendingWebSearchResultToolId && notification.item.text.trim()) {
         pendingTurn.queue.push({
           type: "transcript",
-          entry: createTranscriptEntry({
+          entry: timestamped({
             kind: "tool_result",
             toolId: pendingTurn.pendingWebSearchResultToolId,
             content: notification.item.text,
@@ -883,7 +866,7 @@ export class CodexAppServerManager {
   private handleContextCompacted(pendingTurn: PendingTurn, _notification: ContextCompactedNotification) {
     pendingTurn.queue.push({
       type: "transcript",
-      entry: createTranscriptEntry({ kind: "compact_boundary" }),
+      entry: timestamped({ kind: "compact_boundary" }),
     })
   }
 
@@ -900,7 +883,7 @@ export class CodexAppServerManager {
 
     pendingTurn.queue.push({
       type: "transcript",
-      entry: createTranscriptEntry({
+      entry: timestamped({
         kind: "context_window_updated",
         usage,
       }),
@@ -938,20 +921,17 @@ export class CodexAppServerManager {
         }
         pendingTurn.queue.push({
           type: "transcript",
-          entry: createTranscriptEntry({
+          entry: timestamped({
             kind: "tool_call",
             tool,
           }),
         })
         await pendingTurn.onToolRequest({ tool })
-        pendingTurn.resolved = true
-        pendingTurn.queue.finish()
-        context.pendingTurn = null
+        this.settleTurn(context, pendingTurn)
         return
       }
     }
 
-    pendingTurn.resolved = true
     let subtype: "cancelled" | "error" | "success"
     if (isCancelled) {
       subtype = "cancelled"
@@ -960,23 +940,31 @@ export class CodexAppServerManager {
     } else {
       subtype = "success"
     }
-    pendingTurn.queue.push({
-      type: "transcript",
-      entry: buildResultEntry(subtype, notification.turn.error?.message ?? "", notification.turn.error?.codexErrorInfo, pendingTurn.lastUsageSnapshot),
-    })
-    pendingTurn.queue.finish()
-    context.pendingTurn = null
+    this.settleTurn(
+      context,
+      pendingTurn,
+      buildResultEntry(subtype, notification.turn.error?.message ?? "", notification.turn.error?.codexErrorInfo, pendingTurn.lastUsageSnapshot),
+    )
+  }
+
+  private settleTurn(context: SessionContext, turn: PendingTurn, final?: TranscriptEntry) {
+    if (final) turn.queue.push({ type: "transcript", entry: final })
+    turn.queue.finish()
+    if (context.pendingTurn === turn) context.pendingTurn = null
+  }
+
+  private async requestThreadId(
+    context: SessionContext,
+    method: "thread/start" | "thread/resume" | "thread/fork",
+    params: ThreadStartParams | ThreadResumeParams | ThreadForkParams,
+  ): Promise<string> {
+    return decodeNestedId(method, await this.sendRequest(context, method, params), "thread")
   }
 
   private failContext(context: SessionContext, message: string, errorInfo?: CodexErrorInfo | null) {
     const pendingTurn = context.pendingTurn
-    if (pendingTurn && !pendingTurn.resolved) {
-      pendingTurn.queue.push({
-        type: "transcript",
-        entry: buildResultEntry("error", message, errorInfo, pendingTurn.lastUsageSnapshot),
-      })
-      pendingTurn.queue.finish()
-      context.pendingTurn = null
+    if (pendingTurn) {
+      this.settleTurn(context, pendingTurn, buildResultEntry("error", message, errorInfo, pendingTurn.lastUsageSnapshot))
     }
 
     for (const pending of context.pendingRequests.values()) {

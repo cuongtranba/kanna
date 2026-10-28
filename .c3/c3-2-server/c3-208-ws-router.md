@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: e16918a8f85ba0bb6d584f96ad0d6bc8217cb219ad63c0aaf15bbd2b5313c0d9
+c3-seal: 8347e7bf7127925ee408326f7a588f1bb8e3908843ae312af1bdc438a32927ab
 title: ws-router
 type: component
 category: foundation
@@ -75,6 +75,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 | Command coverage gate | IN | Every registry command is named by a ws-router handler literal and every command literal or prefix a handler claims is a registry command, checked from the syntax tree rather than from text | c3-302 | src/server/ws-router-coverage.test.ts |
 | Project files and plugins | IN | project.listPaths and upload.delete answer the path autocomplete and abandoned-upload cleanup that used to be HTTP routes; plugins.list and plugins.reload drive the plugin service and answer an empty list or an error while plugins are switched off | c3-238 | src/server/ws-router-project-files.ts, src/server/ws-router-plugins.ts |
 | Command origin stamp | IN | routeCommand is the only place a chat.send or message.enqueue origin is set: it copies the connection's commandOrigin onto the command and deletes any origin the sender wrote, so a browser socket can never claim an MCP origin | c3-242 | src/server/ws-router.ts, src/server/command-origin-stamp.ts |
+| Stale-state errors | OUT | A command that names a chat, project, queued message or file that is gone throws StaleStateError (src/shared/errors.ts: chatNotFound, projectNotFound, queuedMessageNotFound, fileNoLongerChanged); describeCommandFailure matches the class, never the message text, to log it at info instead of error, and the error envelope carries the message | c3-301 | src/server/ws-router.ts, src/shared/errors.ts |
 
 ## Change Safety
 

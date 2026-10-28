@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: b99578cbe6d16cd407192ba783956a44f20da0f96a1e265a6b696ec464e5353b
+c3-seal: d8d0850638824daf600e09713206ea971a24b9a156d289ae22cb8713ef99629a
 title: oauth-token-pool
 type: component
 category: feature
@@ -83,8 +83,8 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | TOCTOU between hasUsable preflight and pickActive | Eligibility predicate diverges between read-only and mutating paths under cap-aware logic | Refusal banner appears but pickActive would succeed (or vice versa) | bun test src/server/oauth-pool/oauth-token-pool.test.ts — hasUsable/pickActive parity tests |
 | Expired-limited token never revived | Revive logic skipped post-sort | Token remains limited past limitedUntil and never picked again | bun test src/server/oauth-pool/oauth-token-pool.test.ts — revive test |
 | Refcount leak — release frees a slot still in use by another chat | release(chatId) clobbers entire Set instead of removing the single chat | A shared token reports fewer owners than reality; cap admits over the limit | bun test src/server/oauth-pool/oauth-token-pool.test.ts — release refcount case |
-| Rotation herd when N owners simultaneously detect limit/401 on shared token | acquireRotationSlot in agent.ts does not dedupe within TOKEN_ROTATION_DEDUPE_WINDOW_MS or skips stagger application | All N respawns fire at once; cold-boot stampede; second pickActive on same chatId double-claims | Existing bun test src/server/agent.oauth-rotation.test.ts + manual smoke (cap=2 on one token, force 401, observe staggered respawn) |
-| Refusal transcript entry loses chat reference | describeUnavailability output format changes, agent.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> links for the multi-owner case | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx |
+| Rotation herd when N owners simultaneously detect limit/401 on shared token | acquireRotationSlot in claude-session-error-handler.ts does not dedupe within TOKEN_ROTATION_DEDUPE_WINDOW_MS or skips stagger application | All N respawns fire at once; cold-boot stampede; second pickActive on same chatId double-claims | Existing bun test src/server/agent.oauth-rotation.test.ts + manual smoke (cap=2 on one token, force 401, observe staggered respawn) |
+| Refusal transcript entry loses chat reference | describeUnavailability output format changes, claude-session-lifecycle.ts buildPoolUnavailableMessage drift, or renderChatLinks regex drift | ResultMessage error body missing /chat/<id> links for the multi-owner case | bun test src/server/oauth-pool/ + src/client/components/messages/ResultMessage.test.tsx |
 | Reservation pinned across restart | reservedBy persisted (it must not be) | Restart cannot pick any token until manual fix | reservedBy lives in memory only — confirmed by private readonly reservedBy = new Map(...) in oauth-token-pool.ts |
 
 ## Derived Materials
@@ -93,5 +93,5 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | --- | --- | --- | --- |
 | src/server/oauth-pool/oauth-token-pool.ts | c3-224 Contract | Internal data structures may evolve as long as Contract surfaces hold | src/server/oauth-pool/oauth-token-pool.ts |
 | src/server/oauth-pool/oauth-token-pool.test.ts | c3-224 Contract (state machine + reservation + describeUnavailability) | Test names may evolve; coverage of state machine + reservation + describeUnavailability must remain | src/server/oauth-pool/oauth-token-pool.test.ts |
-| agent.ts buildPoolUnavailableMessage + OAuthPoolUnavailableError | c3-224 Contract (describeUnavailability surface) | Wording may evolve; markdown chat-link format title is fixed (UI parser); error class identity is used by startTurnForChat catch to switch on refusal vs other failures | src/server/agent.ts buildPoolUnavailableMessage, OAuthPoolUnavailableError |
+| claude-session-lifecycle.ts buildPoolUnavailableMessage + oauth-errors.ts OAuthPoolUnavailableError | c3-224 Contract (describeUnavailability surface) | Wording may evolve; markdown chat-link format title is fixed (UI parser); error class identity is used by the claude-turn-starter.ts catch to switch on refusal vs other failures | src/server/claude-session-lifecycle.ts buildPoolUnavailableMessage, src/server/oauth-errors.ts OAuthPoolUnavailableError |
 | renderChatLinks helper + ResultMessage error body | c3-224 Contract (describeUnavailability surface) | Regex may evolve; must keep accepting /chat/<uuid> link form | src/client/components/messages/renderChatLinks.tsx, src/client/components/messages/ResultMessage.tsx, src/client/app/ChatPage/ChatTranscriptViewport.tsx |

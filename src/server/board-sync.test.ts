@@ -90,7 +90,6 @@ function setup(allowAgentPush = false) {
   boardId = board.id
   store.upsertBinding({
     boardId,
-    providerId: "github-issues",
     projectId: null,
     sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
     direction: "both",
@@ -347,7 +346,6 @@ describe("drain", () => {
   test("a pull-only binding never pushes", async () => {
     store.upsertBinding({
       boardId,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
@@ -422,7 +420,6 @@ describe("multiple bindings", () => {
     multiBoardId = board.id
     multiStore.upsertBinding({
       boardId: multiBoardId,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",
@@ -430,7 +427,6 @@ describe("multiple bindings", () => {
     })
     multiStore.upsertBinding({
       boardId: multiBoardId,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o2", repo: "r2" },
       direction: "both",
@@ -510,7 +506,6 @@ describe("multiple bindings", () => {
   test("a binding with no adapter is reported rather than dropped from the run", async () => {
     multiStore.upsertBinding({
       boardId: multiBoardId,
-      providerId: "github-projectv2",
       projectId: null,
       sourceRef: { provider: "github-projectv2", owner: "o3", projectNumber: 1, projectId: "pv2" },
       direction: "both",
@@ -547,7 +542,6 @@ describe("multiple bindings", () => {
     ] as const) {
       stackStore.upsertBinding({
         boardId: board.id,
-        providerId: "github-issues",
         projectId,
         sourceRef: { provider: "github-issues", owner, repo },
         direction: "both",
@@ -584,7 +578,6 @@ describe("multiple bindings", () => {
     })
     multiStore.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o1", repo: "r1" },
       direction: "both",

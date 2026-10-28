@@ -6,22 +6,13 @@ const MODULE_MOCK = /\bvi\s*\.\s*(?:mock|doMock)\s*\(/
 
 const REMEDY =
   "a module mock substitutes the module for every importer in its test file and hides " +
-  "a real dependency breaking — under bun test it also outlived its file and killed " +
-  "unrelated suites in filesystem-dependent order, the class that blocked the v1.58.0 " +
-  'publish. Inject the dependency as a parameter with the production default instead; ' +
-  'see CLAUDE.md "Module mocks are banned".'
+  "a real dependency breaking, so it keeps passing when the real collaborator breaks. " +
+  "Inject the dependency as a parameter with the production default instead; " +
+  'see the kanna-test skill.'
 
 const LEGACY_MODULE_MOCKS = new Set([
-  "src/client/components/lexical/markdown/MessageCodeBlock.test.tsx",
-  "src/client/components/lexical/markdown/renderMessage.test.tsx",
-  "src/client/components/messages/ExitPlanModeMessage.test.tsx",
   "src/client/components/messages/MermaidDiagram.test.tsx",
-  "src/client/components/messages/SubagentTaskMessage.test.tsx",
-  "src/client/components/messages/TextMessage.test.tsx",
-  "src/client/components/messages/ThinkingMessage.test.tsx",
   "src/client/components/messages/file-preview/bodies/CodeBody.test.tsx",
-  "src/client/components/messages/file-preview/bodies/textBodies.test.tsx",
-  "src/client/components/messages/shared.test.tsx",
   "src/server/claude-session-start.test.ts",
 ])
 

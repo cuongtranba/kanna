@@ -6,18 +6,20 @@ import {
   UPDATE_PROTOCOL,
   type BeaconFrame,
   type BeaconRequest,
+  type BeaconResponseFrame,
   type BeaconUpdateStatus,
 } from "../shared/beacon-protocol"
 import type { BeaconScope } from "../shared/beacon-scope"
 import { TRANSFER_PROTOCOL } from "../shared/beacon-transfer"
 import type { BeaconLiveState } from "../shared/beacon-status"
 import type { BeaconUpdateResult } from "../shared/beacon-config"
-import type { ClientState } from "./ws-router"
+import { createBeaconTransferTickets, type BeaconTransferHost } from "./beacon-transfer-tickets"
+import type { BeaconSocketState } from "./ws-router-utils"
 
 export const PING_INTERVAL_MS = 15_000
 export const STALE_MS = 45_000
 
-export type BeaconSocket = Pick<ServerWebSocket<ClientState>, "send" | "close">
+export type BeaconSocket = Pick<ServerWebSocket<BeaconSocketState>, "send" | "close">
 
 export interface BeaconRequestSink {
   onStdout?(chunk: string): void
@@ -28,6 +30,7 @@ export interface BeaconRequestSink {
 }
 
 export interface BeaconRegistry {
+  readonly transfer: BeaconTransferHost
   connect(args: {
     beaconId: string
     socket: BeaconSocket
@@ -44,7 +47,7 @@ export interface BeaconRegistry {
   send(beaconId: string, frame: BeaconFrame): boolean
   pushScope(beaconId: string, scope: BeaconScope, options?: { force?: boolean }): void
   dispatch(beaconId: string, request: BeaconRequest, sink: BeaconRequestSink): { requestId: string; cancel(): void }
-  routeInbound(beaconId: string, frame: BeaconFrame): void
+  routeInbound(beaconId: string, frame: BeaconResponseFrame): void
   setUpdateStatus(beaconId: string, status: BeaconUpdateStatus): void
   requestUpdate(beaconId: string): BeaconUpdateResult
   subscribe(cb: () => void): () => void
@@ -78,8 +81,12 @@ function isTransferRequest(request: BeaconRequest): boolean {
   return request.op === "upload" || request.op === "download"
 }
 
-export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconRegistry {
+export function createBeaconRegistry(deps: { now?: () => number; transfer?: BeaconTransferHost } = {}): BeaconRegistry {
   const now = deps.now ?? Date.now
+  const transfer: BeaconTransferHost = deps.transfer ?? {
+    tickets: createBeaconTransferTickets(),
+    maxPullBytes: () => undefined,
+  }
   const entries = new Map<string, BeaconEntry>()
   const pending = new Map<string, PendingRequest>()
   const listeners = new Set<() => void>()
@@ -103,7 +110,7 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
     }
   }
 
-  function deliver(request: PendingRequest, requestId: string, frame: BeaconFrame): void {
+  function deliver(request: PendingRequest, requestId: string, frame: BeaconResponseFrame): void {
     switch (frame.kind) {
       case "stdout":
         request.sink.onStdout?.(frame.chunk)
@@ -122,9 +129,6 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       case "error":
         pending.delete(requestId)
         request.sink.onError?.(frame.message)
-        break
-      default:
-        break
     }
   }
 
@@ -139,6 +143,7 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
   }
 
   return {
+    transfer,
     connect({ beaconId, socket, beaconVersion, protocolVersion, scope }) {
       entries.set(beaconId, {
         socket,
@@ -209,15 +214,6 @@ export function createBeaconRegistry(deps: { now?: () => number } = {}): BeaconR
       return { requestId, cancel }
     },
     routeInbound(beaconId, frame) {
-      if (
-        frame.kind !== "stdout" &&
-        frame.kind !== "stderr" &&
-        frame.kind !== "result" &&
-        frame.kind !== "exit" &&
-        frame.kind !== "error"
-      ) {
-        return
-      }
       const request = pending.get(frame.id)
       if (!request || request.beaconId !== beaconId) return
       deliver(request, frame.id, frame)

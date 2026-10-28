@@ -7,9 +7,9 @@ import { fileTypeFromBuffer } from "file-type"
 import { isErrnoException } from "../shared/errors"
 import { buildRoutePath, HTTP_ROUTES } from "../shared/http-routes"
 import type { UploadedAttachment } from "../shared/types"
-import { getProjectUploadDir } from "./paths"
+import { getProjectUploadDir, projectUploadRelativePath } from "./paths"
 
-const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
+export const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
 const IMAGE_MIME_PREFIX = "image/"
 const FALLBACK_UPLOAD_NAME = "upload"
 const MIME_SNIFF_BYTES = 4100
@@ -53,7 +53,7 @@ async function holdsSameBytes(absolutePath: string, bytes: Uint8Array): Promise<
   }
 }
 
-async function writeNewFile(absolutePath: string, bytes: Uint8Array): Promise<"written" | "exists"> {
+async function writeNewFile(absolutePath: string, bytes: Uint8Array): Promise<"placed" | "exists"> {
   try {
     const handle = await open(absolutePath, "wx")
     try {
@@ -61,28 +61,10 @@ async function writeNewFile(absolutePath: string, bytes: Uint8Array): Promise<"w
     } finally {
       await handle.close()
     }
-    return "written"
+    return "placed"
   } catch (error) {
     if (isErrnoException(error) && error.code === "EEXIST") return "exists"
     throw error
-  }
-}
-
-async function storeUploadBytes(uploadDir: string, fileName: string, bytes: Uint8Array) {
-  const candidates = getUploadCandidateNames(fileName)
-  let storedName = candidates.first
-  let counter = 1
-
-  while (true) {
-    const absolutePath = path.join(uploadDir, storedName)
-    if ((await writeNewFile(absolutePath, bytes)) === "written") {
-      return { storedName, absolutePath, reused: false }
-    }
-    if (await holdsSameBytes(absolutePath, bytes)) {
-      return { storedName, absolutePath, reused: true }
-    }
-    storedName = candidates.withCounter(counter)
-    counter += 1
   }
 }
 
@@ -90,6 +72,38 @@ interface StoredUpload {
   storedName: string
   absolutePath: string
   reused: boolean
+}
+
+async function storeUnique(
+  uploadDir: string,
+  fileName: string,
+  place: (absolutePath: string) => Promise<"placed" | "exists">,
+  holdsSameContent: (absolutePath: string) => Promise<boolean>,
+): Promise<StoredUpload> {
+  const candidates = getUploadCandidateNames(fileName)
+  let storedName = candidates.first
+  let counter = 1
+
+  while (true) {
+    const absolutePath = path.join(uploadDir, storedName)
+    if ((await place(absolutePath)) === "placed") {
+      return { storedName, absolutePath, reused: false }
+    }
+    if (await holdsSameContent(absolutePath)) {
+      return { storedName, absolutePath, reused: true }
+    }
+    storedName = candidates.withCounter(counter)
+    counter += 1
+  }
+}
+
+async function storeUploadBytes(uploadDir: string, fileName: string, bytes: Uint8Array) {
+  return storeUnique(
+    uploadDir,
+    fileName,
+    (absolutePath) => writeNewFile(absolutePath, bytes),
+    (absolutePath) => holdsSameBytes(absolutePath, bytes),
+  )
 }
 
 function buildUploadedAttachment(args: {
@@ -104,7 +118,7 @@ function buildUploadedAttachment(args: {
     kind: args.mimeType.startsWith(IMAGE_MIME_PREFIX) ? "image" : "file",
     displayName: args.fileName,
     absolutePath: args.stored.absolutePath,
-    relativePath: `./.kanna/uploads/${args.stored.storedName}`,
+    relativePath: projectUploadRelativePath(args.stored.storedName),
     contentUrl: buildRoutePath(HTTP_ROUTES.uploadContent.path, { projectId: args.projectId, storedName: args.stored.storedName }),
     mimeType: args.mimeType,
     size: args.size,
@@ -167,17 +181,17 @@ async function filesHoldSameBytes(leftPath: string, rightPath: string): Promise<
   }
 }
 
-async function linkNewFile(sourcePath: string, targetPath: string): Promise<"linked" | "exists"> {
+async function linkNewFile(sourcePath: string, targetPath: string): Promise<"placed" | "exists"> {
   try {
     await link(sourcePath, targetPath)
-    return "linked"
+    return "placed"
   } catch (error) {
     if (isErrnoException(error) && error.code === "EEXIST") return "exists"
     if (!isErrnoException(error) || error.code !== "EXDEV") throw error
   }
   try {
     await copyFile(sourcePath, targetPath, constants.COPYFILE_EXCL)
-    return "linked"
+    return "placed"
   } catch (error) {
     if (isErrnoException(error) && error.code === "EEXIST") return "exists"
     throw error
@@ -185,21 +199,12 @@ async function linkNewFile(sourcePath: string, targetPath: string): Promise<"lin
 }
 
 async function storeUploadFile(uploadDir: string, fileName: string, sourcePath: string): Promise<StoredUpload> {
-  const candidates = getUploadCandidateNames(fileName)
-  let storedName = candidates.first
-  let counter = 1
-
-  while (true) {
-    const absolutePath = path.join(uploadDir, storedName)
-    if ((await linkNewFile(sourcePath, absolutePath)) === "linked") {
-      return { storedName, absolutePath, reused: false }
-    }
-    if (await filesHoldSameBytes(absolutePath, sourcePath)) {
-      return { storedName, absolutePath, reused: true }
-    }
-    storedName = candidates.withCounter(counter)
-    counter += 1
-  }
+  return storeUnique(
+    uploadDir,
+    fileName,
+    (absolutePath) => linkNewFile(sourcePath, absolutePath),
+    (absolutePath) => filesHoldSameBytes(absolutePath, sourcePath),
+  )
 }
 
 async function sniffMimeType(sourcePath: string): Promise<string | undefined> {
@@ -233,14 +238,20 @@ export async function finalizeUploadFromFile(args: {
   return buildUploadedAttachment({ projectId: args.projectId, fileName: args.fileName, mimeType, size, stored })
 }
 
+export function isSafeStoredName(storedName: string): boolean {
+  return storedName !== ""
+    && storedName !== "."
+    && storedName !== ".."
+    && !storedName.includes("/")
+    && !storedName.includes("\\")
+}
+
 export async function deleteProjectUpload(args: {
   localPath: string
   storedName: string
 }): Promise<boolean> {
   const storedName = args.storedName
-  if (!storedName || storedName.includes("/") || storedName.includes("\\") || storedName === "." || storedName === "..") {
-    return false
-  }
+  if (!isSafeStoredName(storedName)) return false
 
   const absolutePath = path.join(getProjectUploadDir(args.localPath), storedName)
   try {

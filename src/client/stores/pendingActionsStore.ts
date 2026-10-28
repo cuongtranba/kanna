@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { LOG_PREFIX } from "../../shared/branding"
 import { onRejected, toError } from "../../shared/errors"
 import { log } from "../../shared/log"
+import { omitKeyOrEmpty } from "../lib/recordOps"
 
 const NO_ACTIONS: Readonly<Record<string, true>> = {}
 
@@ -21,8 +22,7 @@ export const usePendingActionsStore = create<PendingActionsState>()((set, get) =
   end: (key) => {
     const { inFlight } = get()
     if (!inFlight[key]) return
-    const rest = Object.fromEntries(Object.entries(inFlight).filter(([pendingKey]) => pendingKey !== key))
-    set({ inFlight: Object.keys(rest).length > 0 ? rest : NO_ACTIONS })
+    set({ inFlight: omitKeyOrEmpty(inFlight, key, NO_ACTIONS) })
   },
 }))
 
@@ -50,6 +50,10 @@ export function runPendingAction<T>(key: string, action: () => Promise<T>): void
 
 export function usePendingAction(key: string): boolean {
   return usePendingActionsStore((state) => state.inFlight[key] === true)
+}
+
+export function usePendingScope(scope: string): boolean {
+  return usePendingActionsStore((state) => Object.keys(state.inFlight).some((key) => key === scope || key.startsWith(`${scope}:`)))
 }
 
 export function isPendingAction(key: string): boolean {

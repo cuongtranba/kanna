@@ -3,6 +3,8 @@ import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import type { StorageBackend } from "./storage/backend"
+import { storeLayoutFor } from "./event-logs"
+import { LogWriter } from "./event-store-writer"
 import {
   appendPushEvent,
   appendShareEvent,
@@ -25,6 +27,8 @@ function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
     size: async (p) => files.get(p)?.length ?? 0,
     readText: async (p) => files.get(p) ?? "",
     readTextSync: (p) => files.get(p) ?? "",
+    sizeSync: (p) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p, start, end) => Buffer.from(files.get(p) ?? "").subarray(start, end),
     writeText: async (p, v) => { files.set(p, v) },
     appendText: async (p, v) => { files.set(p, (files.get(p) ?? "") + v) },
     rename: async () => {},
@@ -32,26 +36,15 @@ function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
   }
 }
 
-function makeWriteChainRef() {
-  let chain = Promise.resolve()
+function makeDeps(overrides: Partial<Omit<PeripheralEventsDeps, "writer">> = {}): PeripheralEventsDeps {
+  const storage = overrides.storage ?? makeStorage()
   return {
-    getWriteChain: () => chain,
-    setWriteChain: (p: Promise<void>) => { chain = p },
-  }
-}
-
-function makeDeps(overrides: Partial<PeripheralEventsDeps> = {}): PeripheralEventsDeps {
-  const wc = makeWriteChainRef()
-  return {
-    storage: makeStorage(),
-    tunnelLogPath: "/data/tunnels.jsonl",
-    sharesLogPath: "/data/shares.jsonl",
-    pushLogPath: "/data/push.jsonl",
+    storage,
+    layout: storeLayoutFor("/data"),
+    writer: new LogWriter(storage),
     tunnelEventsByChatId: new Map(),
     isLiveChat: () => true,
     shareEventsAll: [],
-    getWriteChain: wc.getWriteChain,
-    setWriteChain: wc.setWriteChain,
     ...overrides,
   }
 }

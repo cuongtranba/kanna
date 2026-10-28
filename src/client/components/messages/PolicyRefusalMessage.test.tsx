@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PolicyRefusalMessage } from "./PolicyRefusalMessage"
-import type { ProcessedPolicyRefusalMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
-function buildMessage(overrides: Partial<ProcessedPolicyRefusalMessage> = {}): ProcessedPolicyRefusalMessage {
+function buildMessage(overrides: Partial<TranscriptMessageOf<"policy_refusal">> = {}): TranscriptMessageOf<"policy_refusal"> {
   return {
     kind: "policy_refusal",
     text: "API Error: Claude Code is unable to respond to this request, which appears to violate our Usage Policy.",

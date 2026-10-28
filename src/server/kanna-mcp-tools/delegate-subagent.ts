@@ -2,6 +2,8 @@ import { z } from "zod"
 import type { TranscriptEntry } from "../../shared/types"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import { parseChunkMarker } from "../../shared/loop-progress"
+import { TASK_CLAIM_TOOL_NAME } from "../../shared/tools"
+import { fail, ok, type ToolResult } from "../kanna-mcp-tool"
 
 const InputSchema = z.object({
   subagent_id: z.string().min(1).describe(
@@ -17,7 +19,7 @@ const InputSchema = z.object({
     "Launch the subagent without blocking your turn. Returns immediately with {status:'async_launched', run_id}; the subagent's final reply is delivered back to you as a new turn when it finishes. Use for long jobs you don't need to wait on. Mutually exclusive with keep_alive.",
   ),
   claim_id: z.string().optional().describe(
-    "In a parallel loop, the claim_id that claim_tracking_task returned for the task this worker is being given. It binds the task's lease to this run, which is what lets Kanna return the task to the queue if the run dies instead of leaving it parked.",
+    `In a parallel loop, the claim_id that ${TASK_CLAIM_TOOL_NAME} returned for the task this worker is being given. It binds the task's lease to this run, which is what lets Kanna return the task to the queue if the run dies instead of leaving it parked.`,
   ),
 })
 
@@ -42,7 +44,7 @@ export interface DelegateSubagentTool {
   handler: (
     input: DelegateSubagentInput,
     ctx: DelegateSubagentContext,
-  ) => Promise<{ content: { type: "text"; text: string }[]; isError?: boolean }>
+  ) => Promise<ToolResult>
 }
 
 const DESCRIPTION =
@@ -70,6 +72,9 @@ async function bindClaim(
   await ctx.bindClaimToRun(claimId, runId).catch(() => undefined)
 }
 
+const KEEP_ALIVE_HINT = (runId: string): string =>
+  `\n\n[run_id: ${runId}] — session kept alive; use send_subagent_message({run_id, prompt}) for more turns, close_subagent({run_id}) when done.`
+
 export function createDelegateSubagentTool(deps: {
   orchestrator: SubagentOrchestrator
 }): DelegateSubagentTool {
@@ -79,32 +84,22 @@ export function createDelegateSubagentTool(deps: {
     async handler(input, ctx) {
       const parentUserMessageId = ctx.getParentUserMessageId()
       if (!parentUserMessageId) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: "delegate_subagent needs a running chat turn or a live background-task self-wake; neither is active right now.",
-          }],
-          isError: true,
-        }
+        return fail(
+          "delegate_subagent needs a running chat turn or a live background-task self-wake; neither is active right now.",
+        )
       }
       const mentionedSubagentIds = ctx.getMentionedSubagentIds()
       if (input.keep_alive && input.run_in_background) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: "keep_alive and run_in_background are mutually exclusive — keep_alive holds a warm session for follow-up turns; run_in_background fires the run and delivers the result later. Pick one.",
-          }],
-          isError: true,
-        }
+        return fail(
+          "keep_alive and run_in_background are mutually exclusive — keep_alive holds a warm session for follow-up turns; run_in_background fires the run and delivers the result later. Pick one.",
+        )
       }
-      if (!deps.orchestrator.findSubagent(input.subagent_id)) {
-        return {
-          content: [{
-            type: "text" as const,
-            text: deps.orchestrator.describeUnknownSubagent(input.subagent_id),
-          }],
-          isError: true,
-        }
+      const subagent = deps.orchestrator.findSubagent(input.subagent_id)
+      if (!subagent) {
+        return fail(deps.orchestrator.describeUnknownSubagent(input.subagent_id))
+      }
+      if (input.keep_alive && subagent.provider !== "claude") {
+        return fail("keep_alive is only supported for Claude subagents")
       }
       const label = await resolveRunLabel(input.prompt, ctx.resolveLoopChunkLabel)
       const outcome = await deps.orchestrator.delegateRun({
@@ -124,40 +119,18 @@ export function createDelegateSubagentTool(deps: {
       })
       if (outcome.status === "async_launched") {
         await bindClaim(ctx, input.claim_id, outcome.runId)
-        return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "async_launched",
-              run_id: outcome.runId,
-            }),
-          }],
-        }
+        return ok(JSON.stringify({ status: "async_launched", run_id: outcome.runId }))
       }
       if (outcome.status === "completed") {
-        return {
-          content: [{
-            type: "text" as const,
-            text: JSON.stringify({
-              status: "completed",
-              run_id: outcome.runId,
-              reply: outcome.text,
-            }),
-          }],
-        }
+        const reply = JSON.stringify({ status: "completed", run_id: outcome.runId, reply: outcome.text })
+        return ok(input.keep_alive ? reply + KEEP_ALIVE_HINT(outcome.runId) : reply)
       }
-      return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify({
-            status: "failed",
-            run_id: outcome.runId,
-            error_code: outcome.errorCode,
-            error_message: outcome.errorMessage,
-          }),
-        }],
-        isError: true,
-      }
+      return fail(JSON.stringify({
+        status: "failed",
+        run_id: outcome.runId,
+        error_code: outcome.errorCode,
+        error_message: outcome.errorMessage,
+      }))
     },
   }
 }

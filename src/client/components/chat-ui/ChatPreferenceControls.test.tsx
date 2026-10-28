@@ -77,7 +77,7 @@ describe("ChatPreferenceControls", () => {
     expect(html).toContain("touch-manipulation")
   })
 
-  test("locks model picker when onModelChange is omitted", () => {
+  test("locks the model picker when a model lock is supplied", () => {
     const html = renderToStaticMarkup(
       <ChatPreferenceControls
         availableProviders={PROVIDERS}
@@ -85,6 +85,8 @@ describe("ChatPreferenceControls", () => {
         model="claude-opus-4-7"
         modelOptions={{ reasoningEffort: "high", contextWindow: "1m" }}
         onProviderChange={() => {}}
+        onModelChange={() => {}}
+        modelLock={{ reason: "Locked for a test" }}
         onModelOptionChange={() => {}}
       />
     )
@@ -92,6 +94,7 @@ describe("ChatPreferenceControls", () => {
     expect(html).toContain("aria-disabled")
     expect(html).toContain("lucide-lock")
   })
+
   test("custom endpoints use the model picker without reasoning, context or fast controls", () => {
     const html = renderToStaticMarkup(
       <ChatPreferenceControls

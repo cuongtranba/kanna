@@ -5,7 +5,7 @@ import type { ClientCommand, CommandResult } from "../../../shared/protocol"
 import type { CommandPort, CommandReply } from "../../ports/commandPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
-import type { ComputedStyleLike, DomPort, ServiceWorkerRegistrationLike } from "../../ports/domPort"
+import type { ComputedStyleLike, DomPort } from "../../ports/domPort"
 import type { NotificationPort, NotificationPermission } from "../../ports/notificationPort"
 import type { SoundPort } from "../../ports/soundPort"
 import type { ClipboardPort } from "../../ports/clipboardPort"
@@ -256,7 +256,6 @@ export interface FakeDomPort extends DomPort {
   pathname: string
   search: string
   userAgent: string
-  secure: boolean
   innerWidth: number
   innerHeight: number
   reloaded: boolean
@@ -267,10 +266,6 @@ export interface FakeDomPort extends DomPort {
   selection: Selection | null
   focusOverlay: boolean
   typeaheadMenuOpen: boolean
-  hostname: string
-  serviceWorkerSupported: boolean
-  pushManagerSupported: boolean
-  serviceWorkerRegistration: ServiceWorkerRegistrationLike
   touchDevice: boolean
   webShareSupported: boolean
   webShareError: Error | null
@@ -293,13 +288,8 @@ export function makeFakeDomPort(overrides: Partial<{
   pathname: string
   search: string
   userAgent: string
-  secure: boolean
   innerWidth: number
   innerHeight: number
-  hostname: string
-  serviceWorkerSupported: boolean
-  pushManagerSupported: boolean
-  serviceWorkerRegistration: ServiceWorkerRegistrationLike
   touchDevice: boolean
   webShareSupported: boolean
   baseURI: string
@@ -318,19 +308,6 @@ export function makeFakeDomPort(overrides: Partial<{
   const confirmCalls: string[] = []
   const eventListenerCounts = new Map<string, number>()
 
-  const defaultRegistration: ServiceWorkerRegistrationLike = {
-    pushManager: {
-      async subscribe() {
-        return {
-          endpoint: "https://push.example/fake",
-          toJSON: () => ({ endpoint: "https://push.example/fake", keys: { p256dh: "p", auth: "a" } }),
-          async unsubscribe() { return true },
-        }
-      },
-      async getSubscription() { return null },
-    },
-  }
-
   const fake: FakeDomPort = {
     get title() { return title },
     visibilityState: overrides.visibilityState ?? "visible",
@@ -339,7 +316,6 @@ export function makeFakeDomPort(overrides: Partial<{
     pathname: overrides.pathname ?? "/",
     search: overrides.search ?? "",
     userAgent: overrides.userAgent ?? "FakeBrowser/1.0",
-    secure: overrides.secure ?? true,
     innerWidth: overrides.innerWidth ?? 1024,
     innerHeight: overrides.innerHeight ?? 768,
     get reloaded() { return reloaded },
@@ -350,10 +326,6 @@ export function makeFakeDomPort(overrides: Partial<{
     selection: null,
     focusOverlay: false,
     typeaheadMenuOpen: false,
-    hostname: overrides.hostname ?? "localhost",
-    serviceWorkerSupported: overrides.serviceWorkerSupported ?? true,
-    pushManagerSupported: overrides.pushManagerSupported ?? true,
-    serviceWorkerRegistration: overrides.serviceWorkerRegistration ?? defaultRegistration,
     touchDevice: overrides.touchDevice ?? false,
     iosStandalone: overrides.iosStandalone ?? false,
     webShareSupported: overrides.webShareSupported ?? false,
@@ -379,7 +351,6 @@ export function makeFakeDomPort(overrides: Partial<{
     reload(): void { reloaded = true },
 
     getUserAgent(): string { return overrides.userAgent ?? "FakeBrowser/1.0" },
-    isSecureContext(): boolean { return overrides.secure ?? true },
 
     getInnerWidth(): number { return overrides.innerWidth ?? 1024 },
     getInnerHeight(): number { return overrides.innerHeight ?? 768 },
@@ -454,26 +425,6 @@ export function makeFakeDomPort(overrides: Partial<{
       }
     },
 
-    getHostname(): string {
-      return fake.hostname
-    },
-
-    isServiceWorkerSupported(): boolean {
-      return fake.serviceWorkerSupported
-    },
-
-    isPushManagerSupported(): boolean {
-      return fake.pushManagerSupported
-    },
-
-    async registerServiceWorker(_url: string): Promise<ServiceWorkerRegistrationLike> {
-      return fake.serviceWorkerRegistration
-    },
-
-    async getReadyServiceWorkerRegistration(): Promise<ServiceWorkerRegistrationLike> {
-      return fake.serviceWorkerRegistration
-    },
-
     upsertHeadMeta(_name: string, _content: string): void { },
 
     getComputedBackgroundColor(): string { return "" },
@@ -526,8 +477,8 @@ export function makeFakeDomPort(overrides: Partial<{
       if (fake.webShareError) throw fake.webShareError
     },
 
-    getBaseURI(): string {
-      return fake.baseURI
+    resolveUrl(path: string): string {
+      return new URL(path, fake.baseURI || fake.href).toString()
     },
 
     triggerDownload(url: string, filename: string): void {

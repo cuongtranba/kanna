@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto"
 import { log } from "../../shared/log"
+import type { InboundHandling } from "../../shared/inbound/handler"
+import type { AgentProvider } from "../../shared/types"
 import {
   WEBHOOK_RATE_LIMIT_PER_MINUTE,
   WEBHOOK_RECENT_DELIVERY_IDS,
   type WebhookConfig,
   type WebhookDeliveryOutcome,
   type WebhookInput,
+  type WebhookKind,
   type WebhookPatch,
   type WebhookSlackPatch,
   type WebhooksSnapshot,
@@ -39,6 +42,11 @@ export interface WebhookStorePort {
 
 export type WebhookMutation<T> = { ok: true; value: T } | { ok: false; errors: string[] }
 
+export type Admission =
+  | { kind: "admitted" }
+  | { kind: "duplicate" }
+  | { kind: "rate_limited"; retryAfterSeconds: number }
+
 export interface CreatedWebhook {
   hook: WebhookSummary
   secret: string | null
@@ -64,6 +72,34 @@ export function slackCredentialsOf(hook: StoredWebhook): SlackCredentials | null
   }
 }
 
+const OPTIONAL_HOOK_TEXT_FIELDS = ["chatId", "projectId", "threadKeyPath", "senderPath", "replyHint", "filter"] as const
+
+type OptionalHookTextField = (typeof OPTIONAL_HOOK_TEXT_FIELDS)[number]
+
+type OptionalHookFields = Pick<WebhookConfig, OptionalHookTextField | "handling" | "provider" | "model">
+
+interface OptionalHookSource extends Partial<Record<OptionalHookTextField, string>> {
+  kind?: WebhookKind
+  handling?: InboundHandling
+  provider?: AgentProvider
+  model?: string
+}
+
+export function optionalHookFields(source: OptionalHookSource): OptionalHookFields {
+  const fields: OptionalHookFields = {}
+  for (const key of OPTIONAL_HOOK_TEXT_FIELDS) {
+    const text = source[key]?.trim()
+    if (text) fields[key] = text
+  }
+  if (source.kind !== "slack" && source.handling === "task") fields.handling = source.handling
+  const model = source.model?.trim()
+  if (source.provider && model) {
+    fields.provider = source.provider
+    fields.model = model
+  }
+  return fields
+}
+
 function dedupeIds(ids: readonly string[]): string[] {
   return [...new Set(ids.map((id) => id.trim()))]
 }
@@ -74,7 +110,6 @@ function inputOf(hook: StoredWebhook): WebhookInput {
     mode: hook.mode,
     template: hook.template,
     kind: hook.kind,
-    ...(hook.handling === "task" ? { handling: hook.handling } : {}),
     ...(hook.kind === "slack"
       ? {
           slack: {
@@ -84,13 +119,7 @@ function inputOf(hook: StoredWebhook): WebhookInput {
           },
         }
       : {}),
-    ...(hook.chatId ? { chatId: hook.chatId } : {}),
-    ...(hook.projectId ? { projectId: hook.projectId } : {}),
-    ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
-    ...(hook.threadKeyPath ? { threadKeyPath: hook.threadKeyPath } : {}),
-    ...(hook.senderPath ? { senderPath: hook.senderPath } : {}),
-    ...(hook.replyHint ? { replyHint: hook.replyHint } : {}),
-    ...(hook.filter ? { filter: hook.filter } : {}),
+    ...optionalHookFields(hook),
   }
 }
 
@@ -104,14 +133,7 @@ function configOf(hook: StoredWebhook): Omit<WebhookConfig, "slack"> {
     template: hook.template,
     createdAt: hook.createdAt,
     updatedAt: hook.updatedAt,
-    ...(hook.handling === "task" ? { handling: hook.handling } : {}),
-    ...(hook.chatId ? { chatId: hook.chatId } : {}),
-    ...(hook.projectId ? { projectId: hook.projectId } : {}),
-    ...(hook.provider && hook.model ? { provider: hook.provider, model: hook.model } : {}),
-    ...(hook.threadKeyPath ? { threadKeyPath: hook.threadKeyPath } : {}),
-    ...(hook.senderPath ? { senderPath: hook.senderPath } : {}),
-    ...(hook.replyHint ? { replyHint: hook.replyHint } : {}),
-    ...(hook.filter ? { filter: hook.filter } : {}),
+    ...optionalHookFields(hook),
   }
 }
 
@@ -187,14 +209,7 @@ export class WebhookRegistry {
       ...(slack
         ? { slack: { allowedUserIds: dedupeIds(slack.allowedUserIds) }, slackBotToken: slack.botToken.trim() }
         : {}),
-      ...(!slack && input.handling === "task" ? { handling: input.handling } : {}),
-      ...(input.chatId ? { chatId: input.chatId } : {}),
-      ...(input.projectId ? { projectId: input.projectId } : {}),
-      ...(input.provider && input.model ? { provider: input.provider, model: input.model.trim() } : {}),
-      ...(input.threadKeyPath?.trim() ? { threadKeyPath: input.threadKeyPath.trim() } : {}),
-      ...(input.senderPath?.trim() ? { senderPath: input.senderPath.trim() } : {}),
-      ...(input.replyHint?.trim() ? { replyHint: input.replyHint.trim() } : {}),
-      ...(input.filter?.trim() ? { filter: input.filter.trim() } : {}),
+      ...optionalHookFields({ ...input, kind: slack ? "slack" : "generic" }),
     }
     this.hooks.set(stored.id, stored)
     this.setFilter(stored.id, filter.compiled)
@@ -247,7 +262,15 @@ export class WebhookRegistry {
     this.notify()
   }
 
-  claimDelivery(hookId: string, deliveryId: string): boolean {
+  admit(hookId: string, deliveryId: string): Admission {
+    if (!this.claimDelivery(hookId, deliveryId)) return { kind: "duplicate" }
+    const decision = this.takeToken(hookId)
+    if (decision.allowed) return { kind: "admitted" }
+    this.releaseDelivery(hookId, deliveryId)
+    return { kind: "rate_limited", retryAfterSeconds: decision.retryAfterSeconds }
+  }
+
+  private claimDelivery(hookId: string, deliveryId: string): boolean {
     const recent = this.recentDeliveryIds.get(hookId) ?? []
     if (recent.includes(deliveryId)) return false
     recent.push(deliveryId)
@@ -262,7 +285,7 @@ export class WebhookRegistry {
     this.recentDeliveryIds.set(hookId, recent.filter((id) => id !== deliveryId))
   }
 
-  takeToken(hookId: string): RateDecision {
+  private takeToken(hookId: string): RateDecision {
     return this.limiter.take(hookId)
   }
 
@@ -343,9 +366,7 @@ function applySlackPatch(target: StoredWebhook, patch: WebhookSlackPatch): void 
   if (botToken) target.slackBotToken = botToken
 }
 
-type ClearableKey = "chatId" | "projectId" | "threadKeyPath" | "senderPath" | "replyHint" | "filter"
-
-function setOrClear(target: StoredWebhook, key: ClearableKey, value: string | null): void {
+function setOrClear(target: StoredWebhook, key: OptionalHookTextField, value: string | null): void {
   const trimmed = value?.trim()
   if (!trimmed) delete target[key]
   else target[key] = trimmed

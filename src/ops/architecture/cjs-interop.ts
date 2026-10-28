@@ -28,15 +28,7 @@ export interface SanctionedInterop {
   readonly reason: string
 }
 
-export const SANCTIONED_INTEROP: readonly SanctionedInterop[] = [
-  {
-    path: "src/client/lib/useWebSocket.ts",
-    specifier: "react-use-websocket",
-    reason:
-      "Sole chokepoint: reads `.default` off the binding and falls back to the binding itself, "
-      + "so the hook resolves correctly under both rolldown and __esModule-aware interop.",
-  },
-]
+export const SANCTIONED_INTEROP: readonly SanctionedInterop[] = []
 
 export type InteropBreach =
   | { kind: "cjs_default_import"; path: string; line: number; specifier: string; local: string; binding: BindingKind; reason: string }

@@ -5,8 +5,6 @@ description: Model-authored rendered content in Kanna — the mermaid validation
 
 # Kanna GenUI, mermaid, and share links
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Mermaid Validation Gate (KANNA_MERMAID_GUARD)
 
 Kanna renders mermaid inline, so a syntax error reaches the user as a broken

@@ -12,6 +12,22 @@ import {
 
 export const PROCESS_RSS_BYTES = "kanna.process.rss_bytes"
 
+export const PROCESS_HEAP_USED_BYTES = "kanna.process.heap_used_bytes"
+
+export const PROCESS_HEAP_TOTAL_BYTES = "kanna.process.heap_total_bytes"
+
+export const PROCESS_EXTERNAL_BYTES = "kanna.process.external_bytes"
+
+export const AUTOCONTINUE_FIRED = "kanna.autocontinue.fired"
+
+export const QUEUED_MESSAGE_RECOVERED = "kanna.queued_message.recovered"
+
+export const LOOP_WAKE_RECOVERED = "kanna.loop.wake.recovered"
+
+export const MCP_SOURCE_ITEMS = "kanna.mcp_source.items"
+
+export const MCP_SOURCE_ERRORS = "kanna.mcp_source.errors"
+
 export const EVENT_LOOP_DELAY_P50_MS = "kanna.event_loop.delay_p50_ms"
 
 export const EVENT_LOOP_DELAY_P99_MS = "kanna.event_loop.delay_p99_ms"
@@ -86,14 +102,14 @@ export const COMPACTION_TOKEN_BUCKETS: readonly number[] = [
   150_000, 200_000, 300_000, 500_000, 800_000, 1_200_000,
 ]
 
-const SCOPE = "kanna"
+export const METER_SCOPE = "kanna"
 
 export async function withSpan<T>(
   name: string,
   attributes: Attributes,
   fn: (span: Span) => Promise<T>,
 ): Promise<T> {
-  return trace.getTracer(SCOPE).startActiveSpan(name, { attributes }, async (span) => {
+  return trace.getTracer(METER_SCOPE).startActiveSpan(name, { attributes }, async (span) => {
     try {
       const result = await fn(span)
       span.setStatus({ code: SpanStatusCode.OK })
@@ -121,7 +137,7 @@ export function resetMetricInstrumentCache(): void {
 export function addCounter(name: string, value: number, attributes?: Attributes): void {
   let counter = counters.get(name)
   if (!counter) {
-    counter = metrics.getMeter(SCOPE).createCounter(name)
+    counter = metrics.getMeter(METER_SCOPE).createCounter(name)
     counters.set(name, counter)
   }
   counter.add(value, attributes)
@@ -130,7 +146,7 @@ export function addCounter(name: string, value: number, attributes?: Attributes)
 export function recordUpDown(name: string, value: number, attributes?: Attributes): void {
   let instrument = upDowns.get(name)
   if (!instrument) {
-    instrument = metrics.getMeter(SCOPE).createUpDownCounter(name)
+    instrument = metrics.getMeter(METER_SCOPE).createUpDownCounter(name)
     upDowns.set(name, instrument)
   }
   instrument.add(value, attributes)
@@ -139,7 +155,7 @@ export function recordUpDown(name: string, value: number, attributes?: Attribute
 export function recordHistogram(name: string, value: number, attributes?: Attributes): void {
   let instrument = histograms.get(name)
   if (!instrument) {
-    instrument = metrics.getMeter(SCOPE).createHistogram(name)
+    instrument = metrics.getMeter(METER_SCOPE).createHistogram(name)
     histograms.set(name, instrument)
   }
   instrument.record(value, attributes)

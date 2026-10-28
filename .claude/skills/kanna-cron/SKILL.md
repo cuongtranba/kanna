@@ -5,8 +5,6 @@ description: The /cron feature — parser and refusal path, validate_cron / arm_
 
 # Kanna /cron
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## `/cron` Self-Repair (KANNA_CRON_REPAIR)
 
 `/cron` always intercepts and never starts a turn, so a rejected line used to be

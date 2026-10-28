@@ -2,16 +2,14 @@ import { describe, expect, test } from "vite-plus/test"
 import { BEACON_DOWNLOAD_PAGE } from "../shared/beacon-pair-link"
 import type { BeaconFrame } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
-import {
-  backoffMs,
-  beaconSocketUrl,
-  parseBeaconArgs,
-  RESTART_EXIT_CODE,
-  runBeaconCli,
-  type BeaconCliDeps,
-} from "./main"
-import type { BeaconPairingRequest, BeaconState, BeaconTransport } from "./ports"
-import { UNSUPPORTED_UPDATER } from "./self-update"
+import { parseBeaconArgs, runBeaconCli, type BeaconCliDeps } from "./main"
+import type { BeaconPairingRequest, BeaconState, BeaconTransport, BeaconUpdater } from "./ports"
+import { backoffMs, beaconSocketUrl } from "./runner"
+import { RESTART_EXIT_CODE } from "./supervisor"
+
+const UNSUPPORTED_UPDATER: BeaconUpdater = {
+  install: async () => ({ ok: false, error: "this beacon cannot update itself yet" }),
+}
 
 const PAIRED: BeaconState = { kannaUrl: "http://kanna.local", beaconId: "b-1" }
 
@@ -85,6 +83,15 @@ describe("parseBeaconArgs", () => {
     })
   })
 
+  test("normalises the pairing code the way the desktop does", () => {
+    expect(parseBeaconArgs(["pair", "https://kanna.example", "abcd-2345"])).toEqual({
+      command: "pair",
+      kannaUrl: "https://kanna.example",
+      code: "ABCD2345",
+    })
+    expect(parseBeaconArgs(["pair", "https://kanna.example", "CODE"]).command).toBe("invalid")
+  })
+
   test("parses run", () => {
     expect(parseBeaconArgs(["run"])).toEqual({ command: "run" })
   })
@@ -128,14 +135,14 @@ describe("runBeaconCli", () => {
       },
       stateStore: { load: async () => null, save: async (state) => void saved.push(state), clear: async () => {} },
     })
-    expect(await runBeaconCli(["pair", "http://kanna.local/", "CODE"], deps)).toBe(0)
-    expect(requests).toEqual([{ code: "CODE", publicKey: "PUB", label: "box", os: "linux" }])
+    expect(await runBeaconCli(["pair", "http://kanna.local/", "ABCD2345"], deps)).toBe(0)
+    expect(requests).toEqual([{ code: "ABCD2345", publicKey: "PUB", label: "box", os: "linux" }])
     expect(saved).toEqual([{ kannaUrl: "http://kanna.local", beaconId: "b-9" }])
   })
 
   test("pair reports a refused code with a failing exit code", async () => {
     const { deps, logs } = createDeps({ pairClient: { pair: async () => ({ ok: false, error: "expired", status: 400 }) } })
-    expect(await runBeaconCli(["pair", "http://kanna.local", "CODE"], deps)).toBe(1)
+    expect(await runBeaconCli(["pair", "http://kanna.local", "ABCD2345"], deps)).toBe(1)
     expect(logs.join("\n")).toContain("expired")
   })
 

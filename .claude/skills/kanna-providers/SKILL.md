@@ -5,8 +5,6 @@ description: Model and provider catalog in Kanna — customModels and mergeCusto
 
 # Kanna providers and models
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Configurable Model Catalog (customModels)
 
 Claude + Codex models are user-configurable from Settings → "Models" instead
@@ -171,8 +169,9 @@ in Codex's own rollout JSONL under `~/.codex/sessions/**` are a DIFFERENT,
 internal format. Reading the rollout and typing the wire from it produces a
 field that never matches — check the generated bindings.
 
-- **One classification table.** `FAILURE_CLASS_BY_TAG` maps every variant to
-  `transient | quota | auth | fatal | unknown`; `CodexErrorInfoTag` is derived
+- **One classification table.** `CODEX_ERROR_TAGS` maps every variant to its
+  `failureClass` (`transient | quota | auth | fatal | unknown`), its wire
+  `shape` and its user-facing `describe`; `CodexErrorInfoTag` is derived
   from that table's keys, so a variant cannot be classified without existing.
   An unknown or absent tag classifies `unknown`, **never** `transient` — a
   future variant must not silently earn a retry affordance.

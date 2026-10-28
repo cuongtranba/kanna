@@ -35,7 +35,6 @@ export function StackEditPanels({
     <>
       {createPanelOpen && (
         <StackCreatePanel
-          mode={editId ? "edit" : "create"}
           projects={projects}
           initialProjectIds={editing?.projectIds ?? []}
           initialTitle={editing?.title ?? ""}

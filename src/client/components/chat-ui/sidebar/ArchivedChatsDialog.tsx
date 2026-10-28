@@ -1,13 +1,10 @@
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { formatSidebarAgeLabel } from "../../../lib/formatters"
 import { getSidebarChatTimestamp } from "../../../lib/sidebarChats"
-import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { unarchiveChatKey } from "./sidebarPendingActions"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../ui/dialog"
 import { Spinner } from "../../ui/spinner"
-
-function unarchiveKey(chatId: string): string {
-  return pendingActionKey("chat.unarchive", chatId)
-}
 
 function ArchivedChatButton({
   chat,
@@ -18,14 +15,14 @@ function ArchivedChatButton({
   nowMs: number
   onOpenChat: (chatId: string) => Promise<void>
 }) {
-  const pending = usePendingAction(unarchiveKey(chat.chatId))
+  const pending = usePendingAction(unarchiveChatKey(chat.chatId))
   return (
     <button
       type="button"
       disabled={pending}
       aria-busy={pending || undefined}
       className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/0 px-3 py-2 text-left transition-colors hover:border-border hover:bg-muted disabled:opacity-70"
-      onClick={() => runPendingAction(unarchiveKey(chat.chatId), () => onOpenChat(chat.chatId))}
+      onClick={() => runPendingAction(unarchiveChatKey(chat.chatId), () => onOpenChat(chat.chatId))}
     >
       <span className="min-w-0 truncate text-sm">{chat.title}</span>
       {pending ? (

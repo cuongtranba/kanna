@@ -1,12 +1,12 @@
 import type { BeaconConfig } from "./beacon-config"
 
-export const BEACON_ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/
-
 export const BEACON_ALIAS_MAX_LENGTH = 40
+
+export const BEACON_ALIAS_PATTERN = new RegExp(`^[a-z0-9][a-z0-9_-]{0,${BEACON_ALIAS_MAX_LENGTH - 1}}$`)
 
 export const BEACON_MENTION_PREFIX = "beacon/"
 
-export const BEACON_MENTION_PATTERN = "(^|[\\s\\n\\t])@beacon/([A-Za-z0-9][A-Za-z0-9_-]*)"
+export const BEACON_MENTION_PATTERN = `(^|[\\s\\n\\t])@${BEACON_MENTION_PREFIX}([A-Za-z0-9][A-Za-z0-9_-]*)`
 
 export function createBeaconMentionRegex(): RegExp {
   return new RegExp(BEACON_MENTION_PATTERN, "g")

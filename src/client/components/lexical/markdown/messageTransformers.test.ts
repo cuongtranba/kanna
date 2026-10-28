@@ -14,10 +14,9 @@ import { TableNode, TableRowNode, TableCellNode } from "@lexical/table"
 import {
   $isMermaidNode,
   $isLocalFileLinkNode,
-  ThinkingNode,
   KANNA_MESSAGE_NODES,
 } from "../nodes"
-import { KANNA_MESSAGE_TRANSFORMERS } from "./messageTransformers"
+import { KANNA_MESSAGE_TRANSFORMERS, LOCAL_FILE_LINK } from "./messageTransformers"
 import type { LexicalEditor } from "lexical"
 
 
@@ -220,15 +219,14 @@ describe("KANNA_MESSAGE_TRANSFORMERS combined", () => {
       expect(mermaidNodes[0]!.getTextContent()).toBe("graph LR\nA-->B")
     })
   })
-
-  it("ThinkingNode class is registered but not created by transformers (transformers don't produce ThinkingNodes)", () => {
-    expect(ThinkingNode.getType()).toBe("kanna-thinking")
-    const markdown = "<think>some thinking</think>"
+  it("exports a link with its line and column so a round trip keeps them", () => {
+    const markdown = "[main](/Users/alice/project/src/main.ts:12:3)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
-      const thinkingNodes = allNodes.filter((n) => n instanceof ThinkingNode)
-      expect(thinkingNodes.length).toBe(0)
+      const node = flattenNodes($getRoot().getChildren<LexicalNode>()).find($isLocalFileLinkNode)
+      expect(node?.toHref()).toBe("/Users/alice/project/src/main.ts:12:3")
+      expect(node ? LOCAL_FILE_LINK.export?.(node, () => "", () => "") : null)
+        .toBe("[/Users/alice/project/src/main.ts:12:3](/Users/alice/project/src/main.ts:12:3)")
     })
   })
 })

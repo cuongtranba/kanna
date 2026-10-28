@@ -1,5 +1,6 @@
 
 import type { BoardTemplateDefinition, FieldDef } from "../shared/boards/types"
+import type { WellKnownField } from "../shared/boards/well-known-fields"
 
 export interface BuiltinBoardTemplate {
   id: string
@@ -9,37 +10,14 @@ export interface BuiltinBoardTemplate {
 }
 
 
-const ASSIGNEE_FIELD: FieldDef = {
-  id: "assignee",
-  label: "Assignee",
-  kind: "text",
-  options: null,
-  required: false,
+function wellKnownField(id: WellKnownField, label: string, kind: FieldDef["kind"]): FieldDef {
+  return { id, label, kind, options: null, required: false }
 }
 
-const LABELS_FIELD: FieldDef = {
-  id: "labels",
-  label: "Labels",
-  kind: "label",
-  options: null,
-  required: false,
-}
-
-const DESCRIPTION_FIELD: FieldDef = {
-  id: "description",
-  label: "Description",
-  kind: "longtext",
-  options: null,
-  required: false,
-}
-
-const EXTERNAL_URL_FIELD: FieldDef = {
-  id: "externalUrl",
-  label: "Source",
-  kind: "url",
-  options: null,
-  required: false,
-}
+const ASSIGNEE_FIELD = wellKnownField("assignee", "Assignee", "text")
+const LABELS_FIELD = wellKnownField("labels", "Labels", "label")
+const DESCRIPTION_FIELD = wellKnownField("description", "Description", "longtext")
+const EXTERNAL_URL_FIELD = wellKnownField("externalUrl", "Source", "url")
 
 const PRIORITY_FIELD: FieldDef = {
   id: "priority",

@@ -3,18 +3,20 @@ import { createHash } from "node:crypto"
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { createBeaconTransfer } from "../beacon/transfer.adapter"
 import type { BeaconConfig } from "../shared/beacon-config"
-import type { BeaconFrame } from "../shared/beacon-protocol"
+import type { BeaconFrame, BeaconResponseFrame } from "../shared/beacon-protocol"
+import type { JsonObject } from "../shared/json"
 import { DEFAULT_BEACON_SCOPE, type BeaconScope } from "../shared/beacon-scope"
 import { TRANSFER_PROTOCOL, type BeaconTransferResult } from "../shared/beacon-transfer"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { createBeaconRegistry, type BeaconRegistry, type BeaconSocket } from "./beacon-registry"
 import { createBeaconTransferTickets, type BeaconTransferTickets } from "./beacon-transfer-tickets"
 import { buildBeaconToolList } from "./kanna-mcp-beacon"
-import type { ToolArgs, ToolResult } from "./kanna-mcp-tool"
 import { startKannaServer } from "./server"
 import { createTestEventStore } from "./storage/test-helpers"
+import { invokeTool, sdkToolFactory, toolText } from "./test-helpers/sdk-tool"
 import { createToolCallbackService, type ToolCallbackService } from "./tool-callback"
 
 type SendPayload = Parameters<BeaconSocket["send"]>[0]
@@ -25,7 +27,7 @@ interface ToolExtra {
 
 interface FakeTool {
   name: string
-  handler: (input: ToolArgs, extra?: ToolExtra) => Promise<ToolResult>
+  handler: (input: JsonObject, extra?: ToolExtra) => Promise<CallToolResult>
 }
 
 const BEACON_ID = "beacon-1"
@@ -37,6 +39,7 @@ let projectDir = ""
 let remoteDir = ""
 let base = ""
 let stopServer: () => Promise<void> = async () => undefined
+let serverTickets: BeaconTransferTickets | undefined
 let toolCallback: ToolCallbackService
 let beacons: BeaconConfig[] = []
 
@@ -53,6 +56,7 @@ beforeAll(async () => {
   })
   base = `http://127.0.0.1:${String(server.port)}`
   stopServer = server.stop
+  serverTickets = server.beaconTransferTickets
   const store = createTestEventStore(path.join(dataDir, "store"))
   await store.initialize()
   toolCallback = createToolCallbackService({ store, serverSecret: "secret", now: () => 1, getBeacons: () => beacons })
@@ -84,12 +88,14 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex")
 }
 
-function recordingTool(name: string, _description: string, _schema: object, handler: FakeTool["handler"]): FakeTool {
-  return { name, handler }
-}
-
-function connectBeacon(handleRequest: (frame: Extract<BeaconFrame, { kind: "request" }>, reply: (frame: BeaconFrame) => void) => void) {
-  const registry = createBeaconRegistry()
+function connectBeacon(
+  handleRequest: (frame: Extract<BeaconFrame, { kind: "request" }>, reply: (frame: BeaconResponseFrame) => void) => void,
+  tickets?: BeaconTransferTickets,
+) {
+  const hostTickets = tickets ?? serverTickets
+  const registry = createBeaconRegistry(
+    hostTickets === undefined ? {} : { transfer: { tickets: hostTickets, maxPullBytes: () => undefined } },
+  )
   const sent: BeaconFrame[] = []
   registry.connect({
     beaconId: BEACON_ID,
@@ -135,7 +141,7 @@ function realBeaconMachine(config: BeaconConfig) {
 function toolsFor(
   registry: BeaconRegistry,
   config: BeaconConfig,
-  options: { tickets?: BeaconTransferTickets; withProject?: boolean } = {},
+  options: { withProject?: boolean } = {},
 ): Map<string, FakeTool> {
   beacons = [config]
   const list = buildBeaconToolList(
@@ -146,15 +152,22 @@ function toolsFor(
       allowed: true,
       approval: { toolCallback, sessionId: "session-1", cwd: projectDir, chatPolicy: POLICY_DEFAULT },
       projectRoot: options.withProject === false ? undefined : projectDir,
-      transferTickets: options.tickets,
     },
-    recordingTool,
+    sdkToolFactory,
   )
-  return new Map(list.map((entry) => [entry.name, entry]))
+  return new Map(
+    list.map((entry): [string, FakeTool] => [
+      entry.name,
+      {
+        name: entry.name,
+        handler: (input, extra) => invokeTool(entry, input, extra),
+      },
+    ]),
+  )
 }
 
-function textOf(result: ToolResult): string {
-  return result.content[0].text
+function textOf(result: CallToolResult): string {
+  return toolText(result)
 }
 
 async function until(condition: () => boolean): Promise<void> {
@@ -231,9 +244,9 @@ describe("beacon_pull and beacon_push", () => {
   test("a transfer that moves no data fails after the idle timeout and revokes its ticket", async () => {
     let clock = 0
     const tickets = createBeaconTransferTickets({ now: () => clock, idleTimeoutMs: 1000 })
-    const { registry, sent } = connectBeacon(() => undefined)
+    const { registry, sent } = connectBeacon(() => undefined, tickets)
     const config = beaconConfig({})
-    const pull = toolsFor(registry, config, { tickets }).get("beacon_pull")!
+    const pull = toolsFor(registry, config).get("beacon_pull")!
 
     const call = pull.handler({ beaconId: BEACON_ID, path: path.join(remoteDir, "stalled.bin") })
     await until(() => sent.some((frame) => frame.kind === "request"))
@@ -246,14 +259,14 @@ describe("beacon_pull and beacon_push", () => {
 
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain("idle timeout")
-    expect(tickets.lookup(ticket, "upload")).toBeNull()
+    expect(tickets.claim(ticket, "upload")).toBeNull()
   })
 
   test("cancelling the call fails it and revokes the ticket", async () => {
     const tickets = createBeaconTransferTickets()
-    const { registry, sent } = connectBeacon(() => undefined)
+    const { registry, sent } = connectBeacon(() => undefined, tickets)
     const config = beaconConfig({})
-    const pull = toolsFor(registry, config, { tickets }).get("beacon_pull")!
+    const pull = toolsFor(registry, config).get("beacon_pull")!
     const controller = new AbortController()
 
     const call = pull.handler({ beaconId: BEACON_ID, path: path.join(remoteDir, "cancelled.bin") }, { signal: controller.signal })
@@ -265,6 +278,6 @@ describe("beacon_pull and beacon_push", () => {
 
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain("cancelled")
-    expect(tickets.lookup(requestFrame.request.ticket, "upload")).toBeNull()
+    expect(tickets.claim(requestFrame.request.ticket, "upload")).toBeNull()
   })
 })

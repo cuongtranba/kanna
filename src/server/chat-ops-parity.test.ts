@@ -50,23 +50,13 @@ describe("chat ops parity (snapshot path vs ops path)", () => {
       const activeStatuses = new Map<string, KannaStatus>()
 
       function deriveFull(): ChatSnapshot {
-        const snapshot = deriveChatSnapshot(
-          store.state, activeStatuses, new Set(), chat.id,
-          (chatId) => store.getRecentChatHistory(chatId, FULL_LIMIT),
-          (chatId) => store.getTunnelEvents(chatId),
-          new Map(), FIXED_NOW, new Map(), { customModels: [], customProviders: [] },
-        )
+        const snapshot = deriveChatSnapshot(store.state, chat.id, { getMessages: (chatId) => store.getRecentChatHistory(chatId, FULL_LIMIT), getTunnelEvents: (chatId) => store.getTunnelEvents(chatId) }, { activeStatuses, nowMs: FIXED_NOW })
         if (!snapshot) throw new Error("expected snapshot")
         return snapshot
       }
 
       function deriveMeta(): ChatSnapshot {
-        const snapshot = deriveChatSnapshot(
-          store.state, activeStatuses, new Set(), chat.id,
-          (chatId) => store.getRecentChatHistory(chatId, 0),
-          (chatId) => store.getTunnelEvents(chatId),
-          new Map(), FIXED_NOW, new Map(), { customModels: [], customProviders: [] },
-        )
+        const snapshot = deriveChatSnapshot(store.state, chat.id, { getMessages: (chatId) => store.getRecentChatHistory(chatId, 0), getTunnelEvents: (chatId) => store.getTunnelEvents(chatId) }, { activeStatuses, nowMs: FIXED_NOW })
         if (!snapshot) throw new Error("expected meta snapshot")
         return snapshot
       }

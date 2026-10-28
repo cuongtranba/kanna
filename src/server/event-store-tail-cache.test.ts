@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { EventStore } from "./event-store"
 import type { TranscriptEntry } from "../shared/types"
-import { getRecentMessagesPageTail, MAX_SEEN_MESSAGE_IDS } from "./event-store-messages.adapter"
+import { getRecentMessagesPageTail } from "./event-store-messages.adapter"
+import { MAX_SEEN_MESSAGE_IDS, type SeenMessageIds } from "./seen-message-ids"
 
 function entry(id: string, text: string): TranscriptEntry {
   return { _id: id, createdAt: Date.now(), kind: "assistant_text", text } as TranscriptEntry
@@ -145,7 +146,7 @@ describe("byte-aware tail growth", () => {
 })
 
 describe("seenMessageIds Set is bounded", () => {
-  type StoreInternals = { seenMessageIdsByChatId: Map<string, Set<string>> }
+  type StoreInternals = { seenMessageIds: SeenMessageIds }
 
   function entryWithId(id: string, mid: string): TranscriptEntry {
     return { _id: id, createdAt: Date.now(), kind: "assistant_text", text: "x", messageId: mid } as TranscriptEntry
@@ -158,10 +159,10 @@ describe("seenMessageIds Set is bounded", () => {
         await store.appendMessage(chatId, entryWithId(`e${i}`, `mid-${i}`))
       }
 
-      const seen = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!
-      expect(seen.size).toBeLessThanOrEqual(MAX_SEEN_MESSAGE_IDS)
-      expect(seen.has(`mid-${overCap - 1}`)).toBe(true)
-      expect(seen.has("mid-0")).toBe(false)
+      const seen = (store as unknown as StoreInternals).seenMessageIds
+      expect(seen.count(chatId)).toBeLessThanOrEqual(MAX_SEEN_MESSAGE_IDS)
+      expect(seen.has(chatId, `mid-${overCap - 1}`)).toBe(true)
+      expect(seen.has(chatId, "mid-0")).toBe(false)
     })
   })
 
@@ -171,9 +172,9 @@ describe("seenMessageIds Set is bounded", () => {
         await store.appendMessage(chatId, entryWithId(`e${i}`, `mid-${i}`))
       }
       const recentMid = `mid-${MAX_SEEN_MESSAGE_IDS + 49}`
-      const countBefore = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
+      const countBefore = (store as unknown as StoreInternals).seenMessageIds.count(chatId)
       await store.appendMessage(chatId, entryWithId("duplicate", recentMid))
-      const countAfter = (store as unknown as StoreInternals).seenMessageIdsByChatId.get(chatId)!.size
+      const countAfter = (store as unknown as StoreInternals).seenMessageIds.count(chatId)
       expect(countAfter).toBe(countBefore)
     })
   })

@@ -1,11 +1,11 @@
 import { createConnection } from "node:net"
 import { createInterface } from "node:readline"
-import * as zod from "zod"
 import { type LoadedModule } from "../../shared/dynamic-module"
 import { errorMessage, isRecord } from "../../shared/errors"
 import { type JsonValue } from "../../shared/json"
+import { hostModuleUnavailableMessage, PLUGIN_HOST_GLOBAL, type PluginClientContributionMethod } from "../../shared/plugins/host-modules"
+import { SERVER_HOST_MODULE_TABLE } from "./server-host-modules"
 import {
-  defineRpc,
   encodePluginLine,
   parsePluginHostCallMessage,
   type PluginChildMessage,
@@ -20,31 +20,30 @@ interface RegisteredRpc {
   readonly handler: PluginRpcHandler
 }
 
-interface PluginContext {
+interface PluginContext extends Record<PluginClientContributionMethod, () => void> {
   handle(contract: PluginRpcContract, handler: PluginRpcHandler): void
-  addSurface(): void
-  addSidebarItem(): void
-  addCommandCenterItem(): void
 }
+
+function noContribution(): void {}
 
 function createPluginContext(handlers: Map<string, RegisteredRpc>): PluginContext {
   return {
     handle(contract, handler) {
       handlers.set(contract.name, { contract, handler })
     },
-    addSurface() {},
-    addSidebarItem() {},
-    addCommandCenterItem() {},
+    addSurface: noContribution,
+    addSidebarItem: noContribution,
+    addCommandCenterItem: noContribution,
   }
 }
 
 function installHostModuleRequire(): void {
   Object.assign(globalThis, {
-    __KANNA_PLUGIN_HOST__: {
+    [PLUGIN_HOST_GLOBAL]: {
       require(name: string): LoadedModule {
-        if (name === "zod") return zod
-        if (name === "@kanna/plugin/server") return { defineRpc }
-        throw new Error(`plugin-child-entry: host module "${name}" is not available in server code`)
+        const load = SERVER_HOST_MODULE_TABLE[name]
+        if (!load) throw new Error(hostModuleUnavailableMessage(name, "server"))
+        return load()
       },
     },
   })

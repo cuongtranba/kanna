@@ -1,11 +1,6 @@
 import "../../../../lib/testing/setupHappyDom"
-import { describe, expect, test, beforeEach, afterEach, vi } from "vite-plus/test"
-
-vi.mock("../../../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "dark", theme: "dark", setTheme: () => {} }),
-}))
-
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test, beforeEach } from "vite-plus/test"
+import { renderThemed } from "../../../../lib/testing/renderThemed"
 import { TextBody } from "./TextBody"
 import { JsonBody } from "./JsonBody"
 import { MarkdownBody } from "./MarkdownBody"
@@ -19,23 +14,19 @@ const makeSrc = (mime: string, name: string): PreviewSource => ({
 
 beforeEach(() => {
   __clearTextBodyCacheForTests()
-  ;(globalThis as { fetch?: unknown }).fetch = vi.fn(async () => new Response("hello world"))
-})
-afterEach(() => {
-  delete (globalThis as { fetch?: unknown }).fetch
 })
 
 describe("TextBody/JsonBody/MarkdownBody static markup", () => {
   test("TextBody includes a <pre> shell so SSR snapshot is stable", () => {
-    const html = renderToStaticMarkup(<TextBody source={makeSrc("text/plain", "a.txt")} />)
+    const html = renderThemed(<TextBody source={makeSrc("text/plain", "a.txt")} />, true)
     expect(html).toContain("<pre")
   })
   test("JsonBody includes a <pre> shell", () => {
-    const html = renderToStaticMarkup(<JsonBody source={makeSrc("application/json", "a.json")} />)
+    const html = renderThemed(<JsonBody source={makeSrc("application/json", "a.json")} />, true)
     expect(html).toContain("<pre")
   })
   test("MarkdownBody uses prose wrapper", () => {
-    const html = renderToStaticMarkup(<MarkdownBody source={makeSrc("text/markdown", "a.md")} />)
+    const html = renderThemed(<MarkdownBody source={makeSrc("text/markdown", "a.md")} />, true)
     expect(html).toContain("prose")
   })
 
@@ -46,7 +37,7 @@ describe("TextBody/JsonBody/MarkdownBody static markup", () => {
       content: "# Plan\n\n```mermaid\nflowchart TB\n  A --> B\n```\n",
       truncated: false,
     })
-    const html = renderToStaticMarkup(<MarkdownBody source={src} />)
+    const html = renderThemed(<MarkdownBody source={src} />, true)
     expect(html).toContain("group/mermaid")
   })
 
@@ -57,7 +48,7 @@ describe("TextBody/JsonBody/MarkdownBody static markup", () => {
       content: "| a | b |\n| --- | --- |\n| 1 | 2 |\n",
       truncated: false,
     })
-    const html = renderToStaticMarkup(<MarkdownBody source={src} />)
+    const html = renderThemed(<MarkdownBody source={src} />, true)
     expect(html).toContain("<table")
   })
 })

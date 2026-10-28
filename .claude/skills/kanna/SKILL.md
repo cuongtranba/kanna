@@ -1,6 +1,6 @@
 ---
 name: kanna
-description: Router and shared ground rules for ANY work in the Kanna repo — read this first to find the specialist skill for the task. Use whenever the work touches this codebase: adding a feature or a field, changing a type or contract shared between server and client, wiring a new event or read-model, a chat/session that got stuck or behaved wrong, metrics and performance questions, React or client UI edits, running tests or clearing lint and ast-grep gates, cutting a release, reviewing a PR, or "where does this live" and "what else do I have to update". Use it especially when the task spans several of those, when it starts with "what's the best way to…" or "how do I add…", or when you are unsure which Kanna skill applies — routing costs one short read and prevents guessing at conventions this repo enforces mechanically.
+description: Router and shared ground rules for ANY work in the Kanna repo — read this first to find the specialist skill for the task. Use whenever the work touches this codebase: adding a feature or a field, changing a type or contract shared between server and client, wiring a new event or read-model, a chat/session that got stuck or behaved wrong, metrics and performance questions, React or client UI edits, running tests or clearing lint and ast-grep gates, cutting a release, reviewing a PR, or "where does this live" and "what else do I have to update". Use it especially when the task spans several of those, when it starts with "what's the best way to…" or "how do I add…", or when it is unclear which Kanna skill applies — routing costs one short read and prevents guessing at conventions this repo enforces mechanically.
 ---
 
 # Kanna — start here
@@ -22,10 +22,11 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | A chat/session id, "why did this turn fail", stuck or hung turn, a tool that never returned, wrong model, billing to API instead of subscription | `.claude/skills/kanna-debug/SKILL.md` |
 | Metrics, spans, traces, Grafana, "no telemetry arriving", the OTel collector, "why is it slow", memory growth, RSS, an OOM kill | `.claude/skills/kanna-telemetry/SKILL.md` |
 | Editing `.tsx`/`.ts` under `src/client/**` — components, hooks, formatting helpers, layout, tooltips | `.claude/skills/kanna-react-style/SKILL.md` |
-| Running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
-| `/loop`, `setup_loop`, `run_verify`, an armed loop, a loop that stalled or declared GOAL MET too early, `PROGRESS.md` and the tracking-doc tools | `.claude/skills/kanna-loop/SKILL.md` |
+| Writing a test, running tests, a green-locally-red-on-CI failure, lint / ast-grep / design-gate errors, "how do I verify this" | `.claude/skills/kanna-test/SKILL.md` |
+| Where new code belongs, module and interface design, a structural review, a `check:arch` breach | `.claude/skills/kanna-design/SKILL.md` |
+| `/loop`, `setup_loop`, `run_verify`, the `mcp__kanna__task_*` tools, an armed loop, a loop that stalled or declared GOAL MET too early | `.claude/skills/kanna-loop/SKILL.md` |
 | `delegate_subagent`, `keep_alive` / `run_in_background`, a run that failed `AUTH_REQUIRED` / `CAP_EXCEEDED` / `MAX_TURNS`, the permit pool | `.claude/skills/kanna-subagents/SKILL.md` |
-| Session/turn lifecycle: `/clear` `/compact`, compaction, a chat stuck busy, a lost queued message, background-task keep-alive, live blocks, the idle reaper, `CLAUDE_TOOLSET` | `.claude/skills/kanna-sessions/SKILL.md` |
+| Session/turn lifecycle: `/clear` `/compact`, compaction, a chat stuck busy, a lost queued message, background-task keep-alive, live blocks, the idle reaper, `CLAUDE_TOOLSET`, a `PROGRESS.md` tracking document (`append_tracking_row` and friends) | `.claude/skills/kanna-sessions/SKILL.md` |
 | `/cron`, `arm_cron`, a cron job that never fired or stayed running | `.claude/skills/kanna-cron/SKILL.md` |
 | Model catalog, custom Anthropic-compatible endpoints, a wrong context window, a Codex turn failure | `.claude/skills/kanna-providers/SKILL.md` |
 | Custom MCP servers, MCP OAuth, Kanna's remote `/mcp` endpoint | `.claude/skills/kanna-mcp/SKILL.md` |
@@ -37,6 +38,7 @@ to the repo root, so `Read` works even if the skill does not auto-trigger.
 | Reviewing a pull request for safety or correctness | `.claude/skills/review-pr/SKILL.md` |
 | Filing a bug or feature request, writing up a defect found mid-task, handing a finding to another agent | `.claude/skills/github-issue/SKILL.md` |
 | Adding a field the server sends and the client renders, or otherwise changing a contract across the WS boundary | `src/shared/types.ts` defines it once, both sides import it — never redeclare the shape on the client. Then `.claude/skills/kanna-react-style/SKILL.md` for the render, and `c3` if it moves a boundary |
+| Adding or changing a WS command | "WS commands" below |
 | "Where does X live", component boundaries, whether a change needs a doc update | the `c3` skill (see below) |
 | Visual design, spacing, color tokens, typography polish | the `impeccable` skill; `DESIGN.md` at the repo root is the source of truth |
 | Deploying or debugging infra on the lowbit Dokploy host | the `dokploy` skill |
@@ -70,10 +72,6 @@ alongside its implementation can be a tautology that passes for the wrong reason
 that leaves the underlying defect in place is not done, and "done" here means no
 follow-up items left open.
 
-**Let the code explain itself.** Default to zero comments: name things well and
-extract helpers instead. Comment only to record *why* — an invariant, a constraint,
-a workaround the code cannot express on its own.
-
 **One source of truth, flowing one direction.** A value should be defined once and
 derived everywhere else. When you find the same fact in two places, the fix is to
 delete one, not to keep them in sync.
@@ -93,6 +91,15 @@ must pass — see `.claude/skills/kanna-test/SKILL.md` for how the suite runs an
 the failures that only reproduce on CI. Report what actually happened: if a check
 failed or you skipped one, say so plainly.
 
+## WS commands
+
+Every command in `src/shared/commands/` is built with `defineCommand`, which requires a
+`result` zod schema; `CommandResult<C>` is its output type. A handler answers through
+`ackResult(id, command, result)`, so a reply of another shape fails to compile. A command
+that acks with nothing declares `noResult` and calls `ackResult(id, command)`. The client's
+`socket.command(command)` resolves to `CommandResult<C>` with no type-argument overload, so
+never cast it. A result type that already exists is tied to its schema with `assertParity`.
+
 ## Diagrams
 
 When explaining architecture or brainstorming a design, a Mermaid diagram usually
@@ -111,3 +118,9 @@ That parser is line-based, so a description must stay on **one line** — a fold
 `>-` block silently reduces to an empty description in the picker. `user-invocable:
 false` hides a skill from the picker while leaving auto-triggering intact; use it
 for skills only ever reached by routing.
+
+`src/ops/skills/skill-authoring.test.ts` enforces the rest: a one-line,
+third-person description of at most 1024 characters, a body of at most 500 lines
+(`LEGACY_BODY_ALLOWANCES` grandfathers kanna-loop and kanna-sessions and only
+shrinks), and a `## Contents` section in any reference file over 100 lines. A new
+skill also needs a symlink in `.agents/skills/` so Codex sees it.

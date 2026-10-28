@@ -276,7 +276,6 @@ describe("read models", () => {
 
     const binding = registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
@@ -314,7 +313,6 @@ describe("read models", () => {
     const { board } = seed()
     const binding = registry.bindSync({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: { provider: "github-issues", owner: "o", repo: "r" },
       direction: "pull",
@@ -345,7 +343,6 @@ describe("one repo, one board", () => {
   function bind(boardId: string, extra: { detachFromBoardId?: string | null } = {}) {
     return registry.bindSync({
       boardId,
-      providerId: "github-issues",
       projectId: "project-1",
       sourceRef: REPO,
       direction: "pull",
@@ -410,7 +407,6 @@ describe("one repo, one board", () => {
     const first = bind(project.id)
     const again = registry.bindSync({
       boardId: project.id,
-      providerId: "github-issues",
       projectId: "project-1",
       sourceRef: REPO,
       direction: "both",
@@ -428,17 +424,17 @@ describe("one repo, one board", () => {
     registry.createCard({ boardId: project.id, columnId: column.id, title: "one", actor: USER })
     registry.createCard({ boardId: project.id, columnId: column.id, title: "two", actor: USER })
 
-    expect(registry.repoBindingOwner("github-issues", REPO, stack.id)).toEqual({
+    expect(registry.repoBindingOwner(REPO, stack.id)).toEqual({
       boardId: project.id,
       boardTitle: "Widgets",
       cardCount: 2,
     })
-    expect(registry.repoBindingOwner("github-issues", REPO, project.id)).toBeNull()
+    expect(registry.repoBindingOwner(REPO, project.id)).toBeNull()
   })
 
   test("an unheld repo has no owner, so the screen offers a plain Connect", () => {
     const { stack } = boards()
-    expect(registry.repoBindingOwner("github-issues", REPO, stack.id)).toBeNull()
+    expect(registry.repoBindingOwner(REPO, stack.id)).toBeNull()
   })
 
   test("a move broadcasts, so both boards' viewers see the change", () => {

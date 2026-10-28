@@ -1,6 +1,19 @@
-import type { ServiceWorkerRegistrationLike } from "./domPort"
+export interface PushSubscriptionLike {
+  endpoint: string
+  options?: { applicationServerKey?: ArrayBuffer | null }
+  toJSON(): { endpoint?: string; keys?: { p256dh?: string; auth?: string } }
+  unsubscribe(): Promise<boolean>
+}
 
-export type { ServiceWorkerRegistrationLike }
+export interface ServiceWorkerRegistrationLike {
+  pushManager: {
+    subscribe(options: {
+      userVisibleOnly: boolean
+      applicationServerKey: Uint8Array<ArrayBuffer>
+    }): Promise<PushSubscriptionLike>
+    getSubscription(): Promise<PushSubscriptionLike | null>
+  }
+}
 
 export interface PushPort {
   isServiceWorkerSupported(): boolean

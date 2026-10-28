@@ -15,3 +15,13 @@ code:
   - src/server/storage/backend.ts
   - src/server/storage/fs-storage.adapter.ts
   - src/server/storage/in-memory-storage.ts
+  - src/server/event-logs.ts
+  - src/server/event-logs.test.ts
+  - src/server/event-routes.ts
+  - src/server/event-routes.test.ts
+  - src/server/history-paging.ts
+  - src/server/history-paging.test.ts
+  - src/server/jsonl-log.ts
+  - src/server/jsonl-log.test.ts
+  - src/server/seen-message-ids.ts
+  - src/server/seen-message-ids.test.ts

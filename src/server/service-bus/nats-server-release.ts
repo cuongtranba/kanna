@@ -1,7 +1,6 @@
 import { join } from "node:path"
-import { releaseAssetUrl } from "../../shared/release-sums"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/jetstream-config"
 
-export const NATS_SERVER_VERSION = "2.15.1"
 export const NATS_RELEASE_BASE = "https://github.com/nats-io/nats-server/releases/download"
 
 export interface NatsServerTarget {
@@ -28,10 +27,6 @@ export function natsServerTarget(platform: string, arch: string, version = NATS_
 
 export function unsupportedTargetMessage(platform: string, arch: string): string {
   return `Embedded mode supports macOS and Linux in this release (this machine is ${platform}-${arch}); use external mode`
-}
-
-export function natsAssetUrl(base: string, version: string, asset: string): string {
-  return releaseAssetUrl(base, version, asset)
 }
 
 export function installedBinaryPath(dataDir: string, version = NATS_SERVER_VERSION): string {

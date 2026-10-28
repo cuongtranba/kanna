@@ -1,34 +1,21 @@
 import { useCallback } from "react"
 import { CalendarX2, Check, Copy } from "lucide-react"
-import { CopyStateStore } from "./CopyState.store"
-import { clipboardAdapter, timerAdapter } from "../../adapters"
+import { useCopyFeedback } from "../../stores/copyFeedbackStore"
 import { runDetached } from "../../lib/runDetached"
-import type { ProcessedCronCommandErrorMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronCommandErrorMessage
+  message: TranscriptMessageOf<"cron_command_error">
 }
 
 export function CronCommandErrorMessage({ message }: Props) {
-  return (
-    <CopyStateStore.Provider init={undefined}>
-      <CronCommandErrorMessageInner message={message} />
-    </CopyStateStore.Provider>
-  )
-}
-
-function CronCommandErrorMessageInner({ message }: Props) {
-  const copied = CopyStateStore.useScopedStore((s) => s.copied)
-  const setCopied = CopyStateStore.useScopedStore((s) => s.setCopied)
+  const { copied, copy } = useCopyFeedback()
   const suggestion = message.suggestion
 
-  const copySuggestion = useCallback(async () => {
+  const handleCopy = useCallback(() => {
     if (suggestion === undefined) return
-    await clipboardAdapter.writeText(suggestion)
-    setCopied(true)
-    timerAdapter.setTimeout(() => setCopied(false), 2000)
-  }, [suggestion, setCopied])
-  const handleCopy = useCallback(() => { runDetached("copy cron fix", copySuggestion()) }, [copySuggestion])
+    runDetached("copy cron fix", copy(suggestion))
+  }, [copy, suggestion])
 
   return (
     <div className="bg-destructive/10 px-4 py-3">

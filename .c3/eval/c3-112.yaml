@@ -9,9 +9,7 @@ code:
   - src/client/app/LoopProgressSection.test.tsx
   - src/client/app/LoopProgressSection.tsx
   - src/client/app/chatNavigator.ts
-  - src/client/app/useRightSidebarToggleAnimation.ts
   - src/client/app/useStickyChatFocus.ts
-  - src/client/app/useTerminalToggleAnimation.ts
   - src/client/components/messages/LoopDisarmedMessage.test.tsx
   - src/client/components/messages/LoopDisarmedMessage.tsx
   - src/client/components/panes/PageTabContent.tsx

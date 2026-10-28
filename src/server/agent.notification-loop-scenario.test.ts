@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
-import { AgentCoordinator } from "./agent"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import { AgentCoordinator } from "./agent-coordinator"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { TranscriptEntry, SlashCommand } from "../shared/types"
 
 function createLoopStore() {
@@ -19,7 +19,7 @@ function createLoopStore() {
   return {
     chat,
     messages: [] as TranscriptEntry[],
-    autoContinueEvents: [] as AutoContinueEvent[],
+    autoContinueEvents: [] as ChatAutomationEvent[],
     getChat: (chatId: string) => (chatId === "chat-loop" ? chat : null),
     requireChat: (chatId: string) => {
       if (chatId !== "chat-loop") throw new Error("Chat not found")
@@ -63,7 +63,7 @@ function createLoopStore() {
     async recordTurnFinished() {},
     async recordTurnFailed() {},
     async recordTurnCancelled() {},
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents (chatId: string) {
@@ -84,6 +84,7 @@ function createLoopStore() {
     async createChat() { return chat },
     async forkChat() { return chat },
     async recordSessionCommandsLoaded() {},
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

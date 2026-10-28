@@ -3,7 +3,6 @@ import type { EditorConfig, LexicalEditor, LexicalNode, SerializedLexicalNode, S
 import type { ReactNode } from "react"
 import { DecoratorNode, $applyNodeReplacement } from "lexical"
 import { domAdapter } from "../../../adapters/dom.adapter"
-import { LocalFileLinkCard } from "../../messages/LocalFileLinkCard"
 
 
 export type CreateLocalFileLinkNodeArgs = {
@@ -96,13 +95,14 @@ export class LocalFileLinkNode extends DecoratorNode<ReactNode> {
   }
 
 
-  decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
-    const linkText =
-      this.__line !== undefined
-        ? `${this.__path}:${this.__line}${this.__column !== undefined ? `:${this.__column}` : ""}`
-        : undefined
+  toHref(): string {
+    if (this.__line === undefined) return this.__path
+    const column = this.__column === undefined ? "" : `:${this.__column}`
+    return `${this.__path}:${this.__line}${column}`
+  }
 
-    return <LocalFileLinkCard path={this.__path} linkText={linkText} />
+  decorate(_editor: LexicalEditor, _config: EditorConfig): ReactNode {
+    return this.toHref()
   }
 }
 

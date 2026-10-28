@@ -2,12 +2,11 @@ import { describe, expect, test, vi } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
-import type { AskUserQuestionAnswerMap, AskUserQuestionItem } from "../../../shared/types"
+import type { AskUserQuestionAnswerMap, AskUserQuestionItem, HydratedToolCall } from "../../../shared/types"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
 import { TranscriptRenderOptionsProvider } from "./render-context"
-import type { ProcessedToolCall } from "./types"
 
-type AskMessage = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+type AskMessage = Extract<HydratedToolCall, { toolKind: "ask_user_question" }>
 
 function singleQuestion(): AskUserQuestionItem[] {
   return [{

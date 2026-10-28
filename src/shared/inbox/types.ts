@@ -1,22 +1,15 @@
 import type { JsonValue } from "../json"
 import type { BusSource } from "../service-bus/envelope"
+import { oneOf } from "../vocab"
 
-export type InboxThreadState = "new" | "needs_you" | "fyi" | "handled" | "replied" | "archived"
+export const INBOX_THREAD_STATES = ["new", "needs_you", "fyi", "handled", "replied", "archived"] as const
+export type InboxThreadState = (typeof INBOX_THREAD_STATES)[number]
 
-export type InboxVerdict = "needs_you" | "fyi" | "handled"
+export const INBOX_VERDICTS = ["needs_you", "fyi", "handled"] as const
+export type InboxVerdict = (typeof INBOX_VERDICTS)[number]
 
-export const INBOX_VERDICTS: readonly InboxVerdict[] = ["needs_you", "fyi", "handled"]
-
-export const INBOX_THREAD_STATES: readonly InboxThreadState[] = [
-  "new",
-  "needs_you",
-  "fyi",
-  "handled",
-  "replied",
-  "archived",
-]
-
-export type InboxSourceKind = "webhook" | "mcp"
+export const INBOX_SOURCE_KINDS = ["webhook", "mcp"] as const
+export type InboxSourceKind = (typeof INBOX_SOURCE_KINDS)[number]
 
 export interface InboundMessage {
   id: string
@@ -87,10 +80,4 @@ export const INBOX_UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 export const INBOX_PREVIEW_MAX_CHARS = 160
 export const INBOX_THREAD_MAX_MESSAGES = 50
 
-export function isInboxVerdict(value: string): value is InboxVerdict {
-  return INBOX_VERDICTS.some((verdict) => verdict === value)
-}
-
-export function isInboxThreadState(value: string): value is InboxThreadState {
-  return INBOX_THREAD_STATES.some((state) => state === value)
-}
+export const isInboxVerdict = oneOf(INBOX_VERDICTS)

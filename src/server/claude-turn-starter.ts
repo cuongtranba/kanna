@@ -1,10 +1,20 @@
 import type { AgentProvider } from "../shared/types"
-import { isCodexReasoningEffort, isEndpointProvider, providerUsesSdkSession } from "../shared/types"
+import {
+  isCodexReasoningEffort,
+  isEndpointProvider,
+  providerUsesSdkSession,
+  DEFAULT_CHAT_TITLE,
+  isUntitledChat,
+} from "../shared/types"
 import { isClaudeSdkProvider } from "./provider-catalog"
 import type { ChatRecord } from "./events"
 import type { ActiveTurn, StartingTurn } from "./claude-session-state"
 import type { JsonValue } from "../shared/json"
-import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
+import {
+  interruptWithGrace,
+  type HarnessTurn,
+  type HarnessToolRequest,
+} from "./harness-types"
 import type {
   StartTurnAfterTurnStartedCtx,
   StartTurnDeps,
@@ -20,7 +30,9 @@ import { decideMentionedProjectBindings } from "./project-mention-attach"
 import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
+import { appendTurnError } from "./claude-turn-outcome"
+import { errorMessage, projectNotFound } from "../shared/errors"
 import { logClaudeSteer, logSendToStartingProfile } from "./claude-steer-log"
 import { log } from "../shared/log"
 import { withSpan } from "./observability"
@@ -138,7 +150,7 @@ async function startTurnForChatInner(
 
   const loadExistingMessages = () => deps.store.getRecentRawEntries(args.chatId, PRIMER_TAIL_LIMIT)
   const shouldGenerateTitle = args.appendUserPrompt
-    && chat.title === "New Chat"
+    && isUntitledChat(chat.title)
     && !loadExistingMessages().some((entry) => entry.kind === "user_prompt")
   const optimisticTitle = shouldGenerateTitle ? fallbackTitleFromMessage(args.content) : null
 
@@ -152,7 +164,7 @@ async function startTurnForChatInner(
 
   const project = deps.store.getProject(chat.projectId)
   if (!project) {
-    throw new Error("Project not found")
+    throw projectNotFound()
   }
 
   await attachMentionedProjects(deps, args, chat, project.localPath)
@@ -215,7 +227,7 @@ async function startTurnForChatInner(
       appendedUserMessageId,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     const isOAuthRefusal = error instanceof OAuthPoolUnavailableError
     log.error(`${LOG_PREFIX} startTurnForChat failed after turn_started`, {
       chatId: args.chatId,
@@ -228,20 +240,11 @@ async function startTurnForChatInner(
     })
     if (isOAuthRefusal) {
       try {
-        await deps.store.appendMessage(
-          args.chatId,
-          timestamped({
-            kind: "result",
-            subtype: "error",
-            isError: true,
-            durationMs: 0,
-            result: message,
-          })
-        )
+        await appendTurnError(deps.store, args.chatId, message)
       } catch (appendErr) {
         log.error(`${LOG_PREFIX} append refusal result entry failed`, {
           chatId: args.chatId,
-          appendErr: appendErr instanceof Error ? appendErr.message : String(appendErr),
+          appendErr: errorMessage(appendErr),
         })
       }
     }
@@ -250,7 +253,7 @@ async function startTurnForChatInner(
     } catch (recordErr) {
       log.error(`${LOG_PREFIX} recordTurnFailed also failed`, {
         chatId: args.chatId,
-        recordErr: recordErr instanceof Error ? recordErr.message : String(recordErr),
+        recordErr: errorMessage(recordErr),
       })
     }
     deps.activeTurns.delete(args.chatId)
@@ -268,7 +271,7 @@ async function startTurnAfterTurnStarted(
 ): Promise<void> {
   const { args, starting, chat, project, loadExistingMessages, shouldGenerateTitle, optimisticTitle, appendedUserMessageId } = ctx
   if (shouldGenerateTitle) {
-    void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? "New Chat")
+    void deps.generateTitleInBackground(args.chatId, args.content, project.localPath, optimisticTitle ?? DEFAULT_CHAT_TITLE)
   }
 
   const onToolRequest = async (request: HarnessToolRequest): Promise<JsonValue> => {
@@ -305,7 +308,7 @@ async function startTurnAfterTurnStarted(
     ? withBeaconMentions(typedPromptText, args.content, deps.getBeacons(), deps.isBeaconOnline)
     : typedPromptText
   const primer = shouldPrime
-    ? buildHistoryPrimer(loadExistingMessages(), targetProvider, userPromptText)
+    ? buildHistoryPrimer(loadExistingMessages(), userPromptText)
     : null
   const promptContent = primer ?? userPromptText
 
@@ -402,13 +405,7 @@ async function startTurnAfterTurnStarted(
       chatId: args.chatId,
       provider: args.provider,
     })
-    try {
-      await Promise.race([
-        turn.interrupt(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ])
-    } catch {
-    }
+    await interruptWithGrace(turn)
     turn.close()
     return
   }
@@ -432,6 +429,7 @@ async function startTurnAfterTurnStarted(
     profilingStartedAt: args.profile?.startedAt,
     waitStartedAt: null,
     cronRun: args.cronRun,
+    compactionTurn: args.compactionTurn,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
   }
   deps.activeTurns.set(args.chatId, active)
@@ -492,10 +490,7 @@ async function startTurnAfterTurnStarted(
     if (!session) {
       throw new Error("SDK session was not initialized")
     }
-    const promptSeq = session.nextPromptSeq + 1
-    session.nextPromptSeq = promptSeq
-    session.pendingPromptSeqs.push(promptSeq)
-    session.cancelledResultPending = 0
+    const promptSeq = session.beginPrompt()
     active.claudePromptSeq = promptSeq
     logClaudeSteer("claude_prompt_sent", {
       chatId: args.chatId,

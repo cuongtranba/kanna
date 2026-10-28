@@ -2,15 +2,17 @@ import { memo } from "react"
 import { Brain, ChevronRight } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
-import { ThinkingBlockStore } from "./ThinkingBlock.store"
+import { createToggleStore } from "../../lib/createToggleStore"
+
+const ThinkingBlockStore = createToggleStore("ThinkingBlock")
 
 interface Props {
   content: string
 }
 
 function ThinkingBlockInner({ content }: Props) {
-  const expanded = ThinkingBlockStore.useScopedStore((s) => s.expanded)
-  const setExpanded = ThinkingBlockStore.useScopedStore((s) => s.setExpanded)
+  const expanded = ThinkingBlockStore.useScopedStore((s) => s.value)
+  const setExpanded = ThinkingBlockStore.useScopedStore((s) => s.set)
   const trimmed = content.trim()
   if (trimmed.length === 0) return null
 
@@ -41,7 +43,7 @@ function ThinkingBlockInner({ content }: Props) {
 }
 
 export const ThinkingBlock = memo(({ content }: Props) => (
-  <ThinkingBlockStore.Provider init={undefined}>
+  <ThinkingBlockStore.Provider init={false}>
     <ThinkingBlockInner content={content} />
   </ThinkingBlockStore.Provider>
 ))

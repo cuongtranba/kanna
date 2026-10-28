@@ -1,7 +1,7 @@
 ---
 id: c3-112
 c3-version: 4
-c3-seal: 296949f690069e436036180b97ec186296f0049f193a8145bfc3deee7f98ab78
+c3-seal: 326051bba83d0f6c69d8165e9efcb46c0275a257f4bf04572dacf0d29a9636f8
 title: chat-page
 type: component
 category: feature
@@ -76,7 +76,6 @@ Composes the workspace route: transcript viewport, input dock, embedded terminal
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | Sticky focus regression | Scroll-anchor logic edit | User loses place during streaming | bun run test src/client/app/ChatPage.test.ts + manual streaming smoke |
-| Layout animation jank | Toggle animation timing edit | Visible flash on terminal toggle | bun run test src/client/app/useTerminalToggleAnimation.ts adjacent tests |
 | Tab falls back to its kind's label | Titling a tab from the active project's snapshots, or a board from the project's board list alone | A board opened by URL reads "Board"; a chat or terminal tab reads its fallback after the user changes project | bun test --conditions production src/client/app/ChatPage/tabPresentationContext.test.ts |
 | Switch key leaks into the terminal | Moving the tab-switch listener off the window capture phase | The shell receives ESC-backtick while the tab changes | bun test --conditions production src/client/components/panes/TabSwitcher.test.tsx |
 | Page tab shows another tab page | A page reading useParams, or a nested Routes with a location prop, instead of props resolved from the tab own path | A Settings or Workflows tab in a split pane renders the section or chat of whichever tab owns the URL | bun test --conditions production src/client/app/SettingsPage.route.test.tsx src/client/app/ChatPage/ChatPage.tabs.test.tsx |

@@ -8,13 +8,8 @@ import { ChatNavbar } from "../../components/chat-ui/ChatNavbar"
 import { Card, CardContent } from "../../components/ui/card"
 import { computeSessionTotals, deriveLatestContextWindowSnapshot } from "../../lib/contextWindow"
 import { getResolvedKeybindings } from "../../lib/keybindings"
-import {
-  DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE,
-  useRightSidebarStore,
-} from "../../stores/rightSidebarStore"
-import { DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "../../stores/terminalLayoutStore"
+import { useProjectPanelVisibility } from "../../stores/projectPanelVisibility"
 import { selectEditorCommandTemplate, selectEditorPreset, useAppSettingsStore } from "../../stores/appSettingsStore"
-import { TERMINAL_TOGGLE_ANIMATION_DURATION_MS } from "../terminalToggleAnimation"
 import { useStickyChatFocus } from "../useStickyChatFocus"
 import { usePushFocus } from "../usePushFocus"
 import { useComposerFocusRequest } from "./useComposerFocusRequest"
@@ -30,10 +25,10 @@ import {
   hasFileDragTypes,
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
-  gitInitializeKey,
-  projectOpenExternalKey,
+  PANEL_TOGGLE_SETTLE_MS,
   scrollTranscriptListToEnd,
-} from "./utils"
+} from "./transcriptViewport"
+import { gitInitializeKey, projectOpenExternalKey } from "./projectActionKeys"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
@@ -43,8 +38,10 @@ import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { runDetached } from "../../lib/runDetached"
-import { describeShareFailure, surfaceCommandError } from "./chatCommandFeedback"
+import { describeShareFailure } from "../../components/share/describeShareFailure"
+import { surfaceCommandError, withCommandFeedback } from "../../lib/commandFeedback"
 import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
+import { isUntitledChat } from "../../../shared/core-types"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
 const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
@@ -207,16 +204,10 @@ export function ChatTabContent({
   }, [setToolGroupExpanded])
 
   const projectId = state.activeProjectId
-  const projectTerminalLayout = useTerminalLayoutStore((store) => (projectId ? store.projects[projectId] : undefined))
-  const terminalLayout = projectTerminalLayout ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
-  const projectRightSidebarVisibility = useRightSidebarStore((store) => (projectId ? store.projects[projectId] : undefined))
-  const rightSidebarVisibility = projectRightSidebarVisibility ?? DEFAULT_RIGHT_SIDEBAR_VISIBILITY_STATE
+  const { showTerminalPane, showRightSidebar } = useProjectPanelVisibility(projectId)
   const editorPreset = useAppSettingsStore(selectEditorPreset)
   const editorCommandTemplate = useAppSettingsStore(selectEditorCommandTemplate)
 
-  const hasTerminals = terminalLayout.terminals.length > 0
-  const showTerminalPane = Boolean(projectId && terminalLayout.isVisible && hasTerminals)
-  const showRightSidebar = Boolean(projectId && rightSidebarVisibility.isVisible)
 
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(state.keybindings), [state.keybindings])
   const contextWindowSnapshot = useMemo(
@@ -236,7 +227,8 @@ export function ChatTabContent({
     [state.messages],
   )
 
-  const showEmptyState = state.messages.length === 0 && state.runtime?.title === "New Chat"
+  const runtimeTitle = state.runtime?.title
+  const showEmptyState = state.messages.length === 0 && runtimeTitle !== undefined && isUntitledChat(runtimeTitle)
 
 
   const clearShowScrollTimeout = useCallback(() => {
@@ -297,70 +289,64 @@ export function ChatTabContent({
   }, [])
 
 
+  const activeChatId = state.activeChatId
+  const socket = state.socket
+
   const handleAutoContinueAccept = useCallback(async (scheduleId: string, scheduledAt: number) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.accept", chatId, scheduleId, scheduledAt }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.accept", chatId: activeChatId, scheduleId, scheduledAt }))
+  }, [activeChatId, socket])
 
   const handleAutoContinueReschedule = useCallback(async (scheduleId: string, scheduledAt: number) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.reschedule", chatId, scheduleId, scheduledAt }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.reschedule", chatId: activeChatId, scheduleId, scheduledAt }))
+  }, [activeChatId, socket])
 
   const handleCronRemove = useCallback((jobId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
+    if (!activeChatId) return
     runPendingAction(
-      pendingActionKey("cron.remove", jobId),
-      () => surfaceCommandError(() => state.socket.command({ type: "cron.remove", chatId, jobId })),
+      pendingActionKey("cron.remove", activeChatId, jobId),
+      () => surfaceCommandError(() => socket.command({ type: "cron.remove", chatId: activeChatId, jobId })),
     )
-  }, [state.activeChatId, state.socket])
+  }, [activeChatId, socket])
 
   const handleAutoContinueCancel = useCallback(async (scheduleId: string) => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await surfaceCommandError(() => state.socket.command({ type: "autoContinue.cancel", chatId, scheduleId }))
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.cancel", chatId: activeChatId, scheduleId }))
+  }, [activeChatId, socket])
 
 
   const sendTunnelAccept = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.accept", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.accept", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
   const sendTunnelStop = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.stop", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.stop", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
   const sendTunnelRetry = useCallback(async (tunnelId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    await state.socket.command({ type: "tunnel.retry", chatId, tunnelId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return
+    await withCommandFeedback(() => socket.command({ type: "tunnel.retry", chatId: activeChatId, tunnelId }))
+  }, [activeChatId, socket])
 
 
   const handleCancelSubagentRun = useCallback(async (chatId: string, runId: string) => {
-    await surfaceCommandError(() => state.socket.command({ type: "chat.cancelSubagentRun", chatId, runId }))
-  }, [state.socket])
+    await surfaceCommandError(() => socket.command({ type: "chat.cancelSubagentRun", chatId, runId }))
+  }, [socket])
 
-  const workflowRuns = useWorkflowsStore(useShallow(selectRuns(state.activeChatId ?? "")))
+  const workflowRuns = useWorkflowsStore(useShallow(selectRuns(activeChatId ?? "")))
 
   const handleGetWorkflowRunDetail = useCallback(async (runId: string): Promise<WorkflowRun | null> => {
-    const chatId = state.activeChatId
-    if (!chatId) return null
-    return state.socket.command({ type: "workflows.getRun", chatId, runId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return null
+    return socket.command({ type: "workflows.getRun", chatId: activeChatId, runId })
+  }, [activeChatId, socket])
 
   const handleGetSubagentTranscript = useCallback(async (agentId: string): Promise<TranscriptEntry[]> => {
-    const chatId = state.activeChatId
-    if (!chatId) return []
-    return state.socket.command({ type: "subagents.getRun", chatId, agentId })
-  }, [state.activeChatId, state.socket])
+    if (!activeChatId) return []
+    return socket.command({ type: "subagents.getRun", chatId: activeChatId, agentId })
+  }, [activeChatId, socket])
 
 
   const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
@@ -451,13 +437,12 @@ export function ChatTabContent({
   const composePending = usePendingAction(COMPOSE_CHAT_KEY)
   const silentPending = usePendingAction(pendingActionKey("push.setChatMute", state.activeChatId ?? ""))
   const handleToggleSilent = useCallback(() => {
-    const chatId = state.activeChatId
-    if (!chatId) return
+    if (!activeChatId) return
     runPendingAction(
-      pendingActionKey("push.setChatMute", chatId),
-      () => surfaceCommandError(() => state.socket.command({ type: "push.setChatMute", chatId, muted: !isSilent })),
+      pendingActionKey("push.setChatMute", activeChatId),
+      () => surfaceCommandError(() => socket.command({ type: "push.setChatMute", chatId: activeChatId, muted: !isSilent })),
     )
-  }, [state.activeChatId, state.socket, isSilent])
+  }, [activeChatId, socket, isSilent])
 
   const openExternalPending = usePendingAction(projectOpenExternalKey(projectId))
   const rightSidebarPending = usePendingAction(gitInitializeKey(projectId))
@@ -467,7 +452,6 @@ export function ChatTabContent({
   }, [projectId, stateHandleOpenExternal])
 
   const stateHandleCancel = state.handleCancel
-  const activeChatId = state.activeChatId
   const handleCancel = useCallback(() => {
     runPendingAction(pendingActionKey("chat.cancel", activeChatId ?? ""), () => stateHandleCancel())
   }, [activeChatId, stateHandleCancel])
@@ -491,15 +475,14 @@ export function ChatTabContent({
   }, [addShare, state.socket])
 
   const handleShareRevoke = useCallback(async (tokenId: string): Promise<void> => {
-    const chatId = state.activeChatId
-    if (!chatId) return
-    const reply = await state.socket.command({
+    if (!activeChatId) return
+    const reply = await socket.command({
       type: "share.revoke",
       payload: { tokenId },
     })
     if (!reply.ok) throw new Error(describeShareFailure(reply.error))
-    removeShare(chatId, tokenId)
-  }, [removeShare, state.activeChatId, state.socket])
+    removeShare(activeChatId, tokenId)
+  }, [removeShare, activeChatId, socket])
 
 
   useStickyChatFocus({
@@ -547,7 +530,7 @@ export function ChatTabContent({
     })
     const timeoutId = timer.setTimeout(() => {
       syncIsAtEndFromList()
-    }, TERMINAL_TOGGLE_ANIMATION_DURATION_MS)
+    }, PANEL_TOGGLE_SETTLE_MS)
 
     return () => {
       timer.cancelAnimationFrame(frameId)
@@ -611,11 +594,6 @@ export function ChatTabContent({
           rightSidebarPending={rightSidebarPending}
           onOpenExternal={handleOpenExternal}
           openExternalPending={openExternalPending}
-          editorPreset={editorPreset}
-          editorCommandTemplate={editorCommandTemplate}
-          platform={state.localProjects?.machine.platform}
-          finderShortcut={resolvedKeybindings.bindings.openInFinder}
-          editorShortcut={resolvedKeybindings.bindings.openInEditor}
           terminalShortcut={resolvedKeybindings.bindings.toggleEmbeddedTerminal}
           rightSidebarShortcut={resolvedKeybindings.bindings.toggleRightSidebar}
           branchName={state.chatDiffSnapshot?.branchName}

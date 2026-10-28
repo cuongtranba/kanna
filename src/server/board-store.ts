@@ -16,7 +16,6 @@ import type {
   ConflictResolution,
   FieldValue,
   OutboxOp,
-  ProviderId,
   RemoteSourceRef,
   SyncBinding,
   SyncConflict,
@@ -162,7 +161,7 @@ export interface BoardStore {
   deleteTemplate(templateId: string): void
 
   listBindings(boardId: string): SyncBinding[]
-  findBindingsBySource(providerId: ProviderId, sourceRef: RemoteSourceRef): SyncBinding[]
+  findBindingsBySource(sourceRef: RemoteSourceRef): SyncBinding[]
   upsertBinding(input: UpsertBindingInput): SyncBinding
   deleteBinding(bindingId: string): void
   setBindingCursor(bindingId: string, cursor: string | null, lastPulledAt: number): void
@@ -180,6 +179,24 @@ export interface BoardStore {
   close(): void
 }
 
+export type BoardSyncStore = Pick<
+  BoardStore,
+  | "getCard"
+  | "listColumns"
+  | "listCardPage"
+  | "listBindings"
+  | "setBindingCursor"
+  | "getSyncLinkByExternal"
+  | "getSyncLinkByCard"
+  | "upsertSyncLink"
+  | "enqueueOutbox"
+  | "dueOutbox"
+  | "countHeldOutbox"
+  | "settleOutbox"
+  | "deferOutbox"
+  | "recordConflict"
+>
+
 export interface ProjectBoardPurge {
   readonly touchedBoards: readonly { readonly boardId: string; readonly owner: BoardOwnerRef }[]
   readonly worktreePaths: readonly string[]
@@ -187,7 +204,6 @@ export interface ProjectBoardPurge {
 
 export interface UpsertBindingInput {
   boardId: string
-  providerId: ProviderId
   sourceRef: RemoteSourceRef
   direction: SyncDirection
   allowAgentPush: boolean
@@ -251,13 +267,8 @@ export function validateCardContent(content: CardContent, fields: readonly Field
   return problems
 }
 
-export function cardBranchName(cardId: string, title: string, externalRef: string | null): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48)
-    .replace(/-+$/g, "")
-  const reference = externalRef ?? cardId.slice(0, 8)
-  return slug ? `card/${reference}-${slug}` : `card/${reference}`
+export function requireText(noun: string, field: "title" | "name" | "body", value: string): void {
+  if (value.trim() === "") {
+    throw new BoardStoreError("invalid_input", `a ${noun} needs a ${field}`)
+  }
 }

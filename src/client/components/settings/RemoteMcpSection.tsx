@@ -8,19 +8,18 @@ import type { KannaState } from "../../app/useKannaState"
 import { clipboardAdapter } from "../../adapters/clipboard.adapter"
 import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
-import { timerAdapter } from "../../adapters/timer.adapter"
 import { runDetached } from "../../lib/runDetached"
 import { selectRemoteMcpSettings, useAppSettingsStore } from "../../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useRemoteMcpSectionStore } from "../../stores/remoteMcpSectionStore"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { copyWithFeedback, useCopied } from "../../stores/copyFeedbackStore"
+import { useAuthStatusStore } from "../../stores/authStatusStore"
 import { errorMessage } from "../../../shared/errors"
 import { buildRemoteMcpSetupSnippets, type RemoteMcpSetupSnippet } from "../../../shared/remote-mcp/setup-snippets"
 import { normalizeRemoteMcpPublicUrl } from "../../../shared/settings/remote-mcp"
 
 const ENABLED_KEY = pendingActionKey("settings.remoteMcp", "enabled")
 const PUBLIC_URL_KEY = pendingActionKey("settings.remoteMcp", "publicUrl")
-const COPIED_RESET_MS = 2000
 
 const ENABLED_OPTIONS = [
   { value: "enabled" as const, label: "Enabled" },
@@ -36,13 +35,12 @@ function originOf(href: string): string {
 }
 
 function SnippetCard({ snippet }: { snippet: RemoteMcpSetupSnippet }) {
-  const copied = useRemoteMcpSectionStore((s) => s.copiedSnippetId === snippet.id)
-  const setCopiedSnippetId = useRemoteMcpSectionStore((s) => s.setCopiedSnippetId)
-  const copy = useCallback(async () => {
-    await clipboardAdapter.writeText(snippet.snippet)
-    setCopiedSnippetId(snippet.id)
-    timerAdapter.setTimeout(() => setCopiedSnippetId(null), COPIED_RESET_MS)
-  }, [snippet.id, snippet.snippet, setCopiedSnippetId])
+  const copyKey = pendingActionKey("remoteMcp.copySnippet", snippet.id)
+  const copied = useCopied(copyKey)
+  const copy = useCallback(
+    () => copyWithFeedback(copyKey, () => clipboardAdapter.writeText(snippet.snippet)),
+    [copyKey, snippet.snippet],
+  )
 
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card/30 p-3">
@@ -69,7 +67,7 @@ function SnippetCard({ snippet }: { snippet: RemoteMcpSetupSnippet }) {
 
 export function RemoteMcpSection({ state, dom = domAdapter }: { state: Pick<KannaState, "handleWriteAppSettings">; dom?: DomPort }) {
   const settings = useAppSettingsStore(selectRemoteMcpSettings)
-  const authEnabled = useSettingsPageStore((s) => s.authEnabled)
+  const authEnabled = useAuthStatusStore((s) => s.authEnabled)
   const draft = useRemoteMcpSectionStore((s) => s.publicUrlDraft)
   const setDraft = useRemoteMcpSectionStore((s) => s.setPublicUrlDraft)
   const error = useRemoteMcpSectionStore((s) => s.error)

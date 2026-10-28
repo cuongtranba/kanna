@@ -1,6 +1,6 @@
-export const FOCUS_FALLBACK_IGNORE_ATTRIBUTE = "data-focus-fallback-ignore"
+import { FOCUS_FALLBACK_IGNORE_ATTRIBUTE } from "../lib/focusOverlay"
+
 export const ALLOW_FOCUS_RETAIN_ATTRIBUTE = "data-allow-focus-retain"
-export const RESTORE_CHAT_INPUT_FOCUS_EVENT = "kanna:restore-chat-input-focus"
 export const CHAT_INPUT_ATTRIBUTE = "data-chat-input"
 export const CHAT_SELECTION_ZONE_ATTRIBUTE = "data-chat-selection-zone"
 

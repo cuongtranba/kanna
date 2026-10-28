@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import { join } from "node:path"
-import { contrastBetween, compositeOver, oklchLuminance } from "../../shared/design/contrast"
+import { contrastRatio, compositeOver, oklchLuminance } from "../../shared/design/contrast"
 import { parseTokens } from "../../shared/design/tokens"
 import { STATUS_PILL_CLASS, TONE_PAIRINGS } from "../../shared/design/tone-pairings"
 
@@ -21,7 +21,7 @@ function measuredContrast(pairing: { fg: string; bg: string; alpha: number; base
   if (!base) throw new Error(`Token not found in ${theme}: --${pairing.base}`)
   const fgLum = oklchLuminance(fg)
   const bgLum = compositeOver(bg, base, pairing.alpha)
-  return contrastBetween(fgLum, bgLum)
+  return contrastRatio(fgLum, bgLum)
 }
 
 describe("TONE_PAIRINGS — WCAG AA (4.5:1) in both themes", () => {

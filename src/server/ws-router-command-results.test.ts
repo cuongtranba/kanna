@@ -72,7 +72,7 @@ async function createRouterOverRepo() {
   await store.initialize()
   const project = await store.openProject(repo.dir)
   const chat = await store.createChat(project.id)
-  const router = createRouterOver(store, { diffStore: new DiffStore(repo.dir) })
+  const router = createRouterOver(store, { diffStore: new DiffStore() })
   return { repo, router, store, chatId: chat.id, projectId: project.id }
 }
 

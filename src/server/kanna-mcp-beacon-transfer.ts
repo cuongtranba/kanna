@@ -4,11 +4,12 @@ import type { BeaconRequest } from "../shared/beacon-protocol"
 import { SHA256_HEX } from "../shared/beacon-transfer"
 import { errorMessage, isRecord } from "../shared/errors"
 import { isJsonObject, type JsonValue } from "../shared/json"
+import type { BeaconToolArgs } from "../shared/beacon-tool-request"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { BeaconDispatchOptions, BeaconDispatchOutcome } from "./kanna-mcp-beacon"
 import type { BeaconTransferFiles } from "./beacon-transfer-files"
 import type { BeaconTransferTickets, TicketEndReason, TransferTicket } from "./beacon-transfer-tickets"
-import { ok, fail, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
+import { ok, fail, type KannaToolFactory, type ToolInput, type ToolResult } from "./kanna-mcp-tool"
 import { pathMatchesDeny } from "./permission-gate"
 
 export interface BeaconTransferToolContext {
@@ -18,19 +19,28 @@ export interface BeaconTransferToolContext {
   files: BeaconTransferFiles
   maxPullBytes: () => number | undefined
   chatPolicy: ChatPermissionPolicy | undefined
-  resolveBeacon: (input: ToolArgs) => BeaconConfig | string
-  authorize: (beacon: BeaconConfig, name: string, input: ToolArgs) => Promise<string | null>
+  resolveBeacon: (input: { beaconId: string }) => BeaconConfig | string
+  authorize: (beacon: BeaconConfig, name: string, input: BeaconToolArgs) => Promise<string | null>
   dispatch: (beaconId: string, request: BeaconRequest, options: BeaconDispatchOptions) => Promise<BeaconDispatchOutcome>
   describeBeacon: (beacon: BeaconConfig) => string
   captureBytes: number | undefined
 }
 
-export type BeaconTransferToolFactory<TTool, TExtra> = (
-  name: string,
-  description: string,
-  schema: Record<string, z.ZodType<JsonValue | undefined>>,
-  handler: (input: ToolArgs, extra?: TExtra) => Promise<ToolResult>,
-) => TTool
+export const beaconIdField = z.string().min(1).describe("Id of the beacon, from beacon_list")
+
+const PULL_SHAPE = {
+  beaconId: beaconIdField,
+  path: z.string().min(1),
+  dest: z.string().min(1).optional(),
+  overwrite: z.boolean().optional(),
+}
+
+const PUSH_SHAPE = {
+  beaconId: beaconIdField,
+  source: z.string().min(1),
+  path: z.string().min(1),
+  overwrite: z.boolean().optional(),
+}
 
 const PULL_DESCRIPTION =
   "Copy ONE file from a beacon (a paired remote machine) into this project, streamed straight to disk and verified with "
@@ -75,11 +85,6 @@ function interruptOnEnd(tickets: BeaconTransferTickets, token: string, signal: A
   }
 }
 
-function readText(input: ToolArgs, key: string): string | undefined {
-  const value = input[key]
-  return typeof value === "string" && value !== "" ? value : undefined
-}
-
 function formatCount(bytes: number): string {
   return bytes.toLocaleString("en-US")
 }
@@ -99,7 +104,7 @@ function parseReport(result: JsonValue | undefined): ReportedTransfer | null {
 
 export function buildBeaconTransferTools<TTool, TExtra>(
   ctx: BeaconTransferToolContext,
-  tool: BeaconTransferToolFactory<TTool, TExtra>,
+  tool: KannaToolFactory<TTool, TExtra>,
 ): TTool[] {
   const { tickets, files } = ctx
 
@@ -123,15 +128,14 @@ export function buildBeaconTransferTools<TTool, TExtra>(
     return report
   }
 
-  async function pull(input: ToolArgs, extra?: TExtra): Promise<ToolResult> {
+  async function pull(input: ToolInput<typeof PULL_SHAPE>, extra?: TExtra): Promise<ToolResult> {
     const beacon = ctx.resolveBeacon(input)
     if (typeof beacon === "string") return fail(beacon)
-    const beaconPath = readText(input, "path")
-    if (beaconPath === undefined) return fail(`Beacon ${ctx.describeBeacon(beacon)}: beacon_pull is missing a required argument`)
+    const beaconPath = input.path
     const overwrite = input.overwrite === true
     const destination = await files.resolvePullDestination({
       projectRoot: ctx.projectRoot,
-      dest: readText(input, "dest"),
+      dest: input.dest,
       beaconPath,
       overwrite,
     })
@@ -178,14 +182,11 @@ export function buildBeaconTransferTools<TTool, TExtra>(
     }
   }
 
-  async function push(input: ToolArgs, extra?: TExtra): Promise<ToolResult> {
+  async function push(input: ToolInput<typeof PUSH_SHAPE>, extra?: TExtra): Promise<ToolResult> {
     const beacon = ctx.resolveBeacon(input)
     if (typeof beacon === "string") return fail(beacon)
-    const beaconPath = readText(input, "path")
-    const sourceArg = readText(input, "source")
-    if (beaconPath === undefined || sourceArg === undefined) {
-      return fail(`Beacon ${ctx.describeBeacon(beacon)}: beacon_push is missing a required argument`)
-    }
+    const beaconPath = input.path
+    const sourceArg = input.source
     const overwrite = input.overwrite === true
     const source = await files.resolvePushSource(ctx.projectRoot, sourceArg)
     if (!source.ok) return refusal(beacon, "beacon_push", source.error)
@@ -232,21 +233,8 @@ export function buildBeaconTransferTools<TTool, TExtra>(
     }
   }
 
-  const beaconId = z.string().min(1).describe("Id of the beacon, from beacon_list")
-  const overwrite = z.boolean().optional()
-
   return [
-    tool(
-      "beacon_pull",
-      PULL_DESCRIPTION,
-      { beaconId, path: z.string().min(1), dest: z.string().min(1).optional(), overwrite },
-      pull,
-    ),
-    tool(
-      "beacon_push",
-      PUSH_DESCRIPTION,
-      { beaconId, source: z.string().min(1), path: z.string().min(1), overwrite },
-      push,
-    ),
+    tool("beacon_pull", PULL_DESCRIPTION, PULL_SHAPE, pull),
+    tool("beacon_push", PUSH_DESCRIPTION, PUSH_SHAPE, push),
   ]
 }

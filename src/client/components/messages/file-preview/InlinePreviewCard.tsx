@@ -1,9 +1,8 @@
 import { useCallback, useRef } from "react"
-import type { ChatAttachment } from "../../../../shared/types"
-import { AttachmentFileCard, formatAttachmentSize } from "../AttachmentCard"
-import { classifyAttachmentIcon, friendlyMimeLabel, fetchTextPreview } from "../attachmentPreview"
+import { AttachmentFileCard, FileMetaLabel } from "../AttachmentCard"
+import { describeFile, fetchTextPreview, fileAriaLabel } from "../attachmentPreview"
 import { useViewportFetch } from "./useViewportFetch"
-import type { PreviewSource } from "./types"
+import { attachmentFromPreviewSource, type PreviewSource } from "./types"
 import type { JsonValue } from "../../../../shared/json"
 
 function cachedSnippet(value: JsonValue): string | undefined {
@@ -17,19 +16,8 @@ interface Props {
 }
 
 export function InlinePreviewCard({ source, onOpen, variant }: Props) {
-  const attachmentLike: ChatAttachment = {
-    id: source.id,
-    kind: "file",
-    displayName: source.displayName,
-    mimeType: source.mimeType,
-    size: source.size ?? 0,
-    contentUrl: source.contentUrl,
-    relativePath: source.relativePath ?? "",
-    absolutePath: "",
-  }
-  const iconKind = classifyAttachmentIcon(attachmentLike)
-  const friendlyType = friendlyMimeLabel(iconKind, source.mimeType)
-  const sizeLabel = source.size && source.size > 0 ? formatAttachmentSize(source.size) : null
+  const description = describeFile(source)
+  const { iconKind, friendlyType, sizeLabel } = description
 
   if (iconKind === "image") {
     return (
@@ -64,20 +52,10 @@ export function InlinePreviewCard({ source, onOpen, variant }: Props) {
 
   return (
     <AttachmentFileCard
-      attachment={attachmentLike}
+      attachment={attachmentFromPreviewSource(source)}
       onClick={onOpen}
-      meta={
-        <>
-          {friendlyType}
-          {sizeLabel ? (
-            <>
-              {" · "}
-              <span className="tabular-nums">{sizeLabel}</span>
-            </>
-          ) : null}
-        </>
-      }
-      ariaLabel={`Preview ${source.displayName}, ${friendlyType}${sizeLabel ? `, ${sizeLabel}` : ""}`}
+      meta={<FileMetaLabel description={description} />}
+      ariaLabel={fileAriaLabel("Preview", source.displayName, description)}
     />
   )
 }

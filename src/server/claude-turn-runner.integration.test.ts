@@ -4,7 +4,7 @@ import { runTurn, type RunTurnDeps } from "./claude-turn-runner"
 import { buildHistoryPrimer } from "./history-primer"
 import type { ActiveTurn } from "./claude-session-state"
 import type { HarnessEvent, HarnessTurn } from "./harness-types"
-import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import type { TranscriptEntry } from "../shared/types"
 
 function entry(partial: Partial<TranscriptEntry> & { kind: string }): TranscriptEntry {
   return { _id: crypto.randomUUID(), createdAt: Date.now(), ...partial } as TranscriptEntry
@@ -94,7 +94,7 @@ describe("codex /compact → next turn's context", () => {
   test("the next turn is primed from the summary, not the compacted history", async () => {
     const transcript = await runSummarizeTurn(history, ["THE_CARRIED_SUMMARY"])
 
-    const primer = buildHistoryPrimer(transcript, "codex" as AgentProvider, "keep going")
+    const primer = buildHistoryPrimer(transcript, "keep going")
 
     expect(primer).not.toBeNull()
     expect(primer).toContain("THE_CARRIED_SUMMARY")
@@ -105,7 +105,7 @@ describe("codex /compact → next turn's context", () => {
   test("a compaction that produced no summary leaves the history intact", async () => {
     const transcript = await runSummarizeTurn(history, [])
 
-    const primer = buildHistoryPrimer(transcript, "codex" as AgentProvider, "keep going")
+    const primer = buildHistoryPrimer(transcript, "keep going")
 
     expect(primer).toContain("SECRET_EARLIER_DETAIL")
   })

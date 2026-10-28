@@ -1,19 +1,20 @@
 
 import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, isAutoContinueScheduleEvent, type AutoContinueScheduleEvent, type ChatAutomationEvent } from "./auto-continue/events"
 import { deriveChatSchedules } from "./auto-continue/read-model"
-import type { SendMessageOptions } from "./claude-steer-log"
-import { timestamped } from "./claude-message-normalizer"
-import { addCounter } from "./observability"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
+import { appendTurnError } from "./claude-turn-outcome"
+import { errorMessage } from "../shared/errors"
+import { addCounter, AUTOCONTINUE_FIRED } from "./observability"
 
 
 interface AutoContinueScheduleManager {
-  onEvent(event: AutoContinueEvent): void
+  onEvent(event: AutoContinueScheduleEvent): void
 }
 
 interface AutoContinueCommandStore {
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   getChat(chatId: string): { id: string } | null | undefined
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -30,14 +31,12 @@ export interface AutoContinueCommandDeps {
 
   emitStateChange(chatId: string): void
 
-  enqueueMessage(
+  deliverPrompt(
     chatId: string,
     content: string,
     attachments: ChatAttachment[],
     options?: SendMessageOptions,
   ): Promise<QueuedChatMessage>
-
-  maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
 }
 
 
@@ -49,10 +48,10 @@ export function resolveAutoResumeFor(deps: AutoContinueCommandDeps, chatId: stri
 
 export async function emitAutoContinueEvent(
   deps: AutoContinueCommandDeps,
-  event: AutoContinueEvent,
+  event: ChatAutomationEvent,
 ): Promise<void> {
   await deps.store.appendAutoContinueEvent(event)
-  deps.scheduleManager?.onEvent(event)
+  if (isAutoContinueScheduleEvent(event)) deps.scheduleManager?.onEvent(event)
   deps.emitStateChange(event.chatId)
 }
 
@@ -79,7 +78,7 @@ export async function fireAutoContinue(
   const schedule = getChatSchedule(deps, chatId, scheduleId)
   const promptToReplay = schedule?.prompt ?? "continue"
 
-  const event: AutoContinueEvent = {
+  const event: ChatAutomationEvent = {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_fired",
     timestamp: Date.now(),
@@ -88,21 +87,10 @@ export async function fireAutoContinue(
   }
   try {
     await deps.store.appendAutoContinueEvent(event)
-    await deps.enqueueMessage(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
-    await deps.maybeStartNextQueuedMessage(chatId)
-    addCounter("kanna.autocontinue.fired", 1)
+    await deps.deliverPrompt(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
+    addCounter(AUTOCONTINUE_FIRED, 1)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    await deps.store.appendMessage(
-      chatId,
-      timestamped({
-        kind: "result",
-        subtype: "error",
-        isError: true,
-        durationMs: 0,
-        result: `Auto-continue failed: ${message}`,
-      }),
-    )
+    await appendTurnError(deps.store, chatId, `Auto-continue failed: ${errorMessage(error)}`)
   }
 
   deps.emitStateChange(chatId)

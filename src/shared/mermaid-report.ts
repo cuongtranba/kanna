@@ -1,5 +1,6 @@
 
 import type { MermaidDefect } from "./mermaid-validation"
+import { VALIDATE_MERMAID_TOOL_NAME } from "./tools"
 
 export interface MermaidFailure {
   startLine: number
@@ -25,6 +26,6 @@ export function formatMermaidCorrection(failures: readonly MermaidFailure[]): st
   return [
     `${String(count)} mermaid ${noun} you just wrote will not render.`,
     ...blocks,
-    "Fix the source and post the corrected diagram. Validate it with `mcp__kanna__validate_mermaid` before you send it.",
+    `Fix the source and post the corrected diagram. Validate it with \`${VALIDATE_MERMAID_TOOL_NAME}\` before you send it.`,
   ].join("\n\n")
 }

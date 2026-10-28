@@ -1,3 +1,5 @@
+import { chatPath } from "../lib/paneTree"
+
 
 export interface ChatNavigatorPort {
   openChat(chatId: string): void
@@ -7,7 +9,7 @@ export interface ChatNavigatorPort {
 
 export function makeChatNavigator(navigate: (path: string) => void): ChatNavigatorPort {
   return {
-    openChat: (chatId) => navigate(`/chat/${chatId}`),
+    openChat: (chatId) => navigate(chatPath(chatId)),
     closeChat: () => navigate("/"),
     goHome: () => navigate("/"),
   }

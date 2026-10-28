@@ -34,17 +34,11 @@ export async function fetchShareSnapshot(
   return result.data
 }
 
-export async function shareQueryFn(
-  ctx: QueryFunctionContext<ReturnType<typeof shareQueryKeys.byToken>>,
-): Promise<ShareApiResponse> {
-  const [, token] = ctx.queryKey
-  return fetchShareSnapshot(token, { signal: ctx.signal })
-}
-
-export function shareQueryOptions(token: string) {
+export function shareQueryOptions(token: string, http?: HttpPort) {
   return {
     queryKey: shareQueryKeys.byToken(token),
-    queryFn: shareQueryFn,
+    queryFn: (ctx: QueryFunctionContext<ReturnType<typeof shareQueryKeys.byToken>>): Promise<ShareApiResponse> =>
+      fetchShareSnapshot(token, { signal: ctx.signal, http }),
     staleTime: Infinity,
     retry: 0,
   } as const

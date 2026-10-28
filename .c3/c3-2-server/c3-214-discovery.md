@@ -1,7 +1,7 @@
 ---
 id: c3-214
 c3-version: 4
-c3-seal: 301d0675f3ea2c6c5a090def7aad9750e37a51dd48f8faab4fa55e576c3f6af7
+c3-seal: fa509f8c7dbd31f627a440d8b33f74552e405962cd9a7db8675ed2a949f26d4f
 title: discovery
 type: component
 category: feature
@@ -73,4 +73,4 @@ Walks Claude Code and Codex history directories on disk, identifies candidate pr
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/discovery.ts | c3-214 Contract | Scan detail | src/server/discovery.ts |
+| src/server/discovery.adapter.ts | c3-214 Contract | Scan detail | src/server/discovery.adapter.ts |

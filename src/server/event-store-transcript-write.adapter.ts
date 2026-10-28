@@ -1,13 +1,16 @@
-import path from "node:path"
 import { LOG_PREFIX } from "../shared/branding"
+import type { JsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import { STORE_VERSION } from "../shared/types"
 import type { TranscriptEntry } from "../shared/types"
 import type { ToolRequest } from "../shared/permission-policy"
 import type { ChatEvent, ChatRecord, StoreEvent } from "./events"
 import { cloneTranscriptEntries } from "./events"
-import type { StorageBackend } from "./storage/backend"
-import { getForkedChatTitle, logSendToStartingProfile } from "./event-store-helpers"
+import { isSendToStartingProfilingEnabled } from "./claude-steer-log"
+import { requireLiveChat } from "./event-store-lookup"
+import { subagentResultsDir } from "./paths"
+import type { LogWriter } from "./event-store-writer"
+import { messageIdOf } from "./seen-message-ids"
 import {
   buildArchiveChatEvent,
   buildChatProviderEvent,
@@ -16,44 +19,26 @@ import {
   buildUnarchiveChatEvent,
 } from "./event-store-write-ops"
 import { deleteToolRequestsForChat } from "./event-store-tool-requests"
-import { applyChatMessageMetadata } from "./event-store-chat-lifecycle"
-import { MAX_SEEN_MESSAGE_IDS } from "./event-store-messages.adapter"
-import type { TranscriptCache } from "./event-store-messages.adapter"
+import { applyChatMessageMetadata, getForkedChatTitle } from "./event-store-chat-lifecycle"
+import { ensureSeenIdsSeeded, getMessages, type MessageReadDeps } from "./event-store-messages.adapter"
 import type { ChatOp } from "../shared/chat-ops"
 
 const STALE_EMPTY_CHAT_MAX_AGE_MS = 30 * 60 * 1000
 
 
 export interface ChatTranscriptWriteDeps {
-  readonly storage: StorageBackend
-  readonly transcriptsDir: string
-  readonly dataDir: string
-  readonly transcriptCache: TranscriptCache
-  readonly seenMessageIdsByChatId: Map<string, Set<string>>
-  readonly chatsById: Map<string, ChatRecord>
+  readonly read: MessageReadDeps
+  readonly writer: LogWriter
   readonly toolRequestsById: Map<string, ToolRequest>
-  readonly chatsLogPath: string
-  readonly turnsLogPath: string
-  getWriteChain: () => Promise<void>
-  setWriteChain: (p: Promise<void>) => void
-  append: <T extends StoreEvent>(filePath: string, event: T) => Promise<void>
-  getMessages: (chatId: string) => TranscriptEntry[]
-  ensureTranscriptLoaded: (chatId: string) => void
-  getSeenMessageIds: (chatId: string) => Set<string>
-  listPendingToolRequests: (chatId: string) => ToolRequest[]
+  commit: (event: StoreEvent) => Promise<void>
   recordChatOp: (chatId: string, op: ChatOp) => void
   clearChatOps: (chatId: string) => void
 }
 
 
-function transcriptPath(deps: ChatTranscriptWriteDeps, chatId: string): string {
-  return path.join(deps.transcriptsDir, `${chatId}.jsonl`)
-}
-
-function requireChat(deps: ChatTranscriptWriteDeps, chatId: string): ChatRecord {
-  const chat = deps.chatsById.get(chatId)
-  if (!chat || chat.deletedAt) throw new Error("Chat not found")
-  return chat
+function logAppendProfile(stage: string, details: JsonObject): void {
+  if (!isSendToStartingProfilingEnabled()) return
+  log.info("[kanna/send->starting][server]", JSON.stringify({ stage, ...details }))
 }
 
 
@@ -62,11 +47,9 @@ export async function removeSubagentResultsDir(
   projectId: string,
   chatId: string,
 ): Promise<void> {
-  const dir = path.join(
-    deps.dataDir, "projects", projectId, "chats", chatId, "subagent-results",
-  )
+  const dir = subagentResultsDir(deps.read.layout.dataDir, projectId, chatId)
   try {
-    await deps.storage.remove(dir, { recursive: true })
+    await deps.read.storage.remove(dir, { recursive: true })
   } catch (err) {
     log.warn(`${LOG_PREFIX} subagent-results cleanup failed`, { chatId, err })
   }
@@ -76,7 +59,7 @@ export async function forkChat(
   deps: ChatTranscriptWriteDeps,
   sourceChatId: string,
 ): Promise<ChatRecord> {
-  const sourceChat = requireChat(deps, sourceChatId)
+  const sourceChat = requireLiveChat(deps.read.chatsById, sourceChatId)
   const sourceProvider = sourceChat.provider
   if (!sourceProvider) throw new Error("Chat cannot be forked")
 
@@ -101,75 +84,73 @@ export async function forkChat(
       ? { stackBindings: sourceChat.stackBindings.map((b) => ({ ...b })) }
       : {}),
   }
-  await deps.append(deps.chatsLogPath, createEvent)
+  await deps.commit(createEvent)
 
-  const providerEv = buildChatProviderEvent(deps.chatsById, chatId, sourceProvider)
-  if (providerEv) await deps.append(deps.chatsLogPath, providerEv)
+  const providerEv = buildChatProviderEvent(deps.read.chatsById, chatId, sourceProvider)
+  if (providerEv) await deps.commit(providerEv)
 
-  const planEv = buildPlanModeEvent(deps.chatsById, chatId, sourceChat.planMode)
-  if (planEv) await deps.append(deps.chatsLogPath, planEv)
+  const planEv = buildPlanModeEvent(deps.read.chatsById, chatId, sourceChat.planMode)
+  if (planEv) await deps.commit(planEv)
 
   const forkTokenEv = buildPendingForkSessionTokenEvent(
-    deps.chatsById, chatId, { provider: sourceProvider, token: sourceSessionToken },
+    deps.read.chatsById, chatId, { provider: sourceProvider, token: sourceSessionToken },
   )
-  if (forkTokenEv) await deps.append(deps.turnsLogPath, forkTokenEv)
+  if (forkTokenEv) await deps.commit(forkTokenEv)
 
-  const sourceEntries = deps.getMessages(sourceChatId)
+  const sourceEntries = getMessages(deps.read, sourceChatId)
   if (sourceEntries.length > 0) {
-    const tPath = transcriptPath(deps, chatId)
+    const tPath = deps.read.layout.transcriptPath(chatId)
     const payload = sourceEntries.map((entry) => JSON.stringify(entry)).join("\n")
-    const newChain = deps.getWriteChain().then(async () => {
-      await deps.storage.mkdir(deps.transcriptsDir)
-      await deps.storage.writeText(tPath, `${payload}\n`)
-      const chat = deps.chatsById.get(chatId)
+    await deps.writer.serialize(async () => {
+      await deps.read.storage.mkdir(deps.read.layout.transcriptsDir)
+      await deps.read.storage.writeText(tPath, `${payload}\n`)
+      const chat = deps.read.chatsById.get(chatId)
       if (chat) {
         chat.hasMessages = true
         chat.updatedAt = Math.max(chat.updatedAt, createdAt)
       }
-      deps.transcriptCache.invalidateTail(chatId)
-      if (deps.transcriptCache.has(chatId)) {
-        deps.transcriptCache.set(chatId, cloneTranscriptEntries(sourceEntries))
+      deps.read.transcriptCache.invalidateTail(chatId)
+      if (deps.read.transcriptCache.has(chatId)) {
+        deps.read.transcriptCache.set(chatId, cloneTranscriptEntries(sourceEntries))
       }
     })
-    deps.setWriteChain(newChain)
-    await newChain
   }
 
-  return deps.chatsById.get(chatId)!
+  return deps.read.chatsById.get(chatId)!
+}
+
+async function teardownChat(
+  deps: ChatTranscriptWriteDeps,
+  chat: ChatRecord,
+  timestamp: number,
+): Promise<void> {
+  await deps.commit({ v: STORE_VERSION, type: "chat_deleted", timestamp, chatId: chat.id })
+  deleteToolRequestsForChat(deps.toolRequestsById, chat.id)
+  deps.clearChatOps(chat.id)
+  await deps.read.storage.remove(deps.read.layout.transcriptPath(chat.id))
+  deps.read.transcriptCache.invalidate(chat.id)
+  await removeSubagentResultsDir(deps, chat.projectId, chat.id)
 }
 
 export async function deleteChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
 ): Promise<void> {
-  const chat = requireChat(deps, chatId)
-  const projectId = chat.projectId
-  const event: ChatEvent = {
-    v: STORE_VERSION,
-    type: "chat_deleted",
-    timestamp: Date.now(),
-    chatId,
-  }
-  await deps.append(deps.chatsLogPath, event)
-  deleteToolRequestsForChat(deps.toolRequestsById, chatId)
-  deps.clearChatOps(chatId)
-  await deps.storage.remove(transcriptPath(deps, chatId))
-  deps.transcriptCache.invalidate(chatId)
-  await removeSubagentResultsDir(deps, projectId, chatId)
+  await teardownChat(deps, requireLiveChat(deps.read.chatsById, chatId), Date.now())
 }
 
 export async function archiveChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
 ): Promise<void> {
-  await deps.append(deps.chatsLogPath, buildArchiveChatEvent(deps.chatsById, chatId))
+  await deps.commit(buildArchiveChatEvent(deps.read.chatsById, chatId))
 }
 
 export async function unarchiveChat(
   deps: ChatTranscriptWriteDeps,
   chatId: string,
 ): Promise<void> {
-  await deps.append(deps.chatsLogPath, buildUnarchiveChatEvent(deps.chatsById, chatId))
+  await deps.commit(buildUnarchiveChatEvent(deps.read.chatsById, chatId))
 }
 
 export async function pruneStaleEmptyChats(
@@ -189,29 +170,16 @@ export async function pruneStaleEmptyChats(
   ])
   const prunedChatIds: string[] = []
 
-  for (const chat of deps.chatsById.values()) {
+  for (const chat of deps.read.chatsById.values()) {
     if (chat.deletedAt || chat.archivedAt || protectedChatIds.has(chat.id)) continue
     if (now - chat.createdAt < maxAgeMs) continue
     if (chat.hasMessages) continue
-    if (deps.getMessages(chat.id).length > 0) {
+    if (getMessages(deps.read, chat.id).length > 0) {
       chat.hasMessages = true
       continue
     }
 
-    const event: ChatEvent = {
-      v: STORE_VERSION,
-      type: "chat_deleted",
-      timestamp: now,
-      chatId: chat.id,
-    }
-    await deps.append(deps.chatsLogPath, event)
-
-    const tPath = transcriptPath(deps, chat.id)
-    await deps.storage.remove(tPath)
-    deps.transcriptCache.invalidate(chat.id)
-    deps.clearChatOps(chat.id)
-    await removeSubagentResultsDir(deps, chat.projectId, chat.id)
-
+    await teardownChat(deps, chat, now)
     prunedChatIds.push(chat.id)
   }
 
@@ -223,39 +191,34 @@ export async function appendMessage(
   chatId: string,
   entry: TranscriptEntry,
 ): Promise<void> {
-  requireChat(deps, chatId)
+  requireLiveChat(deps.read.chatsById, chatId)
   const payload = `${JSON.stringify(entry)}\n`
-  const tPath = transcriptPath(deps, chatId)
+  const tPath = deps.read.layout.transcriptPath(chatId)
   const queuedAt = performance.now()
-  const newChain = deps.getWriteChain().then(async () => {
+  await deps.writer.serialize(async () => {
     const startedAt = performance.now()
     const queueDelayMs = Number((startedAt - queuedAt).toFixed(1))
-    const mid = entry.messageId
-    if (typeof mid === "string" && mid.length > 0) {
-      deps.ensureTranscriptLoaded(chatId)
-      const seen = deps.getSeenMessageIds(chatId)
-      if (seen.has(mid)) {
-        logSendToStartingProfile("event_store.append_message_dedup", {
+    const messageId = messageIdOf(entry)
+    if (messageId !== null) {
+      ensureSeenIdsSeeded(deps.read, chatId)
+      if (deps.read.seenMessageIds.has(chatId, messageId)) {
+        logAppendProfile("event_store.append_message_dedup", {
           chatId,
-          messageId: mid,
+          messageId,
           kind: entry.kind,
         })
         return
       }
-      if (seen.size >= MAX_SEEN_MESSAGE_IDS) {
-        const oldest = seen.values().next().value
-        if (oldest !== undefined) seen.delete(oldest)
-      }
-      seen.add(mid)
+      deps.read.seenMessageIds.record(chatId, entry)
     }
-    await deps.storage.mkdir(deps.transcriptsDir)
+    await deps.read.storage.mkdir(deps.read.layout.transcriptsDir)
     const beforeAppendAt = performance.now()
-    await deps.storage.appendText(tPath, payload)
+    await deps.read.storage.appendText(tPath, payload)
     const afterAppendAt = performance.now()
-    applyChatMessageMetadata(deps.chatsById, chatId, entry)
-    deps.transcriptCache.appendTo(chatId, { ...entry })
+    applyChatMessageMetadata(deps.read.chatsById, chatId, entry)
+    deps.read.transcriptCache.appendTo(chatId, { ...entry })
     deps.recordChatOp(chatId, { kind: "entries.append", entries: [{ ...entry }] })
-    logSendToStartingProfile("event_store.append_message", {
+    logAppendProfile("event_store.append_message", {
       chatId,
       entryId: entry._id,
       kind: entry.kind,
@@ -265,6 +228,4 @@ export async function appendMessage(
       totalMs: Number((afterAppendAt - queuedAt).toFixed(1)),
     })
   })
-  deps.setWriteChain(newChain)
-  return newChain
 }

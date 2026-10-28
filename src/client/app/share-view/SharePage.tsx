@@ -1,10 +1,10 @@
-import { useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
 import type { ShareError } from "../../../shared/session-share/types"
 import { shareQueryOptions } from "../../api/share"
+import type { HttpPort } from "../../ports/httpPort"
 import { ShareViewPage } from "./ShareViewPage"
-import { SharePageStore } from "./SharePage.store"
+import { errorMessage } from "../../../shared/errors"
 
 function errorTitle(error: ShareError): string {
   switch (error.kind) {
@@ -16,7 +16,7 @@ function errorTitle(error: ShareError): string {
   }
 }
 
-function errorMessage(error: ShareError): string {
+function shareErrorMessage(error: ShareError): string {
   switch (error.kind) {
     case "not_found": return "This share link does not exist."
     case "revoked": return "The owner has revoked this share."
@@ -26,54 +26,33 @@ function errorMessage(error: ShareError): string {
   }
 }
 
-function SharePageInner({ token }: { token: string }) {
-  const loadState = SharePageStore.useScopedStore((s) => s.loadState)
-  const setLoadState = SharePageStore.useScopedStore((s) => s.setLoadState)
-  const query = useQuery(shareQueryOptions(token))
+function ShareErrorView({ error }: { error: ShareError }) {
+  return (
+    <main className="kanna-share-view" data-state="error">
+      <h1>{errorTitle(error)}</h1>
+      <p>{shareErrorMessage(error)}</p>
+    </main>
+  )
+}
 
-  useEffect(() => {
-    if (query.isPending) return
-    if (query.isError) {
-      const err = query.error
-      setLoadState({
-        kind: "error",
-        error: { kind: "snapshot_read_failed", message: err instanceof Error ? err.message : String(err) },
-        status: 0,
-      })
-      return
-    }
-    const body = query.data
-    if (body.ok) {
-      setLoadState({ kind: "ok", snapshot: body.snapshot })
-    } else {
-      setLoadState({ kind: "error", error: body.error, status: 0 })
-    }
-  }, [query.isPending, query.isError, query.error, query.data, setLoadState])
+function SharePageInner({ token, http }: { token: string; http?: HttpPort }) {
+  const query = useQuery(shareQueryOptions(token, http))
 
-  if (loadState.kind === "loading") {
+  if (query.isPending) {
     return (
       <main className="kanna-share-view" data-state="loading">
         <p>Loading shared chat…</p>
       </main>
     )
   }
-  if (loadState.kind === "error") {
-    return (
-      <main className="kanna-share-view" data-state="error">
-        <h1>{errorTitle(loadState.error)}</h1>
-        <p>{errorMessage(loadState.error)}</p>
-      </main>
-    )
+  if (query.isError) {
+    return <ShareErrorView error={{ kind: "snapshot_read_failed", message: errorMessage(query.error) }} />
   }
-  return <ShareViewPage snapshot={loadState.snapshot} />
+  if (!query.data.ok) return <ShareErrorView error={query.data.error} />
+  return <ShareViewPage snapshot={query.data.snapshot} />
 }
 
-export function SharePage() {
+export function SharePage({ http }: { http?: HttpPort }) {
   const params = useParams<{ token: string }>()
-  const token = params.token ?? ""
-  return (
-    <SharePageStore.Provider init={{}}>
-      <SharePageInner token={token} />
-    </SharePageStore.Provider>
-  )
+  return <SharePageInner token={params.token ?? ""} http={http} />
 }

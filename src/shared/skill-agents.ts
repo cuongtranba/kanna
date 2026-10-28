@@ -1,3 +1,5 @@
+import { oneOf } from "./vocab"
+
 export const VALID_SKILL_AGENTS = [
   "amp",
   "antigravity",
@@ -20,11 +22,7 @@ export type SkillAgent = (typeof VALID_SKILL_AGENTS)[number]
 
 export const DEFAULT_SKILL_AGENTS: readonly SkillAgent[] = ["universal", "claude-code", "codex"]
 
-const VALID_SKILL_AGENT_LOOKUP: ReadonlySet<string> = new Set(VALID_SKILL_AGENTS)
-
-function isSkillAgent(value: string): value is SkillAgent {
-  return VALID_SKILL_AGENT_LOOKUP.has(value)
-}
+const isSkillAgent = oneOf(VALID_SKILL_AGENTS)
 
 export function assertSafeSkillAgents(agents: string[]): SkillAgent[] {
   if (agents.length === 0) {

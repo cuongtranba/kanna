@@ -3,13 +3,16 @@ import { readFile } from "node:fs/promises"
 import { createInterface } from "node:readline"
 import { join, relative, resolve } from "node:path"
 import { toError } from "../../shared/errors"
+import { isPathInside } from "../path-containment"
 import { errorMessage } from "../../shared/errors"
 import { isJsonArray, isJsonObject, safeJsonParse } from "../../shared/json"
 import {
   CLIENT_HOST_MODULES,
   hostModuleUnavailableMessage,
-  SERVER_HOST_MODULES,
+  PLUGIN_HOST_GLOBAL,
+  type PluginHostTarget,
 } from "../../shared/plugins/host-modules"
+import { SERVER_HOST_MODULES } from "./server-host-modules"
 import * as pluginRpcProtocolModule from "./plugin-rpc-protocol"
 
 export interface BuildPluginBundlesArgs {
@@ -44,7 +47,11 @@ const STUB_EXPORT_NAMES: Readonly<Record<string, readonly string[]>> = {
   "@kanna/plugin/server": Object.keys(pluginRpcProtocolModule),
 }
 
-function hostModulePlugin(ownModules: readonly string[], otherModules: readonly string[]): Bun.BunPlugin {
+function hostModulePlugin(
+  host: PluginHostTarget,
+  ownModules: readonly string[],
+  otherModules: readonly string[],
+): Bun.BunPlugin {
   return {
     name: "kanna-host-modules",
     setup(build) {
@@ -55,10 +62,10 @@ function hostModulePlugin(ownModules: readonly string[], otherModules: readonly 
         if (otherModules.includes(args.path)) {
           return { path: args.path, namespace: HOST_STUB_NAMESPACE }
         }
-        throw new Error(hostModuleUnavailableMessage(args.path))
+        throw new Error(hostModuleUnavailableMessage(args.path, host))
       })
       build.onLoad({ filter: /.*/, namespace: HOST_REQUIRE_NAMESPACE }, (args) => ({
-        contents: `module.exports = globalThis.__KANNA_PLUGIN_HOST__.require(${JSON.stringify(args.path)})`,
+        contents: `module.exports = globalThis.${PLUGIN_HOST_GLOBAL}.require(${JSON.stringify(args.path)})`,
         loader: "js",
       }))
       build.onLoad({ filter: /.*/, namespace: HOST_STUB_NAMESPACE }, (args) => ({
@@ -103,7 +110,7 @@ async function buildTarget(args: TargetBuildArgs): Promise<TargetBuildResult> {
       minify: args.minify,
       metafile: true,
       define: { "process.env.NODE_ENV": JSON.stringify("production") },
-      plugins: [hostModulePlugin(args.ownModules, args.otherModules)],
+      plugins: [hostModulePlugin(args.target === "browser" ? "client" : "server", args.ownModules, args.otherModules)],
     })
     if (!result.success) {
       return { ok: false, errors: result.logs.map((log) => log.message) }
@@ -133,7 +140,7 @@ async function findServerLiteralLeaks(
   for (const inputPath of clientInputPaths) {
     if (!SERVER_FILE_PATTERN.test(inputPath)) continue
     const absolutePath = resolve(process.cwd(), inputPath)
-    if (relative(sourceDir, absolutePath).startsWith("..")) continue
+    if (!isPathInside(sourceDir, absolutePath)) continue
     const source = await readFile(absolutePath, "utf8")
     for (const match of source.matchAll(LITERAL_EXPORT_PATTERN)) {
       const literal = match[2]

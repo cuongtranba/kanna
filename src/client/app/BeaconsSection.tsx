@@ -16,10 +16,10 @@ import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import type { BeaconConfig, BeaconMintResult, BeaconUpdateResult } from "../../shared/beacon-config"
 import type { BeaconScope } from "../../shared/beacon-scope"
 import { beaconDisplayName } from "../../shared/beacon-alias"
-import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-pair-link"
+import { BEACON_DOWNLOAD_PAGE, buildBeaconPairCommand, buildBeaconPairLink } from "../../shared/beacon-pair-link"
 import { isBeaconBehind, type BeaconStatusRow } from "../../shared/beacon-status"
 import { STATUS_PILL_CLASS } from "../../shared/design/tone-pairings"
-import { SDK_CLIENT_APP } from "../../shared/branding"
+import { APP_VERSION } from "../../shared/branding"
 import { cn } from "../lib/utils"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import type { DomPort } from "../ports/domPort"
@@ -31,7 +31,6 @@ import { BeaconAliasEditButton, BeaconAliasForm } from "./BeaconAliasEditor"
 import { BeaconScopeEditor } from "./BeaconScopeEditor"
 import type { KannaState } from "./useKannaState"
 
-const SERVER_VERSION = SDK_CLIENT_APP.split("/")[1]
 
 const MINT_KEY = pendingActionKey("beacons.mintPairingCode")
 
@@ -190,7 +189,7 @@ function PairingCode({
 }) {
   const remaining = expiresAt - now
   const origin = dom.getOrigin()
-  const command = `kanna-beacon pair ${origin} ${code}`
+  const command = buildBeaconPairCommand({ kannaUrl: origin, code })
   const appLink = buildBeaconPairLink({ kannaUrl: origin, code })
   const copyKey = pendingActionKey("beacons.copyPairCommand", code)
   const copying = usePendingAction(copyKey)
@@ -434,5 +433,5 @@ export function BeaconsSettingsBranch(props: {
     [handleWriteAppSettings, handleMintBeaconPairingCode, handleUpdateBeacon],
   )
 
-  return <BeaconsSection rows={rows} configs={configs} handlers={handlers} serverVersion={SERVER_VERSION} />
+  return <BeaconsSection rows={rows} configs={configs} handlers={handlers} serverVersion={APP_VERSION} />
 }

@@ -1,35 +1,24 @@
 import { homedir } from "node:os"
-import path from "node:path"
 import OpenAI from "openai"
-import { isRecord } from "../shared/errors"
 import { isJsonObject, type JsonValue } from "../shared/json"
 import { getLlmProviderFilePath } from "../shared/branding"
+import { shortenHomePath } from "../shared/home-path"
+import { toJsonValue } from "./json-boundary"
+import { readJsonSettingsFile, writeJsonSettingsFile } from "./json-settings-file.adapter"
 import {
   DEFAULT_OPENAI_SDK_MODEL,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  type LlmProviderFile,
   type LlmProviderKind,
   type LlmProviderSnapshot,
   type LlmProviderValidationResult,
 } from "../shared/types"
 
-export {
-  readLlmProviderSnapshotFromDisk as readLlmProviderSnapshot,
-  writeLlmProviderSnapshotToDisk as writeLlmProviderSnapshot,
-} from "./llm-provider-store.adapter"
 
 export const OPENAI_BASE_URL = "https://api.openai.com/v1"
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 const DEFAULT_PROVIDER: LlmProviderKind = "openai"
-
-function formatDisplayPath(filePath: string) {
-  const homePath = homedir()
-  if (filePath === homePath) return "~"
-  if (filePath.startsWith(`${homePath}${path.sep}`)) {
-    return `~${filePath.slice(homePath.length)}`
-  }
-  return filePath
-}
 
 function resolveProvider(value: JsonValue | undefined) {
   if (value === "openai" || value === "openrouter" || value === "custom") {
@@ -102,7 +91,7 @@ export function normalizeLlmProviderSnapshot(
     resolvedBaseUrl,
     enabled,
     warning: warnings.length > 0 ? `Some LLM provider settings are invalid: ${warnings.join("; ")}` : null,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
   }
 }
 
@@ -115,28 +104,30 @@ export function createDefaultSnapshot(filePath: string, warning: string | null =
     resolvedBaseUrl: OPENAI_BASE_URL,
     enabled: false,
     warning,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
   }
 }
 
-function toSerializableValue<T>(value: T): JsonValue {
-  if (value === null || value === undefined) return null
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value
-  if (Array.isArray(value)) {
-    return value.map((entry) => toSerializableValue(entry))
-  }
-  if (value instanceof Error) {
-    const errRecord: Record<string, JsonValue> = Object.fromEntries(
-      Object.getOwnPropertyNames(value).map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value])
-    )
-    return toSerializableValue(errRecord)
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.keys(value).map((key) => [key, toSerializableValue(value[key])])
-    )
-  }
-  return String(value)
+export function readLlmProviderSnapshot(filePath = getLlmProviderFilePath(homedir())): Promise<LlmProviderSnapshot> {
+  return readJsonSettingsFile(filePath, {
+    label: "LLM provider",
+    defaults: (warning) => createDefaultSnapshot(filePath, warning),
+    normalize: (value) => normalizeLlmProviderSnapshot(value, filePath),
+  })
+}
+
+export async function writeLlmProviderSnapshot(
+  value: Pick<LlmProviderFile, "provider" | "apiKey" | "model"> & { baseUrl: string },
+  filePath = getLlmProviderFilePath(homedir()),
+): Promise<LlmProviderSnapshot> {
+  const snapshot = normalizeLlmProviderSnapshot(value, filePath)
+  await writeJsonSettingsFile(filePath, {
+    provider: snapshot.provider,
+    apiKey: snapshot.apiKey,
+    model: snapshot.model,
+    baseUrl: snapshot.provider === "custom" ? snapshot.baseUrl : null,
+  })
+  return snapshot
 }
 
 export async function validateLlmProviderCredentials(
@@ -170,7 +161,7 @@ export async function validateLlmProviderCredentials(
   } catch (error) {
     return {
       ok: false,
-      error: toSerializableValue(error),
+      error: toJsonValue(error),
     }
   }
 }

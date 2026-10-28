@@ -1,5 +1,5 @@
 import { hydrateToolResult, STRUCTURED_RESULT_TOOL_KINDS } from "../../shared/tools"
-import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, TranscriptEntry } from "../../shared/types"
+import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, SystemInitEntry, ToolCallEntry, ToolRequestResolvedEntry, ToolResultEntry, ResultEntry, TranscriptEntry } from "../../shared/types"
 import type { JsonArray, JsonObject, JsonValue } from "../../shared/json"
 import { isJsonObject } from "../../shared/json"
 import { asJsonValue } from "./asJsonValue"
@@ -16,6 +16,29 @@ function isMutableToolCallMsg(v: MutableToolCall): v is MutableToolCall & Hydrat
 
 function createTimestamp(createdAt: number): string {
   return new Date(createdAt).toISOString()
+}
+
+type PassThroughEntry = Exclude<
+  TranscriptEntry,
+  ToolCallEntry | ToolResultEntry | ResultEntry | ToolRequestResolvedEntry | SystemInitEntry
+>
+
+function hydrateSystemInit(entry: SystemInitEntry) {
+  const { _id, createdAt, ...fields } = entry
+  return { ...fields, id: _id, timestamp: createTimestamp(createdAt) }
+}
+
+function hydratePassThrough(entry: PassThroughEntry) {
+  const { _id, createdAt, debugRaw: _debugRaw, ...fields } = entry
+  return { ...fields, id: _id, timestamp: createTimestamp(createdAt) }
+}
+
+function hydrateUnknownEntry(entry: never) {
+  return {
+    ...createBaseMessage(entry),
+    kind: "unknown" as const,
+    json: JSON.stringify(entry, null, 2),
+  }
 }
 
 function createBaseMessage(entry: TranscriptEntry) {
@@ -136,69 +159,33 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
   for (const entry of entries) {
     switch (entry.kind) {
       case "user_prompt":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "user_prompt",
-          content: entry.content,
-          attachments: entry.attachments ?? [],
-          steered: entry.steered,
-          autoContinue: entry.autoContinue,
-          expandedCommand: entry.expandedCommand,
-          origin: entry.origin,
-        })
+      case "account_info":
+      case "assistant_text":
+      case "assistant_thinking":
+      case "api_error":
+      case "policy_refusal":
+      case "status":
+      case "context_window_updated":
+      case "compact_boundary":
+      case "compact_summary":
+      case "context_cleared":
+      case "interrupted":
+      case "memory_loaded":
+      case "auto_continue_prompt":
+      case "pending_tool_request":
+      case "cron_armed":
+      case "cron_command_error":
+      case "cron_run":
+      case "cron_run_skipped":
+      case "cron_list":
+      case "cron_job_change":
+      case "webhook_delivery":
+      case "inbound_delivery":
+      case "loop_disarmed":
+        messages.push(hydratePassThrough(entry))
         break
       case "system_init":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "system_init",
-          provider: entry.provider,
-          model: entry.model,
-          tools: entry.tools,
-          agents: entry.agents,
-          slashCommands: entry.slashCommands,
-          mcpServers: entry.mcpServers,
-          debugRaw: entry.debugRaw,
-        })
-        break
-      case "account_info":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "account_info",
-          accountInfo: entry.accountInfo,
-        })
-        break
-      case "assistant_text":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "assistant_text",
-          text: entry.text,
-        })
-        break
-      case "assistant_thinking":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "assistant_thinking",
-          text: entry.text,
-          signature: entry.signature,
-        })
-        break
-      case "api_error":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "api_error",
-          status: entry.status,
-          text: entry.text,
-          requestId: entry.requestId,
-          apiErrorReason: entry.apiErrorReason,
-        })
-        break
-      case "policy_refusal":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "policy_refusal",
-          text: entry.text,
-          requestId: entry.requestId,
-        })
+        messages.push(hydrateSystemInit(entry))
         break
       case "tool_call": {
         const toolCall = hydrateToolCall(entry, planWrite)
@@ -239,169 +226,10 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
           codexErrorInfo: entry.codexErrorInfo,
         })
         break
-      case "status":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "status",
-          status: entry.status,
-        })
-        break
-      case "context_window_updated":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "context_window_updated",
-          usage: entry.usage,
-        })
-        break
-      case "compact_boundary":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "compact_boundary",
-        })
-        break
-      case "compact_summary":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "compact_summary",
-          summary: entry.summary,
-        })
-        break
-      case "context_cleared":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "context_cleared",
-        })
-        break
-      case "interrupted":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "interrupted",
-        })
-        break
-      case "memory_loaded":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "memory_loaded",
-          path: entry.path,
-        })
-        break
-      case "auto_continue_prompt":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "auto_continue_prompt",
-          scheduleId: entry.scheduleId,
-        })
-        break
-      case "pending_tool_request":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "pending_tool_request",
-          toolRequestId: entry.toolRequestId,
-          toolName: entry.toolName,
-          arguments: entry.arguments,
-        })
-        break
       case "tool_request_resolved":
         break
-      case "cron_armed":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_armed",
-          jobId: entry.jobId,
-          instruction: entry.instruction,
-          mode: entry.mode,
-          scheduleText: entry.scheduleText,
-          scheduleHuman: entry.scheduleHuman,
-          nextFireAt: entry.nextFireAt,
-          ...(entry.model !== undefined ? { model: entry.model } : {}),
-          ...(entry.upcomingFires !== undefined ? { upcomingFires: entry.upcomingFires } : {}),
-          ...(entry.cwd !== undefined ? { cwd: entry.cwd } : {}),
-        })
-        break
-      case "cron_command_error":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_command_error",
-          message: entry.message,
-          ...(entry.input !== undefined ? { input: entry.input } : {}),
-          ...(entry.suggestion !== undefined ? { suggestion: entry.suggestion } : {}),
-        })
-        break
-      case "cron_run":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_run",
-          jobId: entry.jobId,
-          runId: entry.runId,
-          instruction: entry.instruction,
-          ...(entry.spawnedChatId !== undefined ? { spawnedChatId: entry.spawnedChatId } : {}),
-          firedAt: entry.firedAt,
-        })
-        break
-      case "cron_run_skipped":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_run_skipped",
-          jobId: entry.jobId,
-          reason: entry.reason,
-          ...(entry.missedCount !== undefined ? { missedCount: entry.missedCount } : {}),
-        })
-        break
-      case "cron_list":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_list",
-          ...(entry.help !== undefined ? { help: entry.help } : {}),
-        })
-        break
-      case "cron_job_change":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "cron_job_change",
-          jobId: entry.jobId,
-          change: entry.change,
-        })
-        break
-      case "webhook_delivery":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "webhook_delivery",
-          hookId: entry.hookId,
-          hookName: entry.hookName,
-          mode: entry.mode,
-          deliveryId: entry.deliveryId,
-          ...(entry.message !== undefined ? { message: entry.message } : {}),
-        })
-        break
-      case "inbound_delivery":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "inbound_delivery",
-          sourceKind: entry.sourceKind,
-          sourceId: entry.sourceId,
-          sourceName: entry.sourceName,
-          mode: entry.mode,
-          deliveryId: entry.deliveryId,
-          threadId: entry.threadId,
-          ...(entry.message !== undefined ? { message: entry.message } : {}),
-        })
-        break
-      case "loop_disarmed":
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "loop_disarmed",
-          reason: entry.reason,
-          resumable: entry.resumable,
-          ...(entry.trackingFileRel !== undefined ? { trackingFileRel: entry.trackingFileRel } : {}),
-          ...(entry.workdirAbs !== undefined ? { workdirAbs: entry.workdirAbs } : {}),
-        })
-        break
       default:
-        messages.push({
-          ...createBaseMessage(entry),
-          kind: "unknown",
-          json: JSON.stringify(entry, null, 2),
-        })
+        messages.push(hydrateUnknownEntry(entry))
         break
     }
   }

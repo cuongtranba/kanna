@@ -1,3 +1,4 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useCallback, useEffect, useId } from "react"
 import { AlertTriangle, Check, Code2, Copy, Maximize2, RefreshCw, Wrench } from "lucide-react"
 import { Button } from "../ui/button"
@@ -7,10 +8,7 @@ import { useTheme } from "../../hooks/useTheme"
 import { MermaidFallbackCodeBlock } from "./shared"
 import { MermaidZoomModal } from "./MermaidZoomModal"
 import { MermaidDiagramStore } from "./MermaidDiagram.store"
-import type { ClipboardPort } from "../../ports/clipboardPort"
-import type { TimerPort } from "../../ports/timerPort"
-import { clipboardAdapter } from "../../adapters/clipboard.adapter"
-import { timerAdapter } from "../../adapters/timer.adapter"
+import { useCopyFeedback, type CopyFeedbackPorts } from "../../stores/copyFeedbackStore"
 import { domAdapter } from "../../adapters/dom.adapter"
 import type { DomPort } from "../../ports/domPort"
 import { toError } from "../../../shared/errors"
@@ -27,9 +25,7 @@ interface MermaidModule {
   render: (id: string, text: string) => Promise<{ svg: string }>
 }
 
-interface MermaidDiagramPorts {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
+interface MermaidDiagramPorts extends CopyFeedbackPorts {
   dom?: DomPort
   loadMermaid?: () => Promise<MermaidModule>
 }
@@ -75,22 +71,16 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   const isStaleChunk = renderState.status === "error" && renderState.kind === "stale-chunk"
   const showSource = MermaidDiagramStore.useScopedStore((s) => s.showSource)
   const zoomOpen = MermaidDiagramStore.useScopedStore((s) => s.zoomOpen)
-  const copied = MermaidDiagramStore.useScopedStore((s) => s.copied)
   const setRenderState = MermaidDiagramStore.useScopedStore((s) => s.setRenderState)
   const setShowSource = MermaidDiagramStore.useScopedStore((s) => s.setShowSource)
   const setZoomOpen = MermaidDiagramStore.useScopedStore((s) => s.setZoomOpen)
-  const setCopied = MermaidDiagramStore.useScopedStore((s) => s.setCopied)
+  const { copied, copy } = useCopyFeedback(ports)
   const rawId = useId()
   const domId = `mermaid-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`
 
   const closeZoom = useCallback(() => setZoomOpen(false), [setZoomOpen])
 
-  const copySource = async () => {
-    await (ports?.clipboard ?? clipboardAdapter).writeText(source)
-    setCopied(true)
-    ;(ports?.timer ?? timerAdapter).setTimeout(() => setCopied(false), 2000)
-  }
-  const handleCopy = () => { runDetached("copy mermaid source", copySource()) }
+  const handleCopy = () => { runDetached("copy mermaid source", copy(source)) }
 
   const load = ports?.loadMermaid ?? loadMermaid
 
@@ -225,13 +215,7 @@ function MermaidDiagramInner({ source, ports }: { source: string; ports?: Mermai
   )
 }
 
-export function MermaidDiagram({ source, ports }: { source: string; ports?: MermaidDiagramPorts }) {
-  return (
-    <MermaidDiagramStore.Provider init={undefined}>
-      <MermaidDiagramInner source={source} ports={ports} />
-    </MermaidDiagramStore.Provider>
-  )
-}
+export const MermaidDiagram = withScopedStore(MermaidDiagramStore, MermaidDiagramInner)
 
 function MermaidControls({
   showSource,

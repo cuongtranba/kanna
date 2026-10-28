@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { DomPort } from "../ports/domPort"
-import { isAbsoluteLocalFilePath, parseLocalFileLink, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "./pathUtils"
+import { fileNameOfPath, isAbsoluteLocalFilePath, parentDirOfPath, parseLocalFileLink, shortenHomePath, shouldOpenLocalFileLinkInEditor, toLocalFileUrl } from "./pathUtils"
 
 describe("parseLocalFileLink", () => {
   test("parses an absolute file path with a line fragment", () => {
@@ -104,5 +104,31 @@ describe("toLocalFileUrl", () => {
     expect(toLocalFileUrl("file:///Users/cuongtran/foo.png")).toBe(
       "/api/local-file?path=%2FUsers%2Fcuongtran%2Ffoo.png"
     )
+  })
+})
+
+describe("worktree paths with a trailing slash keep a non-empty label", () => {
+  test("fileNameOfPath ignores trailing separators of either kind", () => {
+    expect(fileNameOfPath("/repo/worktrees/feature/")).toBe("feature")
+    expect(fileNameOfPath("C:\\repo\\feature\\")).toBe("feature")
+  })
+
+  test("parentDirOfPath returns the directory above the last segment", () => {
+    expect(parentDirOfPath("src/client/app/")).toBe("src/client")
+    expect(parentDirOfPath("README.md")).toBe("")
+  })
+})
+
+describe("shortenHomePath", () => {
+  test("replaces the home directory with a tilde", () => {
+    expect(shortenHomePath("/home/dev/kanna", "/home/dev")).toBe("~/kanna")
+  })
+
+  test("leaves a path outside the home directory alone", () => {
+    expect(shortenHomePath("/srv/app", "/home/dev")).toBe("/srv/app")
+  })
+
+  test("does not shorten a sibling directory that merely shares a prefix", () => {
+    expect(shortenHomePath("/home/developer/app", "/home/dev")).toBe("/home/developer/app")
   })
 })

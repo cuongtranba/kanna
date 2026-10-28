@@ -1,15 +1,9 @@
 import { describe, expect, test } from "vite-plus/test"
-import { CHAT_SNAPSHOT_VERSION, isShareError, type ChatSnapshot, type ShareError } from "./types"
+import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "./types"
 
 describe("session-share types", () => {
   test("CHAT_SNAPSHOT_VERSION is 2", () => {
     expect(CHAT_SNAPSHOT_VERSION).toBe(2)
-  })
-
-  test("isShareError narrows discriminated union", () => {
-    const err: ShareError = { kind: "expired", expiredAt: 1 }
-    expect(isShareError(err)).toBe(true)
-    expect(isShareError({ kind: "ok" } as unknown as ShareError)).toBe(false)
   })
 
   test("ChatSnapshot is structurally typed", () => {

@@ -220,4 +220,29 @@ describe("cloudflare tunnel e2e", () => {
     expect(second.status).toBe("already_live")
     expect(pendingChildren).toHaveLength(1)
   })
+
+  test("accept after a restart still watches the source pid recorded on the proposal", async () => {
+    const proposal = await gateway.proposeFromTool({ chatId: "c1", port: 5173, sourcePid: 4242 })
+    if (proposal.status !== "proposed") throw new Error("expected proposed outcome")
+
+    const exited: string[] = []
+    const restartedLifecycle = new TunnelLifecycle({
+      pollIntervalMs: 5,
+      isPidAlive: () => false,
+      onSourceExit: (tunnelId) => exited.push(tunnelId),
+    })
+    const restartedGateway = new TunnelGateway({
+      manager,
+      lifecycle: restartedLifecycle,
+      settings: appSettings,
+      store,
+      broadcast: (chatId: string) => {
+        broadcasts.push(chatId)
+      },
+    })
+
+    await restartedGateway.accept("c1", proposal.tunnelId)
+    await waitFor(() => exited.includes(proposal.tunnelId), 2000, "source exit for restarted accept")
+    restartedGateway.shutdown()
+  })
 })

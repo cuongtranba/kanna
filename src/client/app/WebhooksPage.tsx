@@ -4,7 +4,7 @@ import type { WebhookInput } from "../../shared/webhooks/types"
 import { domAdapter } from "../adapters/dom.adapter"
 import { Button } from "../components/ui/button"
 import { SHELL_PAGE_SCROLL_CLASS } from "../lib/shellChrome"
-import { listWebhookTargets } from "../lib/webhookTargets"
+import { listInboundTargets } from "../lib/webhookTargets"
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { useWebhooksStore } from "../stores/webhooksStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -12,21 +12,22 @@ import { useProviderCatalog } from "./useProviderCatalog"
 import { WebhookCreateDialog } from "./WebhookCreateDialog"
 import { WebhookRow } from "./WebhookRow"
 import { WebhookSecretDialog } from "./WebhookSecretDialog"
-import { readCreatedWebhook, sendWebhookCommand } from "./webhookCommands"
+import { revealCreatedWebhookSecret } from "./webhookCommands"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 
 export function WebhooksPage() {
   const socket = useOptionalKannaSocket()
   const hooks = useWebhooksStore((state) => state.hooks)
   const openCreate = useWebhooksStore((state) => state.openCreate)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
   const catalog = useProviderCatalog()
   const origin = domAdapter.getOrigin()
 
   const handleCreate = useCallback(
     async (input: WebhookInput) => {
-      const created = await sendWebhookCommand(socket, { type: "webhooks.create", input })
-      const reveal = readCreatedWebhook(created)
+      const created = await sendCommandWithFeedback(socket, { type: "webhooks.create", input })
+      const reveal = revealCreatedWebhookSecret(created)
       if (reveal) useWebhooksStore.getState().revealSecret(reveal)
     },
     [socket],

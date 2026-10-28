@@ -8,7 +8,7 @@ import { BEACON_DOWNLOAD_PAGE, buildBeaconPairLink } from "../../shared/beacon-p
 import { domAdapter } from "../adapters/dom.adapter"
 import type { BeaconConfig } from "../../shared/beacon-config"
 import type { BeaconStatusRow } from "../../shared/beacon-status"
-import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
+import { defaultAppSettingsSnapshot } from "../../server/app-settings"
 import { useAppSettingsStore } from "../stores/appSettingsStore"
 import { useBeaconsSectionStore } from "../stores/beaconsSectionStore"
 import { useBeaconsStore } from "../stores/beaconsStore"
@@ -58,7 +58,7 @@ afterEach(() => {
 
 test("the settings branch renders live rows from the store without a render loop", async () => {
   useBeaconsStore.getState().setRows([ROW])
-  useAppSettingsStore.getState().setFromServer({ ...buildInitialAppSettingsSnapshot(), customBeacons: [CONFIG] })
+  useAppSettingsStore.getState().setFromServer({ ...defaultAppSettingsSnapshot(), customBeacons: [CONFIG] })
   const result = await renderForLoopCheck(
     <BeaconsSettingsBranch
       state={{

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
-import { jsonResult, readChat, runCommand } from "./remote-mcp-views"
+import { jsonResult, readChat, readTopic, runCommand } from "./remote-mcp-views"
 
 const BRANCH_CHOICE_MESSAGE = "Give exactly one of branch (a branch object from list_branches) or the legacy name (a local branch name)."
 
@@ -23,9 +23,8 @@ export const gitTools: readonly RemoteTool[] = [
       if (!chat) return fail(`Chat ${chatId} was not found.`)
       const refreshed = await runCommand(host, { type: "chat.refreshDiffs", chatId })
       if (!refreshed.ok) return fail(refreshed.message)
-      const envelope = host.readSnapshot({ type: "project-git", projectId: chat.runtime.projectId, chatId })
-      if (envelope.type !== "snapshot" || envelope.snapshot.type !== "project-git") return fail("The git snapshot is unavailable.")
-      const git = envelope.snapshot.data
+      const git = readTopic(host, { type: "project-git", projectId: chat.runtime.projectId, chatId })
+      if (git === undefined) return fail("The git snapshot is unavailable.")
       if (!git) return fail("This chat has no git repository.")
       return jsonResult({
         branch: git.branchName ?? null,

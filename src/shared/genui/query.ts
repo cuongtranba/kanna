@@ -21,6 +21,8 @@ import {
   shiftPoint,
   shiftWindow,
   windowContains,
+  COMPARE_MODES,
+  describeCompareMode,
   type CompareMode,
   type ComparisonShift,
   type PeriodWindow,
@@ -29,8 +31,8 @@ import {
 
 export const QUERY_DEFAULT_LIMIT = 200
 export const QUERY_MAX_LIMIT = 1000
-export const COMPARE_MODES = ["previous-period", "previous-year", "budget", "forecast"] as const
 export const SCENARIOS = ["actual", "budget", "forecast"] as const
+export const DATASET_FILTER_OPS = ["eq", "neq", "in", "not-in"] as const
 
 const identifier = z.string().regex(GENUI_IDENTIFIER)
 
@@ -41,7 +43,7 @@ export const periodSpecSchema = z.union([
 
 export const datasetFilterSchema = z.strictObject({
   dimension: identifier,
-  op: z.enum(["eq", "neq", "in", "not-in"]).optional(),
+  op: z.enum(DATASET_FILTER_OPS).optional(),
   value: z.union([z.string().max(200), z.number(), z.array(z.union([z.string().max(200), z.number()])).max(100)]),
 })
 
@@ -223,7 +225,7 @@ function prepareRow(decl: DatasetDecl, timeDimension: string | null, source: Jso
   return { source, time, scenario }
 }
 
-function scenarioValue(decl: DatasetDecl, scenario: "actual" | "budget" | "forecast"): string | null {
+function scenarioValue(decl: DatasetDecl, scenario: Scenario): string | null {
   if (!decl.scenario) return null
   return decl.scenario[scenario] ?? null
 }
@@ -259,7 +261,7 @@ function compareRows(decl: DatasetDecl, rows: readonly PreparedRow[], mode: Comp
       ok: true,
       rows: rows.filter((row) => row.scenario === scenario && (window === null || (row.time !== null && windowContains(window, row.time)))),
       alignShift: { months: 0, days: 0 },
-      label: mode === "budget" ? "Budget" : "Forecast",
+      label: describeCompareMode(mode),
     }
   }
   if (!window) return invalid(`comparing with the ${mode} needs a period, such as last-12-months`)
@@ -270,7 +272,7 @@ function compareRows(decl: DatasetDecl, rows: readonly PreparedRow[], mode: Comp
     ok: true,
     rows: rows.filter((row) => (actual === null || row.scenario === actual) && row.time !== null && windowContains(compareWindow, row.time)),
     alignShift: { months: -shift.months, days: -shift.days },
-    label: mode === "previous-year" ? `Prior year (${describeWindow(compareWindow)})` : `Prior period (${describeWindow(compareWindow)})`,
+    label: `${describeCompareMode(mode)} (${describeWindow(compareWindow)})`,
   }
 }
 

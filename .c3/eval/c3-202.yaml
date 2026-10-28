@@ -20,7 +20,6 @@ code:
   - src/server/beacon-pairing.test.ts
   - src/server/beacon-pairing-host.ts
   - src/server/beacon-transfer-tickets.ts
-  - src/server/beacon-transfer-host.ts
   - src/server/beacon-transfer-files.ts
   - src/server/beacon-transfer-files.adapter.ts
   - src/server/beacon-transfer-http.adapter.ts
@@ -34,3 +33,8 @@ code:
   - src/server/analytics.ts
   - src/server/http-route-inventory.test.ts
   - src/server/server-data-dir.test.ts
+  - src/server/env-int.ts
+  - src/server/env-int.test.ts
+  - src/server/json-settings-file.adapter.ts
+  - src/server/lifetime.ts
+  - src/server/lifetime.test.ts

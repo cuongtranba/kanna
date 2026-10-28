@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import {
-  migrateChatPreferencesState,
   NEW_CHAT_COMPOSER_ID,
   useChatPreferencesStore,
 } from "./chatPreferencesStore"
 import { useAppSettingsStore } from "./appSettingsStore"
 import type { AppSettingsSnapshot, CustomModelEntry } from "../../shared/types"
-import { DEFAULT_OPENROUTER_SDK_MODEL } from "../../shared/types"
 
 const INITIAL_STATE = useChatPreferencesStore.getInitialState()
 const APP_SETTINGS_INITIAL_STATE = useAppSettingsStore.getInitialState()
@@ -23,177 +21,6 @@ function seedCustomModels(entries: CustomModelEntry[]) {
     hydrationStatus: "ready",
   })
 }
-
-describe("migrateChatPreferencesState", () => {
-  test("preserves max effort for versioned Opus Claude models", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        claude: {
-          model: "claude-opus-4-7",
-          modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
-          planMode: false,
-        },
-      },
-    })
-
-    expect(migrated.providerDefaults.claude).toEqual({
-      model: "claude-opus-4-7",
-      modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
-      planMode: false,
-    })
-  })
-
-  test("normalizes provider defaults and legacy composer state", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        claude: {
-          model: "opus",
-          modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
-          planMode: true,
-        },
-        codex: {
-          model: "gpt-5.3-codex",
-          modelOptions: { reasoningEffort: "minimal", fastMode: true },
-          planMode: false,
-        },
-      },
-      composerState: {
-        provider: "claude",
-        model: "sonnet",
-        modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
-        planMode: false,
-      },
-    })
-
-    expect(migrated).toEqual({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        claude: {
-          model: "claude-opus-4-7",
-          modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
-          planMode: true,
-        },
-        codex: {
-          model: "gpt-5.5",
-          modelOptions: { reasoningEffort: "minimal", fastMode: true },
-          planMode: false,
-        },
-        openrouter: {
-          model: DEFAULT_OPENROUTER_SDK_MODEL,
-          modelOptions: {},
-          planMode: false,
-        },
-        custom: {
-          model: "",
-          modelOptions: {},
-          planMode: false,
-        },
-      },
-      chatStates: {},
-      legacyComposerState: {
-        provider: "claude",
-        model: "claude-sonnet-4-6",
-        modelOptions: { reasoningEffort: "max", contextWindow: "1m" },
-        planMode: false,
-      },
-    })
-  })
-
-  test("drops unsupported Claude context window selections during migration", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        claude: {
-          model: "haiku",
-          modelOptions: { reasoningEffort: "low", contextWindow: "1m" },
-          planMode: false,
-        },
-      },
-      chatStates: {
-        chatA: {
-          provider: "claude",
-          model: "haiku",
-          modelOptions: { reasoningEffort: "high", contextWindow: "1m" },
-          planMode: false,
-        },
-      },
-    })
-
-    expect(migrated.providerDefaults.claude.modelOptions).toEqual({ reasoningEffort: "low", contextWindow: "200k" })
-    expect(migrated.chatStates.chatA).toEqual({
-      provider: "claude",
-      model: "claude-haiku-4-5-20251001",
-      modelOptions: { reasoningEffort: "high", contextWindow: "200k" },
-      planMode: false,
-    })
-  })
-
-  test("rewrites persisted Codex defaults to gpt-5.5 during migration", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "last_used",
-      providerDefaults: {
-        codex: {
-          model: "gpt-5-codex",
-          modelOptions: { reasoningEffort: "low", fastMode: true },
-          planMode: false,
-        },
-      },
-    })
-
-    expect(migrated.providerDefaults.codex).toEqual({
-      model: "gpt-5.5",
-      modelOptions: { reasoningEffort: "low", fastMode: true },
-      planMode: false,
-    })
-  })
-
-  test("rewrites persisted Codex composer state to gpt-5.5 during migration", () => {
-    const migrated = migrateChatPreferencesState({
-      defaultProvider: "codex",
-      providerDefaults: {
-        codex: {
-          model: "gpt-5.3-codex-spark",
-          modelOptions: { reasoningEffort: "low", fastMode: true },
-          planMode: true,
-        },
-      },
-      chatStates: {
-        chatA: {
-          provider: "codex",
-          model: "gpt-5.4",
-          modelOptions: { reasoningEffort: "medium", fastMode: false },
-          planMode: false,
-        },
-      },
-      legacyComposerState: {
-        provider: "codex",
-        model: "gpt-5.3-codex",
-        modelOptions: { reasoningEffort: "xhigh", fastMode: true },
-        planMode: true,
-      },
-    })
-
-    expect(migrated.providerDefaults.codex).toEqual({
-      model: "gpt-5.5",
-      modelOptions: { reasoningEffort: "low", fastMode: true },
-      planMode: true,
-    })
-    expect(migrated.chatStates.chatA).toEqual({
-      provider: "codex",
-      model: "gpt-5.5",
-      modelOptions: { reasoningEffort: "medium", fastMode: false },
-      planMode: false,
-    })
-    expect(migrated.legacyComposerState).toEqual({
-      provider: "codex",
-      model: "gpt-5.5",
-      modelOptions: { reasoningEffort: "xhigh", fastMode: true },
-      planMode: true,
-    })
-  })
-})
 
 describe("chat preference store", () => {
   test("starts with gpt-5.5 as the default Codex model", () => {
@@ -503,7 +330,7 @@ describe("chat preference store", () => {
     })
   })
 
-  test("new chat composer prefers server provider defaults over hardcoded legacy state when last_used", () => {
+  test("new chat composer prefers server provider defaults when last_used", () => {
     useChatPreferencesStore.setState({
       ...INITIAL_STATE,
       defaultProvider: "last_used",
@@ -655,19 +482,6 @@ describe("initializeComposerForChat — provider sync (issue #65)", () => {
       model: "glm/glm-5.3",
       modelOptions: {},
       planMode: true,
-    })
-  })
-
-  test("a persisted custom composer survives migration with its provider and model", () => {
-    const migrated = migrateChatPreferencesState({
-      chatStates: { "chat-custom": { provider: "custom", model: "kimi/kimi-k3", planMode: false } },
-    })
-
-    expect(migrated.chatStates["chat-custom"]).toEqual({
-      provider: "custom",
-      model: "kimi/kimi-k3",
-      modelOptions: {},
-      planMode: false,
     })
   })
 

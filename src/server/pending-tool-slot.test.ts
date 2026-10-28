@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import { PendingToolSlots, type ParkedTool } from "./pending-tool-slot"
+import { PendingToolSlots, discardedToolResult, type ParkedTool } from "./pending-tool-slot"
 import type { NormalizedToolCall } from "../shared/types"
 import type { JsonValue } from "../shared/json"
 
@@ -92,5 +92,38 @@ describe("PendingToolSlots", () => {
     slots.discard("chat-1")
     expect(slots.has("chat-1")).toBe(false)
     expect(slots.get("chat-2")?.toolUseId).toBe("tool-2")
+  })
+})
+
+function makeTool<TKind extends "ask_user_question" | "exit_plan_mode">(
+  toolKind: TKind
+): NormalizedToolCall & { toolKind: TKind } {
+  return {
+    kind: "tool",
+    toolKind,
+    toolName: toolKind,
+    toolId: "t1",
+    input: {} as never,
+  } as unknown as NormalizedToolCall & { toolKind: TKind }
+}
+
+describe("discardedToolResult", () => {
+  test("ask_user_question variant returns answers: {}", () => {
+    const result = discardedToolResult(makeTool("ask_user_question"))
+    expect(result).toHaveProperty("answers")
+    expect((result as { answers: Record<string, string> }).answers).toEqual({})
+  })
+
+  test("exit_plan_mode variant does not have an answers field", () => {
+    const result = discardedToolResult(makeTool("exit_plan_mode"))
+    expect(result).not.toHaveProperty("answers")
+  })
+
+  test("ask_user_question result carries discarded: true", () => {
+    expect(discardedToolResult(makeTool("ask_user_question")).discarded).toBe(true)
+  })
+
+  test("exit_plan_mode result carries discarded: true", () => {
+    expect(discardedToolResult(makeTool("exit_plan_mode")).discarded).toBe(true)
   })
 })

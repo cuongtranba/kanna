@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useRef, type ReactNode } from "react"
+import { useCallback, type ReactNode } from "react"
 import { WorkflowsPageViewStore } from "./WorkflowsPage.store"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { ArrowLeft, Loader2, Workflow } from "lucide-react"
 import { useShallow } from "zustand/react/shallow"
 import type { KannaState } from "./useKannaState"
 import { useWorkflowsStore, selectRuns } from "../stores/workflowsStore"
-import { WorkflowsSection, WorkflowRunDetail } from "./WorkflowsSection"
+import { WorkflowsSection, WorkflowRunDetail, isAgentLive } from "./WorkflowsSection"
+import { useWorkflowRunSelection } from "./useWorkflowRunSelection"
+import { WorkflowRunSelectionStore } from "./WorkflowRunSelection.store"
 import { WorkflowAgentTranscriptPanel } from "./WorkflowAgentTranscriptPanel"
 import { SettingsHeaderButton } from "../components/ui/settings-header-button"
 import { cn } from "../lib/utils"
 import type { WorkflowRun, WorkflowRunSummary } from "../../shared/workflow-types"
 import type { TranscriptEntry } from "../../shared/types"
-import { LOG_PREFIX } from "../../shared/branding"
-import { onRejected } from "../../shared/errors"
-import { log } from "../../shared/log"
-import { runDetached } from "../lib/runDetached"
+import { chatPath } from "../lib/paneTree"
 
 
 export interface WorkflowsPageViewProps {
@@ -25,55 +24,21 @@ export interface WorkflowsPageViewProps {
 }
 
 function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBackToChat }: WorkflowsPageViewProps) {
-  const selectedRunId = WorkflowsPageViewStore.useScopedStore((s) => s.selectedRunId)
-  const selectedRun = WorkflowsPageViewStore.useScopedStore((s) => s.selectedRun)
   const selectedAgentId = WorkflowsPageViewStore.useScopedStore((s) => s.selectedAgentId)
-  const setSelectedRunId = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedRunId)
-  const setSelectedRun = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedRun)
   const setSelectedAgentId = WorkflowsPageViewStore.useScopedStore((s) => s.setSelectedAgentId)
-  const clearSelection = WorkflowsPageViewStore.useScopedStore((s) => s.clearSelection)
-  const runsAtSelectionRef = useRef<WorkflowRunSummary[] | null>(null)
-  const fetchSeqRef = useRef(0)
+  const { selection, selectedRunId, selectRun, clearSelection } = useWorkflowRunSelection(runs, getRunDetail, selectedAgentId)
 
   const handleSelectRun = useCallback((runId: string) => {
-    runsAtSelectionRef.current = runs
-    setSelectedRunId(runId)
     setSelectedAgentId(null)
-    setSelectedRun("loading")
-    const seq = ++fetchSeqRef.current
-    const isCurrent = () => fetchSeqRef.current === seq
-    getRunDetail(runId).then(
-      (detail) => {
-        if (isCurrent()) setSelectedRun(detail ?? "not-found")
-      },
-      onRejected((error) => {
-        log.error(LOG_PREFIX, "workflows.getRun failed", error)
-        if (isCurrent()) setSelectedRun("failed")
-      }),
-    )
-  }, [getRunDetail, runs, setSelectedRunId, setSelectedAgentId, setSelectedRun])
+    selectRun(runId)
+  }, [selectRun, setSelectedAgentId])
 
   const handleClearSelection = useCallback(() => {
     clearSelection()
-    runsAtSelectionRef.current = null
-  }, [clearSelection])
+    setSelectedAgentId(null)
+  }, [clearSelection, setSelectedAgentId])
 
-  useEffect(() => {
-    if (selectedRunId === null) return
-    if (runs === runsAtSelectionRef.current) return
-    const row = runs.find((r) => r.runId === selectedRunId)
-    if (!row || row.status !== "running") return
-    let cancelled = false
-    const seq = ++fetchSeqRef.current
-    runDetached("workflows.getRun refresh", getRunDetail(selectedRunId).then((detail) => {
-      if (cancelled || fetchSeqRef.current !== seq || detail === null) return
-      if (selectedAgentId !== null && !detail.agents.some((a) => a.agentId === selectedAgentId)) return
-      setSelectedRun(detail)
-    }))
-    return () => { cancelled = true }
-  }, [runs, selectedRunId, selectedAgentId, getRunDetail, setSelectedRun])
-
-  const runObj = selectedRun !== "loading" && selectedRun !== "not-found" && selectedRun !== "failed" ? selectedRun : null
+  const runObj = selection.kind === "loaded" ? selection.run : null
   const selectedAgent =
     selectedAgentId !== null && runObj
       ? runObj.agents.find((a) => a.agentId === selectedAgentId)
@@ -81,16 +46,16 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
   const hasSelection = selectedRunId !== null
 
   let detailContent: ReactNode
-  if (selectedRun === "loading") {
+  if (selection.kind === "loading") {
     detailContent = (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" aria-label="Loading" />
         Loading run…
       </div>
     )
-  } else if (selectedRun === "failed") {
+  } else if (selection.kind === "failed") {
     detailContent = <WorkflowDetailPlaceholder text="Couldn't load this run. Select it again to retry." />
-  } else if (selectedRun === "not-found") {
+  } else if (selection.kind === "not-found") {
     detailContent = <WorkflowDetailPlaceholder text="Run not found or no longer available." />
   } else if (selectedAgent && runObj) {
     detailContent = (
@@ -100,7 +65,7 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
         agentId={selectedAgent.agentId!}
         agentLabel={selectedAgent.label}
         promptPreview={selectedAgent.promptPreview}
-        agentIsRunning={selectedAgent.state === "running" || selectedAgent.state === "progress"}
+        agentIsRunning={isAgentLive(selectedAgent.state)}
         onClose={() => setSelectedAgentId(null)}
         getTranscript={getAgentTranscript}
       />
@@ -180,9 +145,11 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
 
 export function WorkflowsPageView(props: WorkflowsPageViewProps) {
   return (
-    <WorkflowsPageViewStore.Provider init={undefined}>
-      <WorkflowsPageViewInner {...props} />
-    </WorkflowsPageViewStore.Provider>
+    <WorkflowRunSelectionStore.Provider init={undefined}>
+      <WorkflowsPageViewStore.Provider init={undefined}>
+        <WorkflowsPageViewInner {...props} />
+      </WorkflowsPageViewStore.Provider>
+    </WorkflowRunSelectionStore.Provider>
   )
 }
 
@@ -217,7 +184,7 @@ export function WorkflowsPage({ chatId }: { chatId?: string }) {
 
   const handleBackToChat = useCallback(() => {
     if (!chatId) return
-    navigate(`/chat/${chatId}`)
+    navigate(chatPath(chatId))
   }, [chatId, navigate])
 
   if (!chatId) {

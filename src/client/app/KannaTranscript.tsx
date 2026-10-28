@@ -1,6 +1,6 @@
+import { Inbox, Webhook } from "lucide-react"
 import React, { memo, useLayoutEffect, useMemo, useRef } from "react"
-import type { AskUserQuestionItem, ProcessedToolCall } from "../components/messages/types"
-import type { AskUserQuestionAnswerMap, ChatAttachment, HydratedTranscriptMessage } from "../../shared/types"
+import type { HydratedToolCall, HydratedTranscriptMessage, AutoContinueSchedule } from "../../shared/types"
 import { UserMessage } from "../components/messages/UserMessage"
 import { RawJsonMessage } from "../components/messages/RawJsonMessage"
 import { SystemMessage } from "../components/messages/SystemMessage"
@@ -10,8 +10,7 @@ import { CronCommandErrorMessage } from "../components/messages/CronCommandError
 import { CronJobChangeMessage } from "../components/messages/CronJobChangeMessage"
 import { CronListMessage } from "../components/messages/CronListMessage"
 import { CronRunMessage } from "../components/messages/CronRunMessage"
-import { InboundDeliveryMessage } from "../components/messages/InboundDeliveryMessage"
-import { WebhookDeliveryMessage } from "../components/messages/WebhookDeliveryMessage"
+import { DeliveryMessage } from "../components/messages/DeliveryMessage"
 import { CronRunSkippedMessage } from "../components/messages/CronRunSkippedMessage"
 import { TextMessage } from "../components/messages/TextMessage"
 import { ThinkingMessage } from "../components/messages/ThinkingMessage"
@@ -35,16 +34,22 @@ import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
 import { AutoContinueCard } from "../components/chat-ui/AutoContinueCard"
 import { PendingToolRequestMessage } from "../components/messages/PendingToolRequestMessage"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "./chatFocusPolicy"
-import type { AutoContinueSchedule } from "../../shared/types"
 import type { CronJobSnapshot } from "../../shared/cron/types"
-import type { ToolRequestDecision } from "../../shared/permission-policy"
+import { sameFields } from "../../shared/equality"
 import { DELEGATE_SUBAGENT_TOOL_NAME } from "./subagent-run-placement"
 import { PREVIEW_FILE_TOOL_NAME } from "../../shared/tools"
-import { useTranscriptActions } from "./transcriptActionsContext"
+import { useTranscriptActions, type TranscriptActionsContextValue } from "./transcriptActionsContext"
+import { SPECIAL_TRANSCRIPT_TOOL_NAMES, type LatestToolIds } from "./derived"
 
-const SPECIAL_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "TodoWrite", DELEGATE_SUBAGENT_TOOL_NAME, PREVIEW_FILE_TOOL_NAME])
+const RESULT_VISIBLE_AFTER_MS = 60_000
 
-const SPECIAL_TOOL_KINDS = new Set<ProcessedToolCall["toolKind"]>(["offer_download", "image_generation"])
+const SPECIAL_TOOL_NAMES = new Set<string>([
+  ...Object.values(SPECIAL_TRANSCRIPT_TOOL_NAMES),
+  DELEGATE_SUBAGENT_TOOL_NAME,
+  PREVIEW_FILE_TOOL_NAME,
+])
+
+const SPECIAL_TOOL_KINDS = new Set<HydratedToolCall["toolKind"]>(["offer_download", "image_generation"])
 
 export type TranscriptRenderItem =
   | { type: "single"; message: HydratedTranscriptMessage; index: number }
@@ -57,13 +62,8 @@ export interface ResolvedSingleTranscriptRow {
   index: number
   isLoading: boolean
   localPath?: string
-  isFirstSystem: boolean
-  isFirstAccount: boolean
   isLatestAskUserQuestion: boolean
   isLatestExitPlanMode: boolean
-  isLatestTodoWrite: boolean
-  hideResult: boolean
-  isFinalStatus: boolean
 }
 
 export interface ResolvedToolGroupTranscriptRow {
@@ -82,16 +82,7 @@ export interface StableResolvedTranscriptRowsState {
   result: ResolvedTranscriptRow[]
 }
 
-interface TranscriptMessageRenderState {
-  isFirstSystem: boolean
-  isFirstAccount: boolean
-  isLatestTodoWrite: boolean
-  hideResult: boolean
-  isFinalStatus: boolean
-  shouldRender: boolean
-}
-
-function isProcessedToolCall(message: HydratedTranscriptMessage): message is ProcessedToolCall {
+function isProcessedToolCall(message: HydratedTranscriptMessage): message is HydratedToolCall {
   return message.kind === "tool"
 }
 
@@ -101,93 +92,51 @@ function isCollapsibleToolCall(message: HydratedTranscriptMessage) {
   return !SPECIAL_TOOL_NAMES.has(message.toolName)
 }
 
-function getTranscriptMessageRenderState(
-  message: HydratedTranscriptMessage,
-  {
-    isFirstSystem,
-    isFirstAccount,
-    isLatestTodoWrite,
-    hideResult,
-    isFinalStatus,
-  }: Omit<TranscriptMessageRenderState, "shouldRender">
-): TranscriptMessageRenderState {
-  let shouldRender = !message.hidden
+function isMessageVisible(
+  messages: HydratedTranscriptMessage[],
+  index: number,
+  latestToolIds: LatestToolIds,
+): boolean {
+  const message = messages[index]
+  if (message.hidden) return false
 
-  if (shouldRender) {
-    switch (message.kind) {
-      case "system_init":
-        shouldRender = isFirstSystem
-        break
-      case "account_info":
-        shouldRender = isFirstAccount
-        break
-      case "tool":
-        shouldRender = message.toolKind !== "todo_write" || isLatestTodoWrite
-        break
-      case "result":
-        shouldRender = !hideResult && (!message.success || message.durationMs > 60000)
-        break
-      case "context_window_updated":
-        shouldRender = false
-        break
-      case "status":
-        shouldRender = isFinalStatus
-        break
-      default:
-        shouldRender = true
-        break
+  switch (message.kind) {
+    case "system_init":
+      return messages.findIndex((entry) => entry.kind === "system_init") === index
+    case "account_info":
+      return messages.findIndex((entry) => entry.kind === "account_info") === index
+    case "tool":
+      return message.toolKind !== "todo_write" || message.id === latestToolIds.todoWrite
+    case "result": {
+      const adjacentToClear = messages[index - 1]?.kind === "context_cleared" || messages[index + 1]?.kind === "context_cleared"
+      return !adjacentToClear && (!message.success || message.durationMs > RESULT_VISIBLE_AFTER_MS)
     }
-  }
-
-  return {
-    isFirstSystem,
-    isFirstAccount,
-    isLatestTodoWrite,
-    hideResult,
-    isFinalStatus,
-    shouldRender,
+    case "context_window_updated":
+      return false
+    case "status":
+      return index === messages.length - 1
+    default:
+      return true
   }
 }
 
-function buildTranscriptMessageRenderStates(
+function buildTranscriptRenderItems(
   messages: HydratedTranscriptMessage[],
-  latestToolIds: Record<string, string | null>
-) {
-  const firstSystemIndex = messages.findIndex((entry) => entry.kind === "system_init")
-  const firstAccountIndex = messages.findIndex((entry) => entry.kind === "account_info")
-
-  return messages.map<TranscriptMessageRenderState>((message, index) => {
-    const previousMessage = messages[index - 1]
-    const nextMessage = messages[index + 1]
-    return getTranscriptMessageRenderState(message, {
-      isFirstSystem: firstSystemIndex === index,
-      isFirstAccount: firstAccountIndex === index,
-      isLatestTodoWrite: message.id === latestToolIds.TodoWrite,
-      hideResult: nextMessage?.kind === "context_cleared" || previousMessage?.kind === "context_cleared",
-      isFinalStatus: index === messages.length - 1,
-    })
-  })
-}
-
-export function buildTranscriptRenderItems(
-  messages: HydratedTranscriptMessage[],
-  renderStates: TranscriptMessageRenderState[]
+  visible: boolean[],
 ): TranscriptRenderItem[] {
   const result: TranscriptRenderItem[] = []
   let index = 0
 
   while (index < messages.length) {
     const message = messages[index]
-    const renderState = renderStates[index]
-    if (renderState?.shouldRender && isCollapsibleToolCall(message)) {
+    if (visible[index] && isCollapsibleToolCall(message)) {
       const group: HydratedTranscriptMessage[] = [message]
       const startIndex = index
       index += 1
 
       while (index < messages.length) {
         const nextMessage = messages[index]
-        const nextRenderState = renderStates[index]
-        if (!nextRenderState?.shouldRender) {
+        if (!visible[index]) {
           index += 1
           continue
         }
@@ -220,121 +169,10 @@ function getTranscriptRenderItemId(item: TranscriptRenderItem) {
   return `tool-group:${firstId}`
 }
 
-function sameStringArray(left: string[] | undefined, right: string[] | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.length !== right.length) return false
-  return left.every((value, index) => value === right[index])
-}
-
-function sameAttachment(left: ChatAttachment, right: ChatAttachment) {
-  return left.id === right.id
-    && left.kind === right.kind
-    && left.displayName === right.displayName
-    && left.absolutePath === right.absolutePath
-    && left.relativePath === right.relativePath
-    && left.contentUrl === right.contentUrl
-    && left.mimeType === right.mimeType
-    && left.size === right.size
-}
-
-function sameAttachmentArray(left: ChatAttachment[] | undefined, right: ChatAttachment[] | undefined) {
-  if (left === right) return true
-  if (!left || !right) return false
-  if (left.length !== right.length) return false
-  return left.every((attachment, index) => sameAttachment(attachment, right[index]!))
-}
+const MESSAGE_FIELDS_IGNORED_FOR_EQUALITY = ["timestamp", "messageId"]
 
 function sameMessage(left: HydratedTranscriptMessage, right: HydratedTranscriptMessage) {
-  if (left === right) return true
-  if (left.kind !== right.kind || left.id !== right.id || left.hidden !== right.hidden) return false
-
-  switch (left.kind) {
-    case "user_prompt":
-      return left.content === (right.kind === "user_prompt" ? right.content : null)
-        && right.kind === "user_prompt"
-        && left.steered === right.steered
-        && left.autoContinue?.scheduleId === right.autoContinue?.scheduleId
-        && sameAttachmentArray(left.attachments, right.attachments)
-    case "system_init":
-      return right.kind === "system_init"
-        && left.provider === right.provider
-        && left.model === right.model
-        && sameStringArray(left.tools, right.tools)
-        && sameStringArray(left.agents, right.agents)
-        && sameStringArray(left.slashCommands, right.slashCommands)
-        && left.debugRaw === right.debugRaw
-    case "account_info":
-      return right.kind === "account_info" && left.accountInfo === right.accountInfo
-    case "assistant_text":
-      return right.kind === "assistant_text" && left.text === right.text
-    case "assistant_thinking":
-      return right.kind === "assistant_thinking" && left.text === right.text
-    case "api_error":
-      return right.kind === "api_error"
-        && left.status === right.status
-        && left.text === right.text
-        && left.requestId === right.requestId
-        && left.apiErrorReason === right.apiErrorReason
-    case "policy_refusal":
-      return right.kind === "policy_refusal"
-        && left.text === right.text
-        && left.requestId === right.requestId
-    case "tool":
-      return right.kind === "tool"
-        && left.toolKind === right.toolKind
-        && left.toolName === right.toolName
-        && left.toolId === right.toolId
-        && left.isError === right.isError
-        && left.input === right.input
-        && left.result === right.result
-        && left.rawResult === right.rawResult
-    case "result":
-      return right.kind === "result"
-        && left.success === right.success
-        && left.cancelled === right.cancelled
-        && left.result === right.result
-        && left.durationMs === right.durationMs
-        && left.costUsd === right.costUsd
-        && left.codexErrorInfo === right.codexErrorInfo
-    case "status":
-      return right.kind === "status" && left.status === right.status
-    case "compact_summary":
-      return right.kind === "compact_summary" && left.summary === right.summary
-    case "context_window_updated":
-      return right.kind === "context_window_updated" && left.usage === right.usage
-    case "memory_loaded":
-      return right.kind === "memory_loaded" && left.path === right.path
-    case "loop_disarmed":
-      return right.kind === "loop_disarmed"
-        && left.reason === right.reason
-        && left.resumable === right.resumable
-        && left.trackingFileRel === right.trackingFileRel
-        && left.workdirAbs === right.workdirAbs
-    case "compact_boundary":
-    case "context_cleared":
-    case "interrupted":
-      return true
-    case "unknown":
-      return right.kind === "unknown" && left.json === right.json
-    case "auto_continue_prompt":
-      return right.kind === "auto_continue_prompt" && left.scheduleId === right.scheduleId
-    case "pending_tool_request":
-      return right.kind === "pending_tool_request"
-        && left.toolRequestId === right.toolRequestId
-        && left.toolName === right.toolName
-    case "cron_armed":
-    case "cron_command_error":
-    case "cron_run":
-    case "cron_run_skipped":
-    case "cron_list":
-    case "cron_job_change":
-      return true
-    case "webhook_delivery":
-      return right.kind === "webhook_delivery" && left.deliveryId === right.deliveryId && left.message === right.message
-    case "inbound_delivery":
-      return right.kind === "inbound_delivery" && left.deliveryId === right.deliveryId && left.message === right.message
-  }
+  return left.kind === right.kind && sameFields(left, right, MESSAGE_FIELDS_IGNORED_FOR_EQUALITY)
 }
 
 function isResolvedTranscriptRowUnchanged(left: ResolvedTranscriptRow, right: ResolvedTranscriptRow) {
@@ -344,13 +182,8 @@ function isResolvedTranscriptRowUnchanged(left: ResolvedTranscriptRow, right: Re
     return left.index === right.index
       && left.isLoading === right.isLoading
       && left.localPath === right.localPath
-      && left.isFirstSystem === right.isFirstSystem
-      && left.isFirstAccount === right.isFirstAccount
       && left.isLatestAskUserQuestion === right.isLatestAskUserQuestion
       && left.isLatestExitPlanMode === right.isLatestExitPlanMode
-      && left.isLatestTodoWrite === right.isLatestTodoWrite
-      && left.hideResult === right.hideResult
-      && left.isFinalStatus === right.isFinalStatus
       && sameMessage(left.message, right.message)
   }
 
@@ -404,61 +237,57 @@ export function useStableResolvedRows(rows: ResolvedTranscriptRow[]) {
   return result.result
 }
 
-const NOOP_TOOL_REQUEST_ANSWER = (_toolRequestId: string, _decision: ToolRequestDecision): Promise<void> => Promise.resolve()
-
-interface TranscriptSingleRowProps {
-  message: HydratedTranscriptMessage
-  index: number
-  isLoading: boolean
-  localPath?: string
-  isFirstSystem: boolean
-  isFirstAccount: boolean
-  isLatestAskUserQuestion: boolean
-  isLatestExitPlanMode: boolean
-  isLatestTodoWrite: boolean
-  hideResult: boolean
-  isFinalStatus: boolean
-  onAskUserQuestionSubmit: (
-    toolUseId: string,
-    questions: AskUserQuestionItem[],
-    answers: AskUserQuestionAnswerMap
-  ) => void | Promise<void>
-  onExitPlanModeConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
-  onToolRequestAnswer?: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
-  schedules: Record<string, AutoContinueSchedule>
-  cronJobs: readonly CronJobSnapshot[]
-  onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => Promise<void>
-  onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => Promise<void>
-  onAutoContinueCancel: (scheduleId: string) => Promise<void>
-  onRetryFailedTurn?: (resultMessageId: string) => void | Promise<void>
-  onCronRemove?: (jobId: string) => void
-  chatId?: string
+function pickSingleRowActions(actions: TranscriptActionsContextValue) {
+  const {
+    onAskUserQuestionSubmit,
+    onExitPlanModeConfirm,
+    onToolRequestAnswer,
+    schedules,
+    cronJobs,
+    onAutoContinueAccept,
+    onAutoContinueReschedule,
+    onAutoContinueCancel,
+    onRetryFailedTurn,
+    onCronRemove,
+    chatId,
+  } = actions
+  return {
+    onAskUserQuestionSubmit,
+    onExitPlanModeConfirm,
+    onToolRequestAnswer,
+    schedules,
+    cronJobs,
+    onAutoContinueAccept,
+    onAutoContinueReschedule,
+    onAutoContinueCancel,
+    onRetryFailedTurn,
+    onCronRemove,
+    chatId,
+  }
 }
 
-const TranscriptSingleRow = memo(({
-  message,
-  index,
-  isLoading,
-  localPath,
-  isFirstSystem,
-  isFirstAccount,
-  isLatestAskUserQuestion,
-  isLatestExitPlanMode,
-  isLatestTodoWrite,
-  hideResult,
-  isFinalStatus,
-  onAskUserQuestionSubmit,
-  onExitPlanModeConfirm,
-  onToolRequestAnswer = NOOP_TOOL_REQUEST_ANSWER,
-  schedules,
-  cronJobs,
-  onAutoContinueAccept,
-  onAutoContinueReschedule,
-  onAutoContinueCancel,
-  onRetryFailedTurn,
-  onCronRemove,
-  chatId,
-}: TranscriptSingleRowProps) => {
+type SingleRowActions = ReturnType<typeof pickSingleRowActions>
+
+interface TranscriptSingleRowProps {
+  row: ResolvedSingleTranscriptRow
+  actions: SingleRowActions
+}
+
+const TranscriptSingleRow = memo(({ row, actions }: TranscriptSingleRowProps) => {
+  const { message, index, isLoading, localPath, isLatestAskUserQuestion, isLatestExitPlanMode } = row
+  const {
+    onAskUserQuestionSubmit,
+    onExitPlanModeConfirm,
+    onToolRequestAnswer,
+    schedules,
+    cronJobs,
+    onAutoContinueAccept,
+    onAutoContinueReschedule,
+    onAutoContinueCancel,
+    onRetryFailedTurn,
+    onCronRemove,
+    chatId,
+  } = actions
   let rendered: React.ReactNode = null
 
   if (message.kind === "user_prompt") {
@@ -490,10 +319,10 @@ const TranscriptSingleRow = memo(({
         rendered = <RawJsonMessage key={message.id} json={message.json} />
         break
       case "system_init":
-        rendered = isFirstSystem ? <SystemMessage key={message.id} message={message} rawJson={message.debugRaw} /> : null
+        rendered = <SystemMessage key={message.id} message={message} rawJson={message.debugRaw} />
         break
       case "account_info":
-        rendered = isFirstAccount ? <AccountInfoMessage key={message.id} message={message} /> : null
+        rendered = <AccountInfoMessage key={message.id} message={message} />
         break
       case "assistant_text":
         rendered = <TextMessage key={message.id} message={message} />
@@ -535,7 +364,7 @@ const TranscriptSingleRow = memo(({
           break
         }
         if (message.toolKind === "todo_write") {
-          rendered = isLatestTodoWrite ? <TodoWriteMessage key={message.id} message={message} /> : null
+          rendered = <TodoWriteMessage key={message.id} message={message} />
           break
         }
         if (message.toolKind === "offer_download" && message.result) {
@@ -553,12 +382,7 @@ const TranscriptSingleRow = memo(({
         rendered = <ToolCallMessage key={message.id} message={message} isLoading={isLoading} localPath={localPath} chatId={chatId} />
         break
       case "result":
-        rendered = hideResult
-          ? null
-          : <ResultMessage key={message.id} message={message} onRetry={onRetryFailedTurn} />
-        break
-      case "context_window_updated":
-        rendered = null
+        rendered = <ResultMessage key={message.id} message={message} onRetry={onRetryFailedTurn} />
         break
       case "interrupted":
         rendered = <InterruptedMessage key={message.id} message={message} />
@@ -576,7 +400,7 @@ const TranscriptSingleRow = memo(({
         rendered = <CompactSummaryMessage key={message.id} message={message} />
         break
       case "status":
-        rendered = isFinalStatus ? <StatusMessage key={message.id} message={message} /> : null
+        rendered = <StatusMessage key={message.id} message={message} />
         break
       case "pending_tool_request":
         rendered = (
@@ -588,7 +412,7 @@ const TranscriptSingleRow = memo(({
         )
         break
       case "cron_armed":
-        rendered = <CronArmedMessage key={message.id} message={message} onRemove={onCronRemove} />
+        rendered = <CronArmedMessage key={message.id} message={message} chatId={chatId} onRemove={onCronRemove} />
         break
       case "cron_command_error":
         rendered = <CronCommandErrorMessage key={message.id} message={message} />
@@ -606,10 +430,10 @@ const TranscriptSingleRow = memo(({
         rendered = <CronJobChangeMessage key={message.id} message={message} />
         break
       case "webhook_delivery":
-        rendered = <WebhookDeliveryMessage key={message.id} message={message} />
+        rendered = <DeliveryMessage key={message.id} icon={Webhook} title="Webhook" name={message.hookName} delivery={message} />
         break
       case "inbound_delivery":
-        rendered = <InboundDeliveryMessage key={message.id} message={message} />
+        rendered = <DeliveryMessage key={message.id} icon={Inbox} title="Inbound" name={message.sourceName} delivery={message} />
         break
       case "loop_disarmed":
         rendered = <LoopDisarmedMessage key={message.id} message={message} />
@@ -628,76 +452,32 @@ const TranscriptSingleRow = memo(({
       {rendered}
     </div>
   )
-}, (prev, next) => (
-  prev.index === next.index
-  && prev.isLoading === next.isLoading
-  && prev.localPath === next.localPath
-  && prev.isFirstSystem === next.isFirstSystem
-  && prev.isFirstAccount === next.isFirstAccount
-  && prev.isLatestAskUserQuestion === next.isLatestAskUserQuestion
-  && prev.isLatestExitPlanMode === next.isLatestExitPlanMode
-  && prev.isLatestTodoWrite === next.isLatestTodoWrite
-  && prev.hideResult === next.hideResult
-  && prev.isFinalStatus === next.isFinalStatus
-  && prev.onAskUserQuestionSubmit === next.onAskUserQuestionSubmit
-  && prev.onExitPlanModeConfirm === next.onExitPlanModeConfirm
-  && prev.onToolRequestAnswer === next.onToolRequestAnswer
-  && prev.schedules === next.schedules
-  && prev.cronJobs === next.cronJobs
-  && prev.onAutoContinueAccept === next.onAutoContinueAccept
-  && prev.onAutoContinueReschedule === next.onAutoContinueReschedule
-  && prev.onAutoContinueCancel === next.onAutoContinueCancel
-  && prev.onCronRemove === next.onCronRemove
-  && prev.chatId === next.chatId
-  && sameMessage(prev.message, next.message)
-))
+}, (prev, next) => prev.row === next.row && sameFields(prev.actions, next.actions))
 
 interface TranscriptToolGroupProps {
-  id: string
-  startIndex: number
-  messages: HydratedTranscriptMessage[]
-  isLoading: boolean
-  localPath?: string
+  row: ResolvedToolGroupTranscriptRow
   expanded: boolean
   onExpandedChange: (groupId: string, next: boolean) => void
   chatId?: string
 }
 
-const TranscriptToolGroup = memo(({
-  id,
-  messages,
-  isLoading,
-  localPath,
-  expanded,
-  onExpandedChange,
-  chatId,
-}: TranscriptToolGroupProps) => {
+const TranscriptToolGroup = memo(({ row, expanded, onExpandedChange, chatId }: TranscriptToolGroupProps) => {
   return (
     <div
       className="group relative"
       {...{ [CHAT_SELECTION_ZONE_ATTRIBUTE]: "" }}
     >
       <CollapsedToolGroup
-        messages={messages}
-        isLoading={isLoading}
-        localPath={localPath}
+        messages={row.messages}
+        isLoading={row.isLoading}
+        localPath={row.localPath}
         expanded={expanded}
-        onExpandedChange={(next) => onExpandedChange(id, next)}
+        onExpandedChange={(next) => onExpandedChange(row.id, next)}
         chatId={chatId}
       />
     </div>
   )
-}, (prev, next) => (
-  prev.id === next.id
-  && prev.startIndex === next.startIndex
-  && prev.isLoading === next.isLoading
-  && prev.localPath === next.localPath
-  && prev.expanded === next.expanded
-  && prev.onExpandedChange === next.onExpandedChange
-  && prev.chatId === next.chatId
-  && prev.messages.length === next.messages.length
-  && prev.messages.every((message, index) => sameMessage(message, next.messages[index]!))
-))
+})
 
 export function buildResolvedTranscriptRows(
   messages: HydratedTranscriptMessage[],
@@ -708,11 +488,11 @@ export function buildResolvedTranscriptRows(
   }: {
     isLoading: boolean
     localPath?: string
-    latestToolIds: Record<string, string | null>
+    latestToolIds: LatestToolIds
   }
 ): ResolvedTranscriptRow[] {
-  const renderStates = buildTranscriptMessageRenderStates(messages, latestToolIds)
-  const renderItems = buildTranscriptRenderItems(messages, renderStates)
+  const visible = messages.map((_, index) => isMessageVisible(messages, index, latestToolIds))
+  const renderItems = buildTranscriptRenderItems(messages, visible)
   const rows: ResolvedTranscriptRow[] = []
 
   for (const item of renderItems) {
@@ -728,27 +508,17 @@ export function buildResolvedTranscriptRows(
       continue
     }
 
-    const renderState = renderStates[item.index]
-    if (!renderState) continue
-    const row: ResolvedSingleTranscriptRow = {
+    if (!visible[item.index]) continue
+    rows.push({
       kind: "single",
       id: getTranscriptRenderItemId(item),
       message: item.message,
       index: item.index,
       isLoading: item.message.kind === "tool" && item.message.result === undefined && isLoading,
       localPath,
-      isFirstSystem: renderState.isFirstSystem,
-      isFirstAccount: renderState.isFirstAccount,
-      isLatestAskUserQuestion: item.message.id === latestToolIds.AskUserQuestion,
-      isLatestExitPlanMode: item.message.id === latestToolIds.ExitPlanMode,
-      isLatestTodoWrite: renderState.isLatestTodoWrite,
-      hideResult: renderState.hideResult,
-      isFinalStatus: renderState.isFinalStatus,
-    }
-
-    if (renderState.shouldRender) {
-      rows.push(row)
-    }
+      isLatestAskUserQuestion: item.message.id === latestToolIds.askUserQuestion,
+      isLatestExitPlanMode: item.message.id === latestToolIds.exitPlanMode,
+    })
   }
 
   return rows
@@ -763,93 +533,21 @@ export const KannaTranscriptRow = memo(({
   row,
   toolGroupExpanded,
 }: KannaTranscriptRowProps) => {
-  const {
-    onToolGroupExpandedChange,
-    onAskUserQuestionSubmit,
-    onExitPlanModeConfirm,
-    onToolRequestAnswer,
-    schedules,
-    cronJobs,
-    onAutoContinueAccept,
-    onAutoContinueReschedule,
-    onAutoContinueCancel,
-    onRetryFailedTurn,
-    onCronRemove,
-    chatId,
-  } = useTranscriptActions()
+  const actions = useTranscriptActions()
 
   if (row.kind === "tool-group") {
     return (
       <TranscriptToolGroup
-        id={row.id}
-        startIndex={row.startIndex}
-        messages={row.messages}
-        isLoading={row.isLoading}
-        localPath={row.localPath}
+        row={row}
         expanded={toolGroupExpanded ?? false}
-        onExpandedChange={onToolGroupExpandedChange}
-        chatId={chatId}
+        onExpandedChange={actions.onToolGroupExpandedChange}
+        chatId={actions.chatId}
       />
     )
   }
 
-  return (
-    <TranscriptSingleRow
-      message={row.message}
-      index={row.index}
-      isLoading={row.isLoading}
-      localPath={row.localPath}
-      isFirstSystem={row.isFirstSystem}
-      isFirstAccount={row.isFirstAccount}
-      isLatestAskUserQuestion={row.isLatestAskUserQuestion}
-      isLatestExitPlanMode={row.isLatestExitPlanMode}
-      isLatestTodoWrite={row.isLatestTodoWrite}
-      hideResult={row.hideResult}
-      isFinalStatus={row.isFinalStatus}
-      onAskUserQuestionSubmit={onAskUserQuestionSubmit}
-      onExitPlanModeConfirm={onExitPlanModeConfirm}
-      onToolRequestAnswer={onToolRequestAnswer}
-      schedules={schedules}
-      cronJobs={cronJobs}
-      onAutoContinueAccept={onAutoContinueAccept}
-      onAutoContinueReschedule={onAutoContinueReschedule}
-      onAutoContinueCancel={onAutoContinueCancel}
-      onRetryFailedTurn={onRetryFailedTurn}
-      onCronRemove={onCronRemove}
-      chatId={chatId}
-    />
-  )
-}, (prev, next) => {
-  if (prev.toolGroupExpanded !== next.toolGroupExpanded) return false
-  if (prev.row.kind !== next.row.kind) return false
-  if (prev.row.id !== next.row.id) return false
-
-  if (prev.row.kind === "tool-group" && next.row.kind === "tool-group") {
-    const previousRow = prev.row
-    const nextRow = next.row
-    return previousRow.startIndex === nextRow.startIndex
-      && previousRow.isLoading === nextRow.isLoading
-      && previousRow.localPath === nextRow.localPath
-      && previousRow.messages.length === nextRow.messages.length
-      && previousRow.messages.every((message, index) => sameMessage(message, nextRow.messages[index]!))
-  }
-
-  if (prev.row.kind === "single" && next.row.kind === "single") {
-    return prev.row.index === next.row.index
-      && prev.row.isLoading === next.row.isLoading
-      && prev.row.localPath === next.row.localPath
-      && prev.row.isFirstSystem === next.row.isFirstSystem
-      && prev.row.isFirstAccount === next.row.isFirstAccount
-      && prev.row.isLatestAskUserQuestion === next.row.isLatestAskUserQuestion
-      && prev.row.isLatestExitPlanMode === next.row.isLatestExitPlanMode
-      && prev.row.isLatestTodoWrite === next.row.isLatestTodoWrite
-      && prev.row.hideResult === next.row.hideResult
-      && prev.row.isFinalStatus === next.row.isFinalStatus
-      && sameMessage(prev.row.message, next.row.message)
-  }
-
-  return false
-})
+  return <TranscriptSingleRow row={row} actions={pickSingleRowActions(actions)} />
+}, (prev, next) => prev.row === next.row && prev.toolGroupExpanded === next.toolGroupExpanded)
 
 export const EMPTY_SCHEDULES: Record<string, AutoContinueSchedule> = {}
 export const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []

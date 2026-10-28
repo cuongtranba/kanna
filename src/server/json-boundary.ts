@@ -21,6 +21,7 @@ function encodeJson<T>(value: T, depth: number): JsonValue | undefined {
   if (depth >= MAX_DEPTH) return null
 
   if (hasToJson(value)) return encodeJson(value.toJSON(), depth + 1)
+  if (value instanceof Error) return { name: value.name, message: value.message }
 
   if (Array.isArray(value)) {
     const out: JsonValue[] = []

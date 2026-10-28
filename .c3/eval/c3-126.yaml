@@ -17,4 +17,3 @@ code:
   - src/client/lib/inboxFilter.test.ts
   - src/client/lib/inboxPresentation.ts
   - src/client/lib/inboxPresentation.test.ts
-  - src/client/lib/inboxCommands.ts

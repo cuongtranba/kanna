@@ -49,7 +49,6 @@ const TYPE_STRICT_SYNTAX: readonly SyntaxBan[] = [AS_CAST_BAN, ANGLE_CAST_BAN, U
 const SHARED_CLIENT_DYNAMIC_MODULE_FILES = [
   "src/client/plugins/evaluatePlugin.ts",
   "src/client/plugins/hostModuleRegistry.ts",
-  "src/client/lib/useWebSocket.ts",
 ]
 const SERVER_OPS_DYNAMIC_MODULE_FILES = [
   "src/server/mermaid-parse.adapter.ts",
@@ -79,7 +78,7 @@ const SHARED_CLIENT_SEAL_SYNTAX: readonly SyntaxBan[] = [
 // storage, timers and DOM globals are banned in src/client; `*.adapter.ts` is the sanctioned site.
 // Known gap carried over from ESLint: this list REPLACES the Bun ban on non-exempt client files.
 const CLIENT_EFFECT_SEAL_GLOBALS = [
-  { name: "WebSocket", message: "Raw WebSocket is banned in src/client — use react-use-websocket via SocketBridge/socketStore instead." },
+  { name: "WebSocket", message: "Raw WebSocket is banned in src/client — use KannaSocket (src/client/app/socket.ts) instead." },
   { name: "fetch", message: "Raw fetch is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
   { name: "XMLHttpRequest", message: "Raw XMLHttpRequest is banned in src/client outside src/client/api/** — add a queryFn there and call it through React Query." },
   { name: "localStorage", message: "Raw localStorage is banned in src/client — reach it through storage.adapter.ts via StoragePort." },
@@ -256,8 +255,8 @@ const PRODUCTION_TEST_EXCLUDES = [
 // src/ops/architecture/budget.ts pins them and they may only ever be lowered.
 // `bun run lint:limits` proves each is still tight rather than slack.
 export const COMPLEXITY_CEILINGS = {
-  "eslint-js/complexity": 127,
-  "eslint-js/max-params": 11,
+  "eslint-js/complexity": 96,
+  "eslint-js/max-params": 9,
   "eslint-js/max-depth": 7,
   "eslint-js/max-nested-callbacks": 4,
 } as const

@@ -3,6 +3,8 @@ import { log } from "../shared/log"
 import { homedir } from "node:os"
 import OpenAI from "openai"
 import { getDataRootDir } from "../shared/branding"
+import { DEFAULT_OPENAI_SDK_MODEL } from "../shared/core-types"
+import { QUICK_RESPONSE_CLAUDE_MODEL } from "../shared/provider-model-types"
 import type { LlmProviderSnapshot } from "../shared/types"
 import { ClaudeAuthErrorDetector } from "./auto-continue/auth-error-detector"
 import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
@@ -12,12 +14,6 @@ import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import { isRecord, toError } from "../shared/errors"
 import { safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
 import { toJsonValue } from "./json-boundary"
-
-let activeOAuthPool: OAuthTokenPool | null = null
-
-export function setQuickResponseOAuthPool(pool: OAuthTokenPool | null) {
-  activeOAuthPool = pool
-}
 
 const CLAUDE_STRUCTURED_TIMEOUT_MS = 60_000
 
@@ -65,6 +61,7 @@ export interface StructuredQuickResponseArgs<T> {
 }
 
 interface QuickResponseAdapterArgs {
+  oauthPool?: OAuthTokenPool | null
   codexManager?: CodexAppServerManager
   readLlmProvider?: () => Promise<LlmProviderSnapshot>
   runOpenAIStructured?: (
@@ -83,6 +80,12 @@ export interface StructuredQuickResponseFailure {
 export interface StructuredQuickResponseResult<T> {
   value: T | null
   failures: StructuredQuickResponseFailure[]
+}
+
+export interface StructuredOrFallbackResult<T> {
+  value: T
+  usedFallback: boolean
+  failureMessage: string | null
 }
 
 export function getQuickResponseWorkspace(env: Record<string, string | undefined> = process.env) {
@@ -129,8 +132,10 @@ function structuredOutputFromSdkMessage<T>(message: T): JsonValue | null {
   return null
 }
 
-export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">): Promise<JsonValue | null> {
-  const pool = activeOAuthPool
+export async function runClaudeStructured(
+  pool: OAuthTokenPool | null,
+  args: Omit<StructuredQuickResponseArgs<JsonValue>, "parse">,
+): Promise<JsonValue | null> {
   const lease = pool?.pickEphemeral() ?? null
   const picked = lease?.token ?? null
   if (pool && pool.hasAnyToken() && !picked) {
@@ -150,7 +155,7 @@ export async function runClaudeStructured(args: Omit<StructuredQuickResponseArgs
     prompt: args.prompt,
     options: {
       cwd: args.cwd,
-      model: "claude-haiku-4-5-20251001",
+      model: QUICK_RESPONSE_CLAUDE_MODEL,
       tools: [],
       systemPrompt: "",
       effort: "low",
@@ -249,7 +254,7 @@ export async function runCodexStructured(
 ): Promise<JsonValue | null> {
   const response = await codexManager.generateStructured({
     cwd: args.cwd,
-    model: "gpt-5.4-mini",
+    model: DEFAULT_OPENAI_SDK_MODEL,
     prompt: `${args.prompt}\n\nReturn JSON only that matches this schema:\n${JSON.stringify(args.schema, null, 2)}`,
   })
   if (typeof response !== "string") return null
@@ -270,13 +275,27 @@ export class QuickResponseAdapter {
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
     this.readLlmProvider = args.readLlmProvider ?? (() => readLlmProviderSnapshot())
     this.runOpenAIStructured = args.runOpenAIStructured ?? runOpenAIStructured
-    this.runClaudeStructured = args.runClaudeStructured ?? runClaudeStructured
+    this.runClaudeStructured = args.runClaudeStructured ?? ((structuredArgs) =>
+      runClaudeStructured(args.oauthPool ?? null, structuredArgs))
     this.runCodexStructured = args.runCodexStructured ?? ((structuredArgs) =>
       runCodexStructured(this.codexManager, structuredArgs))
   }
+
   async generateStructured<T>(args: StructuredQuickResponseArgs<T>): Promise<T | null> {
     const result = await this.generateStructuredWithDiagnostics(args)
     return result.value
+  }
+
+  async generateStructuredOrFallback<T>(
+    args: StructuredQuickResponseArgs<T>,
+    fallback: () => T,
+  ): Promise<StructuredOrFallbackResult<T>> {
+    const result = await this.generateStructuredWithDiagnostics(args)
+    if (result.value !== null) return { value: result.value, usedFallback: false, failureMessage: null }
+    const failureMessage = result.failures.length === 0
+      ? null
+      : result.failures.map((failure) => failure.reason).join("; ")
+    return { value: fallback(), usedFallback: true, failureMessage }
   }
 
   async generateStructuredWithDiagnostics<T>(args: StructuredQuickResponseArgs<T>): Promise<StructuredQuickResponseResult<T>> {

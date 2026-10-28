@@ -5,8 +5,6 @@ description: MCP in Kanna — user-registered custom MCP servers (transports, co
 
 # Kanna MCP — custom servers and the remote /mcp endpoint
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Custom MCP Servers
 
 Users register MCP servers via Settings → "MCP servers". Entries persist
@@ -14,7 +12,7 @@ in `settings.json` under `customMcpServers` (written with the default umask,
 mode 0644 — `writeTextFileUtf8` sets no mode; a secret belongs in a 0600 file of
 its own, as `push/vapid.adapter.ts` does) and are
 merged into the Claude session at chat spawn time: `buildUserMcpServers`
-(`agent.ts`) maps each enabled entry to the SDK's per-transport config and
+(`claude-session-config.ts`) maps each enabled entry to the SDK's per-transport config and
 merges it into the `mcpServers` map passed to `query()` alongside
 `mcp__kanna__*`. Kanna settings remain the single source of truth for which
 servers a session sees.

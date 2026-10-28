@@ -1,7 +1,7 @@
 ---
 id: c3-209
 c3-version: 4
-c3-seal: c80638fcbd96f3c35dc04fbb04a7124db1809b9d11ad1a3ce9b1399410443539
+c3-seal: f2cd3dc0f3f42a3624f3c839cbb59a791decfa1463ed1063e823ff3a124ea2f4
 title: process-utils
 type: component
 category: foundation
@@ -61,18 +61,18 @@ Wraps Bun's child-process APIs into typed helpers (spawn, signal, kill, drain st
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| spawn(opts) | OUT | Returns typed child handle | c3-216 | src/server/process-utils.ts |
-| signalAndWait(handle) | OUT | Sends SIGTERM, escalates after timeout | c3-220 | src/server/process-utils.ts |
+| spawn(opts) | OUT | Returns typed child handle | c3-216 | src/server/process-utils.adapter.ts |
+| signalAndWait(handle) | OUT | Sends SIGTERM, escalates after timeout | c3-220 | src/server/process-utils.adapter.ts |
 
 ## Change Safety
 
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
-| Zombie process leak | Helper skips wait on exit | Process count grows over session | bun run check against src/server/process-utils.ts |
+| Zombie process leak | Helper skips wait on exit | Process count grows over session | bun run check against src/server/process-utils.adapter.ts |
 | Signal escalation regression | Timeout edit | Stuck on shutdown | Manual SIGTERM smoke + grep src/server/ for stuck process patterns |
 
 ## Derived Materials
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| src/server/process-utils.ts | c3-209 Contract | Helper detail | src/server/process-utils.ts |
+| src/server/process-utils.adapter.ts | c3-209 Contract | Helper detail | src/server/process-utils.adapter.ts |

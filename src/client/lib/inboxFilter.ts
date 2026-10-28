@@ -23,9 +23,13 @@ export function itemRecord(item: InboxActivityItem): InboxRecord {
   return { kind: "item", id: item.id, ts: item.ts, unread: item.unread, item }
 }
 
+function threadsSurviveProjectFilter(filter: InboxFilter): boolean {
+  return filter.projectId === undefined
+}
+
 function threadMatches(thread: InboxThread, filter: InboxFilter): boolean {
+  if (!threadsSurviveProjectFilter(filter)) return false
   if (filter.sourceKind !== undefined && thread.sourceKind !== filter.sourceKind) return false
-  if (filter.projectId !== undefined) return false
   if (filter.chatId !== undefined && thread.chatId !== filter.chatId) return false
   if (filter.attentionOnly === true && thread.state !== "needs_you" && thread.state !== "new") return false
   return true

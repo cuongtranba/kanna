@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { jsonObjectSchema } from "./genui/json-schema"
-import type { NormalizedToolCall } from "./tool-call-types"
+import { TASK_STATUSES, type NormalizedToolCall } from "./tool-call-types"
 import { assertParity } from "./type-parity"
 
 const askUserQuestionItemSchema = z.object({
@@ -11,7 +11,7 @@ const askUserQuestionItemSchema = z.object({
   multiSelect: z.boolean().optional(),
 })
 
-const taskStatusSchema = z.enum(["pending", "in_progress", "completed"])
+const taskStatusSchema = z.enum(TASK_STATUSES)
 
 const beaconToolOpSchema = z.enum(["list", "read", "stat", "glob", "grep", "fetch", "exec", "script", "upload", "download"])
 

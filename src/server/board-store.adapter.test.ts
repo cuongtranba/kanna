@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { createBoardStore } from "./board-store.adapter"
-import { BoardStoreError, cardBranchName, validateCardContent, type BoardStore } from "./board-store"
+import { BoardStoreError, validateCardContent, type BoardStore } from "./board-store"
 import { BUILTIN_BOARD_TEMPLATES } from "./board-templates"
 import type { BoardTemplateDefinition, CardActor, FieldDef, RemoteSourceRef } from "../shared/boards/types"
 
@@ -758,35 +758,6 @@ describe("validateCardContent", () => {
   })
 })
 
-describe("cardBranchName", () => {
-  test("derives a readable branch from an external reference", () => {
-    expect(cardBranchName("abcd1234-ef", "Fix: login redirect loop", "412")).toBe(
-      "card/412-fix-login-redirect-loop",
-    )
-  })
-
-  test("falls back to a short card id when there is no external reference", () => {
-    expect(cardBranchName("abcd1234-efgh", "Add telemetry", null)).toBe("card/abcd1234-add-telemetry")
-  })
-
-  test("never emits a trailing or doubled separator", () => {
-    const branch = cardBranchName("abcd1234", "  Weird   ***  title!!  ", "7")
-    expect(branch).toBe("card/7-weird-title")
-    expect(branch.endsWith("-")).toBe(false)
-    expect(branch).not.toContain("--")
-  })
-
-  test("truncates a very long title without leaving a dangling separator", () => {
-    const branch = cardBranchName("abcd1234", "a".repeat(200), "9")
-    expect(branch.length).toBeLessThanOrEqual("card/9-".length + 48)
-    expect(branch.endsWith("-")).toBe(false)
-  })
-
-  test("survives a title with no usable characters", () => {
-    expect(cardBranchName("abcd1234", "***", "5")).toBe("card/5")
-  })
-})
-
 describe("card content is checked against the board's fields", () => {
   const SCHEMA: BoardTemplateDefinition = {
     ...SIMPLE_DEFINITION,
@@ -894,7 +865,6 @@ describe("sync bindings", () => {
     const { board } = seedBoard(store)
     const binding = store.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: REPO_1,
       direction: "both",
@@ -909,7 +879,6 @@ describe("sync bindings", () => {
 
     const again = store.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: REPO_1,
       direction: "pull",
@@ -928,7 +897,6 @@ describe("sync bindings", () => {
 
     const second = store.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: REPO_2,
       direction: "both",
@@ -946,7 +914,6 @@ describe("sync bindings", () => {
 
     store.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: REPO_1,
       direction: "pull",
@@ -961,7 +928,6 @@ describe("sync bindings", () => {
     const { board, binding } = seedBound(store)
     const second = store.upsertBinding({
       boardId: board.id,
-      providerId: "github-issues",
       projectId: null,
       sourceRef: REPO_2,
       direction: "both",
@@ -1000,7 +966,6 @@ describe("binding project + cross-board lookup", () => {
   function bind(store: BoardStore, boardId: string, sourceRef: RemoteSourceRef, projectId: string | null) {
     return store.upsertBinding({
       boardId,
-      providerId: "github-issues",
       projectId,
       sourceRef,
       direction: "pull",
@@ -1036,7 +1001,7 @@ describe("binding project + cross-board lookup", () => {
     bind(store, b.id, REPO_1, "p1")
     bind(store, b.id, REPO_2, "p2")
 
-    const holders = store.findBindingsBySource("github-issues", REPO_1)
+    const holders = store.findBindingsBySource(REPO_1)
     expect(holders.map((binding) => binding.boardId).sort()).toEqual([a.id, b.id].sort())
   })
 
@@ -1046,19 +1011,19 @@ describe("binding project + cross-board lookup", () => {
     const b = seedBoard(store).board
     bind(store, a.id, REPO_1, "p1")
     bind(store, b.id, REPO_1, "p1")
-    expect(store.findBindingsBySource("github-issues", REPO_1)).toHaveLength(2)
+    expect(store.findBindingsBySource(REPO_1)).toHaveLength(2)
   })
 
   test("an unbound repo has no holders", () => {
     const store = newStore()
     seedBoard(store)
-    expect(store.findBindingsBySource("github-issues", REPO_1)).toEqual([])
+    expect(store.findBindingsBySource(REPO_1)).toEqual([])
   })
 
   test("a different repo is not a match, even on a board that syncs one", () => {
     const store = newStore()
     const { board } = seedBoard(store)
     bind(store, board.id, REPO_1, "p1")
-    expect(store.findBindingsBySource("github-issues", REPO_2)).toEqual([])
+    expect(store.findBindingsBySource(REPO_2)).toEqual([])
   })
 })

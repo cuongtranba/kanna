@@ -1,24 +1,26 @@
+import { chatNotFound, errorMessage, projectNotFound, StaleStateError } from "../shared/errors"
 import { randomUUID } from "node:crypto"
 import type { CommandOrigin } from "../shared/command-origin"
-import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
+import { safeJsonParse, type JsonValue } from "../shared/json"
 import { log } from "../shared/log"
 import type { ServerWebSocket } from "bun"
 import { PROTOCOL_VERSION } from "../shared/types"
 import { parseClientCommand } from "../shared/commands"
 import type { ClientCommand, ClientEnvelope, ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
-import { isClientEnvelope, isServerEnvelope } from "../shared/protocol"
-import type { AgentCoordinator } from "./agent"
+import { parseClientEnvelope } from "../shared/protocol.schema"
+import type { AgentCoordinator } from "./agent-coordinator"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import type { AppSettingsManager } from "./app-settings"
 import type { DiscoveredProject } from "./discovery.adapter"
 import { stampCommandOrigin } from "./command-origin-stamp"
+import { toJsonValue } from "./json-boundary"
 import { DiffStore } from "./diff-store"
 import { EventStore } from "./event-store"
 import { openExternal } from "./external-open"
 import { KeybindingsManager } from "./keybindings"
 import { resolveLocalPath } from "./paths"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { resolveChatCwd } from "./claude-session-config"
 import { ensureProjectDirectory } from "./project-directory.adapter"
 import { TerminalManager } from "./terminal-manager"
 import type { UpdateManager } from "./update-manager"
@@ -69,13 +71,13 @@ import { handleServiceBusCommand } from "./ws-router-service-bus"
 import type { ServiceBusController } from "./service-bus/service-bus-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { GenUIDatasetService } from "./genui/dataset-service"
-import { deleteChatWithTeardown, handleChatCommand } from "./ws-router-chat"
+import { handleChatCommand } from "./ws-router-chat"
+import { deleteChatCascade } from "./chat-teardown"
 import type { ChatCommandDeps } from "./ws-router-chat"
 import { removeProjectKannaFiles } from "./project-kanna-files.adapter"
 import { removeWorktree } from "./worktree-store.adapter"
 import {
   ensureSnapshotSignatures,
-  isBenignStaleStateMessage,
   logSendToStartingProfile,
   send,
   silentCommandMessage,
@@ -87,23 +89,7 @@ import { BroadcastManager } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
 import type { PackageUpdateManager } from "./package-update-manager"
 
-export {
-  assertSafeSkillId,
-  assertSafeSkillSource,
-  buildInstallSkillCommand,
-  buildUninstallSkillCommand,
-  getGlobalSkillLockPath,
-  installSkill,
-  listInstalledSkills,
-  parseInstalledSkillsLock,
-  searchSkills,
-  uninstallSkill,
-} from "./ws-router-skills"
-
-export { resolveMcpTestBearer } from "./ws-router-settings"
-
 export type { ClientState } from "./ws-router-utils"
-export { isBenignStaleStateMessage } from "./ws-router-utils"
 
 type RouteOutcome = "unclaimed" | "answered" | "silent"
 
@@ -242,16 +228,9 @@ export function createWsRouter({
   const unsubscribeMcpSources = mcpSources?.onStatus(() => { broadcast.pushMcpSources() })
 
   function resolveChatRepoPath(chatId: string): string {
-    const { chat, project } = resolveChatProject(chatId)
-    return resolveSpawnPaths(chat, project.localPath).cwd
-  }
-
-  function resolveChatProject(chatId: string) {
-    const chat = store.getChat(chatId)
-    if (!chat) throw new Error("Chat not found")
-    const project = store.getProject(chat.projectId)
-    if (!project) throw new Error("Project not found")
-    return { chat, project }
+    const cwd = resolveChatCwd(store, chatId)
+    if (cwd !== undefined) return cwd
+    throw store.getChat(chatId) ? projectNotFound() : chatNotFound()
   }
 
   function buildChatDeps(ws: CommandConnection): ChatCommandDeps {
@@ -266,6 +245,7 @@ export function createWsRouter({
       broadcastSidebar: () => broadcast.broadcastFilteredSnapshots({ includeSidebar: true }),
       broadcastAll: () => broadcast.broadcastSnapshots(),
       followedSessionRegistry,
+      shares: sessionShare,
     }
   }
 
@@ -394,9 +374,8 @@ export function createWsRouter({
           }),
           openExternalFn: openExternal,
           terminals,
-          deleteChat: (chatId) => deleteChatWithTeardown(buildChatDeps(ws), chatId),
+          deleteChat: (chatId) => deleteChatCascade(buildChatDeps(ws), chatId),
           boards: boardRegistry,
-          shares: sessionShare,
           push: pushManager,
           removeWorktree: (repoRoot, worktreePath) => removeWorktree(repoRoot, worktreePath, { force: true }),
           removeProjectKannaFiles,
@@ -468,9 +447,8 @@ export function createWsRouter({
   }
 
   function describeCommandFailure(command: ClientCommand, id: string, error: Error | string): ServerEnvelope {
-    const messageText = error instanceof Error ? error.message : String(error)
-    const benign = isBenignStaleStateMessage(messageText)
-    const logFn = benign ? log.info : log.error
+    const messageText = errorMessage(error)
+    const logFn = error instanceof StaleStateError ? log.info : log.error
     logFn("[ws-router] command failed", {
       id,
       type: command.type,
@@ -481,7 +459,7 @@ export function createWsRouter({
 
   async function dispatchCommand(candidate: ClientCommand, origin?: CommandOrigin): Promise<ServerEnvelope> {
     const id = randomUUID()
-    const validated = parseClientCommand(safeJsonParse(JSON.stringify(candidate)) ?? null)
+    const validated = parseClientCommand(toJsonValue(candidate))
     if (!validated.ok) {
       log.warn("[ws-router] invalid command rejected", { id, message: validated.error })
       return { v: PROTOCOL_VERSION, type: "error", id, message: validated.error }
@@ -490,11 +468,8 @@ export function createWsRouter({
     const captured: ServerEnvelope[] = []
     const connection: CommandConnection = {
       data: { subscriptions: new Map(), snapshotSignatures: new Map(), originHost: "", commandOrigin: origin },
-      send(payload) {
-        const parsed: JsonValue | null = safeJsonParse(payload)
-        if (parsed !== null && isServerEnvelope(parsed)) captured.push(parsed)
-        return payload.length
-      },
+      send: (payload) => payload.length,
+      onSent: (envelope) => { captured.push(envelope) },
     }
     try {
       const outcome = await routeCommand(connection, command, id)
@@ -526,7 +501,7 @@ export function createWsRouter({
       broadcast.removeSocket(ws)
     },
     broadcastSnapshots: () => broadcast.broadcastSnapshots(),
-    broadcastChatStateImmediately: (chatId: string) => broadcast.broadcastChatStateImmediately(chatId),
+    broadcastChatAndSidebar: (chatId: string) => broadcast.broadcastChatAndSidebar(chatId),
     scheduleBroadcast: () => broadcast.scheduleBroadcast(),
     scheduleChatStateBroadcast: (chatId: string) => broadcast.scheduleChatStateBroadcast(chatId),
     pruneStaleEmptyChats: () => broadcast.maybePruneStaleEmptyChats(),
@@ -536,14 +511,14 @@ export function createWsRouter({
     pushInbox: () => broadcast.pushInbox(),
     pushServiceBus: () => broadcast.pushServiceBus(),
     async handleMessage(ws: ServerWebSocket<ClientState>, raw: string | Buffer | ArrayBuffer | Uint8Array) {
-      const parsed: JsonValue | null = safeJsonParse(String(raw))
-      if (parsed === null) {
+      const json: JsonValue | null = safeJsonParse(String(raw))
+      if (json === null) {
         send(ws, { v: PROTOCOL_VERSION, type: "error", message: "Invalid JSON" })
         return
       }
 
-      const rawEnvelope: JsonValue = parsed
-      if (!isClientEnvelope(parsed)) {
+      const parsed = parseClientEnvelope(json)
+      if (parsed === null) {
         send(ws, { v: PROTOCOL_VERSION, type: "error", message: "Invalid envelope" })
         return
       }
@@ -586,17 +561,16 @@ export function createWsRouter({
         return
       }
 
-      const validated = parseClientCommand(isJsonObject(rawEnvelope) ? rawEnvelope.command : null)
+      const validated = parseClientCommand(parsed.command)
       if (!validated.ok) {
         rejectInvalidCommand(ws, parsed.id, validated.error)
         return
       }
       await handleCommand(ws, { v: PROTOCOL_VERSION, type: "command", id: parsed.id, command: validated.command })
     },
-    async dispose() {
+    dispose() {
       broadcast.dispose()
       unsubscribeMcpSources?.()
-      await mcpSources?.stop()
     },
   }
 }

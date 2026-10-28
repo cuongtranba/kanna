@@ -4,66 +4,11 @@ import {
   COMMAND_PRIORITY_HIGH,
   DROP_COMMAND,
   DRAGOVER_COMMAND,
-  $insertNodes,
-  type LexicalEditor,
 } from "lexical"
 import { uploadFile } from "../../../lib/uploadFile.adapter"
-import { $createAttachmentNode } from "../nodes"
 import { runInlineUpload } from "./inlineUploadPending"
-import type { ChatAttachment } from "../../../../shared/types"
+import { uploadFilesIntoEditor, type UploadFileFn } from "./inlineUploads"
 
-
-export const MAX_FILES_PER_DROP = 50
-export const MAX_CONCURRENT_DROP_UPLOADS = 3
-
-
-export type UploadFileFn = typeof uploadFile
-
-export async function uploadDroppedFiles(
-  files: File[],
-  editor: LexicalEditor,
-  projectId: string,
-  uploadFileFn: UploadFileFn,
-  onUploadError?: (msg: string) => void,
-): Promise<void> {
-  if (files.length === 0 || files.length > MAX_FILES_PER_DROP) return
-
-  let index = 0
-
-  async function processNext(): Promise<void> {
-    if (index >= files.length) return
-    const file = files[index++]
-
-    try {
-      const handle = uploadFileFn({
-        projectId,
-        file,
-        onProgress: () => {
-        },
-      })
-      const { attachments } = await handle.promise
-      const attachment: ChatAttachment | undefined = attachments[0]
-      if (!attachment) {
-        onUploadError?.("Upload failed: no attachment returned")
-        return
-      }
-      editor.update(() => {
-        $insertNodes([$createAttachmentNode(attachment)])
-      })
-    } catch (err) {
-      if (err instanceof Error && err.name === "UploadAbortedError") return
-      onUploadError?.(err instanceof Error ? err.message : String(err))
-    }
-
-    await processNext()
-  }
-
-  const chains: Promise<void>[] = []
-  for (let i = 0; i < Math.min(MAX_CONCURRENT_DROP_UPLOADS, files.length); i++) {
-    chains.push(processNext())
-  }
-  await Promise.all(chains)
-}
 
 export function getDroppedFiles(event: DragEvent): File[] {
   const items = event.dataTransfer?.items
@@ -126,7 +71,7 @@ export function DropAttachmentPlugin({
         event.preventDefault()
 
         if (projectId) {
-          runInlineUpload(uploadOwnerId, () => uploadDroppedFiles(files, editor, projectId, uploadFileFn, onUploadError))
+          runInlineUpload(uploadOwnerId, () => uploadFilesIntoEditor(files, editor, projectId, uploadFileFn, onUploadError))
         }
         return true
       },

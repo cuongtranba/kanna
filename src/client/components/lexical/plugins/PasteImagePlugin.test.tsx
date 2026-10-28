@@ -1,58 +1,10 @@
-import { describe, expect, it, vi } from "vite-plus/test"
-import { createHeadlessEditor } from "@lexical/headless"
-import { $createParagraphNode, $getRoot } from "lexical"
-import type { ChatAttachment } from "../../../../shared/types"
-import { AttachmentNode, $getAttachmentNodes } from "../nodes"
+import { describe, expect, it } from "vite-plus/test"
 import {
   getClipboardImageFiles,
   normalizeClipboardImageFile,
   trimTrailingPastedNewlines,
   hasClipboardTextPayload,
-  uploadAndInsertFiles,
-  MAX_FILES_PER_PASTE,
-  MAX_CONCURRENT_UPLOADS,
-  type UploadFileFn,
 } from "./PasteImagePlugin"
-
-
-const fakeAttachment: ChatAttachment = {
-  id: "att-1",
-  kind: "image",
-  displayName: "clipboard-12345.png",
-  absolutePath: "/tmp/uploads/att-1.png",
-  relativePath: "att-1.png",
-  contentUrl: "https://example.com/att-1.png",
-  mimeType: "image/png",
-  size: 1024,
-}
-
-
-function buildEditor() {
-  const editor = createHeadlessEditor({
-    namespace: "test",
-    nodes: [AttachmentNode],
-    onError: (e: Error) => {
-      throw e
-    },
-  })
-  editor.update(
-    () => {
-      const root = $getRoot()
-      root.clear()
-      root.append($createParagraphNode())
-    },
-    { discrete: true },
-  )
-  return editor
-}
-
-
-function makeUploadFileMock(attachment: ChatAttachment = fakeAttachment): UploadFileFn {
-  return vi.fn(() => ({
-    promise: Promise.resolve({ attachments: [attachment] }),
-    abort: () => {},
-  })) as unknown as UploadFileFn
-}
 
 
 describe("getClipboardImageFiles", () => {
@@ -101,6 +53,25 @@ describe("getClipboardImageFiles", () => {
     }
     const result = getClipboardImageFiles([item], 99999)
     expect(result[0].name).toBe("clipboard-99999.png")
+  })
+
+  it("renames a pasted image the browser left unnamed using the clipboard timestamp", () => {
+    const item: Pick<DataTransferItem, "kind" | "type" | "getAsFile"> = {
+      kind: "file",
+      type: "image/png",
+      getAsFile: () => new File(["img"], "", { type: "image/png" }),
+    }
+    expect(getClipboardImageFiles([item], 456)[0]?.name).toBe("clipboard-456.png")
+  })
+
+  it("generates distinct names for multiple unnamed images in one paste event", () => {
+    const unnamed = (type: string): Pick<DataTransferItem, "kind" | "type" | "getAsFile"> => ({
+      kind: "file",
+      type,
+      getAsFile: () => new File(["x"], "", { type }),
+    })
+    const files = getClipboardImageFiles([unnamed("image/png"), unnamed("image/webp")], 789)
+    expect(files.map((file) => file.name)).toEqual(["clipboard-789.png", "clipboard-789-1.webp"])
   })
 
   it("keeps non-generic filenames unchanged", () => {
@@ -173,120 +144,3 @@ describe("hasClipboardTextPayload", () => {
 })
 
 
-describe("uploadAndInsertFiles", () => {
-  it("uploads a single image file and inserts an AttachmentNode", async () => {
-    const editor = buildEditor()
-    const mockUpload = makeUploadFileMock()
-    const file = new File(["img"], "screenshot.png", { type: "image/png" })
-
-    await uploadAndInsertFiles([file], editor, "chat-1", mockUpload)
-
-    let nodeCount = 0
-    editor.read(() => {
-      nodeCount = $getAttachmentNodes().length
-    })
-    expect(nodeCount).toBe(1)
-  })
-
-  it("inserts one AttachmentNode per uploaded file", async () => {
-    const editor = buildEditor()
-    const files = [
-      new File(["a"], "a.png", { type: "image/png" }),
-      new File(["b"], "b.jpg", { type: "image/jpeg" }),
-    ]
-
-    let callIndex = 0
-    const attachments: ChatAttachment[] = [
-      { ...fakeAttachment, id: "att-a" },
-      { ...fakeAttachment, id: "att-b" },
-    ]
-    const mockUpload = vi.fn(() => {
-      const att = attachments[callIndex++]!
-      return { promise: Promise.resolve({ attachments: [att] }), abort: () => {} }
-    }) as unknown as UploadFileFn
-
-    await uploadAndInsertFiles(files, editor, "chat-1", mockUpload)
-
-    let ids: string[] = []
-    editor.read(() => {
-      ids = $getAttachmentNodes().map((n) => n.getAttachment().id)
-    })
-    expect(ids).toHaveLength(2)
-    expect(ids).toContain("att-a")
-    expect(ids).toContain("att-b")
-  })
-
-  it("calls onUploadError when upload returns no attachment", async () => {
-    const editor = buildEditor()
-    const mockUpload = vi.fn(() => ({
-      promise: Promise.resolve({ attachments: [] }),
-      abort: () => {},
-    })) as unknown as UploadFileFn
-
-    const errors: string[] = []
-    const file = new File(["x"], "x.png", { type: "image/png" })
-    await uploadAndInsertFiles([file], editor, "chat-1", mockUpload, (msg) => errors.push(msg))
-
-    expect(errors).toHaveLength(1)
-    let nodeCount = 0
-    editor.read(() => {
-      nodeCount = $getAttachmentNodes().length
-    })
-    expect(nodeCount).toBe(0)
-  })
-
-  it("calls onUploadError when upload rejects", async () => {
-    const editor = buildEditor()
-    const mockUpload = vi.fn(() => ({
-      promise: Promise.reject(new Error("network error")),
-      abort: () => {},
-    })) as unknown as UploadFileFn
-
-    const errors: string[] = []
-    const file = new File(["x"], "x.png", { type: "image/png" })
-    await uploadAndInsertFiles([file], editor, "chat-1", mockUpload, (msg) => errors.push(msg))
-
-    expect(errors[0]).toContain("network error")
-  })
-
-  it("does nothing when files array is empty", async () => {
-    const editor = buildEditor()
-    const mockUpload = makeUploadFileMock()
-    await uploadAndInsertFiles([], editor, "chat-1", mockUpload)
-    expect(mockUpload).not.toHaveBeenCalled()
-  })
-
-  it("does nothing when files exceed MAX_FILES_PER_PASTE", async () => {
-    const editor = buildEditor()
-    const mockUpload = makeUploadFileMock()
-    const files = Array.from({ length: MAX_FILES_PER_PASTE + 1 }, (_, i) =>
-      new File(["x"], `img-${i}.png`, { type: "image/png" }),
-    )
-    await uploadAndInsertFiles(files, editor, "chat-1", mockUpload)
-    expect(mockUpload).not.toHaveBeenCalled()
-  })
-
-  it("respects MAX_CONCURRENT_UPLOADS concurrency limit", async () => {
-    const editor = buildEditor()
-    let maxConcurrent = 0
-    let current = 0
-
-    const mockUpload = vi.fn(() => ({
-      promise: new Promise<{ attachments: ChatAttachment[] }>((resolve) => {
-        current++
-        if (current > maxConcurrent) maxConcurrent = current
-        Promise.resolve().then(() => {
-          current--
-          resolve({ attachments: [fakeAttachment] })
-        })
-      }),
-      abort: () => {},
-    })) as unknown as UploadFileFn
-
-    const files = Array.from({ length: MAX_CONCURRENT_UPLOADS + 2 }, (_, i) =>
-      new File(["x"], `img-${i}.png`, { type: "image/png" }),
-    )
-    await uploadAndInsertFiles(files, editor, "chat-1", mockUpload)
-    expect(maxConcurrent).toBeLessThanOrEqual(MAX_CONCURRENT_UPLOADS)
-  })
-})

@@ -10,10 +10,13 @@ import type {
   SubagentRunSnapshot,
   TranscriptEntry,
 } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { JsonArray, JsonObject } from "../shared/json"
+import type { STORE_VERSION } from "../shared/types"
+
+type StoreVersion = typeof STORE_VERSION
 
 export interface ProjectRecord extends ProjectSummary {
   deletedAt?: number
@@ -66,7 +69,7 @@ export interface StoreState {
   chatsById: Map<string, ChatRecord>
   queuedMessagesByChatId: Map<string, QueuedChatMessage[]>
   sidebarProjectOrder: string[]
-  autoContinueEventsByChatId: Map<string, AutoContinueEvent[]>
+  autoContinueEventsByChatId: Map<string, ChatAutomationEvent[]>
   chatTimingsByChatId: Map<string, ChatTimingState>
   stacksById: Map<string, StackRecord>
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
@@ -75,48 +78,48 @@ export interface StoreState {
 }
 
 export interface SnapshotFile {
-  v: 3
+  v: StoreVersion
   generatedAt: number
   projects: ProjectRecord[]
   chats: ChatRecord[]
   sidebarProjectOrder?: string[]
   queuedMessages?: Array<{ chatId: string; entries: QueuedChatMessage[] }>
   messages?: Array<{ chatId: string; entries: TranscriptEntry[] }>
-  autoContinueEvents?: Array<{ chatId: string; events: AutoContinueEvent[] }>
+  autoContinueEvents?: Array<{ chatId: string; events: ChatAutomationEvent[] }>
   chatTasks?: Array<{ chatId: string; events: ChatTaskEvent[] }>
   stacks?: StackRecord[]
 }
 
 export type ProjectEvent = {
-  v: 3
+  v: StoreVersion
   type: "project_opened"
   timestamp: number
   projectId: string
   localPath: string
   title: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_removed"
   timestamp: number
   projectId: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_deleted"
   timestamp: number
   projectId: string
 } | {
-  v: 3
+  v: StoreVersion
   type: "sidebar_project_order_set"
   timestamp: number
   projectIds: string[]
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_star_set"
   timestamp: number
   projectId: string
   starredAt: number | null
 } | {
-  v: 3
+  v: StoreVersion
   type: "project_instructions_set"
   timestamp: number
   projectId: string
@@ -125,7 +128,7 @@ export type ProjectEvent = {
 
 export type ChatEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_created"
       timestamp: number
       chatId: string
@@ -135,53 +138,53 @@ export type ChatEvent =
       stackBindings?: StackBinding[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_projects_attached"
       timestamp: number
       chatId: string
       stackBindings: StackBinding[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_renamed"
       timestamp: number
       chatId: string
       title: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_deleted"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_archived"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_unarchived"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_pin_set"
       timestamp: number
       chatId: string
       pinnedAt: number | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_provider_set"
       timestamp: number
       chatId: string
       provider: AgentProvider
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_model_set"
       timestamp: number
       chatId: string
@@ -189,35 +192,35 @@ export type ChatEvent =
       modelOptions?: ModelOptions
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_plan_mode_set"
       timestamp: number
       chatId: string
       planMode: boolean
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_read_state_set"
       timestamp: number
       chatId: string
       unread: boolean
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_source_hash_set"
       timestamp: number
       chatId: string
       sourceHash: string | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_policy_override_set"
       timestamp: number
       chatId: string
       policyOverride: ChatPermissionPolicyOverride | null
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "chat_compact_failures_set"
       timestamp: number
       chatId: string
@@ -225,7 +228,7 @@ export type ChatEvent =
     }
 
 export type MessageEvent = {
-  v: 3
+  v: StoreVersion
   type: "message_appended"
   timestamp: number
   chatId: string
@@ -234,14 +237,14 @@ export type MessageEvent = {
 
 export type QueuedMessageEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "queued_message_enqueued"
       timestamp: number
       chatId: string
       message: QueuedChatMessage
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "queued_message_removed"
       timestamp: number
       chatId: string
@@ -259,33 +262,33 @@ export interface TurnRunConfig {
 
 export type TurnEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_started"
       timestamp: number
       chatId: string
       runConfig?: TurnRunConfig
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_finished"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_failed"
       timestamp: number
       chatId: string
       error: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "turn_cancelled"
       timestamp: number
       chatId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "session_token_set"
       timestamp: number
       chatId: string
@@ -293,7 +296,7 @@ export type TurnEvent =
       provider?: AgentProvider
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "pending_fork_session_token_set"
       timestamp: number
       chatId: string
@@ -303,7 +306,7 @@ export type TurnEvent =
 
 export type StackEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_added"
       timestamp: number
       stackId: string
@@ -311,34 +314,34 @@ export type StackEvent =
       projectIds: string[]
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_removed"
       timestamp: number
       stackId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_renamed"
       timestamp: number
       stackId: string
       title: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_project_added"
       timestamp: number
       stackId: string
       projectId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_project_removed"
       timestamp: number
       stackId: string
       projectId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "stack_instructions_set"
       timestamp: number
       stackId: string
@@ -347,7 +350,7 @@ export type StackEvent =
 
 export type SubagentRunEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_started"
       timestamp: number
       chatId: string
@@ -362,7 +365,7 @@ export type SubagentRunEvent =
       depth: number
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_message_delta"
       timestamp: number
       chatId: string
@@ -370,7 +373,7 @@ export type SubagentRunEvent =
       content: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_completed"
       timestamp: number
       chatId: string
@@ -379,7 +382,7 @@ export type SubagentRunEvent =
       usage?: ProviderUsage
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_failed"
       timestamp: number
       chatId: string
@@ -387,14 +390,14 @@ export type SubagentRunEvent =
       error: { code: SubagentErrorCode; message: string }
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_run_cancelled"
       timestamp: number
       chatId: string
       runId: string
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_entry_appended"
       timestamp: number
       chatId: string
@@ -402,7 +405,7 @@ export type SubagentRunEvent =
       entry: TranscriptEntry
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_tool_pending"
       timestamp: number
       chatId: string
@@ -412,7 +415,7 @@ export type SubagentRunEvent =
       input: JsonObject
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "subagent_tool_resolved"
       timestamp: number
       chatId: string
@@ -424,13 +427,13 @@ export type SubagentRunEvent =
 
 export type ToolRequestEvent =
   | {
-      v: 3
+      v: StoreVersion
       type: "tool_request_put"
       timestamp: number
       request: ToolRequest
     }
   | {
-      v: 3
+      v: StoreVersion
       type: "tool_request_resolved"
       timestamp: number
       id: string
@@ -440,107 +443,19 @@ export type ToolRequestEvent =
       mismatchReason?: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | AutoContinueEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | ChatAutomationEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
 
 export type StoreEventKind =
-  | Exclude<StoreEvent, AutoContinueEvent>["type"]
-  | AutoContinueEvent["kind"]
+  | Exclude<StoreEvent, ChatAutomationEvent>["type"]
+  | ChatAutomationEvent["kind"]
 
-export type LogName =
-  | "projects"
-  | "chats"
-  | "messages"
-  | "queued-messages"
-  | "turns"
-  | "schedules"
-  | "stacks"
-  | "tool-requests"
-  | "chat-tasks"
+export function isChatAutomationEvent(event: StoreEvent): event is ChatAutomationEvent {
+  return "kind" in event
+}
 
-export const LOG_FILES = {
-  projects: "projects.jsonl",
-  chats: "chats.jsonl",
-  messages: "messages.jsonl",
-  "queued-messages": "queued-messages.jsonl",
-  turns: "turns.jsonl",
-  schedules: "schedules.jsonl",
-  stacks: "stacks.jsonl",
-  "tool-requests": "tool-requests.jsonl",
-  "chat-tasks": "chat-tasks.jsonl",
-} satisfies Record<LogName, string>
-
-export const LOG_OF_EVENT = {
-  project_opened: "projects",
-  project_removed: "projects",
-  project_deleted: "projects",
-  sidebar_project_order_set: "projects",
-  project_star_set: "projects",
-  project_instructions_set: "projects",
-  chat_created: "chats",
-  chat_projects_attached: "chats",
-  chat_renamed: "chats",
-  chat_deleted: "chats",
-  chat_archived: "chats",
-  chat_unarchived: "chats",
-  chat_pin_set: "chats",
-  chat_provider_set: "chats",
-  chat_model_set: "chats",
-  chat_plan_mode_set: "chats",
-  chat_read_state_set: "chats",
-  chat_source_hash_set: "chats",
-  chat_policy_override_set: "chats",
-  chat_compact_failures_set: "chats",
-  message_appended: "messages",
-  queued_message_enqueued: "queued-messages",
-  queued_message_removed: "queued-messages",
-  turn_started: "turns",
-  turn_finished: "turns",
-  turn_failed: "turns",
-  turn_cancelled: "turns",
-  session_token_set: "turns",
-  pending_fork_session_token_set: "turns",
-  stack_added: "stacks",
-  stack_removed: "stacks",
-  stack_renamed: "stacks",
-  stack_project_added: "stacks",
-  stack_project_removed: "stacks",
-  stack_instructions_set: "stacks",
-  subagent_run_started: "turns",
-  subagent_message_delta: "turns",
-  subagent_entry_appended: "turns",
-  subagent_run_completed: "turns",
-  subagent_run_failed: "turns",
-  subagent_run_cancelled: "turns",
-  subagent_tool_pending: "turns",
-  subagent_tool_resolved: "turns",
-  tool_request_put: "tool-requests",
-  tool_request_resolved: "tool-requests",
-  auto_continue_proposed: "schedules",
-  auto_continue_accepted: "schedules",
-  auto_continue_rescheduled: "schedules",
-  auto_continue_cancelled: "schedules",
-  auto_continue_fired: "schedules",
-  loop_armed: "schedules",
-  loop_run_outcome: "schedules",
-  loop_disarmed: "schedules",
-  cron_armed: "schedules",
-  cron_disarmed: "schedules",
-  cron_paused: "schedules",
-  cron_resumed: "schedules",
-  cron_run_started: "schedules",
-  cron_run_outcome: "schedules",
-  cron_run_skipped: "schedules",
-  chat_task_created: "chat-tasks",
-  chat_task_updated: "chat-tasks",
-  chat_task_deleted: "chat-tasks",
-  chat_task_claimed: "chat-tasks",
-  chat_task_run_bound: "chat-tasks",
-  chat_task_settled: "chat-tasks",
-  chat_task_integrated: "chat-tasks",
-  chat_task_note: "chat-tasks",
-  chat_task_epoch_advanced: "chat-tasks",
-  chat_task_native_synced: "chat-tasks",
-} satisfies Record<StoreEventKind, LogName>
+export function storeEventKind(event: StoreEvent): StoreEventKind {
+  return isChatAutomationEvent(event) ? event.kind : event.type
+}
 
 export interface StackRecord {
   id: string
@@ -566,6 +481,12 @@ export function createEmptyState(): StoreState {
     chatTasksByChatId: new Map<string, ChatTaskEvent[]>(),
     toolRequestsById: new Map<string, ToolRequest>(),
   }
+}
+
+export function resetStoreState(state: StoreState): void {
+  const { sidebarProjectOrder: _order, ...maps } = state
+  for (const map of Object.values(maps)) map.clear()
+  state.sidebarProjectOrder = []
 }
 
 export function cloneTranscriptEntries(entries: readonly TranscriptEntry[]): TranscriptEntry[] {

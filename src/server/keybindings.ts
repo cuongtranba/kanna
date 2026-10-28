@@ -1,18 +1,11 @@
 import { homedir } from "node:os"
-import path from "node:path"
 import { getKeybindingsFilePath, LOG_PREFIX } from "../shared/branding"
 import { log } from "../shared/log"
-import type { JsonValue } from "../shared/json"
+import { isJsonObject, type JsonValue } from "../shared/json"
 import { DEFAULT_KEYBINDINGS, KEYBINDING_ACTIONS, type KeybindingAction, type KeybindingsSnapshot } from "../shared/types"
-import {
-  ensureKeybindingsFile,
-  readKeybindingsFile,
-  watchKeybindingsDirectory,
-  writeKeybindingsFile,
-  type KeybindingsWatcher,
-} from "./keybindings-store.adapter"
-
-type KeybindingsFile = Partial<Record<KeybindingAction, JsonValue>>
+import { shortenHomePath } from "../shared/home-path"
+import { readJsonSettingsFile, writeJsonSettingsFile } from "./json-settings-file.adapter"
+import { ensureKeybindingsFile, watchKeybindingsDirectory, type KeybindingsWatcher } from "./keybindings-store.adapter"
 
 export class KeybindingsManager {
   readonly filePath: string
@@ -55,7 +48,7 @@ export class KeybindingsManager {
 
   async write(bindings: Partial<Record<KeybindingAction, string[]>>) {
     const nextSnapshot = normalizeKeybindings(bindings, this.filePath)
-    await writeKeybindingsFile(this.filePath, `${JSON.stringify(nextSnapshot.bindings, null, 2)}\n`)
+    await writeJsonSettingsFile(this.filePath, nextSnapshot.bindings)
     this.setSnapshot(nextSnapshot)
     return nextSnapshot
   }
@@ -81,23 +74,12 @@ export class KeybindingsManager {
   }
 }
 
-export async function readKeybindingsSnapshot(filePath: string) {
-  const presence = await readKeybindingsFile(filePath)
-  if (presence.text === null) {
-    return createDefaultSnapshot(filePath)
-  }
-  if (!presence.text.trim()) {
-    return createDefaultSnapshot(filePath, "Keybindings file was empty. Using defaults.")
-  }
-  try {
-    const parsed: KeybindingsFile = JSON.parse(presence.text)
-    return normalizeKeybindings(parsed, filePath)
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      return createDefaultSnapshot(filePath, "Keybindings file is invalid JSON. Using defaults.")
-    }
-    throw error
-  }
+export function readKeybindingsSnapshot(filePath: string): Promise<KeybindingsSnapshot> {
+  return readJsonSettingsFile(filePath, {
+    label: "Keybindings",
+    defaults: (warning) => createDefaultSnapshot(filePath, warning),
+    normalize: (value) => normalizeKeybindings(value, filePath),
+  })
 }
 
 function buildBindings(pick: (action: KeybindingAction) => string[]): Record<KeybindingAction, string[]> {
@@ -108,11 +90,9 @@ function buildBindings(pick: (action: KeybindingAction) => string[]): Record<Key
   return bindings
 }
 
-export function normalizeKeybindings(value: KeybindingsFile | null | undefined, filePath = getKeybindingsFilePath(homedir())): KeybindingsSnapshot {
+export function normalizeKeybindings(value: JsonValue | undefined, filePath = getKeybindingsFilePath(homedir())): KeybindingsSnapshot {
   const warnings: string[] = []
-  const source = value && typeof value === "object" && !Array.isArray(value)
-    ? value
-    : null
+  const source = value !== undefined && isJsonObject(value) ? value : null
 
   if (!source) {
     return createDefaultSnapshot(filePath, "Keybindings file must contain a JSON object. Using defaults.")
@@ -145,7 +125,7 @@ export function normalizeKeybindings(value: KeybindingsFile | null | undefined, 
   return {
     bindings,
     warning: warnings.length > 0 ? `Some keybindings were reset to defaults: ${warnings.join("; ")}` : null,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
   }
 }
 
@@ -154,15 +134,7 @@ function createDefaultSnapshot(filePath: string, warning: string | null = null):
   return {
     bindings,
     warning,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
   }
 }
 
-function formatDisplayPath(filePath: string) {
-  const homePath = homedir()
-  if (filePath === homePath) return "~"
-  if (filePath.startsWith(`${homePath}${path.sep}`)) {
-    return `~${filePath.slice(homePath.length)}`
-  }
-  return filePath
-}

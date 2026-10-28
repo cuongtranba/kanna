@@ -8,3 +8,5 @@ code:
   - src/ops/lint/oxlint-run.adapter.ts
   - src/ops/architecture/cjs-interop.ts
   - src/ops/architecture/cjs-interop-scan.adapter.ts
+  - src/ops/architecture/duplication.ts
+  - scripts/test-setup.ts

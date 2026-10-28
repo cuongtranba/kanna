@@ -1,7 +1,7 @@
 
 import { describe, test, expect } from "vite-plus/test"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import {
   resolveAutoResumeFor,
   emitAutoContinueEvent,
@@ -26,14 +26,14 @@ function makeQueuedMessage(): QueuedChatMessage {
   }
 }
 
-type StoredEvent = AutoContinueEvent
+type StoredEvent = ChatAutomationEvent
 
 interface FakeStore {
   events: StoredEvent[]
   messages: { chatId: string; entry: TranscriptEntry }[]
   chatExists: boolean
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
   getChat(chatId: string): { id: string } | null | undefined
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -70,8 +70,7 @@ function makeDeps(overrides: Partial<AutoContinueCommandDeps> = {}): AutoContinu
     store,
     scheduleManager: null,
     emitStateChange: () => {},
-    enqueueMessage: async () => makeQueuedMessage(),
-    maybeStartNextQueuedMessage: async () => false,
+    deliverPrompt: async () => makeQueuedMessage(),
     ...overrides,
   }
 }
@@ -101,7 +100,7 @@ describe("emitAutoContinueEvent", () => {
   test("appends event to store", async () => {
     const store = makeStore()
     const deps = makeDeps({ store })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -114,11 +113,11 @@ describe("emitAutoContinueEvent", () => {
   })
 
   test("notifies schedule manager", async () => {
-    const notified: AutoContinueEvent[] = []
+    const notified: ChatAutomationEvent[] = []
     const deps = makeDeps({
       scheduleManager: { onEvent: (e) => { notified.push(e) } },
     })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -132,7 +131,7 @@ describe("emitAutoContinueEvent", () => {
   test("emits state change for chat", async () => {
     const changes: string[] = []
     const deps = makeDeps({ emitStateChange: (id) => { changes.push(id) } })
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_fired",
       timestamp: Date.now(),
@@ -153,7 +152,7 @@ describe("getChatSchedule", () => {
 
   test("returns the schedule when a proposed event exists", async () => {
     const deps = makeDeps()
-    const event: AutoContinueEvent = {
+    const event: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_proposed",
       timestamp: Date.now(),
@@ -191,7 +190,7 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(enqueued).toHaveLength(0)
@@ -203,7 +202,7 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(store.events).toHaveLength(1)
@@ -239,17 +238,17 @@ describe("fireAutoContinue", () => {
     const enqueued: string[] = []
     const deps = makeDeps({
       store,
-      enqueueMessage: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
+      deliverPrompt: async (_, content) => { enqueued.push(content); return makeQueuedMessage() },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(enqueued).toContain("Read PROGRESS.md and decide next step")
   })
 
-  test("appends error message when enqueueMessage throws", async () => {
+  test("appends error message when delivering the prompt throws", async () => {
     const store = makeStore()
     const deps = makeDeps({
       store,
-      enqueueMessage: async () => { throw new Error("queue full") },
+      deliverPrompt: async () => { throw new Error("queue full") },
     })
     await fireAutoContinue(deps, "chat-1", "sched-1")
     expect(store.messages).toHaveLength(1)

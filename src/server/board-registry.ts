@@ -12,12 +12,12 @@ import type {
   CardDetail,
   CardLink,
   CardLinkKind,
-  ProviderId,
   RemoteSourceRef,
   SyncBinding,
   SyncConflict,
 } from "../shared/boards/types"
 import type { RepoBoardOwner } from "../shared/boards/sync-types"
+import { sourceRefLabel } from "../shared/boards/repo-slug"
 import {
   BLOCKED_BY,
   blockerIdsOf,
@@ -60,12 +60,6 @@ export interface BindSyncInput extends UpsertBindingInput {
   detachFromBoardId?: string | null
 }
 
-function sourceLabel(ref: RemoteSourceRef): string {
-  return ref.provider === "github-issues"
-    ? `${ref.owner}/${ref.repo}`
-    : `${ref.owner}/#${ref.projectNumber}`
-}
-
 export interface BoardRegistry {
   listBoards(owner: BoardOwnerRef): BoardSummary[]
   getBoard(boardId: string): Board | null
@@ -95,11 +89,7 @@ export interface BoardRegistry {
   createTemplate(input: CreateTemplateInput): BoardTemplate
   deleteTemplate(templateId: string): void
   listBindings(boardId: string): SyncBinding[]
-  repoBindingOwner(
-    providerId: ProviderId,
-    sourceRef: RemoteSourceRef,
-    excludingBoardId: string,
-  ): RepoBoardOwner | null
+  repoBindingOwner(sourceRef: RemoteSourceRef, excludingBoardId: string): RepoBoardOwner | null
   bindSync(input: BindSyncInput): SyncBinding
   unbindSync(boardId: string, bindingId: string): void
   listConflicts(boardId: string): SyncConflict[]
@@ -298,13 +288,9 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
     listBindings: (boardId) => store.listBindings(boardId),
     listConflicts: (boardId) => store.listConflicts(boardId, MAX_CONFLICTS),
 
-    repoBindingOwner(
-      providerId: ProviderId,
-      sourceRef: RemoteSourceRef,
-      excludingBoardId: string,
-    ): RepoBoardOwner | null {
+    repoBindingOwner(sourceRef: RemoteSourceRef, excludingBoardId: string): RepoBoardOwner | null {
       const foreign = store
-        .findBindingsBySource(providerId, sourceRef)
+        .findBindingsBySource(sourceRef)
         .find((binding) => binding.boardId !== excludingBoardId)
       if (!foreign) return null
       const board = store.getBoard(foreign.boardId)
@@ -323,7 +309,7 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
         () => binding.boardId,
         () => {
           const foreign = store
-            .findBindingsBySource(binding.providerId, binding.sourceRef)
+            .findBindingsBySource(binding.sourceRef)
             .filter((existing) => existing.boardId !== binding.boardId)
 
           if (foreign.length > 0) {
@@ -331,7 +317,7 @@ export function createBoardRegistry(options: CreateBoardRegistryOptions): BoardR
             if (!detachFromBoardId || !foreign.some((b) => b.boardId === detachFromBoardId)) {
               throw new BoardStoreError(
                 "conflict",
-                `${sourceLabel(binding.sourceRef)} is already synced by board ${holder?.boardId}; ` +
+                `${sourceRefLabel(binding.sourceRef)} is already synced by board ${holder?.boardId}; ` +
                   "connecting it here detaches it from that board — pass detachFromBoardId to confirm",
               )
             }

@@ -54,14 +54,17 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
   }
   const waiters = new Map<string, PendingWaiter[]>()
   const seenToolUseIds = new Map<string, { id: string; toolName: string; canonicalArgsHash: string }>()
+  function keyOf(...parts: readonly string[]): string {
+    return parts.join("|")
+  }
   function seenKey(s: { chatId: string; sessionId: string; toolUseId: string }): string {
-    return `${s.chatId}|${s.sessionId}|${s.toolUseId}`
+    return keyOf(s.chatId, s.sessionId, s.toolUseId)
   }
   const inMemory = new Map<string, ToolRequest>()
   const pendingByContent = new Map<string, string>()
   const contentKeyById = new Map<string, string>()
   function contentKey(s: { chatId: string; sessionId: string; toolName: string }, hash: string): string {
-    return `${s.chatId}|${s.sessionId}|${s.toolName}|${hash}`
+    return keyOf(s.chatId, s.sessionId, s.toolName, hash)
   }
   function clearContentIndex(id: string): void {
     const key = contentKeyById.get(id)
@@ -72,8 +75,16 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
 
   function hmacId(s: ToolCallbackSubmitArgs, hash: string): string {
     const h = createHmac("sha256", opts.serverSecret)
-    h.update(`${s.chatId}|${s.sessionId}|${s.toolUseId}|${s.toolName}|${hash}`)
+    h.update(keyOf(s.chatId, s.sessionId, s.toolUseId, s.toolName, hash))
     return h.digest("hex")
+  }
+
+  function waitFor(id: string): Promise<ToolCallbackResult> {
+    return new Promise<ToolCallbackResult>((resolve) => {
+      const list = waiters.get(id) ?? []
+      list.push({ resolve })
+      waiters.set(id, list)
+    })
   }
 
   function resolveWaiters(id: string, result: ToolCallbackResult) {
@@ -108,6 +119,18 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
     clearContentIndex(id)
     await opts.store.resolveToolRequest(id, update)
     if (existing) notify(existing.chatId)
+  }
+
+  async function persistAutoResolved(
+    req: ToolRequest,
+    update: { status: ToolRequestStatus; decision: ToolRequestDecision; resolvedAt: number },
+  ): Promise<void> {
+    try {
+      await opts.store.putToolRequest(req)
+      await opts.store.resolveToolRequest(req.id, update)
+    } catch (err) {
+      log.warn("[tool-callback] persisting an auto-resolved request failed", String(err))
+    }
   }
 
   const svc: ToolCallbackService = {
@@ -147,25 +170,13 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
           mismatchReason: existing.mismatchReason,
         })
       }
-      if (existing) {
-        return new Promise<ToolCallbackResult>((resolve) => {
-          const list = waiters.get(id) ?? []
-          list.push({ resolve })
-          waiters.set(id, list)
-        })
-      }
+      if (existing) return waitFor(id)
 
       const cKey = contentKey(args, hash)
       const livePendingId = pendingByContent.get(cKey)
       if (livePendingId !== undefined) {
         const live = inMemory.get(livePendingId)
-        if (live && live.status === "pending") {
-          return new Promise<ToolCallbackResult>((resolve) => {
-            const list = waiters.get(livePendingId) ?? []
-            list.push({ resolve })
-            waiters.set(livePendingId, list)
-          })
-        }
+        if (live && live.status === "pending") return waitFor(livePendingId)
         clearContentIndex(livePendingId)
       }
 
@@ -199,22 +210,15 @@ export function createToolCallbackService(opts: ToolCallbackServiceArgs): ToolCa
         const decision: ToolRequestDecision = verdict.verdict === "auto-allow"
           ? { kind: "allow", reason: verdict.reason }
           : { kind: "deny", reason: verdict.reason }
-        const resolvedReq: ToolRequest = { ...req, status: "answered", decision, resolvedAt: now }
-        inMemory.set(id, resolvedReq)
-        void (async () => {
-          await opts.store.putToolRequest(req)
-          await opts.store.resolveToolRequest(id, { status: "answered", decision, resolvedAt: now })
-        })()
+        const update = { status: "answered" as const, decision, resolvedAt: now }
+        inMemory.set(id, { ...req, ...update })
+        void persistAutoResolved(req, update)
         return Promise.resolve({ status: "answered", decision })
       }
 
       pendingByContent.set(cKey, id)
       contentKeyById.set(id, cKey)
-      const pendingPromise = new Promise<ToolCallbackResult>((resolve) => {
-        const list = waiters.get(id) ?? []
-        list.push({ resolve })
-        waiters.set(id, list)
-      })
+      const pendingPromise = waitFor(id)
       void persistPut(req)
       return pendingPromise
     },

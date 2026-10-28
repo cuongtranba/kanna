@@ -185,11 +185,6 @@ describe("makeFakeDomPort", () => {
     const dom = makeFakeDomPort({ userAgent: "TestAgent/2.0" })
     expect(dom.getUserAgent()).toBe("TestAgent/2.0")
   })
-
-  test("isSecureContext returns configured value", () => {
-    const dom = makeFakeDomPort({ secure: false })
-    expect(dom.isSecureContext()).toBe(false)
-  })
 })
 
 

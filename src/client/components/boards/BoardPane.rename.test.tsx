@@ -3,7 +3,6 @@ import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
 import { BoardPane, type BoardPaneSocket } from "./BoardPane"
-import { useBoardSyncStore } from "./BoardPane.store"
 import { useBoardsStore } from "../../stores/boardsStore"
 import type { BoardSnapshot, ClientCommand, SubscriptionTopic } from "../../../shared/protocol"
 import type { BoardViewSnapshot } from "../../../shared/boards/types"
@@ -89,7 +88,6 @@ function boardUpdates(commands: ClientCommand[]) {
 }
 
 beforeEach(() => {
-  useBoardSyncStore.getState().stopRenameBoard()
   useBoardsStore.setState({ boardsByOwner: {}, viewByBoard: {}, pageSizeByBoard: {} })
 })
 

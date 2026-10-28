@@ -1,5 +1,15 @@
 import { describe, expect, test } from "vite-plus/test"
-import { errorMessage, isRecord, onRejected, toError } from "./errors"
+import {
+  StaleStateError,
+  chatNotFound,
+  errorMessage,
+  fileNoLongerChanged,
+  isRecord,
+  onRejected,
+  projectNotFound,
+  queuedMessageNotFound,
+  toError,
+} from "./errors"
 
 describe("toError", () => {
   test("passes an Error through untouched", () => {
@@ -52,5 +62,21 @@ describe("isRecord", () => {
     expect(isRecord(null)).toBe(false)
     expect(isRecord([1])).toBe(false)
     expect(isRecord("s")).toBe(false)
+  })
+})
+
+describe("StaleStateError", () => {
+  test("the entity-went-away factories keep their wire messages", () => {
+    expect(chatNotFound().message).toBe("Chat not found")
+    expect(projectNotFound().message).toBe("Project not found")
+    expect(queuedMessageNotFound().message).toBe("Queued message not found")
+    expect(fileNoLongerChanged("foo/bar.ts").message).toBe("File is no longer changed: foo/bar.ts")
+  })
+
+  test("every factory produces a StaleStateError and a plain Error does not", () => {
+    for (const error of [chatNotFound(), projectNotFound(), queuedMessageNotFound(), fileNoLongerChanged("x")]) {
+      expect(error).toBeInstanceOf(StaleStateError)
+    }
+    expect(new Error("Chat not found")).not.toBeInstanceOf(StaleStateError)
   })
 })

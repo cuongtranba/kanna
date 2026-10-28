@@ -36,3 +36,5 @@ code:
   - src/client/app/ServiceBusConsumersGroup.tsx
   - src/client/app/ServiceBusEmbeddedGroup.tsx
   - src/client/app/ServiceBusFields.tsx
+  - src/server/service-bus/scheduler.ts
+  - src/shared/service-bus/subjects.ts

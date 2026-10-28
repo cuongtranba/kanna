@@ -1,12 +1,12 @@
 import { useCallback } from "react"
 import { describeCodexFailure, isRetryableCodexFailure } from "../../../shared/codex-error-classification"
 import { TranscriptActionCard, type CardAction } from "../chat-ui/TranscriptActionCard"
-import type { ProcessedResultMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { TurnDurationFooter } from "./TurnDurationFooter"
 import { renderChatLinks } from "./renderChatLinks"
 
 interface Props {
-  message: ProcessedResultMessage
+  message: TranscriptMessageOf<"result">
   onRetry?: (resultMessageId: string) => void | Promise<void>
 }
 

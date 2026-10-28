@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import type { ComponentRenderProps } from "@json-render/react"
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Info, Minus, ShieldQuestion, XCircle } from "lucide-react"
 import type { Sentiment, Trend } from "../../../../shared/genui"
 import { Button } from "../../ui/button"
@@ -7,6 +8,7 @@ import { cn } from "../../../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { useGenUIHost } from "../host"
 import { GENUI_DATASET_QUERY_KEY, type DatasetState } from "../useDatasetQuery"
+import { isBoolean, useElementUiState } from "../useElementUiState"
 import { useQueryClient } from "@tanstack/react-query"
 
 export type Tone = "neutral" | "positive" | "negative" | "attention" | "info"
@@ -126,4 +128,22 @@ export function EmptyNotice({ label, minHeight }: { label: string; minHeight?: n
       {label}
     </div>
   )
+}
+
+const TABLE_PAGE_SIZE = 50
+
+export const TABLE_HEAD_CLASS = "px-3 py-2 text-xs font-medium text-muted-foreground"
+
+function ShowAllRows({ total, onShow }: { total: number; onShow: () => void }) {
+  return (
+    <div className="border-t border-border px-3 py-2">
+      <Button size="sm" variant="ghost" onClick={onShow}>Show all {total} rows</Button>
+    </div>
+  )
+}
+
+export function useExpandableRows<T>(element: ComponentRenderProps["element"], rows: readonly T[]): { visibleRows: readonly T[]; showAll: ReactNode } {
+  const [expanded, setExpanded] = useElementUiState(element, "expanded", false, isBoolean)
+  const showAll = !expanded && rows.length > TABLE_PAGE_SIZE ? <ShowAllRows total={rows.length} onShow={() => setExpanded(true)} /> : null
+  return { visibleRows: expanded ? rows : rows.slice(0, TABLE_PAGE_SIZE), showAll }
 }

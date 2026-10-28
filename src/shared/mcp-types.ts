@@ -5,7 +5,8 @@ import type {
   AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 
-export type McpServerTransport = "stdio" | "http" | "sse" | "ws"
+export const MCP_SERVER_TRANSPORTS = ["stdio", "http", "sse", "ws"] as const
+export type McpServerTransport = (typeof MCP_SERVER_TRANSPORTS)[number]
 
 export type McpServerTestResult =
   | { status: "untested" }

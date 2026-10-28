@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "../auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
 import { compactCronRunEvents } from "./compact"
 import { deriveCronJobs, findRunningCronRuns } from "./read-model"
 import { parseSchedule } from "../../shared/cron/parse-schedule"
@@ -14,7 +14,7 @@ function scheduleOf(text: string): CronSchedule {
   return parsed.schedule
 }
 
-function armed(jobId: string, timestamp: number, chatId = CHAT): AutoContinueEvent {
+function armed(jobId: string, timestamp: number, chatId = CHAT): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_armed",
@@ -33,7 +33,7 @@ function lifecycle(
   jobId: string,
   timestamp: number,
   chatId = CHAT,
-): AutoContinueEvent {
+): ChatAutomationEvent {
   const base = { v: AUTO_CONTINUE_EVENT_VERSION, chatId, scheduleId: jobId, timestamp }
   if (kind === "cron_disarmed") return { ...base, kind, reason: "user" }
   return { ...base, kind }
@@ -45,7 +45,7 @@ function runStarted(
   timestamp: number,
   spawnedChatId?: string,
   chatId = CHAT,
-): AutoContinueEvent {
+): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_started",
@@ -57,7 +57,7 @@ function runStarted(
   }
 }
 
-function runOutcome(jobId: string, runId: string, timestamp: number, ok = true, chatId = CHAT): AutoContinueEvent {
+function runOutcome(jobId: string, runId: string, timestamp: number, ok = true, chatId = CHAT): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_outcome",
@@ -75,7 +75,7 @@ function runSkipped(
   reason: CronSkipReason = "chat_busy",
   missedCount?: number,
   chatId = CHAT,
-): AutoContinueEvent {
+): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "cron_run_skipped",
@@ -87,8 +87,8 @@ function runSkipped(
   }
 }
 
-function settledRuns(jobId: string, count: number, startAt: number): AutoContinueEvent[] {
-  const out: AutoContinueEvent[] = []
+function settledRuns(jobId: string, count: number, startAt: number): ChatAutomationEvent[] {
+  const out: ChatAutomationEvent[] = []
   for (let i = 0; i < count; i += 1) {
     const at = startAt + i * 1000
     out.push(runStarted(jobId, `${jobId}-run-${i}`, at), runOutcome(jobId, `${jobId}-run-${i}`, at + 1))
@@ -96,11 +96,11 @@ function settledRuns(jobId: string, count: number, startAt: number): AutoContinu
   return out
 }
 
-function skips(jobId: string, count: number, startAt: number): AutoContinueEvent[] {
+function skips(jobId: string, count: number, startAt: number): ChatAutomationEvent[] {
   return Array.from({ length: count }, (_, i) => runSkipped(jobId, startAt + i * 1000))
 }
 
-const PARITY_SHAPES: Array<{ name: string; log: AutoContinueEvent[] }> = [
+const PARITY_SHAPES: Array<{ name: string; log: ChatAutomationEvent[] }> = [
   { name: "200 settled pairs", log: [armed("j1", 1), ...settledRuns("j1", 200, 100)] },
   { name: "200 skips", log: [armed("j1", 1), ...skips("j1", 200, 100)] },
   {
@@ -239,7 +239,7 @@ describe("compactCronRunEvents — invariants", () => {
   })
 
   test("I/J: non-cron events are never touched, however many there are", () => {
-    const loopArmed: AutoContinueEvent = {
+    const loopArmed: ChatAutomationEvent = {
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_armed",
       chatId: CHAT,
@@ -250,7 +250,7 @@ describe("compactCronRunEvents — invariants", () => {
       verifyCommand: "bun run lint",
       trackingFileRel: "PROGRESS.md",
     }
-    const loopOutcomes: AutoContinueEvent[] = Array.from({ length: 200 }, (_, i) => ({
+    const loopOutcomes: ChatAutomationEvent[] = Array.from({ length: 200 }, (_, i) => ({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "loop_run_outcome",
       chatId: CHAT,
@@ -258,7 +258,7 @@ describe("compactCronRunEvents — invariants", () => {
       timestamp: 6 + i,
       ok: true,
     }))
-    const accepted: AutoContinueEvent[] = Array.from({ length: 200 }, (_, i) => ({
+    const accepted: ChatAutomationEvent[] = Array.from({ length: 200 }, (_, i) => ({
       v: AUTO_CONTINUE_EVENT_VERSION,
       kind: "auto_continue_accepted",
       chatId: CHAT,

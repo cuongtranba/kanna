@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
 import type { OAuthTokenEntry, SlashCommand, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -46,7 +46,7 @@ function createMultiChatStore(chatIds: string[]) {
       planMode?: boolean
       autoContinue?: unknown
     }>,
-    autoContinueEvents: [] as AutoContinueEvent[],
+    autoContinueEvents: [] as ChatAutomationEvent[],
     turnFinishedCount: 0,
     turnFailedCount: 0,
     turnFailures: [] as Array<{ chatId: string; reason: string }>,
@@ -97,7 +97,7 @@ function createMultiChatStore(chatIds: string[]) {
       this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {
@@ -148,6 +148,7 @@ function createMultiChatStore(chatIds: string[]) {
       this.queuedMessages.push(queuedMessage)
       return queuedMessage
     },
+    async setChatModel() {},
     getQueuedMessages() {
       return [...this.queuedMessages]
     },
@@ -157,6 +158,7 @@ function createMultiChatStore(chatIds: string[]) {
     async removeQueuedMessage(_chatId: string, id: string) {
       this.queuedMessages = this.queuedMessages.filter((m) => m.id !== id)
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }

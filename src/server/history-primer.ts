@@ -61,7 +61,6 @@ function selectPrimerEntries(entries: readonly TranscriptEntry[]): TranscriptEnt
 
 export function buildHistoryPrimer(
   entries: readonly TranscriptEntry[],
-  _targetProvider: AgentProvider,
   userText: string,
 ): string | null {
   const inContext = selectPrimerEntries(entries)

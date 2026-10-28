@@ -1,11 +1,10 @@
 import { homedir } from "node:os"
 import path from "node:path"
 import { getDataDir } from "../shared/branding"
-import { log } from "../shared/log"
 import type { StorageBackend } from "./storage/backend"
 import { FsStorageBackend } from "./storage/fs-storage.adapter"
 import type { AgentProvider, ChatHistoryPage, ModelOptions, QueuedChatMessage, StackBinding, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import * as ChatTasks from "./event-store-tasks"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
@@ -16,12 +15,14 @@ import {
   type StoreState,
   type SubagentRunEvent,
   type TurnRunConfig,
-  type StoreEventKind,
-  type LogName,
-  LOG_FILES,
-  LOG_OF_EVENT,
   createEmptyState,
+  isChatAutomationEvent,
 } from "./events"
+import { logOfEvent } from "./event-routes"
+import { storeLayoutFor, type StoreLayout } from "./event-logs"
+import { LogWriter } from "./event-store-writer"
+import { liveRecord, requireLiveChat } from "./event-store-lookup"
+import { SeenMessageIds } from "./seen-message-ids"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
@@ -47,6 +48,7 @@ import * as PeripheralEvents from "./event-store-peripheral-events.adapter"
 import * as MessageRead from "./event-store-messages.adapter"
 import * as TranscriptWrite from "./event-store-transcript-write.adapter"
 import {
+  createBootState,
   initializeEventStore,
   getLegacyTranscriptStats as getLegacyTranscriptStatsFn,
   hasLegacyTranscriptData as hasLegacyTranscriptDataFn,
@@ -90,35 +92,27 @@ import {
   computeNewSidebarOrder,
 } from "./event-store-write-ops"
 
-const SIDEBAR_PROJECT_ORDER_FILE = "sidebar-order.json"
+export interface ChatTaskDecision<R> {
+  events: readonly ChatTaskEvent[]
+  result: R
+}
+
+export type TurnOutcome = "finished" | "failed" | "cancelled"
+
+export type TurnTerminalListener = (chatId: string, outcome: TurnOutcome, error?: string) => void
 
 export class EventStore implements PushEventStore {
   readonly dataDir: string
   readonly state: StoreState = createEmptyState()
-  private writeChain = Promise.resolve()
-  private storageReset = false
-  private readonly snapshotPath: string
-  private readonly projectsLogPath: string
-  private readonly chatsLogPath: string
-  private readonly messagesLogPath: string
-  private readonly queuedMessagesLogPath: string
-  private readonly turnsLogPath: string
-  private readonly schedulesLogPath: string
-  private readonly tunnelLogPath: string
-  private readonly sharesLogPath: string
-  private readonly pushLogPath: string
-  private readonly stacksLogPath: string
-  private readonly toolRequestsLogPath: string
-  private readonly chatTasksLogPath: string
+  private readonly layout: StoreLayout
+  private readonly writer: LogWriter
   private readonly pendingNativeTaskCalls: ChatTasks.PendingNativeTaskCalls = new Map()
-  private readonly transcriptsDir: string
-  private readonly sidebarProjectOrderPath: string
+  private readonly turnTerminalListeners = new Set<TurnTerminalListener>()
   private legacyMessagesByChatId = new Map<string, TranscriptEntry[]>()
-  private seenMessageIdsByChatId = new Map<string, Set<string>>()
+  private readonly seenMessageIds = new SeenMessageIds()
   private lastUserMessageIdByChatId = new Map<string, string>()
-  private legacySidebarProjectOrder: string[] = []
   private readonly sidebarProjectOrderRef: { value: string[] } = { value: [] }
-  private snapshotHasLegacyMessages = false
+  private readonly boot = createBootState()
   private readonly transcriptCache = new MessageRead.TranscriptCache()
   readonly chatOps = new ChatOpLog()
   private readonly tunnelEventsByChatId = new Map<string, CloudflareTunnelEvent[]>()
@@ -137,137 +131,77 @@ export class EventStore implements PushEventStore {
   constructor(dataDir = getDataDir(homedir()), storage: StorageBackend = new FsStorageBackend()) {
     this.dataDir = dataDir
     this.storage = storage
-    this.snapshotPath = path.join(this.dataDir, "snapshot.json")
-    this.projectsLogPath = path.join(this.dataDir, "projects.jsonl")
-    this.chatsLogPath = path.join(this.dataDir, "chats.jsonl")
-    this.messagesLogPath = path.join(this.dataDir, "messages.jsonl")
-    this.queuedMessagesLogPath = path.join(this.dataDir, "queued-messages.jsonl")
-    this.turnsLogPath = path.join(this.dataDir, "turns.jsonl")
-    this.schedulesLogPath = path.join(this.dataDir, "schedules.jsonl")
-    this.tunnelLogPath = path.join(this.dataDir, "tunnels.jsonl")
-    this.sharesLogPath = path.join(this.dataDir, "shares.jsonl")
-    this.pushLogPath = path.join(this.dataDir, "push.jsonl")
-    this.stacksLogPath = path.join(this.dataDir, "stacks.jsonl")
-    this.toolRequestsLogPath = path.join(this.dataDir, "tool-requests.jsonl")
-    this.chatTasksLogPath = path.join(this.dataDir, "chat-tasks.jsonl")
-    this.transcriptsDir = path.join(this.dataDir, "transcripts")
-    this.sidebarProjectOrderPath = path.join(this.dataDir, SIDEBAR_PROJECT_ORDER_FILE)
+    this.layout = storeLayoutFor(dataDir)
+    this.writer = new LogWriter(storage)
+
+    this.peripheralDeps = {
+      storage: this.storage,
+      layout: this.layout,
+      writer: this.writer,
+      tunnelEventsByChatId: this.tunnelEventsByChatId,
+      isLiveChat: (chatId) => this.getChat(chatId) !== null,
+      shareEventsAll: this.shareEventsAll,
+    }
 
     this.initDeps = {
       storage: this.storage,
-      dataDir: this.dataDir,
-      snapshotPath: this.snapshotPath,
-      projectsLogPath: this.projectsLogPath,
-      chatsLogPath: this.chatsLogPath,
-      messagesLogPath: this.messagesLogPath,
-      queuedMessagesLogPath: this.queuedMessagesLogPath,
-      turnsLogPath: this.turnsLogPath,
-      schedulesLogPath: this.schedulesLogPath,
-      tunnelLogPath: this.tunnelLogPath,
-      sharesLogPath: this.sharesLogPath,
-      pushLogPath: this.pushLogPath,
-      stacksLogPath: this.stacksLogPath,
-      toolRequestsLogPath: this.toolRequestsLogPath,
-      chatTasksLogPath: this.chatTasksLogPath,
-      transcriptsDir: this.transcriptsDir,
-      sidebarProjectOrderPath: this.sidebarProjectOrderPath,
+      layout: this.layout,
       state: this.state,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
       tunnelEventsByChatId: this.tunnelEventsByChatId,
       transcriptCache: this.transcriptCache,
       sidebarProjectOrderRef: this.sidebarProjectOrderRef,
-      getLegacySidebarProjectOrder: () => this.legacySidebarProjectOrder,
-      setLegacySidebarProjectOrder: (v) => { this.legacySidebarProjectOrder = v },
-      getSnapshotHasLegacyMessages: () => this.snapshotHasLegacyMessages,
-      setSnapshotHasLegacyMessages: (v) => { this.snapshotHasLegacyMessages = v },
-      getStorageReset: () => this.storageReset,
-      setStorageReset: (v) => { this.storageReset = v },
+      boot: this.boot,
+      peripheral: this.peripheralDeps,
       replayChatProvider: this.replayChatProvider,
       applyEvent: (event) => { this.applyEvent(event) },
     }
 
     this.msgReadDeps = {
       storage: this.storage,
-      transcriptsDir: this.transcriptsDir,
+      layout: this.layout,
       transcriptCache: this.transcriptCache,
       legacyMessagesByChatId: this.legacyMessagesByChatId,
-      seenMessageIdsByChatId: this.seenMessageIdsByChatId,
+      seenMessageIds: this.seenMessageIds,
       queuedMessagesByChatId: this.state.queuedMessagesByChatId,
       chatsById: this.state.chatsById,
       listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
     }
 
-    this.peripheralDeps = {
-      storage: this.storage,
-      tunnelLogPath: this.tunnelLogPath,
-      sharesLogPath: this.sharesLogPath,
-      pushLogPath: this.pushLogPath,
-      tunnelEventsByChatId: this.tunnelEventsByChatId,
-      isLiveChat: (chatId) => this.getChat(chatId) !== null,
-      shareEventsAll: this.shareEventsAll,
-      getWriteChain: () => this.writeChain,
-      setWriteChain: (p) => { this.writeChain = p },
-    }
-
     this.chatTranscriptDeps = {
-      storage: this.storage,
-      transcriptsDir: this.transcriptsDir,
-      dataDir: this.dataDir,
-      transcriptCache: this.transcriptCache,
-      seenMessageIdsByChatId: this.seenMessageIdsByChatId,
-      chatsById: this.state.chatsById,
+      read: this.msgReadDeps,
+      writer: this.writer,
       toolRequestsById: this.state.toolRequestsById,
-      chatsLogPath: this.chatsLogPath,
-      turnsLogPath: this.turnsLogPath,
-      getWriteChain: () => this.writeChain,
-      setWriteChain: (p) => { this.writeChain = p },
-      append: (filePath, event) => this.append(filePath, event),
-      getMessages: (chatId) => this.getMessages(chatId),
-      ensureTranscriptLoaded: (chatId) => {
-        if (!this.transcriptCache.isSeeded(chatId)) {
-          if (!MessageRead.seedSeenMessageIdsFromTail(this.msgReadDeps, chatId)) {
-            MessageRead.getMessagesView(this.msgReadDeps, chatId)
-          }
-        }
-      },
-      getSeenMessageIds: (chatId) => this.getSeenMessageIds(chatId),
-      listPendingToolRequests: (chatId) => this.listPendingToolRequests(chatId),
+      commit: (event) => this.commit(event),
       recordChatOp: (chatId, op) => { this.chatOps.record(chatId, op) },
       clearChatOps: (chatId) => { this.chatOps.clear(chatId) },
     }
 
     this.toolRequestDeps = {
       toolRequestsById: this.state.toolRequestsById,
-      toolRequestsLogPath: this.toolRequestsLogPath,
-      append: (fp, e) => this.append(fp, e),
+      commit: (event) => this.commit(event),
     }
 
     this.appendSubagentDeps = {
       chatsById: this.state.chatsById,
-      turnsLogPath: this.turnsLogPath,
       dataDir: this.dataDir,
       applyEvent: (e) => { this.applyEvent(e) },
-      enqueueDiskAppend: (fp, p) => { this.enqueueDiskAppend(fp, p) },
+      persistDetached: (event) => { this.writer.appendDetached(this.layout.logPath(logOfEvent(event)), event) },
     }
   }
 
   async initialize() {
-    await initializeEventStore(this.initDeps, {
-      loadTunnelEvents: () => this.loadTunnelEvents(),
-      loadShareEvents: () => this.loadShareEvents(),
-      hasLegacyTranscriptData: () => this.hasLegacyTranscriptData(),
-      snapshotAndTruncateLogs: () => this.snapshotAndTruncateLogs(),
-    })
+    await initializeEventStore(this.initDeps)
   }
 
   private applyEvent(event: StoreEvent) {
     applyStoreEvent(event, this.state, this.legacyMessagesByChatId, this.replayChatProvider)
     this.tap?.onEventApplied(event)
-    if ("kind" in event) return
-    const typedEvent: Exclude<StoreEvent, AutoContinueEvent> = event
+    if (isChatAutomationEvent(event)) return
+    const typedEvent: Exclude<StoreEvent, ChatAutomationEvent> = event
     if (typedEvent.type === "chat_deleted") {
       const { chatId } = typedEvent
-      this.seenMessageIdsByChatId.delete(chatId)
+      this.seenMessageIds.forget(chatId)
       this.lastUserMessageIdByChatId.delete(chatId)
       this.transcriptCache.invalidate(chatId)
       this.legacyMessagesByChatId.delete(chatId)
@@ -275,31 +209,9 @@ export class EventStore implements PushEventStore {
     }
   }
 
-  private enqueueDiskAppend(filePath: string, payload: string): void {
-    this.writeChain = this.writeChain
-      .then(() => this.storage.appendText(filePath, payload))
-      .catch((err) => {
-        log.error("[event-store] subagent disk append failed:", err)
-      })
-  }
-
-  private append<TEvent extends StoreEvent>(filePath: string, event: TEvent) {
-    const payload = `${JSON.stringify(event)}\n`
-    this.writeChain = this.writeChain.then(async () => {
-      await this.storage.appendText(filePath, payload)
-      this.applyEvent(event)
-    })
-    return this.writeChain
-  }
-
   private commit(event: StoreEvent): Promise<void> {
-    const key: StoreEventKind = "kind" in event ? event.kind : event.type
-    const logName: LogName = LOG_OF_EVENT[key]
-    const filePath = path.join(this.dataDir, LOG_FILES[logName])
-    return this.append(filePath, event)
+    return this.writer.append(this.layout.logPath(logOfEvent(event)), event, () => { this.applyEvent(event) })
   }
-
-  private getSeenMessageIds(chatId: string): Set<string> { return MessageRead.getSeenMessageIds(this.msgReadDeps, chatId) }
 
   async openProject(localPath: string, title?: string) {
     const result = buildOpenProjectResult(
@@ -335,10 +247,7 @@ export class EventStore implements PushEventStore {
     return this.state.stacksById.get(event.stackId)!
   }
 
-  getStack(stackId: string): StackRecord | null {
-    const stack = this.state.stacksById.get(stackId)
-    return stack && !stack.deletedAt ? stack : null
-  }
+  getStack(stackId: string): StackRecord | null { return liveRecord(this.state.stacksById, stackId) }
 
   listStacks(): StackRecord[] { return [...this.state.stacksById.values()].filter((s) => !s.deletedAt) }
 
@@ -383,12 +292,10 @@ export class EventStore implements PushEventStore {
       projectIds,
     )
     if (!newOrder) return
-    const newChain = this.writeChain.then(async () => {
-      await writeSidebarOrderFile(this.storage, this.dataDir, this.sidebarProjectOrderPath, newOrder)
+    await this.writer.serialize(async () => {
+      await writeSidebarOrderFile(this.storage, this.layout, newOrder)
       this.sidebarProjectOrderRef.value = [...newOrder]
     })
-    this.writeChain = newChain
-    await newChain
   }
 
   async createChat(
@@ -500,22 +407,30 @@ export class EventStore implements PushEventStore {
     await this.commit(buildTurnStartedEvent(this.state.chatsById, chatId, runConfig))
   }
 
-  onTurnTerminal: ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void) | null = null
   tap: import("./service-bus/event-store-tap").EventStoreTap | null = null
+
+  subscribeTurnTerminal(listener: TurnTerminalListener): () => void {
+    this.turnTerminalListeners.add(listener)
+    return () => { this.turnTerminalListeners.delete(listener) }
+  }
+
+  private notifyTurnTerminal(chatId: string, outcome: TurnOutcome, error?: string) {
+    for (const listener of this.turnTerminalListeners) listener(chatId, outcome, error)
+  }
 
   async recordTurnFinished(chatId: string) {
     await this.commit(buildTurnFinishedEvent(this.state.chatsById, chatId))
-    this.onTurnTerminal?.(chatId, "finished")
+    this.notifyTurnTerminal(chatId, "finished")
   }
 
   async recordTurnFailed(chatId: string, error: string) {
     await this.commit(buildTurnFailedEvent(this.state.chatsById, chatId, error))
-    this.onTurnTerminal?.(chatId, "failed", error)
+    this.notifyTurnTerminal(chatId, "failed", error)
   }
 
   async recordTurnCancelled(chatId: string) {
     await this.commit(buildTurnCancelledEvent(this.state.chatsById, chatId))
-    this.onTurnTerminal?.(chatId, "cancelled")
+    this.notifyTurnTerminal(chatId, "cancelled")
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) { return appendSubagentEventFn(this.appendSubagentDeps, event) }
@@ -539,25 +454,11 @@ export class EventStore implements PushEventStore {
     if (ev) await this.commit(ev)
   }
 
-  getProject(projectId: string) {
-    const project = this.state.projectsById.get(projectId)
-    if (!project || project.deletedAt) return null
-    return project
-  }
+  getProject(projectId: string) { return liveRecord(this.state.projectsById, projectId) }
 
-  requireChat(chatId: string) {
-    const chat = this.state.chatsById.get(chatId)
-    if (!chat || chat.deletedAt) {
-      throw new Error("Chat not found")
-    }
-    return chat
-  }
+  requireChat(chatId: string) { return requireLiveChat(this.state.chatsById, chatId) }
 
-  getChat(chatId: string) {
-    const chat = this.state.chatsById.get(chatId)
-    if (!chat || chat.deletedAt) return null
-    return chat
-  }
+  getChat(chatId: string) { return liveRecord(this.state.chatsById, chatId) }
 
   getSidebarProjectOrder() { return [...this.sidebarProjectOrderRef.value] }
 
@@ -618,27 +519,24 @@ export class EventStore implements PushEventStore {
 
   async migrateLegacyTranscripts(onProgress?: (message: string) => void) { return migrateLegacyTranscriptsFn(this.initDeps, onProgress) }
 
-  async appendAutoContinueEvent(event: AutoContinueEvent) { return this.commit(event) }
+  async appendAutoContinueEvent(event: ChatAutomationEvent) { return this.commit(event) }
 
   async appendChatTaskEvents(events: readonly ChatTaskEvent[]): Promise<void> {
     for (const event of events) await this.commit(event)
   }
 
-  async decideChatTaskEvents(
+  async decideChatTaskEvents<R>(
     chatId: string,
     ctx: ChatTaskScheduleContext,
-    decide: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
-  ): Promise<readonly ChatTaskEvent[]> {
-    let decided: readonly ChatTaskEvent[] = []
-    this.writeChain = this.writeChain.then(async () => {
-      decided = decide(ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx))
-      for (const event of decided) {
-        await this.storage.appendText(this.chatTasksLogPath, `${JSON.stringify(event)}\n`)
-        this.applyEvent(event)
+    decide: (projection: ChatTaskProjection) => ChatTaskDecision<R>,
+  ): Promise<ChatTaskDecision<R>> {
+    return this.writer.serialize(async () => {
+      const decision = decide(ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx))
+      for (const event of decision.events) {
+        await this.writer.appendInsideStep(this.layout.logPath(logOfEvent(event)), event, () => { this.applyEvent(event) })
       }
+      return decision
     })
-    await this.writeChain
-    return decided
   }
 
   getChatTaskEvents(chatId: string): ChatTaskEvent[] {
@@ -650,7 +548,7 @@ export class EventStore implements PushEventStore {
     return ChatTasks.projectChatTasks(this.state.chatTasksByChatId, chatId, ctx)
   }
 
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[] {
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[] {
     const list = this.state.autoContinueEventsByChatId.get(chatId)
     return list ? [...list] : []
   }
@@ -669,13 +567,9 @@ export class EventStore implements PushEventStore {
 
   listTunnelChats(): string[] { return PeripheralEvents.listTunnelChats(this.peripheralDeps) }
 
-  private async loadTunnelEvents(): Promise<void> { await PeripheralEvents.loadTunnelEvents(this.peripheralDeps) }
-
   async appendShareEvent(event: ShareEvent): Promise<void> { return PeripheralEvents.appendShareEvent(this.peripheralDeps, event) }
 
   getShareEvents(): ShareEvent[] { return PeripheralEvents.getShareEvents(this.peripheralDeps) }
-
-  private async loadShareEvents(): Promise<void> { await PeripheralEvents.loadShareEvents(this.peripheralDeps) }
 
   async appendPushEvent(event: PushEvent): Promise<void> { return PeripheralEvents.appendPushEvent(this.peripheralDeps, event) }
 
@@ -696,5 +590,5 @@ export class EventStore implements PushEventStore {
 
   scanAllToolRequests(): ToolRequest[] { return scanAllToolRequestsFromMap(this.state.toolRequestsById) }
 
-  async flush(): Promise<void> { await this.writeChain }
+  async flush(): Promise<void> { await this.writer.flush() }
 }

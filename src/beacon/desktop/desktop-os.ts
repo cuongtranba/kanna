@@ -1,10 +1,13 @@
 import path from "node:path"
 import { BEACON_LINK_SCHEME } from "../../shared/beacon-pair-link"
 import type { BeaconOs } from "../../shared/beacon-protocol"
+import { beaconFilePaths } from "../paths"
 
 export const BEACON_APP_NAME = "Kanna Beacon"
 export const BEACON_APP_IDENTIFIER = "dev.kanna.beacon"
 export const AUTOSTART_ENV = "KANNA_BEACON_AUTOSTART"
+export const MAC_LOGIN_LABEL = `${BEACON_APP_IDENTIFIER}.login`
+export const LINK_MIME_TYPE = `x-scheme-handler/${BEACON_LINK_SCHEME}`
 
 export interface DesktopPaths {
   home: string
@@ -23,8 +26,7 @@ export function desktopPaths(input: { os: BeaconOs; beaconHome: string; userName
   const pipeName = `kanna-beacon-${input.userName.replace(/[^A-Za-z0-9_.-]/g, "-")}`
   return {
     home: input.beaconHome,
-    keyFile: at("key.der"),
-    stateFile: at("state.json"),
+    ...beaconFilePaths(input.os, input.beaconHome),
     prefsFile: at("desktop.json"),
     activityFile: at("activity.jsonl"),
     pendingLinkFile: at("pending-link.txt"),
@@ -72,7 +74,7 @@ export function macLaunchAgentPlist(): string {
     '<plist version="1.0">',
     "<dict>",
     "  <key>Label</key>",
-    `  <string>${BEACON_APP_IDENTIFIER}.login</string>`,
+    `  <string>${MAC_LOGIN_LABEL}</string>`,
     "  <key>ProgramArguments</key>",
     "  <array>",
     "    <string>/usr/bin/open</string>",
@@ -107,7 +109,7 @@ export function linuxUrlHandlerEntry(bunPath: string, helperPath: string): strin
     "Type=Application",
     `Name=${BEACON_APP_NAME}`,
     `Exec="${bunPath}" "${helperPath}" %u`,
-    `MimeType=x-scheme-handler/${BEACON_LINK_SCHEME};`,
+    `MimeType=${LINK_MIME_TYPE};`,
     "NoDisplay=true",
     "",
   ].join("\n")

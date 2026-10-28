@@ -1,10 +1,12 @@
-import { type ReactNode } from "react"
+import { useCallback, type ChangeEvent, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { stateMarkKind, stateMarkStrokes } from "../../../client/lib/stateMark"
 import type { StatusTone } from "../../../client/lib/statusLabel"
-import { pendingActionKey } from "../../../client/stores/pendingActionsStore"
+import { pendingActionKey, runPendingAction, usePendingAction } from "../../../client/stores/pendingActionsStore"
+import type { DesktopRequestName, DesktopView } from "../desktop-types"
 import type { DesktopLocale, DesktopStrings } from "../strings"
 import { type DesktopBridge } from "./bridge"
+import { splitFolderPath } from "./present"
 
 export interface Shared {
   bridge: DesktopBridge
@@ -12,19 +14,34 @@ export interface Shared {
   locale: DesktopLocale
 }
 
+export function desktopActionKey(name: DesktopRequestName): string {
+  return pendingActionKey(`beacon.${name}`)
+}
+
 export const KEY = {
-  submit: pendingActionKey("beacon.submitPairingInput"),
-  confirm: pendingActionKey("beacon.confirmPairing"),
-  cancel: pendingActionKey("beacon.cancelPairing"),
-  openGrant: pendingActionKey("beacon.openGrant"),
-  closeGrant: pendingActionKey("beacon.closeGrant"),
-  applyGrant: pendingActionKey("beacon.applyGrant"),
-  pickFolders: pendingActionKey("beacon.pickFolders"),
-  paused: pendingActionKey("beacon.setPaused"),
-  login: pendingActionKey("beacon.setLaunchAtLogin"),
-  unpair: pendingActionKey("beacon.unpair"),
-  dismiss: pendingActionKey("beacon.dismissNotice"),
-  external: pendingActionKey("beacon.openExternal"),
+  getView: desktopActionKey("getView"),
+  submit: desktopActionKey("submitPairingInput"),
+  confirm: desktopActionKey("confirmPairing"),
+  cancel: desktopActionKey("cancelPairing"),
+  openGrant: desktopActionKey("openGrant"),
+  closeGrant: desktopActionKey("closeGrant"),
+  applyGrant: desktopActionKey("applyGrant"),
+  pickFolders: desktopActionKey("pickFolders"),
+  paused: desktopActionKey("setPaused"),
+  login: desktopActionKey("setLaunchAtLogin"),
+  unpair: desktopActionKey("unpair"),
+  dismiss: desktopActionKey("dismissNotice"),
+  external: desktopActionKey("openExternal"),
+}
+
+export function useLaunchAtLoginBusy(view: DesktopView): boolean {
+  const pending = usePendingAction(KEY.login)
+  return pending || view.busy.launchAtLogin
+}
+
+export function useUnpairBusy(view: DesktopView): boolean {
+  const pending = usePendingAction(KEY.unpair)
+  return pending || view.busy.unpairing
 }
 
 export function cx(...names: ReadonlyArray<string | false | null | undefined>): string {
@@ -110,3 +127,35 @@ export function ActionButton({
   )
 }
 
+
+export function LaunchAtLoginToggle({ view, bridge, label }: { view: DesktopView; bridge: DesktopBridge; label: string }) {
+  const busy = useLaunchAtLoginBusy(view)
+  const onChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const enabled = event.target.checked
+      runPendingAction(KEY.login, () => bridge.request("setLaunchAtLogin", { enabled }))
+    },
+    [bridge],
+  )
+  return (
+    <label className="bd-check">
+      <input type="checkbox" checked={view.prefs.launchAtLogin} onChange={onChange} disabled={busy} />
+      <span>{label}</span>
+      {busy ? <Spinner /> : null}
+    </label>
+  )
+}
+
+export function FolderLabel({ root }: { root: string }) {
+  const { name, parent } = splitFolderPath(root)
+  return (
+    <>
+      <span className="bd-folder-name">{name}</span>
+      {parent !== "" && (
+        <span className="bd-folder-parent">
+          <bdi>{parent}</bdi>
+        </span>
+      )}
+    </>
+  )
+}

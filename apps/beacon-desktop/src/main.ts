@@ -15,6 +15,8 @@ import { createBeaconFs } from "../../../src/beacon/fs.adapter"
 import { beaconOsFor } from "../../../src/beacon/host-os"
 import { createKeyStore, eraseKeyStore } from "../../../src/beacon/key-store.adapter"
 import { createPairClient } from "../../../src/beacon/pair-client.adapter"
+import { beaconHome, launcherPathFor } from "../../../src/beacon/paths"
+import { defaultSleep as sleep } from "../../../src/beacon/http"
 import { createBeaconRunner } from "../../../src/beacon/runner"
 import { createBeaconShell } from "../../../src/beacon/shell.adapter"
 import { createStateStore } from "../../../src/beacon/state-store.adapter"
@@ -26,11 +28,11 @@ import { RPC_MAX_REQUEST_MS, type BeaconDesktopRPC } from "./rpc"
 const os = beaconOsFor(platform())
 const paths = desktopPaths({
   os,
-  beaconHome: process.env.KANNA_BEACON_HOME ?? join(homedir(), ".kanna-beacon"),
+  beaconHome: beaconHome(os, process.env.KANNA_BEACON_HOME, homedir()),
   userName: userInfo().username,
 })
 const binDir = dirname(process.execPath)
-const launcherPath = join(binDir, os === "windows" ? "launcher.exe" : "launcher")
+const launcherPath = launcherPathFor(os, process.execPath)
 const helperPath = join(dirname(process.argv[1] ?? binDir), "open-link.js")
 const launchedAtLogin = process.env[AUTOSTART_ENV] === "1"
 
@@ -44,8 +46,6 @@ function log(line: string): void {
 if (await notifyRunningInstance(paths.instanceEndpoint, { kind: "show" })) {
   process.exit(0)
 }
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 const selfUpdate = createDesktopSelfUpdate({
   localInfo: () => Updater.getLocalInfo(),
@@ -109,13 +109,7 @@ function defineWindowRpc() {
     maxRequestTime: RPC_MAX_REQUEST_MS,
     handlers: {
       requests: {
-        getView: () => app.view(),
-        submitPairingInput: ({ text }) => app.submitPairingInput(text),
-        confirmPairing: () => app.confirmPairing(),
-        cancelPairing: () => app.cancelPairing(),
-        openGrant: () => app.openGrant(),
-        closeGrant: () => app.closeGrant(),
-        applyGrant: ({ grant }) => app.applyGrant(grant),
+        ...app.handlers,
         pickFolders: async () => {
           const chosen = await Utils.openFileDialog({
             startingFolder: homedir(),
@@ -125,10 +119,6 @@ function defineWindowRpc() {
           })
           return { paths: chosen.filter((path) => path.trim().length > 0) }
         },
-        setPaused: ({ paused }) => app.setPaused(paused),
-        setLaunchAtLogin: ({ enabled }) => app.setLaunchAtLogin(enabled),
-        unpair: () => app.unpair(),
-        dismissNotice: () => app.dismissNotice(),
         openExternal: ({ url }) => ({ ok: url === BEACON_DOWNLOAD_PAGE && Utils.openExternal(url) }),
       },
       messages: {
@@ -241,7 +231,7 @@ tray.on("tray-clicked", (event) => {
     return
   }
   if (action === "toggle-pause") {
-    void app.setPaused(!app.view().prefs.paused)
+    void app.handlers.setPaused({ paused: !app.view().prefs.paused })
     return
   }
   if (action === "status") return

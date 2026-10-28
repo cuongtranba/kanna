@@ -1,6 +1,6 @@
 ---
 id: adr-20260927-project-process-env-node-env
-c3-seal: 5be2c8178dca5c15413038e319206fd8189629bd53324359ba8a7586c3550def
+c3-seal: 6567525f87cbe8a09edde48d9b25fb024bdb3f742b39162809dc7666c1e1d4c6
 title: project-process-env-node-env
 type: adr
 goal: Stop Kanna handing its own `NODE_ENV` to the processes it starts for a project. Every project-facing spawn — the Claude SDK session (`buildClaudeEnv`), the Claude PTY session (`buildPtyEnv`), the Codex app-server, the embedded terminal, the loop oracle (`runVerifyCommand`) and the MCP stdio validator — now builds its environment through one pure function, `projectProcessEnv`, which drops `NODE_ENV`. Separately, `Bun.serve`'s `development` flag is set from Kanna's own runtime profile (`KANNA_RUNTIME_PROFILE`) instead of being left to Bun's `NODE_ENV` default.
@@ -14,7 +14,7 @@ Stop Kanna handing its own `NODE_ENV` to the processes it starts for a project. 
 
 ## Context
 
-`docs/pm2-deploy.md` runs Kanna with `NODE_ENV=production`, and it is load-bearing there: `Bun.serve` runs in development mode unless `NODE_ENV=production`, and development mode answers an uncaught error with a page carrying source and file paths, served through the public tunnel. But every spawn site spread `process.env` into the child, so the whole deployment's agents, terminals and loop oracles ran with `NODE_ENV=production` in projects that never asked for it. A React project's test suite then loads React's production bundle and fails with `act(...) is not supported in production builds of React`; npm omits devDependencies. Kanna's own suite hit it in #127 and patched only itself with a test preload, so the defect resurfaced in every other project opened in Kanna.
+The pm2 deployment guide of the time (now `wiki/src/content/docs/guides/ops/pm2.md`, which no longer sets it) ran Kanna with `NODE_ENV=production`, and it was load-bearing there: `Bun.serve` runs in development mode unless `NODE_ENV=production`, and development mode answers an uncaught error with a page carrying source and file paths, served through the public tunnel. But every spawn site spread `process.env` into the child, so the whole deployment's agents, terminals and loop oracles ran with `NODE_ENV=production` in projects that never asked for it. A React project's test suite then loads React's production bundle and fails with `act(...) is not supported in production builds of React`; npm omits devDependencies. Kanna's own suite hit it in #127 and patched only itself with a test preload, so the defect resurfaced in every other project opened in Kanna.
 
 ## Decision
 

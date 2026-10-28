@@ -1,7 +1,7 @@
 ---
 id: c3-110
 c3-version: 4
-c3-seal: b87f5d07d74892804e932828f7f66669603a8eeaf6ce31c3d193d53a26244cc0
+c3-seal: 84489bd9506fcf9a5133be09b6ece67d510ada18f9199eb5acc42cf003bf3721
 title: app-shell
 type: component
 category: feature
@@ -72,6 +72,7 @@ Composes the React tree at boot: react-router, the central `useKannaState` hook,
 | Global keybinding handlers | OUT | Dispatches commands like number-jump, toggle terminal | c3-111, c3-118 | src/client/hooks |
 | Viewport measurement | OUT | Mounts the single window-resize subscription and owns BREAKPOINT_MD, the one responsive pivot | c3-102, c3-111, c3-112 | src/client/lib/viewport.ts |
 | Sidebar swipe gesture | OUT | Window-level swipes open and close the sidebar below BREAKPOINT_MD, except when the gesture starts inside a surface marked data-swipe-scroll-x — that surface owns its own horizontal scroll, and it advertises the attribute only while it overflows | c3-104 | src/client/app/sidebarSwipeGesture.ts |
+| Command feedback | OUT | withCommandFeedback and surfaceCommandError settle an async call and clear or set kannaStateStore commandError, and sendCommandWithFeedback does so for a socket command (failing with a not-connected error when the socket is null); surfaceErrorIn does the same for a component-local error state | c3-102 | src/client/lib/commandFeedback.ts |
 
 ## Change Safety
 

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test"
 import { createMemoryWebhookStore } from "../test-helpers/webhook-harness"
-import type { WebhookInput } from "../../shared/webhooks/types"
+import { WEBHOOK_RATE_LIMIT_PER_MINUTE, type WebhookInput } from "../../shared/webhooks/types"
 import { slackCredentialsOf, WebhookRegistry } from "./webhook-registry"
 
 const BASE = { name: "CI", mode: "notify", chatId: "chat-1", template: "t" } as const
@@ -136,4 +136,14 @@ test("a generic hook cannot be given Slack settings and its kind never changes",
   expect(created.value.secret).toMatch(/^kwh_/)
   const patched = await registry.update(created.value.hook.id, { slack: { botToken: "xoxb-token-5678" } })
   expect(patched.ok).toBe(false)
+})
+
+test("admit refuses a repeated delivery id and a rate-limited delivery frees its id for the retry", () => {
+  const registry = new WebhookRegistry(createMemoryWebhookStore(), () => 1_000)
+  expect(registry.admit("hook", "first")).toEqual({ kind: "admitted" })
+  expect(registry.admit("hook", "first")).toEqual({ kind: "duplicate" })
+  for (let used = 1; used < WEBHOOK_RATE_LIMIT_PER_MINUTE; used += 1) registry.admit("hook", `fill-${used}`)
+  const limited = registry.admit("hook", "overflow")
+  expect(limited.kind).toBe("rate_limited")
+  expect(registry.admit("hook", "overflow").kind).toBe("rate_limited")
 })

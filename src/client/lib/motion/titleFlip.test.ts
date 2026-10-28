@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import { flyChatTitleToTab } from "./titleFlip.adapter"
+import { buildTabId } from "../paneTree/tabTarget"
 
 
 const CHAT_ID = "chat-123"
@@ -8,6 +9,7 @@ function buildRow(chatId: string, title: string): HTMLElement {
   const row = document.createElement("div")
   row.setAttribute("data-chat-id", chatId)
   const span = document.createElement("span")
+  span.setAttribute("data-flip-title", "")
   span.className = "min-w-0 flex-1 truncate text-sm"
   span.textContent = title
   row.appendChild(span)
@@ -16,8 +18,9 @@ function buildRow(chatId: string, title: string): HTMLElement {
 
 function buildTab(chatId: string, title: string): HTMLElement {
   const tab = document.createElement("div")
-  tab.setAttribute("data-tab-id", chatId)
+  tab.setAttribute("data-tab-id", buildTabId({ kind: "chat", chatId }))
   const span = document.createElement("span")
+  span.setAttribute("data-flip-title", "")
   span.className = "min-w-0 flex-1 truncate text-xs"
   span.textContent = title
   tab.appendChild(span)
@@ -48,6 +51,19 @@ describe("flyChatTitleToTab", () => {
 
     expect(document.querySelectorAll("[aria-hidden='true']")).toHaveLength(0)
     expect(document.body.children).toHaveLength(2)
+  })
+
+  test("finds the tab under its buildTabId rather than the raw chat id", async () => {
+    document.body.appendChild(withRect(buildRow(CHAT_ID, "Fix the parser"), 12, 300))
+    document.body.appendChild(withRect(buildTab(CHAT_ID, "Fix the parser"), 320, 40))
+
+    const carry = flyChatTitleToTab(CHAT_ID, { root: document, raf: immediateRaf })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const clone = document.querySelector("body > [aria-hidden='true']")
+    expect(clone?.textContent).toBe("Fix the parser")
+    await carry
   })
 
   test("gives up silently when the tab never appears", async () => {

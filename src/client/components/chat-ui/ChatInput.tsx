@@ -1,7 +1,6 @@
 import {
   forwardRef,
   memo,
-  startTransition,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -17,6 +16,7 @@ import {
   $getRoot,
 } from "lexical"
 import { LexicalComposer } from "@lexical/react/LexicalComposer"
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary"
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin"
 import { ContentEditable } from "@lexical/react/LexicalContentEditable"
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin"
@@ -31,7 +31,6 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
-  type UploadedAttachment,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
@@ -55,8 +54,10 @@ import {
   useChatPreferencesStore,
 } from "../../stores/chatPreferencesStore"
 import { useComposerArrival } from "./ComposerArrival"
+import { useComposerUploads } from "./useComposerUploads"
 import { CHAT_INPUT_ATTRIBUTE } from "../../app/chatFocusPolicy"
-import { ChatPreferenceControls } from "./ChatPreferenceControls"
+import { toSendOptions } from "../../lib/composerSendOptions"
+import { ChatPreferenceControls, type ModelLock } from "./ChatPreferenceControls"
 import { ContextWindowMeter } from "./ContextWindowMeter"
 import { SessionTokenPill } from "./SessionTokenPill"
 import { AttachmentFileCard, AttachmentImageCard } from "../messages/AttachmentCard"
@@ -68,7 +69,6 @@ import {
   type ContextWindowSnapshot,
   type SessionTotals,
 } from "../../lib/contextWindow"
-import { uploadFile, UploadAbortedError } from "../../lib/uploadFile.adapter"
 import { useAppSettingsStore, selectCustomBeacons, selectCustomModels, selectTextSnippets } from "../../stores/appSettingsStore"
 import { createAgentMentionRegex } from "../../../shared/mention-pattern"
 
@@ -87,8 +87,6 @@ import {
 import { useInlineUploadsPending } from "../lexical/plugins/inlineUploadPending"
 import { serializeEditorToWire } from "../lexical/serialize/editorToWireString"
 import { log } from "../../../shared/log"
-import { deleteUploadedFile } from "../../api/files"
-import { runDetached } from "../../lib/runDetached"
 import { beaconMentionChips } from "../../lib/beaconMentionChips"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import type { DomPort } from "../../ports/domPort"
@@ -97,86 +95,14 @@ import { domAdapter } from "../../adapters/dom.adapter"
 import { useOptionalKannaSocket } from "../../app/KannaSocketProvider"
 
 
-const CLIPBOARD_EXTENSION_BY_MIME_TYPE: Record<string, string> = {
-  "image/gif": "gif",
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-}
-
-type ClipboardFileItem = Pick<DataTransferItem, "kind" | "type" | "getAsFile">
-
-function getClipboardImageExtension(file: File): string {
-  return CLIPBOARD_EXTENSION_BY_MIME_TYPE[file.type] ?? "bin"
-}
-
-function isGenericClipboardImageName(file: File): boolean {
-  const normalized = file.name.trim().toLowerCase()
-  if (!normalized) return true
-  const expectedExtension = getClipboardImageExtension(file)
-  return normalized === `image.${expectedExtension}` || normalized === "image.png"
-}
-
-function normalizeClipboardImageFileFn(file: File, index: number, timestamp: number): File {
-  if (file.name && !isGenericClipboardImageName(file)) return file
-  const extension = getClipboardImageExtension(file)
-  const suffix = index === 0 ? "" : `-${index}`
-  const fileName = `clipboard-${timestamp}${suffix}.${extension}`
-  Object.defineProperty(file, "name", {
-    configurable: true,
-    value: fileName,
-  })
-  return file
-}
-
-export function getClipboardImageFiles(
-  items: Iterable<ClipboardFileItem>,
-  timestamp: number,
-): File[] {
-  const files: File[] = []
-  for (const item of items) {
-    if (item.kind !== "file" || !item.type.startsWith("image/")) continue
-    const file = item.getAsFile()
-    if (!file) continue
-    files.push(normalizeClipboardImageFileFn(file, files.length, timestamp))
-  }
-  return files
-}
-
-export function trimTrailingPastedNewlines(text: string): string {
-  return text.replace(/(?:\r\n|\r|\n)+$/, "")
-}
-
 export function isStopAffordance(canCancel: boolean, hasTextToSend: boolean): boolean {
   return canCancel && !hasTextToSend
 }
 
-export function willExceedAttachmentLimit(args: {
-  currentAttachmentCount: number
-  queuedAttachmentCount: number
-  incomingAttachmentCount: number
-  maxAttachments?: number
-}): boolean {
-  const maxAttachments = args.maxAttachments ?? MAX_FILES_PER_DROP
-  return (
-    args.currentAttachmentCount + args.queuedAttachmentCount + args.incomingAttachmentCount >
-    maxAttachments
-  )
-}
-
-
-export function isTouchDeviceEnvironment(dom: DomPort = domAdapter): boolean {
-  return dom.isTouchDevice()
-}
-
-export function shouldRefreshPickerOnSelection(isTouchDevice: boolean): boolean {
-  return !isTouchDevice
-}
-
-
 const EMPTY_SUBAGENTS: Subagent[] = []
-const MAX_FILES_PER_DROP = 50
-const MAX_CONCURRENT_UPLOADS = 3
+const CRON_MODEL_LOCK: ModelLock = {
+  reason: "Model is locked while a cron job is running — pause or remove the cron job to change it",
+}
 
 
 type ComposerAttachment = StoreComposerAttachment
@@ -241,19 +167,6 @@ function withNormalizedContextWindow(
   }
 }
 
-function hydrateComposerAttachments(attachments: UploadedAttachment[]): ComposerAttachment[] {
-  return attachments.map((attachment) => ({
-    ...attachment,
-    status: "uploaded" as const,
-  }))
-}
-
-export async function deleteUploadedAttachment(attachment: UploadedAttachment, commands: CommandPort | null): Promise<void> {
-  if (!attachment.contentUrl || attachment.reused) return
-  await deleteUploadedFile(attachment.contentUrl, commands)
-}
-
-
 interface LexicalEditorBridgeHandle {
   clearEditor: () => void
   hydrateFromDraft: (lexicalState: SerializedEditorState | null, text: string | null) => void
@@ -284,7 +197,8 @@ function LexicalEditorBridgePlugin({
             const parsed = editor.parseEditorState(lexicalState)
             editor.setEditorState(parsed)
             return
-          } catch {
+          } catch (error) {
+            log.error("[ChatInput] Draft restore failed, falling back to plain text:", String(error))
           }
         }
         if (text) {
@@ -352,17 +266,6 @@ function EditorTextTracker({
 }
 
 
-function LexicalErrorBoundary({
-  children,
-  onError: _onError,
-}: {
-  children: React.ReactNode
-  onError: (error: Error) => void
-}): React.ReactNode {
-  return children
-}
-
-
 const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   {
     onSubmit,
@@ -390,9 +293,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     getDraft,
     setDraft,
     clearDraft,
-    getAttachmentDrafts,
-    setAttachmentDrafts,
-    clearAttachmentDrafts,
   } = useChatInputStore()
   const {
     getComposerState,
@@ -410,25 +310,22 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   const composerState = storedComposerState ?? getComposerState(composerChatId)
   const isStandalone = useIsStandalone()
 
-  const attachments = ChatTabScopedStore.useScopedStore((state) => state.attachments)
-  const setAttachments = ChatTabScopedStore.useScopedStore((state) => state.setAttachments)
-  const selectedAttachmentId = ChatTabScopedStore.useScopedStore((state) => state.selectedAttachmentId)
-  const setSelectedAttachmentId = ChatTabScopedStore.useScopedStore((state) => state.setSelectedAttachmentId)
-  const uploadError = ChatTabScopedStore.useScopedStore((state) => state.uploadError)
-  const setUploadError = ChatTabScopedStore.useScopedStore((state) => state.setUploadError)
   const currentText = ChatTabScopedStore.useScopedStore((state) => state.currentText)
   const setCurrentText = ChatTabScopedStore.useScopedStore((state) => state.setCurrentText)
   const chatSettingsOpen = ChatTabScopedStore.useScopedStore((state) => state.chatSettingsOpen)
   const setChatSettingsOpen = ChatTabScopedStore.useScopedStore((state) => state.setChatSettingsOpen)
 
-  const uploadQueueRef = useRef<File[]>([])
+  const uploads = useComposerUploads({ projectId: projectId ?? null, chatId: chatId ?? null, commands })
+  const {
+    attachments,
+    uploadError,
+    setUploadError,
+    selectedAttachment,
+    selectAttachment,
+    enqueue: enqueueFiles,
+    beginSubmit,
+  } = uploads
   const chatSettingsTriggerRef = useRef<HTMLButtonElement>(null)
-  const activeUploadsRef = useRef(0)
-  const attachmentsRef = useRef<ComposerAttachment[]>([])
-  const uploadGenerationRef = useRef(0)
-  const removedAttachmentIdsRef = useRef<Set<string>>(new Set())
-  const previousProjectIdRef = useRef<string | null>(projectId ?? null)
-  const latestChatIdRef = useRef<string | null>(chatId ?? null)
 
   const bridgeRef = useRef<LexicalEditorBridgeHandle | null>(null)
 
@@ -458,19 +355,17 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     providerPrefs,
   ])
 
-  const uploadedAttachments = attachments.filter((a) => a.status === "uploaded")
   const inlineUploadsPending = useInlineUploadsPending(composerChatId)
-  const hasPendingUploads = inlineUploadsPending || attachments.some((a) => a.status === "uploading")
+  const hasPendingUploads = inlineUploadsPending || uploads.isUploading
   const submitActionKey = pendingActionKey("chat.send", composerChatId)
   const submitPending = usePendingAction(submitActionKey)
   const cancelPending = usePendingAction(pendingActionKey("chat.cancel", chatId ?? ""))
   const hasTextToSend = currentText.trim().length > 0
-  const canSubmit = currentText.trim().length > 0 || uploadedAttachments.length > 0
+  const canSubmit = currentText.trim().length > 0 || uploads.hasUploadedAttachments
   const orderedAttachments = [...attachments].sort((left, right) => {
     if (left.kind === right.kind) return 0
     return left.kind === "image" ? -1 : 1
   })
-  const selectedAttachment = attachments.find((a) => a.id === selectedAttachmentId) ?? null
 
   const subagentsForChips = useAppSettingsStore(
     (state) => state.settings?.subagents ?? EMPTY_SUBAGENTS,
@@ -498,234 +393,39 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     return chips
   }, [currentText, subagentsForChips, beaconsForChips])
 
-  const cleanupAttachmentPreview = useCallback((attachment: ComposerAttachment) => {
-    if (attachment.previewUrl) {
-      URL.revokeObjectURL(attachment.previewUrl)
-    }
-  }, [])
-
-  const clearAttachments = useCallback(
-    (options?: { cleanupPreviews?: boolean }) => {
-      const cleanupPreviews = options?.cleanupPreviews ?? true
-      uploadGenerationRef.current += 1
-      removedAttachmentIdsRef.current.clear()
-      setAttachments((current) => {
-        if (cleanupPreviews) {
-          current.forEach(cleanupAttachmentPreview)
-        }
-        return []
-      })
-      uploadQueueRef.current = []
-      activeUploadsRef.current = 0
-      setSelectedAttachmentId(null)
-      setUploadError(null)
-    },
-    [cleanupAttachmentPreview, setAttachments, setSelectedAttachmentId, setUploadError],
-  )
-
-  const processUploadQueueRef = useRef<(() => void) | undefined>(undefined)
-  const processUploadQueue = useCallback(() => {
-    if (!projectId) return
-
-    while (
-      activeUploadsRef.current < MAX_CONCURRENT_UPLOADS &&
-      uploadQueueRef.current.length > 0
-    ) {
-      const file = uploadQueueRef.current.shift()
-      if (!file) break
-
-      activeUploadsRef.current += 1
-      const tempId = crypto.randomUUID()
-      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
-      const generation = uploadGenerationRef.current
-
-      const handle = uploadFile({
-        projectId,
-        file,
-        onProgress: ({ loaded, total }) => {
-          if (generation !== uploadGenerationRef.current) return
-          const progress = total > 0 ? loaded / total : 0
-          setAttachments((current) =>
-            current.map((a) => (a.id === tempId ? { ...a, uploadProgress: progress } : a)),
-          )
-        },
-      })
-
-      setAttachments((current) => [
-        ...current,
-        {
-          id: tempId,
-          kind: file.type.startsWith("image/") ? ("image" as const) : ("file" as const),
-          displayName: file.name,
-          absolutePath: "",
-          relativePath: "",
-          contentUrl: "",
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
-          status: "uploading" as const,
-          previewUrl,
-          uploadProgress: 0,
-          cancelUpload: handle.abort,
-        },
-      ])
-
-      runDetached("attachment upload", (async () => {
-        try {
-          const { attachments: uploaded } = await handle.promise
-          const result = uploaded[0]
-          if (!result) throw new Error("Upload failed")
-
-          if (generation !== uploadGenerationRef.current) {
-            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, commands))
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-
-          if (removedAttachmentIdsRef.current.has(tempId)) {
-            removedAttachmentIdsRef.current.delete(tempId)
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            runDetached("abandoned upload cleanup", deleteUploadedAttachment(result, commands))
-            return
-          }
-
-          setAttachments((current) =>
-            current.map((a) =>
-              a.id !== tempId
-                ? a
-                : {
-                    ...a,
-                    ...result,
-                    previewUrl: a.previewUrl,
-                    status: "uploaded" as const,
-                    uploadProgress: 1,
-                    cancelUpload: undefined,
-                  },
-            ),
-          )
-          setUploadError(null)
-        } catch (error) {
-          if (generation !== uploadGenerationRef.current) {
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-          if (error instanceof UploadAbortedError) {
-            setAttachments((current) => current.filter((a) => a.id !== tempId))
-            removedAttachmentIdsRef.current.delete(tempId)
-            if (previewUrl) URL.revokeObjectURL(previewUrl)
-            return
-          }
-          setAttachments((current) =>
-            current.map((a) =>
-              a.id === tempId
-                ? { ...a, status: "failed" as const, cancelUpload: undefined }
-                : a,
-            ),
-          )
-          setUploadError(error instanceof Error ? error.message : String(error))
-        } finally {
-          activeUploadsRef.current = Math.max(0, activeUploadsRef.current - 1)
-          processUploadQueueRef.current?.()
-        }
-      })())
-    }
-  }, [commands, projectId, setAttachments, setUploadError])
-  useEffect(() => {
-    processUploadQueueRef.current = processUploadQueue
-  }, [processUploadQueue])
-
-  const enqueueFiles = useCallback(
-    (files: File[]) => {
-      if (!projectId) {
-        setUploadError("Open a project before uploading files.")
-        return
-      }
-
-      if (
-        willExceedAttachmentLimit({
-          currentAttachmentCount: attachmentsRef.current.length,
-          queuedAttachmentCount: uploadQueueRef.current.length,
-          incomingAttachmentCount: files.length,
-        })
-      ) {
-        setUploadError(`You can upload up to ${MAX_FILES_PER_DROP} files at a time.`)
-        return
-      }
-
-      uploadQueueRef.current.push(...files)
-      setUploadError(null)
-      processUploadQueue()
-    },
-    [processUploadQueue, projectId, setUploadError],
-  )
-
   useImperativeHandle(
     forwardedRef,
     () => ({ enqueueFiles, focus: () => bridgeRef.current?.focusEditor() }),
     [enqueueFiles],
   )
 
-  const buildSubmitOptions = useCallback(() => {
-    let modelOptions: ModelOptions = {}
-    if (providerPrefs.provider === "claude") {
-      modelOptions = { claude: { ...providerPrefs.modelOptions } }
-    } else if (providerPrefs.provider === "codex") {
-      modelOptions = { codex: { ...providerPrefs.modelOptions } }
-    }
-    return {
-      provider: selectedProvider,
-      model: providerPrefs.model,
-      modelOptions,
-      planMode: showPlanMode ? providerPrefs.planMode : false,
-    }
-  }, [providerPrefs, selectedProvider, showPlanMode])
+  const buildSubmitOptions = useCallback(
+    () => toSendOptions(providerPrefs, showPlanMode),
+    [providerPrefs, showPlanMode],
+  )
 
   const doSubmit = useCallback(
     async (text: string, pluginAttachments: ChatAttachment[]) => {
-      const previousAttachments = attachmentsRef.current
-      const previousSelectedId = selectedAttachmentId
-      const previousUploadError = uploadError
-
-      const composerAttachmentsCopy = uploadedAttachments.map(
-        ({ previewUrl: _p, status: _s, uploadProgress: _up, cancelUpload: _c, reused: _r, ...a }) => a,
-      )
-      const allAttachments = [...composerAttachmentsCopy, ...pluginAttachments]
-
-      const submitOptions = { ...buildSubmitOptions(), attachments: allAttachments }
+      const submission = beginSubmit()
+      const submitOptions = {
+        ...buildSubmitOptions(),
+        attachments: [...submission.attachments, ...pluginAttachments],
+      }
 
       bridgeRef.current?.clearEditor()
       setCurrentText("")
       if (chatId) clearDraft(chatId)
-      clearAttachments({ cleanupPreviews: false })
-      if (latestChatIdRef.current) clearAttachmentDrafts(latestChatIdRef.current)
 
       try {
         await onSubmit(text, submitOptions)
-        previousAttachments.forEach(cleanupAttachmentPreview)
+        submission.commit()
       } catch (error) {
         log.error("[ChatInput] Submit failed:", String(error))
         if (chatId) setDraft(chatId, text)
-        setAttachments(previousAttachments)
-        setSelectedAttachmentId(previousSelectedId)
-        setUploadError(previousUploadError)
+        submission.rollback()
       }
     },
-    [
-      uploadedAttachments,
-      buildSubmitOptions,
-      chatId,
-      clearDraft,
-      clearAttachments,
-      clearAttachmentDrafts,
-      onSubmit,
-      cleanupAttachmentPreview,
-      selectedAttachmentId,
-      uploadError,
-      setDraft,
-      setCurrentText,
-      setAttachments,
-      setSelectedAttachmentId,
-      setUploadError,
-    ],
+    [beginSubmit, buildSubmitOptions, chatId, clearDraft, onSubmit, setDraft, setCurrentText],
   )
 
   const handlePluginSubmit = useCallback(
@@ -757,10 +457,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   }, [composerChatId, initializeComposerForChat, activeProvider])
 
   useEffect(() => {
-    latestChatIdRef.current = chatId ?? null
-  }, [chatId])
-
-  useEffect(() => {
     if (!chatId) {
       bridgeRef.current?.clearEditor()
     } else {
@@ -774,69 +470,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
     bridgeRef.current?.focusEditor()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId])
-
-  useEffect(() => {
-    uploadGenerationRef.current += 1
-    uploadQueueRef.current = []
-    activeUploadsRef.current = 0
-    removedAttachmentIdsRef.current.clear()
-    setSelectedAttachmentId(null)
-    setUploadError(null)
-    startTransition(() => {
-      setAttachments((current) => {
-        current.forEach(cleanupAttachmentPreview)
-        return hydrateComposerAttachments(chatId ? getAttachmentDrafts(chatId) : [])
-      })
-    })
-  }, [chatId, cleanupAttachmentPreview, getAttachmentDrafts, setSelectedAttachmentId, setUploadError, setAttachments])
-
-  useEffect(() => {
-    const previousProjectId = previousProjectIdRef.current
-    previousProjectIdRef.current = projectId ?? null
-
-    if (previousProjectId === null || projectId === previousProjectId) {
-      return
-    }
-
-    clearAttachments()
-    if (chatId) {
-      clearAttachmentDrafts(chatId)
-    }
-  }, [projectId, chatId, clearAttachments, clearAttachmentDrafts])
-
-  useEffect(() => {
-    attachmentsRef.current = attachments
-  }, [attachments])
-
-  useEffect(() => {
-    if (!chatId) return
-
-    const persistedAttachments = attachments
-      .filter((a) => a.status === "uploaded")
-      .map(
-        ({
-          previewUrl: _previewUrl,
-          status: _status,
-          uploadProgress: _uploadProgress,
-          cancelUpload: _cancelUpload,
-          ...attachment
-        }) => attachment,
-      )
-
-    if (persistedAttachments.length === 0) {
-      clearAttachmentDrafts(chatId)
-      return
-    }
-
-    setAttachmentDrafts(chatId, persistedAttachments)
-  }, [attachments, chatId, clearAttachmentDrafts, setAttachmentDrafts])
-
-  useEffect(
-    () => () => {
-      attachmentsRef.current.forEach(cleanupAttachmentPreview)
-    },
-    [cleanupAttachmentPreview],
-  )
 
   useLayoutEffect(() => {
     onLayoutChange?.()
@@ -895,26 +528,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       )
       return
     }
-    setSelectedAttachmentId(attachment.id)
-  }
-
-  function removeAttachment(attachment: ComposerAttachment) {
-    if (attachment.status === "uploading") {
-      attachment.cancelUpload?.()
-    }
-    removedAttachmentIdsRef.current.add(attachment.id)
-    setAttachments((current) => {
-      const removed = current.find((item) => item.id === attachment.id)
-      if (removed) cleanupAttachmentPreview(removed)
-      return current.filter((item) => item.id !== attachment.id)
-    })
-    if (selectedAttachmentId === attachment.id) {
-      setSelectedAttachmentId(null)
-    }
-    if (attachment.status === "uploaded") {
-      removedAttachmentIdsRef.current.delete(attachment.id)
-      runDetached("removed upload cleanup", deleteUploadedAttachment(attachment, commands))
-    }
+    selectAttachment(attachment.id)
   }
 
   function handleKeyDown(event: React.KeyboardEvent) {
@@ -969,11 +583,11 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
       <ChatPreferenceControls
         availableProviders={availableProviders}
         selectedProvider={selectedProvider}
-        showCodexCliRequirementHints
         model={providerPrefs.model}
         modelOptions={providerPrefs.modelOptions}
         onProviderChange={(provider) => resetChatComposerFromProvider(composerChatId, provider)}
-        onModelChange={hasUnpausedCronJob ? undefined : (_, model) => setChatComposerModel(composerChatId, model)}
+        onModelChange={(_, model) => setChatComposerModel(composerChatId, model)}
+        modelLock={hasUnpausedCronJob ? CRON_MODEL_LOCK : null}
         onModelOptionChange={(change) => {
           switch (change.type) {
             case "claudeReasoningEffort":
@@ -1045,7 +659,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                             ? () => handleAttachmentPreview(attachment)
                             : undefined
                         }
-                        onRemove={() => removeAttachment(attachment)}
+                        onRemove={() => uploads.remove(attachment)}
                         uploadProgress={
                           attachment.status === "uploading"
                             ? (attachment.uploadProgress ?? null)
@@ -1053,7 +667,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                         }
                         onCancelUpload={
                           attachment.status === "uploading"
-                            ? () => removeAttachment(attachment)
+                            ? () => uploads.remove(attachment)
                             : undefined
                         }
                       />
@@ -1065,7 +679,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                             ? () => handleAttachmentPreview(attachment)
                             : undefined
                         }
-                        onRemove={() => removeAttachment(attachment)}
+                        onRemove={() => uploads.remove(attachment)}
                         uploadProgress={
                           attachment.status === "uploading"
                             ? (attachment.uploadProgress ?? null)
@@ -1073,7 +687,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
                         }
                         onCancelUpload={
                           attachment.status === "uploading"
-                            ? () => removeAttachment(attachment)
+                            ? () => uploads.remove(attachment)
                             : undefined
                         }
                       />
@@ -1219,7 +833,6 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
               </Button>
               <DialogContent
                 size="sm"
-                restoreFocus="trigger"
                 onCloseAutoFocus={(event) => {
                   event.preventDefault()
                   chatSettingsTriggerRef.current?.focus({ preventScroll: true })
@@ -1257,7 +870,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
             : null
         }
         open={selectedAttachment !== null}
-        onOpenChange={(open) => !open && setSelectedAttachmentId(null)}
+        onOpenChange={(open) => !open && selectAttachment(null)}
       />
     </div>
   )

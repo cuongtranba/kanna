@@ -8,7 +8,6 @@ import {
   $createAttachmentNode,
 } from "../nodes"
 import { serializeEditorToWire } from "../serialize/editorToWireString"
-import { isTypeaheadMenuOpen } from "./SubmitPlugin"
 import type { ChatAttachment } from "../../../../shared/types"
 
 
@@ -516,17 +515,7 @@ describe("SubmitPlugin — composition ref tracking (Korean IME edge case)", () 
 })
 
 
-describe("SubmitPlugin — isTypeaheadMenuOpen guard", () => {
-  it("returns true when a typeahead menu element is present", () => {
-    const fakeDom = { hasTypeaheadMenuOpen: () => true }
-    expect(isTypeaheadMenuOpen(fakeDom)).toBe(true)
-  })
-
-  it("returns false when no typeahead menu element is present", () => {
-    const fakeDom = { hasTypeaheadMenuOpen: () => false }
-    expect(isTypeaheadMenuOpen(fakeDom)).toBe(false)
-  })
-
+describe("SubmitPlugin — typeahead menu guard", () => {
   it("Enter is suppressed (no submit) while a picker menu is open", () => {
     function shouldSubmit(
       event: KeyboardEvent,

@@ -1,6 +1,7 @@
 import type {
   AgentProvider,
   ChatAttachment,
+  ModelOptions,
   ResolvedStackBinding,
   SlashCommandKind,
   Subagent,
@@ -12,13 +13,24 @@ import type { CronRunTag } from "../shared/cron/types"
 import type { JsonValue } from "../shared/json"
 import type { KannaSystemPromptOptions, SkillRosterEntry } from "../shared/kanna-system-prompt"
 import type { ChatRecord, ProjectRecord } from "./events"
-import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import type { ActiveTurn, ClaudeSessionState, CompactionTurnKind, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { EventStore } from "./event-store"
 import type { CodexAppServerManager } from "./codex-app-server"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { SendToStartingProfile } from "./claude-steer-log"
+
+export interface SendMessageOptions {
+  provider?: AgentProvider
+  model?: string
+  modelOptions?: ModelOptions
+  effort?: string
+  planMode?: boolean
+  autoContinue?: { scheduleId: string }
+  cronRun?: CronRunTag
+  origin?: CommandOrigin
+}
 
 export interface StartClaudeTurnArgs {
   chatId: string
@@ -84,6 +96,7 @@ export interface StartTurnForChatArgs {
   promptOverride?: string
   expandedCommand?: { name: string; kind: SlashCommandKind }
   onTurnRecorded?: () => Promise<void>
+  compactionTurn?: CompactionTurnKind
 }
 
 export interface StartTurnAfterTurnStartedCtx {

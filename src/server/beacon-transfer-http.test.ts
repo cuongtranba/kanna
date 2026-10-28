@@ -3,8 +3,7 @@ import { createHash } from "node:crypto"
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { getBeaconTransferTickets } from "./beacon-transfer-host"
-import type { TransferTicketSpec } from "./beacon-transfer-tickets"
+import type { BeaconTransferTickets, TransferTicketSpec } from "./beacon-transfer-tickets"
 import { startKannaServer } from "./server"
 
 const CHUNK = 4096
@@ -13,6 +12,12 @@ let dataDir = ""
 let workDir = ""
 let base = ""
 let stopServer: () => Promise<void> = async () => undefined
+let tickets: BeaconTransferTickets | null = null
+
+function transferTickets(): BeaconTransferTickets {
+  if (tickets === null) throw new Error("the server has not started")
+  return tickets
+}
 
 beforeAll(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), "kanna-transfer-data-"))
@@ -26,6 +31,7 @@ beforeAll(async () => {
   })
   base = `http://127.0.0.1:${String(server.port)}`
   stopServer = server.stop
+  tickets = server.beaconTransferTickets
 })
 
 afterAll(async () => {
@@ -43,7 +49,7 @@ function sha256(bytes: Uint8Array): string {
 }
 
 function mintUpload(destination: string, overrides: Partial<TransferTicketSpec> = {}) {
-  return getBeaconTransferTickets().mint({
+  return transferTickets().mint({
     beaconId: "b1",
     chatId: "c1",
     direction: "upload",
@@ -123,7 +129,7 @@ describe("beacon transfer endpoint", () => {
 
   test("a revoked ticket gets 401 on every route", async () => {
     const ticket = mintUpload(path.join(workDir, "revoked.bin"))
-    getBeaconTransferTickets().revoke(ticket.token)
+    transferTickets().revoke(ticket.token)
     const headers = { authorization: `Bearer ${ticket.token}` }
 
     expect((await fetch(`${base}/beacon/transfer`, { headers })).status).toBe(401)
@@ -135,7 +141,7 @@ describe("beacon transfer endpoint", () => {
     const bytes = patternBytes(CHUNK * 3)
     const source = path.join(workDir, "source.bin")
     await writeFile(source, bytes)
-    const ticket = getBeaconTransferTickets().mint({
+    const ticket = transferTickets().mint({
       beaconId: "b1",
       chatId: "c1",
       direction: "download",

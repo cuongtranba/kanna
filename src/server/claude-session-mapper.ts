@@ -18,18 +18,31 @@ function toMillis(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : Date.now()
 }
 
-function makeId(uuid: string | undefined, suffix: string): string {
-  if (uuid) return `${uuid}-${suffix}`
-  return `${crypto.randomUUID()}-${suffix}`
+const USER_PROMPT_PART = "user"
+type BlockPart = "text" | "tool_call" | "tool_result"
+const BLOCK_PARTS: readonly BlockPart[] = ["text", "tool_call", "tool_result"]
+
+const ENTRY_ID_PATTERN = new RegExp(`^(.+)-(?:${[USER_PROMPT_PART, ...BLOCK_PARTS.map((part) => `${part}-\\d+`)].join("|")})$`)
+
+function makeId(uuid: string | undefined, part: string): string {
+  return `${uuid || crypto.randomUUID()}-${part}`
+}
+
+function blockId(uuid: string | undefined, part: BlockPart, index: number): string {
+  return makeId(uuid, `${part}-${index}`)
+}
+
+export function sourceUuidOfEntryId(entryId: string): string | null {
+  return ENTRY_ID_PATTERN.exec(entryId)?.[1] ?? null
 }
 
 function mapUserRecord(record: ClaudeSessionUserRecord): TranscriptEntry[] {
   const createdAt = toMillis(record.timestamp)
-  const content = record.message.content
+  const content = record.content
 
   if (typeof content === "string") {
     const entry: UserPromptEntry = {
-      _id: makeId(record.uuid, "user"),
+      _id: makeId(record.uuid, USER_PROMPT_PART),
       kind: "user_prompt",
       createdAt,
       content,
@@ -42,13 +55,13 @@ function mapUserRecord(record: ClaudeSessionUserRecord): TranscriptEntry[] {
     const block = content[i]
     if (block.type === "tool_result") {
       const resultEntry: ToolResultEntry = {
-        _id: makeId(record.uuid, `tool_result-${i}`),
+        _id: blockId(record.uuid, "tool_result", i),
         kind: "tool_result",
         createdAt,
         toolId: block.tool_use_id,
-        content: typeof block.content === "string" ? block.content : block.content ?? null,
+        content: block.content ?? null,
         isError: block.is_error === true,
-        debugRaw: record.toolUseResult ? JSON.stringify(record) : undefined,
+        debugRaw: record.debugRaw,
       }
       entries.push(resultEntry)
     }
@@ -58,14 +71,14 @@ function mapUserRecord(record: ClaudeSessionUserRecord): TranscriptEntry[] {
 
 function mapAssistantRecord(record: ClaudeSessionAssistantRecord): TranscriptEntry[] {
   const createdAt = toMillis(record.timestamp)
-  const messageId = record.message.id
+  const messageId = record.messageId
 
   const entries: TranscriptEntry[] = []
-  for (let i = 0; i < record.message.content.length; i += 1) {
-    const block = record.message.content[i]
+  for (let i = 0; i < record.content.length; i += 1) {
+    const block = record.content[i]
     if (block.type === "text") {
       const entry: AssistantTextEntry = {
-        _id: makeId(record.uuid, `text-${i}`),
+        _id: blockId(record.uuid, "text", i),
         messageId,
         kind: "assistant_text",
         createdAt,
@@ -78,10 +91,10 @@ function mapAssistantRecord(record: ClaudeSessionAssistantRecord): TranscriptEnt
       const tool = normalizeToolCall({
         toolName: block.name,
         toolId: block.id,
-        input: block.input ?? {},
+        input: block.input,
       })
       const entry: ToolCallEntry = {
-        _id: makeId(record.uuid, `tool_call-${i}`),
+        _id: blockId(record.uuid, "tool_call", i),
         messageId,
         kind: "tool_call",
         createdAt,
@@ -93,20 +106,12 @@ function mapAssistantRecord(record: ClaudeSessionAssistantRecord): TranscriptEnt
   return entries
 }
 
-function isUserRecord(r: ClaudeSessionRecord): r is ClaudeSessionUserRecord {
-  return r.type === "user"
-}
-
-function isAssistantRecord(r: ClaudeSessionRecord): r is ClaudeSessionAssistantRecord {
-  return r.type === "assistant"
-}
-
 export function mapClaudeRecordsToEntries(records: ClaudeSessionRecord[]): TranscriptEntry[] {
   const entries: TranscriptEntry[] = []
   for (const record of records) {
-    if (isUserRecord(record)) {
+    if (record.type === "user") {
       entries.push(...mapUserRecord(record))
-    } else if (isAssistantRecord(record)) {
+    } else if (record.type === "assistant") {
       entries.push(...mapAssistantRecord(record))
     }
   }

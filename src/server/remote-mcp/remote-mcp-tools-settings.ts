@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { fail } from "../kanna-mcp-tool"
 import { commandTool, topicTool, type RemoteTool } from "./remote-mcp-tool-spec"
-import { jsonResult } from "./remote-mcp-views"
+import { jsonResult, readTopic } from "./remote-mcp-views"
 
 export const settingsTools: readonly RemoteTool[] = [
   commandTool({
@@ -29,10 +29,10 @@ export const settingsTools: readonly RemoteTool[] = [
     topic: "app-settings",
     input: z.object({}),
     handle: (_args, { host }) => {
-      const envelope = host.readSnapshot({ type: "app-settings" })
-      if (envelope.type !== "snapshot" || envelope.snapshot.type !== "app-settings") return fail("The settings snapshot is unavailable.")
+      const settings = readTopic(host, { type: "app-settings" })
+      if (!settings) return fail("The settings snapshot is unavailable.")
       return jsonResult({
-        subagents: envelope.snapshot.data.subagents.map((agent) => ({
+        subagents: settings.subagents.map((agent) => ({
           id: agent.id,
           name: agent.name,
           description: agent.description,

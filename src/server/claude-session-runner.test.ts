@@ -116,7 +116,7 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
   sessions.set(session.chatId, session)
 
   return {
-    openrouterFirstEntryTimeoutMs: 30000,
+    endpointFirstEntryTimeoutMs: 30000,
     claudeSessions: sessions,
     activeTurns: new Map(),
     pendingTools: new PendingToolSlots(),
@@ -129,7 +129,6 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
       detect: () => null,
       detectFromResultText: () => null,
     },
-    throwOnClaudeSessionStart: false,
     store: {
       appendMessage: async () => {},
       recordTurnFailed: async () => {},
@@ -145,7 +144,6 @@ function makeDeps(session: ClaudeSessionState, overrides: Partial<RunClaudeSessi
     maybeRegisterSdkWorkflowsDir: () => {},
     getSubagents: () => [],
     resolveBackgroundTaskMaxMs: () => 3_600_000,
-    handleLimitError: async () => false,
     handleAuthFailure: async () => false,
     closeClaudeSession: () => {},
     maybeStartNextQueuedMessage: async () => {},

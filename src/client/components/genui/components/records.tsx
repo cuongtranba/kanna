@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { useActions, type ComponentRenderProps } from "@json-render/react"
+import { useActions } from "@json-render/react"
 import { FileCode2, FileMinus2, FilePen, FilePlus2, Wrench } from "lucide-react"
 import { GENUI_COMPONENTS } from "../../../../shared/genui"
 import type { JsonObject } from "../../../../shared/json"
@@ -8,8 +8,8 @@ import { cn } from "../../../lib/utils"
 import { formatCompactDuration } from "../../../lib/formatDuration"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
 import { useGenUIView } from "../view-context"
-import { PropsIssue, ToneIcon, toneInkClass, type Tone } from "./primitives"
-import { resolvedProps } from "./props"
+import { defineElement } from "./define-element"
+import { ToneIcon, toneInkClass, type Tone } from "./primitives"
 
 export function useRunAction(action: string, params: JsonObject, id: string) {
   const { execute } = useActions()
@@ -38,12 +38,10 @@ function FileLink({ path, line, label }: { path: string; line?: number; label: s
   )
 }
 
-export function KeyValueElement({ element }: ComponentRenderProps) {
-  const parsed = GENUI_COMPONENTS.KeyValue.props.safeParse(resolvedProps(element.props))
-  if (!parsed.success) return <PropsIssue component="KeyValue" />
+export const KeyValueElement = defineElement(GENUI_COMPONENTS.KeyValue.props, ({ props }) => {
   return (
-    <dl className={cn("grid gap-x-6 gap-y-1.5", parsed.data.columns === 2 ? "grid-cols-1 @md:grid-cols-2" : "grid-cols-1")}>
-      {parsed.data.items.map((item) => (
+    <dl className={cn("grid gap-x-6 gap-y-1.5", props.columns === 2 ? "grid-cols-1 @md:grid-cols-2" : "grid-cols-1")}>
+      {props.items.map((item) => (
         <div key={item.label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 text-sm">
           <dt className="text-muted-foreground">{item.label}</dt>
           <dd className="break-words text-foreground tabular-nums">{item.value === null ? "—" : String(item.value)}</dd>
@@ -51,7 +49,7 @@ export function KeyValueElement({ element }: ComponentRenderProps) {
       ))}
     </dl>
   )
-}
+})
 
 const FILE_STATUS = {
   added: { icon: FilePlus2, label: "Added" },
@@ -60,12 +58,10 @@ const FILE_STATUS = {
   renamed: { icon: FileCode2, label: "Renamed" },
 } as const
 
-export function FileListElement({ element }: ComponentRenderProps) {
-  const parsed = GENUI_COMPONENTS.FileList.props.safeParse(resolvedProps(element.props))
-  if (!parsed.success) return <PropsIssue component="FileList" />
+export const FileListElement = defineElement(GENUI_COMPONENTS.FileList.props, ({ props }) => {
   return (
     <ul className="divide-y divide-border rounded-md border border-border">
-      {parsed.data.files.map((file) => {
+      {props.files.map((file) => {
         const status = file.status ? FILE_STATUS[file.status] : null
         const Icon = status?.icon ?? FileCode2
         return (
@@ -81,7 +77,7 @@ export function FileListElement({ element }: ComponentRenderProps) {
       })}
     </ul>
   )
-}
+})
 
 function formatLocation(path: string, line: number | undefined, column: number | undefined): string {
   if (!line) return path
@@ -91,12 +87,10 @@ function formatLocation(path: string, line: number | undefined, column: number |
 const SEVERITY_TONE: Readonly<Record<"error" | "warning" | "info", Tone>> = { error: "negative", warning: "attention", info: "info" }
 const SEVERITY_LABEL = { error: "Error", warning: "Warning", info: "Info" } as const
 
-export function DiagnosticListElement({ element }: ComponentRenderProps) {
-  const parsed = GENUI_COMPONENTS.DiagnosticList.props.safeParse(resolvedProps(element.props))
-  if (!parsed.success) return <PropsIssue component="DiagnosticList" />
+export const DiagnosticListElement = defineElement(GENUI_COMPONENTS.DiagnosticList.props, ({ props }) => {
   return (
     <ul className="divide-y divide-border rounded-md border border-border">
-      {parsed.data.items.map((item, index) => {
+      {props.items.map((item, index) => {
         const tone = SEVERITY_TONE[item.severity]
         const location = item.path ? formatLocation(item.path, item.line, item.column) : null
         return (
@@ -117,7 +111,7 @@ export function DiagnosticListElement({ element }: ComponentRenderProps) {
       })}
     </ul>
   )
-}
+})
 
 function FixFailureButton({ name, context }: { name: string; context: JsonObject }) {
   const { run, pending } = useRunAction("agent.fix", { subject: name, context }, name)
@@ -129,10 +123,8 @@ function FixFailureButton({ name, context }: { name: string; context: JsonObject
   )
 }
 
-export function TestResultElement({ element }: ComponentRenderProps) {
-  const parsed = GENUI_COMPONENTS.TestResult.props.safeParse(resolvedProps(element.props))
-  if (!parsed.success) return <PropsIssue component="TestResult" />
-  const { passed, failed, skipped, durationMs, command, failures } = parsed.data
+export const TestResultElement = defineElement(GENUI_COMPONENTS.TestResult.props, ({ props }) => {
+  const { passed, failed, skipped, durationMs, command, failures } = props
   const overall: Tone = failed > 0 ? "negative" : "positive"
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3">
@@ -171,14 +163,12 @@ export function TestResultElement({ element }: ComponentRenderProps) {
       ) : null}
     </div>
   )
-}
+})
 
-export function TimelineElement({ element }: ComponentRenderProps) {
-  const parsed = GENUI_COMPONENTS.Timeline.props.safeParse(resolvedProps(element.props))
-  if (!parsed.success) return <PropsIssue component="Timeline" />
+export const TimelineElement = defineElement(GENUI_COMPONENTS.Timeline.props, ({ props }) => {
   return (
     <ol className="flex flex-col gap-3 border-l border-border pl-4">
-      {parsed.data.items.map((item, index) => (
+      {props.items.map((item, index) => (
         <li key={`${index}-${item.title}`} className="flex flex-col gap-0.5">
           <div className="flex flex-wrap items-center gap-2">
             {item.tone ? <ToneIcon tone={item.tone} className={toneInkClass(item.tone)} /> : null}
@@ -190,4 +180,4 @@ export function TimelineElement({ element }: ComponentRenderProps) {
       ))}
     </ol>
   )
-}
+})

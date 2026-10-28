@@ -38,6 +38,7 @@ function makeHarness(options?: {
         suppressSessionTokenPersist: false,
         pendingPromptSeqs: [],
         selfWakeActive: false,
+        isHoldingWork: () => options.hasPendingBackgroundTask === true,
         ...options.session,
       } as ClaudeSessionState)
     : undefined
@@ -61,7 +62,6 @@ function makeHarness(options?: {
       startingTurns: { has: () => options?.hasStartingTurn === true },
       pendingTools: { has: () => options?.hasPendingTool === true },
       hasLiveWorkflow: () => options?.hasLiveWorkflow === true,
-      hasPendingBackgroundTask: () => options?.hasPendingBackgroundTask === true,
       closeClaudeSession: (chatId) => { closedChatIds.push(chatId) },
       stopCodexSession: (chatId) => { stoppedCodexChatIds.push(chatId) },
       emitStateChange: (chatId) => { stateChanges.push(chatId) },
@@ -240,6 +240,6 @@ describe("clearChatContext → next turn's context", () => {
 
     await clearChatContext(h.deps, "chat-1")
 
-    expect(buildHistoryPrimer(transcript, "claude", "what now?")).toBeNull()
+    expect(buildHistoryPrimer(transcript, "what now?")).toBeNull()
   })
 })

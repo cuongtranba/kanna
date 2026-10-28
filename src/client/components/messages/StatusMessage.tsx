@@ -1,9 +1,9 @@
 import { Minimize } from "lucide-react"
-import type { ProcessedStatusMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { MetaRow, MetaLabel } from "./shared"
 
 interface Props {
-  message: ProcessedStatusMessage
+  message: TranscriptMessageOf<"status">
 }
 
 const STATUS_LABELS: Record<string, string> = {

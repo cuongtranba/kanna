@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { GitWorktree } from "../../shared/types"
+import { clampRounded } from "../../shared/numeric"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import type { StoragePort } from "../ports/storagePort"
 
@@ -15,9 +16,10 @@ export interface KannaSidebarStorePorts {
 export const SIDEBAR_CONTENT_MIN_WIDTH = 400
 export const SIDEBAR_CONTENT_MIN_WIDTH_SETTINGS = 720
 
+const SIDEBAR_WIDTH_RANGE = { min: MIN_SIDEBAR_WIDTH, max: MAX_SIDEBAR_WIDTH }
+
 export function clampSidebarWidth(width: number) {
-  if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))
+  return clampRounded(width, SIDEBAR_WIDTH_RANGE, DEFAULT_SIDEBAR_WIDTH)
 }
 
 export interface ResolveSidebarWidthArgs {

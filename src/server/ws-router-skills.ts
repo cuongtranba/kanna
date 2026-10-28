@@ -1,34 +1,11 @@
 import os from "node:os"
-import path from "node:path"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
 import { DEFAULT_SKILL_AGENTS, assertSafeSkillAgents } from "../shared/skill-agents"
 import type { SkillAgent } from "../shared/skill-agents"
-import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import { spawnCapture } from "./process-utils.adapter"
+import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath, NPX, skillsCliEnv } from "./skills-cli"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import type { InstalledSkillsSnapshot, SkillInstallResult, SkillSearchSnapshot, SkillUninstallResult } from "../shared/types"
-
-export function assertSafeSkillSource(source: string) {
-  const normalized = source.trim()
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized)) {
-    throw new Error("Skill source must be an owner/repo pair.")
-  }
-  return normalized
-}
-
-export function assertSafeSkillId(skillId: string) {
-  const normalized = skillId.trim()
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(normalized)) {
-    throw new Error("Skill id is invalid.")
-  }
-  return normalized
-}
-
-export function getGlobalSkillLockPath() {
-  const xdgStateHome = process.env.XDG_STATE_HOME?.trim()
-  if (xdgStateHome) {
-    return path.join(xdgStateHome, "skills", ".skill-lock.json")
-  }
-  return path.join(process.env.HOME ?? os.homedir(), ".agents", ".skill-lock.json")
-}
 
 function asString(value: JsonValue | undefined) {
   return typeof value === "string" ? value : ""
@@ -128,37 +105,37 @@ export function buildInstallSkillCommand(
   skillId: string,
   agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
 ) {
-  return [
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    "skills",
-    "add",
-    assertSafeSkillSource(source),
-    "--skill",
-    assertSafeSkillId(skillId),
-    "--global",
-    "--agent",
-    ...assertSafeSkillAgents([...agents]),
-    "--yes",
-  ]
+  const safeSource = assertSafeSkillSource(source)
+  const safeSkillId = assertSafeSkillId(skillId)
+  return {
+    source: safeSource,
+    skillId: safeSkillId,
+    argv: [
+      NPX,
+      "skills",
+      "add",
+      safeSource,
+      "--skill",
+      safeSkillId,
+      "--global",
+      "--agent",
+      ...assertSafeSkillAgents([...agents]),
+      "--yes",
+    ],
+  }
 }
 
 export function buildUninstallSkillCommand(skillId: string) {
-  return [
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    "skills",
-    "remove",
-    assertSafeSkillId(skillId),
-    "--global",
-    "--yes",
-  ]
+  const safeSkillId = assertSafeSkillId(skillId)
+  return {
+    skillId: safeSkillId,
+    argv: [NPX, "skills", "remove", safeSkillId, "--global", "--yes"],
+  }
 }
 
 async function runSkillCommand(command: string[]) {
   const cwd = os.homedir()
-  const { stdout, stderr, exitCode } = await spawnCommandCapture(command, cwd, {
-    ...process.env,
-    DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY ?? "1",
-  })
+  const { stdout, stderr, exitCode } = await spawnCapture(command, { cwd, env: skillsCliEnv() })
 
   if (exitCode !== 0) {
     throw new Error(stderr.trim() || stdout.trim() || `skills CLI exited with code ${exitCode}.`)
@@ -172,12 +149,12 @@ export async function installSkill(
   skillId: string,
   agents: readonly SkillAgent[] = DEFAULT_SKILL_AGENTS,
 ): Promise<SkillInstallResult> {
-  const command = buildInstallSkillCommand(source, skillId, agents)
-  const { cwd, stdout, stderr } = await runSkillCommand(command)
+  const built = buildInstallSkillCommand(source, skillId, agents)
+  const { cwd, stdout, stderr } = await runSkillCommand(built.argv)
   return {
-    source: command[3],
-    skillId: command[5],
-    command,
+    source: built.source,
+    skillId: built.skillId,
+    command: built.argv,
     cwd,
     stdout,
     stderr,
@@ -185,15 +162,15 @@ export async function installSkill(
 }
 
 export async function uninstallSkill(skillId: string): Promise<SkillUninstallResult> {
-  const command = buildUninstallSkillCommand(skillId)
-  const { cwd, stdout, stderr } = await runSkillCommand(command)
+  const built = buildUninstallSkillCommand(skillId)
+  const { cwd, stdout, stderr } = await runSkillCommand(built.argv)
   const remaining = await listInstalledSkills()
-  if (remaining.skills.some((skill) => skill.name === command[3])) {
-    throw new Error(`skills CLI exited without removing ${command[3]}; it is still in ${remaining.lockFilePath}.`)
+  if (remaining.skills.some((skill) => skill.name === built.skillId)) {
+    throw new Error(`skills CLI exited without removing ${built.skillId}; it is still in ${remaining.lockFilePath}.`)
   }
   return {
-    skillId: command[3],
-    command,
+    skillId: built.skillId,
+    command: built.argv,
     cwd,
     stdout,
     stderr,

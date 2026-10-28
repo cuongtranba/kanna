@@ -403,3 +403,113 @@ describe("ClaudeSessionState.abandonBackgroundTasks", () => {
     expect(s.backgroundTaskDeadlineAt).toBe(0)
   })
 })
+
+describe("ClaudeSessionState.applyLevelSnapshot merge", () => {
+  it("preserves outputPath from a previous entry when the snapshot has no path", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: 100, outputPath: "/tmp/t1.out" }]]),
+    })
+    s.applyLevelSnapshot(["t1"], undefined, MAX_MS, 200)
+    expect(s.backgroundTasks.get("t1")?.outputPath).toBe("/tmp/t1.out")
+  })
+
+  it("gives a new task a null outputPath", () => {
+    const s = makeSession()
+    s.applyLevelSnapshot(["t2"], undefined, MAX_MS, 200)
+    expect(s.backgroundTasks.get("t2")?.outputPath).toBeNull()
+  })
+
+  it("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([
+        ["gone", { taskType: null, description: "stale", startedAt: 1, outputPath: null }],
+        ["kept", { taskType: null, description: null, startedAt: 2, outputPath: null }],
+      ]),
+    })
+    s.applyLevelSnapshot(
+      ["kept", "fresh"],
+      [
+        { id: "kept", taskType: "local_bash", description: "CI watch" },
+        { id: "fresh", taskType: "local_agent", description: null },
+      ],
+      MAX_MS,
+      1_000,
+    )
+    expect(s.backgroundTasks.has("gone")).toBe(false)
+    expect(s.backgroundTasks.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2, outputPath: null })
+    expect(s.backgroundTasks.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000, outputPath: null })
+  })
+
+  it("a snapshot without meta preserves previously learned labels", () => {
+    const s = makeSession({
+      backgroundTasks: new Map([["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null }]]),
+    })
+    s.applyLevelSnapshot(["t1"], undefined, MAX_MS, 999)
+    expect(s.backgroundTasks.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null })
+  })
+})
+
+describe("ClaudeSessionState cancelled-result protocol", () => {
+  it("beginPrompt numbers prompts, queues them, and forgets earlier cancellations", () => {
+    const s = makeSession({ nextPromptSeq: 4, cancelledResultPending: 2 })
+    expect(s.beginPrompt()).toBe(5)
+    expect(s.beginPrompt()).toBe(6)
+    expect(s.pendingPromptSeqs).toEqual([5, 6])
+    expect(s.cancelledResultPending).toBe(0)
+  })
+
+  it("completePrompt hands back the oldest outstanding prompt, or null when none is outstanding", () => {
+    const s = makeSession({ pendingPromptSeqs: [3, 4] })
+    expect(s.completePrompt()).toBe(3)
+    expect(s.completePrompt()).toBe(4)
+    expect(s.completePrompt()).toBeNull()
+  })
+
+  it("cancelPrompt drops that prompt and expects one echoed error result, even for an unknown seq", () => {
+    const s = makeSession({ pendingPromptSeqs: [1, 2, 3] })
+    s.cancelPrompt(2)
+    expect(s.pendingPromptSeqs).toEqual([1, 3])
+    expect(s.cancelledResultPending).toBe(1)
+    s.cancelPrompt(9)
+    expect(s.pendingPromptSeqs).toEqual([1, 3])
+    expect(s.cancelledResultPending).toBe(2)
+  })
+
+  it("the echoed error result is swallowed once per cancellation and disarms the self-wake", () => {
+    const s = makeSession({ cancelledResultPending: 1, selfWakeActive: true })
+    expect(s.swallowCancelledErrorResult()).toBe(true)
+    expect(s.cancelledResultPending).toBe(0)
+    expect(s.selfWakeActive).toBe(false)
+    expect(s.swallowCancelledErrorResult()).toBe(false)
+  })
+
+  it("cancelSelfWake suppresses the background wake only while tasks are outstanding", () => {
+    const withTasks = makeSession({
+      selfWakeActive: true,
+      backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: NOW, outputPath: null }]]),
+    })
+    withTasks.cancelSelfWake()
+    expect(withTasks.selfWakeActive).toBe(false)
+    expect(withTasks.backgroundTaskWakeSuppressed).toBe(true)
+    expect(withTasks.cancelledResultPending).toBe(1)
+
+    const withoutTasks = makeSession({ selfWakeActive: true })
+    withoutTasks.cancelSelfWake()
+    expect(withoutTasks.backgroundTaskWakeSuppressed).toBe(false)
+    expect(withoutTasks.cancelledResultPending).toBe(1)
+  })
+
+  it("token persistence and self-wake arming are held back while a cancellation is unresolved", () => {
+    const settled = makeSession()
+    expect(settled.persistsSessionToken()).toBe(true)
+    expect(settled.canArmSelfWake()).toBe(true)
+
+    const cancelled = makeSession({ cancelledResultPending: 1 })
+    expect(cancelled.persistsSessionToken()).toBe(false)
+    expect(cancelled.canArmSelfWake()).toBe(false)
+
+    const suppressed = makeSession({ suppressSessionTokenPersist: true, backgroundTaskWakeSuppressed: true })
+    expect(suppressed.persistsSessionToken()).toBe(false)
+    expect(suppressed.canArmSelfWake()).toBe(false)
+  })
+})

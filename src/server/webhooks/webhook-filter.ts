@@ -2,8 +2,7 @@ import { celEnv, isCelError, parse, plan, type CelResult } from "@bufbuild/cel"
 import { isAlias, parseDocument, visit } from "yaml"
 import { z } from "zod"
 import { toError } from "../../shared/errors"
-import type { JsonValue } from "../../shared/json"
-import { resolvePath } from "../../shared/inbound/template"
+import { resolveJsonPath, type JsonValue } from "../../shared/json"
 import { WEBHOOK_FILTER_MAX_CHARS } from "../../shared/webhooks/types"
 
 export interface WebhookFilterInput {
@@ -108,7 +107,7 @@ function matchEvent(events: EventTypes, event: string, body: JsonValue): Webhook
   const types = events.get(event)
   if (types === undefined) return { matched: false, reason: `event "${event}" not in on` }
   if (types === null) return { matched: true }
-  const action = resolvePath(body, "action")
+  const action = resolveJsonPath(body, "action")
   const actionName = typeof action === "string" ? action : ""
   if (!types.includes(actionName)) return { matched: false, reason: `action "${actionName}" not in types` }
   return { matched: true }

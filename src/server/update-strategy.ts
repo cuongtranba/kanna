@@ -68,7 +68,6 @@ export class NpmChecker implements UpdateChecker {
 }
 
 export interface GitCheckerDeps {
-  repoDir: string
   branch: string
   runGit: (args: string[]) => Promise<string>
 }
@@ -90,7 +89,6 @@ export class GitChecker implements UpdateChecker {
 }
 
 export interface Pm2ReloaderDeps {
-  repoDir: string
   runCommand: (command: string, args: string[]) => Promise<void>
   lockfileChanged: () => Promise<boolean>
 }
@@ -163,12 +161,10 @@ export function createUpdateStrategy(deps: CreateUpdateStrategyDeps): UpdateStra
     const repoDir = deps.repoDir
     return {
       checker: new GitChecker({
-        repoDir,
         branch: "main",
         runGit: (args) => runCommandCapture("git", args, repoDir),
       }),
       reloader: new Pm2Reloader({
-        repoDir,
         runCommand: (command, args) => runCommandThrow(command, args, repoDir),
         lockfileChanged: () => detectLockfileChange(repoDir),
       }),
@@ -178,7 +174,7 @@ export function createUpdateStrategy(deps: CreateUpdateStrategyDeps): UpdateStra
 }
 
 async function runCommandCapture(command: string, args: string[], cwd: string): Promise<string> {
-  const { stdout, stderr, exitCode } = await spawnCapture(command, args, cwd)
+  const { stdout, stderr, exitCode } = await spawnCapture([command, ...args], { cwd })
   if (exitCode !== 0) {
     const tail = stderr.trim().slice(-500)
     throw new Error(tail || `${command} exited with code ${exitCode}`)

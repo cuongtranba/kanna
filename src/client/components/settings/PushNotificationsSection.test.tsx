@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PushNotificationsSection } from "./PushNotificationsSection"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
-import { useSettingsPageStore } from "../../stores/settingsPageStore"
+import { usePushSettingsStore } from "../../stores/pushSettingsStore"
 import type { PushConfigSnapshot, LocalProjectsSnapshot } from "../../../shared/types"
 
 const baseConfig: PushConfigSnapshot = {
@@ -155,7 +155,7 @@ describe("PushNotificationsSection", () => {
   })
 
   test("shows a push failure inline under the Enable button", async () => {
-    useSettingsPageStore.getState().setPushError("Could not register the service worker: boom")
+    usePushSettingsStore.getState().setError("Could not register the service worker: boom")
     const { container, cleanup } = await renderClientMarkup(
       <PushNotificationsSection
         permissionState="default"
@@ -171,7 +171,7 @@ describe("PushNotificationsSection", () => {
       )
     } finally {
       await cleanup()
-      useSettingsPageStore.getState().setPushError(null)
+      usePushSettingsStore.getState().setError(null)
     }
   })
 })

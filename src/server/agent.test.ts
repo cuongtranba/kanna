@@ -2,21 +2,20 @@ import { afterEach, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { AgentCoordinator } from "./agent-coordinator"
+import { buildCanUseTool, buildClaudeEnv } from "./claude-spawn-helpers"
+import { buildTaskNotification, buildUserMcpServers } from "./claude-session-config"
+import { buildAttachmentHintText, buildPromptText } from "./claude-prompt-helpers"
+import { normalizeClaudeStreamMessage } from "./claude-message-normalizer"
 import {
-  AgentCoordinator,
-  buildAttachmentHintText,
-  buildCanUseTool,
-  buildClaudeEnv,
-  buildPromptText,
-  buildTaskNotification,
-  buildUserMcpServers,
   maxClaudeContextWindowFromModelUsage,
-  normalizeClaudeStreamMessage,
   normalizeClaudeUsageSnapshot,
   parseConfiguredContextWindowFromModelId,
   resolveFinalTurnUsage,
-} from "./agent"
+} from "./claude-usage-math"
 import { EventStore } from "./event-store"
+import { EMPTY_CHAT_TASK_PROJECTION } from "../shared/chat-tasks/read-model"
+import { getLatestContextWindowUsage } from "./proactive-compact"
 import { createToolCallbackService } from "./tool-callback"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -24,7 +23,7 @@ import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { HarnessEvent, HarnessTurn } from "./harness-types"
 import type { ChatAttachment, McpServerConfig, SlashCommand, TranscriptEntry } from "../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION } from "./auto-continue/events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { WorkflowRegistry } from "./workflow-registry"
 import { AsyncEventQueue } from "./test-helpers/async-event-queue"
 import { waitFor } from "./test-helpers/wait-for"
@@ -3611,6 +3610,14 @@ function createFakeStore() {
     getMessages() {
       return this.messages
     },
+    getLatestContextWindowUsage() {
+      return getLatestContextWindowUsage(this.messages)
+    },
+    async setChatModel() {},
+    getChatTasks() {
+      return EMPTY_CHAT_TASK_PROJECTION
+    },
+    async appendChatTaskEvents() {},
     getLastUserMessageId(_chatId: string) {
       const last = [...this.messages].reverse().find((e) => e.kind === "user_prompt")
       return last?._id ?? null
@@ -3647,8 +3654,8 @@ function createFakeStore() {
       this.turnFailures.push({ chatId, reason })
     },
     async recordTurnCancelled() {},
-    autoContinueEvents: [] as AutoContinueEvent[],
-    async appendAutoContinueEvent(event: AutoContinueEvent) {
+    autoContinueEvents: [] as ChatAutomationEvent[],
+    async appendAutoContinueEvent(event: ChatAutomationEvent) {
       this.autoContinueEvents.push(event)
     },
     getAutoContinueEvents(chatId: string) {
@@ -3770,6 +3777,7 @@ function createFakeStore() {
     getSubagentRuns() {
       return Object.fromEntries(this.subagentRuns.entries())
     },
+    subscribeTurnTerminal: () => () => {},
     *runningSubagentRuns() {
     },
   }
@@ -4239,7 +4247,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
       })
 
       if (!result.ok) throw new Error(result.errors.join(", "))
-      expect(result.created).toBe(false)
       expect(await Bun.file(path.join(projectRoot, "PROGRESS.md")).exists()).toBe(false)
 
       expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
@@ -4383,8 +4390,6 @@ describe("AgentCoordinator.setupLoop (mcp__kanna__setup_loop backing)", () => {
         input: { goal: "g", verifyCommand: "false", subagentId: "sa-1" },
       })
       if (!result.ok) throw new Error(result.errors.join(", "))
-      expect(result.created).toBe(false)
-      expect(result.reconciled).toBe(false)
       expect(await Bun.file(abs).text()).toBe("user-authored content")
       expect(store.getAutoContinueEvents("chat-1")).toHaveLength(2)
     } finally {
@@ -4503,7 +4508,7 @@ describe("AgentCoordinator.acceptAutoContinue", () => {
   test("happy path: appends auto_continue_accepted with source 'user' for a proposed schedule", async () => {
     const { store, coordinator } = makeCoordinatorWithStore()
     const scheduleId = "sched-1"
-    const proposedEvent: AutoContinueEvent = {
+    const proposedEvent: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_proposed",
       timestamp: Date.now(),
@@ -5568,33 +5573,27 @@ describe("AgentCoordinator turn-start failure recording", () => {
   test("records turn_failed and clears activeTurn when startClaudeSession throws", async () => {
     const store = createFakeStore()
     store.chat.provider = "claude"
-    const consoleError = console.error
-    console.error = () => {}
-    try {
-      const coordinator = new AgentCoordinator({
-        store: store as never,
-        onStateChange: () => {},
-        startClaudeSession: async () => {
-          throw new Error("simulated spawn failure")
-        },
-      })
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async () => {
+        throw new Error("simulated spawn failure")
+      },
+    })
 
-      await expect(
-        coordinator.send({
-          type: "chat.send",
-          chatId: "chat-1",
-          provider: "claude",
-          content: "hi",
-        }),
-      ).rejects.toThrow(/simulated spawn failure/)
+    await expect(
+      coordinator.send({
+        type: "chat.send",
+        chatId: "chat-1",
+        provider: "claude",
+        content: "hi",
+      }),
+    ).rejects.toThrow(/simulated spawn failure/)
 
-      expect(store.turnFailedCount).toBe(1)
-      expect(store.turnFailures[0]?.chatId).toBe("chat-1")
-      expect(store.turnFailures[0]?.reason).toContain("simulated spawn failure")
-      expect(store.messages[0]?.kind).toBe("user_prompt")
-    } finally {
-      console.error = consoleError
-    }
+    expect(store.turnFailedCount).toBe(1)
+    expect(store.turnFailures[0]?.chatId).toBe("chat-1")
+    expect(store.turnFailures[0]?.reason).toContain("simulated spawn failure")
+    expect(store.messages[0]?.kind).toBe("user_prompt")
   })
 })
 

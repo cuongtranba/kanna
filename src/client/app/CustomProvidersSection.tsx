@@ -40,17 +40,12 @@ import type { KannaState } from "./useKannaState"
 import {
   useAppSettingsCrudHandlers,
   type AppSettingsCrudHandlers,
-  type AppSettingsPatchWrapper,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 
 export type CustomProvidersHandlers = AppSettingsCrudHandlers<CustomProviderInput, CustomProviderPatch>
-
-const wrapCustomProvidersPatch: AppSettingsPatchWrapper<CustomProviderInput, CustomProviderPatch> = (
-  customProviders,
-) => ({ customProviders })
 
 const SECTION_DESCRIPTION =
   "Anthropic-compatible endpoints such as GLM, Qwen, Kimi, DeepSeek or MiniMax. They run through the Claude agent, so tools, skills and MCP work as usual. Pick them in the chat composer under Custom endpoints."
@@ -248,7 +243,7 @@ function ProviderEditor({
     () => providers.filter((provider) => provider.id !== editingId).map((provider) => provider.id),
     [providers, editingId],
   )
-  const saveKey = pendingActionKey("settings.customProviders", editingId ?? (form.id || "new"))
+  const saveKey = pendingActionKey("settings.customProviders", editingId ?? "new")
   const savePending = usePendingAction(saveKey)
 
   const handleLabelChange = useCallback((value: string) => {
@@ -272,12 +267,11 @@ function ProviderEditor({
           }
         },
         onDone: discardEditor,
-        fallbackMessage: "Failed to save endpoint",
       }),
     )
   }, [discardEditor, editingId, form, handlers, mode, otherIds, patchEditorForm, saveKey])
 
-  const busy = form.submitting || savePending
+  const busy = savePending
 
   return (
     <div className="flex flex-col gap-4 rounded-md border border-border px-4 py-4">
@@ -405,6 +399,6 @@ export function CustomProvidersSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">
 }) {
   const providers = useAppSettingsStore(selectCustomProviders)
-  const handlers = useAppSettingsCrudHandlers(wrapCustomProvidersPatch, props.state)
+  const handlers = useAppSettingsCrudHandlers("customProviders", props.state)
   return <CustomProvidersSection providers={providers} handlers={handlers} />
 }

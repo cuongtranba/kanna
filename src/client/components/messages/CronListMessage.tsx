@@ -2,11 +2,12 @@ import { CalendarClock } from "lucide-react"
 import { cronModeConsequence } from "../../../shared/cron/arm-summary"
 import type { CronJobSnapshot } from "../../../shared/cron/types"
 import { humanizeSchedule } from "../../../shared/cron/humanize"
+import { CRON_USAGE_LINES } from "../../../shared/cron/parse-command"
 import { CronRunStatusPill } from "./CronRunMessage"
-import type { ProcessedCronListMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronListMessage
+  message: TranscriptMessageOf<"cron_list">
   cronJobs?: readonly CronJobSnapshot[]
 }
 
@@ -38,9 +39,7 @@ export function CronListMessage({ message, cronJobs }: Props) {
       )}
       {message.help ? (
         <div className="mt-3 border-t border-border pt-2 font-mono text-xs text-muted-foreground">
-          <div>/cron &lt;instruction&gt; inline|spawn &lt;schedule&gt;</div>
-          <div>/cron list · /cron remove &lt;id&gt; · /cron pause &lt;id&gt; · /cron resume &lt;id&gt;</div>
-          <div>schedules: `0 9 * * 1-5` · `*/30 * * * * *` (leading second) · @hourly @daily @weekly @monthly · every 30s / every 5m / every 2h</div>
+          {CRON_USAGE_LINES.map((line) => <div key={line}>{line}</div>)}
           <div className="mt-1">
             inline: {cronModeConsequence("inline")}; spawn: {cronModeConsequence("spawn")}.
             Next-fire times use server-local time.

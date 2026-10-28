@@ -4,8 +4,6 @@ import { SegmentedControl } from "../ui/segmented-control"
 import type { ChatPermissionPolicy, ChatPermissionPolicyOverride } from "../../../shared/permission-policy"
 import { ChatPolicyDialogStore } from "./ChatPolicyDialog.store"
 
-type DefaultAction = ChatPermissionPolicy["defaultAction"]
-
 interface Props {
   open: boolean
   chatTitle: string
@@ -32,7 +30,7 @@ export function ChatPolicyDialog(props: Props) {
   return <ChatPolicyDialogInner {...props} />
 }
 
-function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, onCancel, applying = false }: Props) {
+function ChatPolicyDialogInner({ chatTitle, baseline, current, onApply, onCancel, applying = false }: Props) {
   const initialDefaultAction = current?.defaultAction ?? baseline.defaultAction
   const initialReadDenyText = listToText(current?.readPathDeny ?? baseline.readPathDeny)
   const initialWriteDenyText = listToText(current?.writePathDeny ?? baseline.writePathDeny)
@@ -42,7 +40,6 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
       init={{ initialDefaultAction, initialReadDenyText, initialWriteDenyText }}
     >
       <ChatPolicyDialogContent
-        open={open}
         chatTitle={chatTitle}
         baseline={baseline}
         onApply={onApply}
@@ -54,7 +51,6 @@ function ChatPolicyDialogInner({ open, chatTitle, baseline, current, onApply, on
 }
 
 interface ContentProps {
-  open: boolean
   chatTitle: string
   baseline: ChatPermissionPolicy
   onApply: (next: ChatPermissionPolicyOverride | null) => void
@@ -62,23 +58,15 @@ interface ContentProps {
   applying: boolean
 }
 
-function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel, applying }: ContentProps) {
+function ChatPolicyDialogContent({ chatTitle, baseline, onApply, onCancel, applying }: ContentProps) {
   const defaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.defaultAction)
   const readDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.readDenyText)
   const writeDenyText = ChatPolicyDialogStore.useScopedStore((state) => state.writeDenyText)
-  const confirmUnsafeOpen = ChatPolicyDialogStore.useScopedStore((state) => state.confirmUnsafeOpen)
   const pendingDefaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.pendingDefaultAction)
+  const requestDefaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.requestDefaultAction)
+  const confirmPendingDefaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.confirmPendingDefaultAction)
+  const cancelPendingDefaultAction = ChatPolicyDialogStore.useScopedStore((state) => state.cancelPendingDefaultAction)
   const storeApi = ChatPolicyDialogStore.useScopedStoreApi()
-
-  function handleDefaultActionChange(next: DefaultAction) {
-    const state = storeApi.getState()
-    if (next === "auto-allow" && state.defaultAction !== "auto-allow") {
-      state.setPendingDefaultAction(next)
-      state.setConfirmUnsafeOpen(true)
-      return
-    }
-    state.setDefaultAction(next)
-  }
 
   function buildOverride(): ChatPermissionPolicyOverride | null {
     const readDeny = textToList(readDenyText)
@@ -100,7 +88,7 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel,
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
+      <Dialog open onOpenChange={(next) => { if (!next) onCancel() }}>
         <DialogContent className="max-w-2xl">
           <DialogTitle>Permissions — {chatTitle}</DialogTitle>
           <DialogBody className="space-y-5">
@@ -111,7 +99,7 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel,
               </div>
               <SegmentedControl
                 value={defaultAction}
-                onValueChange={handleDefaultActionChange}
+                onValueChange={requestDefaultAction}
                 options={[
                   { value: "ask", label: "Ask" },
                   { value: "auto-allow", label: "Auto-allow (unsafe)" },
@@ -158,7 +146,7 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel,
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmUnsafeOpen} onOpenChange={(next) => { if (!next) { storeApi.getState().setConfirmUnsafeOpen(false); storeApi.getState().setPendingDefaultAction(null) } }}>
+      <Dialog open={pendingDefaultAction !== null} onOpenChange={(next) => { if (!next) cancelPendingDefaultAction() }}>
         <DialogContent className="max-w-md">
           <DialogTitle>Enable auto-allow for this chat?</DialogTitle>
           <DialogBody className="space-y-3 text-sm">
@@ -169,18 +157,10 @@ function ChatPolicyDialogContent({ open, chatTitle, baseline, onApply, onCancel,
             <p className="text-warning-text">Use a worktree for risky tasks.</p>
           </DialogBody>
           <DialogFooter className="justify-end gap-2">
-            <Button variant="ghost" onClick={() => { storeApi.getState().setConfirmUnsafeOpen(false); storeApi.getState().setPendingDefaultAction(null) }}>
+            <Button variant="ghost" onClick={cancelPendingDefaultAction}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                const state = storeApi.getState()
-                if (pendingDefaultAction) state.setDefaultAction(pendingDefaultAction)
-                state.setConfirmUnsafeOpen(false)
-                state.setPendingDefaultAction(null)
-              }}
-            >
+            <Button variant="destructive" onClick={confirmPendingDefaultAction}>
               Enable auto-allow
             </Button>
           </DialogFooter>

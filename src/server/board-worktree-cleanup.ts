@@ -11,9 +11,8 @@ import {
   type CleanupDecision,
   type WorktreeCleanupView,
 } from "../shared/boards/worktree-cleanup"
-import { cardBranchName } from "./board-store"
-import type { GitWorktree } from "../shared/types"
-import type { StartWorkProject } from "./board-start-work"
+import { DETACHED_BRANCH, type GitWorktree } from "../shared/types"
+import { cardBranchName, type StartWorkProject } from "./board-start-work"
 
 export interface MergePreview {
   commitCount: number
@@ -63,7 +62,7 @@ async function locate(deps: WorktreeCleanupDeps, cardId: string): Promise<Resolv
   return {
     worktreePath,
     branch:
-      branch && branch !== "(detached)"
+      branch && branch !== DETACHED_BRANCH
         ? branch
         : cardBranchName(detail.card.id, detail.card.title, detail.externalRef),
     project,

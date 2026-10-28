@@ -1,16 +1,24 @@
 import { z } from "zod"
-import type { InboxActivityItem, InboxFilter, InboxThread } from "./types"
+import {
+  INBOX_SOURCE_KINDS,
+  INBOX_THREAD_STATES,
+  INBOX_VERDICTS,
+  type InboxActivityItem,
+  type InboxFilter,
+  type InboxThread,
+} from "./types"
+import { BUS_SOURCE_KINDS, type BusSource } from "../service-bus/envelope"
 import { jsonValueSchema } from "../genui/json-schema"
 import { assertParity } from "../type-parity"
 
 export const inboxFilterSchema = z.object({
-  sourceKind: z.enum(["store", "transcript", "webhook", "mcp", "inbox"]).optional(),
+  sourceKind: z.enum(BUS_SOURCE_KINDS).optional(),
   projectId: z.string().optional(),
   chatId: z.string().optional(),
   attentionOnly: z.boolean().optional(),
 })
 
-const busSourceSchema = z.discriminatedUnion("kind", [
+export const busSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("store"), log: z.string() }),
   z.object({ kind: z.literal("transcript"), chatId: z.string() }),
   z.object({ kind: z.literal("webhook"), hookId: z.string(), hookName: z.string() }),
@@ -24,42 +32,57 @@ const busSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("inbox") }),
 ])
 
+export const inboundMessageSchema = z.object({
+  id: z.string(),
+  deliveryId: z.string(),
+  ts: z.number(),
+  payload: jsonValueSchema,
+  preview: z.string(),
+})
+
+const tolerantOptionalString = z.string().optional().catch(undefined)
+
+export const inboxReportSchema = z.object({
+  verdict: z.enum(INBOX_VERDICTS),
+  summary: z.string(),
+  draftReply: tolerantOptionalString,
+  at: z.number(),
+  chatId: z.string(),
+})
+
 const inboxThreadSchema = z.object({
   id: z.string(),
-  sourceKind: z.enum(["webhook", "mcp"]),
+  sourceKind: z.enum(INBOX_SOURCE_KINDS),
   sourceId: z.string(),
   sourceName: z.string(),
   threadKey: z.string(),
   sender: z.string(),
-  messages: z.array(z.object({
-    id: z.string(),
-    deliveryId: z.string(),
-    ts: z.number(),
-    payload: jsonValueSchema,
-    preview: z.string(),
-  })),
+  messages: z.array(inboundMessageSchema),
   chatId: z.string().optional(),
-  state: z.enum(["new", "needs_you", "fyi", "handled", "replied", "archived"]),
-  report: z.object({
-    verdict: z.enum(["needs_you", "fyi", "handled"]),
-    summary: z.string(),
-    draftReply: z.string().optional(),
-    at: z.number(),
-    chatId: z.string(),
-  }).optional(),
+  state: z.enum(INBOX_THREAD_STATES),
+  report: inboxReportSchema.optional(),
   unread: z.boolean(),
   lastMessageAt: z.number(),
   replyCount: z.number(),
   pendingScheduleId: z.string().optional(),
 })
 
-const inboxActivityItemSchema = z.object({
+export const inboxThreadHeaderSchema = inboxThreadSchema.pick({
+  id: true,
+  sourceKind: true,
+  sourceId: true,
+  sourceName: true,
+  threadKey: true,
+  sender: true,
+})
+
+export const inboxActivityItemSchema = z.object({
   id: z.string(),
   ts: z.number(),
   subject: z.string(),
   source: busSourceSchema,
-  chatId: z.string().optional(),
-  projectId: z.string().optional(),
+  chatId: tolerantOptionalString,
+  projectId: tolerantOptionalString,
   title: z.string(),
   preview: z.string(),
   payload: jsonValueSchema,
@@ -74,6 +97,7 @@ export const inboxPageSchema = z.object({
 
 export type InboxPage = z.output<typeof inboxPageSchema>
 
+assertParity<z.output<typeof busSourceSchema>, BusSource>()
 assertParity<z.output<typeof inboxThreadSchema>, InboxThread>()
 assertParity<z.output<typeof inboxActivityItemSchema>, InboxActivityItem>()
 assertParity<z.output<typeof inboxFilterSchema>, InboxFilter>()

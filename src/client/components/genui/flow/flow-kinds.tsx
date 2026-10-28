@@ -2,6 +2,7 @@ import { Database, Diamond, Globe, Play, RectangleHorizontal, Square, type Lucid
 import type { FlowNode } from "../../../../shared/genui"
 import { cn } from "../../../lib/utils"
 import { toneInkClass, type Tone } from "../components/primitives"
+import { fileNameOfPath } from "../../../lib/pathUtils"
 
 type FlowNodeKind = NonNullable<FlowNode["kind"]>
 
@@ -39,8 +40,28 @@ export function FlowStatus({ node }: { node: FlowNode }) {
   )
 }
 
+export const FLOW_NODE_METRICS = {
+  labelFont: "500 14px",
+  statusFont: "500 12px",
+  textFont: "12px",
+  paddingX: 12,
+  terminalPaddingX: 16,
+  contentChrome: 26,
+  statusChrome: 24,
+  rowHeight: 16,
+  baseHeight: 38,
+} as const
+
+export function flowNodePaddingX(node: FlowNode): number {
+  return node.kind === "start" || node.kind === "end" ? FLOW_NODE_METRICS.terminalPaddingX : FLOW_NODE_METRICS.paddingX
+}
+
+export function flowNodeChrome(node: FlowNode): number {
+  return 2 * flowNodePaddingX(node) + FLOW_NODE_METRICS.contentChrome
+}
+
 export function flowFileLabel(node: FlowNode): string | null {
   if (!node.path) return null
-  const name = node.path.split("/").pop() ?? node.path
+  const name = fileNameOfPath(node.path)
   return node.line ? `${name}:${node.line}` : name
 }

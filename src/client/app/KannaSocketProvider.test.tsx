@@ -7,7 +7,7 @@ import {
   wsUrl,
 } from "./KannaSocketProvider"
 import type { KannaSocket } from "./socket"
-import { makeFakeDomPort, makeFakeStoragePort, makeFakeTimerPort } from "../lib/testing/fakePorts"
+import { makeFakeDomPort, makeFakeTimerPort } from "../lib/testing/fakePorts"
 import type { WebSocketLike, WebSocketPort, WsEventPayload } from "../ports/webSocketPort"
 
 
@@ -45,8 +45,6 @@ function makePorts(webSocket: WebSocketPort, href = "http://localhost:5174/chat/
   return {
     dom: makeFakeDomPort({ href }),
     timer: makeFakeTimerPort(),
-    localStorage: makeFakeStoragePort(),
-    sessionStorage: makeFakeStoragePort(),
     webSocket,
   }
 }

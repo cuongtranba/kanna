@@ -17,7 +17,6 @@ code:
   - src/server/ws-router-defaults.ts
   - src/server/ws-router-diff.ts
   - src/server/ws-router-envelope.ts
-  - src/server/ws-router-io.adapter.ts
   - src/server/ws-router-misc.ts
   - src/server/ws-router-project.ts
   - src/server/ws-router-settings.ts

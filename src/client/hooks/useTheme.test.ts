@@ -15,7 +15,6 @@ function createFakeDomPort(overrides: Partial<DomPort> = {}): DomPort {
     getSearch: () => "",
     reload: () => { },
     getUserAgent: () => "",
-    isSecureContext: () => false,
     getInnerWidth: () => 0,
     getInnerHeight: () => 0,
     setBodyStyle: () => { },
@@ -30,11 +29,6 @@ function createFakeDomPort(overrides: Partial<DomPort> = {}): DomPort {
     hasTypeaheadMenuOpen: () => false,
     addWindowCaptureListener: () => () => { },
     addWindowCustomListener: () => () => { },
-    getHostname: () => "",
-    isServiceWorkerSupported: () => false,
-    isPushManagerSupported: () => false,
-    registerServiceWorker: () => Promise.reject(new Error("not supported")),
-    getReadyServiceWorkerRegistration: () => Promise.reject(new Error("not supported")),
     upsertHeadMeta(name: string, content: string) {
       headMeta.set(name, content)
     },
@@ -47,7 +41,7 @@ function createFakeDomPort(overrides: Partial<DomPort> = {}): DomPort {
     addWindowListenerWithOptions: () => () => { },
     isWebShareSupported: () => false,
     webShare: () => Promise.resolve(),
-    getBaseURI: () => "",
+    resolveUrl: (path: string) => path,
     triggerDownload: () => { },
     getCssVar: (_name: string, fallback: string) => fallback,
     measureTextWidth: () => null,

@@ -2,11 +2,11 @@ import { describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { AgentCoordinator } from "../agent"
+import { AgentCoordinator } from "../agent-coordinator"
 import { EventStore } from "../event-store"
 import { AsyncEventQueue } from "../test-helpers/async-event-queue"
 import { waitFor } from "../test-helpers/wait-for"
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 import { ClaudeLimitDetector, CodexLimitDetector } from "./limit-detector"
 import { ScheduleManager, type Clock } from "./schedule-manager"
 
@@ -120,7 +120,7 @@ describe("auto-continue end-to-end", () => {
       const acEventsAfterPropose = store.getAutoContinueEvents(chatId)
       expect(acEventsAfterPropose).toHaveLength(1)
       expect(acEventsAfterPropose[0].kind).toBe("auto_continue_proposed")
-      const proposed = acEventsAfterPropose[0] as Extract<AutoContinueEvent, { kind: "auto_continue_proposed" }>
+      const proposed = acEventsAfterPropose[0] as Extract<ChatAutomationEvent, { kind: "auto_continue_proposed" }>
       expect(proposed.tz).toBe("Asia/Saigon")
       const { scheduleId } = proposed
 
@@ -129,7 +129,7 @@ describe("auto-continue end-to-end", () => {
 
       const acEventsAfterAccept = store.getAutoContinueEvents(chatId)
       expect(acEventsAfterAccept).toHaveLength(2)
-      const accepted = acEventsAfterAccept[1] as Extract<AutoContinueEvent, { kind: "auto_continue_accepted" }>
+      const accepted = acEventsAfterAccept[1] as Extract<ChatAutomationEvent, { kind: "auto_continue_accepted" }>
       expect(accepted.kind).toBe("auto_continue_accepted")
       expect(accepted.scheduleId).toBe(scheduleId)
       expect(accepted.source).toBe("user")
@@ -144,7 +144,7 @@ describe("auto-continue end-to-end", () => {
       const acEventsAfterFire = store.getAutoContinueEvents(chatId)
       const firedEvent = acEventsAfterFire.find(
         (e) => e.kind === "auto_continue_fired"
-      ) as Extract<AutoContinueEvent, { kind: "auto_continue_fired" }> | undefined
+      ) as Extract<ChatAutomationEvent, { kind: "auto_continue_fired" }> | undefined
       expect(firedEvent).toBeDefined()
       expect(firedEvent!.scheduleId).toBe(scheduleId)
 

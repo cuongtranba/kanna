@@ -1,9 +1,8 @@
-import { type MouseEvent as ReactMouseEvent } from "react"
 import { Bell, BellOff, Flower, GitBranch, Menu, MoreHorizontal, PanelLeft, PanelRight, SquarePen, Terminal } from "lucide-react"
 import { ShareButton } from "../share/ShareButton"
 import { SharePopover } from "../share/SharePopover"
 import type { ShareSummary } from "../../../shared/session-share/types"
-import type { EditorOpenSettings, EditorPreset, OpenExternalAction } from "../../../shared/protocol"
+import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/protocol"
 import type { AgentProvider, ChatStateTimings, KannaStatus, ResolvedStackBinding } from "../../../shared/types"
 import { PeerWorktreeStrip } from "./PeerWorktreeStrip"
 import { Button } from "../ui/button"
@@ -51,19 +50,13 @@ function SessionSigil({
 }
 
 import { branchLabel as computeBranchLabel } from "../../lib/branchLabel"
+import { openContextMenuFromButton } from "../../lib/openContextMenuFromButton"
 import { OpenExternalSelect } from "../open-external-menu"
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "../ui/context-menu"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useFollowedSessionsStore, selectIsFollowing } from "../../stores/followedSessionsStore"
 import type { DomPort } from "../../ports/domPort"
 import { domAdapter } from "../../adapters/dom.adapter"
-
-function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>, dom: DomPort) {
-  event.preventDefault()
-  event.stopPropagation()
-  const rect = event.currentTarget.getBoundingClientRect()
-  dom.dispatchContextMenuEvent(event.currentTarget, rect.left + rect.width / 2, rect.bottom)
-}
 
 function NavbarOverflowMenu({
   showOnDesktop,
@@ -144,11 +137,6 @@ interface Props {
   rightSidebarPending?: boolean
   onOpenExternal?: (action: OpenExternalAction, editor?: EditorOpenSettings) => void
   openExternalPending?: boolean
-  editorPreset?: EditorPreset
-  editorCommandTemplate?: string
-  platform?: NodeJS.Platform
-  finderShortcut?: string[]
-  editorShortcut?: string[]
   terminalShortcut?: string[]
   rightSidebarShortcut?: string[]
   branchName?: string
@@ -186,11 +174,6 @@ export function ChatNavbar({
   rightSidebarPending = false,
   onOpenExternal,
   openExternalPending = false,
-  editorPreset = "cursor",
-  editorCommandTemplate,
-  platform = "darwin",
-  finderShortcut,
-  editorShortcut,
   terminalShortcut,
   rightSidebarShortcut,
   branchName,
@@ -215,7 +198,6 @@ export function ChatNavbar({
   const branchLabel = computeBranchLabel({ hasGitRepo, gitStatus, localPath, branchName, homeDir })
   const sharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.sharePopoverOpen)
   const setSharePopoverOpen = ChatTabScopedStore.useScopedStore((s) => s.setSharePopoverOpen)
-  const isMac = platform === "darwin"
 
   return (
     <CardHeader
@@ -349,11 +331,6 @@ export function ChatNavbar({
             {onOpenExternal ? (
               <div className="hidden py-0.5 md:block border border-border rounded-2xl">
                 <OpenExternalSelect
-                  isMac={isMac}
-                  editorPreset={editorPreset}
-                  editorCommandTemplate={editorCommandTemplate}
-                  finderShortcut={finderShortcut}
-                  editorShortcut={editorShortcut}
                   onOpenExternal={onOpenExternal}
                   pending={openExternalPending}
                 />

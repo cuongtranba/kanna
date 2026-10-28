@@ -2,7 +2,7 @@ import { useDraggable } from "@dnd-kit/core"
 import { SessionMark } from "../ui/session-mark"
 import { Columns2, Rows2, X } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
-import type { PaneLeaf, SplitPosition } from "../../lib/paneTree"
+import { activeTabIdOf, type PaneLeaf, type SplitPosition } from "../../lib/paneTree"
 import {
   chatDotBgClass,
   type ChatStatusIndicator,
@@ -69,7 +69,7 @@ export function PaneTabStrip({
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const hasAlignedRef = useRef(false)
-  const focusedTabId = pane.focusedTabId
+  const activeTabId = activeTabIdOf(pane)
 
   useEffect(() => {
     const active = scrollerRef.current?.querySelector<HTMLElement>('[data-tab-active="true"]')
@@ -82,7 +82,7 @@ export function PaneTabStrip({
       inline: "nearest",
       ...(instant ? { behavior: "instant" as const } : {}),
     })
-  }, [focusedTabId])
+  }, [activeTabId])
 
   return (
     <div
@@ -103,7 +103,7 @@ export function PaneTabStrip({
         style={{ WebkitOverflowScrolling: "touch" }}
       >
         {pane.tabs.map((tab, index) => {
-          const isActive = pane.focusedTabId === tab.tabId
+          const isActive = activeTabId === tab.tabId
           const { label, icon: Icon, closable, indicator, sessionBadge } = describeTab(
             tab.target,
             presentation,
@@ -258,7 +258,7 @@ function PaneTab({
         </span>
       ) : null}
 
-      {showLabel ? <span className="min-w-0 flex-1 truncate text-xs">{label}</span> : null}
+      {showLabel ? <span data-flip-title className="min-w-0 flex-1 truncate text-xs">{label}</span> : null}
 
       {closable ? (
         <button

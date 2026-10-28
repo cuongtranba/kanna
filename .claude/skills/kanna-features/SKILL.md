@@ -5,8 +5,6 @@ description: Assorted Kanna product features and their load-bearing invariants �
 
 # Kanna features — boards, projects, uploads, packages, plugins
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ## Single-Session Import Live-Tail (KANNA_IMPORT_FOLLOW_*)
 
 `FollowedSessionRegistry` (`src/server/followed-session-registry.ts`) stat-polls
@@ -190,7 +188,7 @@ carry a big file. ADR `adr-20261008-tus-resumable-uploads`, component `c3-217`.
 `PackageUpdateManager` (`src/server/package-update-manager.ts`) manages update
 detection and application for three package kinds: `skill`, `claude-plugin`,
 `codex-plugin`. Component facts: c3-237 (server), c3-312 (shared types/parsers),
-c3-116 (PluginsSection UI). ADR: `adr-20260902-package-auto-update`.
+c3-116 (CliPluginPackagesSection UI). ADR: `adr-20260902-package-auto-update`.
 
 **Six load-bearing invariants — do not violate silently:**
 
@@ -248,7 +246,7 @@ nothing on an ordinary check.
 - New checker adapter in `src/server/*-update-checker.adapter.ts`
 - New applier adapter in `src/server/*-update-applier.adapter.ts`
 - Entry in `package-update-appliers-boot.adapter.ts`
-- UI changes in `PluginsSection.tsx`
+- UI changes in `CliPluginPackagesSection.tsx`
 - Entries in `.c3/eval/c3-237.yaml`, `.c3/eval/c3-312.yaml`, and `.c3/code-map.yaml`
 
 **`CODEX_BINARY_PATH`** is the only env var for this feature. Defaults to

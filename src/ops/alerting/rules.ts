@@ -1,5 +1,6 @@
 
 import {
+  AUTOCONTINUE_FIRED,
   COMPACTION_FINISHED,
   COMPACTION_POST_TOKENS,
   COMPACTION_PRE_TOKENS,
@@ -15,14 +16,21 @@ import {
   EVENT_LOOP_DELAY_P99_MS,
   NATS_SERVER_RESTARTS_TOTAL,
   HOST_MEMORY_TOTAL_BYTES,
+  LOOP_WAKE_RECOVERED,
+  MCP_SOURCE_ERRORS,
+  MCP_SOURCE_ITEMS,
   PACKAGE_APPLY_DURATION_MS,
   PACKAGE_APPLY_FINISHED,
   PACKAGE_CHECK_DURATION_MS,
   PACKAGE_CHECK_FINISHED,
   PACKAGE_UPDATE_RATE_LIMITED,
+  PROCESS_EXTERNAL_BYTES,
+  PROCESS_HEAP_TOTAL_BYTES,
+  PROCESS_HEAP_USED_BYTES,
   PROCESS_MEMORY_CEILING_BYTES,
   PROCESS_RSS_BYTES,
   PROCESS_RSS_RATIO,
+  QUEUED_MESSAGE_RECOVERED,
   SUBAGENT_RUN_FINISHED,
   SUBAGENT_RUN_DURATION_MS,
   SUBAGENT_TOKENS,
@@ -30,17 +38,25 @@ import {
   TURN_DURATION_MS,
   TURN_TOKENS,
 } from "../../server/observability"
-import { TICKET_SCOPE_ANNOTATION } from "./webhook-payload"
+import { PERF_ALERT_LABEL, TICKET_SCOPE_ANNOTATION, type AlertAnnotationKey } from "./webhook-payload"
 
 export function promMetricName(otelName: string): string {
   return otelName.replaceAll(".", "_")
 }
 
+function promCounter(otelName: string): string {
+  return `${promMetricName(otelName)}_total`
+}
+
+function promHistogram(otelName: string): string[] {
+  const base = promMetricName(otelName)
+  return [`${base}_bucket`, `${base}_count`, `${base}_sum`]
+}
+
 const rss = promMetricName(PROCESS_RSS_BYTES)
 const rssRatio = promMetricName(PROCESS_RSS_RATIO)
-const subagentRuns = `${promMetricName(SUBAGENT_RUN_FINISHED)}_total`
+const subagentRuns = promCounter(SUBAGENT_RUN_FINISHED)
 const turnDuration = promMetricName(TURN_DURATION_MS)
-const subagentDuration = promMetricName(SUBAGENT_RUN_DURATION_MS)
 
 export const EXPORTED_PROM_METRICS: readonly string[] = [
   rss,
@@ -52,43 +68,34 @@ export const EXPORTED_PROM_METRICS: readonly string[] = [
   promMetricName(EVENT_LOOP_DELAY_MAX_MS),
   promMetricName(CHILD_PROCESS_RSS_BYTES),
   promMetricName(CHILD_PROCESS_COUNT),
-  "kanna_process_heap_used_bytes",
-  "kanna_process_heap_total_bytes",
-  "kanna_process_external_bytes",
+  promMetricName(PROCESS_HEAP_USED_BYTES),
+  promMetricName(PROCESS_HEAP_TOTAL_BYTES),
+  promMetricName(PROCESS_EXTERNAL_BYTES),
   subagentRuns,
-  "kanna_autocontinue_fired_total",
-  "kanna_queued_message_recovered_total",
-  "kanna_loop_wake_recovered_total",
-  `${promMetricName(TURN_TOKENS)}_total`,
-  `${promMetricName(TURN_COST_USD)}_total`,
-  `${promMetricName(SUBAGENT_TOKENS)}_total`,
-  ...[turnDuration, subagentDuration].flatMap((base) => [
-    `${base}_bucket`,
-    `${base}_count`,
-    `${base}_sum`,
-  ]),
-  `${promMetricName(PACKAGE_CHECK_FINISHED)}_total`,
-  `${promMetricName(PACKAGE_APPLY_FINISHED)}_total`,
-  `${promMetricName(PACKAGE_UPDATE_RATE_LIMITED)}_total`,
-  ...[promMetricName(PACKAGE_CHECK_DURATION_MS), promMetricName(PACKAGE_APPLY_DURATION_MS)].flatMap((base) => [
-    `${base}_bucket`,
-    `${base}_count`,
-    `${base}_sum`,
-  ]),
-  `${promMetricName(COMPACTION_STARTED)}_total`,
-  `${promMetricName(COMPACTION_FINISHED)}_total`,
-  `${promMetricName(REMOTE_MCP_TOOL_CALL)}_total`,
-  `${promMetricName(BUS_PUBLISHED_TOTAL)}_total`,
-  `${promMetricName(BUS_HANDLER_ERRORS_TOTAL)}_total`,
-  "kanna_mcp_source_items_total",
-  "kanna_mcp_source_errors_total",
-  `${promMetricName(BUS_MIRROR_DROPPED_TOTAL)}_total`,
-  `${promMetricName(NATS_SERVER_RESTARTS_TOTAL)}_total`,
-  ...[promMetricName(COMPACTION_PRE_TOKENS), promMetricName(COMPACTION_POST_TOKENS)].flatMap((base) => [
-    `${base}_bucket`,
-    `${base}_count`,
-    `${base}_sum`,
-  ]),
+  promCounter(AUTOCONTINUE_FIRED),
+  promCounter(QUEUED_MESSAGE_RECOVERED),
+  promCounter(LOOP_WAKE_RECOVERED),
+  promCounter(TURN_TOKENS),
+  promCounter(TURN_COST_USD),
+  promCounter(SUBAGENT_TOKENS),
+  ...promHistogram(TURN_DURATION_MS),
+  ...promHistogram(SUBAGENT_RUN_DURATION_MS),
+  promCounter(PACKAGE_CHECK_FINISHED),
+  promCounter(PACKAGE_APPLY_FINISHED),
+  promCounter(PACKAGE_UPDATE_RATE_LIMITED),
+  ...promHistogram(PACKAGE_CHECK_DURATION_MS),
+  ...promHistogram(PACKAGE_APPLY_DURATION_MS),
+  promCounter(COMPACTION_STARTED),
+  promCounter(COMPACTION_FINISHED),
+  promCounter(REMOTE_MCP_TOOL_CALL),
+  promCounter(BUS_PUBLISHED_TOTAL),
+  promCounter(BUS_HANDLER_ERRORS_TOTAL),
+  promCounter(MCP_SOURCE_ITEMS),
+  promCounter(MCP_SOURCE_ERRORS),
+  promCounter(BUS_MIRROR_DROPPED_TOTAL),
+  promCounter(NATS_SERVER_RESTARTS_TOTAL),
+  ...promHistogram(COMPACTION_PRE_TOKENS),
+  ...promHistogram(COMPACTION_POST_TOKENS),
 ]
 
 export type TicketScope = "release" | "condition"
@@ -308,7 +315,7 @@ export interface GrafanaAlertRule {
   execErrState: "OK"
   for: string
   labels: Record<string, string>
-  annotations: Record<string, string>
+  annotations: Record<AlertAnnotationKey, string>
   isPaused: boolean
   orgID: number
   folderUID: string
@@ -360,7 +367,7 @@ export function buildRuleGroup(
       noDataState: "OK",
       execErrState: "OK",
       for: spec.forDuration,
-      labels: { kanna_alert: "perf", severity: spec.severity },
+      labels: { ...PERF_ALERT_LABEL, severity: spec.severity },
       annotations: {
         summary: spec.summary,
         description: spec.description,

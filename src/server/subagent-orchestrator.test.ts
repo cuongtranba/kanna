@@ -1727,6 +1727,52 @@ describe("SubagentOrchestrator", () => {
       expect(out2.status === "failed" && out2.errorCode).toBe("CAP_EXCEEDED")
     })
 
+    test("a CAP_EXCEEDED refusal is recorded as a visible failed run", async () => {
+      const { live } = makeLiveTurnSource()
+      const h = await setupHarness({ subagents: [makeSubagent({})], maxLive: 1 })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start() {
+          return { text: "turn1", live }
+        },
+      })
+      const delegate = (prompt: string) => h.orchestrator.delegateRun({
+        chatId: h.chatId,
+        parentUserMessageId: h.userMessageId,
+        parentRunId: null,
+        parentSubagentId: null,
+        ancestorSubagentIds: [],
+        depth: 0,
+        subagentId: "sa-1",
+        prompt,
+        keepAlive: true,
+        mentionedSubagentIds: [],
+      })
+      await delegate("first")
+      const refused = await delegate("second")
+      if (refused.status !== "failed") throw new Error("expected the second live session to be refused")
+
+      const run = h.store.getSubagentRuns(h.chatId)[refused.runId]
+      expect(run?.status).toBe("failed")
+      expect(run?.error?.code).toBe("CAP_EXCEEDED")
+    })
+
+    test("a provider error whose message is the word TIMEOUT stays a provider error", async () => {
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      h.mockProviderRun({
+        authReady: async () => true,
+        async start() {
+          throw new Error("TIMEOUT")
+        },
+      })
+      const outcome = await h.orchestrator.delegateRun({
+        chatId: h.chatId, parentUserMessageId: h.userMessageId, parentRunId: null,
+        parentSubagentId: null, ancestorSubagentIds: [], depth: 0,
+        subagentId: "sa-1", prompt: "x", mentionedSubagentIds: [],
+      })
+      expect(outcome.status === "failed" && outcome.errorCode).toBe("PROVIDER_ERROR")
+    })
+
     test("manual subagent without a matching mention fails MANUAL_ONLY", async () => {
       const h = await setupHarness({ subagents: [makeSubagent({ id: "sa-1", triggerMode: "manual" })] })
       const outcome = await h.orchestrator.delegateRun({

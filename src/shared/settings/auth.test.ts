@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import {
-  AUTH_DEFAULTS,
-  AUTH_SESSION_MAX_AGE_DAYS_MAX,
-  AUTH_SESSION_MAX_AGE_DAYS_MIN,
-  normalizeAuthSettings,
-} from "./auth"
+import { AUTH_DEFAULTS, AUTH_SESSION_MAX_AGE_DAYS_MAX, AUTH_SESSION_MAX_AGE_DAYS_MIN, normalizeAuthSettings } from "./auth"
 
 describe("normalizeAuthSettings", () => {
   test("returns defaults when value is undefined", () => {

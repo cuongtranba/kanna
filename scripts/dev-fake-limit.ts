@@ -1,5 +1,6 @@
 import process from "node:process"
 import { startKannaServer } from "../src/server/server"
+import { failingClaudeSession } from "../src/server/test-helpers/failing-claude-session"
 
 process.env.KANNA_RUNTIME_PROFILE = "dev"
 process.env.KANNA_DISABLE_SELF_UPDATE = "1"
@@ -11,7 +12,7 @@ const server = await startKannaServer({
   port,
   host: "127.0.0.1",
   agentOverrides: {
-    throwOnClaudeSessionStart: true,
+    startClaudeSession: failingClaudeSession(),
     claudeLimitDetector: {
       detect: (chatId) => ({
         chatId,

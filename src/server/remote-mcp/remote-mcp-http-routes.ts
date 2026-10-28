@@ -2,10 +2,9 @@ import type { AuthInfo, McpHttpHandler } from "@modelcontextprotocol/server"
 import { CLIENT_IP_HEADER, type RemoteMcpPrincipal } from "../auth-backend"
 import type { PasswordAuth } from "../better-auth.adapter"
 import { handleOAuthPageRequest } from "./oauth-page-routes"
-import { isRemoteMcpOAuthPath, REMOTE_MCP_PATH } from "./oauth-paths"
+import { isRemoteMcpOAuthPath, OAUTH_PAGE_PATHS, REMOTE_MCP_PATH, remoteMcpOriginOf } from "./oauth-paths"
 import type { RemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 
-const OAUTH_PAGE_PATHS: ReadonlySet<string> = new Set(["/oauth/login", "/oauth/consent"])
 const PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource"
 const UNAUTHORIZED_CODE = -32000
 
@@ -38,7 +37,7 @@ function toAuthInfo(principal: RemoteMcpPrincipal): AuthInfo {
 function unauthorized(resource: string | null): Response {
   const headers = new Headers()
   if (resource) {
-    const origin = resource.slice(0, resource.length - REMOTE_MCP_PATH.length)
+    const origin = remoteMcpOriginOf(resource)
     headers.set(
       "www-authenticate",
       `Bearer resource_metadata="${origin}${PROTECTED_RESOURCE_METADATA_PATH}${REMOTE_MCP_PATH}"`,

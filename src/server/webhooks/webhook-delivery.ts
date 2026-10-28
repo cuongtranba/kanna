@@ -1,11 +1,9 @@
 import type { InboundHandler } from "../../shared/inbound/handler"
-import { resolvePath, stringifyValue } from "../../shared/inbound/template"
 import type { WebhookConfig } from "../../shared/webhooks/types"
-import type { WebhookBody } from "../../shared/webhooks/template"
+import { jsonText, resolveJsonPath, type JsonValue } from "../../shared/json"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import {
   deliverInbound,
-  inboundScheduleId,
   type InboundDeliveryAgent,
   type InboundDeliveryStore,
 } from "../inbound/deliver-inbound"
@@ -15,10 +13,6 @@ export type WebhookDeliveryStore = InboundDeliveryStore
 export type WebhookDeliveryAgent = InboundDeliveryAgent
 
 export type WebhookDeliveryResult = { ok: true; chatId: string } | { ok: false; detail: string }
-
-export function webhookScheduleId(hookId: string, deliveryId: string): string {
-  return inboundScheduleId({ kind: "webhook", hookId, hookName: "" }, deliveryId)
-}
 
 export function webhookHandler(hook: WebhookConfig): InboundHandler {
   return {
@@ -33,9 +27,9 @@ export function webhookHandler(hook: WebhookConfig): InboundHandler {
   }
 }
 
-function pathValue(body: WebhookBody, path: string | undefined): string | null {
+function pathValue(body: JsonValue, path: string | undefined): string | null {
   if (!path) return null
-  const text = stringifyValue(resolvePath(body, path)).trim()
+  const text = jsonText(resolveJsonPath(body, path)).trim()
   return text.length > 0 ? text : null
 }
 
@@ -46,7 +40,7 @@ export async function deliverWebhook(
   inbox: InboxRegistry,
   hook: WebhookConfig,
   deliveryId: string,
-  body: WebhookBody,
+  body: JsonValue,
   at: number,
 ): Promise<WebhookDeliveryResult> {
   const result = await deliverInbound(store, agent, bus, inbox, {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import type { BeaconConfig } from "../shared/beacon-config"
 import {
+  applyBeaconSetters,
   BeaconValidationException,
   normalizeBeacons,
   updateBeacon,
@@ -143,5 +144,33 @@ describe("beacon alias", () => {
       [],
     )
     expect(loaded.map((beacon) => [beacon.id, beacon.alias])).toEqual([["b1", "shared"], ["b2", undefined]])
+  })
+})
+
+describe("applyBeaconSetters", () => {
+  const beacon: BeaconConfig = {
+    ...valid,
+    os: "linux",
+    scope: { ...DEFAULT_BEACON_SCOPE, trustedScriptHashes: ["old"] },
+  }
+
+  test("a patch carrying several ops applies every one instead of only the first", () => {
+    const [next] = applyBeaconSetters([beacon], {
+      setEnabled: { id: "b1", enabled: false },
+      addTrustedScript: { id: "b1", hash: "new" },
+      removeTrustedScript: { id: "b1", hash: "old" },
+    })
+    expect(next?.enabled).toBe(false)
+    expect(next?.scope.trustedScriptHashes).toEqual(["new"])
+  })
+
+  test("adding a hash the beacon already trusts leaves the beacon untouched", () => {
+    const [next] = applyBeaconSetters([beacon], { addTrustedScript: { id: "b1", hash: "old" } })
+    expect(next).toBe(beacon)
+  })
+
+  test("an op naming another beacon leaves this one untouched", () => {
+    const [next] = applyBeaconSetters([beacon], { setEnabled: { id: "other", enabled: false } })
+    expect(next).toBe(beacon)
   })
 })

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { useInboxStore } from "../stores/inboxStore"
-import { SidebarUtilityNav } from "./SidebarUtilityNav"
+import { SidebarUtilityNav, isUtilityRoute } from "./SidebarUtilityNav"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"
 
 const NO_ITEMS: readonly PluginSidebarItem[] = []
@@ -13,15 +13,8 @@ function render(items: readonly PluginSidebarItem[] = NO_ITEMS, activeChatId: st
     <MemoryRouter>
       <SidebarUtilityNav
         activeChatId={activeChatId}
-        navigate={() => {}}
         onClose={() => {}}
-        workflowsButtonClass=""
-        isInboxActive={false}
-        isCronJobsActive={false}
-        isWebhooksActive={false}
-        isSettingsActive={false}
-        statusDotClass=""
-        statusLabel="Connected"
+        connectionStatus="connected"
         pluginItems={items}
       />
     </MemoryRouter>,
@@ -43,15 +36,8 @@ describe("SidebarUtilityNav", () => {
     try {
       const { html, cleanup } = await renderClientMarkup(<MemoryRouter><SidebarUtilityNav
         activeChatId={null}
-        navigate={() => {}}
         onClose={() => {}}
-        workflowsButtonClass=""
-        isInboxActive={false}
-        isCronJobsActive={false}
-        isWebhooksActive={false}
-        isSettingsActive={false}
-        statusDotClass=""
-        statusLabel="Connected"
+        connectionStatus="connected"
         pluginItems={NO_ITEMS}
       /></MemoryRouter>)
       try {
@@ -76,5 +62,18 @@ describe("SidebarUtilityNav", () => {
     expect(html).toContain("plugin-sidebar-items")
     expect(html).toContain("Hello")
     expect(html).toContain("Workflows")
+  })
+})
+
+describe("isUtilityRoute", () => {
+  test("covers the home page and every utility section", () => {
+    for (const path of ["/", "/settings/general", "/workflows/chat-1", "/cron", "/webhooks", "/inbox/thread-1"]) {
+      expect(isUtilityRoute(path)).toBe(true)
+    }
+  })
+
+  test("does not treat chat or board pages as utility pages", () => {
+    expect(isUtilityRoute("/chat/chat-1")).toBe(false)
+    expect(isUtilityRoute("/boards/project-1")).toBe(false)
   })
 })

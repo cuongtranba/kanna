@@ -1,11 +1,13 @@
 
 import type { TranscriptEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
-import type { PendingToolSlots } from "./pending-tool-slot"
-import type { HarnessTurn } from "./harness-types"
+import { discardedToolResult, type PendingToolSlots } from "./pending-tool-slot"
+import {
+  interruptWithGrace,
+  type HarnessTurn,
+} from "./harness-types"
 import { logClaudeSteer } from "./claude-steer-log"
-import { discardedToolResult } from "./claude-sdk-queue"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 
 interface DrainingStreamsMap {
@@ -99,23 +101,13 @@ export async function cancelChat(
 
     const session = deps.claudeSessions.get(chatId)
     if (session?.selfWakeActive) {
-      session.selfWakeActive = false
-      if (session.hasBackgroundTasks()) {
-        session.backgroundTaskWakeSuppressed = true
-      }
-      session.cancelledResultPending += 1
+      session.cancelSelfWake()
       await deps.store.appendMessage(
         chatId,
         timestamped({ kind: "interrupted", hidden: options?.hideInterrupted }),
       )
       deps.emitStateChange(chatId)
-      try {
-        await Promise.race([
-          session.session.interrupt(),
-          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-        ])
-      } catch {
-      }
+      await interruptWithGrace(session.session)
     }
     return
   }
@@ -140,19 +132,12 @@ export async function cancelChat(
   deps.activeTurns.delete(chatId)
 
   if (active.provider === "claude") {
-    const sessionForWakeGate = deps.claudeSessions.get(chatId)
-    if (sessionForWakeGate && sessionForWakeGate.hasBackgroundTasks()) {
-      sessionForWakeGate.backgroundTaskWakeSuppressed = true
-    }
+    deps.claudeSessions.get(chatId)?.suppressBackgroundWake()
   }
 
   if (active.provider === "claude" && active.claudePromptSeq != null) {
     const session = deps.claudeSessions.get(chatId)
-    if (session) {
-      const idx = session.pendingPromptSeqs.indexOf(active.claudePromptSeq)
-      if (idx >= 0) session.pendingPromptSeqs.splice(idx, 1)
-      session.cancelledResultPending += 1
-    }
+    session?.cancelPrompt(active.claudePromptSeq)
   }
 
   deps.emitStateChange(chatId)
@@ -162,12 +147,6 @@ export async function cancelChat(
     activePromptSeq: active.claudePromptSeq ?? null,
   })
 
-  try {
-    await Promise.race([
-      active.turn.interrupt(),
-      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-    ])
-  } catch {
-  }
+  await interruptWithGrace(active.turn)
   active.turn.close()
 }

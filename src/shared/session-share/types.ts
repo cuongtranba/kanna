@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "../json"
+import type { JsonObject, JsonValue } from "../json"
 import type { TranscriptEntry } from "../transcript-types"
 
 export const CHAT_SNAPSHOT_VERSION = 2 as const
@@ -55,22 +55,6 @@ export type ShareError =
   | { kind: "revoked" }
   | { kind: "expired"; expiredAt: number }
   | { kind: "snapshot_read_failed"; message: string }
-
-const SHARE_ERROR_KINDS = new Set<string>([
-  "chat_not_found",
-  "snapshot_too_large",
-  "snapshot_write_failed",
-  "not_found",
-  "revoked",
-  "expired",
-  "snapshot_read_failed",
-])
-
-export function isShareError(value: JsonValue): value is ShareError {
-  if (!isJsonObject(value)) return false
-  const kind = value.kind
-  return typeof kind === "string" && SHARE_ERROR_KINDS.has(kind)
-}
 
 export interface ShareSummary {
   tokenId: string

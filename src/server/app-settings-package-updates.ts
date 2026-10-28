@@ -1,24 +1,24 @@
 
 import type { PackageUpdateSettings } from "../shared/types"
-import type { PackageKind } from "../shared/packages/types"
+import { isPackageKind, type PackageKind } from "../shared/packages/types"
 import {
   PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS,
   PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS,
   PACKAGE_UPDATE_SETTINGS_DEFAULTS,
 } from "../shared/types"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
-import { isPlainObject } from "../shared/settings/plain-object"
+import { isRecord } from "../shared/errors"
 
+const HOUR_MS = 3_600_000
+const DAY_MS = 24 * HOUR_MS
 
-const VALID_PACKAGE_KINDS = new Set<string>(["skill", "claude-plugin", "codex-plugin"])
-
-function isPackageKind(value: string): value is PackageKind {
-  return VALID_PACKAGE_KINDS.has(value)
+function describeIntervalMs(ms: number): string {
+  return ms % DAY_MS === 0 ? `${ms / DAY_MS}d` : `${ms / HOUR_MS}h`
 }
 
 export function normalizePackageUpdateSettings<T>(value: T, warnings: string[]): PackageUpdateSettings {
   if (value === undefined || value === null) return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) {
     warnings.push("packageUpdates must be an object")
     return { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS }
@@ -32,10 +32,10 @@ export function normalizePackageUpdateSettings<T>(value: T, warnings: string[]):
     if (typeof raw !== "number" || !Number.isInteger(raw) || raw <= 0) {
       warnings.push("packageUpdates.checkIntervalMs must be a positive integer")
     } else if (raw < PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS) {
-      warnings.push(`packageUpdates.checkIntervalMs ${raw} is below the 1h floor; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS}`)
+      warnings.push(`packageUpdates.checkIntervalMs ${raw} is below the ${describeIntervalMs(PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS)} floor; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS}`)
       checkIntervalMs = PACKAGE_UPDATE_CHECK_INTERVAL_MIN_MS
     } else if (raw > PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS) {
-      warnings.push(`packageUpdates.checkIntervalMs ${raw} exceeds the 30d ceiling; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS}`)
+      warnings.push(`packageUpdates.checkIntervalMs ${raw} exceeds the ${describeIntervalMs(PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS)} ceiling; clamped to ${PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS}`)
       checkIntervalMs = PACKAGE_UPDATE_CHECK_INTERVAL_MAX_MS
     } else {
       checkIntervalMs = raw

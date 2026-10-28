@@ -1,8 +1,7 @@
-import type { InboundHandling } from "../../shared/inbound/handler"
+import { decodeInboundModelChoice, inboundHandlerTarget, type InboundHandling } from "../../shared/inbound/handler"
 import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
 import type { WebhookInput, WebhookKind, WebhookMode, WebhookPatch, WebhookSlackInput } from "../../shared/webhooks/types"
 import { validateWebhookInput, validateWebhookModel } from "../../shared/webhooks/validate"
-import { decodeWebhookModel } from "./webhookTargets"
 
 export interface WebhookDraftFields {
   name: string
@@ -48,12 +47,12 @@ function slackInputOf(draft: WebhookDraftFields): WebhookSlackInput {
 
 export function buildWebhookInput(draft: WebhookDraftFields): WebhookInput {
   const mode = effectiveWebhookMode(draft)
-  const choice = webhookDraftStartsTurn(draft) ? decodeWebhookModel(draft.modelValue) : null
+  const choice = webhookDraftStartsTurn(draft) ? decodeInboundModelChoice(draft.modelValue) : null
   const base: WebhookInput = {
     name: draft.name,
     mode,
     template: draft.template,
-    ...(mode === "spawn" ? { projectId: draft.projectId } : { chatId: draft.chatId }),
+    ...inboundHandlerTarget(mode, draft.chatId, draft.projectId),
     ...(choice ? { provider: choice.provider, model: choice.model } : {}),
   }
   if (draft.kind === "slack") return { ...base, kind: "slack", slack: slackInputOf(draft) }

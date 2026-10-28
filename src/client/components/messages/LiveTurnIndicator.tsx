@@ -3,6 +3,7 @@ import { Brain } from "lucide-react"
 import type { LiveBlock } from "../../../shared/live-block"
 import { selectLiveBlock, useLiveBlockStore } from "../../stores/liveBlockStore"
 import { formatByteSize } from "../../lib/formatByteSize"
+import { toolIconByName } from "../../lib/toolPresentation"
 import { renderMarkdownBlocks, renderMarkdownWithCaret } from "../lexical/markdown/renderMessage"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { AnimatedShinyText } from "../ui/animated-shiny-text"
@@ -13,7 +14,7 @@ import type { DomPort, TimerPort } from "../../ports"
 import { closeOpenMarkup, splitParagraphs } from "./live-typewriter"
 import { ProcessingMessage } from "./ProcessingMessage"
 import { useLiveTypewriter, type LiveTypewriter } from "./useLiveTypewriter"
-import { LucideIconWrapper, MetaContent, MetaLabel, MetaRow, getToolIcon } from "./shared"
+import { LucideIconWrapper, MetaContent, MetaLabel, MetaRow } from "./shared"
 
 type LiveTextBlock = Extract<LiveBlock, { kind: "text" }>
 type LiveThinkingBlock = Extract<LiveBlock, { kind: "thinking" }>
@@ -75,7 +76,7 @@ function LiveThinking({ block }: { block: LiveThinkingBlock }) {
     <div data-testid="live-block-thinking" className="px-0.5 w-full max-w-[70ch]">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Brain className="h-3.5 w-3.5" />
-        <AnimatedShinyText className="ml-0 font-medium tracking-wider" shimmerWidth={44}>
+        <AnimatedShinyText className="ml-0 font-medium tracking-wider">
           Thinking…
         </AnimatedShinyText>
       </div>
@@ -93,9 +94,9 @@ function LiveToolUse({ block }: { block: LiveToolUseBlock }) {
     <MetaRow className="ml-[1px] w-full">
       <MetaContent className="min-w-0 flex-1 gap-2 text-sm">
         <Spinner className="size-4.5 text-muted-icon" />
-        <LucideIconWrapper icon={getToolIcon(block.toolName)} className="size-4 shrink-0 text-muted-icon" />
+        <LucideIconWrapper icon={toolIconByName(block.toolName)} className="size-4 shrink-0 text-muted-icon" />
         <MetaLabel className="shrink-0">
-          <AnimatedShinyText shimmerWidth={44}>{block.toolName}</AnimatedShinyText>
+          <AnimatedShinyText>{block.toolName}</AnimatedShinyText>
         </MetaLabel>
         {block.subject ? (
           <TruncatedText tooltip={block.subject} inline className="min-w-0 text-muted-foreground">

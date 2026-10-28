@@ -1,71 +1,40 @@
 import { z } from "zod"
-import { readdir, readFile, lstat, stat } from "node:fs/promises"
-import path from "node:path"
-import { homedir } from "node:os"
+import { readFile, stat } from "node:fs/promises"
+import { errorMessage } from "../../shared/errors"
+import { currentHomeDir } from "../home-dir.adapter"
+import { resolveUserPath } from "../home-path"
+import { fail, ok } from "../kanna-mcp-tool"
 import type { ToolCallbackService } from "../tool-callback"
-import type { ToolHandlerContext, ToolHandlerResult } from "./tool-callback-shim"
-import { gatedToolCall } from "./tool-callback-shim"
+import { defineGatedTool } from "./tool-callback-shim"
+import { walkFiles } from "./walk-files.adapter"
 
-const InputSchema = z.object({
+const SHAPE = {
   path: z.string(),
   pattern: z.string(),
-})
-
-export type GrepInput = z.infer<typeof InputSchema>
-
-export interface GrepTool {
-  name: "grep"
-  schema: typeof InputSchema
-  handler: (input: GrepInput, ctx: ToolHandlerContext) => Promise<ToolHandlerResult>
 }
 
-function resolvePath(p: string, cwd: string): string {
-  if (p.startsWith("~")) return path.join(homedir(), p.slice(1).replace(/^\//, ""))
-  return path.resolve(cwd, p)
-}
-
-const SKIP_DIRS = new Set(["node_modules", ".git"])
 const MAX_LINES = 500
 const MAX_FILE_SIZE = 1_000_000
 
-async function grepDir(root: string, re: RegExp, results: string[]): Promise<void> {
-  if (results.length >= MAX_LINES) return
-  let entries
+async function readSearchableFile(filePath: string): Promise<string | null> {
   try {
-    entries = await readdir(root, { withFileTypes: true })
+    const fileStat = await stat(filePath)
+    if (fileStat.size > MAX_FILE_SIZE) return null
+    return await readFile(filePath, "utf8")
   } catch {
-    return
+    return null
   }
-  for (const entry of entries) {
-    if (results.length >= MAX_LINES) break
-    const fullPath = path.join(root, entry.name)
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue
-      try {
-        const st = await lstat(fullPath)
-        if (st.isSymbolicLink()) continue
-      } catch {
-        continue
-      }
-      await grepDir(fullPath, re, results)
-    } else {
-      try {
-        const fileStat = await stat(fullPath)
-        if (fileStat.size > MAX_FILE_SIZE) continue
-      } catch {
-        continue
-      }
-      let content: string
-      try {
-        content = await readFile(fullPath, "utf8")
-      } catch {
-        continue
-      }
-      const lines = content.split("\n")
-      for (let i = 0; i < lines.length && results.length < MAX_LINES; i++) {
-        if (re.test(lines[i])) {
-          results.push(`${fullPath}:${i + 1}: ${lines[i]}`)
-        }
+}
+
+async function grepDir(root: string, re: RegExp, results: string[]): Promise<void> {
+  for await (const filePath of walkFiles(root)) {
+    if (results.length >= MAX_LINES) return
+    const content = await readSearchableFile(filePath)
+    if (content === null) continue
+    const lines = content.split("\n")
+    for (let i = 0; i < lines.length && results.length < MAX_LINES; i++) {
+      if (re.test(lines[i])) {
+        results.push(`${filePath}:${i + 1}: ${lines[i]}`)
       }
     }
   }
@@ -78,47 +47,25 @@ async function grepWithTimeout(root: string, re: RegExp, results: string[]): Pro
   ])
 }
 
-export function createGrepTool(deps: { toolCallback: ToolCallbackService }): GrepTool {
-  return {
+export function createGrepTool(deps: { toolCallback: ToolCallbackService }) {
+  return defineGatedTool(deps, {
     name: "grep",
-    schema: InputSchema,
-    async handler(input, ctx) {
-      return gatedToolCall({
-        toolCallback: deps.toolCallback,
-        toolName: "mcp__kanna__grep",
-        ctx,
-        args: input,
-        formatAnswer: async () => {
-          let re: RegExp
-          try {
-            re = new RegExp(input.pattern)
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            return {
-              content: [{ type: "text" as const, text: `Invalid regex pattern: ${msg}` }],
-              isError: true,
-            }
-          }
-          const root = resolvePath(input.path, ctx.cwd)
-          const results: string[] = []
-          try {
-            await grepWithTimeout(root, re, results)
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err)
-            return {
-              content: [{ type: "text" as const, text: `grep error: ${msg}` }],
-              isError: true,
-            }
-          }
-          return {
-            content: [{ type: "text" as const, text: results.join("\n") }],
-          }
-        },
-        formatDeny: (reason) => ({
-          content: [{ type: "text" as const, text: `Denied: ${reason}` }],
-          isError: true,
-        }),
-      })
+    shape: SHAPE,
+    async run(input, ctx) {
+      let re: RegExp
+      try {
+        re = new RegExp(input.pattern)
+      } catch (err) {
+        return fail(`Invalid regex pattern: ${errorMessage(err)}`)
+      }
+      const root = resolveUserPath(input.path, ctx.cwd, currentHomeDir())
+      const results: string[] = []
+      try {
+        await grepWithTimeout(root, re, results)
+      } catch (err) {
+        return fail(`grep error: ${errorMessage(err)}`)
+      }
+      return ok(results.join("\n"))
     },
-  }
+  })
 }

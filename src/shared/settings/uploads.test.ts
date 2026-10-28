@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import {
-  UPLOAD_DEFAULTS,
-  UPLOAD_MAX_FILE_SIZE_MB_MAX,
-  UPLOAD_MAX_FILE_SIZE_MB_MIN,
-  normalizeUploadSettings,
-} from "./uploads"
+import { normalizeUploadSettings, UPLOAD_DEFAULTS, UPLOAD_MAX_FILE_SIZE_MB_MAX, UPLOAD_MAX_FILE_SIZE_MB_MIN } from "./uploads"
 
 describe("normalizeUploadSettings", () => {
   test("returns defaults when value is undefined", () => {

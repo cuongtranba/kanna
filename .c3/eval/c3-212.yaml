@@ -7,4 +7,5 @@ code:
   - src/shared/custom-providers.ts
   - src/shared/custom-providers.test.ts
   - src/shared/custom-provider-presets.ts
-  - src/server/llm-provider-store.adapter.ts
+  - src/shared/anthropic-base-url.ts
+  - src/shared/anthropic-base-url.test.ts

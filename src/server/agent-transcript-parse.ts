@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "../shared/types"
-import { normalizeClaudeStreamMessage } from "./agent"
+import { normalizeClaudeStreamMessage } from "./claude-message-normalizer"
 
 export function parseAgentTranscriptLines(lines: string[]): TranscriptEntry[] {
   const out: TranscriptEntry[] = []

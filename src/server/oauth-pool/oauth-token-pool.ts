@@ -17,6 +17,12 @@ export interface EphemeralLease {
   release(): void
 }
 
+type LimitedToken = OAuthTokenEntry & { status: "limited"; limitedUntil: number }
+
+function isLimitedNow(t: OAuthTokenEntry, now: number): t is LimitedToken {
+  return t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now
+}
+
 export class OAuthTokenPool {
   private readonly reservedBy = new Map<string, Set<string>>()
 
@@ -45,10 +51,13 @@ export class OAuthTokenPool {
     const owners = this.getOwners(t.id)
     const reentrant = reservedFor !== undefined && owners.has(reservedFor)
     if (!reentrant && owners.size >= this.tokenCap(t)) return false
-    if (t.status === "limited") {
-      if (t.limitedUntil !== null && t.limitedUntil > now) return false
-    }
-    return true
+    return !isLimitedNow(t, now)
+  }
+
+  private activate(t: OAuthTokenEntry): OAuthTokenEntry {
+    if (t.status !== "limited") return t
+    this.writeStatus(t.id, { status: "active", limitedUntil: null })
+    return { ...t, status: "active", limitedUntil: null }
   }
 
   pickActive(reservedFor?: string): OAuthTokenEntry | null {
@@ -61,13 +70,7 @@ export class OAuthTokenPool {
     if (candidates.length === 0) return null
     if (reservedFor !== undefined) {
       const owned = candidates.find((t) => this.getOwners(t.id).has(reservedFor))
-      if (owned) {
-        if (owned.status === "limited") {
-          this.writeStatus(owned.id, { status: "active", limitedUntil: null })
-          return { ...owned, status: "active", limitedUntil: null }
-        }
-        return owned
-      }
+      if (owned) return this.activate(owned)
     }
     candidates.sort((a, b) => {
       const oa = this.getOwners(a.id).size
@@ -75,15 +78,9 @@ export class OAuthTokenPool {
       if (oa !== ob) return oa - ob
       return (a.lastUsedAt ?? 0) - (b.lastUsedAt ?? 0)
     })
-    const picked = candidates[0]
-    if (picked.status === "limited") {
-      this.writeStatus(picked.id, { status: "active", limitedUntil: null })
-    }
-    const result: OAuthTokenEntry = picked.status === "limited"
-      ? { ...picked, status: "active", limitedUntil: null }
-      : picked
+    const result = this.activate(candidates[0])
     if (reservedFor !== undefined) {
-      this.removeOwnerExcept(reservedFor, result.id)
+      this.release(reservedFor, result.id)
       const owners = this.reservedBy.get(result.id) ?? new Set<string>()
       owners.add(reservedFor)
       this.reservedBy.set(result.id, owners)
@@ -102,24 +99,12 @@ export class OAuthTokenPool {
       release: () => {
         if (released) return
         released = true
-        this.releaseInternal(key)
+        this.release(key)
       },
     }
   }
 
-  release(reservedFor: string): void {
-    this.releaseInternal(reservedFor)
-  }
-
-  private releaseInternal(reservedFor: string): void {
-    for (const [tokenId, owners] of this.reservedBy) {
-      if (owners.delete(reservedFor) && owners.size === 0) {
-        this.reservedBy.delete(tokenId)
-      }
-    }
-  }
-
-  private removeOwnerExcept(reservedFor: string, exceptTokenId: string): void {
+  release(reservedFor: string, exceptTokenId?: string): void {
     for (const [tokenId, owners] of this.reservedBy) {
       if (tokenId === exceptTokenId) continue
       if (owners.delete(reservedFor) && owners.size === 0) {
@@ -175,7 +160,7 @@ export class OAuthTokenPool {
     const eligible = this.readTokens().filter((t) => t.status !== "disabled" && t.status !== "error")
     if (eligible.length === 0) return false
     const now = this.now()
-    return eligible.every((t) => t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now)
+    return eligible.every((t) => isLimitedNow(t, now))
   }
 
   describeUnavailability(reservedFor?: string): TokenUnavailability[] {
@@ -198,7 +183,7 @@ export class OAuthTokenPool {
         out.push({ ...base, reason: "reserved", byChatIds: [...owners], ownedBySelf })
         continue
       }
-      if (t.status === "limited" && t.limitedUntil !== null && t.limitedUntil > now) {
+      if (isLimitedNow(t, now)) {
         out.push({ ...base, reason: "limited", until: t.limitedUntil })
         continue
       }
@@ -211,8 +196,7 @@ export class OAuthTokenPool {
     const now = this.now()
     let earliest: number | null = null
     for (const t of this.readTokens()) {
-      if (t.status !== "limited") continue
-      if (t.limitedUntil === null || t.limitedUntil <= now) continue
+      if (!isLimitedNow(t, now)) continue
       if (earliest === null || t.limitedUntil < earliest) earliest = t.limitedUntil
     }
     return earliest

@@ -2,7 +2,9 @@ import type { HydratedImageGenerationToolCall } from "../../../shared/types"
 import { InlinePreviewCard } from "./file-preview/InlinePreviewCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import type { PreviewSource } from "./file-preview/types"
-import { ImageGenerationMessageStore } from "./ImageGenerationMessage.store"
+import { createToggleStore } from "../../lib/createToggleStore"
+
+const ImageGenerationMessageStore = createToggleStore("ImageGenerationMessage")
 
 interface Props {
   message: HydratedImageGenerationToolCall
@@ -13,8 +15,8 @@ function ImageGenerationMessageInner({ message }: Props) {
   const result = message.result
   const contentUrl = result?.contentUrl
   const hasFailed = message.isError || status === "failed"
-  const open = ImageGenerationMessageStore.useScopedStore((s) => s.open)
-  const setOpen = ImageGenerationMessageStore.useScopedStore((s) => s.setOpen)
+  const open = ImageGenerationMessageStore.useScopedStore((s) => s.value)
+  const setOpen = ImageGenerationMessageStore.useScopedStore((s) => s.set)
 
   if (!hasFailed && !result && status === "in_progress") {
     return (
@@ -64,7 +66,7 @@ function ImageGenerationMessageInner({ message }: Props) {
 
 export function ImageGenerationMessage({ message }: Props) {
   return (
-    <ImageGenerationMessageStore.Provider init={undefined}>
+    <ImageGenerationMessageStore.Provider init={false}>
       <ImageGenerationMessageInner message={message} />
     </ImageGenerationMessageStore.Provider>
   )

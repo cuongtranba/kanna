@@ -1,9 +1,8 @@
-import { describe, expect, test, beforeEach } from "vite-plus/test"
+import { describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
 import { CardSchemaPanel, type CardSchemaPanelSocket } from "./CardSchemaPanel"
-import { useCardSchemaStore } from "./CardSchemaPanel.store"
 import type { FieldDef } from "../../../shared/boards/types"
 import type { ClientCommand } from "../../../shared/protocol"
 
@@ -35,8 +34,6 @@ async function mount(fields: readonly FieldDef[] = FIELDS, fail?: string): Promi
     },
   }
 
-  useCardSchemaStore.getState().open(fields)
-
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
@@ -44,6 +41,7 @@ async function mount(fields: readonly FieldDef[] = FIELDS, fail?: string): Promi
     root.render(
       <CardSchemaPanel
         boardId="board-1"
+        fields={fields}
         socket={socket}
         onClose={() => {
           closes += 1
@@ -95,10 +93,6 @@ function savedFields(commands: ClientCommand[]): FieldDef[] | null {
   const update = commands.find((command) => (command as { type?: string }).type === "board.update")
   return (update as { cardFields?: FieldDef[] } | undefined)?.cardFields ?? null
 }
-
-beforeEach(() => {
-  useCardSchemaStore.getState().open([])
-})
 
 describe("CardSchemaPanel", () => {
   test("lists the board's fields with the id and kind each one is", async () => {

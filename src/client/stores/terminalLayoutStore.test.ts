@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "vite-plus/test"
-import { findTerminalOwner, getDefaultProjectTerminalLayout, useTerminalLayoutStore } from "./terminalLayoutStore"
+import { findTerminalOwner, DEFAULT_PROJECT_TERMINAL_LAYOUT, useTerminalLayoutStore } from "./terminalLayoutStore"
 
 const PROJECT_ID = "project-1"
 
@@ -11,7 +11,7 @@ describe("terminalLayoutStore", () => {
   test("adds the first terminal and shows the workspace", () => {
     useTerminalLayoutStore.getState().addTerminal(PROJECT_ID)
 
-    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? getDefaultProjectTerminalLayout()
+    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
     expect(layout.isVisible).toBe(true)
     expect(layout.terminals).toHaveLength(1)
     expect(layout.terminals[0]?.title).toBe("Terminal A")
@@ -33,7 +33,7 @@ describe("terminalLayoutStore", () => {
 
     useTerminalLayoutStore.getState().removeTerminal(PROJECT_ID, terminalId!)
 
-    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? getDefaultProjectTerminalLayout()
+    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
     expect(layout.isVisible).toBe(false)
     expect(layout.terminals).toHaveLength(0)
   })
@@ -44,7 +44,7 @@ describe("terminalLayoutStore", () => {
 
     useTerminalLayoutStore.getState().resetMainSizes(PROJECT_ID)
 
-    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? getDefaultProjectTerminalLayout()
+    const layout = useTerminalLayoutStore.getState().projects[PROJECT_ID] ?? DEFAULT_PROJECT_TERMINAL_LAYOUT
     expect(layout.mainSizes).toEqual([68, 32])
     expect(layout.isVisible).toBe(true)
     expect(layout.terminals).toHaveLength(1)

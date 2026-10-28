@@ -1,13 +1,13 @@
 
 import type { TranscriptEntry } from "../shared/types"
-import { AUTO_CONTINUE_EVENT_VERSION, type AutoContinueEvent } from "./auto-continue/events"
+import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent, type ChatAutomationEventBase } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
-import { deriveChatSchedules, deriveLoopState } from "./auto-continue/read-model"
+import { deriveChatSchedules, deriveLoopState, type LoopState } from "./auto-continue/read-model"
 import { log } from "../shared/log"
 import type { OAuthTokenEntry } from "../shared/types"
 import type { ActiveTurn, ClaudeSessionState } from "./claude-session-state"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 
 
 export const TOKEN_ROTATION_SCHEDULE_DELAY_MS = 100
@@ -30,8 +30,8 @@ interface ErrorHandlerOAuthPool {
 }
 
 interface ErrorHandlerStore {
-  getAutoContinueEvents(chatId: string): AutoContinueEvent[]
-  appendAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  getAutoContinueEvents(chatId: string): ChatAutomationEvent[]
+  appendAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
   recordTurnFailed(chatId: string, error: string): Promise<void>
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
 }
@@ -50,7 +50,7 @@ export interface SessionErrorHandlerDeps {
 
   resolveAutoResumeFor(chatId: string): boolean
 
-  emitAutoContinueEvent(event: AutoContinueEvent): Promise<void>
+  emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void>
 
   closeClaudeSession(
     chatId: string,
@@ -86,33 +86,37 @@ export async function handleLimitError(
   return handleLimitDetection(deps, chatId, detection)
 }
 
-export async function handleLimitDetection(
-  deps: SessionErrorHandlerDeps,
-  chatId: string,
-  detection: LimitDetection,
-): Promise<boolean> {
-  const autoContinueEvents = deps.store.getAutoContinueEvents(chatId)
-  const live = deriveChatSchedules(autoContinueEvents, chatId).liveScheduleId
-  if (live !== null) return true
+interface RotationFailure {
+  chatId: string
+  session: ClaudeSessionState | undefined
+  markToken: (pool: ErrorHandlerOAuthPool, tokenId: string) => void
+  logMessage: string
+  logFields: (tokenId: string | null) => object
+  tz: string
+  rotationResetAt: (now: number) => number
+  failureLabel: string
+  fallbackEvent: (base: ChatAutomationEventBase, now: number) => ChatAutomationEvent
+}
 
-  const loop = deriveLoopState(autoContinueEvents, chatId)
+function hasLiveSchedule(deps: SessionErrorHandlerDeps, chatId: string): boolean {
+  return deriveChatSchedules(deps.store.getAutoContinueEvents(chatId), chatId).liveScheduleId !== null
+}
 
-  const session = deps.claudeSessions.get(chatId)
-  const limitedTokenId = session?.activeTokenId ?? null
-  const slot = acquireRotationSlot(deps, limitedTokenId)
-  if (deps.oauthPool && limitedTokenId && slot.isFirst) {
-    deps.oauthPool.markLimited(limitedTokenId, detection.resetAt)
+async function rotateOrPropose(deps: SessionErrorHandlerDeps, failure: RotationFailure): Promise<boolean> {
+  const { chatId, session } = failure
+  const failedTokenId = session?.activeTokenId ?? null
+  const slot = acquireRotationSlot(deps, failedTokenId)
+  if (deps.oauthPool && failedTokenId && slot.isFirst) {
+    failure.markToken(deps.oauthPool, failedTokenId)
   }
   const rotationTarget = deps.oauthPool?.pickActive(chatId) ?? null
   const canRotate = rotationTarget !== null
-    && (!limitedTokenId || rotationTarget.id !== limitedTokenId)
+    && (!failedTokenId || rotationTarget.id !== failedTokenId)
 
   if (deps.oauthPool) {
-    log.info("[oauth-pool] rate-limit detected", {
+    log.info(failure.logMessage, {
       chatId,
-      markedLimitedTokenId: limitedTokenId,
-      resetAt: new Date(detection.resetAt).toISOString(),
-      tz: detection.tz,
+      ...failure.logFields(failedTokenId),
       nextTokenId: rotationTarget?.id ?? null,
       canRotate,
       herdSlot: slot,
@@ -121,51 +125,26 @@ export async function handleLimitDetection(
 
   const now = Date.now()
   const scheduleId = crypto.randomUUID()
-  const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
+  const base: ChatAutomationEventBase = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
-  const earliestPoolUnlimit = deps.oauthPool?.earliestUnlimit() ?? null
-  const waitUntil = earliestPoolUnlimit !== null
-    ? Math.min(detection.resetAt, earliestPoolUnlimit)
-    : detection.resetAt
-
-  let event: AutoContinueEvent
-  if (canRotate) {
-    event = {
-      ...base,
-      kind: "auto_continue_accepted",
-      scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-      tz: detection.tz,
-      source: "token_rotation",
-      resetAt: detection.resetAt,
-      detectedAt: now,
-    }
-  } else if (deps.resolveAutoResumeFor(chatId) || loop !== null) {
-    event = {
-      ...base,
-      kind: "auto_continue_accepted",
-      scheduledAt: waitUntil,
-      tz: detection.tz,
-      source: "auto_setting",
-      resetAt: waitUntil,
-      detectedAt: now,
-      ...(loop !== null ? { prompt: loop.prompt } : {}),
-    }
-  } else {
-    event = {
-      ...base,
-      kind: "auto_continue_proposed",
-      detectedAt: now,
-      resetAt: waitUntil,
-      tz: detection.tz,
-    }
-  }
+  const event: ChatAutomationEvent = canRotate
+    ? {
+        ...base,
+        kind: "auto_continue_accepted",
+        scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
+        tz: failure.tz,
+        source: "token_rotation",
+        resetAt: failure.rotationResetAt(now),
+        detectedAt: now,
+      }
+    : failure.fallbackEvent(base, now)
 
   await deps.emitAutoContinueEvent(event)
   if (canRotate && session) {
     deps.closeClaudeSession(chatId, session, { keepReservation: true })
     const active = deps.activeTurns.get(chatId)
     if (active) {
-      await deps.store.recordTurnFailed(chatId, "rate_limit")
+      await deps.store.recordTurnFailed(chatId, failure.failureLabel)
       deps.activeTurns.delete(chatId)
     }
   }
@@ -179,72 +158,84 @@ export async function handleLimitDetection(
   return true
 }
 
+export async function handleLimitDetection(
+  deps: SessionErrorHandlerDeps,
+  chatId: string,
+  detection: LimitDetection,
+): Promise<boolean> {
+  if (hasLiveSchedule(deps, chatId)) return true
+  const loop = deriveLoopState(deps.store.getAutoContinueEvents(chatId), chatId)
+  return rotateOrPropose(deps, {
+    chatId,
+    session: deps.claudeSessions.get(chatId),
+    markToken: (pool, tokenId) => { pool.markLimited(tokenId, detection.resetAt) },
+    logMessage: "[oauth-pool] rate-limit detected",
+    logFields: (tokenId) => ({
+      markedLimitedTokenId: tokenId,
+      resetAt: new Date(detection.resetAt).toISOString(),
+      tz: detection.tz,
+    }),
+    tz: detection.tz,
+    rotationResetAt: () => detection.resetAt,
+    failureLabel: "rate_limit",
+    fallbackEvent: (base, now) => limitWaitEvent(deps, detection, loop, base, now),
+  })
+}
+
+function limitWaitEvent(
+  deps: SessionErrorHandlerDeps,
+  detection: LimitDetection,
+  loop: LoopState | null,
+  base: ChatAutomationEventBase,
+  now: number,
+): ChatAutomationEvent {
+  const earliestPoolUnlimit = deps.oauthPool?.earliestUnlimit() ?? null
+  const waitUntil = earliestPoolUnlimit !== null
+    ? Math.min(detection.resetAt, earliestPoolUnlimit)
+    : detection.resetAt
+  if (deps.resolveAutoResumeFor(base.chatId) || loop !== null) {
+    return {
+      ...base,
+      kind: "auto_continue_accepted",
+      scheduledAt: waitUntil,
+      tz: detection.tz,
+      source: "auto_setting",
+      resetAt: waitUntil,
+      detectedAt: now,
+      ...(loop !== null ? { prompt: loop.prompt } : {}),
+    }
+  }
+  return {
+    ...base,
+    kind: "auto_continue_proposed",
+    detectedAt: now,
+    resetAt: waitUntil,
+    tz: detection.tz,
+  }
+}
+
 export async function handleAuthFailure(
   deps: SessionErrorHandlerDeps,
   session: ClaudeSessionState,
   detection: AuthErrorDetection,
 ): Promise<boolean> {
   const chatId = session.chatId
-  const live = deriveChatSchedules(deps.store.getAutoContinueEvents(chatId), chatId).liveScheduleId
-  if (live !== null) return true
-
-  const erroredTokenId = session.activeTokenId
-  const slot = acquireRotationSlot(deps, erroredTokenId)
-  if (deps.oauthPool && erroredTokenId && slot.isFirst) {
-    deps.oauthPool.markError(erroredTokenId, detection.reason)
-  }
-  const rotationTarget = deps.oauthPool?.pickActive(chatId) ?? null
-  const canRotate = rotationTarget !== null
-    && (!erroredTokenId || rotationTarget.id !== erroredTokenId)
-
-  if (deps.oauthPool) {
-    log.info("[oauth-pool] auth-error detected", {
-      chatId,
-      markedErrorTokenId: erroredTokenId,
-      reason: detection.reason,
-      nextTokenId: rotationTarget?.id ?? null,
-      canRotate,
-      herdSlot: slot,
-    })
-  }
-
-  const now = Date.now()
-  const scheduleId = crypto.randomUUID()
-  const base = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
-
-  const event: AutoContinueEvent = canRotate
-    ? {
-        ...base,
-        kind: "auto_continue_accepted",
-        scheduledAt: now + TOKEN_ROTATION_SCHEDULE_DELAY_MS + slot.extraDelayMs,
-        tz: "system",
-        source: "token_rotation",
-        resetAt: now,
-        detectedAt: now,
-      }
-    : {
-        ...base,
-        kind: "auto_continue_proposed",
-        detectedAt: now,
-        resetAt: now,
-        tz: "system",
-      }
-
-  await deps.emitAutoContinueEvent(event)
-  if (canRotate) {
-    deps.closeClaudeSession(chatId, session, { keepReservation: true })
-    const active = deps.activeTurns.get(chatId)
-    if (active) {
-      await deps.store.recordTurnFailed(chatId, "auth_error")
-      deps.activeTurns.delete(chatId)
-    }
-  }
-  if (!canRotate) {
-    await deps.store.appendMessage(chatId, timestamped({
-      kind: "auto_continue_prompt",
-      scheduleId,
-    }))
-  }
-
-  return true
+  if (hasLiveSchedule(deps, chatId)) return true
+  return rotateOrPropose(deps, {
+    chatId,
+    session,
+    markToken: (pool, tokenId) => { pool.markError(tokenId, detection.reason) },
+    logMessage: "[oauth-pool] auth-error detected",
+    logFields: (tokenId) => ({ markedErrorTokenId: tokenId, reason: detection.reason }),
+    tz: "system",
+    rotationResetAt: (now) => now,
+    failureLabel: "auth_error",
+    fallbackEvent: (base, now) => ({
+      ...base,
+      kind: "auto_continue_proposed",
+      detectedAt: now,
+      resetAt: now,
+      tz: "system",
+    }),
+  })
 }

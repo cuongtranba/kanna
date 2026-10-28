@@ -19,7 +19,7 @@ export function DrainingIndicator({ chatId, onStop }: DrainingIndicatorProps) {
         <div className="group/draining relative flex items-center gap-1.5">
           <div className={cn("flex items-center gap-1.5 group-hover/draining:opacity-0 transition-opacity", stopPending && "opacity-0")}>
             <Loader2 className="size-4.5 animate-spin text-muted-icon" />
-            <AnimatedShinyText className="ml-[1px] text-sm" shimmerWidth={44}>
+            <AnimatedShinyText className="ml-[1px] text-sm">
               Running...
             </AnimatedShinyText>
           </div>

@@ -18,11 +18,7 @@ export async function readPluginManifestText(sourceDir: string): Promise<string>
   return Bun.file(join(sourceDir, KANNA_PLUGIN_MANIFEST_FILENAME)).text()
 }
 
-export async function writePluginServerBundle(bundlePath: string, code: string): Promise<void> {
-  await Bun.write(bundlePath, code)
-}
-
-export async function writePluginClientBundle(bundlePath: string, code: string): Promise<void> {
+export async function writePluginBundle(bundlePath: string, code: string): Promise<void> {
   await Bun.write(bundlePath, code)
 }
 

@@ -1,7 +1,7 @@
 
 import { AGENT_PROVIDERS, type AgentProvider } from "../shared/core-types"
 import type { TranscriptEntry } from "../shared/types"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import type { ClaudeSessionState } from "./claude-session-state"
 import { isSessionInUse } from "./claude-session-state-queries"
 
@@ -18,7 +18,6 @@ export interface ClearClaudeContextDeps {
   startingTurns: { has(chatId: string): boolean }
   pendingTools: { has(chatId: string): boolean }
   hasLiveWorkflow: (chatId: string) => boolean
-  hasPendingBackgroundTask: (session: ClaudeSessionState, now: number) => boolean
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
 }
 

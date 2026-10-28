@@ -1,14 +1,10 @@
-import { describe, expect, test, vi } from "vite-plus/test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test } from "vite-plus/test"
+import { renderThemed } from "../../lib/testing/renderThemed"
 
-vi.mock("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
+import { ThinkingMessage } from "./ThinkingMessage"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
-const { ThinkingMessage } = await import("./ThinkingMessage")
-import type { ProcessedThinkingMessage } from "./types"
-
-function buildMessage(text: string): ProcessedThinkingMessage {
+function buildMessage(text: string): TranscriptMessageOf<"assistant_thinking"> {
   return {
     kind: "assistant_thinking",
     text,
@@ -19,7 +15,7 @@ function buildMessage(text: string): ProcessedThinkingMessage {
 
 describe("ThinkingMessage", () => {
   test("renders collapsed by default: shows label, hides reasoning body", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <ThinkingMessage message={buildMessage("private chain of thought")} />
     )
     expect(html).toContain("Thinking")
@@ -27,7 +23,7 @@ describe("ThinkingMessage", () => {
   })
 
   test("renders nothing for empty reasoning text", () => {
-    const html = renderToStaticMarkup(
+    const html = renderThemed(
       <ThinkingMessage message={buildMessage("   ")} />
     )
     expect(html).not.toContain("Thinking")

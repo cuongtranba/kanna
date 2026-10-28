@@ -14,14 +14,10 @@ import {
   type PushSource,
   type TransferPathOutcome,
 } from "./beacon-transfer-files"
+import { isPathInside } from "./path-containment"
 
 const WINDOWS_DRIVE = /^[A-Za-z]:/
 const MAX_NUMBERED_COPIES = 1000
-
-function isInside(parent: string, child: string): boolean {
-  const relative = path.relative(parent, child)
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
-}
 
 function isMissing(error: Error): boolean {
   return "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
@@ -81,21 +77,22 @@ async function firstFreeName(directory: string, fileName: string): Promise<strin
 async function resolveContained(
   root: string,
   relative: string,
-): Promise<TransferPathOutcome<{ lexical: string; kannaPath: string; present: boolean }>> {
-  if (relative === "" || isAbsoluteLike(relative)) return refuse("the path must be relative to the project root")
+  subject: string,
+): Promise<TransferPathOutcome<{ kannaPath: string; present: boolean }>> {
+  if (relative === "" || isAbsoluteLike(relative)) return refuse(`${subject} must be relative to the project root`)
   const lexical = path.resolve(root, relative)
-  if (lexical === root || !isInside(root, lexical)) return refuse("the path escapes the project root")
+  if (lexical === root || !isPathInside(root, lexical)) return refuse(`${subject} escapes the project root`)
   const tail = await resolveThroughExistingAncestor(lexical)
   const kannaPath = path.join(tail.existing, ...tail.rest)
-  if (!isInside(root, kannaPath)) return refuse("the path resolves outside the project root")
-  return { ok: true, lexical, kannaPath, present: tail.rest.length === 0 }
+  if (!isPathInside(root, kannaPath)) return refuse(`${subject} resolves outside the project root`)
+  return { ok: true, kannaPath, present: tail.rest.length === 0 }
 }
 
 async function resolvePullDestination(request: PullDestinationRequest): Promise<TransferPathOutcome<PullDestination>> {
   const root = await realpath(request.projectRoot)
   const explicit = request.dest !== undefined && request.dest !== ""
   const relative = explicit ? (request.dest ?? "") : defaultPullPath(request.beaconPath)
-  const resolved = await resolveContained(root, relative)
+  const resolved = await resolveContained(root, relative, "the path")
   if (!resolved.ok) return resolved
   if (resolved.present && (await stat(resolved.kannaPath)).isDirectory()) {
     return refuse("the destination is a directory; name the file to write")
@@ -111,20 +108,12 @@ async function resolvePullDestination(request: PullDestinationRequest): Promise<
 
 async function resolvePushSource(projectRoot: string, source: string): Promise<TransferPathOutcome<PushSource>> {
   const root = await realpath(projectRoot)
-  if (source === "" || isAbsoluteLike(source)) return refuse("source must be relative to the project root")
-  const lexical = path.resolve(root, source)
-  if (!isInside(root, lexical)) return refuse("source escapes the project root")
-  let real: string
-  try {
-    real = await realpath(lexical)
-  } catch (error) {
-    if (error instanceof Error && isMissing(error)) return refuse(`no such file: ${source}`)
-    throw error
-  }
-  if (!isInside(root, real)) return refuse("source resolves outside the project root")
-  const info = await stat(real)
+  const resolved = await resolveContained(root, source, "source")
+  if (!resolved.ok) return resolved
+  if (!resolved.present) return refuse(`no such file: ${source}`)
+  const info = await stat(resolved.kannaPath)
   if (!info.isFile()) return refuse(`source is not a regular file: ${source}`)
-  return { ok: true, kannaPath: real, workspacePath: workspaceRelative(root, real), size: info.size }
+  return { ok: true, kannaPath: resolved.kannaPath, workspacePath: workspaceRelative(root, resolved.kannaPath), size: info.size }
 }
 
 export async function hashFileStreaming(filePath: string, onPiece?: () => void): Promise<FileDigest> {

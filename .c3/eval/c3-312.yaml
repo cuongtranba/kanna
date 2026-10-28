@@ -14,3 +14,4 @@ code:
   - src/shared/packages/skill-update-classifier.test.ts
   - src/shared/packages/tag-order.ts
   - src/shared/packages/tag-order.test.ts
+  - src/shared/packages/installed-package.ts

@@ -1,3 +1,4 @@
+import { scanFenceBody } from "./markdown-fences"
 
 export interface MermaidFence {
   source: string
@@ -5,38 +6,6 @@ export interface MermaidFence {
 }
 
 export const MERMAID_FENCE_START_REGEX = /^[ \t]*(`{3,})[ \t]*mermaid[ \t]*$/i
-
-export const MERMAID_FENCE_END_REGEX = /^[ \t]*`{3,}[ \t]*$/
-
-export function closingFenceRegex(fenceLength: number): RegExp {
-  return new RegExp(`^[ \\t]*\`{${String(fenceLength)},}[ \\t]*$`)
-}
-
-export interface FenceBody {
-  source: string
-  lastLineIndex: number
-  closed: boolean
-}
-
-export function scanFenceBody(
-  lines: readonly string[],
-  startLineIndex: number,
-  fence: string,
-): FenceBody {
-  const endRegex = closingFenceRegex(fence.length)
-  const bodyLines: string[] = []
-  let lastLineIndex = startLineIndex
-
-  for (let i = startLineIndex + 1; i < lines.length; i++) {
-    const line = lines[i]
-    if (line === undefined) break
-    lastLineIndex = i
-    if (endRegex.test(line)) return { source: bodyLines.join("\n"), lastLineIndex, closed: true }
-    bodyLines.push(line)
-  }
-
-  return { source: bodyLines.join("\n"), lastLineIndex, closed: false }
-}
 
 export function extractMermaidFences(markdown: string): readonly MermaidFence[] {
   const lines = markdown.split("\n")

@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { LiveBlock } from "../../shared/live-block"
+import { omitKey } from "../lib/recordOps"
 
 interface LiveBlockState {
   byChat: Record<string, LiveBlock>
@@ -12,8 +13,7 @@ export const useLiveBlockStore = create<LiveBlockState>()((set) => ({
     set((state) => {
       if (block === null) {
         if (!(chatId in state.byChat)) return state
-        const { [chatId]: _removed, ...rest } = state.byChat
-        return { byChat: rest }
+        return { byChat: omitKey(state.byChat, chatId) }
       }
       return { byChat: { ...state.byChat, [chatId]: block } }
     }),

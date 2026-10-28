@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto"
 import type { AppSettingsManager } from "../app-settings"
 import type { EventStore } from "../event-store"
 import type { CloudflareTunnelEvent } from "./events"
-import { CLOUDFLARE_TUNNEL_EVENT_VERSION } from "./events"
+import { tunnelEnvelope } from "./events"
 import { TunnelLifecycle } from "./lifecycle"
-import { deriveChatTunnels } from "./read-model"
+import { deriveChatTunnels, isLiveTunnel } from "./read-model"
 import { TunnelManager } from "./tunnel-manager.adapter"
 
 export interface TunnelGatewayArgs {
@@ -33,7 +33,6 @@ export class TunnelGateway {
   private readonly store: EventStore
   private readonly broadcast: (chatId: string) => void
   private readonly now: () => number
-  private readonly proposedSourcePid = new Map<string, number | null>()
 
   constructor(args: TunnelGatewayArgs) {
     this.manager = args.manager
@@ -49,13 +48,10 @@ export class TunnelGateway {
     for (const chatId of chatIds) {
       const projection = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId)
       for (const record of Object.values(projection.tunnels)) {
-        if (record.state !== "proposed" && record.state !== "active") continue
+        if (!isLiveTunnel(record)) continue
         await this.persist({
-          v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+          ...tunnelEnvelope(chatId, record.tunnelId, this.now()),
           kind: "tunnel_stopped",
-          timestamp: this.now(),
-          chatId,
-          tunnelId: record.tunnelId,
           reason: "server_shutdown",
         })
       }
@@ -78,24 +74,17 @@ export class TunnelGateway {
 
     const tunnelId = randomUUID()
     const sourcePid = args.sourcePid ?? null
-    this.proposedSourcePid.set(tunnelId, sourcePid)
     await this.persist({
-      v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+      ...tunnelEnvelope(args.chatId, tunnelId, this.now()),
       kind: "tunnel_proposed",
-      timestamp: this.now(),
-      chatId: args.chatId,
-      tunnelId,
       port: args.port,
       sourcePid,
     })
 
     if (snapshot.cloudflareTunnel.mode === "auto-expose") {
       await this.persist({
-        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        ...tunnelEnvelope(args.chatId, tunnelId, this.now()),
         kind: "tunnel_accepted",
-        timestamp: this.now(),
-        chatId: args.chatId,
-        tunnelId,
         source: "auto_setting",
       })
       await this.manager.start({ chatId: args.chatId, port: args.port, sourcePid, tunnelId })
@@ -109,7 +98,7 @@ export class TunnelGateway {
   private findLiveTunnelForPort(chatId: string, port: number): { tunnelId: string; port: number; url: string | null } | null {
     const projection = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId)
     for (const record of Object.values(projection.tunnels)) {
-      if ((record.state === "proposed" || record.state === "active") && record.port === port) {
+      if (isLiveTunnel(record) && record.port === port) {
         return { tunnelId: record.tunnelId, port: record.port, url: record.url }
       }
     }
@@ -117,33 +106,25 @@ export class TunnelGateway {
   }
 
   async accept(chatId: string, tunnelId: string): Promise<void> {
-    const sourcePid = this.proposedSourcePid.get(tunnelId) ?? null
     const proposedEvents = this.store.getTunnelEvents(chatId).filter((e: CloudflareTunnelEvent) => e.tunnelId === tunnelId)
     const proposed = proposedEvents.find((e: CloudflareTunnelEvent) => e.kind === "tunnel_proposed")
     if (!proposed || proposed.kind !== "tunnel_proposed") return
     await this.persist({
-      v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+      ...tunnelEnvelope(chatId, tunnelId, this.now()),
       kind: "tunnel_accepted",
-      timestamp: this.now(),
-      chatId,
-      tunnelId,
       source: "user",
     })
-    await this.manager.start({ chatId, port: proposed.port, sourcePid, tunnelId })
-    this.lifecycle.watch(tunnelId, sourcePid)
+    await this.manager.start({ chatId, port: proposed.port, sourcePid: proposed.sourcePid, tunnelId })
+    this.lifecycle.watch(tunnelId, proposed.sourcePid)
   }
 
   async stop(chatId: string, tunnelId: string): Promise<void> {
     this.lifecycle.unwatch(tunnelId)
     const record = deriveChatTunnels(this.store.getTunnelEvents(chatId), chatId).tunnels[tunnelId]
     if (record?.state === "proposed") {
-      this.proposedSourcePid.delete(tunnelId)
       await this.persist({
-        v: CLOUDFLARE_TUNNEL_EVENT_VERSION,
+        ...tunnelEnvelope(chatId, tunnelId, this.now()),
         kind: "tunnel_stopped",
-        timestamp: this.now(),
-        chatId,
-        tunnelId,
         reason: "user",
       })
       return

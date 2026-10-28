@@ -362,6 +362,21 @@ function makeFullRunForPush(over: Partial<WorkflowRun> = {}): WorkflowRun {
   }
 }
 
+describe("WorkflowsSectionWithDetail when the run is gone", () => {
+  test("a run whose detail is no longer available says so instead of silently closing the dialog", async () => {
+    const runRow = makeRun({ runId: "run-1", status: "completed" })
+    const getRunDetail = async () => null
+
+    const { container, cleanup } = await mountWithDetail({ runs: [runRow], getRunDetail })
+    const btn = container.querySelector<HTMLButtonElement>(`[data-testid="workflow-row:run-1"]`)!
+    await act(async () => { btn.click() })
+
+    expect(document.body.textContent ?? "").toContain("Run not found or no longer available.")
+
+    cleanup()
+  })
+})
+
 describe("WorkflowsSectionWithDetail re-fetch on snapshot push", () => {
   test("running row: snapshot push triggers a re-fetch and swaps detail without flashing 'loading'", async () => {
     const runRow = makeRun({ runId: "run-1", status: "running" })

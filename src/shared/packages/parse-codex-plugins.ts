@@ -1,13 +1,6 @@
-import { isJsonObject, type JsonValue } from "../json"
+import { isJsonObject, nonEmptyStringField, stringField, type JsonValue } from "../json"
+import { installedPackage } from "./installed-package"
 import type { InstalledPackage } from "./types"
-
-function asStringOrNull(value: JsonValue): string | null {
-  return typeof value === "string" && value ? value : null
-}
-
-function asString(value: JsonValue): string {
-  return typeof value === "string" ? value : ""
-}
 
 export interface CodexPluginAvailableEntry {
   id: string
@@ -22,30 +15,21 @@ function parseInstalledArray(
   for (const item of arr) {
     if (!isJsonObject(item)) continue
 
-    const id = asString(item.id)
+    const id = stringField(item, "id")
     if (!id) continue
     if (id.startsWith(".system")) continue
 
-    const version = asStringOrNull(item.version)
-    const installPath = asStringOrNull(item.installPath)
-    const installedAt = asStringOrNull(item.installedAt)
-    const updatedAt = asStringOrNull(item.updatedAt)
-
-    packages.push({
-      id: `codex-plugin:${id}`,
-      kind: "codex-plugin",
-      name: id,
-      source: id,
-      sourceUrl: null,
-      version,
-      revision: null,
-      installedAt,
-      updatedAt,
-      installPath,
-      versionLabel: version ?? null,
-      agents: [],
-      pinnedRef: null,
-    })
+    const version = nonEmptyStringField(item, "version")
+    packages.push(
+      installedPackage("codex-plugin", id, {
+        source: id,
+        version,
+        installedAt: nonEmptyStringField(item, "installedAt"),
+        updatedAt: nonEmptyStringField(item, "updatedAt"),
+        installPath: nonEmptyStringField(item, "installPath"),
+        versionLabel: version,
+      }),
+    )
   }
 
   return packages
@@ -73,10 +57,10 @@ export function parseCodexPluginAvailable(raw: JsonValue): Map<string, CodexPlug
 
   for (const item of available) {
     if (!isJsonObject(item)) continue
-    const id = asString(item.id)
+    const id = stringField(item, "id")
     if (!id) continue
     if (id.startsWith(".system")) continue
-    result.set(id, { id, version: asStringOrNull(item.version) })
+    result.set(id, { id, version: nonEmptyStringField(item, "version") })
   }
 
   return result

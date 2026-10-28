@@ -1,8 +1,8 @@
 import { CalendarClock } from "lucide-react"
-import type { ProcessedCronJobChangeMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedCronJobChangeMessage
+  message: TranscriptMessageOf<"cron_job_change">
 }
 
 export function CronJobChangeMessage({ message }: Props) {

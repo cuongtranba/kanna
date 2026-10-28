@@ -1,3 +1,4 @@
+import type { AgentAppSettingsView } from "./agent-app-settings-view"
 import type { ChatTaskStorePort } from "./kanna-mcp"
 
 import type { JsonValue } from "../shared/json"
@@ -14,7 +15,7 @@ import { resolveModelPrice, stripModelVariantSuffix } from "../shared/token-pric
 import type { ModelPrice } from "../shared/token-pricing"
 import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
-import { OAuthPoolUnavailableError } from "./oauth-errors"
+import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
@@ -90,7 +91,7 @@ export interface SpawnClaudeTurnDeps {
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   listOpenRouterModelsFn: (() => Promise<OpenRouterModel[]>) | null
   getSubagents: () => Subagent[]
-  getAppSettingsSnapshot: () => { globalPromptAppend?: string }
+  getAppSettingsSnapshot: () => Partial<Pick<AgentAppSettingsView, "globalPromptAppend">>
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
@@ -134,11 +135,9 @@ export async function spawnClaudeTurn(
     }
 
     deps.enforceClaudeSessionBudget(args.chatId)
-    const picked = endpoint ? null : (deps.oauthPool?.pickActive(args.chatId) ?? null)
-    if (!endpoint && deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
-      throw new OAuthPoolUnavailableError(deps.buildPoolUnavailableMessage(args.chatId, ""))
-    }
-    if (picked) deps.oauthPool!.markUsed(picked.id)
+    const picked = endpoint
+      ? null
+      : pickOAuthTokenOrRefuse(deps.oauthPool, args.chatId, () => deps.buildPoolUnavailableMessage(args.chatId, ""))
 
     let openrouterTurnPrice: ModelPrice | null = null
     let openrouterContextWindow: number | undefined
@@ -194,36 +193,28 @@ export async function spawnClaudeTurn(
         additionalDirectories: args.additionalDirectories,
         chatId: args.chatId,
         streamLiveBlocks: true,
-        tunnelGateway: deps.tunnelGateway,
         onToolRequest: args.onToolRequest,
         systemPromptAppend,
-        subagentOrchestrator: deps.subagentOrchestrator,
-        delegationContext,
-        setupLoop: delegationContext.depth === 0
-          ? (input) => deps.setupLoop(chatIdForCtx, input)
-          : undefined,
-        armCron: delegationContext.depth === 0
-          ? (command: string) => deps.armCron(chatIdForCtx, command)
-          : undefined,
-        updateCron: delegationContext.depth === 0 && deps.updateCron
-          ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
-          : undefined,
-        stopLoop: delegationContext.depth === 0
-          ? () => deps.stopLoop(chatIdForCtx, "goal_met")
-          : undefined,
-        resumeLoop: delegationContext.depth === 0
-          ? () => deps.resumeLoop(chatIdForCtx)
-          : undefined,
-        isLoopArmed: delegationContext.depth === 0
-          ? () => deps.isLoopArmed(chatIdForCtx) !== null
-          : undefined,
-        getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
-        isRunAlive: deps.isRunAlive,
-        chatTaskStore: deps.chatTaskStore,
-        boardRegistry: deps.boardRegistry,
-        inboxRegistry: delegationContext.depth === 0 ? deps.inboxRegistry : undefined,
-        beaconRegistry: deps.beaconRegistry,
-        getBeacons: deps.getBeacons,
+        isLoopArmed: () => deps.isLoopArmed(chatIdForCtx) !== null,
+        kannaMcp: {
+          tunnelGateway: deps.tunnelGateway,
+          subagentOrchestrator: deps.subagentOrchestrator,
+          delegationContext,
+          setupLoop: (input) => deps.setupLoop(chatIdForCtx, input),
+          armCron: (command: string) => deps.armCron(chatIdForCtx, command),
+          updateCron: deps.updateCron
+            ? (jobId, patch) => deps.updateCron!(chatIdForCtx, jobId, patch)
+            : undefined,
+          stopLoop: () => deps.stopLoop(chatIdForCtx, "goal_met"),
+          resumeLoop: () => deps.resumeLoop(chatIdForCtx),
+          getArmedLoop: (id) => toArmedLoopInfo(deps.isLoopArmed(id)),
+          isRunAlive: deps.isRunAlive,
+          chatTaskStore: deps.chatTaskStore,
+          boardRegistry: deps.boardRegistry,
+          inboxRegistry: deps.inboxRegistry,
+          beaconRegistry: deps.beaconRegistry,
+          getBeacons: deps.getBeacons,
+        },
         toolCallback: deps.toolCallback ?? undefined,
         chatPolicy: deps.resolveChatPolicy(args.chatId),
         customMcpServers: enabledMcpServers,
@@ -231,7 +222,7 @@ export async function spawnClaudeTurn(
         turnPrice: openrouterTurnPrice,
         costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
         contextWindowOverride: endpoint?.contextWindow ?? openrouterContextWindow,
-        onCompaction: delegationContext.depth === 0 ? deps.onCompaction : undefined,
+        onCompaction: deps.onCompaction,
       })
     } catch (err) {
       if (picked) deps.oauthPool?.release(args.chatId)

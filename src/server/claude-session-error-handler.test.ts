@@ -14,7 +14,7 @@ import {
 } from "./claude-session-error-handler"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn } from "./claude-session-state"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 
@@ -89,7 +89,7 @@ function makeLimitDetection(resetAt = Date.now() + 60_000): LimitDetection {
   return { chatId: "chat-1", resetAt, tz: "system", raw: {} }
 }
 
-function makeLoopArmed(chatId: string, prompt: string): AutoContinueEvent {
+function makeLoopArmed(chatId: string, prompt: string): ChatAutomationEvent {
   return {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "loop_armed",
@@ -102,7 +102,7 @@ function makeLoopArmed(chatId: string, prompt: string): AutoContinueEvent {
 }
 
 function makeDeps(overrides: Partial<SessionErrorHandlerDeps> = {}): SessionErrorHandlerDeps {
-  const emittedEvents: AutoContinueEvent[] = []
+  const emittedEvents: ChatAutomationEvent[] = []
   const appendedMessages: Array<{ chatId: string; entry: unknown }> = []
   const closedSessions: string[] = []
 
@@ -186,7 +186,7 @@ describe("handleLimitError", () => {
     const deps = makeDeps()
     const detection = makeLimitDetection()
     const detector: LimitDetector = { detect: () => detection }
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleLimitError(deps, "chat-1", detector, new Error("rate limited"))
@@ -217,7 +217,7 @@ describe("handleLimitDetection", () => {
         appendMessage: async () => {},
       },
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -227,7 +227,7 @@ describe("handleLimitDetection", () => {
 
   test("emits auto_continue_proposed when no pool and no auto-resume", async () => {
     const deps = makeDeps({ oauthPool: null, resolveAutoResumeFor: () => false })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -237,7 +237,7 @@ describe("handleLimitDetection", () => {
 
   test("emits auto_continue_accepted with source auto_setting when auto-resume is on", async () => {
     const deps = makeDeps({ oauthPool: null, resolveAutoResumeFor: () => true })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -252,7 +252,7 @@ describe("handleLimitDetection", () => {
   test("emits auto_continue_accepted with source token_rotation and closes session when pool can rotate", async () => {
     const session = makeSession({ chatId: "chat-1", activeTokenId: "tok-old" })
     const closedSessions: string[] = []
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const turnsFailed: string[] = []
 
     const deps = makeDeps({
@@ -346,7 +346,7 @@ describe("handleLimitDetection", () => {
         appendMessage: async () => {},
       },
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleLimitDetection(deps, "chat-1", makeLimitDetection(resetAt))
@@ -362,7 +362,7 @@ describe("handleLimitDetection", () => {
 
   test("unarmed + no rotation + autoResume off → still proposed (regression guard)", async () => {
     const deps = makeDeps({ oauthPool: null, resolveAutoResumeFor: () => false })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -387,7 +387,7 @@ describe("handleLimitDetection", () => {
         appendMessage: async () => {},
       },
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -410,7 +410,7 @@ describe("handleLimitDetection", () => {
         appendMessage: async () => {},
       },
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     await handleLimitDetection(deps, "chat-1", makeLimitDetection())
@@ -447,7 +447,7 @@ describe("handleAuthFailure", () => {
         appendMessage: async () => {},
       },
     })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     deps.emitAutoContinueEvent = async (ev) => { emitted.push(ev) }
 
     const result = await handleAuthFailure(deps, session, fakeDetection)
@@ -457,7 +457,7 @@ describe("handleAuthFailure", () => {
 
   test("emits auto_continue_proposed when pool cannot rotate", async () => {
     const session = makeSession({ chatId: "chat-1", activeTokenId: "tok-dead" })
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
     const deps = makeDeps({
       oauthPool: {
         markLimited: () => {},
@@ -476,7 +476,7 @@ describe("handleAuthFailure", () => {
   test("emits auto_continue_accepted with token_rotation and closes session when pool can rotate", async () => {
     const session = makeSession({ chatId: "chat-1", activeTokenId: "tok-dead" })
     const closedSessions: string[] = []
-    const emitted: AutoContinueEvent[] = []
+    const emitted: ChatAutomationEvent[] = []
 
     const deps = makeDeps({
       oauthPool: {

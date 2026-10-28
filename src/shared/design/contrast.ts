@@ -69,7 +69,3 @@ export function contrastRatio(l1: number, l2: number): number {
   const darker = Math.min(l1, l2)
   return (lighter + 0.05) / (darker + 0.05)
 }
-
-export function contrastBetween(fgLuminance: number, bgLuminance: number): number {
-  return contrastRatio(fgLuminance, bgLuminance)
-}

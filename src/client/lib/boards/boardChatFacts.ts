@@ -1,5 +1,6 @@
 import type { SidebarData } from "../../../shared/types"
 import type { CardChatFacts } from "./cardWorkSignal"
+import { allChatRows } from "../../../shared/sidebar-data"
 
 export interface BoardChatFacts extends CardChatFacts {
   title: string
@@ -8,12 +9,8 @@ export interface BoardChatFacts extends CardChatFacts {
 export const NO_BOARD_CHAT_FACTS: Readonly<Record<string, BoardChatFacts>> = {}
 
 export function buildBoardChatFacts(sidebarData: SidebarData): Record<string, BoardChatFacts> {
-  const rows = [...sidebarData.starredProjectGroups, ...sidebarData.projectGroups].flatMap(
-    (group) => [...group.chats, ...group.previewChats, ...group.olderChats],
-  )
-
   return Object.fromEntries(
-    rows.map((row) => [
+    allChatRows(sidebarData).map((row) => [
       row.chatId,
       {
         title: row.title,

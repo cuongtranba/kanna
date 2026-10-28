@@ -1,16 +1,13 @@
 
-import { describe, expect, test, vi } from "vite-plus/test"
+import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
 
-vi.mock("../../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
-
-const { renderMessageMarkdown, useRenderedMessage } = await import("./renderMessage")
+import { renderMessageMarkdown, useRenderedMessage } from "./renderMessage"
+import { TestThemeProvider } from "../../../lib/testing/TestThemeProvider"
 
 
 function render(text: string): string {
-  return renderToStaticMarkup(<div>{renderMessageMarkdown(text)}</div>)
+  return renderToStaticMarkup(<TestThemeProvider><div>{renderMessageMarkdown(text)}</div></TestThemeProvider>)
 }
 
 
@@ -126,7 +123,7 @@ describe("useRenderedMessage", () => {
       return <div>{node}</div>
     }
 
-    const hookHtml = renderToStaticMarkup(<TestComponent text="hello **world**" />)
+    const hookHtml = renderToStaticMarkup(<TestThemeProvider><TestComponent text="hello **world**" /></TestThemeProvider>)
     const directHtml = render("hello **world**")
 
     expect(hookHtml).toContain("hello")

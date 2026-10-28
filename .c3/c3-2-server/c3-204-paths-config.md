@@ -1,7 +1,7 @@
 ---
 id: c3-204
 c3-version: 4
-c3-seal: c7f4554b449d6f6fe110a42dc0fdd31825e6b2d51bb5de14de36272977934386
+c3-seal: 946d1e41b1477e4021cb6d4b97df49894758ad71f03be8fedbc172316163f40e
 title: paths-config
 type: component
 category: foundation
@@ -63,6 +63,7 @@ Owns the canonical mapping of data dir, JSONL event logs, snapshot files, settin
 | Machine identity helper | OUT | Stable per-machine id from data dir | c3-218 | src/server/paths.ts |
 | resolveSubagentRoots | OUT | Resolves workingDir + allowedPaths against parent cwd via injected realpath fn; rejects absolute paths, tilde, parent-escape (lexical + realpath); returns { cwd, allowedPaths } with canonical absolute roots | c3-210 | src/server/paths.ts |
 | paths-fs.adapter realpathAdapter | OUT | Sole node:fs realpath wrapper feeding resolveSubagentRoots; defensive fallback to input on errno | c3-204 | src/server/paths-fs.adapter.ts |
+| Path containment | OUT | isPathInside(root, candidate) and isInsideAny(roots, candidate) are the one containment predicate (a candidate equal to the root counts as inside); every caller (permission-gate, paths.ts, project-file-path.ts, the remote MCP file tools and the genui dataset reader among them) calls it instead of re-deriving relative-path checks | c3-226 | src/server/path-containment.ts |
 
 ## Change Safety
 

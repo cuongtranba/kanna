@@ -1,7 +1,5 @@
-import type { CommandOrigin } from "../shared/command-origin"
 import type { JsonObject } from "../shared/json"
 import { log } from "../shared/log"
-import type { AgentProvider, ModelOptions } from "../shared/types"
 
 
 export interface SendToStartingProfile {
@@ -19,17 +17,6 @@ export function logClaudeSteer(stage: string, details?: JsonObject) {
     stage,
     ...details,
   }))
-}
-
-export interface SendMessageOptions {
-  provider?: AgentProvider
-  model?: string
-  modelOptions?: ModelOptions
-  effort?: string
-  planMode?: boolean
-  autoContinue?: { scheduleId: string }
-  cronRun?: import("../shared/cron/types").CronRunTag
-  origin?: CommandOrigin
 }
 
 export function isSendToStartingProfilingEnabled() {

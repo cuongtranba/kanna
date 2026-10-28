@@ -1,11 +1,11 @@
 import { toError } from "../../../shared/errors"
-import type { ChatAttachment } from "../../../shared/types"
 import type { DomPort } from "../../ports/domPort"
 import type { HttpPort } from "../../ports/httpPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { fetchFileTextPreview } from "../../api/files"
+import { formatByteSize } from "../../lib/formatByteSize"
 
 export const TEXT_PREVIEW_LIMIT_BYTES = 1024 * 1024
 export const JSON_PREVIEW_LIMIT_BYTES = 256 * 1024
@@ -66,7 +66,14 @@ export interface TablePreviewData {
   truncatedColumns: boolean
 }
 
-export function classifyAttachmentPreview(attachment: ChatAttachment): AttachmentPreviewTarget {
+export interface FileDescriptor {
+  mimeType: string
+  displayName: string
+  relativePath?: string
+  size?: number
+}
+
+export function classifyAttachmentPreview(attachment: FileDescriptor): AttachmentPreviewTarget {
   const mimeType = attachment.mimeType.toLowerCase()
   const extension = getFileExtension(attachment.displayName)
 
@@ -77,7 +84,7 @@ export function classifyAttachmentPreview(attachment: ChatAttachment): Attachmen
     return { kind: "pdf", openInNewTab: false }
   }
   if (mimeType === "application/json") {
-    return attachment.size <= JSON_PREVIEW_LIMIT_BYTES
+    return (attachment.size ?? 0) <= JSON_PREVIEW_LIMIT_BYTES
       ? { kind: "json", openInNewTab: false }
       : { kind: "external", openInNewTab: true }
   }
@@ -130,7 +137,26 @@ export function friendlyMimeLabel(kind: AttachmentIconKind, mimeType?: string): 
   return FRIENDLY_MIME_BY_KIND[kind]
 }
 
-export function classifyAttachmentIcon(attachment: ChatAttachment): AttachmentIconKind {
+export interface FileDescription {
+  iconKind: AttachmentIconKind
+  friendlyType: string
+  sizeLabel: string | null
+}
+
+export function describeFile(file: FileDescriptor): FileDescription {
+  const iconKind = classifyAttachmentIcon(file)
+  return {
+    iconKind,
+    friendlyType: friendlyMimeLabel(iconKind, file.mimeType),
+    sizeLabel: file.size !== undefined && file.size > 0 ? formatByteSize(file.size) : null,
+  }
+}
+
+export function fileAriaLabel(verb: "Preview" | "Download", name: string, description: FileDescription): string {
+  return [verb, name, description.friendlyType, description.sizeLabel].filter((part): part is string => Boolean(part)).join(", ")
+}
+
+export function classifyAttachmentIcon(attachment: FileDescriptor): AttachmentIconKind {
   const mimeType = attachment.mimeType.toLowerCase()
   const extension = getFileExtension(attachment.displayName)
 
@@ -170,7 +196,7 @@ export async function fetchTextPreview(
     : null
 
   try {
-    return await fetchFileTextPreview(resolvePreviewUrl(url, dom), limitBytes, {
+    return await fetchFileTextPreview(dom.resolveUrl(url), limitBytes, {
       signal: controller?.signal,
       http: ports.http,
     })
@@ -219,26 +245,22 @@ function mimeEssence(mimeType: string) {
   return mimeType.split(";")[0]?.trim().toLowerCase() ?? ""
 }
 
-function attachmentExtensions(attachment: ChatAttachment): string[] {
-  return [getFileExtension(attachment.displayName), getFileExtension(attachment.relativePath)]
+function attachmentExtensions(attachment: FileDescriptor): string[] {
+  return [getFileExtension(attachment.displayName), getFileExtension(attachment.relativePath ?? "")]
 }
 
 const MARKDOWN_MIME_ESSENCES = new Set(["text/markdown", "text/x-markdown"])
 
-function isMarkdownAttachment(attachment: ChatAttachment): boolean {
+function isMarkdownAttachment(attachment: FileDescriptor): boolean {
   if (MARKDOWN_MIME_ESSENCES.has(mimeEssence(attachment.mimeType))) return true
   return attachmentExtensions(attachment).includes(".md")
 }
 
 const MERMAID_EXTENSIONS = new Set([".mmd", ".mermaid"])
 
-function isMermaidAttachment(attachment: ChatAttachment): boolean {
+function isMermaidAttachment(attachment: FileDescriptor): boolean {
   if (mimeEssence(attachment.mimeType) === "text/vnd.mermaid") return true
   return attachmentExtensions(attachment).some((ext) => MERMAID_EXTENSIONS.has(ext))
-}
-
-function resolvePreviewUrl(url: string, dom: DomPort) {
-  return new URL(url, dom.getBaseURI() || dom.getHref()).toString()
 }
 
 function isPreviewTimeout(error: Error) {

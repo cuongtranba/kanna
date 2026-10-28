@@ -1,26 +1,21 @@
+import { withScopedStore } from "../../lib/createScopedStore"
 import { useCallback, useRef, useEffect, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react"
 import { Check, CheckCheck, Pencil, CornerDownLeft, ChevronDown, Copy, Send } from "lucide-react"
-import type { ProcessedToolCall } from "./types"
+import type { HydratedToolCall } from "../../../shared/types"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { runDetached } from "../../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useTranscriptRenderOptions } from "./render-context"
-import { renderMarkdownDocument } from "../lexical/markdown/renderMessage"
+import { renderMarkdownBlocks } from "../lexical/markdown/renderMessage"
 import { ExitPlanModeMessageStore } from "./ExitPlanModeMessage.store"
-import type { ClipboardPort, TimerPort } from "../../ports"
-import { clipboardAdapter, timerAdapter } from "../../adapters"
-
-interface ExitPlanModeMessagePorts {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
+import { useCopyFeedback, type CopyFeedbackPorts } from "../../stores/copyFeedbackStore"
 
 interface Props {
-  message: Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
+  message: Extract<HydratedToolCall, { toolKind: "exit_plan_mode" }>
   onConfirm: (toolUseId: string, confirmed: boolean, clearContext?: boolean, message?: string) => Promise<void>
   isLatest: boolean
-  ports?: ExitPlanModeMessagePorts
+  ports?: CopyFeedbackPorts
 }
 
 export function useExitPlanModeResponding(toolId: string): boolean {
@@ -32,15 +27,12 @@ export function useExitPlanModeResponding(toolId: string): boolean {
 
 function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: Props) {
   const renderOptions = useTranscriptRenderOptions()
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
+  const { copied, copy } = useCopyFeedback(ports)
   const isComplete = Boolean(message.result)
   const expanded = ExitPlanModeMessageStore.useScopedStore((s) => s.expanded)
-  const copied = ExitPlanModeMessageStore.useScopedStore((s) => s.copied)
   const showEditInput = ExitPlanModeMessageStore.useScopedStore((s) => s.showEditInput)
   const editMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.editMessage)
   const setExpanded = ExitPlanModeMessageStore.useScopedStore((s) => s.setExpanded)
-  const setCopied = ExitPlanModeMessageStore.useScopedStore((s) => s.setCopied)
   const setEditMessage = ExitPlanModeMessageStore.useScopedStore((s) => s.setEditMessage)
   const openEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.openEdit)
   const cancelEdit = ExitPlanModeMessageStore.useScopedStore((s) => s.cancelEdit)
@@ -84,13 +76,10 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
     }
   }, [showEditInput])
 
-  const copyPlan = async () => {
+  const handleCopy = () => {
     if (!input?.plan) return
-    await clipboard.writeText(input.plan)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
+    runDetached("copy plan", copy(input.plan))
   }
-  const handleCopy = () => { runDetached("copy plan", copyPlan()) }
 
   const result = isComplete ? message.result : null
   const isDiscarded = result?.discarded === true
@@ -245,7 +234,7 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
           )}
           {input?.plan ? (
             <div className="prose prose-sm dark:prose-invert max-w-none">
-              {renderMarkdownDocument(input.plan)}
+              {renderMarkdownBlocks(input.plan)}
               <div className="mt-5" />
             </div>
           ) : (
@@ -259,10 +248,4 @@ function ExitPlanModeMessageInner({ message, onConfirm, isLatest, ports = {} }: 
   )
 }
 
-export function ExitPlanModeMessage({ message, onConfirm, isLatest, ports }: Props) {
-  return (
-    <ExitPlanModeMessageStore.Provider init={undefined}>
-      <ExitPlanModeMessageInner message={message} onConfirm={onConfirm} isLatest={isLatest} ports={ports} />
-    </ExitPlanModeMessageStore.Provider>
-  )
-}
+export const ExitPlanModeMessage = withScopedStore(ExitPlanModeMessageStore, ExitPlanModeMessageInner)

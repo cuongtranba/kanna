@@ -47,3 +47,5 @@ code:
   - src/shared/http-routes.ts
   - src/shared/http-routes.test.ts
   - src/ops/parity/http-route-inventory.test.ts
+  - src/shared/protocol.schema.ts
+  - src/shared/protocol.schema.test.ts

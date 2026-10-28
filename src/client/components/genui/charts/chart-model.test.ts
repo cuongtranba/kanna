@@ -86,6 +86,12 @@ test("a comparison is drawn as a muted dashed series and a single series gets no
   const spec = buildVChartSpec(compared, THEME)
   expect(compared.series.map((series) => [series.role, seriesColor(series, THEME)])).toEqual([["series", "s1"], ["compare", "muted"]])
   expect(spec.legends).toMatchObject({ visible: true })
+  expect(spec).toMatchObject({
+    data: [{ values: expect.arrayContaining([
+      expect.objectContaining({ series: "revenue", role: "series" }),
+      expect.objectContaining({ series: "revenue::compare", role: "compare" }),
+    ]) }],
+  })
 
   const single = buildVChartSpec(model({ chart: "line", metrics: ["revenue"], dimension: "month" }, SALES, { metrics: ["revenue"], groupBy: ["month"] }), THEME)
   expect(single.legends).toMatchObject({ visible: false })

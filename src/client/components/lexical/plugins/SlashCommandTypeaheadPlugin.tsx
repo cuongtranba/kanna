@@ -1,12 +1,10 @@
 import { useCallback, useMemo } from "react"
-import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { $createTextNode, $insertNodes, TextNode } from "lexical"
-import type { LexicalEditor } from "lexical"
 import {
   LexicalTypeaheadMenuPlugin,
   MenuOption,
 } from "@lexical/react/LexicalTypeaheadMenuPlugin"
-import type { MenuTextMatch, TriggerFn } from "@lexical/react/LexicalTypeaheadMenuPlugin"
 import { useSlashCommands } from "../../../hooks/useSlashCommands"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import { mergePluginCommands } from "../../../lib/plugin-slash-commands"
@@ -16,27 +14,13 @@ import {
 } from "../../../stores/pluginContributionsStore"
 import type { SlashCommand } from "../../../../shared/types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
-import { cn } from "../../../lib/utils"
 import { clampCommandDescription } from "../../../lib/formatters"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
 import { useTypeaheadHoverHighlight } from "./typeahead-hover-highlight"
+import { TypeaheadMenu, useRegexTypeaheadTrigger } from "./typeahead-menu"
 
 
 const SLASH_TRIGGER_RE = /(?:^|\s)(\/(\S*))$/
-
-function useSlashTrigger(): TriggerFn {
-  return useCallback((text: string, _editor: LexicalEditor): MenuTextMatch | null => {
-    const match = SLASH_TRIGGER_RE.exec(text)
-    if (match === null) return null
-    const leadOffset = match.index + (match[0].length - match[1].length)
-    return {
-      leadOffset,
-      matchingString: match[2] ?? "",
-      replaceableString: match[1],
-    }
-  }, [])
-}
-
 
 export class SlashCommandMenuOption extends MenuOption {
   readonly command: SlashCommand
@@ -97,6 +81,34 @@ export function $applySlashCommandSelection({
 }
 
 
+function SlashCommandRowContent({ cmd }: { cmd: SlashCommand }) {
+  return (
+    <>
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">
+          /{normalizeCommandName(cmd.name)}
+        </span>
+        {cmd.kind === "skill" ? (
+          <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-xs font-medium tracking-wide text-muted-foreground">
+            skill
+          </span>
+        ) : null}
+        {cmd.argumentHint ? (
+          <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
+            {cmd.argumentHint}
+          </span>
+        ) : null}
+      </div>
+      {cmd.description ? (
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
+          {clampCommandDescription(cmd.description)}
+        </span>
+      ) : null}
+    </>
+  )
+}
+
+
 export interface SlashCommandTypeaheadPluginProps {
   projectId: string | null
 }
@@ -111,7 +123,7 @@ export function SlashCommandTypeaheadPlugin({
   const slashCommands = useSlashCommands(projectId)
   const pluginCommandItems = usePluginContributionsStore(selectPluginCommandCenterItems)
 
-  const triggerFn = useSlashTrigger()
+  const triggerFn = useRegexTypeaheadTrigger(SLASH_TRIGGER_RE)
 
   const highlightOnPointerMove = useTypeaheadHoverHighlight()
 
@@ -124,10 +136,6 @@ export function SlashCommandTypeaheadPlugin({
     const filtered = filterCommands(merged.commands, query ?? "")
     return dedupeCommandsByName(filtered).map((cmd) => new SlashCommandMenuOption(cmd))
   }, [merged, query])
-
-  const onQueryChange = useCallback((matchingString: string | null) => {
-    setQuery(matchingString)
-  }, [setQuery])
 
   const onSelectOption = useCallback(
     (
@@ -163,68 +171,17 @@ export function SlashCommandTypeaheadPlugin({
       if (anchorElementRef.current == null) return null
       if (menuOptions.length === 0) return null
 
-      const handleOptionMouseDown = (
-        event: ReactMouseEvent<HTMLLIElement>,
-        option: SlashCommandMenuOption,
-      ) => {
-        event.preventDefault()
-        selectOptionAndCleanUp(option)
-      }
-
-      const handleOptionMouseMove = (
-        event: ReactMouseEvent<HTMLLIElement>,
-        index: number,
-      ) => {
-        highlightOnPointerMove(event, index, setHighlightedIndex)
-      }
-
       return (
-        <ul
-          role="listbox"
-          data-kanna-typeahead-menu="slash"
-          className="absolute bottom-full left-0 mb-2 w-full max-w-md md:max-w-xl max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md"
-        >
-          {menuOptions.map((option, i) => {
-            const isActive = i === selectedIndex
-            const cmd = option.command
-
-            return (
-              <li
-                key={option.key}
-                ref={option.setRefElement}
-                role="option"
-                aria-selected={isActive}
-                onMouseDown={(e) => handleOptionMouseDown(e, option)}
-                onMouseMove={(e) => handleOptionMouseMove(e, i)}
-                className={cn(
-                  "flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3",
-                  isActive && "bg-accent text-accent-foreground",
-                )}
-              >
-                <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">
-                    /{normalizeCommandName(cmd.name)}
-                  </span>
-                  {cmd.kind === "skill" ? (
-                    <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-xs font-medium tracking-wide text-muted-foreground">
-                      skill
-                    </span>
-                  ) : null}
-                  {cmd.argumentHint ? (
-                    <span className="shrink-0 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                      {cmd.argumentHint}
-                    </span>
-                  ) : null}
-                </div>
-                {cmd.description ? (
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:text-right">
-                    {clampCommandDescription(cmd.description)}
-                  </span>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
+        <TypeaheadMenu
+          kind="slash"
+          maxHeightClass="max-h-64"
+          rowClassName="flex flex-col gap-0.5 px-3 py-1.5 cursor-pointer text-sm sm:flex-row sm:items-center sm:gap-3"
+          options={menuOptions}
+          selectedIndex={selectedIndex}
+          onPick={selectOptionAndCleanUp}
+          onRowPointerMove={(event, index) => highlightOnPointerMove(event, index, setHighlightedIndex)}
+          renderRow={(option) => <SlashCommandRowContent cmd={option.command} />}
+        />
       )
     },
     [highlightOnPointerMove],
@@ -233,7 +190,7 @@ export function SlashCommandTypeaheadPlugin({
   return (
     <LexicalTypeaheadMenuPlugin<SlashCommandMenuOption>
       options={options}
-      onQueryChange={onQueryChange}
+      onQueryChange={setQuery}
       onSelectOption={onSelectOption}
       triggerFn={triggerFn}
       menuRenderFn={menuRenderFn}

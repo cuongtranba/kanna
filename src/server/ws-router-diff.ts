@@ -37,35 +37,58 @@ export async function handleDiffCommand(
 ): Promise<boolean> {
   const { resolvedDiffStore, resolveChatRepoPath, send, broadcastSnapshots } = deps
 
+  async function respondForRepo<R>(
+    chatId: string,
+    operation: (projectPath: string) => Promise<R>,
+    reply: (result: R) => ServerEnvelope,
+  ): Promise<R> {
+    const result = await operation(resolveChatRepoPath(chatId))
+    send(reply(result))
+    return result
+  }
+
+  async function readRepoCommand<R>(
+    chatId: string,
+    operation: (projectPath: string) => Promise<R>,
+    reply: (result: R) => ServerEnvelope,
+  ): Promise<true> {
+    await respondForRepo(chatId, operation, reply)
+    return true
+  }
+
+  async function runRepoCommand<R extends { snapshotChanged?: boolean }>(
+    chatId: string,
+    operation: (projectPath: string) => Promise<R>,
+    reply: (result: R) => ServerEnvelope,
+  ): Promise<true> {
+    const result = await respondForRepo(chatId, operation, reply)
+    if (result.snapshotChanged) {
+      void broadcastSnapshots()
+    }
+    return true
+  }
+
   switch (command.type) {
     case "chat.refreshDiffs": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const changed = await resolvedDiffStore.refreshSnapshot(repoPath)
+      const changed = await resolvedDiffStore.refreshSnapshot(resolveChatRepoPath(command.chatId))
       send(ackResult(id, command))
       if (changed) {
         void broadcastSnapshots()
       }
       return true
     }
-    case "chat.initGit": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.initializeGit({
-        projectPath: repoPath,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.getGitHubPublishInfo": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.getGitHubPublishInfo({
-        projectPath: repoPath,
-      })
-      send(ackResult(id, command, result))
-      return true
-    }
+    case "chat.initGit":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.initializeGit({ projectPath }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.getGitHubPublishInfo":
+      return readRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.getGitHubPublishInfo({ projectPath }),
+        (result) => ackResult(id, command, result),
+      )
     case "chat.checkGitHubRepoAvailability": {
       const result = await resolvedDiffStore.checkGitHubRepoAvailability({
         owner: command.owner,
@@ -74,136 +97,92 @@ export async function handleDiffCommand(
       send(ackResult(id, command, result))
       return true
     }
-    case "chat.publishToGitHub": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.publishToGitHub({
-        projectPath: repoPath,
-        owner: command.owner,
-        name: command.name,
-        visibility: command.visibility,
-        description: command.description,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.listBranches": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.listBranches({
-        projectPath: repoPath,
-      })
-      send(ackResult(id, command, result))
-      return true
-    }
-    case "chat.previewMergeBranch": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.previewMergeBranch({
-        projectPath: repoPath,
-        branch: command.branch,
-      })
-      send(ackResult(id, command, result))
-      return true
-    }
-    case "chat.mergeBranch": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.mergeBranch({
-        projectPath: repoPath,
-        branch: command.branch,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.checkoutBranch": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.checkoutBranch({
-        projectPath: repoPath,
-        branch: command.branch,
-        bringChanges: command.bringChanges,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.syncBranch": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.syncBranch({
-        projectPath: repoPath,
-        action: command.action,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.createBranch": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.createBranch({
-        projectPath: repoPath,
-        name: command.name,
-        baseBranchName: command.baseBranchName,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.generateCommitMessage": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.generateCommitMessage({
-        projectPath: repoPath,
-        paths: command.paths,
-      })
-      send(ackResult(id, command, result))
-      return true
-    }
-    case "chat.commitDiffs": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.commitFiles({
-        projectPath: repoPath,
-        paths: command.paths,
-        summary: command.summary,
-        description: command.description,
-        mode: command.mode,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.discardDiffFile": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.discardFile({
-        projectPath: repoPath,
-        path: command.path,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
-    case "chat.ignoreDiffFile": {
-      const repoPath = resolveChatRepoPath(command.chatId)
-      const result = await resolvedDiffStore.ignoreFile({
-        projectPath: repoPath,
-        path: command.path,
-      })
-      send(ackResult(id, command, result))
-      if (result.snapshotChanged) {
-        void broadcastSnapshots()
-      }
-      return true
-    }
+    case "chat.publishToGitHub":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.publishToGitHub({
+          projectPath,
+          owner: command.owner,
+          name: command.name,
+          visibility: command.visibility,
+          description: command.description,
+        }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.listBranches":
+      return readRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.listBranches({ projectPath }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.previewMergeBranch":
+      return readRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.previewMergeBranch({ projectPath, branch: command.branch }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.mergeBranch":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.mergeBranch({ projectPath, branch: command.branch }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.checkoutBranch":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.checkoutBranch({
+          projectPath,
+          branch: command.branch,
+          bringChanges: command.bringChanges,
+        }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.syncBranch":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.syncBranch({ projectPath, action: command.action }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.createBranch":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.createBranch({
+          projectPath,
+          name: command.name,
+          baseBranchName: command.baseBranchName,
+        }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.generateCommitMessage":
+      return readRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.generateCommitMessage({ projectPath, paths: command.paths }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.commitDiffs":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.commitFiles({
+          projectPath,
+          paths: command.paths,
+          summary: command.summary,
+          description: command.description,
+          mode: command.mode,
+        }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.discardDiffFile":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.discardFile({ projectPath, path: command.path }),
+        (result) => ackResult(id, command, result),
+      )
+    case "chat.ignoreDiffFile":
+      return runRepoCommand(
+        command.chatId,
+        (projectPath) => resolvedDiffStore.ignoreFile({ projectPath, path: command.path }),
+        (result) => ackResult(id, command, result),
+      )
     default:
       return false
   }

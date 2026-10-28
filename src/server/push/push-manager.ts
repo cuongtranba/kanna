@@ -127,49 +127,30 @@ export class PushManager {
     userAgent: string
   }): Promise<{ id: string }> {
     const ts = this.now()
-    for (const existing of this.subscriptions.values()) {
-      if (existing.endpoint === args.subscription.endpoint) {
-        const updated: PushSubscriptionRecord = {
-          id: existing.id,
-          endpoint: existing.endpoint,
-          keys: args.subscription.keys,
-          label: args.label,
-          userAgent: args.userAgent,
-          createdAt: existing.createdAt,
-          lastSeenAt: ts,
-        }
-        const event: PushEvent = { kind: "subscription_added", ts, id: existing.id, record: updated }
-        this.applyEvent(event)
-        await this.store.appendPushEvent(event)
-        log.info("[kanna/push] subscribe: ok", {
-          id: existing.id,
-          endpoint: safeEndpointHost(existing.endpoint),
-          label: args.label,
-          renewed: true,
-        })
-        return { id: existing.id }
-      }
-    }
-    const id = crypto.randomUUID()
+    const existing = [...this.subscriptions.values()].find((candidate) => candidate.endpoint === args.subscription.endpoint)
+    const id = existing?.id ?? crypto.randomUUID()
     const record: PushSubscriptionRecord = {
       id,
       endpoint: args.subscription.endpoint,
       keys: args.subscription.keys,
       label: args.label,
       userAgent: args.userAgent,
-      createdAt: ts,
+      createdAt: existing?.createdAt ?? ts,
       lastSeenAt: ts,
     }
-    const event: PushEvent = { kind: "subscription_added", ts, id, record }
-    this.applyEvent(event)
-    await this.store.appendPushEvent(event)
+    await this.commit({ kind: "subscription_added", ts, id, record })
     log.info("[kanna/push] subscribe: ok", {
       id,
       endpoint: safeEndpointHost(record.endpoint),
       label: args.label,
-      renewed: false,
+      renewed: existing !== undefined,
     })
     return { id }
+  }
+
+  private async commit(event: PushEvent): Promise<void> {
+    this.applyEvent(event)
+    await this.store.appendPushEvent(event)
   }
 
   async removeSubscription(
@@ -178,8 +159,7 @@ export class PushManager {
   ): Promise<void> {
     if (!this.subscriptions.has(id)) return
     const event: PushEvent = { kind: "subscription_removed", ts: this.now(), id, reason }
-    this.applyEvent(event)
-    await this.store.appendPushEvent(event)
+    await this.commit(event)
   }
 
   async setProjectMute(localPath: string, muted: boolean): Promise<void> {
@@ -189,8 +169,7 @@ export class PushManager {
       localPath,
       muted,
     }
-    this.applyEvent(event)
-    await this.store.appendPushEvent(event)
+    await this.commit(event)
   }
 
   async setChatMute(chatId: string, muted: boolean): Promise<void> {
@@ -200,8 +179,7 @@ export class PushManager {
       chatId,
       muted,
     }
-    this.applyEvent(event)
-    await this.store.appendPushEvent(event)
+    await this.commit(event)
   }
 
   isChatMuted(chatId: string): boolean {
@@ -217,8 +195,7 @@ export class PushManager {
     if (lastWrite !== undefined && ts - lastWrite < SEEN_WRITE_INTERVAL_MS) return
     const event: PushEvent = { kind: "subscription_seen", ts, id }
     this.lastSeenWriteByDevice.set(id, ts)
-    this.applyEvent(event)
-    await this.store.appendPushEvent(event)
+    await this.commit(event)
   }
 
   async sendTest(id: string): Promise<void> {

@@ -11,11 +11,11 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { APP_NAME } from "../../shared/branding"
 import { Button } from "../components/ui/button"
 import { HoverHint } from "../components/ui/truncated-text"
-import { SidebarUtilityNav } from "./SidebarUtilityNav"
+import { SidebarUtilityNav, isUtilityRoute } from "./SidebarUtilityNav"
 import { usePluginContributionsStore, selectPluginSidebarItems } from "../stores/pluginContributionsStore"
 import { ImportSessionsDialog } from "../components/ImportSessionsDialog"
-import { getPathBasename } from "../lib/formatters"
-import { cn, normalizeChatId } from "../lib/utils"
+import { fileNameOfPath } from "../lib/pathUtils"
+import { cn } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow, type SelectionGesture } from "../components/chat-ui/sidebar/ChatRow"
 import { SidebarBulkActionBar } from "../components/chat-ui/sidebar/SidebarBulkActionBar"
@@ -27,8 +27,9 @@ import { ArchivedChatsDialog } from "../components/chat-ui/sidebar/ArchivedChats
 import { createChatKey } from "../components/chat-ui/sidebar/sidebarPendingActions"
 import { runPendingAction } from "../stores/pendingActionsStore"
 import { getResolvedKeybindings } from "../lib/keybindings"
-import type { GitWorktree, KeybindingsSnapshot, SidebarData, SidebarChatRow, SidebarProjectGroup, StackBinding, UpdateSnapshot } from "../../shared/types"
+import type { KeybindingsSnapshot, SidebarData, SidebarChatRow, SidebarProjectGroup, StackBinding, UpdateSnapshot } from "../../shared/types"
 import type { SocketStatus } from "./socket"
+import type { SidebarActions } from "./useSidebarActions"
 import {
   getSidebarJumpTargetIndex,
   getSidebarNumberJumpHint,
@@ -55,6 +56,8 @@ import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { isMobileViewport } from "../lib/viewport"
+import { chatPath } from "../lib/paneTree"
+import { allProjectGroups } from "../../shared/sidebar-data"
 
 export { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, clampSidebarWidth }
 
@@ -76,34 +79,12 @@ interface KannaSidebarProps {
   onClose: () => void
   onCollapse: () => void
   onExpand: () => void
-  onCreateChat: (projectId: string) => Promise<void>
-  onForkChat: (chat: SidebarChatRow) => Promise<void>
   currentProjectId: string | null
   keybindings: KeybindingsSnapshot | null
-  onRenameChat: (chat: SidebarChatRow) => Promise<void>
-  onArchiveChat: (chat: SidebarChatRow) => Promise<void>
-  onOpenArchivedChat: (chatId: string) => Promise<void>
-  onDeleteChat: (chat: SidebarChatRow) => Promise<void>
-  onArchiveBulkChats: (chatIds: string[]) => Promise<void>
-  onDeleteBulkChats: (chatIds: string[]) => Promise<void>
+  actions: SidebarActions
   onEditChatPermissions?: (chatId: string) => void
-  onOpenAddProjectModal: () => void
   onImportClaudeSessions?: () => Promise<void>
   onImportClaudeSessionIds?: (sessionIds: string[]) => Promise<void>
-  onCopyPath: (localPath: string) => Promise<void>
-  onOpenExternalPath: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
-  onHideProject: (projectId: string) => Promise<void>
-  onDeleteProject: (projectId: string) => Promise<void>
-  onToggleStar: (projectId: string, starred: boolean) => Promise<void>
-  onTogglePinChat: (chatId: string, pinned: boolean) => Promise<void>
-  onSetProjectInstructions: (projectId: string, instructions: string) => Promise<void>
-  onReorderProjectGroups: (projectIds: string[]) => Promise<void>
-  onCreateStack: (title: string, projectIds: string[], instructions?: string) => Promise<void>
-  onRenameStack: (stackId: string, title: string) => Promise<void>
-  onSetStackInstructions: (stackId: string, instructions: string) => Promise<void>
-  onRemoveStack: (stackId: string) => Promise<void>
-  onCreateStackChat: (primaryProjectId: string, stackId: string, stackBindings: StackBinding[]) => Promise<void>
-  onListStackWorktrees: (projectId: string) => Promise<GitWorktree[]>
   editorLabel: string
   updateSnapshot: UpdateSnapshot | null
   ports?: KannaSidebarPorts
@@ -120,38 +101,41 @@ function KannaSidebarImpl({
   onClose,
   onCollapse,
   onExpand,
-  onCreateChat,
-  onForkChat,
   currentProjectId,
   keybindings,
-  onRenameChat,
-  onArchiveChat,
-  onOpenArchivedChat,
-  onDeleteChat,
-  onArchiveBulkChats,
-  onDeleteBulkChats,
+  actions,
   onEditChatPermissions,
-  onOpenAddProjectModal,
   onImportClaudeSessions,
   onImportClaudeSessionIds,
-  onCopyPath,
-  onOpenExternalPath,
-  onHideProject,
-  onDeleteProject,
-  onToggleStar,
-  onTogglePinChat,
-  onSetProjectInstructions,
-  onReorderProjectGroups,
-  onCreateStack,
-  onRenameStack,
-  onSetStackInstructions,
-  onRemoveStack,
-  onCreateStackChat,
-  onListStackWorktrees,
   editorLabel,
   updateSnapshot,
   ports = {},
 }: KannaSidebarProps) {
+  const {
+    onCreateChat,
+    onForkChat,
+    onRenameChat,
+    onArchiveChat,
+    onOpenArchivedChat,
+    onDeleteChat,
+    onArchiveBulkChats,
+    onDeleteBulkChats,
+    onOpenAddProjectModal,
+    onCopyPath,
+    onOpenExternalPath,
+    onHideProject,
+    onDeleteProject,
+    onToggleStar,
+    onTogglePinChat,
+    onSetProjectInstructions,
+    onReorderProjectGroups,
+    onCreateStack,
+    onRenameStack,
+    onSetStackInstructions,
+    onRemoveStack,
+    onCreateStackChat,
+    onListStackWorktrees,
+  } = actions
   const dom = ports.dom ?? domAdapter
   const timer = ports.timer ?? timerAdapter
 
@@ -288,7 +272,7 @@ function KannaSidebarImpl({
   )
 
   const stackProjects = useMemo(
-    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: getPathBasename(group.localPath) })),
+    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: fileNameOfPath(group.localPath) })),
     [data.projectGroups]
   )
 
@@ -357,9 +341,14 @@ function KannaSidebarImpl({
     event.preventDefault()
   }, [nudgeSidebarWidth, setSidebarWidthAndPersist])
 
+  const allGroups = useMemo(
+    () => allProjectGroups({ starredProjectGroups: data.starredProjectGroups, projectGroups: data.projectGroups }),
+    [data.starredProjectGroups, data.projectGroups],
+  )
+
   const projectIdByPath = useMemo(
-    () => new Map([...data.starredProjectGroups, ...data.projectGroups].map((group) => [group.localPath, group.groupKey])),
-    [data.starredProjectGroups, data.projectGroups]
+    () => new Map(allGroups.map((group) => [group.localPath, group.groupKey])),
+    [allGroups]
   )
 
   const handleNewLocalChat = useCallback(async (localPath: string) => {
@@ -369,8 +358,8 @@ function KannaSidebarImpl({
 
   const activeVisibleCount = visibleChats.length
   const archivedProject = useMemo(
-    () => [...data.starredProjectGroups, ...data.projectGroups].find((group) => group.groupKey === archivedProjectId) ?? null,
-    [archivedProjectId, data.starredProjectGroups, data.projectGroups]
+    () => allGroups.find((group) => group.groupKey === archivedProjectId) ?? null,
+    [archivedProjectId, allGroups]
   )
 
   useEffect(() => {
@@ -378,16 +367,16 @@ function KannaSidebarImpl({
   }, [visibleChats])
 
   useEffect(() => {
-    reconcileSidebarGroups([...data.starredProjectGroups, ...data.projectGroups])
-  }, [data.starredProjectGroups, data.projectGroups, reconcileSidebarGroups])
+    reconcileSidebarGroups(allGroups)
+  }, [allGroups, reconcileSidebarGroups])
 
   const toggleSection = toggleSectionCollapsed
 
   const toggleExpandedGroup = toggleGroupExpanded
 
   const allSidebarGroupKeys = useMemo(
-    () => [...data.starredProjectGroups, ...data.projectGroups].map((g) => g.groupKey),
-    [data.starredProjectGroups, data.projectGroups]
+    () => allGroups.map((g) => g.groupKey),
+    [allGroups]
   )
   const allSectionsCollapsed = allSidebarGroupKeys.length > 0
     && allSidebarGroupKeys.every((key) => collapsedSections.has(key))
@@ -413,7 +402,7 @@ function KannaSidebarImpl({
       toggleSelect(chatId)
       return
     }
-    const activeEntry = visibleChats.find((entry) => normalizeChatId(entry.chat.chatId) === activeChatId)
+    const activeEntry = visibleChats.find((entry) => entry.chat.chatId === activeChatId)
     selectRange(visibleChats.map((entry) => entry.chat.chatId), chatId, activeEntry?.chat.chatId ?? null)
   }, [activeChatId, selectRange, toggleSelect, visibleChats])
 
@@ -435,7 +424,7 @@ function KannaSidebarImpl({
         shortcutHint={visibleIndex ? getSidebarNumberJumpHint(resolvedKeybindings, visibleIndex) : null}
         showShortcutHint={showNumberJumpHints}
         onSelectChat={(chatId) => {
-          navigate(`/chat/${chatId}`)
+          navigate(chatPath(chatId))
           onClose()
         }}
         onRenameChat={() => onRenameChat(chat)}
@@ -512,7 +501,7 @@ function KannaSidebarImpl({
 
       event.preventDefault()
       useComposerFocusStore.getState().requestComposerFocus(targetChat.chatId)
-      navigate(`/chat/${targetChat.chatId}`)
+      navigate(chatPath(targetChat.chatId))
       onClose()
     }
 
@@ -615,36 +604,29 @@ function KannaSidebarImpl({
     }
   }, [isImporting, onImportClaudeSessionIds, setIsImporting, setImportDialogOpen])
 
-  const hasVisibleChats = activeVisibleCount > 0
-  const isLocalProjectsActive = location.pathname === "/"
-  const isSettingsActive = location.pathname.startsWith("/settings")
-  const isWorkflowsActive = location.pathname.startsWith("/workflows")
-  const isInboxActive = location.pathname.startsWith("/inbox")
-  const isCronJobsActive = location.pathname.startsWith("/cron")
-  const isWebhooksActive = location.pathname.startsWith("/webhooks")
-  const isUtilityPageActive = isLocalProjectsActive || isSettingsActive || isWorkflowsActive || isCronJobsActive || isWebhooksActive || isInboxActive
-  const isConnecting = connectionStatus === "connecting"
-  let statusLabel: string
-  if (isConnecting) {
-    statusLabel = "Connecting"
-  } else if (connectionStatus === "connected") {
-    statusLabel = "Connected"
-  } else {
-    statusLabel = "Disconnected"
+  const projectSectionProps = {
+    editorLabel,
+    collapsedSections,
+    expandedGroups,
+    onToggleSection: toggleSection,
+    onToggleExpandedGroup: toggleExpandedGroup,
+    renderChatRow,
+    onShowArchivedProject: setArchivedProjectId,
+    onNewLocalChat: handleNewLocalChat,
+    onCopyPath,
+    onOpenExternalPath,
+    onHideProject,
+    onDeleteProject,
+    onOpenBoards: handleOpenBoards,
+    onToggleStar,
+    onSetInstructions: onSetProjectInstructions,
+    isConnected: connectionStatus === "connected",
   }
-  const statusDotClass = connectionStatus === "connected" ? "bg-success" : "bg-warning"
+  const hasVisibleChats = activeVisibleCount > 0
+  const isUtilityPageActive = isUtilityRoute(location.pathname)
   const showDevBadge = updateSnapshot
     ? updateSnapshot.latestVersion === `${updateSnapshot.currentVersion}-dev`
     : false
-  let workflowsButtonClass: string
-  if (!activeChatId) {
-    workflowsButtonClass = "opacity-60"
-  } else if (isWorkflowsActive) {
-    workflowsButtonClass = "bg-muted"
-  } else {
-    workflowsButtonClass = "hover:bg-muted/50"
-  }
-
   return (
     <>
       {!open && showMobileOpenButton && (
@@ -860,50 +842,18 @@ function KannaSidebarImpl({
             />
 
             {starredProjectGroupsWithoutStackChats.length > 0 && (
-              <>
-                <LocalProjectsSection
-                  projectGroups={starredProjectGroupsWithoutStackChats}
-                  heading="Starred"
-                  editorLabel={editorLabel}
-                  collapsedSections={collapsedSections}
-                  expandedGroups={expandedGroups}
-                  onToggleSection={toggleSection}
-                  onToggleExpandedGroup={toggleExpandedGroup}
-                  renderChatRow={renderChatRow}
-                  onShowArchivedProject={setArchivedProjectId}
-                  onNewLocalChat={handleNewLocalChat}
-                  onCopyPath={onCopyPath}
-                  onOpenExternalPath={onOpenExternalPath}
-                  onHideProject={onHideProject}
-                  onDeleteProject={onDeleteProject}
-                  onOpenBoards={handleOpenBoards}
-                  onToggleStar={onToggleStar}
-                  onSetInstructions={onSetProjectInstructions}
-                  isConnected={connectionStatus === "connected"}
-                />
-              </>
+              <LocalProjectsSection
+                {...projectSectionProps}
+                projectGroups={starredProjectGroupsWithoutStackChats}
+                heading="Starred"
+              />
             )}
 
             <LocalProjectsSection
+              {...projectSectionProps}
               projectGroups={projectGroupsWithoutStackChats}
               heading="Projects"
-              editorLabel={editorLabel}
               onReorderGroups={onReorderProjectGroups}
-              collapsedSections={collapsedSections}
-              expandedGroups={expandedGroups}
-              onToggleSection={toggleSection}
-              onToggleExpandedGroup={toggleExpandedGroup}
-              renderChatRow={renderChatRow}
-              onShowArchivedProject={setArchivedProjectId}
-              onNewLocalChat={handleNewLocalChat}
-              onCopyPath={onCopyPath}
-              onOpenExternalPath={onOpenExternalPath}
-              onHideProject={onHideProject}
-              onDeleteProject={onDeleteProject}
-              onOpenBoards={handleOpenBoards}
-              onToggleStar={onToggleStar}
-              onSetInstructions={onSetProjectInstructions}
-              isConnected={connectionStatus === "connected"}
             />
           </div>
         </div>
@@ -920,15 +870,8 @@ function KannaSidebarImpl({
 
         <SidebarUtilityNav
           activeChatId={activeChatId}
-          navigate={navigate}
           onClose={onClose}
-          workflowsButtonClass={workflowsButtonClass}
-          isInboxActive={isInboxActive}
-          isCronJobsActive={isCronJobsActive}
-          isWebhooksActive={isWebhooksActive}
-          isSettingsActive={isSettingsActive}
-          statusDotClass={statusDotClass}
-          statusLabel={statusLabel}
+          connectionStatus={connectionStatus}
           pluginItems={pluginSidebarItems}
         />
 

@@ -2,15 +2,12 @@ import { describe, expect, test } from "vite-plus/test"
 import {
   buildAttachmentHintText,
   buildPromptText,
-  buildSteeredMessageContent,
   isPromptTooLongMessage,
   isNoConversationFoundMessage,
   toSdkEffort,
   backgroundTaskIdsFromToolResult,
   backgroundTaskLaunchesFromToolResult,
-  mergeBackgroundTaskSnapshot,
   toolCallDescription,
-  positiveIntegerFromEnv,
   findLastUserMessageId,
 } from "./claude-prompt-helpers"
 import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
@@ -87,29 +84,6 @@ describe("buildPromptText", () => {
 })
 
 
-describe("buildSteeredMessageContent", () => {
-  test("prepends STEERED_MESSAGE_PREFIX to non-empty content", () => {
-    const result = buildSteeredMessageContent("keep going")
-    expect(result).toContain("<system-message>")
-    expect(result).toContain("keep going")
-    expect(result.indexOf("<system-message>")).toBeLessThan(result.indexOf("keep going"))
-  })
-
-  test("returns just the prefix for empty content", () => {
-    const result = buildSteeredMessageContent("")
-    expect(result).toContain("<system-message>")
-    expect(result).toContain("</system-message>")
-    const afterTag = result.slice(result.lastIndexOf("</system-message>") + "</system-message>".length)
-    expect(afterTag.trim()).toBe("")
-  })
-
-  test("returns just the prefix for whitespace-only content", () => {
-    const result = buildSteeredMessageContent("   ")
-    expect(result.indexOf("</system-message>")).toBeGreaterThan(0)
-    const afterTag = result.slice(result.lastIndexOf("</system-message>") + "</system-message>".length)
-    expect(afterTag.trim()).toBe("")
-  })
-})
 
 
 describe("isPromptTooLongMessage", () => {
@@ -270,55 +244,6 @@ describe("backgroundTaskLaunchesFromToolResult", () => {
 })
 
 
-describe("mergeBackgroundTaskSnapshot outputPath preservation", () => {
-  test("preserves outputPath from a previous entry when snapshot has no path", () => {
-    const previous = new Map([
-      ["t1", { taskType: null, description: null, startedAt: 100, outputPath: "/tmp/t1.out" }],
-    ])
-    const result = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 200)
-    expect(result.get("t1")?.outputPath).toBe("/tmp/t1.out")
-  })
-
-  test("new task not in previous gets null outputPath from snapshot alone", () => {
-    const result = mergeBackgroundTaskSnapshot(new Map(), ["t2"], undefined, 200)
-    expect(result.get("t2")?.outputPath).toBeNull()
-  })
-})
-
-
-describe("positiveIntegerFromEnv", () => {
-  test("returns fallback for undefined", () => {
-    expect(positiveIntegerFromEnv(undefined, 5)).toBe(5)
-  })
-
-  test("returns fallback for empty string", () => {
-    expect(positiveIntegerFromEnv("", 5)).toBe(5)
-    expect(positiveIntegerFromEnv("   ", 5)).toBe(5)
-  })
-
-  test("returns parsed value for valid positive integer", () => {
-    expect(positiveIntegerFromEnv("10", 5)).toBe(10)
-    expect(positiveIntegerFromEnv("1", 5)).toBe(1)
-  })
-
-  test("returns fallback for zero", () => {
-    expect(positiveIntegerFromEnv("0", 5)).toBe(5)
-  })
-
-  test("returns fallback for negative integer", () => {
-    expect(positiveIntegerFromEnv("-3", 5)).toBe(5)
-  })
-
-  test("returns fallback for non-integer float", () => {
-    expect(positiveIntegerFromEnv("3.14", 5)).toBe(5)
-  })
-
-  test("returns fallback for non-numeric string", () => {
-    expect(positiveIntegerFromEnv("abc", 5)).toBe(5)
-  })
-})
-
-
 describe("toolCallDescription", () => {
   test("bash: prefers description, falls back to command", () => {
     const withDescription = {
@@ -362,35 +287,6 @@ describe("toolCallDescription", () => {
   })
 })
 
-
-describe("mergeBackgroundTaskSnapshot", () => {
-  test("REPLACE semantics: absent ids drop, new ids appear with snapshot meta", () => {
-    const previous = new Map([
-      ["gone", { taskType: null, description: "stale", startedAt: 1, outputPath: null }],
-      ["kept", { taskType: null, description: null, startedAt: 2, outputPath: null }],
-    ])
-    const next = mergeBackgroundTaskSnapshot(
-      previous,
-      ["kept", "fresh"],
-      [
-        { id: "kept", taskType: "local_bash", description: "CI watch" },
-        { id: "fresh", taskType: "local_agent", description: null },
-      ],
-      1_000,
-    )
-    expect(next.has("gone")).toBe(false)
-    expect(next.get("kept")).toEqual({ taskType: "local_bash", description: "CI watch", startedAt: 2, outputPath: null })
-    expect(next.get("fresh")).toEqual({ taskType: "local_agent", description: null, startedAt: 1_000, outputPath: null })
-  })
-
-  test("snapshot without meta preserves previously learned labels", () => {
-    const previous = new Map([
-      ["t1", { taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null }],
-    ])
-    const next = mergeBackgroundTaskSnapshot(previous, ["t1"], undefined, 999)
-    expect(next.get("t1")).toEqual({ taskType: "local_bash", description: "Watch deploy", startedAt: 5, outputPath: null })
-  })
-})
 
 describe("findLastUserMessageId", () => {
   test("returns the most recent user_prompt id", () => {

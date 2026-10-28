@@ -2,10 +2,10 @@ import { CircleCheck, CircleSlash, Hand, TriangleAlert } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { TruncatedText } from "../ui/truncated-text"
-import type { ProcessedLoopDisarmedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedLoopDisarmedMessage
+  message: TranscriptMessageOf<"loop_disarmed">
 }
 
 interface DisarmCopy {
@@ -15,7 +15,7 @@ interface DisarmCopy {
   detail: string | null
 }
 
-const DISARM_COPY: Record<ProcessedLoopDisarmedMessage["reason"], DisarmCopy> = {
+const DISARM_COPY: Record<TranscriptMessageOf<"loop_disarmed">["reason"], DisarmCopy> = {
   user_send: {
     Icon: Hand,
     iconClass: "text-muted-foreground",

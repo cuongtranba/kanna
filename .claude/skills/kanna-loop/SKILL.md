@@ -11,16 +11,15 @@ on the main agent's Claude session. There is no timer-based `schedule_wakeup`
 anymore — it was removed when this pattern landed, superseding
 `adr-20260603-agent-self-scheduled-wake`.
 
-**The plan is the chat's durable task list, not a markdown file
-(adr-20260918-loop-tasks-replace-tracking-file).** A loop no longer creates,
+**The plan is the chat's durable task list, not a markdown file.** A loop no longer creates,
 reads, or writes `PROGRESS.md`. Its plan lives in event-sourced per-chat task
 state (`src/shared/chat-tasks/**`, folded at `event-store-tasks.ts`, on the
 `chat-tasks` log), read and written through the `mcp__kanna__task_*` tools. That
 state survives `/clear`, a server restart, and the transcript tail window — the
 three ways the old client-derived task card lost its rows. The markdown
 tracking tools (`query_tracking_file` / `append_tracking_row` /
-`replace_tracking_section`) remain for the NON-loop durable-document use in
-CLAUDE.md; the loop simply does not use them.
+`replace_tracking_section`) remain for the NON-loop durable-document use
+described in kanna-sessions; the loop simply does not use them.
 
 **Roles:**
 - **Main agent = orchestrator; stateless-in-context, stateful-in-tasks.**
@@ -99,7 +98,7 @@ task_update status completed then terminate"}). End this turn.
 
 Instead of writing the recurring prompt by hand, the user can say "set up a
 /loop with goal X, verify command Y" and the model calls
-`mcp__kanna__setup_loop({ goal, verify_command, chunk_hint?, tasks?, tracking_file? })`.
+`mcp__kanna__setup_loop({ goal, verify_command, chunk_hint?, tracking_file?, subagent_id?, workdir?, parallelism?, force? })`.
 The server owns the template so the prompt is deterministic.
 
 - **Pure validator** (`src/server/loop-template.ts`): rejects blank goal /
@@ -108,10 +107,10 @@ The server owns the template so the prompt is deterministic.
   surfaces the list as `isError`. (There is intentionally NO length cap on
   `goal` / `chunkHint`.)
 - **Seeds the task list, writes no file.** The arm path creates the plan as
-  tasks: `tasks?` seeds a plan written in advance
-  (`{ subject, needs?, worktree?, branch? }[]`), else `chunk_hint` seeds a
-  single task, else the plan starts empty and the orchestrator writes the first
-  step itself. `reconcileTrackingFile` / `assertTrackingFileSafe` /
+  tasks: the internal `tasks?` input (`{ subject, worktree?, branch? }[]`, no
+  `needs`; not an MCP parameter) seeds a plan in advance, else `chunk_hint`
+  seeds a single task, else the plan starts empty and the orchestrator writes
+  the first step itself. `reconcileTrackingFile` / `assertTrackingFileSafe` /
   `ensureTrackingFile` are gone from arming — there is no file to reconcile or
   clobber.
 - **`tracking_file` is a one-time import hint, kept for back-compat.** If it is
@@ -219,7 +218,7 @@ foundation phase degenerates to one worker.
 **The claim is atomic in one process** — `EventStore.decideChatTaskEvents` runs
 the read-decide-append inside the store's per-chat write chain, so two concurrent
 `task_claim` calls can never lease the same task. This replaces the old
-`withFileLock` read-modify-write, which existed only because the markdown tools
+file-lock read-modify-write, which existed only because the markdown tools
 had an `await` between reading and writing the file.
 
 **Reclaim is keyed on run liveness, NEVER on a wall clock** — this is the defect
@@ -392,7 +391,7 @@ armed and "Tasks" otherwise, showing a `completed/total` tally in the latter.
 ## Structured tracking-file access — kept for NON-loop use only
 
 The loop no longer reads or writes a tracking file, but the structured
-tracking-document tools remain for the durable-document use CLAUDE.md documents
+tracking-document tools remain for the durable-document use kanna-sessions documents
 (a repo-resident file the user reads, commits and diffs):
 
 - **Pure engine** (`src/shared/structured-doc/`): a format-agnostic port
@@ -400,8 +399,8 @@ tracking-document tools remain for the durable-document use CLAUDE.md documents
   an extension registry (`resolveStructuredDoc(ext)`). NO IO — allowed in
   `src/shared/**` under the side-effect seal.
 - **IO leaf** (`src/server/structured-doc-io.adapter.ts`): `readDoc` /
-  `writeDoc` byte IO only. `withFileLock` (`tracking-file-lock.ts`) still guards
-  the read-modify-write.
+  `writeDoc` byte IO only. `kanna-mcp.ts` serializes each read-modify-write on
+  the confined absolute path with `createKeyedLanes()` from `serial-lane.ts`.
 - **MCP tools** (`kanna-mcp.ts`, `buildTrackingDocToolList`): `query_tracking_file`,
   `append_tracking_row`, `replace_tracking_section`, registered whenever a
   `chatId` is present. Outside a loop a missing file is seeded from
@@ -461,7 +460,7 @@ either; CC hardcodes 200 only for its fork agent). Enforcement:
 An ARMED loop always holds exactly one pending wake: a running subagent, a
 queued message, or an active turn. Three ways that invariant broke, each fixed
 by a different pass. The general queued-message durability rules live in
-`CLAUDE.md` ("Queued messages are released on commit, not on dequeue"); what
+kanna-sessions ("Queued messages are released on commit, not on dequeue"); what
 follows is the loop-specific half.
 
 **`recoverArmedLoopWakes` — the wake that died WITH the server.** The loop's
@@ -489,8 +488,8 @@ transport error matches neither `detectFromResultText` nor the auth detector, so
 `handleLimitDetection` — the only other path that re-arms a failed main turn —
 never fires.
 
-It hangs off `AgentCoordinator`'s `onTurnTerminal` on `outcome === "failed"`, the
-choke point every provider terminal path already funnels through. Four things
+It hangs off `AgentCoordinator.handleTurnTerminal` (a `subscribeTurnTerminal`
+listener) on `outcome === "failed"`, the choke point every provider terminal path already funnels through. Four things
 about it are load-bearing:
 
 - **The re-arm is DEFERRED** (injectable `RearmScheduler`, default `setTimeout`).
@@ -571,5 +570,5 @@ The historical bug this section recorded — a bare `PROGRESS.md` resolving
 against the wrong checkout across 26 sibling worktrees — is deleted by
 construction: the task store is keyed on `chatId` and has no path.
 
-See `adr-20260830-unarmed-delivery-names-plan` (superseded by
-`adr-20260918-loop-tasks-replace-tracking-file`).
+See `adr-20260830-unarmed-delivery-names-plan`, superseded by the move to the
+task store.

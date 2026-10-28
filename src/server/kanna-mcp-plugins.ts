@@ -1,7 +1,6 @@
 import { z } from "zod"
 import { errorMessage, isRecord } from "../shared/errors"
-import type { JsonValue } from "../shared/json"
-import type { PluginLogEntry } from "../shared/plugins/log-ring"
+import { PLUGIN_LOG_DEFAULT_TAIL, type PluginLogEntry } from "../shared/plugins/log-ring"
 import {
   isValidPluginId,
   KANNA_PLUGIN_MANIFEST_FILENAME,
@@ -13,7 +12,7 @@ import { buildPluginScaffoldFiles } from "./plugins/plugin-scaffold"
 import { pluginDirHasManifest, writePluginScaffold } from "./plugins/plugin-scaffold.adapter"
 import { readPluginManifestText } from "./plugins/plugin-service-io.adapter"
 import type { PluginService, PluginSummary } from "./plugins/plugin-service"
-import { fail, ok, type ToolArgs, type ToolResult } from "./kanna-mcp-tool"
+import { fail, ok, requireNonBlank, type KannaToolFactory, type ToolResult } from "./kanna-mcp-tool"
 
 const PLUGIN_LIST_DESCRIPTION = "List installed Kanna plugins and their runtime state."
 
@@ -28,16 +27,7 @@ const PLUGIN_INSTALL_DESCRIPTION = "Compile a plugin source directory and instal
 
 const PLUGIN_RELOAD_DESCRIPTION = "Stop and restart a running plugin, picking up a rebuilt bundle."
 
-const DEFAULT_LOG_TAIL = 100
-
 const SERVICE_UNAVAILABLE = "The plugin runtime is not available in this session."
-
-export type PluginToolFactory<TTool> = (
-  name: string,
-  description: string,
-  schema: Record<string, z.ZodType<JsonValue | undefined>>,
-  handler: (input: ToolArgs) => Promise<ToolResult>,
-) => TTool
 
 type PluginToolService = Pick<PluginService, "install" | "list" | "logs" | "reload">
 
@@ -48,18 +38,6 @@ function isPluginToolService(value: object): value is PluginToolService {
   return REQUIRED_SERVICE_METHODS.every((method) => typeof value[method] === "function")
 }
 
-function requireString(value: JsonValue | undefined, name: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${name} is required`)
-  }
-  return value
-}
-
-function optionalPositiveInt(value: JsonValue | undefined, fallback: number): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) return fallback
-  return value
-}
-
 function formatPluginList(plugins: readonly PluginSummary[]): string {
   if (plugins.length === 0) return "No plugins are installed."
   return plugins
@@ -67,10 +45,9 @@ function formatPluginList(plugins: readonly PluginSummary[]): string {
     .join("\n")
 }
 
-function formatPluginLogs(id: string, entries: readonly PluginLogEntry[], tail: number): string {
-  const window = entries.slice(-tail)
-  if (window.length === 0) return `No log lines recorded for plugin "${id}".`
-  return window.map((entry) => `[${entry.stream}] ${entry.text}`).join("\n")
+function formatPluginLogs(id: string, entries: readonly PluginLogEntry[]): string {
+  if (entries.length === 0) return `No log lines recorded for plugin "${id}".`
+  return entries.map((entry) => `[${entry.stream}] ${entry.text}`).join("\n")
 }
 
 function describePlugin(service: PluginToolService, id: string): string {
@@ -120,7 +97,7 @@ export function buildPluginToolList<TTool>(
   service: object | null,
   chatId: string | null,
   depth: number,
-  tool: PluginToolFactory<TTool>,
+  tool: KannaToolFactory<TTool>,
 ): TTool[] {
   if (!service || !chatId) return []
 
@@ -146,7 +123,7 @@ export function buildPluginToolList<TTool>(
       { source_dir: z.string().describe("Absolute path to the plugin source directory to check.") },
       async (input) => {
         try {
-          return await validatePluginSource(requireString(input.source_dir, "source_dir"))
+          return await validatePluginSource(requireNonBlank(input.source_dir, "source_dir"))
         } catch (error) {
           return fail(errorMessage(error))
         }
@@ -158,12 +135,12 @@ export function buildPluginToolList<TTool>(
       PLUGIN_LOGS_DESCRIPTION,
       {
         id: z.string().describe("Installed plugin id, from plugin_list."),
-        tail: z.number().int().min(0).optional().describe(`How many trailing lines to return (default ${String(DEFAULT_LOG_TAIL)}).`),
+        tail: z.number().int().min(0).optional().describe(`How many trailing lines to return (default ${String(PLUGIN_LOG_DEFAULT_TAIL)}).`),
       },
       (input) =>
         withService(async (plugins) => {
-          const id = requireString(input.id, "id")
-          return ok(formatPluginLogs(id, plugins.logs(id), optionalPositiveInt(input.tail, DEFAULT_LOG_TAIL)))
+          const id = requireNonBlank(input.id, "id")
+          return ok(formatPluginLogs(id, plugins.logs(id, input.tail)))
         }),
     ),
   ]
@@ -183,9 +160,9 @@ export function buildPluginToolList<TTool>(
       },
       async (input) => {
         try {
-          const id = requireString(input.id, "id")
-          const name = typeof input.name === "string" && input.name.trim() !== "" ? input.name : id
-          return await scaffoldPlugin(requireString(input.dir, "dir"), id, name)
+          const id = requireNonBlank(input.id, "id")
+          const name = input.name !== undefined && input.name.trim() !== "" ? input.name : id
+          return await scaffoldPlugin(requireNonBlank(input.dir, "dir"), id, name)
         } catch (error) {
           return fail(errorMessage(error))
         }
@@ -198,7 +175,7 @@ export function buildPluginToolList<TTool>(
       { source_dir: z.string().describe("Absolute path to the plugin source directory to compile and install.") },
       (input) =>
         withService(async (plugins) => {
-          const sourceDir = requireString(input.source_dir, "source_dir")
+          const sourceDir = requireNonBlank(input.source_dir, "source_dir")
           await plugins.install({ sourceDir })
           const installed = plugins.list().find((plugin) => plugin.sourceDir === sourceDir)
           if (!installed) return ok(`Installed the plugin at ${sourceDir}.`)
@@ -214,7 +191,7 @@ export function buildPluginToolList<TTool>(
       { id: z.string().describe("Installed plugin id, from plugin_list.") },
       (input) =>
         withService(async (plugins) => {
-          const id = requireString(input.id, "id")
+          const id = requireNonBlank(input.id, "id")
           await plugins.reload(id)
           return ok(`Reloaded plugin "${id}" — ${describePlugin(plugins, id)}.`)
         }),

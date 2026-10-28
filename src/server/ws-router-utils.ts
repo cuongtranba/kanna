@@ -3,9 +3,7 @@ import type { JsonObject } from "../shared/json"
 import type { ServerWebSocket } from "bun"
 import { log } from "../shared/log"
 import type { SidebarData } from "../shared/types"
-import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
-import type { EventStore } from "./event-store"
 
 
 export function unhandledCommandMessage(commandType: string): string {
@@ -14,6 +12,7 @@ export function unhandledCommandMessage(commandType: string): string {
 }
 
 export interface ClientState {
+  kind?: "browser"
   subscriptions: Map<string, SubscriptionTopic>
   snapshotSignatures: Map<string, string>
   chatOpSeqBySubId?: Map<string, number>
@@ -22,14 +21,30 @@ export interface ClientState {
   pushDeviceId?: string | null
   originHost?: string
   commandOrigin?: CommandOrigin
-  kind?: "beacon"
-  beaconHandshake?: {
-    phase: "awaiting-hello" | "awaiting-auth" | "ready"
-    beaconId?: string
-    nonce?: string
-    beaconVersion?: string
-    protocolVersion?: number
-  }
+}
+
+export interface BeaconHandshake {
+  phase: "awaiting-hello" | "awaiting-auth" | "ready"
+  beaconId?: string
+  nonce?: string
+  beaconVersion?: string
+  protocolVersion?: number
+}
+
+export interface BeaconSocketState {
+  kind: "beacon"
+  originHost?: string
+  beaconHandshake?: BeaconHandshake
+}
+
+export type SocketState = ClientState | BeaconSocketState
+
+export function isBeaconSocket(ws: ServerWebSocket<SocketState>): ws is ServerWebSocket<BeaconSocketState> {
+  return ws.data.kind === "beacon"
+}
+
+export function isBrowserSocket(ws: ServerWebSocket<SocketState>): ws is ServerWebSocket<ClientState> {
+  return ws.data.kind !== "beacon"
 }
 
 export interface SnapshotBroadcastFilter {
@@ -76,91 +91,14 @@ export function logSendToStartingProfile(
 }
 
 
-export function countSubscriptionsByTopic(ws: ServerWebSocket<ClientState>): {
-  total: number
-  sidebar: number
-  chat: number
-  projectGit: number
-  projectCommands: number
-  localProjects: number
-  update: number
-  keybindings: number
-  appSettings: number
-  terminal: number
-} {
-  let sidebar = 0
-  let chat = 0
-  let projectGit = 0
-  let projectCommands = 0
-  let localProjects = 0
-  let update = 0
-  let keybindings = 0
-  let appSettings = 0
-  let terminal = 0
-
+export function countSubscriptionsByTopic(
+  ws: ServerWebSocket<ClientState>,
+): { total: number } & Partial<Record<SubscriptionTopic["type"], number>> {
+  const counts: Partial<Record<SubscriptionTopic["type"], number>> = {}
   for (const topic of ws.data.subscriptions.values()) {
-    switch (topic.type) {
-      case "sidebar":
-        sidebar += 1
-        break
-      case "chat":
-        chat += 1
-        break
-      case "project-git":
-        projectGit += 1
-        break
-      case "project-commands":
-        projectCommands += 1
-        break
-      case "local-projects":
-        localProjects += 1
-        break
-      case "update":
-        update += 1
-        break
-      case "keybindings":
-        keybindings += 1
-        break
-      case "app-settings":
-        appSettings += 1
-        break
-      case "terminal":
-        terminal += 1
-        break
-    }
+    counts[topic.type] = (counts[topic.type] ?? 0) + 1
   }
-
-  return {
-    total: ws.data.subscriptions.size,
-    sidebar,
-    chat,
-    projectGit,
-    projectCommands,
-    localProjects,
-    update,
-    keybindings,
-    appSettings,
-    terminal,
-  }
-}
-
-
-export function getSidebarProjectOrder(store: EventStore): string[] {
-  return typeof store.getSidebarProjectOrder === "function"
-    ? store.getSidebarProjectOrder()
-    : []
-}
-
-
-const BENIGN_STALE_STATE_MESSAGES = [
-  /^Chat not found$/,
-  /^Queued message not found$/,
-  /^File is no longer changed: /,
-  /^Project not found$/,
-] as const
-
-export function isBenignStaleStateMessage(message: string): boolean {
-  return BENIGN_STALE_STATE_MESSAGES.some((pattern) => pattern.test(message))
+  return { total: ws.data.subscriptions.size, ...counts }
 }
 
 
@@ -203,6 +141,47 @@ export function ensureChatOpSeqMap(
 }
 
 
+type TopicByType = { [T in SubscriptionTopic as T["type"]]: T }
+
+type TopicFilterTable = {
+  [K in keyof TopicByType]: (topic: TopicByType[K], filter: SnapshotBroadcastFilter) => boolean
+}
+
+const REFRESHED_ON_EVERY_BROADCAST = () => true
+
+const TOPIC_FILTER: TopicFilterTable = {
+  "sidebar": (_topic, filter) => Boolean(filter.includeSidebar),
+  "local-projects": (_topic, filter) => Boolean(filter.includeLocalProjects),
+  "update": (_topic, filter) => Boolean(filter.includeUpdate),
+  "keybindings": (_topic, filter) => Boolean(filter.includeKeybindings),
+  "app-settings": (_topic, filter) => Boolean(filter.includeAppSettings),
+  "push-config": (_topic, filter) => Boolean(filter.includePushConfig),
+  "chat": (topic, filter) => filter.chatIds?.has(topic.chatId) ?? false,
+  "project-git": (topic, filter) => filter.projectIds?.has(topic.projectId) ?? false,
+  "project-commands": (topic, filter) => filter.projectIds?.has(topic.projectId) ?? false,
+  "terminal": (topic, filter) => filter.terminalIds?.has(topic.terminalId) ?? false,
+  "workflows": REFRESHED_ON_EVERY_BROADCAST,
+  "boards": REFRESHED_ON_EVERY_BROADCAST,
+  "board": REFRESHED_ON_EVERY_BROADCAST,
+  "followed-sessions": REFRESHED_ON_EVERY_BROADCAST,
+  "cron-jobs": REFRESHED_ON_EVERY_BROADCAST,
+  "beacons": REFRESHED_ON_EVERY_BROADCAST,
+  "background-task-output": REFRESHED_ON_EVERY_BROADCAST,
+  "package-updates": REFRESHED_ON_EVERY_BROADCAST,
+  "webhooks": REFRESHED_ON_EVERY_BROADCAST,
+  "inbox": REFRESHED_ON_EVERY_BROADCAST,
+  "mcp-sources": REFRESHED_ON_EVERY_BROADCAST,
+  "service-bus": REFRESHED_ON_EVERY_BROADCAST,
+}
+
+function matchesTopicFilter<K extends keyof TopicByType>(
+  type: K,
+  topic: TopicByType[K],
+  filter: SnapshotBroadcastFilter,
+): boolean {
+  return TOPIC_FILTER[type](topic, filter)
+}
+
 export function shouldIncludeTopic(
   topic: SubscriptionTopic,
   filter?: SnapshotBroadcastFilter
@@ -210,39 +189,7 @@ export function shouldIncludeTopic(
   if (!filter) {
     return true
   }
-
-  if (topic.type === "sidebar") {
-    return Boolean(filter.includeSidebar)
-  }
-  if (topic.type === "local-projects") {
-    return Boolean(filter.includeLocalProjects)
-  }
-  if (topic.type === "update") {
-    return Boolean(filter.includeUpdate)
-  }
-  if (topic.type === "keybindings") {
-    return Boolean(filter.includeKeybindings)
-  }
-  if (topic.type === "app-settings") {
-    return Boolean(filter.includeAppSettings)
-  }
-  if (topic.type === "push-config") {
-    return Boolean(filter.includePushConfig)
-  }
-  if (topic.type === "chat") {
-    return filter.chatIds?.has(topic.chatId) ?? false
-  }
-  if (topic.type === "project-git") {
-    return filter.projectIds?.has(topic.projectId) ?? false
-  }
-  if (topic.type === "project-commands") {
-    return filter.projectIds?.has(topic.projectId) ?? false
-  }
-  if (topic.type === "terminal") {
-    return filter.terminalIds?.has(topic.terminalId) ?? false
-  }
-
-  return true
+  return matchesTopicFilter(topic.type, topic, filter)
 }
 
 export function getStableChatSnapshotSignature(
@@ -254,5 +201,3 @@ export function getStableChatSnapshotSignature(
   }
   return JSON.stringify(snapshot)
 }
-
-export { PROTOCOL_VERSION }

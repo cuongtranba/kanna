@@ -7,6 +7,7 @@ import {
   deriveBranchListSnapshot,
   deriveRepositorySnapshot,
   filterBranchEntries,
+  filterMergeBranchGroups,
   formatFetchTooltip,
   formatRelativeTime,
   getBranchCandidatePriority,
@@ -195,6 +196,29 @@ describe("filterBranchEntries", () => {
   test("is case-insensitive", () => {
     const entries = [makeEntry({ name: "FEATURE-1" })]
     expect(filterBranchEntries(entries, "feature")).toHaveLength(1)
+  })
+})
+
+describe("filterMergeBranchGroups", () => {
+  const groups = {
+    defaultBranch: makeEntry({ name: "main" }),
+    recent: [makeEntry({ name: "feat/login" }), makeEntry({ name: "fix/typo" })],
+    other: [makeEntry({ name: "pr-9", headLabel: "octo:login-flow" })],
+  }
+
+  test("returns every group untouched for a blank query", () => {
+    expect(filterMergeBranchGroups(groups, "   ")).toEqual(groups)
+  })
+
+  test("applies the shared branch search to each group, including head labels", () => {
+    const visible = filterMergeBranchGroups(groups, "LOGIN")
+    expect(visible.defaultBranch).toBeUndefined()
+    expect(visible.recent.map((entry) => entry.name)).toEqual(["feat/login"])
+    expect(visible.other.map((entry) => entry.name)).toEqual(["pr-9"])
+  })
+
+  test("keeps the default branch when it matches", () => {
+    expect(filterMergeBranchGroups(groups, "mai").defaultBranch?.name).toBe("main")
   })
 })
 

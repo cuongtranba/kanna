@@ -1,26 +1,22 @@
 
-import { describe, expect, test, vi } from "vite-plus/test"
-import { renderToStaticMarkup } from "react-dom/server"
+import { describe, expect, test } from "vite-plus/test"
+import { renderThemed } from "../../lib/testing/renderThemed"
 
-vi.mock("../../hooks/useTheme", () => ({
-  useTheme: () => ({ resolvedTheme: "light", theme: "light", setTheme: () => {} }),
-}))
+import { ExitPlanModeMessage } from "./ExitPlanModeMessage"
+import type { HydratedToolCall } from "../../../shared/types"
 
-const { ExitPlanModeMessage } = await import("./ExitPlanModeMessage")
-import type { ProcessedToolCall } from "./types"
-
-function planMessage(plan: string): Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }> {
+function planMessage(plan: string): Extract<HydratedToolCall, { toolKind: "exit_plan_mode" }> {
   return {
     kind: "tool",
     toolKind: "exit_plan_mode",
     toolName: "ExitPlanMode",
     toolId: "tool-1",
     input: { plan },
-  } as Extract<ProcessedToolCall, { toolKind: "exit_plan_mode" }>
+  } as Extract<HydratedToolCall, { toolKind: "exit_plan_mode" }>
 }
 
 function render(plan: string): string {
-  return renderToStaticMarkup(
+  return renderThemed(
     <ExitPlanModeMessage message={planMessage(plan)} onConfirm={() => Promise.resolve()} isLatest={false} />,
   )
 }

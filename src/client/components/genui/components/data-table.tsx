@@ -8,20 +8,15 @@ import {
   metricLabel,
   valueFormatOf,
   type DatasetDecl,
-  type DatasetQuery,
   type QueryResult,
 } from "../../../../shared/genui"
 import { isJsonObject, type JsonObject, type JsonValue } from "../../../../shared/json"
-import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { useDatasetDecl, useDatasetQuery } from "../useDatasetQuery"
 import { useDrillState } from "./financial-chart"
-import { isBoolean, useElementUiState } from "../useElementUiState"
-import { DataStateNotice, PropsIssue } from "./primitives"
-import { compareOf, resolvedProps, withDrillFilter } from "./props"
-
-const PAGE_SIZE = 50
-const HEAD = "px-3 py-2 text-xs font-medium text-muted-foreground"
+import { defineElement } from "./define-element"
+import { DataStateNotice, PropsIssue, TABLE_HEAD_CLASS, useExpandableRows } from "./primitives"
+import { compareOf, datasetQuery, withDrillFilter } from "./props"
 
 interface Column {
   key: string
@@ -73,8 +68,7 @@ function datasetTable(decl: DatasetDecl, dimensions: readonly string[], metrics:
 }
 
 function Table({ element, columns, rows, title }: { element: ComponentRenderProps["element"]; columns: Column[]; rows: TableRow[]; title?: string }) {
-  const [expanded, setExpanded] = useElementUiState(element, "expanded", false, isBoolean)
-  const visible = expanded ? rows : rows.slice(0, PAGE_SIZE)
+  const { visibleRows, showAll } = useExpandableRows(element, rows)
   return (
     <figure className="flex min-w-0 flex-col gap-2">
       {title ? <figcaption className="text-sm font-medium text-foreground">{title}</figcaption> : null}
@@ -83,12 +77,12 @@ function Table({ element, columns, rows, title }: { element: ComponentRenderProp
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border">
               {columns.map((column) => (
-                <th key={column.key} scope="col" className={cn(HEAD, column.numeric ? "text-right" : "text-left")}>{column.label}</th>
+                <th key={column.key} scope="col" className={cn(TABLE_HEAD_CLASS, column.numeric ? "text-right" : "text-left")}>{column.label}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {visible.map((row) => (
+            {visibleRows.map((row) => (
               <tr key={row.key}>
                 {columns.map((column) => (
                   <td key={column.key} className={cn("px-3 py-1.5 text-foreground", column.numeric ? "text-right tabular-nums" : "text-left")}>{row.cells[column.key]}</td>
@@ -97,38 +91,27 @@ function Table({ element, columns, rows, title }: { element: ComponentRenderProp
             ))}
           </tbody>
         </table>
-        {!expanded && rows.length > PAGE_SIZE ? (
-          <div className="border-t border-border px-3 py-2">
-            <Button size="sm" variant="ghost" onClick={() => setExpanded(true)}>Show all {rows.length} rows</Button>
-          </div>
-        ) : null}
+        {showAll}
       </div>
     </figure>
   )
 }
 
-export function DataTableElement({ element }: ComponentRenderProps) {
-  const props = useMemo(() => {
-    const parsed = GENUI_COMPONENTS.DataTable.props.safeParse(resolvedProps(element.props))
-    return parsed.success ? parsed.data : null
-  }, [element.props])
-  const decl = useDatasetDecl(props?.dataset)
-  const drill = useDrillState(props?.dataset)
-  const query = useMemo((): DatasetQuery | null => {
-    if (!props?.dataset || !props.metrics) return null
-    const compare = compareOf(props.compareWith)
-    const filters = withDrillFilter(props.filters, drill)
-    return {
+export const DataTableElement = defineElement(GENUI_COMPONENTS.DataTable.props, ({ element, props }) => {
+  const decl = useDatasetDecl(props.dataset)
+  const drill = useDrillState(props.dataset)
+  const query = useMemo(() => {
+    if (!props.dataset || !props.metrics) return null
+    return datasetQuery({
       metrics: props.metrics,
       groupBy: props.dimensions ?? [],
-      ...(props.period ? { period: props.period } : {}),
-      ...(compare ? { compare } : {}),
-      ...(filters && filters.length > 0 ? { filters } : {}),
+      period: props.period,
+      compare: compareOf(props.compareWith),
+      filters: withDrillFilter(props.filters, drill),
       limit: props.limit ?? 200,
-    }
+    })
   }, [drill, props])
-  const state = useDatasetQuery(props?.dataset, query)
-  if (!props) return <PropsIssue component="DataTable" />
+  const state = useDatasetQuery(props.dataset, query)
   if (!props.dataset) {
     const rows = (props.rows ?? []).filter(isJsonObject)
     return <Table element={element} {...staticTable(props.columns, rows)} title={props.title} />
@@ -137,4 +120,4 @@ export function DataTableElement({ element }: ComponentRenderProps) {
   if (state.status !== "ok") return <DataStateNotice state={state} />
   if (!decl) return <PropsIssue component="DataTable" />
   return <Table element={element} {...datasetTable(decl, props.dimensions ?? [], props.metrics, state.result)} title={props.title} />
-}
+})

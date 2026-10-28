@@ -101,14 +101,20 @@ export interface BranchActionFailure {
   snapshotChanged?: boolean
 }
 
+export const GIT_SYNC_ACTIONS = ["fetch", "pull", "push", "publish"] as const
+export type GitSyncAction = (typeof GIT_SYNC_ACTIONS)[number]
+
+export const GIT_REPO_VISIBILITIES = ["public", "private"] as const
+export type GitRepoVisibility = (typeof GIT_REPO_VISIBILITIES)[number]
+
 export type ChatSyncSuccess = BranchActionSuccess & {
-  action: "fetch" | "pull" | "push" | "publish"
+  action: GitSyncAction
   aheadCount?: number
   behindCount?: number
 }
 
 export type ChatSyncFailure = BranchActionFailure & {
-  action: "fetch" | "pull" | "push" | "publish"
+  action: GitSyncAction
 }
 
 export type ChatSyncResult = ChatSyncSuccess | ChatSyncFailure
@@ -152,6 +158,8 @@ export type DiffCommitFailure = BranchActionFailure & {
 }
 
 export type DiffCommitResult = DiffCommitSuccess | DiffCommitFailure
+
+export const DETACHED_BRANCH = "(detached)"
 
 export interface GitWorktree {
   path: string

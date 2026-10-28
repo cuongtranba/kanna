@@ -1,14 +1,9 @@
 import { create } from "zustand"
-
-export type SnippetEditingState =
-  | { kind: "list" }
-  | { kind: "create" }
-  | { kind: "edit"; id: string }
+import { LIST_EDITING, type SectionEditing } from "../lib/sectionEditing"
 
 export interface SnippetEditorFormState {
   shortcut: string
   expansion: string
-  submitting: boolean
   error: string | null
 }
 
@@ -19,24 +14,23 @@ function createEditorFormFromInitial(
   return {
     shortcut,
     expansion,
-    submitting: false,
     error: null,
   }
 }
 
 interface TextSnippetsSectionState {
-  editing: SnippetEditingState
+  editing: SectionEditing
 
   editorForm: SnippetEditorFormState
 
-  setEditing: (editing: SnippetEditingState) => void
+  setEditing: (editing: SectionEditing) => void
 
   resetEditorForm: (shortcut: string, expansion: string) => void
   patchEditorForm: (patch: Partial<SnippetEditorFormState>) => void
 }
 
 export const useTextSnippetsSectionStore = create<TextSnippetsSectionState>()((set) => ({
-  editing: { kind: "list" },
+  editing: LIST_EDITING,
   editorForm: createEditorFormFromInitial("", ""),
 
   setEditing: (editing) => set({ editing }),

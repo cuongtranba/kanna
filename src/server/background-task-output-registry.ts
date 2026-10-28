@@ -1,7 +1,6 @@
 import { OutputRing, OUTPUT_RING_DEFAULT_BYTES } from "./output-ring"
 
 export interface BackgroundTaskOutputDeps {
-  statSize(path: string): number | null
   readAppend(path: string, fromByte: number): { data: string; endByte: number }
   setInterval(fn: () => void, ms: number): () => void
 }
@@ -44,8 +43,6 @@ export function createBackgroundTaskOutputRegistry(
   }
 
   function poll(chatId: string, taskId: string, state: TaskState): void {
-    const size = deps.statSize(state.outputPath)
-    if (size === null || size <= state.byteOffset) return
     const { data, endByte } = deps.readAppend(state.outputPath, state.byteOffset)
     if (!data) return
     state.byteOffset = endByte

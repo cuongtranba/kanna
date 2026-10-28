@@ -12,9 +12,8 @@ import {
 import { addCounter, BUS_MIRROR_DROPPED_TOTAL, BUS_PUBLISHED_TOTAL } from "../observability"
 import { reconcileJetStream, type JetStreamAdmin } from "./jetstream-reconcile"
 import { createMirrorQueue, type MirrorQueue } from "./nats-mirror-queue"
+import { defaultSchedule, type NatsScheduler } from "./scheduler"
 import type { BusSink } from "./service-bus"
-
-export type NatsScheduler = (run: () => void, delayMs: number) => () => void
 
 export type LinkState = { kind: "connected" } | { kind: "reconnecting" } | { kind: "closed"; message: string | null }
 
@@ -62,13 +61,6 @@ export const CONNECT_RETRY_MAX_MS = 30_000
 export const STATUS_REFRESH_MS = 30_000
 export const WARN_THROTTLE_MS = 30_000
 export const SHUTDOWN_FLUSH_MS = 2000
-
-function defaultSchedule(run: () => void, delayMs: number): () => void {
-  const timer = setTimeout(run, delayMs)
-  return () => {
-    clearTimeout(timer)
-  }
-}
 
 export function createNatsMirror(options: NatsMirrorOptions): NatsMirror {
   const now = options.now ?? Date.now

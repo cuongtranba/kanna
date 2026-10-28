@@ -1,42 +1,22 @@
-
 import type { StoragePort } from "../ports/storagePort"
 
-function guardedStorage(): Storage | null {
-  if (typeof localStorage === "undefined") return null
-  return localStorage
+function storageAdapter(resolve: () => Storage | null): StoragePort {
+  return {
+    getItem(key: string): string | null {
+      return resolve()?.getItem(key) ?? null
+    },
+    setItem(key: string, value: string): void {
+      resolve()?.setItem(key, value)
+    },
+    removeItem(key: string): void {
+      resolve()?.removeItem(key)
+    },
+    clear(): void {
+      resolve()?.clear()
+    },
+  }
 }
 
-export const localStorageAdapter: StoragePort = {
-  getItem(key: string): string | null {
-    return guardedStorage()?.getItem(key) ?? null
-  },
-  setItem(key: string, value: string): void {
-    guardedStorage()?.setItem(key, value)
-  },
-  removeItem(key: string): void {
-    guardedStorage()?.removeItem(key)
-  },
-  clear(): void {
-    guardedStorage()?.clear()
-  },
-}
+export const localStorageAdapter: StoragePort = storageAdapter(() => (typeof localStorage === "undefined" ? null : localStorage))
 
-function guardedSessionStorage(): Storage | null {
-  if (typeof sessionStorage === "undefined") return null
-  return sessionStorage
-}
-
-export const sessionStorageAdapter: StoragePort = {
-  getItem(key: string): string | null {
-    return guardedSessionStorage()?.getItem(key) ?? null
-  },
-  setItem(key: string, value: string): void {
-    guardedSessionStorage()?.setItem(key, value)
-  },
-  removeItem(key: string): void {
-    guardedSessionStorage()?.removeItem(key)
-  },
-  clear(): void {
-    guardedSessionStorage()?.clear()
-  },
-}
+export const sessionStorageAdapter: StoragePort = storageAdapter(() => (typeof sessionStorage === "undefined" ? null : sessionStorage))

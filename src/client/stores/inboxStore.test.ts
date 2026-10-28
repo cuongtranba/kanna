@@ -68,6 +68,33 @@ describe("appendPage", () => {
   })
 })
 
+describe("filter transitions", () => {
+  test("toggling needs-attention flips it on and back off while keeping other filters", () => {
+    useInboxStore.getState().setProjectFilter("p1")
+    useInboxStore.getState().toggleAttentionOnly()
+    expect(useInboxStore.getState().filter).toEqual({ projectId: "p1", attentionOnly: true })
+    useInboxStore.getState().toggleAttentionOnly()
+    expect(useInboxStore.getState().filter.attentionOnly).toBeUndefined()
+    expect(useInboxStore.getState().filter.projectId).toBe("p1")
+  })
+
+  test("selecting a source kind replaces the previous one and selecting it again clears it", () => {
+    useInboxStore.getState().toggleSourceKind("webhook")
+    expect(useInboxStore.getState().filter.sourceKind).toBe("webhook")
+    useInboxStore.getState().toggleSourceKind("webhook")
+    expect(useInboxStore.getState().filter.sourceKind).toBeUndefined()
+  })
+
+  test("a null project or chat clears that filter and every change re-opens exhausted history", () => {
+    useInboxStore.getState().setChatFilter("c1")
+    expect(useInboxStore.getState().filter.chatId).toBe("c1")
+    useInboxStore.getState().appendPage({ threads: [], items: [] })
+    useInboxStore.getState().setChatFilter(null)
+    expect(useInboxStore.getState().filter.chatId).toBeUndefined()
+    expect(useInboxStore.getState().olderExhausted).toBe(false)
+  })
+})
+
 describe("selection and drafts", () => {
   test("selects a thread by id and resolves it from the loaded threads", () => {
     useInboxStore.getState().applySnapshot(snapshot([thread("t1", 100)], []))

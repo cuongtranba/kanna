@@ -1,5 +1,6 @@
 import React from "react"
 import { Link } from "react-router-dom"
+import { chatPath } from "../../lib/paneTree"
 
 const CHAT_LINK_RE = /\[([^\]]+)\]\(\/chat\/([0-9a-fA-F][0-9a-fA-F-]{7,})\)/g
 
@@ -13,7 +14,7 @@ export function renderChatLinks(text: string, linkClassName?: string): React.Rea
     parts.push(
       <Link
         key={`chat-link-${key++}`}
-        to={`/chat/${match[2]}`}
+        to={chatPath(match[2])}
         className={linkClassName ?? "underline decoration-destructive/40 hover:decoration-destructive"}
       >
         {match[1]}

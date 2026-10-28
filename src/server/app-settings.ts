@@ -1,62 +1,55 @@
 import { randomUUID } from "node:crypto"
 import { homedir } from "node:os"
 import path from "node:path"
-import { mkdirRecursive, readBunFileText, readTextFileOrThrow, renameFile, writeTextFileUtf8 } from "./app-settings-io.adapter"
+import { mkdirRecursive, renameFile, writeTextFileUtf8 } from "./app-settings-io.adapter"
+import { readJsonSettingsFile, type JsonSettingsFileReader } from "./json-settings-file.adapter"
 import { getSettingsFilePath } from "../shared/branding"
+import { shortenHomePath } from "../shared/home-path"
 import type { BeaconConfig, BeaconInput, BeaconPatch } from "../shared/beacon-config"
 import { applyBeaconSetters, beaconNotFound, createBeacon, normalizeBeacons, updateBeacon } from "./beacon-settings"
 import { clampTabMinWidth } from "../shared/pane-tab-width"
+import { clampScrollback } from "../shared/terminal-scrollback"
+import { clampTerminalMinColumnWidth } from "../shared/terminal-column-width"
 import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normalizeMcpSources } from "./mcp-sources-settings"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
-import { mergePluginPatch, normalizePluginState } from "./plugins/plugin-settings"
+import { mergeInstalledPluginsPatch, normalizePluginState } from "./plugins/plugin-settings"
 import {
-  normalizeAuthSettings,
   normalizeRemoteMcpSettings,
   normalizeCloudflareTunnelSettings,
   normalizePushSettings,
   normalizeTelemetrySettings,
   normalizeTypographySettings,
-  normalizeUploadSettings,
 } from "../shared/settings/index"
+import { normalizeChatSoundId, normalizeChatSoundPreference } from "../shared/settings/chat-sound"
+import { normalizeEditorCommandTemplate, normalizeEditorPreset } from "../shared/settings/editor"
+import { mergeSettingsSections } from "../shared/settings/merge-settings-sections"
 import {
-  AUTH_SESSION_MAX_AGE_DAYS_MAX,
-  AUTH_SESSION_MAX_AGE_DAYS_MIN,
+  normalizeClaudePreference,
+  normalizeCodexPreference,
+  normalizeDefaultProvider,
+  normalizeProviderDefaults,
+  type RawProviderDefaults,
+} from "../shared/settings/provider-defaults"
+import {
   CLAUDE_AUTH_DEFAULTS,
   CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_IDLE_TIMEOUT_MS_MAX,
-  CLAUDE_IDLE_TIMEOUT_MS_MIN,
   CLAUDE_LIFECYCLE_DEFAULTS,
-  CLAUDE_MAX_CONCURRENT_MAX,
-  CLAUDE_MAX_CONCURRENT_MIN,
-  DEFAULT_CLAUDE_MODEL_OPTIONS,
-  DEFAULT_CODEX_MODEL_OPTIONS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
+  isAppThemePreference,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   isAgentProvider,
   isClaudeReasoningEffort,
-  isCodexReasoningEffort,
-  normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeCodexModelId,
   OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+  OAUTH_TOKEN_BASE_URL_MAX,
   OAUTH_TOKEN_LABEL_MAX,
-  OAUTH_TOKEN_MAX_CONCURRENT_MIN,
   OAUTH_TOKEN_VALUE_MAX,
-  clampTokenConcurrency,
-  isTokenConcurrency,
-  normalizeAnthropicBaseUrl,
-  normalizeClaudeReasoningEffort,
   PROVIDERS,
-  UPLOAD_MAX_FILE_SIZE_MB_MAX,
-  UPLOAD_MAX_FILE_SIZE_MB_MIN,
   type AgentProvider,
   type AppSettingsPatch,
   type AppSettingsSnapshot,
   type AppThemePreference,
   type AuthSettings,
-  type ChatProviderPreferences,
-  type ChatSoundId,
-  type ChatSoundPreference,
   type ClaudeAuthSettings,
   type ClaudeDriverSettings,
   type ClaudeModelOptions,
@@ -71,18 +64,15 @@ import {
   type TextSnippet,
   type TextSnippetInput,
   type TextSnippetPatch,
-  type DefaultProviderPreference,
-  type EditorPreset,
   type McpOAuthState,
   type McpServerConfig,
   type McpServerInput,
   type McpServerPatch,
   type McpServerTestResult,
-  type McpServerTransport,
+  MCP_SERVER_TRANSPORTS,
   type McpValidationError,
   type OAuthTokenEntry,
   type OAuthTokenStatus,
-  type ProviderPreference,
   type Subagent,
   type SubagentContextScope,
   type SubagentInput,
@@ -96,8 +86,30 @@ import { assertSafeSkillAgents } from "../shared/skill-agents"
 import type { CustomProviderCredential, CustomProviderEntry, CustomProviderInput, CustomProviderPatch } from "../shared/custom-providers"
 import { applyServiceBusPatch, normalizeServiceBusSettings, toPublicServiceBus, type ServiceBusSettingsStored } from "./service-bus-settings"
 import { createCustomProvider, credentialOfCustomProvider, customProviderNotFound, normalizeCustomProviders, toPublicCustomProvider, updateCustomProvider } from "./custom-providers-settings"
-import { isPlainObject } from "../shared/settings/plain-object"
-import type { JsonArray, JsonObject, JsonValue } from "../shared/json"
+import { isRecord } from "../shared/errors"
+import {
+  MCP_SERVER_NAME_PATTERN,
+  SNIPPET_SHORTCUT_PATTERN,
+  SUBAGENT_NAME_MAX,
+  SUBAGENT_NAME_PATTERN,
+  mcpServerNameIssue,
+} from "../shared/settings/validation"
+import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
+import { assertWithinBound, normalizeBounded } from "../shared/numeric"
+import { oneOf } from "../shared/vocab"
+import { AUTH_SESSION_MAX_AGE_DAYS_BOUND, normalizeAuthSettings } from "../shared/settings/auth"
+import { normalizeUploadSettings, UPLOAD_MAX_FILE_SIZE_MB_BOUND } from "../shared/settings/uploads"
+import {
+  CLAUDE_IDLE_TIMEOUT_MS_BOUND,
+  CLAUDE_MAX_CONCURRENT_BOUND,
+  globalPromptAppendViolation,
+  OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND,
+  OAUTH_TOKEN_MAX_CONCURRENT_BOUND,
+  SHARE_DEFAULT_TTL_HOURS_BOUND,
+  SUBAGENT_RUN_TIMEOUT_MS_BOUND,
+  SUBAGENT_RUN_TIMEOUT_MS_DEFAULT,
+} from "../shared/settings/bounds"
+import type { JsonArray, JsonObject } from "../shared/json"
 
 type StatusPatch = Partial<Pick<OAuthTokenEntry,
   "status" | "limitedUntil" | "lastUsedAt" | "lastErrorAt" | "lastErrorMessage"
@@ -123,12 +135,7 @@ interface AppSettingsFile {
     commandTemplate?: string
   }
   defaultProvider?: string
-  providerDefaults?: {
-    claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>> & { effort?: string }
-    codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>> & { effort?: string }
-    openrouter?: Partial<ProviderPreference<Record<string, never>>>
-    custom?: Partial<ProviderPreference<Record<string, never>>>
-  }
+  providerDefaults?: RawProviderDefaults
   cloudflareTunnel?: JsonObject
   push?: JsonObject
   telemetry?: JsonObject
@@ -158,20 +165,14 @@ interface AppSettingsFile {
 }
 
 function isAppSettingsFile<T>(value: T): value is T & AppSettingsFile {
-  return isPlainObject(value)
-}
-
-function isErrnoException<T>(error: T): error is T & NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error
+  return isRecord(value)
 }
 
 function isMcpOAuthState<T>(value: T): value is T & McpOAuthState {
-  return isPlainObject(value)
+  return isRecord(value)
 }
 
-function isMcpTransport<T>(value: T): value is T & McpServerTransport {
-  return value === "stdio" || value === "http" || value === "sse" || value === "ws"
-}
+const isMcpTransport = oneOf(MCP_SERVER_TRANSPORTS)
 
 interface AppSettingsState extends Omit<AppSettingsSnapshot, "customProviders" | "serviceBus"> {
   analyticsUserId: string
@@ -187,26 +188,9 @@ interface NormalizedAppSettings {
 }
 
 const DEFAULT_SHARE_DEFAULT_TTL_HOURS = 24
-const DEFAULT_SUBAGENT_RUN_TIMEOUT_MS = 600_000
-const MIN_SUBAGENT_RUN_TIMEOUT_MS = 30_000
-const MAX_SUBAGENT_RUN_TIMEOUT_MS = 86_400_000
-const DEFAULT_TERMINAL_SCROLLBACK = 1_000
-const MIN_TERMINAL_SCROLLBACK = 500
-const MAX_TERMINAL_SCROLLBACK = 5_000
-const DEFAULT_TERMINAL_MIN_COLUMN_WIDTH = 450
-const MIN_TERMINAL_MIN_COLUMN_WIDTH = 250
-const MAX_TERMINAL_MIN_COLUMN_WIDTH = 900
-const DEFAULT_EDITOR_PRESET: EditorPreset = "cursor"
-const DEFAULT_CHAT_SOUND_PREFERENCE: ChatSoundPreference = "always"
-const DEFAULT_CHAT_SOUND_ID: ChatSoundId = "funk"
-const SUBAGENT_NAME_REGEX = /^[a-z0-9_-]+$/
 const SUBAGENT_RESERVED_NAMES = new Set(["agent", "agents"])
-const SUBAGENT_NAME_MAX = 64
-const MCP_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/
-const MCP_RESERVED_NAMES = new Set(["kanna"])
 const MODEL_ID_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 const MODEL_LABEL_MAX = 64
-const SNIPPET_SHORTCUT_REGEX = /^\S{1,32}$/
 const SNIPPET_EXPANSION_MAX = 4_000
 
 interface ValidationErrorOf<Code extends string> {
@@ -241,184 +225,12 @@ async function atomicWriteJson(filePath: string, content: string) {
   await renameFile(tmpPath, filePath)
 }
 
-function formatDisplayPath(filePath: string) {
-  const homePath = homedir()
-  if (filePath === homePath) return "~"
-  if (filePath.startsWith(`${homePath}${path.sep}`)) {
-    return `~${filePath.slice(homePath.length)}`
-  }
-  return filePath
-}
-
 function createAnalyticsUserId() {
   return `anon_${randomUUID()}`
 }
 
-function getDefaultEditorCommandTemplate(preset: EditorPreset) {
-  switch (preset) {
-    case "vscode":
-      return "code {path}"
-    case "xcode":
-      return "xed {path}"
-    case "windsurf":
-      return "windsurf {path}"
-    case "custom":
-    case "cursor":
-    default:
-      return "cursor {path}"
-  }
-}
-
-function createDefaultProviderDefaults(): ChatProviderPreferences {
-  return {
-    claude: {
-      model: "claude-opus-4-7",
-      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-      planMode: false,
-    },
-    codex: {
-      model: "gpt-5.5",
-      modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
-      planMode: false,
-    },
-    openrouter: {
-      model: DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: false,
-    },
-    custom: { model: "", modelOptions: {}, planMode: false },
-  }
-}
-
-function clampNumber<T>(value: T, fallback: number, min: number, max: number) {
-  const numberValue = typeof value === "number" ? value : Number(value)
-  if (!Number.isFinite(numberValue)) return fallback
-  return Math.min(max, Math.max(min, Math.round(numberValue)))
-}
-
 function normalizeTheme<T>(value: T): AppThemePreference {
-  if (value === "light") return "light"
-  if (value === "dark") return "dark"
-  if (value === "system") return "system"
-  return "system"
-}
-
-function normalizeChatSoundPreference<T>(value: T): ChatSoundPreference {
-  if (value === "never") return "never"
-  if (value === "unfocused") return "unfocused"
-  if (value === "always") return "always"
-  return DEFAULT_CHAT_SOUND_PREFERENCE
-}
-
-function normalizeChatSoundId<T>(value: T): ChatSoundId {
-  switch (value) {
-    case "blow": return "blow"
-    case "bottle": return "bottle"
-    case "frog": return "frog"
-    case "funk": return "funk"
-    case "glass": return "glass"
-    case "ping": return "ping"
-    case "pop": return "pop"
-    case "purr": return "purr"
-    case "tink": return "tink"
-    default:
-      return DEFAULT_CHAT_SOUND_ID
-  }
-}
-
-function normalizeDefaultProvider<T>(value: T): DefaultProviderPreference {
-  return typeof value === "string" && isAgentProvider(value) ? value : "last_used"
-}
-
-function normalizeEditorPreset<T>(value: T): EditorPreset {
-  if (value === "vscode") return "vscode"
-  if (value === "xcode") return "xcode"
-  if (value === "windsurf") return "windsurf"
-  if (value === "custom") return "custom"
-  if (value === "cursor") return "cursor"
-  return DEFAULT_EDITOR_PRESET
-}
-
-function normalizeEditorCommandTemplate<T>(value: T, preset: EditorPreset) {
-  const trimmed = typeof value === "string" ? value.trim() : ""
-  return trimmed || getDefaultEditorCommandTemplate(preset)
-}
-
-function normalizeClaudePreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<Record<keyof ClaudeModelOptions, JsonValue>>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
-  const model = normalizeClaudeModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels)
-  const rawEffort = value?.modelOptions?.reasoningEffort
-  const effortStr = typeof rawEffort === "string" ? rawEffort : undefined
-  const rawLegacyEffort = value?.effort
-  const legacyEffortStr = typeof rawLegacyEffort === "string" ? rawLegacyEffort : undefined
-  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
-  if (isClaudeReasoningEffort(effortStr)) {
-    normalizedEffort = effortStr
-  } else if (isClaudeReasoningEffort(legacyEffortStr)) {
-    normalizedEffort = legacyEffortStr
-  } else {
-    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
-  }
-
-  return {
-    model,
-    modelOptions: {
-      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
-      contextWindow: normalizeClaudeContextWindow(model, typeof value?.modelOptions?.contextWindow === "string" ? value.modelOptions.contextWindow : undefined, customModels),
-    },
-    planMode: value?.planMode === true,
-  }
-}
-
-function normalizeCodexPreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<Record<keyof CodexModelOptions, JsonValue>>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
-  const rawCodexEffort = value?.modelOptions?.reasoningEffort
-  const codexEffortStr = typeof rawCodexEffort === "string" ? rawCodexEffort : undefined
-  const rawCodexLegacyEffort = value?.effort
-  const codexLegacyEffortStr = typeof rawCodexLegacyEffort === "string" ? rawCodexLegacyEffort : undefined
-  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
-  if (isCodexReasoningEffort(codexEffortStr)) {
-    normalizedCodexEffort = codexEffortStr
-  } else if (isCodexReasoningEffort(codexLegacyEffortStr)) {
-    normalizedCodexEffort = codexLegacyEffortStr
-  } else {
-    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
-  }
-  return {
-    model: normalizeCodexModelId(typeof value?.model === "string" ? value.model : undefined, undefined, customModels),
-    modelOptions: {
-      reasoningEffort: normalizedCodexEffort,
-      fastMode: typeof value?.modelOptions?.fastMode === "boolean"
-        ? value.modelOptions.fastMode
-        : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
-    },
-    planMode: value?.planMode === true,
-  }
-}
-
-function normalizeProviderDefaults(
-  value: AppSettingsFile["providerDefaults"] | undefined,
-  customModels?: readonly CustomModelEntry[],
-): ChatProviderPreferences {
-  const defaults = createDefaultProviderDefaults()
-  return {
-    claude: normalizeClaudePreference(value?.claude ?? defaults.claude, customModels),
-    codex: normalizeCodexPreference(value?.codex ?? defaults.codex, customModels),
-    openrouter: {
-      model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: Boolean(value?.openrouter?.planMode),
-    },
-    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
-  }
+  return isAppThemePreference(value) ? value : "system"
 }
 
 function validateSubagentRestriction(
@@ -487,7 +299,7 @@ function validateSubagentName(
       return { code: "DUPLICATE_NAME", message: `Name '${name}' already in use` }
     }
   }
-  if (!SUBAGENT_NAME_REGEX.test(name)) {
+  if (!SUBAGENT_NAME_PATTERN.test(name)) {
     return { code: "INVALID_CHAR", message: "Name must match [a-z0-9_-]+" }
   }
   return null
@@ -498,7 +310,7 @@ function normalizeSubagentEntry<T>(
   warnings: string[],
   customModels?: readonly CustomModelEntry[],
 ): Subagent | null {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (!source) return null
   if (typeof source.id !== "string" || !source.id.trim()) return null
   if (typeof source.name !== "string") return null
@@ -507,7 +319,7 @@ function normalizeSubagentEntry<T>(
     warnings.push(`Subagent '${source.id}' has invalid provider; dropped`)
     return null
   }
-  const rawModelOptions = isPlainObject(source.modelOptions) ? source.modelOptions : {}
+  const rawModelOptions = isRecord(source.modelOptions) ? source.modelOptions : {}
   const rawModel = typeof source.model === "string" ? source.model : undefined
   let model = rawModel ?? ""
   let modelOptions: Subagent["modelOptions"] = {}
@@ -575,7 +387,7 @@ function normalizeSubagents<T>(
 }
 
 function normalizeStringMap<T>(value: T): Record<string, string> {
-  const obj = isPlainObject(value) ? value : null
+  const obj = isRecord(value) ? value : null
   if (!obj) return {}
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(obj)) {
@@ -586,7 +398,7 @@ function normalizeStringMap<T>(value: T): Record<string, string> {
 }
 
 function normalizeMcpTestResult<T>(value: T): McpServerTestResult {
-  const v = isPlainObject(value) ? value : null
+  const v = isRecord(value) ? value : null
   if (!v) return { status: "untested" as const }
   switch (v.status) {
     case "pending":
@@ -609,7 +421,7 @@ function normalizeMcpTestResult<T>(value: T): McpServerTestResult {
 }
 
 function normalizeMcpEntry<T>(value: T, warnings: string[]): McpServerConfig | null {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) return null
   const id = typeof src.id === "string" && src.id.length > 0 ? src.id : null
   const name = typeof src.name === "string" ? src.name : null
@@ -688,8 +500,13 @@ function normalizeOAuthTokenStatus<T>(value: T): OAuthTokenStatus {
   return "active"
 }
 
+function normalizeTokenMaxConcurrent<T>(raw: T, warnings: string[]): number | undefined {
+  const normalized = normalizeBounded(OAUTH_TOKEN_MAX_CONCURRENT_BOUND, raw, Number.NaN, "clamp", warnings)
+  return Number.isNaN(normalized) ? undefined : normalized
+}
+
 function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry | null {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) return null
   const id = typeof src.id === "string" && src.id.trim() ? src.id.trim() : null
   const token = typeof src.token === "string" ? src.token : ""
@@ -700,25 +517,13 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
   const label = typeof src.label === "string" && src.label.trim()
     ? src.label.trim().slice(0, OAUTH_TOKEN_LABEL_MAX)
     : id
-  let maxConcurrent: number | undefined
-  if (src.maxConcurrent !== undefined) {
-    if (typeof src.maxConcurrent !== "number" || !Number.isFinite(src.maxConcurrent)) {
-      warnings.push("claudeAuth.tokens entry maxConcurrent must be a number")
-    } else if (!isTokenConcurrency(src.maxConcurrent)) {
-      warnings.push(
-        `claudeAuth.tokens entry maxConcurrent must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
-      )
-      maxConcurrent = clampTokenConcurrency(src.maxConcurrent)
-    } else {
-      maxConcurrent = Math.round(src.maxConcurrent)
-    }
-  }
+  const maxConcurrent = normalizeTokenMaxConcurrent(src.maxConcurrent, warnings)
   let baseUrl: string | undefined
   if (src.baseUrl !== undefined && src.baseUrl !== null && src.baseUrl !== "") {
     if (typeof src.baseUrl !== "string") {
       warnings.push("claudeAuth.tokens entry baseUrl must be a string")
     } else {
-      const normalized = normalizeAnthropicBaseUrl(src.baseUrl)
+      const normalized = normalizeAnthropicBaseUrl(src.baseUrl, OAUTH_TOKEN_BASE_URL_MAX)
       if (normalized === null) {
         warnings.push("claudeAuth.tokens entry baseUrl must be an http(s) URL")
       } else {
@@ -742,43 +547,29 @@ function normalizeTokenEntry<T>(value: T, warnings: string[]): OAuthTokenEntry |
 }
 
 function normalizeClaudeLifecycle<T>(value: T, warnings: string[]): ClaudeLifecycleSettings {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver.lifecycle must be an object")
   }
-  const idleRaw = source?.idleTimeoutMs
-  let idleTimeoutMs = CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs
-  if (idleRaw !== undefined) {
-    if (typeof idleRaw !== "number" || !Number.isFinite(idleRaw)) {
-      warnings.push("claudeDriver.lifecycle.idleTimeoutMs must be a number")
-    } else if (idleRaw < CLAUDE_IDLE_TIMEOUT_MS_MIN || idleRaw > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
-      warnings.push(
-        `claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`,
-      )
-      idleTimeoutMs = clampNumber(idleRaw, CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs, CLAUDE_IDLE_TIMEOUT_MS_MIN, CLAUDE_IDLE_TIMEOUT_MS_MAX)
-    } else {
-      idleTimeoutMs = Math.round(idleRaw)
-    }
-  }
-  const maxRaw = source?.maxConcurrent
-  let maxConcurrent = CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent
-  if (maxRaw !== undefined) {
-    if (typeof maxRaw !== "number" || !Number.isFinite(maxRaw)) {
-      warnings.push("claudeDriver.lifecycle.maxConcurrent must be a number")
-    } else if (maxRaw < CLAUDE_MAX_CONCURRENT_MIN || maxRaw > CLAUDE_MAX_CONCURRENT_MAX) {
-      warnings.push(
-        `claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`,
-      )
-      maxConcurrent = clampNumber(maxRaw, CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent, CLAUDE_MAX_CONCURRENT_MIN, CLAUDE_MAX_CONCURRENT_MAX)
-    } else {
-      maxConcurrent = Math.round(maxRaw)
-    }
-  }
+  const idleTimeoutMs = normalizeBounded(
+    CLAUDE_IDLE_TIMEOUT_MS_BOUND,
+    source?.idleTimeoutMs,
+    CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs,
+    "clamp",
+    warnings,
+  )
+  const maxConcurrent = normalizeBounded(
+    CLAUDE_MAX_CONCURRENT_BOUND,
+    source?.maxConcurrent,
+    CLAUDE_LIFECYCLE_DEFAULTS.maxConcurrent,
+    "clamp",
+    warnings,
+  )
   return { idleTimeoutMs, maxConcurrent }
 }
 
 function normalizeClaudeDriverSettings<T>(value: T, warnings: string[]): ClaudeDriverSettings {
-  const source = isPlainObject(value) ? value : null
+  const source = isRecord(value) ? value : null
   if (value !== undefined && !source) {
     warnings.push("claudeDriver must be an object")
     return {
@@ -796,8 +587,9 @@ function normalizeGlobalPromptAppend<T>(value: T, warnings: string[]): string {
     return ""
   }
   const trimmed = value.replace(/\s+$/u, "")
-  if (trimmed.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
-    warnings.push(`globalPromptAppend must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} chars or fewer`)
+  const violation = globalPromptAppendViolation(trimmed)
+  if (violation) {
+    warnings.push(violation)
     return trimmed.slice(0, GLOBAL_PROMPT_APPEND_MAX_CHARS)
   }
   return trimmed
@@ -808,22 +600,18 @@ function normalizeSubagentRuntime<T>(
   subagents: readonly Subagent[],
   warnings: string[],
 ): SubagentRuntimeSettings {
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (value !== undefined && value !== null && !src) {
     warnings.push("subagentRuntime must be an object")
   }
 
-  let runTimeoutMs = DEFAULT_SUBAGENT_RUN_TIMEOUT_MS
-  const rawTimeout = src?.runTimeoutMs
-  if (rawTimeout !== undefined) {
-    if (typeof rawTimeout !== "number" || !Number.isInteger(rawTimeout)) {
-      warnings.push("subagentRuntime.runTimeoutMs must be an integer")
-    } else if (rawTimeout < MIN_SUBAGENT_RUN_TIMEOUT_MS || rawTimeout > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
-      warnings.push(`subagentRuntime.runTimeoutMs must be between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
-    } else {
-      runTimeoutMs = rawTimeout
-    }
-  }
+  const runTimeoutMs = normalizeBounded(
+    SUBAGENT_RUN_TIMEOUT_MS_BOUND,
+    src?.runTimeoutMs,
+    SUBAGENT_RUN_TIMEOUT_MS_DEFAULT,
+    "fallback",
+    warnings,
+  )
 
   let defaultLoopSubagentId: string | null = null
   const rawId = src?.defaultLoopSubagentId
@@ -843,7 +631,7 @@ function normalizeSubagentRuntime<T>(
 
 function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSettings {
   if (value === undefined) return { ...CLAUDE_AUTH_DEFAULTS }
-  const src = isPlainObject(value) ? value : null
+  const src = isRecord(value) ? value : null
   if (!src) {
     warnings.push("claudeAuth must be an object")
     return { ...CLAUDE_AUTH_DEFAULTS }
@@ -857,19 +645,13 @@ function normalizeClaudeAuth<T>(value: T, warnings: string[]): ClaudeAuthSetting
     const entry = normalizeTokenEntry(raw, warnings)
     if (entry) tokens.push(entry)
   }
-  let concurrencyDefault = OAUTH_TOKEN_CONCURRENCY_DEFAULT
-  if (src.concurrencyDefault !== undefined) {
-    if (typeof src.concurrencyDefault !== "number" || !Number.isFinite(src.concurrencyDefault)) {
-      warnings.push("claudeAuth.concurrencyDefault must be a number")
-    } else if (!isTokenConcurrency(src.concurrencyDefault)) {
-      warnings.push(
-        `claudeAuth.concurrencyDefault must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
-      )
-      concurrencyDefault = clampTokenConcurrency(src.concurrencyDefault)
-    } else {
-      concurrencyDefault = Math.round(src.concurrencyDefault)
-    }
-  }
+  const concurrencyDefault = normalizeBounded(
+    OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND,
+    src.concurrencyDefault,
+    OAUTH_TOKEN_CONCURRENCY_DEFAULT,
+    "clamp",
+    warnings,
+  )
   return { tokens, concurrencyDefault }
 }
 
@@ -926,15 +708,13 @@ function normalizeAppSettings<T>(
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
   const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
 
-  let shareDefaultTtlHours = DEFAULT_SHARE_DEFAULT_TTL_HOURS
-  if (source?.shareDefaultTtlHours !== undefined) {
-    const raw = source.shareDefaultTtlHours
-    if (typeof raw !== "number" || !Number.isInteger(raw) || raw <= 0) {
-      warnings.push("shareDefaultTtlHours must be a positive integer")
-    } else {
-      shareDefaultTtlHours = raw
-    }
-  }
+  const shareDefaultTtlHours = normalizeBounded(
+    SHARE_DEFAULT_TTL_HOURS_BOUND,
+    source?.shareDefaultTtlHours,
+    DEFAULT_SHARE_DEFAULT_TTL_HOURS,
+    "fallback",
+    warnings,
+  )
 
   const subagentRuntime = normalizeSubagentRuntime(source?.subagentRuntime, subagents, warnings)
   const packageUpdates = normalizePackageUpdateSettings(source?.packageUpdates, warnings)
@@ -949,8 +729,8 @@ function normalizeAppSettings<T>(
     chatSoundPreference: normalizeChatSoundPreference(source?.chatSoundPreference),
     chatSoundId: normalizeChatSoundId(source?.chatSoundId),
     terminal: {
-      scrollbackLines: clampNumber(source?.terminal?.scrollbackLines, DEFAULT_TERMINAL_SCROLLBACK, MIN_TERMINAL_SCROLLBACK, MAX_TERMINAL_SCROLLBACK),
-      minColumnWidth: clampNumber(source?.terminal?.minColumnWidth, DEFAULT_TERMINAL_MIN_COLUMN_WIDTH, MIN_TERMINAL_MIN_COLUMN_WIDTH, MAX_TERMINAL_MIN_COLUMN_WIDTH),
+      scrollbackLines: clampScrollback(source?.terminal?.scrollbackLines),
+      minColumnWidth: clampTerminalMinColumnWidth(source?.terminal?.minColumnWidth),
     },
     panes: {
       tabMinWidth: clampTabMinWidth(source?.panes?.tabMinWidth),
@@ -962,7 +742,7 @@ function normalizeAppSettings<T>(
     defaultProvider: normalizeDefaultProvider(source?.defaultProvider),
     providerDefaults: normalizeProviderDefaults(source?.providerDefaults, customModels),
     warning: null,
-    filePathDisplay: formatDisplayPath(filePath),
+    filePathDisplay: shortenHomePath(filePath, homedir()),
     cloudflareTunnel,
     push,
     telemetry,
@@ -1007,10 +787,11 @@ function validateMcpName(
   others: Array<{ id: string; name: string }>,
   ignoreId?: string,
 ): McpValidationError | null {
-  if (!MCP_NAME_REGEX.test(name)) {
-    return { code: "INVALID_NAME", field: "name", message: `name must match ${MCP_NAME_REGEX}` }
+  const issue = mcpServerNameIssue(name)
+  if (issue === "INVALID_NAME") {
+    return { code: "INVALID_NAME", field: "name", message: `name must match ${MCP_SERVER_NAME_PATTERN}` }
   }
-  if (MCP_RESERVED_NAMES.has(name)) {
+  if (issue === "RESERVED_NAME") {
     return { code: "RESERVED_NAME", field: "name", message: `name '${name}' is reserved` }
   }
   for (const other of others) {
@@ -1180,7 +961,7 @@ function validateTextSnippetShape(
   entry: TextSnippet,
   others: Array<{ id: string; shortcut: string }>,
 ): TextSnippetValidationError | null {
-  if (!SNIPPET_SHORTCUT_REGEX.test(entry.shortcut)) {
+  if (!SNIPPET_SHORTCUT_PATTERN.test(entry.shortcut)) {
     return { code: "INVALID_SHORTCUT", field: "shortcut", message: "shortcut must be 1-32 characters with no whitespace" }
   }
   if (entry.expansion.length === 0 || entry.expansion.length > SNIPPET_EXPANSION_MAX) {
@@ -1222,7 +1003,7 @@ function normalizeTextSnippets<T>(value: T, warnings: string[]): TextSnippet[] {
   }
   const out: TextSnippet[] = []
   for (const raw of value) {
-    if (!isPlainObject(raw)) continue
+    if (!isRecord(raw)) continue
     const entry: TextSnippet = {
       id: typeof raw.id === "string" && raw.id.length > 0 ? raw.id : randomUUID(),
       shortcut: String(raw.shortcut ?? "").trim(),
@@ -1308,7 +1089,7 @@ function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntr
   }
   const out: CustomModelEntry[] = []
   for (const raw of value) {
-    if (!isPlainObject(raw)) continue
+    if (!isRecord(raw)) continue
     const entry: CustomModelEntry = {
       id: String(raw.id ?? ""),
       label: String(raw.label ?? ""),
@@ -1444,7 +1225,7 @@ const SUBAGENT_CRUD: CollectionCrud<Subagent, SubagentInput, SubagentPatch> = {
 
 const MCP_CRUD: CollectionCrud<McpServerConfig, McpServerInput, McpServerPatch> = {
   create(input, current) {
-    if (isPlainObject(input) && input.transport === "stdio" && isMcpOAuthState(input.oauth) && input.oauth.enabled) {
+    if (isRecord(input) && input.transport === "stdio" && isMcpOAuthState(input.oauth) && input.oauth.enabled) {
       throw new McpValidationException({ code: "INVALID_OAUTH_TRANSPORT", field: "oauth", message: "OAuth is only supported for http/sse transports" })
     }
     return validatedMcpEntry(buildMcpFromInput(input), current)
@@ -1515,17 +1296,11 @@ type BeaconPairingPatch = Omit<AppSettingsPatch, "customBeacons"> & {
 
 function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSettingsState {
   if (patch.shareDefaultTtlHours !== undefined) {
-    const value = patch.shareDefaultTtlHours
-    if (!Number.isInteger(value) || value < 1) {
-      throw new Error("shareDefaultTtlHours must be a positive integer >= 1")
-    }
+    assertWithinBound(SHARE_DEFAULT_TTL_HOURS_BOUND, patch.shareDefaultTtlHours)
   }
 
   if (patch.subagentRuntime?.runTimeoutMs !== undefined) {
-    const value = patch.subagentRuntime.runTimeoutMs
-    if (!Number.isInteger(value) || value < MIN_SUBAGENT_RUN_TIMEOUT_MS || value > MAX_SUBAGENT_RUN_TIMEOUT_MS) {
-      throw new Error(`subagentRuntime.runTimeoutMs must be an integer between ${MIN_SUBAGENT_RUN_TIMEOUT_MS} and ${MAX_SUBAGENT_RUN_TIMEOUT_MS}`)
-    }
+    assertWithinBound(SUBAGENT_RUN_TIMEOUT_MS_BOUND, patch.subagentRuntime.runTimeoutMs)
   }
   if (patch.subagentRuntime?.defaultLoopSubagentId != null) {
     const id = patch.subagentRuntime.defaultLoopSubagentId
@@ -1551,70 +1326,7 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
   return normalizeAppSettings({
     ...toFilePayload(state),
     ...patch,
-    terminal: {
-      ...state.terminal,
-      ...patch.terminal,
-    },
-    panes: {
-      ...state.panes,
-      ...patch.panes,
-    },
-    editor: {
-      ...state.editor,
-      ...patch.editor,
-    },
-    typography: {
-      ...state.typography,
-      ...patch.typography,
-    },
-    providerDefaults: {
-      claude: {
-        ...state.providerDefaults.claude,
-        ...patch.providerDefaults?.claude,
-        modelOptions: {
-          ...state.providerDefaults.claude.modelOptions,
-          ...patch.providerDefaults?.claude?.modelOptions,
-        },
-      },
-      codex: {
-        ...state.providerDefaults.codex,
-        ...patch.providerDefaults?.codex,
-        modelOptions: {
-          ...state.providerDefaults.codex.modelOptions,
-          ...patch.providerDefaults?.codex?.modelOptions,
-        },
-      },
-      openrouter: {
-        ...state.providerDefaults.openrouter,
-        ...patch.providerDefaults?.openrouter,
-        modelOptions: {},
-      },
-      custom: { ...state.providerDefaults.custom, ...patch.providerDefaults?.custom, modelOptions: {} },
-    },
-    cloudflareTunnel: {
-      ...state.cloudflareTunnel,
-      ...patch.cloudflareTunnel,
-    },
-    push: {
-      ...state.push,
-      ...patch.push,
-    },
-    telemetry: {
-      ...state.telemetry,
-      ...patch.telemetry,
-    },
-    auth: {
-      ...state.auth,
-      ...patch.auth,
-    },
-    claudeAuth: {
-      tokens: patch.claudeAuth?.tokens ?? state.claudeAuth.tokens,
-      concurrencyDefault: patch.claudeAuth?.concurrencyDefault ?? state.claudeAuth.concurrencyDefault,
-    },
-    uploads: {
-      ...state.uploads,
-      ...patch.uploads,
-    },
+    ...mergeSettingsSections(state, patch),
     subagents: nextSubagents,
     customMcpServers: nextMcpServers,
     customBeacons: nextBeacons,
@@ -1622,54 +1334,41 @@ function applyPatch(state: AppSettingsState, patch: BeaconPairingPatch): AppSett
     mcpSources: nextMcpSources,
     customProviders: nextCustomProviders,
     textSnippets: nextTextSnippets,
-    ...mergePluginPatch(state, patch),
-    remoteMcp: { ...state.remoteMcp, ...patch.remoteMcp },
+    installedPlugins: mergeInstalledPluginsPatch(state, patch),
     serviceBus: applyServiceBusPatch(state.serviceBus, patch.serviceBus),
-    claudeDriver: {
-      lifecycle: {
-        ...state.claudeDriver.lifecycle,
-        ...patch.claudeDriver?.lifecycle,
-      },
-    },
-    globalPromptAppend: patch.globalPromptAppend ?? state.globalPromptAppend,
-    shareDefaultTtlHours: patch.shareDefaultTtlHours ?? state.shareDefaultTtlHours,
-    subagentRuntime: {
-      runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? state.subagentRuntime.runTimeoutMs,
-      defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined
-        ? patch.subagentRuntime.defaultLoopSubagentId
-        : state.subagentRuntime.defaultLoopSubagentId,
-    },
-    packageUpdates: {
-      ...state.packageUpdates,
-      ...patch.packageUpdates,
-    },
   }, state.filePathDisplay).payload
 }
 
-export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())) {
-  try {
-    const text = await readTextFileOrThrow(filePath)
-    if (!text.trim()) {
-      const normalized = normalizeAppSettings(undefined, filePath)
-      return {
-        ...toSnapshot(normalized.payload),
-        warning: "Settings file was empty. Using defaults.",
-      } satisfies AppSettingsSnapshot
-    }
+interface LoadedSettings {
+  state: AppSettingsState
+  shouldPersist: boolean
+}
 
-    return toSnapshot(normalizeAppSettings(JSON.parse(text), filePath).payload)
-  } catch (error) {
-    if (isErrnoException(error) && error.code === "ENOENT") {
-      return toSnapshot(normalizeAppSettings(undefined, filePath).payload)
-    }
-    if (error instanceof SyntaxError) {
-      return {
-        ...toSnapshot(normalizeAppSettings(undefined, filePath).payload),
-        warning: "Settings file is invalid JSON. Using defaults.",
-      } satisfies AppSettingsSnapshot
-    }
-    throw error
+function settingsFileReader(filePath: string): JsonSettingsFileReader<LoadedSettings> {
+  return {
+    label: "Settings",
+    defaults: (warning) => ({
+      state: { ...normalizeAppSettings(undefined, filePath).payload, warning },
+      shouldPersist: true,
+    }),
+    normalize: (value) => {
+      const normalized = normalizeAppSettings(value, filePath)
+      return { state: normalized.payload, shouldPersist: normalized.shouldWrite }
+    },
   }
+}
+
+async function persistSettings(filePath: string, state: AppSettingsState) {
+  await atomicWriteJson(filePath, `${JSON.stringify(toFilePayload(state), null, 2)}\n`)
+}
+
+export function defaultAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())): AppSettingsSnapshot {
+  return toSnapshot(normalizeAppSettings(undefined, filePath).payload)
+}
+
+export async function readAppSettingsSnapshot(filePath = getSettingsFilePath(homedir())) {
+  const loaded = await readJsonSettingsFile(filePath, settingsFileReader(filePath))
+  return toSnapshot(loaded.state)
 }
 
 export class AppSettingsManager {
@@ -1730,22 +1429,14 @@ export class AppSettingsManager {
 
   async setAuth(patch: Partial<AuthSettings>) {
     if (patch.sessionMaxAgeDays !== undefined) {
-      const value = patch.sessionMaxAgeDays
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < AUTH_SESSION_MAX_AGE_DAYS_MIN || value > AUTH_SESSION_MAX_AGE_DAYS_MAX) {
-        throw new Error(`auth.sessionMaxAgeDays must be between ${AUTH_SESSION_MAX_AGE_DAYS_MIN} and ${AUTH_SESSION_MAX_AGE_DAYS_MAX}`)
-      }
+      assertWithinBound(AUTH_SESSION_MAX_AGE_DAYS_BOUND, patch.sessionMaxAgeDays)
     }
     return this.writePatch({ auth: patch })
   }
 
   async setUploads(patch: Partial<UploadSettings>) {
     if (patch.maxFileSizeMb !== undefined) {
-      const value = patch.maxFileSizeMb
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < UPLOAD_MAX_FILE_SIZE_MB_MIN || value > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
-        throw new Error(`uploads.maxFileSizeMb must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX}`)
-      }
+      assertWithinBound(UPLOAD_MAX_FILE_SIZE_MB_BOUND, patch.maxFileSizeMb)
     }
     return this.writePatch({ uploads: patch })
   }
@@ -1754,29 +1445,17 @@ export class AppSettingsManager {
     lifecycle?: Partial<ClaudeLifecycleSettings>
   }) {
     if (patch.lifecycle?.idleTimeoutMs !== undefined) {
-      const value = patch.lifecycle.idleTimeoutMs
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_IDLE_TIMEOUT_MS_MIN || value > CLAUDE_IDLE_TIMEOUT_MS_MAX) {
-        throw new Error(`claudeDriver.lifecycle.idleTimeoutMs must be between ${CLAUDE_IDLE_TIMEOUT_MS_MIN} and ${CLAUDE_IDLE_TIMEOUT_MS_MAX}`)
-      }
+      assertWithinBound(CLAUDE_IDLE_TIMEOUT_MS_BOUND, patch.lifecycle.idleTimeoutMs)
     }
     if (patch.lifecycle?.maxConcurrent !== undefined) {
-      const value = patch.lifecycle.maxConcurrent
-      if (typeof value !== "number" || !Number.isFinite(value)
-        || value < CLAUDE_MAX_CONCURRENT_MIN || value > CLAUDE_MAX_CONCURRENT_MAX) {
-        throw new Error(`claudeDriver.lifecycle.maxConcurrent must be between ${CLAUDE_MAX_CONCURRENT_MIN} and ${CLAUDE_MAX_CONCURRENT_MAX}`)
-      }
+      assertWithinBound(CLAUDE_MAX_CONCURRENT_BOUND, patch.lifecycle.maxConcurrent)
     }
     return this.writePatch({ claudeDriver: patch })
   }
 
   async setGlobalPromptAppend(text: string) {
-    if (typeof text !== "string") {
-      throw new Error("globalPromptAppend must be a string")
-    }
-    if (text.length > GLOBAL_PROMPT_APPEND_MAX_CHARS) {
-      throw new Error(`globalPromptAppend must be ${GLOBAL_PROMPT_APPEND_MAX_CHARS} chars or fewer`)
-    }
+    const violation = globalPromptAppendViolation(text)
+    if (violation) throw new Error(violation)
     return this.writePatch({ globalPromptAppend: text })
   }
 
@@ -1785,15 +1464,7 @@ export class AppSettingsManager {
       throw new Error("claudeAuth.tokens must be an array")
     }
     if (patch.concurrencyDefault !== undefined) {
-      const v = patch.concurrencyDefault
-      if (typeof v !== "number" || !Number.isFinite(v)) {
-        throw new Error("claudeAuth.concurrencyDefault must be a number")
-      }
-      if (!isTokenConcurrency(v)) {
-        throw new Error(
-          `claudeAuth.concurrencyDefault must be at least ${OAUTH_TOKEN_MAX_CONCURRENT_MIN}`,
-        )
-      }
+      assertWithinBound(OAUTH_TOKEN_CONCURRENCY_DEFAULT_BOUND, patch.concurrencyDefault)
     }
     return this.writePatch({ claudeAuth: patch })
   }
@@ -1846,43 +1517,22 @@ export class AppSettingsManager {
     const nextState = {
       ...applyPatch(this.state, patch),
       warning: null,
-      filePathDisplay: formatDisplayPath(this.filePath),
+      filePathDisplay: shortenHomePath(this.filePath, homedir()),
     }
     await mkdirRecursive(path.dirname(this.filePath))
-    await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(nextState), null, 2)}\n`)
+    await persistSettings(this.filePath, nextState)
     this.setState(nextState)
     return toSnapshot(nextState)
   }
 
   private async readState(options?: { persistNormalized?: boolean; allowDefaultsFallback?: boolean }) {
-    try {
-      const text = await readBunFileText(this.filePath)
-      const hasText = text.trim().length > 0
-      const normalized = normalizeAppSettings(hasText ? JSON.parse(text) : undefined, this.filePath)
-      if (options?.persistNormalized && (!hasText || normalized.shouldWrite)) {
-            await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
-      }
-      return {
-        ...normalized.payload,
-        warning: !hasText ? "Settings file was empty. Using defaults." : normalized.warning,
-      } satisfies AppSettingsState
-    } catch (error) {
-      if (!(isErrnoException(error) && error.code === "ENOENT") && !(error instanceof SyntaxError)) {
-        throw error
-      }
-
-      if (!options?.allowDefaultsFallback) {
-        throw error
-      }
-      const normalized = normalizeAppSettings(undefined, this.filePath)
-      if (options?.persistNormalized) {
-            await atomicWriteJson(this.filePath, `${JSON.stringify(toFilePayload(normalized.payload), null, 2)}\n`)
-      }
-      return {
-        ...normalized.payload,
-        warning: error instanceof SyntaxError ? "Settings file is invalid JSON. Using defaults." : null,
-      } satisfies AppSettingsState
+    const loaded = await readJsonSettingsFile(this.filePath, settingsFileReader(this.filePath), {
+      strict: !options?.allowDefaultsFallback,
+    })
+    if (options?.persistNormalized && loaded.shouldPersist) {
+      await persistSettings(this.filePath, loaded.state)
     }
+    return loaded.state
   }
 
   private setState(state: AppSettingsState) {

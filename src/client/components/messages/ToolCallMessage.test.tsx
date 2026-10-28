@@ -3,7 +3,7 @@ import { act } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ReadResultImages, ToolCallMessage } from "./ToolCallMessage"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
-import type { ProcessedToolCall } from "./types"
+import type { HydratedToolCall } from "../../../shared/types"
 import { useWorkflowsStore } from "../../stores/workflowsStore"
 import type { WorkflowRunSummary } from "../../../shared/workflow-types"
 
@@ -26,7 +26,7 @@ describe("ToolCallMessage", () => {
   })
 
   test("workflow tool call renders WorkflowMessage with name and neutral pill when no result yet", async () => {
-    const message: ProcessedToolCall = {
+    const message: HydratedToolCall = {
       kind: "tool",
       toolKind: "workflow",
       toolName: "Workflow",
@@ -49,7 +49,7 @@ describe("ToolCallMessage", () => {
   })
 
   test("workflow tool call with hydrated result shows name (no render loop)", async () => {
-    const message: ProcessedToolCall = {
+    const message: HydratedToolCall = {
       kind: "tool",
       toolKind: "workflow",
       toolName: "Workflow",
@@ -78,7 +78,7 @@ describe("ToolCallMessage", () => {
       { runId: "wf_x", taskId: "task_old", status: "running", agentCount: 3, phases: [], agents: [] },
     ]
     useWorkflowsStore.getState().setRuns(chatId, runs)
-    const message: ProcessedToolCall = {
+    const message: HydratedToolCall = {
       kind: "tool", toolKind: "workflow", toolName: "Workflow", toolId: "t-wf-3",
       input: { name: "sweep" },
       result: { taskId: "task_old", text: "Task ID: task_old" },
@@ -96,7 +96,7 @@ describe("ToolCallMessage", () => {
   })
 
   test("image_view names the file in the collapsed row and mounts no image element until it is expanded", async () => {
-    const message: ProcessedToolCall = {
+    const message: HydratedToolCall = {
       kind: "tool",
       toolKind: "image_view",
       toolName: "ImageView",
@@ -138,7 +138,7 @@ describe("ToolCallMessage", () => {
       { runId: "wf_other", taskId: "task_unrelated", status: "failed", agentCount: 0, phases: [], agents: [] },
     ]
     useWorkflowsStore.getState().setRuns(chatId, runs)
-    const message: ProcessedToolCall = {
+    const message: HydratedToolCall = {
       kind: "tool", toolKind: "workflow", toolName: "Workflow", toolId: "t-wf-4",
       input: { name: "sweep" },
       result: { taskId: "task_new", text: "Task ID: task_new" },

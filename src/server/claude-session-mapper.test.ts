@@ -1,15 +1,20 @@
 import { describe, expect, test } from "vite-plus/test"
-import { mapClaudeRecordsToEntries } from "./claude-session-mapper"
-import type { ClaudeSessionRecord } from "./claude-session-types"
+import type { JsonObject } from "../shared/json"
+import { decodeClaudeSessionRecord } from "./claude-session-decode"
+import { mapClaudeRecordsToEntries, sourceUuidOfEntryId } from "./claude-session-mapper"
+
+function mapLines(lines: JsonObject[]) {
+  const records = lines.flatMap((line) => decodeClaudeSessionRecord(line) ?? [])
+  return mapClaudeRecordsToEntries(records)
+}
 
 describe("mapClaudeRecordsToEntries", () => {
   const baseTs = "2026-04-20T10:00:00.000Z"
 
   test("user message → user_prompt entry", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       { type: "user", uuid: "u1", timestamp: baseTs, message: { role: "user", content: "hello" } },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
     expect(entries[0].kind).toBe("user_prompt")
     if (entries[0].kind === "user_prompt") {
@@ -18,15 +23,14 @@ describe("mapClaudeRecordsToEntries", () => {
   })
 
   test("assistant text → assistant_text entry", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       {
         type: "assistant",
         uuid: "a1",
         timestamp: baseTs,
         message: { role: "assistant", id: "m1", content: [{ type: "text", text: "hi" }] },
       },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
     expect(entries[0].kind).toBe("assistant_text")
     if (entries[0].kind === "assistant_text") {
@@ -35,7 +39,7 @@ describe("mapClaudeRecordsToEntries", () => {
   })
 
   test("assistant tool_use → tool_call entry with normalized Bash tool", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       {
         type: "assistant",
         uuid: "a2",
@@ -45,8 +49,7 @@ describe("mapClaudeRecordsToEntries", () => {
           content: [{ type: "tool_use", id: "tu-1", name: "Bash", input: { command: "ls" } }],
         },
       },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
     expect(entries[0].kind).toBe("tool_call")
     if (entries[0].kind === "tool_call") {
@@ -56,7 +59,7 @@ describe("mapClaudeRecordsToEntries", () => {
   })
 
   test("user tool_result → tool_result entry", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       {
         type: "user",
         uuid: "u1",
@@ -66,8 +69,7 @@ describe("mapClaudeRecordsToEntries", () => {
           content: [{ type: "tool_result", tool_use_id: "tu-1", content: "file1\nfile2" }],
         },
       },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
     expect(entries[0].kind).toBe("tool_result")
     if (entries[0].kind === "tool_result") {
@@ -77,7 +79,7 @@ describe("mapClaudeRecordsToEntries", () => {
   })
 
   test("user tool_result carrying a sibling toolUseResult (Task/Agent tool) → entry.debugRaw round-trips agentId", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       {
         type: "user",
         uuid: "u2",
@@ -88,8 +90,7 @@ describe("mapClaudeRecordsToEntries", () => {
         },
         toolUseResult: { agentId: "agent-abc123", agentType: "Hunter", status: "completed" },
       },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
     expect(entries[0].kind).toBe("tool_result")
     if (entries[0].kind === "tool_result") {
@@ -100,12 +101,38 @@ describe("mapClaudeRecordsToEntries", () => {
   })
 
   test("skips summary and system records", () => {
-    const records: ClaudeSessionRecord[] = [
+    const entries = mapLines([
       { type: "summary", summary: "x" },
       { type: "system", content: "y" },
       { type: "user", uuid: "u1", timestamp: baseTs, message: { role: "user", content: "hi" } },
-    ]
-    const entries = mapClaudeRecordsToEntries(records)
+    ])
     expect(entries.length).toBe(1)
+  })
+
+  test("a user line with no message is skipped instead of aborting the import", () => {
+    const entries = mapLines([
+      { type: "user", uuid: "bad", timestamp: baseTs },
+      { type: "user", uuid: "u1", timestamp: baseTs, message: { role: "user", content: "hi" } },
+    ])
+    expect(entries.length).toBe(1)
+  })
+
+  test("every mapped entry id resolves back to its source record uuid", () => {
+    const entries = mapLines([
+      { type: "user", uuid: "u-1", message: { content: "hi" } },
+      {
+        type: "assistant",
+        uuid: "a-1",
+        message: {
+          content: [
+            { type: "text", text: "hi" },
+            { type: "tool_use", id: "tu-1", name: "Bash", input: { command: "ls" } },
+          ],
+        },
+      },
+      { type: "user", uuid: "u-2", message: { content: [{ type: "tool_result", tool_use_id: "tu-1", content: "ok" }] } },
+    ])
+    expect(entries.map((entry) => sourceUuidOfEntryId(entry._id))).toEqual(["u-1", "a-1", "a-1", "u-2"])
+    expect(sourceUuidOfEntryId("not-an-imported-id")).toBeNull()
   })
 })

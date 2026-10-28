@@ -136,19 +136,6 @@ export type ChatTaskEvent =
 
 export type ChatTaskEventType = ChatTaskEvent["type"]
 
-export const CHAT_TASK_EVENT_TYPES: readonly ChatTaskEventType[] = [
-  "chat_task_created",
-  "chat_task_updated",
-  "chat_task_deleted",
-  "chat_task_claimed",
-  "chat_task_run_bound",
-  "chat_task_settled",
-  "chat_task_integrated",
-  "chat_task_note",
-  "chat_task_epoch_advanced",
-  "chat_task_native_synced",
-]
-
 export function isNativeTaskId(taskId: string): boolean {
   return taskId.startsWith(NATIVE_TASK_ID_PREFIX)
 }

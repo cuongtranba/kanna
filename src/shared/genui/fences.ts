@@ -1,4 +1,4 @@
-import { scanFenceBody } from "../mermaid-fences"
+import { scanFenceBody } from "../markdown-fences"
 
 export const KANNA_UI_FENCE_LANGUAGE = "kanna-ui"
 export const KANNA_UI_INTENT_FENCE_LANGUAGE = "kanna-ui-intent"

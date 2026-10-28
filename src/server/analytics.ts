@@ -4,6 +4,7 @@ import { PROD_SERVER_PORT } from "../shared/ports"
 import type { ShareMode } from "../shared/share"
 import { isTokenShareMode } from "../shared/share"
 import { log } from "../shared/log"
+import { createSerialQueue } from "./serial-lane"
 interface AnalyticsRequestBody {
   userId: string
   environment: AnalyticsEnvironment
@@ -21,6 +22,8 @@ export interface LaunchAnalyticsOptions {
   password: string | null
   strictPort: boolean
 }
+
+type AnalyticsLogger = Pick<typeof log, "info" | "warn">
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 type AnalyticsEnvironment = "dev" | "prod"
@@ -47,7 +50,9 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
   private readonly fetchImpl: FetchLike
   private readonly currentVersion: string
   private readonly environment: AnalyticsEnvironment
-  private queue = Promise.resolve()
+  private readonly logger: AnalyticsLogger
+  private readonly isLoggingEnabled: () => boolean
+  private readonly queue = createSerialQueue()
 
   constructor(args: {
     settings: AnalyticsSettings
@@ -55,12 +60,16 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
     environment: AnalyticsEnvironment
     endpoint?: string
     fetchImpl?: FetchLike
+    logger?: AnalyticsLogger
+    isLoggingEnabled?: () => boolean
   }) {
     this.settings = args.settings
     this.currentVersion = args.currentVersion
     this.environment = args.environment
     this.endpoint = args.endpoint ?? ANALYTICS_ENDPOINT
     this.fetchImpl = args.fetchImpl ?? fetch
+    this.logger = args.logger ?? log
+    this.isLoggingEnabled = args.isLoggingEnabled ?? isAnalyticsLoggingEnabled
   }
 
   track(eventName: string, properties?: JsonObject) {
@@ -78,8 +87,8 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
       },
     }
 
-    this.queue = this.queue
-      .then(async () => {
+    this.queue
+      .run(async () => {
         const response = await this.fetchImpl(this.endpoint, {
           method: "POST",
           headers: {
@@ -90,15 +99,19 @@ export class KannaAnalyticsReporter implements AnalyticsReporter {
         if (!response.ok) {
           throw new Error(`Analytics request failed with status ${response.status}`)
         }
-        if (isAnalyticsLoggingEnabled()) {
-          log.info("[kanna/analytics] Sent analytics event:", eventName, response.status)
+        if (this.isLoggingEnabled()) {
+          this.logger.info("[kanna/analytics] Sent analytics event:", eventName, response.status)
         }
       })
       .catch((error) => {
-        if (isAnalyticsLoggingEnabled()) {
-          log.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
+        if (this.isLoggingEnabled()) {
+          this.logger.warn("[kanna/analytics] Failed to send analytics event:", eventName, error)
         }
       })
+  }
+
+  flush(): Promise<void> {
+    return this.queue.run(async () => {})
   }
 
   trackLaunch(options: LaunchAnalyticsOptions) {

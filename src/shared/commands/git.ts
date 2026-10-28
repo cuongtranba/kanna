@@ -13,6 +13,7 @@ import {
   generateCommitMessageResultSchema,
   gitHubPublishInfoSchema,
   gitHubRepoAvailabilityResultSchema,
+  gitRepoVisibilitySchema,
   gitSyncActionSchema,
   snapshotChangedResultSchema,
 } from "../git-diff-types.schema"
@@ -55,7 +56,7 @@ export const gitCommands = defineCommands(
       ...chatIdShape,
       owner: z.string(),
       name: z.string(),
-      visibility: z.enum(["public", "private"]),
+      visibility: gitRepoVisibilitySchema,
       description: z.string().optional(),
     }),
     result: branchActionResultSchema,

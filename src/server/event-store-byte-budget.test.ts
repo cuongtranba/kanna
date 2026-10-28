@@ -4,7 +4,7 @@ import {
   fitLimitToByteBudget,
   MIN_RECENT_PAGE_ENTRIES,
   RECENT_PAGE_BYTE_BUDGET,
-} from "./event-store-helpers"
+} from "./history-paging"
 
 function entryOfSize(id: number, bytes: number): TranscriptEntry {
   return {

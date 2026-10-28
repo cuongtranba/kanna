@@ -1,30 +1,30 @@
 import { useCallback } from "react"
 import { Pencil, Plus, Trash2 } from "lucide-react"
-import type { JetStreamConsumerSettings } from "../../shared/service-bus/jetstream-config"
+import {
+  CONSUMER_ACK_POLICIES,
+  CONSUMER_DELIVER_POLICIES,
+  type ConsumerAckPolicy,
+  type ConsumerDeliverPolicy,
+  type JetStreamConsumerSettings,
+} from "../../shared/service-bus/jetstream-config"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { SegmentedControl } from "../components/ui/segmented-control"
 import { consumerToDraft, draftToConsumer, newConsumerDraft, problemsOf } from "../lib/serviceBusDraft"
 import { selectServiceBusSettings, useAppSettingsStore } from "../stores/appSettingsStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
-import { selectServiceBusStatus, useServiceBusStore } from "../stores/serviceBusStore"
+import { useServiceBusStore } from "../stores/serviceBusStore"
 import { useServiceBusSectionStore } from "../stores/serviceBusSectionStore"
-import { errorMessage } from "../../shared/errors"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import type { KannaState } from "./useKannaState"
 import { Field, Problems } from "./ServiceBusFields"
 
 const SAVE_KEY = pendingActionKey("settings.serviceBus", "consumers")
 
-const ACK_OPTIONS = [
-  { value: "explicit" as const, label: "Explicit" },
-  { value: "all" as const, label: "All" },
-  { value: "none" as const, label: "None" },
-]
-const DELIVER_OPTIONS = [
-  { value: "all" as const, label: "All" },
-  { value: "new" as const, label: "New" },
-  { value: "last" as const, label: "Last" },
-]
+const ACK_LABELS: Record<ConsumerAckPolicy, string> = { explicit: "Explicit", all: "All", none: "None" }
+const ACK_OPTIONS = CONSUMER_ACK_POLICIES.map((value) => ({ value, label: ACK_LABELS[value] }))
+const DELIVER_LABELS: Record<ConsumerDeliverPolicy, string> = { all: "All", new: "New", last: "Last" }
+const DELIVER_OPTIONS = CONSUMER_DELIVER_POLICIES.map((value) => ({ value, label: DELIVER_LABELS[value] }))
 
 function ConsumerRow({ consumer, onEdit, onRemove }: { consumer: JetStreamConsumerSettings; onEdit: () => void; onRemove: () => void }) {
   const live = useServiceBusStore((s) => s.status.consumers.find((candidate) => candidate.name === consumer.durableName))
@@ -54,7 +54,6 @@ function ConsumerRow({ consumer, onEdit, onRemove }: { consumer: JetStreamConsum
 
 export function ServiceBusConsumersGroup({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
   const settings = useAppSettingsStore(selectServiceBusSettings)
-  useServiceBusStore(selectServiceBusStatus)
   const editor = useServiceBusSectionStore((s) => s.consumerEditor)
   const openConsumerEditor = useServiceBusSectionStore((s) => s.openConsumerEditor)
   const editConsumer = useServiceBusSectionStore((s) => s.editConsumer)
@@ -63,15 +62,10 @@ export function ServiceBusConsumersGroup({ state }: { state: Pick<KannaState, "h
   const saving = usePendingAction(SAVE_KEY)
 
   const write = useCallback(
-    async (consumers: JetStreamConsumerSettings[]) => {
-      setError(null)
-      try {
-        await state.handleWriteAppSettings({ serviceBus: { consumers } })
-        closeConsumerEditor()
-      } catch (caught) {
-        setError(errorMessage(caught))
-      }
-    },
+    (consumers: JetStreamConsumerSettings[]) => surfaceErrorIn(setError, async () => {
+      await state.handleWriteAppSettings({ serviceBus: { consumers } })
+      closeConsumerEditor()
+    }),
     [state, closeConsumerEditor, setError],
   )
 

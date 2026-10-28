@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { toError } from "../../shared/errors"
-import { resolvePath, stringifyValue } from "../../shared/inbound/template"
-import { isJsonArray, type JsonObject, type JsonValue } from "../../shared/json"
+import { isJsonArray, jsonText, resolveJsonPath, type JsonObject, type JsonValue } from "../../shared/json"
 import { log } from "../../shared/log"
+import { createSerialQueue } from "../serial-lane"
 import {
   MCP_SOURCE_DEDUPE_KEYS,
   type McpPollSource,
@@ -12,7 +12,7 @@ import {
 } from "../../shared/mcp-sources/types"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import type { InboundDelivery, InboundDeliveryResult } from "../inbound/deliver-inbound"
-import { addCounter } from "../observability"
+import { addCounter, MCP_SOURCE_ERRORS, MCP_SOURCE_ITEMS } from "../observability"
 
 export type McpSourceCloseReason = "local" | "graceful" | "remote"
 
@@ -81,7 +81,7 @@ function isUnauthorized(error: Error): boolean {
 }
 
 function textAt(item: JsonValue, path: string): string {
-  return path.length > 0 ? stringifyValue(resolvePath(item, path)).trim() : ""
+  return path.length > 0 ? jsonText(resolveJsonPath(item, path)).trim() : ""
 }
 
 function initialStatus(source: McpSource, state: McpSourceStatus["state"], lastError: string | null): McpSourceStatus {
@@ -116,8 +116,8 @@ export class McpSourceRunner {
   private readonly listeners = new Set<() => void>()
   private cursors: McpSourceCursors = {}
   private cursorsLoaded = false
-  private saving: Promise<void> = Promise.resolve()
-  private reconciling: Promise<void> = Promise.resolve()
+  private readonly saving = createSerialQueue()
+  private readonly reconciling = createSerialQueue()
 
   constructor(
     private readonly connector: McpSourceConnector,
@@ -128,16 +128,15 @@ export class McpSourceRunner {
   ) {}
 
   reconcile(sources: readonly McpSource[], servers: readonly McpServerConfig[]): Promise<void> {
-    this.reconciling = this.reconciling.then(() => this.apply(sources, servers))
-    return this.reconciling
+    return this.reconciling.run(() => this.apply(sources, servers))
   }
 
   async stop(): Promise<void> {
-    await this.reconciling
+    await this.reconciling.run(async () => {})
     const entries = [...this.entries.values()]
     this.entries.clear()
     await Promise.all(entries.map((entry) => this.halt(entry)))
-    await this.saving
+    await this.saving.run(async () => {})
   }
 
   statuses(): McpSourceStatus[] {
@@ -193,11 +192,9 @@ export class McpSourceRunner {
 
   private persist(): void {
     const snapshot = this.cursors
-    this.saving = this.saving
-      .then(() => this.cursorStore.save(snapshot))
-      .catch((error: Error) => {
-        log.warn("[kanna/mcp-source] cursor save failed:", error.message)
-      })
+    this.saving.run(() => this.cursorStore.save(snapshot)).catch((error: Error) => {
+      log.warn("[kanna/mcp-source] cursor save failed:", error.message)
+    })
   }
 
   private async halt(entry: Entry): Promise<void> {
@@ -232,7 +229,7 @@ export class McpSourceRunner {
   }
 
   private fail(entry: Entry, error: Error): void {
-    addCounter("kanna.mcp_source.errors", 1, { mode: entry.source.mode })
+    addCounter(MCP_SOURCE_ERRORS, 1, { mode: entry.source.mode })
     log.warn(`[kanna/mcp-source] ${entry.source.name}:`, error.message)
     this.patch(entry, { lastError: error.message })
   }
@@ -277,7 +274,7 @@ export class McpSourceRunner {
       [source.id]: { ...state, recentKeys: [...state.recentKeys, key].slice(-MCP_SOURCE_DEDUPE_KEYS) },
     }
     this.persist()
-    addCounter("kanna.mcp_source.items", 1, { mode: source.mode })
+    addCounter(MCP_SOURCE_ITEMS, 1, { mode: source.mode })
     this.patch(entry, { lastItemAt: at, itemCount: entry.status.itemCount + 1, lastError: null })
   }
 
@@ -347,7 +344,7 @@ export class McpSourceRunner {
     const { cursor } = this.cursorState(source.id)
     const args = cursor === null ? source.args : { ...source.args, [source.cursorArg]: cursor }
     const result = await connection.callTool(source.tool, args)
-    const items = resolvePath(result, source.itemsPath)
+    const items = resolveJsonPath(result, source.itemsPath)
     if (items === undefined || !isJsonArray(items)) {
       throw new Error(`"${source.itemsPath}" did not resolve to an array in the ${source.tool} result`)
     }
@@ -355,7 +352,7 @@ export class McpSourceRunner {
       const key = (source.itemKeyPath ? textAt(item, source.itemKeyPath) : "") || sha256(JSON.stringify(item))
       await this.ingest(entry, server, item, key, key)
     }
-    const next = resolvePath(result, source.cursorPath)
+    const next = resolveJsonPath(result, source.cursorPath)
     if (next === undefined) return
     this.cursors = { ...this.cursors, [source.id]: { ...this.cursorState(source.id), cursor: next } }
     this.persist()

@@ -98,6 +98,16 @@ function foldSeries(rows: readonly QueryRow[], seriesDimension: string, metric: 
   return new Set(ranked.length > keep + 1 ? ranked.slice(0, keep) : ranked)
 }
 
+function pointAt(
+  model: Pick<ChartModel, "xLabels">,
+  x: string,
+  series: string,
+  value: number,
+  range?: { start: number; end: number },
+): ChartPoint {
+  return { x, xLabel: model.xLabels[x] ?? x, series, value, ...range }
+}
+
 function base(request: ChartRequest, decl: DatasetDecl, result: QueryResult, metric: string): Omit<ChartModel, "points" | "series"> {
   const xOrder = orderedKeys(result.rows, request.dimension)
   return {
@@ -160,7 +170,7 @@ function cartesian(request: ChartRequest, decl: DatasetDecl, result: QueryResult
     }
     for (const [key, value] of sums) {
       const [x = "", id = ""] = key.split("\u0001")
-      points.push({ x, xLabel: model.xLabels[x] ?? x, series: id, value })
+      points.push(pointAt(model, x, id, value))
     }
     return { ok: true, model: { ...model, points, series } }
   }
@@ -178,9 +188,9 @@ function cartesian(request: ChartRequest, decl: DatasetDecl, result: QueryResult
     if (x === undefined) continue
     for (const metric of request.metrics) {
       const value = row.values[metric]
-      if (value !== null && value !== undefined) points.push({ x, xLabel: model.xLabels[x] ?? x, series: metric, value })
+      if (value !== null && value !== undefined) points.push(pointAt(model, x, metric, value))
       const compare = row.compare?.[metric]
-      if (compare !== null && compare !== undefined) points.push({ x, xLabel: model.xLabels[x] ?? x, series: `${metric}::compare`, value: compare })
+      if (compare !== null && compare !== undefined) points.push(pointAt(model, x, `${metric}::compare`, compare))
     }
   }
   return { ok: true, model: { ...model, points, series } }
@@ -196,8 +206,8 @@ function combo(request: ChartRequest, decl: DatasetDecl, result: QueryResult, pr
     if (x === undefined) continue
     const bar = row.values[primary]
     const line = row.values[secondary]
-    if (bar !== null && bar !== undefined) points.push({ x, xLabel: model.xLabels[x] ?? x, series: primary, value: bar })
-    if (line !== null && line !== undefined) points.push({ x, xLabel: model.xLabels[x] ?? x, series: secondary, value: line })
+    if (bar !== null && bar !== undefined) points.push(pointAt(model, x, primary, bar))
+    if (line !== null && line !== undefined) points.push(pointAt(model, x, secondary, line))
   }
   return {
     ok: true,
@@ -223,10 +233,10 @@ function waterfall(request: ChartRequest, decl: DatasetDecl, result: QueryResult
     if (x === undefined || value === null || value === undefined) continue
     const start = running
     running += value
-    points.push({ x, xLabel: model.xLabels[x] ?? x, series: value >= 0 ? "increase" : "decrease", value, start, end: running })
+    points.push(pointAt(model, x, value >= 0 ? "increase" : "decrease", value, { start, end: running }))
   }
   const totalLabel = request.totalLabel ?? "Total"
-  points.push({ x: totalLabel, xLabel: totalLabel, series: "total", value: running, start: 0, end: running })
+  points.push(pointAt(model, totalLabel, "total", running, { start: 0, end: running }))
   return {
     ok: true,
     model: {
@@ -257,10 +267,10 @@ function composition(request: ChartRequest, decl: DatasetDecl, result: QueryResu
   const ids = stableSeriesOrder(decl, request.dimension, kept.map((slice) => slice.key))
   const values = new Map(kept.map((slice) => [slice.key, slice.value]))
   const series: ChartSeries[] = ids.map((id, index) => ({ id, label: model.xLabels[id] ?? id, role: "series", slot: index }))
-  const points: ChartPoint[] = ids.map((id) => ({ x: id, xLabel: model.xLabels[id] ?? id, series: id, value: values.get(id) ?? 0 }))
+  const points: ChartPoint[] = ids.map((id) => pointAt(model, id, id, values.get(id) ?? 0))
   if (rest > 0) {
     series.push({ id: OTHER_SERIES, label: OTHER_SERIES, role: "series", slot: ids.length })
-    points.push({ x: OTHER_SERIES, xLabel: OTHER_SERIES, series: OTHER_SERIES, value: rest })
+    points.push(pointAt(model, OTHER_SERIES, OTHER_SERIES, rest))
   }
   return { ok: true, model: { ...model, points, series, xOrder: points.map((point) => point.x) } }
 }

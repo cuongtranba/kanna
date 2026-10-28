@@ -1,4 +1,5 @@
-export type WorkflowStatus = "running" | "completed" | "failed" | "killed" | "unknown"
+export const WORKFLOW_STATUSES = ["running", "completed", "failed", "killed", "unknown"] as const
+export type WorkflowStatus = (typeof WORKFLOW_STATUSES)[number]
 export interface WorkflowPhase { title: string; detail?: string }
 export interface WorkflowAgentProgress {
   index: number
@@ -52,39 +53,34 @@ export interface WorkflowRunSummary {
   agents: WorkflowAgentSummary[]
 }
 
-import { isJsonObject, type JsonObject, type JsonValue } from "./json"
+import { isJsonObject, numberField, stringField, type JsonValue } from "./json"
+import { oneOf } from "./vocab"
 
-const KNOWN_STATUS: ReadonlySet<string> = new Set(["running", "completed", "failed", "killed"])
-
-function rec(v: JsonValue): JsonObject | null {
-  return isJsonObject(v) && !Array.isArray(v) ? v : null
-}
-function str(v: JsonValue): string | undefined { return typeof v === "string" ? v : undefined }
-function num(v: JsonValue): number | undefined { return typeof v === "number" ? v : undefined }
+const isWorkflowStatus = oneOf(WORKFLOW_STATUSES)
 
 function parseAgents(progress: JsonValue): WorkflowAgentProgress[] {
   if (!Array.isArray(progress)) return []
   const out: WorkflowAgentProgress[] = []
   for (const item of progress) {
-    const r = rec(item)
-    if (!r || r.type !== "workflow_agent") continue
+    if (!isJsonObject(item) || item.type !== "workflow_agent") continue
+    const r = item
     out.push({
-      index: num(r.index) ?? out.length + 1,
-      label: str(r.label) ?? "agent",
-      phaseIndex: num(r.phaseIndex),
-      phaseTitle: str(r.phaseTitle),
-      agentId: str(r.agentId),
-      model: str(r.model),
-      state: str(r.state) ?? "unknown",
-      lastToolName: str(r.lastToolName),
-      lastToolSummary: str(r.lastToolSummary),
-      promptPreview: str(r.promptPreview),
-      resultPreview: str(r.resultPreview),
-      tokens: num(r.tokens),
-      toolCalls: num(r.toolCalls),
-      durationMs: num(r.durationMs),
-      startedAt: num(r.startedAt),
-      lastProgressAt: num(r.lastProgressAt),
+      index: numberField(r, "index") ?? out.length + 1,
+      label: stringField(r, "label") ?? "agent",
+      phaseIndex: numberField(r, "phaseIndex"),
+      phaseTitle: stringField(r, "phaseTitle"),
+      agentId: stringField(r, "agentId"),
+      model: stringField(r, "model"),
+      state: stringField(r, "state") ?? "unknown",
+      lastToolName: stringField(r, "lastToolName"),
+      lastToolSummary: stringField(r, "lastToolSummary"),
+      promptPreview: stringField(r, "promptPreview"),
+      resultPreview: stringField(r, "resultPreview"),
+      tokens: numberField(r, "tokens"),
+      toolCalls: numberField(r, "toolCalls"),
+      durationMs: numberField(r, "durationMs"),
+      startedAt: numberField(r, "startedAt"),
+      lastProgressAt: numberField(r, "lastProgressAt"),
     })
   }
   return out
@@ -94,25 +90,21 @@ function parsePhases(phases: JsonValue): WorkflowPhase[] {
   if (!Array.isArray(phases)) return []
   const out: WorkflowPhase[] = []
   for (const item of phases) {
-    const r = rec(item)
-    if (!r) continue
-    const title = str(r.title)
+    if (!isJsonObject(item)) continue
+    const title = stringField(item, "title")
     if (!title) continue
-    out.push({ title, detail: str(r.detail) })
+    out.push({ title, detail: stringField(item, "detail") })
   }
   return out
 }
 
 export function parseWorkflowRunFile(raw: JsonValue): WorkflowRun | null {
-  const r = rec(raw)
-  if (!r) return null
-  const runId = str(r.runId)
+  if (!isJsonObject(raw)) return null
+  const r = raw
+  const runId = stringField(r, "runId")
   if (!runId) return null
-  const rawStatus = str(r.status)
-  function isKnownStatus(s: string): s is Exclude<WorkflowStatus, "unknown"> {
-    return KNOWN_STATUS.has(s)
-  }
-  const status: WorkflowStatus = rawStatus && isKnownStatus(rawStatus) ? rawStatus : "unknown"
+  const rawStatus = r.status
+  const status: WorkflowStatus = isWorkflowStatus(rawStatus) ? rawStatus : "unknown"
   const resultVal = r.result
   let resultStr: string | null
   if (typeof resultVal === "string") {
@@ -133,21 +125,21 @@ export function parseWorkflowRunFile(raw: JsonValue): WorkflowRun | null {
   }
   return {
     runId,
-    taskId: str(r.taskId),
-    workflowName: str(r.workflowName),
+    taskId: stringField(r, "taskId"),
+    workflowName: stringField(r, "workflowName"),
     status,
-    startTime: num(r.startTime),
-    durationMs: num(r.durationMs),
-    agentCount: num(r.agentCount),
-    totalTokens: num(r.totalTokens),
-    totalToolCalls: num(r.totalToolCalls),
+    startTime: numberField(r, "startTime"),
+    durationMs: numberField(r, "durationMs"),
+    agentCount: numberField(r, "agentCount"),
+    totalTokens: numberField(r, "totalTokens"),
+    totalToolCalls: numberField(r, "totalToolCalls"),
     phases: parsePhases(r.phases),
     agents: parseAgents(r.workflowProgress),
     result: resultStr,
-    error: str(r.error) ?? (r.error == null ? null : String(r.error)),
-    summary: str(r.summary) ?? null,
-    script: str(r.script),
-    scriptPath: str(r.scriptPath),
+    error: stringField(r, "error") ?? (r.error == null ? null : String(r.error)),
+    summary: stringField(r, "summary") ?? null,
+    script: stringField(r, "script"),
+    scriptPath: stringField(r, "scriptPath"),
     args: argsStr,
   }
 }

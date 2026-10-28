@@ -7,10 +7,12 @@ import {
   coveredBy,
   PATTERN_BUDGETS,
   PRODUCTION_EXCLUDES,
+  TEST_SOURCE_SUFFIXES,
   type ModuleMeasurement,
   type PatternBudget,
   type PatternMeasurement,
 } from "./budget"
+import { countCloneBlocks, findLeakedLiterals, type SourceText } from "./duplication"
 
 const SOURCE_EXTENSIONS = [".ts", ".tsx"]
 
@@ -18,31 +20,42 @@ const isProductionSource = (relativePath: string): boolean =>
   SOURCE_EXTENSIONS.some((ext) => relativePath.endsWith(ext))
   && !PRODUCTION_EXCLUDES.some((excluded) => relativePath.includes(excluded))
 
+const isTestSource = (relativePath: string): boolean =>
+  TEST_SOURCE_SUFFIXES.some((suffix) => relativePath.endsWith(suffix))
+
 const countLines = (contents: string): number => {
   let lines = 0
   for (let i = 0; i < contents.length; i += 1) if (contents[i] === "\n") lines += 1
   return lines
 }
 
-function listProductionSources(root: string, directory: string): string[] {
+function listSources(root: string, directory: string, accepts: (relativePath: string) => boolean): string[] {
   const absolute = path.join(root, directory)
   const found: string[] = []
   for (const entry of readdirSync(absolute, { withFileTypes: true })) {
     const relativePath = path.posix.join(directory, entry.name)
-    if (entry.isDirectory()) found.push(...listProductionSources(root, relativePath))
-    else if (isProductionSource(relativePath)) found.push(relativePath)
+    if (entry.isDirectory()) found.push(...listSources(root, relativePath, accepts))
+    else if (accepts(relativePath)) found.push(relativePath)
   }
   return found
 }
 
-export function measureModules(root: string, directory = "src"): ModuleMeasurement[] {
-  return listProductionSources(root, directory)
+export const listProductionSources = (root: string, directory: string): string[] =>
+  listSources(root, directory, isProductionSource)
+
+const measureSources = (root: string, directory: string, accepts: (relativePath: string) => boolean): ModuleMeasurement[] =>
+  listSources(root, directory, accepts)
     .map((relativePath) => ({
       path: relativePath,
       lines: countLines(readFileSync(path.join(root, relativePath), "utf8")),
     }))
     .sort((a, b) => a.path.localeCompare(b.path))
-}
+
+export const measureModules = (root: string, directory = "src"): ModuleMeasurement[] =>
+  measureSources(root, directory, isProductionSource)
+
+export const measureTestSources = (root: string, directory = "src"): ModuleMeasurement[] =>
+  measureSources(root, directory, isTestSource)
 
 function measurePattern(root: string, sources: readonly ModuleMeasurement[], budget: PatternBudget): PatternMeasurement {
   const expression = new RegExp(budget.pattern)
@@ -98,4 +111,19 @@ export function readLintLimits(
   }
 
   return found
+}
+
+const SELF_QUOTING_PREFIX = "src/ops/architecture/"
+
+export function measureDuplication(root: string, sources: readonly ModuleMeasurement[]): PatternMeasurement[] {
+  const texts: SourceText[] = sources.map(({ path: relativePath }) => ({
+    path: relativePath,
+    text: readFileSync(path.join(root, relativePath), "utf8"),
+  }))
+  const clones = countCloneBlocks(texts)
+  const leaked = findLeakedLiterals(texts.filter((source) => !source.path.startsWith(SELF_QUOTING_PREFIX)))
+  return [
+    { id: "leaked-protocol-literals", count: leaked.count, sites: leaked.sites, filesScanned: texts.length },
+    { id: "code-clones", count: clones.count, sites: clones.sites, filesScanned: texts.length },
+  ]
 }

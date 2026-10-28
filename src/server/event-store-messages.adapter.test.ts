@@ -16,7 +16,6 @@ import {
   getRecentMessagesPage,
   getLatestChatContextWindowUsage,
   getLatestClaudeCumulativeCostUsd,
-  getSeenMessageIds,
   getRecentRawEntries,
   loadTranscriptFromDisk,
   getMessagesView,
@@ -24,6 +23,8 @@ import {
   type MessageReadDeps,
 } from "./event-store-messages.adapter"
 import { getLatestContextWindowUsage } from "./proactive-compact"
+import { storeLayoutFor } from "./event-logs"
+import { SeenMessageIds } from "./seen-message-ids"
 
 
 function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
@@ -34,6 +35,8 @@ function makeStorage(files: Map<string, string> = new Map()): StorageBackend {
     size: async (p) => files.get(p)?.length ?? 0,
     readText: async (p) => files.get(p) ?? "",
     readTextSync: (p) => files.get(p) ?? "",
+    sizeSync: (p) => Buffer.byteLength(files.get(p) ?? ""),
+    readSliceSync: (p, start, end) => Buffer.from(files.get(p) ?? "").subarray(start, end),
     writeText: async (p, v) => { files.set(p, v) },
     appendText: async (p, v) => { files.set(p, (files.get(p) ?? "") + v) },
     rename: async () => {},
@@ -79,41 +82,16 @@ function makeChatRecord(overrides: Partial<ChatRecord> = {}): ChatRecord {
 function makeDeps(overrides: Partial<MessageReadDeps> = {}): MessageReadDeps {
   return {
     storage: makeStorage(),
-    transcriptsDir: "/data/transcripts",
+    layout: storeLayoutFor("/data"),
     transcriptCache: new TranscriptCache(),
     legacyMessagesByChatId: new Map(),
-    seenMessageIdsByChatId: new Map(),
+    seenMessageIds: new SeenMessageIds(),
     queuedMessagesByChatId: new Map(),
     chatsById: new Map(),
     listPendingToolRequests: (_chatId) => [],
     ...overrides,
   }
 }
-
-
-describe("getSeenMessageIds", () => {
-  test("creates an empty set for unknown chatId", () => {
-    const deps = makeDeps()
-    const set = getSeenMessageIds(deps, "chat-x")
-    expect(set.size).toBe(0)
-  })
-
-  test("returns the same set on repeated calls for the same chatId", () => {
-    const deps = makeDeps()
-    const s1 = getSeenMessageIds(deps, "chat-x")
-    s1.add("msg-1")
-    const s2 = getSeenMessageIds(deps, "chat-x")
-    expect(s2.has("msg-1")).toBe(true)
-    expect(s1).toBe(s2)
-  })
-
-  test("returns distinct sets for different chatIds", () => {
-    const deps = makeDeps()
-    const sa = getSeenMessageIds(deps, "chat-a")
-    const sb = getSeenMessageIds(deps, "chat-b")
-    expect(sa).not.toBe(sb)
-  })
-})
 
 
 describe("loadTranscriptFromDisk", () => {
@@ -145,13 +123,12 @@ describe("loadTranscriptFromDisk", () => {
     const e1: TranscriptEntry = { ...makeTranscriptEntry("chat-1"), messageId: "mid-1" } as TranscriptEntry & { messageId: string }
     const content = `${JSON.stringify(e1)}\n`
     const files = new Map([["/data/transcripts/chat-1.jsonl", content]])
-    const seenMessageIdsByChatId = new Map<string, Set<string>>()
-    const deps = makeDeps({ storage: makeStorage(files), seenMessageIdsByChatId })
+    const seenMessageIds = new SeenMessageIds()
+    const deps = makeDeps({ storage: makeStorage(files), seenMessageIds })
 
     loadTranscriptFromDisk(deps, "chat-1")
 
-    const seen = seenMessageIdsByChatId.get("chat-1")
-    expect(seen?.has("mid-1")).toBe(true)
+    expect(seenMessageIds.has("chat-1", "mid-1")).toBe(true)
   })
 })
 
@@ -943,6 +920,8 @@ describe("seedSeenMessageIdsFromTail", () => {
       size: async () => buf.length,
       readText: async () => content,
       readTextSync: () => { throw new Error("readTextSync must not be called for large transcripts") },
+      sizeSync: () => buf.length,
+      readSliceSync: (_p, start, end) => buf.subarray(start, end),
       writeText: async () => {},
       appendText: async () => {},
       rename: async () => {},
@@ -963,27 +942,17 @@ describe("seedSeenMessageIdsFromTail", () => {
     }
   }
 
-  test("returns false when backend lacks slice APIs", () => {
-    const files = new Map([["/data/transcripts/chat-1.jsonl", makeMessageEntry(0, "mid-0")]])
-    const deps = makeDeps({ storage: makeStorage(files) })
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
-    expect(result).toBe(false)
-    expect(deps.transcriptCache.isSeeded("chat-1")).toBe(false)
-  })
-
   test("seeds messageIds from tail and marks chat seeded", () => {
     const content = makeLargeTranscriptWithIds("old-mid", "recent-mid")
     const { storage } = makeSliceStorageForId(content)
     const transcriptCache = new TranscriptCache(4)
-    const seenMessageIdsByChatId = new Map<string, Set<string>>()
-    const deps = makeDeps({ storage, transcriptCache, seenMessageIdsByChatId })
+    const seenMessageIds = new SeenMessageIds()
+    const deps = makeDeps({ storage, transcriptCache, seenMessageIds })
 
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+    seedSeenMessageIdsFromTail(deps, "chat-1")
 
-    expect(result).toBe(true)
     expect(transcriptCache.isSeeded("chat-1")).toBe(true)
-    const seen = seenMessageIdsByChatId.get("chat-1")
-    expect(seen?.has("recent-mid")).toBe(true)
+    expect(seenMessageIds.has("chat-1", "recent-mid")).toBe(true)
   })
 
   test("does not read the full transcript when entries exceed tail window", () => {
@@ -1031,17 +1000,15 @@ describe("seedSeenMessageIdsFromTail", () => {
       readSliceSync: (_p, start, end) => buf.subarray(start, end),
     }
     const transcriptCache = new TranscriptCache(4)
-    const seenMessageIdsByChatId = new Map<string, Set<string>>()
-    const deps = makeDeps({ storage: sliceStorage, transcriptCache, seenMessageIdsByChatId })
+    const seenMessageIds = new SeenMessageIds()
+    const deps = makeDeps({ storage: sliceStorage, transcriptCache, seenMessageIds })
 
-    const result = seedSeenMessageIdsFromTail(deps, "chat-1")
+    seedSeenMessageIdsFromTail(deps, "chat-1")
 
-    expect(result).toBe(true)
     expect(transcriptCache.isSeeded("chat-1")).toBe(true)
     expect(transcriptCache.has("chat-1")).toBe(true)
-    const seen = seenMessageIdsByChatId.get("chat-1")
     for (let i = 0; i < 5; i++) {
-      expect(seen?.has(`mid-${i}`)).toBe(true)
+      expect(seenMessageIds.has("chat-1", `mid-${i}`)).toBe(true)
     }
   })
 })

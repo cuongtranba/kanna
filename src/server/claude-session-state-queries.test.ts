@@ -6,9 +6,9 @@ import {
   getPendingTool,
   getDrainingChatIds,
   getClaudeSessionStates,
+  isAnyChatBusy,
   isClaudeSessionIdle,
   isSessionInUse,
-  hasPendingBackgroundTask,
   sweepIdleClaudeSessions,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
@@ -64,6 +64,14 @@ function makeSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSess
   })
 }
 
+function makeHoldingSession(overrides?: Partial<ConstructorParameters<typeof ClaudeSessionState>[0]>): ClaudeSessionState {
+  return makeSession({
+    backgroundTasks: new Map([["t1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
+    backgroundTaskDeadlineAt: Date.now() + 60_000,
+    ...overrides,
+  })
+}
+
 function makeActiveTurn(overrides?: Partial<ActiveTurn>): ActiveTurn {
   return {
     chatId: "chat-1",
@@ -100,7 +108,6 @@ function makeDeps(overrides?: Partial<SessionStateQueryDeps>): SessionStateQuery
     claudeSessions: new Map(),
     drainingStreams: new Map(),
     isClaudeSdkProvider: vi.fn(() => false),
-    hasPendingBackgroundTask: vi.fn(() => false),
     resolveClaudeIdleMs: vi.fn(() => 600_000),
     resolveBackgroundTaskMaxMs: vi.fn(() => 1_800_000),
     resolveBackgroundTaskMaxWakes: vi.fn(() => 3),
@@ -322,10 +329,9 @@ describe("getClaudeSessionStates", () => {
   })
 
   it("returns 'warming' when background task pending", () => {
-    const session = makeSession({ chatId: "chat-1", lastUsedAt: 0 })
+    const session = makeHoldingSession({ chatId: "chat-1", lastUsedAt: 0 })
     const deps = makeDeps({
       claudeSessions: new Map([["chat-1", session]]),
-      hasPendingBackgroundTask: () => true,
       resolveClaudeIdleMs: () => 100,
     })
     expect(getClaudeSessionStates(deps).get("chat-1")).toBe("warming")
@@ -378,9 +384,8 @@ describe("isClaudeSessionIdle", () => {
   })
 
   it("returns false when background task is pending", () => {
-    const session = makeSession({ lastUsedAt: 0 })
+    const session = makeHoldingSession({ lastUsedAt: 0 })
     const deps = makeDeps({
-      hasPendingBackgroundTask: () => true,
       resolveClaudeIdleMs: () => 1,
     })
     expect(isClaudeSessionIdle(deps, "chat-1", session, Date.now())).toBe(false)
@@ -415,7 +420,6 @@ function makeInUseDeps(overrides?: Partial<SessionInUseDeps>): SessionInUseDeps 
     startingTurns: { has: () => false },
     pendingTools: { has: () => false },
     hasLiveWorkflow: () => false,
-    hasPendingBackgroundTask: () => false,
     ...overrides,
   }
 }
@@ -457,9 +461,9 @@ describe("isSessionInUse", () => {
     expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
   })
 
-  it("clause 6: hasPendingBackgroundTask → in use", () => {
-    const deps = makeInUseDeps({ hasPendingBackgroundTask: () => true })
-    const session = makeSession({ selfWakeActive: false, pendingPromptSeqs: [] })
+  it("clause 6: background task holding work → in use", () => {
+    const deps = makeInUseDeps()
+    const session = makeHoldingSession({ selfWakeActive: false, pendingPromptSeqs: [] })
     expect(isSessionInUse(deps, "chat-1", session, Date.now())).toBe(true)
   })
 
@@ -478,7 +482,7 @@ describe("isSessionInUse", () => {
       backgroundTaskDeadlineAt: now - 1,
       backgroundTasksLevelSourced: true,
     })
-    const deps = makeInUseDeps({ hasPendingBackgroundTask: (s, n) => hasPendingBackgroundTask(s, n) })
+    const deps = makeInUseDeps()
     expect(isSessionInUse(deps, "chat-1", session, now)).toBe(true)
   })
 })
@@ -554,7 +558,6 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
       closeClaudeSession: closeFn,
       wakeBackgroundTaskSession: wakeFn,
       notifyBackgroundTasksAbandoned: notifyFn,
-      hasPendingBackgroundTask: (s, n) => hasPendingBackgroundTask(s, n),
     })
     sweepIdleClaudeSessions(deps, now)
     expect(wakeFn.mock.calls.length).toBe(0)
@@ -690,5 +693,36 @@ describe("sweepIdleClaudeSessions background-task escalation", () => {
     })
     sweepIdleClaudeSessions(deps, Date.now())
     expect(closeFn.mock.calls.length).toBe(1)
+  })
+})
+
+describe("isAnyChatBusy", () => {
+  function makeBusyDeps(overrides?: Partial<Parameters<typeof isAnyChatBusy>[0]>): Parameters<typeof isAnyChatBusy>[0] {
+    return {
+      activeTurns: new Map(),
+      startingTurns: new Map(),
+      pendingTools: new PendingToolSlots(),
+      claudeSessions: new Map(),
+      ...overrides,
+    }
+  }
+
+  it("is false when nothing is live", () => {
+    expect(isAnyChatBusy(makeBusyDeps())).toBe(false)
+  })
+
+  it("is true for an active turn, a booting turn, a parked tool, or a streaming self-wake", () => {
+    expect(isAnyChatBusy(makeBusyDeps({ activeTurns: new Map([["c1", makeActiveTurn()]]) }))).toBe(true)
+    expect(isAnyChatBusy(makeBusyDeps({ startingTurns: new Map([["c1", makeStartingTurn()]]) }))).toBe(true)
+    expect(isAnyChatBusy(makeBusyDeps({
+      claudeSessions: new Map([["c1", makeSession({ selfWakeActive: true })]]),
+    }))).toBe(true)
+    const pendingTools = new PendingToolSlots()
+    parkTool(pendingTools, "c1", "tool-1")
+    expect(isAnyChatBusy(makeBusyDeps({ pendingTools }))).toBe(true)
+  })
+
+  it("an idle resident session is not busy", () => {
+    expect(isAnyChatBusy(makeBusyDeps({ claudeSessions: new Map([["c1", makeSession()]]) }))).toBe(false)
   })
 })

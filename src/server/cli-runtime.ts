@@ -10,7 +10,7 @@ import { runPluginCli } from "./plugin-cli-dispatch"
 import { configurePluginService } from "./plugins/plugin-service-host"
 import { createInstalledPluginStore } from "./plugins/installed-plugin-store"
 import { AppSettingsManager } from "./app-settings"
-import { CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
+import { CLI_DISABLE_SELF_UPDATE_ENV_VAR, CLI_SUPPRESS_OPEN_ONCE_ENV_VAR } from "./restart"
 import { logShareDetails, renderTerminalQr, startShareTunnel, type StartedShareTunnel } from "./share"
 
 export interface CliOptions {
@@ -230,8 +230,8 @@ function normalizeVersion(version: string) {
     .filter((part) => Number.isFinite(part))
 }
 
-async function maybeSelfUpdate(_argv: string[], deps: CliRuntimeDeps) {
-  if (process.env.KANNA_DISABLE_SELF_UPDATE === "1") {
+async function maybeSelfUpdate(deps: CliRuntimeDeps) {
+  if (process.env[CLI_DISABLE_SELF_UPDATE_ENV_VAR] === "1") {
     return null
   }
 
@@ -293,7 +293,7 @@ export async function runCli(argv: string[], deps: CliRuntimeDeps): Promise<CliR
     return { kind: "exited", code: 1 }
   }
 
-  const shouldRestart = await maybeSelfUpdate(argv, deps)
+  const shouldRestart = await maybeSelfUpdate(deps)
   if (shouldRestart !== null) {
     return { kind: "restarting", reason: shouldRestart }
   }

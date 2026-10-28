@@ -5,18 +5,12 @@ import {
   countMatchingUserPrompts,
   getActiveChatSnapshot,
   getNextMeasuredInputHeight,
-  getNewestRemainingChatId,
   getPreviousPrompt,
   getTranscriptPaddingBottom,
-  deriveUiRestartActivity,
-  getUiUpdateReadinessPath,
   getUserPromptSignature,
-  getUiUpdateRestartReconnectAction,
   pruneOptimisticOnQueuedAck,
   reconcileOptimisticUserPrompts,
   resolveComposeIntent,
-  sameChatSnapshotCore,
-  shouldHandleUiUpdateReloadRequest,
   shouldMarkActiveChatRead,
   shouldAutoFollowTranscript,
 } from "./useKannaState"
@@ -107,26 +101,6 @@ function createSidebarData(): SidebarData {
   }
 }
 
-describe("getNewestRemainingChatId", () => {
-  test("returns the next newest chat from the same project", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "chat-3")).toBe("chat-2")
-  })
-
-  test("returns null when no other chats remain in the project", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "chat-4")).toBeNull()
-  })
-
-  test("returns null when the chat is not found", () => {
-    const sidebarData = createSidebarData()
-
-    expect(getNewestRemainingChatId(sidebarData.projectGroups, "missing")).toBeNull()
-  })
-})
-
 describe("applySidebarProjectOrder", () => {
   test("reorders project groups immediately using the optimistic order", () => {
     const sidebarData = createSidebarData()
@@ -205,60 +179,6 @@ describe("shouldMarkActiveChatRead", () => {
       getVisibilityState: () => "visible" as DocumentVisibilityState,
       hasFocus: () => false,
     })).toBe(false)
-  })
-})
-
-describe("getUiUpdateRestartReconnectAction", () => {
-  test("waits for server readiness after the socket disconnects", () => {
-    expect(getUiUpdateRestartReconnectAction("awaiting_disconnect", "disconnected")).toBe("awaiting_server_ready")
-  })
-
-  test("does nothing for unrelated phase and connection combinations", () => {
-    expect(getUiUpdateRestartReconnectAction(null, "connected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_disconnect", "connected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_server_ready", "disconnected")).toBe("none")
-    expect(getUiUpdateRestartReconnectAction("awaiting_server_ready", "connected")).toBe("none")
-  })
-})
-
-describe("deriveUiRestartActivity", () => {
-  test("update install/restart status drives the overlay regardless of phase", () => {
-    expect(deriveUiRestartActivity(null, "updating")).toEqual({ active: true, label: "Installing update" })
-    expect(deriveUiRestartActivity(null, "restart_pending")).toEqual({ active: true, label: "Installing update" })
-  })
-
-  test("restart phase drives the overlay when update status is idle", () => {
-    expect(deriveUiRestartActivity("awaiting_disconnect", "idle")).toEqual({ active: true, label: "Re-deploying Kanna" })
-    expect(deriveUiRestartActivity("awaiting_server_ready", undefined)).toEqual({ active: true, label: "Re-deploying Kanna" })
-  })
-
-  test("inactive when neither phase nor update status indicates a restart", () => {
-    expect(deriveUiRestartActivity(null, "idle")).toEqual({ active: false, label: "" })
-    expect(deriveUiRestartActivity(null, "up_to_date")).toEqual({ active: false, label: "" })
-    expect(deriveUiRestartActivity(null, undefined)).toEqual({ active: false, label: "" })
-  })
-
-  test("update status takes precedence over an active restart phase", () => {
-    expect(deriveUiRestartActivity("awaiting_disconnect", "updating")).toEqual({ active: true, label: "Installing update" })
-  })
-})
-
-describe("shouldHandleUiUpdateReloadRequest", () => {
-  test("handles a new backend reload request", () => {
-    expect(shouldHandleUiUpdateReloadRequest(123, null)).toBe(true)
-    expect(shouldHandleUiUpdateReloadRequest(123, "122")).toBe(true)
-  })
-
-  test("ignores missing or already handled reload requests", () => {
-    expect(shouldHandleUiUpdateReloadRequest(null, null)).toBe(false)
-    expect(shouldHandleUiUpdateReloadRequest(undefined, null)).toBe(false)
-    expect(shouldHandleUiUpdateReloadRequest(123, "123")).toBe(false)
-  })
-})
-
-describe("getUiUpdateReadinessPath", () => {
-  test("uses a public auth endpoint so password-protected restarts can reload", () => {
-    expect(getUiUpdateReadinessPath()).toBe("/auth/status")
   })
 })
 
@@ -516,215 +436,6 @@ describe("optimistic user prompts", () => {
   })
 })
 
-function createMinimalChatSnapshot(overrides: Partial<ChatSnapshot> = {}): ChatSnapshot {
-  return {
-    runtime: {
-      chatId: "chat-1",
-      projectId: "project-1",
-      localPath: "/tmp/project-1",
-      title: "Chat",
-      status: "idle",
-      isDraining: false,
-      provider: "claude",
-      planMode: false,
-      sessionTokensByProvider: {},
-      timings: { activeSessionStartedAt: 0, chatCreatedAt: 0, stateEnteredAt: 0, lastTurnDurationMs: null, derivedAtMs: 0, cumulativeMs: { idle: 0, starting: 0, running: 0, waiting_for_user: 0, failed: 0 } },
-      policyOverride: null,
-      sessionState: "cold",
-      backgroundTasks: [],
-    },
-    queuedMessages: [],
-    messages: [],
-    history: { hasOlder: false, olderCursor: null, recentLimit: 200 },
-    availableProviders: [],
-    schedules: {},
-    liveScheduleId: null,
-    tunnels: {},
-    liveTunnelId: null,
-    subagentRuns: {},
-    loopProgress: { chatId: "c", armed: false, rows: [], rateLimit: null, completed: 0, total: 0 },
-    cronJobs: [],
-    ...overrides,
-  }
-}
-
-describe("sameChatSnapshotCore tunnel fields", () => {
-  test("returns true when both snapshots have no tunnels", () => {
-    const a = createMinimalChatSnapshot()
-    const b = createMinimalChatSnapshot()
-    expect(sameChatSnapshotCore(a, b)).toBe(true)
-  })
-
-  test("returns false when tunnel state differs", () => {
-    const a = createMinimalChatSnapshot({
-      tunnels: {
-        t1: {
-          tunnelId: "t1",
-          chatId: "chat-1",
-          port: 3000,
-          state: "proposed",
-          url: null,
-          error: null,
-          proposedAt: 1000,
-          activatedAt: null,
-          stoppedAt: null,
-        },
-      },
-      liveTunnelId: "t1",
-    })
-    const b = createMinimalChatSnapshot({
-      tunnels: {
-        t1: {
-          tunnelId: "t1",
-          chatId: "chat-1",
-          port: 3000,
-          state: "active",
-          url: "https://example.trycloudflare.com",
-          error: null,
-          proposedAt: 1000,
-          activatedAt: 2000,
-          stoppedAt: null,
-        },
-      },
-      liveTunnelId: "t1",
-    })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns true when tunnel state and all fields match", () => {
-    const tunnel = {
-      tunnelId: "t1",
-      chatId: "chat-1",
-      port: 3000,
-      state: "active" as const,
-      url: "https://example.trycloudflare.com",
-      error: null,
-      proposedAt: 1000,
-      activatedAt: 2000,
-      stoppedAt: null,
-    }
-    const a = createMinimalChatSnapshot({ tunnels: { t1: tunnel }, liveTunnelId: "t1" })
-    const b = createMinimalChatSnapshot({ tunnels: { t1: { ...tunnel } }, liveTunnelId: "t1" })
-    expect(sameChatSnapshotCore(a, b)).toBe(true)
-  })
-
-  test("returns false when liveTunnelId differs", () => {
-    const a = createMinimalChatSnapshot({ tunnels: {}, liveTunnelId: "t1" })
-    const b = createMinimalChatSnapshot({ tunnels: {}, liveTunnelId: null })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns false when tunnel count differs", () => {
-    const tunnel = {
-      tunnelId: "t1",
-      chatId: "chat-1",
-      port: 3000,
-      state: "stopped" as const,
-      url: null,
-      error: null,
-      proposedAt: 1000,
-      activatedAt: null,
-      stoppedAt: 3000,
-    }
-    const a = createMinimalChatSnapshot({ tunnels: { t1: tunnel } })
-    const b = createMinimalChatSnapshot({ tunnels: {} })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-})
-
-function createMinimalSubagentRun(overrides: Partial<import("../../shared/types").SubagentRunSnapshot> = {}): import("../../shared/types").SubagentRunSnapshot {
-  return {
-    runId: "run-1",
-    chatId: "chat-1",
-    subagentId: "sa-1",
-    subagentName: "alpha",
-    label: null,
-    provider: "claude",
-    model: "claude-opus-4-7",
-    status: "running",
-    parentUserMessageId: "u1",
-    parentRunId: null,
-    depth: 0,
-    startedAt: 1000,
-    finishedAt: null,
-    finalText: null,
-    error: null,
-    usage: null,
-    entries: [],
-    pendingTool: null,
-    ...overrides,
-  }
-}
-
-describe("sameChatSnapshotCore subagent fields", () => {
-  test("returns true when both snapshots have no subagent runs", () => {
-    const a = createMinimalChatSnapshot({ subagentRuns: {} })
-    const b = createMinimalChatSnapshot({ subagentRuns: {} })
-    expect(sameChatSnapshotCore(a, b)).toBe(true)
-  })
-
-  test("returns false when subagent entries grew between snapshots", () => {
-    const runA = createMinimalSubagentRun({ entries: [] })
-    const runB = createMinimalSubagentRun({
-      entries: [
-        { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi", messageId: "m1" } as unknown as import("../../shared/types").TranscriptEntry,
-      ],
-    })
-    const a = createMinimalChatSnapshot({ subagentRuns: { "run-1": runA } })
-    const b = createMinimalChatSnapshot({ subagentRuns: { "run-1": runB } })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns false when run status transitions to completed", () => {
-    const a = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun({ status: "running" }) },
-    })
-    const b = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun({ status: "completed", finishedAt: 2000 }) },
-    })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns false when run count differs (new run added mid-turn)", () => {
-    const a = createMinimalChatSnapshot({ subagentRuns: {} })
-    const b = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun() },
-    })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns false when finalText length changes (streaming text)", () => {
-    const a = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun({ finalText: "Hello" }) },
-    })
-    const b = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun({ finalText: "Hello world" }) },
-    })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns false when pendingTool toolUseId changes", () => {
-    const a = createMinimalChatSnapshot({
-      subagentRuns: { "run-1": createMinimalSubagentRun({ pendingTool: null }) },
-    })
-    const b = createMinimalChatSnapshot({
-      subagentRuns: {
-        "run-1": createMinimalSubagentRun({
-          pendingTool: { toolUseId: "tu-1", toolKind: "ask_user_question", input: { questions: [] }, askedAt: 100 } as unknown as import("../../shared/types").SubagentRunSnapshot["pendingTool"],
-        }),
-      },
-    })
-    expect(sameChatSnapshotCore(a, b)).toBe(false)
-  })
-
-  test("returns true when terminal run is structurally identical", () => {
-    const run = createMinimalSubagentRun({ status: "completed", finishedAt: 2000, finalText: "done" })
-    const a = createMinimalChatSnapshot({ subagentRuns: { "run-1": run } })
-    const b = createMinimalChatSnapshot({ subagentRuns: { "run-1": { ...run } } })
-    expect(sameChatSnapshotCore(a, b)).toBe(true)
-  })
-})
-
 describe("applyProjectCommandsSnapshot", () => {
   test("writes the commands under the project id", () => {
     useSlashCommandsStore.setState({ byProjectId: {} })
@@ -753,27 +464,3 @@ describe("applyProjectCommandsSnapshot", () => {
   })
 })
 
-describe("sameChatSnapshotCore loop progress rows", () => {
-  function progress(rows: import("../../shared/types").LoopRow[]) {
-    return createMinimalChatSnapshot({
-      loopProgress: { chatId: "c", armed: true, rows, rateLimit: null, completed: 0, total: 0 },
-    })
-  }
-
-  const doneRow = { runId: "progress:0", label: "chunk one", status: "done" as const, startedAt: 0, finishedAt: null }
-
-  test("identical plan rows dedup", () => {
-    expect(sameChatSnapshotCore(progress([doneRow]), progress([doneRow]))).toBe(true)
-  })
-
-  test("a reworded plan row is not mistaken for the same row", () => {
-    const reworded = { ...doneRow, label: "chunk one (reverted)" }
-    expect(sameChatSnapshotCore(progress([doneRow]), progress([reworded]))).toBe(false)
-  })
-
-  test("the current step turning from pending to running re-renders", () => {
-    const pending = { runId: "next", label: "chunk two", status: "pending" as const, startedAt: 0, finishedAt: null }
-    const running = { runId: "r1", label: "chunk two", status: "running" as const, startedAt: 5, finishedAt: null }
-    expect(sameChatSnapshotCore(progress([doneRow, pending]), progress([doneRow, running]))).toBe(false)
-  })
-})

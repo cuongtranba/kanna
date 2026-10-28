@@ -1,6 +1,6 @@
 import { LegendList, type LegendListRef } from "@legendapp/list/react"
 import { AlertTriangle, ArrowUp, Ban, Building2, Check, ChevronDown, ChevronUp, Code, Columns2, Copy, Download, Ellipsis, FileText, FolderOpen, GitBranch, GitBranchPlus, GitMerge, GitPullRequest, Globe, LoaderCircle, Lock, Minus, PencilLine, PenLine, RefreshCw, Rows3, Trash2, Upload, UserRound, WrapText } from "lucide-react"
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react"
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, type ChangeEvent as ReactChangeEvent, type ReactNode, type RefObject } from "react"
 import type {
   BranchActionFailure,
   BranchActionSuccess,
@@ -16,17 +16,22 @@ import type {
   ChatSyncResult,
   GitHubPublishInfo,
   GitHubRepoAvailabilityResult,
+  GitRepoVisibility,
+  GitSyncAction,
 } from "../../../shared/types"
+import { GIT_REPO_VISIBILITIES } from "../../../shared/types"
 import { errorMessage, onRejected } from "../../../shared/errors"
+import { oneOf } from "../../../shared/vocab"
 import type { DomPort } from "../../ports/domPort"
 import type { TimerPort } from "../../ports/timerPort"
 import { domAdapter } from "../../adapters/dom.adapter"
 import { timerAdapter } from "../../adapters/timer.adapter"
 import { useStickyState } from "../../hooks/useStickyState"
+import { openContextMenuFromButton } from "../../lib/openContextMenuFromButton"
 import { runDetached } from "../../lib/runDetached"
 import { cn } from "../../lib/utils"
 import { useDiffCommitStore } from "../../stores/diffCommitStore"
-import { useKannaStateStore } from "../../stores/kannaStateStore"
+import { reportCommandFailure } from "../../lib/commandFeedback"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useRightSidebarStore } from "../../stores/rightSidebarStore"
 import { useRightSidebarUiStore } from "../../stores/rightSidebarUiStore"
@@ -55,6 +60,7 @@ import {
   formatFetchTooltip,
   formatRelativeTime,
   getDiffPreviewAttachment,
+  filterMergeBranchGroups,
   getMergeBranchGroups,
   shouldLoadDiffPatchNow,
 } from "./repositoryWorkspace"
@@ -65,13 +71,11 @@ type BranchActionResult = BranchActionSuccess | BranchActionFailure
 type DiffRenderMode = "unified" | "split"
 type DiffFile = ChatDiffSnapshot["files"][number]
 type SidebarViewMode = "changes" | "history"
-type RepoVisibility = "public" | "private"
 type EntryView = "branches" | "pull_requests"
 const SIDEBAR_VIEW_MODES = new Set<string>(["changes", "history"] satisfies SidebarViewMode[])
-const REPO_VISIBILITY_VALUES = new Set<string>(["public", "private"] satisfies RepoVisibility[])
+const isRepoVisibility = oneOf(GIT_REPO_VISIBILITIES)
 const ENTRY_VIEW_VALUES = new Set<string>(["branches", "pull_requests"] satisfies EntryView[])
 function isSidebarViewMode(v: string): v is SidebarViewMode { return SIDEBAR_VIEW_MODES.has(v) }
-function isRepoVisibility(v: string): v is RepoVisibility { return REPO_VISIBILITY_VALUES.has(v) }
 function isEntryView(v: string): v is EntryView { return ENTRY_VIEW_VALUES.has(v) }
 const EMPTY_CHECKED_PATHS: Record<string, boolean> = {}
 const PatchDiff = lazy(() => import("@pierre/diffs/react").then((module) => ({ default: module.PatchDiff })))
@@ -92,12 +96,13 @@ export interface DiffFileActions {
   onCopyRelativePath: (path: string) => Promise<void>
 }
 
-interface RightSidebarProps extends DiffFileActions {
+interface RightSidebarProps {
   projectId: string | null
   diffs: ChatDiffSnapshot
   editorLabel: string
   diffRenderMode: DiffRenderMode
   wrapLines: boolean
+  fileActions: DiffFileActions
   onLoadPatch: (path: string) => Promise<string>
   onListBranches: () => Promise<ChatBranchListResult>
   onPreviewMergeBranch: (branch: ChatBranchListEntry) => Promise<ChatMergePreviewResult>
@@ -108,9 +113,9 @@ interface RightSidebarProps extends DiffFileActions {
   onInitializeGit: () => Promise<BranchActionResult | null>
   onGetGitHubPublishInfo: () => Promise<GitHubPublishInfo>
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
-  onSetupGitHub: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<BranchActionResult | null>
+  onSetupGitHub: (args: { owner: string; name: string; visibility: GitRepoVisibility; description: string }) => Promise<BranchActionResult | null>
   onCommit: (args: { paths: string[]; summary: string; description: string; mode: DiffCommitMode }) => Promise<DiffCommitResult | null>
-  onSyncWithRemote: (action: "fetch" | "pull" | "push" | "publish") => Promise<ChatSyncResult | null>
+  onSyncWithRemote: (action: GitSyncAction) => Promise<ChatSyncResult | null>
   onDiffRenderModeChange: (mode: DiffRenderMode) => void
   onWrapLinesChange: (wrap: boolean) => void
   ports?: RightSidebarPorts
@@ -263,7 +268,7 @@ function GitHubPublishModal({
   onOpenChange: (open: boolean) => void
   onGetGitHubPublishInfo: () => Promise<GitHubPublishInfo>
   onCheckGitHubRepoAvailability: (args: { owner: string; name: string }) => Promise<GitHubRepoAvailabilityResult>
-  onPublish: (args: { owner: string; name: string; visibility: "public" | "private"; description: string }) => Promise<BranchActionResult | null>
+  onPublish: (args: { owner: string; name: string; visibility: GitRepoVisibility; description: string }) => Promise<BranchActionResult | null>
   ports?: RightSidebarPorts
 }) {
   const timer = ports?.timer ?? timerAdapter
@@ -304,7 +309,7 @@ function GitHubPublishModal({
         setDescription("")
       }, onRejected((error) => {
         if (cancelled) return
-        useKannaStateStore.getState().setCommandError(errorMessage(error))
+        reportCommandFailure(error)
       }))
       .finally(() => {
         if (cancelled) return
@@ -585,23 +590,7 @@ function MergeBranchModal({
     return getMergeBranchGroups(branchList, currentBranchName)
   }, [branchList, currentBranchName])
 
-  const normalizedQuery = query.trim().toLowerCase()
-  const matchesQuery = useCallback((entry: ChatBranchListEntry) => {
-    if (!normalizedQuery) return true
-    return [
-      entry.displayName,
-      entry.name,
-      entry.description,
-      entry.prTitle,
-      entry.headLabel,
-    ].some((value) => value?.toLowerCase().includes(normalizedQuery))
-  }, [normalizedQuery])
-
-  const visibleDefaultBranch = groupedEntries.defaultBranch && matchesQuery(groupedEntries.defaultBranch)
-    ? groupedEntries.defaultBranch
-    : undefined
-  const visibleRecent = groupedEntries.recent.filter(matchesQuery)
-  const visibleOther = groupedEntries.other.filter(matchesQuery)
+  const visible = useMemo(() => filterMergeBranchGroups(groupedEntries, query), [groupedEntries, query])
 
   const selectedEntry = useMemo(() => {
     if (!selectedName) return null
@@ -633,7 +622,7 @@ function MergeBranchModal({
       })
       .catch((error) => {
         if (cancelled) return
-        setPreviewError(error instanceof Error ? error.message : String(error))
+        setPreviewError(errorMessage(error))
       })
       .finally(() => {
         if (cancelled) return
@@ -738,21 +727,21 @@ function MergeBranchModal({
           <div className="max-h-[375px] space-y-3 overflow-y-auto pr-1">
             <BranchListSection
               title="Default Branch"
-              entries={visibleDefaultBranch ? [visibleDefaultBranch] : []}
+              entries={visible.defaultBranch ? [visible.defaultBranch] : []}
               emptyLabel="No default branch available."
               selectedName={selectedName}
               onSelect={(entry) => setSelectedName(entry.name)}
             />
             <BranchListSection
               title="Recent Branches"
-              entries={visibleRecent}
+              entries={visible.recent}
               emptyLabel="No recent branches."
               selectedName={selectedName}
               onSelect={(entry) => setSelectedName(entry.name)}
             />
             <BranchListSection
               title="Other Branches"
-              entries={visibleOther}
+              entries={visible.other}
               emptyLabel="No other branches match this search."
               selectedName={selectedName}
               onSelect={(entry) => setSelectedName(entry.name)}
@@ -828,7 +817,7 @@ function BranchSwitcher({
     void onListBranches()
       .then((result) => setBranchList(result))
       .catch((loadError) => {
-        setError(loadError instanceof Error ? loadError.message : String(loadError))
+        setError(errorMessage(loadError))
       })
       .finally(() => {
         setIsLoading(false)
@@ -1107,15 +1096,6 @@ function DiffFileCard({
     setSelectedAttachmentId(attachment.id)
   }
 
-  function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>) {
-    event.preventDefault()
-    event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    if (cardRef.current) {
-      dom.dispatchContextMenuEvent(cardRef.current, rect.left + rect.width / 2, rect.bottom)
-    }
-  }
-
   function handleToggleRequest() {
     if (!isCollapsed) {
       onToggleCollapsed()
@@ -1248,7 +1228,7 @@ function DiffFileCard({
               <button
                 type="button"
                 aria-label={`Open actions for ${file.path}`}
-                onClick={openContextMenuFromButton}
+                onClick={(event) => openContextMenuFromButton(event, dom, cardRef.current)}
                 disabled={isFileActionPending}
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
@@ -1354,13 +1334,7 @@ function RightSidebarImpl({
   editorLabel,
   diffRenderMode,
   wrapLines,
-  onOpenFile,
-  onOpenInFinder,
-  onDiscardFile,
-  onIgnoreFile,
-  onIgnoreFolder,
-  onCopyFilePath,
-  onCopyRelativePath,
+  fileActions,
   onListBranches,
   onPreviewMergeBranch,
   onMergeBranch,
@@ -1379,26 +1353,18 @@ function RightSidebarImpl({
   ports,
 }: RightSidebarProps) {
   const dom = ports?.dom ?? domAdapter
-  const fileActions: DiffFileActions = useMemo(() => ({
-    onOpenFile,
-    onOpenInFinder,
-    onDiscardFile,
-    onIgnoreFile,
-    onIgnoreFolder,
-    onCopyFilePath,
-    onCopyRelativePath,
-  }), [onOpenFile, onOpenInFinder, onDiscardFile, onIgnoreFile, onIgnoreFolder, onCopyFilePath, onCopyRelativePath])
   const hasChanges = diffs.files.length > 0
-  const isGenerating = useRightSidebarUiStore((store) => store.isGenerating)
+  const gitActionScope = projectId ?? ""
+  const generateKey = pendingActionKey("chat.generateCommitMessage", gitActionScope)
+  const syncKey = pendingActionKey("chat.syncBranch", gitActionScope)
+  const isGenerating = usePendingAction(generateKey)
   const commitModeInFlight = useRightSidebarUiStore((store) => store.commitModeInFlight)
-  const isSyncing = useRightSidebarUiStore((store) => store.isSyncing)
+  const isSyncing = usePendingAction(syncKey)
   const isGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.isGitHubPublishModalOpen)
   const patchesByPath = useRightSidebarUiStore((store) => store.patchesByPath)
   const patchErrorsByPath = useRightSidebarUiStore((store) => store.patchErrorsByPath)
   const loadingPatchPaths = useRightSidebarUiStore((store) => store.loadingPatchPaths)
-  const setIsGenerating = useRightSidebarUiStore((store) => store.setIsGenerating)
   const setCommitModeInFlight = useRightSidebarUiStore((store) => store.setCommitModeInFlight)
-  const setIsSyncing = useRightSidebarUiStore((store) => store.setIsSyncing)
   const setIsGitHubPublishModalOpen = useRightSidebarUiStore((store) => store.setIsGitHubPublishModalOpen)
   const reconcilePatches = useRightSidebarUiStore((store) => store.reconcilePatches)
   const setPatchLoading = useRightSidebarUiStore((store) => store.setPatchLoading)
@@ -1540,21 +1506,15 @@ function RightSidebarImpl({
 
   async function handleGenerate() {
     if (!canGenerate) return
-    setIsGenerating(true)
-    try {
-      const result = await onGenerateCommitMessage({ paths: selectedPaths })
-      if (projectId) {
-        setCommitDraft(projectId, {
-          summary: result.subject,
-          description: result.body,
-        })
-      }
-    } finally {
-      setIsGenerating(false)
+    const result = await onGenerateCommitMessage({ paths: selectedPaths })
+    if (projectId) {
+      setCommitDraft(projectId, {
+        summary: result.subject,
+        description: result.body,
+      })
     }
   }
 
-  const gitActionScope = projectId ?? ""
   const initGitKey = pendingActionKey("chat.initGit", gitActionScope)
   const isInitializingGit = usePendingAction(initGitKey)
 
@@ -1563,7 +1523,7 @@ function RightSidebarImpl({
   }
 
   function launchGenerate() {
-    runPendingAction(pendingActionKey("chat.generateCommitMessage", gitActionScope), handleGenerate)
+    runPendingAction(generateKey, handleGenerate)
   }
 
   function launchPrimaryCommitAction() {
@@ -1574,8 +1534,8 @@ function RightSidebarImpl({
     launchGenerate()
   }
 
-  function launchSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
-    runPendingAction(pendingActionKey("chat.syncBranch", gitActionScope), () => handleSync(action))
+  function launchSync(action: GitSyncAction = syncAction) {
+    runPendingAction(syncKey, () => handleSync(action))
   }
 
   function launchInitGit() {
@@ -1590,14 +1550,9 @@ function RightSidebarImpl({
     launchPrimaryCommitAction()
   }
 
-  async function handleSync(action: "fetch" | "pull" | "push" | "publish" = syncAction) {
-    if (diffs.status !== "ready" || isSyncing) return
-    setIsSyncing(true)
-    try {
-      await onSyncWithRemote(action)
-    } finally {
-      setIsSyncing(false)
-    }
+  async function handleSync(action: GitSyncAction = syncAction) {
+    if (diffs.status !== "ready") return
+    await onSyncWithRemote(action)
   }
 
   const handleLoadPatch = useCallback(async (path: string) => {
@@ -1621,7 +1576,7 @@ function RightSidebarImpl({
       }
       return patch
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = errorMessage(error)
       setPatchError(path, message)
       throw error
     } finally {

@@ -1,5 +1,6 @@
 import { QuickResponseAdapter } from "./quick-response"
 import { isJsonObject, type JsonValue } from "../shared/json"
+import { isUntitledChat } from "../shared/types"
 
 const TITLE_SCHEMA = {
   type: "object",
@@ -13,7 +14,7 @@ const TITLE_SCHEMA = {
 function normalizeGeneratedTitle(value: JsonValue | undefined): string | null {
   if (typeof value !== "string") return null
   const normalized = value.replace(/\s+/g, " ").trim().slice(0, 80)
-  if (!normalized || normalized === "New Chat") return null
+  if (!normalized || isUntitledChat(normalized)) return null
   return normalized
 }
 
@@ -30,11 +31,6 @@ export interface GenerateChatTitleResult {
   failureMessage: string | null
 }
 
-function summarizeFailures(failures: Array<{ provider: "openai" | "claude" | "codex"; reason: string }>) {
-  if (failures.length === 0) return null
-  return failures.map((failure) => failure.reason).join("; ")
-}
-
 export async function generateTitleForChat(
   messageContent: string,
   cwd: string,
@@ -49,7 +45,7 @@ export async function generateTitleForChatDetailed(
   cwd: string,
   adapter = new QuickResponseAdapter()
 ): Promise<GenerateChatTitleResult> {
-  const result = await adapter.generateStructuredWithDiagnostics<string>({
+  const result = await adapter.generateStructuredOrFallback<string | null>({
     cwd,
     task: "conversation title generation",
     prompt: `Generate a short, descriptive title (under 30 chars) for a conversation that starts with this message.\n\n${messageContent}`,
@@ -58,20 +54,7 @@ export async function generateTitleForChatDetailed(
       const output = isJsonObject(value) ? value : {}
       return normalizeGeneratedTitle(output.title)
     },
-  })
+  }, () => fallbackTitleFromMessage(messageContent))
 
-  if (result.value) {
-    return {
-      title: result.value,
-      usedFallback: false,
-      failureMessage: null,
-    }
-  }
-
-  const fallbackTitle = fallbackTitleFromMessage(messageContent)
-  return {
-    title: fallbackTitle,
-    usedFallback: true,
-    failureMessage: summarizeFailures(result.failures),
-  }
+  return { title: result.value, usedFallback: result.usedFallback, failureMessage: result.failureMessage }
 }

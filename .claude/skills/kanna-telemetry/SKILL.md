@@ -198,8 +198,6 @@ password only reaches the container because the compose file declares
 
 ## Server-side observability and perf alerts
 
-Moved verbatim from the root `CLAUDE.md`.
-
 ### Observability (OTel traces + metrics, memlog, SIGUSR2 heap snapshot)
 
 Three independent concerns, one adapter (`src/server/otel.adapter.ts` — the
@@ -278,8 +276,9 @@ come from upstream, so `kanna.turn.cost_usd` is deliberately sparser than
 `kanna.turn.tokens`. Read a missing series as unknown, not zero.
 
 **Usage reaches the metric on `ActiveTurn.usage`, not through the callback.**
-`onTurnTerminal` carries only `(chatId, outcome)` and must keep doing so, so
-both runners stash the result entry's usage on the ActiveTurn — Claude/
+The `EventStore.subscribeTurnTerminal` listener carries only the chat id, the
+outcome and the failure message — never turn timing or spend — and must keep
+doing so, so both runners stash the result entry's usage on the ActiveTurn — Claude/
 OpenRouter at `claude-session-runner.ts`, Codex at `claude-turn-runner.ts`,
 both through `billedUsageOfResult`, which settles the entry-level-cost vs
 `usage.costUsd` precedence in ONE place. Terminal paths with no result entry
@@ -290,15 +289,16 @@ a loop's spend actually shows up, since its per-iteration cost is a subagent
 run, not a chat turn.
 
 **Duration histograms — `kanna.turn.duration_ms`, `kanna.subagent.run.duration_ms`.**
-Turn duration is recorded from `EventStore.onTurnTerminal` (`agent-coordinator.ts`),
+Turn duration is recorded in `AgentCoordinator.handleTurnTerminal` (`agent-coordinator.ts`),
+the listener it registers with `EventStore.subscribeTurnTerminal`,
 the one choke point every provider terminal path funnels through, enriched from
 `activeTurns.get(chatId)` — the same lookup the cron-outcome consumer already
 does there, valid because a turn leaves the map only after its terminal record
 persists. `ActiveTurn.startedAt` is REQUIRED and carried over from the
 `StartingTurn`, so the measurement includes spawn cost. A terminal with no
 ActiveTurn (a background-task self-wake) records nothing rather than a
-fabricated duration. Do NOT widen `onTurnTerminal`'s signature to carry this —
-24 call sites would ripple to serve one observer.
+fabricated duration. Do NOT widen the `subscribeTurnTerminal` listener's signature to carry this —
+every subscriber would ripple to serve one observer.
 
 **`DURATION_BUCKETS_MS` is load-bearing.** OTel's default explicit boundaries
 stop at 10s and a turn runs seconds to tens of minutes, so without the adapter's

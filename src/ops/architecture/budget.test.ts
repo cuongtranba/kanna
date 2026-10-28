@@ -1,20 +1,23 @@
 import { describe, expect, test } from "vite-plus/test"
 import path from "node:path"
-import { measureModules, measurePatterns, readLintLimits } from "./budget-scan.adapter"
+import { measureDuplication, measureModules, measurePatterns, measureTestSources, readLintLimits } from "./budget-scan.adapter"
 import {
   checkModuleBudget,
   coveredBy,
   checkLintLimits,
   checkPatternBudget,
+  COUNT_BUDGETS,
   LINT_LIMIT_PINS,
   formatBreach,
   MODULE_ALLOWANCES,
   MODULE_LINE_THRESHOLD,
   PATTERN_BUDGETS,
   SELF_EXCLUDED_PATHS,
+  TEST_PATTERN_BUDGETS,
   type ModuleMeasurement,
   type PatternMeasurement,
 } from "./budget"
+import { CLONE_WINDOW_LINES, countCloneBlocks, findLeakedLiterals } from "./duplication"
 
 const measuredModules = (entries: Record<string, number>): ModuleMeasurement[] =>
   Object.entries(entries).map(([path, lines]) => ({ path, lines }))
@@ -183,6 +186,16 @@ describe("the repository satisfies its architecture budget", () => {
     expect(breaches.map(formatBreach).join("\n\n")).toBe("")
   })
 
+  test("no test-style defect population grew, and none shrank without its pin being lowered", () => {
+    const breaches = checkPatternBudget(measurePatterns(root, measureTestSources(root), TEST_PATTERN_BUDGETS), TEST_PATTERN_BUDGETS)
+    expect(breaches.map(formatBreach).join("\n\n")).toBe("")
+  })
+
+  test("no protocol literal leaked into a second module and no copied block appeared, and neither population shrank unpinned", () => {
+    const breaches = checkPatternBudget(measureDuplication(root, modules), COUNT_BUDGETS)
+    expect(breaches.map(formatBreach).join("\n\n")).toBe("")
+  })
+
   test("the scan reaches real source, so a silently-empty gate cannot pass", () => {
     expect(modules.length).toBeGreaterThan(400)
     expect(modules.some((m) => m.path === "src/server/agent-coordinator.ts")).toBe(true)
@@ -198,21 +211,42 @@ describe("the manifest itself", () => {
     }
   })
 
-  test("every pattern budget cites a rationale and a driving issue", () => {
-    for (const budget of PATTERN_BUDGETS) {
+  test("every budget cites a rationale and a driving issue", () => {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS]) {
       expect(budget.rationale.length).toBeGreaterThan(20)
       expect(budget.issue).toBeGreaterThan(0)
+    }
+  })
+
+  test("every pattern budget names the paths it scans", () => {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
       expect(budget.include.length).toBeGreaterThan(0)
     }
   })
 
-  test("pattern ids are unique", () => {
-    const ids = PATTERN_BUDGETS.map((b) => b.id)
+  test("a block copied into a second module counts as a clone, and the same block once does not", () => {
+    const block = Array.from({ length: CLONE_WINDOW_LINES }, (_, i) => `const value${i} = compute(${i})`).join("\n")
+    const once = countCloneBlocks([{ path: "a.ts", text: block }, { path: "b.ts", text: "const other = 1" }])
+    const twice = countCloneBlocks([{ path: "a.ts", text: block }, { path: "b.ts", text: `  ${block.replaceAll("\n", "\n   ")}` }])
+    expect(once.count).toBe(0)
+    expect(twice.count).toBe(2)
+  })
+
+  test("a protocol literal is leaked only once a second module hard-codes it", () => {
+    const owner = { path: "routes.ts", text: 'export const SHARE_ROUTE = "/api/share"' }
+    const importer = { path: "page.ts", text: "fetch(SHARE_ROUTE)" }
+    const copier = { path: "other.ts", text: 'fetch("/api/share")' }
+    expect(findLeakedLiterals([owner, importer]).count).toBe(0)
+    expect(findLeakedLiterals([owner, importer, copier]).count).toBe(1)
+  })
+
+  test("pattern ids are unique across both manifests", () => {
+    const ids = [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS].map((b) => b.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   test("every pattern regex compiles", () => {
-    for (const budget of PATTERN_BUDGETS) {
+    for (const budget of [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS]) {
       expect(() => new RegExp(budget.pattern)).not.toThrow()
     }
   })
@@ -225,6 +259,34 @@ describe("the manifest itself", () => {
     expect(expression.test("export type StartClaudeSessionDeps = {")).toBe(true)
     expect(expression.test("  deps: {")).toBe(true)
     expect(expression.test("  const x: SendCommandDeps = build()")).toBe(false)
+  })
+
+  test("coordinator-passthroughs counts the forwarding method itself, whatever its deps accessor is called", () => {
+    const budget = PATTERN_BUDGETS.find((b) => b.id === "coordinator-passthroughs")
+    expect(budget).toBeDefined()
+    const expression = new RegExp(budget?.pattern ?? "")
+    expect(expression.test("    return closeChatFn(this.chatManagementDeps(), chatId)")).toBe(true)
+    expect(expression.test("    return closeChatFn(this.buildChatManagementDeps(), chatId)")).toBe(true)
+    expect(expression.test("    const x = closeChatFn(deps)")).toBe(false)
+  })
+
+  test("test-mock-functions counts mock functions and spies, and leaves module mocks to their own guard", () => {
+    const budget = TEST_PATTERN_BUDGETS.find((b) => b.id === "test-mock-functions")
+    expect(budget).toBeDefined()
+    const expression = new RegExp(budget?.pattern ?? "")
+    expect(expression.test("  const onSave = vi.fn(async () => {})")).toBe(true)
+    expect(expression.test("  const spy = vi.spyOn(console, \"error\")")).toBe(true)
+    expect(expression.test("  const closeFn = vi.fn<(chatId: string) => void>(() => undefined)")).toBe(true)
+    expect(expression.test(`${"vi"}.mock("./x", () => ({}))`)).toBe(false)
+    expect(expression.test("  expect(onSave.mock.calls).toHaveLength(1)")).toBe(false)
+    expect(expression.test("  let recorder: ReturnType<typeof vi.fn>")).toBe(false)
+  })
+
+  test("no test-style budget scans src/ops, whose gates quote every pattern as a literal", () => {
+    for (const budget of TEST_PATTERN_BUDGETS) {
+      expect({ id: budget.id, covered: coveredBy("src/ops/architecture/budget.test.ts", budget.include) })
+        .toMatchObject({ covered: false })
+    }
   })
 
   test("no budget scans the manifest or the scanner, which quote every regex as a literal", () => {

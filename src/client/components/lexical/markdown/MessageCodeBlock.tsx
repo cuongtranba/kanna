@@ -4,35 +4,19 @@ import { Button } from "../../ui/button"
 import { cn } from "../../../lib/utils"
 import { runDetached } from "../../../lib/runDetached"
 import { HighlightedCode } from "../../messages/HighlightedCode"
-import { MessageCodeBlockStore } from "./MessageCodeBlock.store"
-import type { ClipboardPort, TimerPort } from "../../../ports"
-import { clipboardAdapter, timerAdapter } from "../../../adapters"
+import { useCopyFeedback, type CopyFeedbackPorts } from "../../../stores/copyFeedbackStore"
 
-interface MessageCodeBlockPorts {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
-
-function MessageCodeBlockInner({
+export function MessageCodeBlock({
   source,
   lang,
-  ports = {},
+  ports,
 }: {
   source: string
   lang: string
-  ports?: MessageCodeBlockPorts
+  ports?: CopyFeedbackPorts
 }) {
-  const copied = MessageCodeBlockStore.useScopedStore((state) => state.copied)
-  const setCopied = MessageCodeBlockStore.useScopedStore((state) => state.setCopied)
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
-
-  const copyToClipboard = useCallback(async () => {
-    await clipboard.writeText(source)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
-  }, [source, setCopied, clipboard, timer])
-  const handleCopy = useCallback(() => { runDetached("copy code block", copyToClipboard()) }, [copyToClipboard])
+  const { copied, copy } = useCopyFeedback(ports)
+  const handleCopy = useCallback(() => { runDetached("copy code block", copy(source)) }, [copy, source])
 
   return (
     <div className="relative overflow-x-auto max-w-full min-w-0 no-code-highlight group/pre">
@@ -57,21 +41,5 @@ function MessageCodeBlockInner({
         {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
       </Button>
     </div>
-  )
-}
-
-export function MessageCodeBlock({
-  source,
-  lang,
-  ports,
-}: {
-  source: string
-  lang: string
-  ports?: MessageCodeBlockPorts
-}) {
-  return (
-    <MessageCodeBlockStore.Provider init={undefined}>
-      <MessageCodeBlockInner source={source} lang={lang} ports={ports} />
-    </MessageCodeBlockStore.Provider>
   )
 }

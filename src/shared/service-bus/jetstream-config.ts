@@ -1,12 +1,22 @@
+import type { NumericRange } from "../numeric"
 import { BUS_SUBJECT_PREFIX } from "./envelope"
 
-export type StreamRetention = "limits" | "interest" | "workqueue"
-export type StreamStorage = "file" | "memory"
-export type StreamDiscard = "old" | "new"
-export type ConsumerAckPolicy = "explicit" | "none" | "all"
-export type ConsumerDeliverPolicy = "all" | "new" | "last"
-export type ServiceBusMode = "embedded" | "external"
-export type EmbeddedLogLevel = "info" | "debug"
+export const NATS_SERVER_VERSION = "2.15.1"
+
+export const STREAM_RETENTIONS = ["limits", "interest", "workqueue"] as const
+export type StreamRetention = (typeof STREAM_RETENTIONS)[number]
+export const STREAM_STORAGES = ["file", "memory"] as const
+export type StreamStorage = (typeof STREAM_STORAGES)[number]
+export const STREAM_DISCARDS = ["old", "new"] as const
+export type StreamDiscard = (typeof STREAM_DISCARDS)[number]
+export const CONSUMER_ACK_POLICIES = ["explicit", "all", "none"] as const
+export type ConsumerAckPolicy = (typeof CONSUMER_ACK_POLICIES)[number]
+export const CONSUMER_DELIVER_POLICIES = ["all", "new", "last"] as const
+export type ConsumerDeliverPolicy = (typeof CONSUMER_DELIVER_POLICIES)[number]
+export const SERVICE_BUS_MODES = ["embedded", "external"] as const
+export type ServiceBusMode = (typeof SERVICE_BUS_MODES)[number]
+export const EMBEDDED_LOG_LEVELS = ["info", "debug"] as const
+export type EmbeddedLogLevel = (typeof EMBEDDED_LOG_LEVELS)[number]
 
 export interface JetStreamStreamSettings {
   name: string
@@ -128,6 +138,13 @@ export const SERVICE_BUS_DEFAULTS: Omit<ServiceBusSettingsStored, "token"> = {
   embedded: { maxMemoryStoreMb: 256, maxFileStoreMb: 2048, port: "auto", logLevel: "info" },
 }
 
+export const SERVICE_BUS_CONSUMER_DEFAULTS: Omit<JetStreamConsumerSettings, "durableName" | "filterSubject"> = {
+  ackPolicy: "explicit",
+  deliverPolicy: "all",
+  maxAckPending: 1000,
+  ackWaitSec: 30,
+}
+
 export const SERVICE_BUS_PORT_MIN = 1024
 export const SERVICE_BUS_PORT_MAX = 65535
 export const SERVICE_BUS_TOKEN_HINT_LENGTH = 4
@@ -143,7 +160,9 @@ export const EMBEDDED_STORE_MB_RANGE = { min: 16, max: 1_048_576 } as const
 const NANOS_PER_SECOND = 1_000_000_000
 const SECONDS_PER_DAY = 86_400
 const BYTES_PER_MB = 1_048_576
-const NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+const NAME_MAX_LENGTH = 64
+const NAME_PATTERN = new RegExp(`^[A-Za-z0-9_-]{1,${String(NAME_MAX_LENGTH)}}$`)
+const NAME_RULE = `1–${String(NAME_MAX_LENGTH)} letters, digits, - or _`
 const PREFIX_PATTERN = /^[a-z][a-z0-9_-]*$/
 const LITERAL_TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/
 const SERVER_URL_PATTERN = /^(?:nats|tls|ws|wss):\/\/[^\s/]+$/
@@ -276,26 +295,36 @@ export function consumerNeedsUpdate(live: LiveConsumerConfig, wanted: WantedCons
   )
 }
 
-function inRange(value: number, range: { min: number; max: number }): boolean {
+function inRange(value: number, range: NumericRange): boolean {
   return Number.isInteger(value) && value >= range.min && value <= range.max
 }
 
+function rangeText(range: NumericRange): string {
+  return `${String(range.min)}–${String(range.max)}`
+}
+
+function rangeProblems(label: string, value: number, range: NumericRange, unit = ""): string[] {
+  return inRange(value, range) ? [] : [`${label} must be ${rangeText(range)}${unit}`]
+}
+
+const SERVICE_BUS_PORT_RANGE: NumericRange = { min: SERVICE_BUS_PORT_MIN, max: SERVICE_BUS_PORT_MAX }
+
 function validateStream(stream: JetStreamStreamSettings): string[] {
   const errors: string[] = []
-  if (!NAME_PATTERN.test(stream.name)) errors.push("Stream name must be 1–64 letters, digits, - or _")
+  if (!NAME_PATTERN.test(stream.name)) errors.push(`Stream name must be ${NAME_RULE}`)
   if (!PREFIX_PATTERN.test(stream.subjectPrefix)) {
     errors.push("Subject prefix must start with a lowercase letter and use lowercase letters, digits, - or _")
   }
   for (const subject of stream.extraSubjects) {
     if (!isValidSubjectPattern(subject)) errors.push(`Extra subject "${subject}" is not a valid NATS subject`)
   }
-  if (!inRange(stream.maxAgeDays, MAX_AGE_DAYS_RANGE)) errors.push("Max age must be 1–3650 days")
-  if (!inRange(stream.maxBytesMb, MAX_BYTES_MB_RANGE)) errors.push("Max bytes must be 1–1048576 MB")
+  errors.push(...rangeProblems("Max age", stream.maxAgeDays, MAX_AGE_DAYS_RANGE, " days"))
+  errors.push(...rangeProblems("Max bytes", stream.maxBytesMb, MAX_BYTES_MB_RANGE, " MB"))
   if (!Number.isInteger(stream.maxMsgs) || (stream.maxMsgs !== -1 && stream.maxMsgs < 1)) {
     errors.push("Max messages must be -1 (unlimited) or at least 1")
   }
-  if (!inRange(stream.duplicateWindowSec, DUPLICATE_WINDOW_SEC_RANGE)) errors.push("Duplicate window must be 0–7200 seconds")
-  if (!inRange(stream.replicas, REPLICAS_RANGE)) errors.push("Replicas must be 1–5")
+  errors.push(...rangeProblems("Duplicate window", stream.duplicateWindowSec, DUPLICATE_WINDOW_SEC_RANGE, " seconds"))
+  errors.push(...rangeProblems("Replicas", stream.replicas, REPLICAS_RANGE))
   return errors
 }
 
@@ -304,27 +333,26 @@ function validateConsumers(consumers: readonly JetStreamConsumerSettings[]): str
   const seen = new Set<string>()
   for (const consumer of consumers) {
     if (!NAME_PATTERN.test(consumer.durableName)) {
-      errors.push(`Consumer name "${consumer.durableName}" must be 1–64 letters, digits, - or _`)
+      errors.push(`Consumer name "${consumer.durableName}" must be ${NAME_RULE}`)
     }
     if (seen.has(consumer.durableName)) errors.push(`Consumer name "${consumer.durableName}" is used twice`)
     seen.add(consumer.durableName)
     if (consumer.filterSubject.length > 0 && !isValidSubjectPattern(consumer.filterSubject)) {
       errors.push(`Consumer "${consumer.durableName}" filter is not a valid NATS subject`)
     }
-    if (!inRange(consumer.ackWaitSec, ACK_WAIT_SEC_RANGE)) errors.push(`Consumer "${consumer.durableName}" ack wait must be 1–3600 seconds`)
-    if (!inRange(consumer.maxAckPending, MAX_ACK_PENDING_RANGE)) {
-      errors.push(`Consumer "${consumer.durableName}" max ack pending must be 1–1000000`)
-    }
+    const label = `Consumer "${consumer.durableName}"`
+    errors.push(...rangeProblems(`${label} ack wait`, consumer.ackWaitSec, ACK_WAIT_SEC_RANGE, " seconds"))
+    errors.push(...rangeProblems(`${label} max ack pending`, consumer.maxAckPending, MAX_ACK_PENDING_RANGE))
   }
   return errors
 }
 
 function validateEmbedded(embedded: EmbeddedServerSettings): string[] {
   const errors: string[] = []
-  if (!inRange(embedded.maxMemoryStoreMb, EMBEDDED_STORE_MB_RANGE)) errors.push("Memory store must be 16–1048576 MB")
-  if (!inRange(embedded.maxFileStoreMb, EMBEDDED_STORE_MB_RANGE)) errors.push("File store must be 16–1048576 MB")
-  if (embedded.port !== "auto" && !inRange(embedded.port, { min: SERVICE_BUS_PORT_MIN, max: SERVICE_BUS_PORT_MAX })) {
-    errors.push("Port must be auto or 1024–65535")
+  errors.push(...rangeProblems("Memory store", embedded.maxMemoryStoreMb, EMBEDDED_STORE_MB_RANGE, " MB"))
+  errors.push(...rangeProblems("File store", embedded.maxFileStoreMb, EMBEDDED_STORE_MB_RANGE, " MB"))
+  if (embedded.port !== "auto" && !inRange(embedded.port, SERVICE_BUS_PORT_RANGE)) {
+    errors.push(`Port must be auto or ${rangeText(SERVICE_BUS_PORT_RANGE)}`)
   }
   return errors
 }

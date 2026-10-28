@@ -3,10 +3,10 @@ import type { ProjectPathEntry } from "../shared/commands/results/project"
 import {
   pathExists,
   readDirEntries,
-  runGitCapture,
   statMtimeMsOrNull,
   type DirEntry,
 } from "./project-paths-io.adapter"
+import { tryRunGit } from "./git-runner.adapter"
 
 export type ProjectPath = ProjectPathEntry
 
@@ -120,7 +120,7 @@ async function listGitFiles(localPath: string): Promise<string[] | null> {
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string[] | null> {
-  const result = await runGitCapture(cwd, args, { ...process.env, GIT_TERMINAL_PROMPT: "0" })
+  const result = await tryRunGit(args, cwd)
   if (!result || result.exitCode !== 0) return null
   return result.stdout.split("\n").filter(Boolean)
 }

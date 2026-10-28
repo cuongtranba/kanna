@@ -19,7 +19,10 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
+  CUSTOM_MODEL_PROVIDERS,
   effectiveContextWindowOptions,
+  getProviderCatalog,
+  isCustomModelProvider,
   type CustomModelEntry,
   type CustomModelInput,
   type CustomModelPatch,
@@ -29,12 +32,10 @@ import type { KannaState } from "./useKannaState"
 import {
   useAppSettingsCrudHandlers,
   type AppSettingsCrudHandlers,
-  type AppSettingsPatchWrapper,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import {
   useModelsSectionStore,
-  type ModelProvider,
   type ModelsEditingState,
 } from "../stores/modelsSectionStore"
 import type { DomPort } from "../ports/domPort"
@@ -42,24 +43,10 @@ import { domAdapter } from "../adapters/dom.adapter"
 
 export type ModelsSectionHandlers = AppSettingsCrudHandlers<CustomModelInput, CustomModelPatch>
 
-const wrapModelsPatch: AppSettingsPatchWrapper<CustomModelInput, CustomModelPatch> = (
-  customModels,
-) => ({ customModels })
-
-const MODEL_PROVIDER_SET = new Set<string>(["claude", "codex"])
-function isModelProvider(v: string): v is ModelProvider {
-  return MODEL_PROVIDER_SET.has(v)
-}
-
 interface ModelsSectionProps {
   models: readonly CustomModelEntry[]
   handlers: ModelsSectionHandlers
   dom?: DomPort
-}
-
-const PROVIDER_LABEL: Record<ModelProvider, string> = {
-  claude: "Claude",
-  codex: "Codex",
 }
 
 export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSectionProps) {
@@ -110,12 +97,12 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
 
   return (
     <div className="flex flex-col gap-6 px-6 py-6">
-      {(["claude", "codex"] as const).map((provider) => {
+      {CUSTOM_MODEL_PROVIDERS.map((provider) => {
         const rows = models.filter((m) => m.provider === provider)
         return (
           <div key={provider} className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-medium">{PROVIDER_LABEL[provider]} models</h2>
+              <h2 className="text-base font-medium">{getProviderCatalog(provider).label} models</h2>
               <Button size="sm" onClick={() => navigate({ kind: "create", provider })}>
                 <Plus className="mr-1 h-4 w-4" />
                 Add model
@@ -124,7 +111,7 @@ export function ModelsSection({ models, handlers, dom = domAdapter }: ModelsSect
             {rows.length === 0 ? (
               <SettingsEmptyState
                 icon={Cpu}
-                message={`No ${PROVIDER_LABEL[provider]} models configured.`}
+                message={`No ${getProviderCatalog(provider).label} models configured.`}
               />
             ) : (
               <SettingsList>
@@ -200,10 +187,12 @@ function ModelEditor({
   const toggleSupportedEffort = useModelsSectionStore((state) => state.toggleSupportedEffort)
   const toggleOneMillionContext = useModelsSectionStore((state) => state.toggleOneMillionContext)
   const handleProviderChange = useCallback((value: string) => {
-    if (isModelProvider(value)) patchEditorForm({ modelProvider: value })
+    if (isCustomModelProvider(value)) patchEditorForm({ modelProvider: value })
   }, [patchEditorForm])
 
-  const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, submitting, error } = editorForm
+  const { id, label, modelProvider, supportedEfforts, offersOneMillionContext, error } = editorForm
+  const saveKey = pendingActionKey("models.save", initial?.id ?? "new")
+  const submitting = usePendingAction(saveKey)
 
   const contextWindowOptions: readonly ProviderContextWindowOption[] = offersOneMillionContext
     ? CLAUDE_CONTEXT_WINDOW_OPTIONS
@@ -241,7 +230,6 @@ function ModelEditor({
         }
       },
       onDone,
-      fallbackMessage: "Failed to save model",
     })
 
   const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add model" })
@@ -261,8 +249,9 @@ function ModelEditor({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="claude">Claude</SelectItem>
-            <SelectItem value="codex">Codex</SelectItem>
+            {CUSTOM_MODEL_PROVIDERS.map((provider) => (
+              <SelectItem key={provider} value={provider}>{getProviderCatalog(provider).label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </label>
@@ -328,7 +317,7 @@ function ModelEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            runPendingAction(pendingActionKey("models.save", initial?.id ?? "new"), onSubmit)
+            runPendingAction(saveKey, onSubmit)
           }}
           pending={submitting}
           disabled={!canSave}
@@ -348,6 +337,6 @@ export function ModelsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">
 }) {
   const models = useAppSettingsStore(selectCustomModels)
-  const handlers = useAppSettingsCrudHandlers(wrapModelsPatch, props.state)
+  const handlers = useAppSettingsCrudHandlers("customModels", props.state)
   return <ModelsSection models={models} handlers={handlers} />
 }

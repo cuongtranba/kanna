@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
-import type { PluginLogEntry } from "../shared/plugins/log-ring"
+import { PLUGIN_LOG_DEFAULT_TAIL, tailLogEntries, type PluginLogEntry } from "../shared/plugins/log-ring"
 import { runCli } from "./cli-runtime"
 import {
   formatInstalled,
@@ -43,9 +43,9 @@ function createFakeService(overrides: Partial<PluginService> = {}): FakePluginSe
     status: () => undefined,
     call: async () => ({ ok: false, error: "not implemented" }),
     stop: async () => {},
-    logs: (id) => {
+    logs: (id, tail = PLUGIN_LOG_DEFAULT_TAIL) => {
       calls.push(`logs:${id}`)
-      return [...logEntries]
+      return tailLogEntries(logEntries, tail)
     },
     ...overrides,
   }
@@ -236,12 +236,21 @@ describe("formatPluginTable", () => {
 })
 
 describe("formatPluginLogs", () => {
-  test("--tail 0 prints nothing rather than the whole ring", () => {
-    expect(formatPluginLogs([entry(0, "out", "a"), entry(1, "out", "b")], 0)).toEqual(["No log entries."])
+  test("says so when there is nothing to print", () => {
+    expect(formatPluginLogs([])).toEqual(["No log entries."])
   })
 
-  test("a tail larger than the ring prints every entry", () => {
-    expect(formatPluginLogs([entry(0, "out", "a")], 100)).toEqual(["1970-01-01T00:00:00.000Z out a"])
+  test("prints every entry it is given", () => {
+    expect(formatPluginLogs([entry(0, "out", "a")])).toEqual(["1970-01-01T00:00:00.000Z out a"])
+  })
+
+  test("--tail 0 prints nothing rather than the whole ring", async () => {
+    const fake = createFakeService()
+    fake.logEntries.push(entry(0, "out", "a"), entry(1, "out", "b"))
+    const { out, io } = createOutput()
+
+    expect(await runPluginCli(["logs", "demo", "--tail", "0"], io, fake.service)).toBe(0)
+    expect(out.lines).toEqual(["No log entries."])
   })
 })
 

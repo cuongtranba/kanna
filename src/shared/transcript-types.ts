@@ -316,32 +316,30 @@ export type TranscriptEntry =
   | InboundDeliveryEntry
 
 
+type HydratedEntry<E extends TranscriptEntry> = E extends TranscriptEntry
+  ? Omit<E, "_id" | "createdAt" | "debugRaw"> & { id: string; timestamp: string }
+  : never
+
+interface HydratedMessageBase {
+  id: string
+  messageId?: string
+  timestamp: string
+  hidden?: boolean
+}
+
 export type HydratedTranscriptMessage =
-  | ({ kind: "user_prompt"; content: string; attachments?: ChatAttachment[]; steered?: boolean; autoContinue?: { scheduleId: string }; expandedCommand?: { name: string; kind: SlashCommandKind }; origin?: CommandOrigin; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "system_init"; model: string; tools: string[]; agents: string[]; slashCommands: string[]; mcpServers: McpServerInfo[]; provider: AgentProvider; id: string; messageId?: string; timestamp: string; hidden?: boolean; debugRaw?: string })
-  | ({ kind: "account_info"; accountInfo: AccountInfo; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "assistant_text"; text: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "assistant_thinking"; text: string; signature?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "api_error"; status: number; text: string; requestId?: string; apiErrorReason?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "policy_refusal"; text: string; requestId?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "result"; success: boolean; cancelled?: boolean; result: string; durationMs: number; costUsd?: number; codexErrorInfo?: CodexErrorInfoTag; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "status"; status: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "context_window_updated"; usage: ContextWindowUsageSnapshot; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "compact_boundary"; compactMetadata?: CompactBoundaryMetadata; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "compact_summary"; summary: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "context_cleared"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "interrupted"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "loop_disarmed"; reason: LoopDisarmReason; resumable: boolean; trackingFileRel?: string; workdirAbs?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "memory_loaded"; path: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "unknown"; json: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "auto_continue_prompt"; scheduleId: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "pending_tool_request"; toolRequestId: string; toolName: string; arguments: JsonObject; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_armed"; jobId: string; instruction: string; mode: CronMode; scheduleText: string; scheduleHuman: string; nextFireAt: number | null; model?: string; upcomingFires?: readonly number[]; cwd?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_command_error"; message: string; input?: string; suggestion?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_run"; jobId: string; runId: string; instruction: string; spawnedChatId?: string; firedAt: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_run_skipped"; jobId: string; reason: CronSkipReason; missedCount?: number; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_list"; help?: boolean; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "cron_job_change"; jobId: string; change: "removed" | "paused" | "resumed" | "updated"; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "webhook_delivery"; hookId: string; hookName: string; mode: WebhookMode; deliveryId: string; message?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
-  | ({ kind: "inbound_delivery"; sourceKind: "mcp" | "webhook"; sourceId: string; sourceName: string; mode: InboundHandlerMode; deliveryId: string; threadId: string; message?: string; id: string; messageId?: string; timestamp: string; hidden?: boolean })
+  | HydratedEntry<Exclude<TranscriptEntry, SystemInitEntry | ResultEntry | ToolCallEntry | ToolResultEntry | ToolRequestResolvedEntry>>
+  | (HydratedEntry<SystemInitEntry> & { debugRaw?: string })
+  | (HydratedMessageBase & {
+    kind: "result"
+    success: boolean
+    cancelled?: boolean
+    result: string
+    durationMs: number
+    costUsd?: number
+    codexErrorInfo?: CodexErrorInfoTag
+  })
+  | (HydratedMessageBase & { kind: "unknown"; json: string })
   | ({ id: string; messageId?: string; hidden?: boolean } & HydratedToolCall)
+
+export type TranscriptMessageOf<K extends HydratedTranscriptMessage["kind"]> = Extract<HydratedTranscriptMessage, { kind: K }>

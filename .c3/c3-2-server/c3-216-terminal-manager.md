@@ -1,7 +1,7 @@
 ---
 id: c3-216
 c3-version: 4
-c3-seal: d3905261b855926416d9ff4d67f3fbefa4954daee0fff24140dd4918cd100740
+c3-seal: d30101f432e8f8c7b69c9888b12b9b615620f2336442961844ef94ee305821c4
 title: terminal-manager
 type: component
 category: feature
@@ -69,7 +69,7 @@ Spawns PTY child processes via process-utils, streams stdin/stdout over the WS s
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | PTY leak on disconnect | Cleanup hook skipped | Process count grows | bun run check against src/server/terminal-manager.ts |
-| Resize drift | Wrong rows/cols on update | Wrapping artifacts in client | Manual resize smoke pairing client src/client/app/terminalLayoutResize.ts and server src/server/terminal-manager.ts |
+| Resize drift | Wrong rows/cols on update | Wrapping artifacts in client | Manual resize smoke pairing client src/client/components/chat-ui/TerminalPane.tsx and server src/server/terminal-manager.ts |
 
 ## Derived Materials
 

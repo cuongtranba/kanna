@@ -1,6 +1,5 @@
 
 import type { ChatAttachment, NormalizedToolCall } from "../shared/types"
-import type { SessionBackgroundTask } from "./claude-session-state"
 import { isRecord } from "../shared/errors"
 
 
@@ -38,17 +37,6 @@ export function buildPromptText(content: string, attachments: ChatAttachment[]) 
     trimmed || "Please inspect the attached files.",
     attachmentHint,
   ].join("\n\n").trim()
-}
-
-
-const STEERED_MESSAGE_PREFIX = `<system-message>
-The user would like to inform you of something while you continue to work. Acknowledge receipt immediately with a text response, then continue with the task at hand, incorporating the user's feedback if needed.
-</system-message>`
-
-export function buildSteeredMessageContent(content: string) {
-  return content.trim().length > 0
-    ? `${STEERED_MESSAGE_PREFIX}\n\n${content}`
-    : STEERED_MESSAGE_PREFIX
 }
 
 
@@ -130,28 +118,6 @@ export function toolCallDescription(tool: NormalizedToolCall): string | null {
   return typeof raw === "string" && raw.length > 0 ? raw : null
 }
 
-export function mergeBackgroundTaskSnapshot(
-  previous: ReadonlyMap<string, SessionBackgroundTask>,
-  ids: readonly string[],
-  meta: readonly { id: string; taskType: string | null; description: string | null }[] | undefined,
-  now: number,
-): Map<string, SessionBackgroundTask> {
-  const metaById = new Map((meta ?? []).map((entry) => [entry.id, entry]))
-  const next = new Map<string, SessionBackgroundTask>()
-  for (const id of ids) {
-    const prev = previous.get(id)
-    const snapshotMeta = metaById.get(id)
-    next.set(id, {
-      taskType: snapshotMeta?.taskType ?? prev?.taskType ?? null,
-      description: snapshotMeta?.description ?? prev?.description ?? null,
-      startedAt: prev?.startedAt ?? now,
-      outputPath: prev?.outputPath ?? null,
-    })
-  }
-  return next
-}
-
-
 export function buildBackgroundTaskWakePrompt(
   taskIds: string[],
   wakeNumber: number,
@@ -177,12 +143,6 @@ export function buildBackgroundTasksAbandonedMessage(taskIds: string[]): string 
   ].join(" ")
 }
 
-
-export function positiveIntegerFromEnv(value: string | undefined, fallback: number): number {
-  if (value === undefined || value.trim() === "") return fallback
-  const parsed = Number(value)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
 
 
 export interface UserMessageEntry {

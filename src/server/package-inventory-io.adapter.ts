@@ -1,13 +1,14 @@
-import os from "node:os"
 import path from "node:path"
 import { stat } from "node:fs/promises"
-import { readTextFileOrThrow, spawnCommandCapture } from "./ws-router-io.adapter"
+import { spawnCapture } from "./process-utils.adapter"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import type { InstalledPackage, PackageInventorySnapshot, PackageKind } from "../shared/packages/types"
 import { parseSkillLock } from "../shared/packages/parse-skill-lock"
 import { parseClaudePluginList, parseClaudePluginsFile } from "../shared/packages/parse-claude-plugins"
 import { parseCodexPluginList } from "../shared/packages/parse-codex-plugins"
-import { getGlobalSkillLockPath } from "./ws-router-skills"
+import { getGlobalSkillLockPath } from "./skills-cli"
 import { errorMessage } from "../shared/errors"
+import { currentHomeDir } from "./home-dir.adapter"
 import { isJsonObject, safeJsonParse, type JsonValue } from "../shared/json"
 
 interface SourceResult {
@@ -30,7 +31,7 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 async function buildAgentPresenceMap(skillNames: string[]): Promise<Map<string, string[]>> {
-  const home = resolvedHome()
+  const home = currentHomeDir()
   const presenceMap = new Map<string, string[]>()
 
   for (const name of skillNames) {
@@ -45,10 +46,6 @@ async function buildAgentPresenceMap(skillNames: string[]): Promise<Map<string, 
   }
 
   return presenceMap
-}
-
-function resolvedHome(): string {
-  return process.env.HOME ?? os.homedir()
 }
 
 async function readSkillPackages(): Promise<SourceResult> {
@@ -76,13 +73,9 @@ function extractSkillNamesFromLock(raw: JsonValue): string[] {
 }
 
 async function readClaudePluginPackages(): Promise<SourceResult> {
-  const cwd = resolvedHome()
+  const cwd = currentHomeDir()
   try {
-    const { stdout, exitCode } = await spawnCommandCapture(
-      ["claude", "plugin", "list", "--json"],
-      cwd,
-      process.env,
-    )
+    const { stdout, exitCode } = await spawnCapture(["claude", "plugin", "list", "--json"], { cwd, env: process.env })
     if (exitCode === 0) {
       const raw = safeJsonParse(stdout)
       if (raw !== null) return parseClaudePluginList(raw)
@@ -90,7 +83,7 @@ async function readClaudePluginPackages(): Promise<SourceResult> {
   } catch {
   }
 
-  const fallbackPath = path.join(resolvedHome(), ".claude", "plugins", "installed_plugins.json")
+  const fallbackPath = path.join(currentHomeDir(), ".claude", "plugins", "installed_plugins.json")
   try {
     const raw = safeJsonParse(await readTextFileOrThrow(fallbackPath))
     if (raw === null) return { packages: [], error: null }
@@ -101,13 +94,9 @@ async function readClaudePluginPackages(): Promise<SourceResult> {
 }
 
 async function readCodexPluginPackages(): Promise<SourceResult> {
-  const cwd = resolvedHome()
+  const cwd = currentHomeDir()
   try {
-    const { stdout, exitCode } = await spawnCommandCapture(
-      ["codex", "plugin", "list", "--json"],
-      cwd,
-      process.env,
-    )
+    const { stdout, exitCode } = await spawnCapture(["codex", "plugin", "list", "--json"], { cwd, env: process.env })
     if (exitCode === 0) {
       const raw = safeJsonParse(stdout)
       if (raw !== null) return parseCodexPluginList(raw)

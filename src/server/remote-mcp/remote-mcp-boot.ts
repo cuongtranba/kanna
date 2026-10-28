@@ -5,7 +5,7 @@ import type { DiscoveredProject } from "../discovery.adapter"
 import type { EventStore } from "../event-store"
 import { getMachineDisplayName } from "../machine-name.adapter"
 import { log } from "../../shared/log"
-import { REMOTE_MCP_PATH } from "./oauth-paths"
+import { remoteMcpOriginOf } from "./oauth-paths"
 import type { CommandOrigin } from "../../shared/command-origin"
 import type { ClientCommand, ServerEnvelope, SubscriptionTopic } from "../../shared/protocol"
 import { FsStorageBackend } from "../storage/fs-storage.adapter"
@@ -49,7 +49,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands, ref
   const dispatchCommand = (command: ClientCommand) => commands.dispatchCommand(command, currentRemoteMcpOrigin())
   const publicOrigin = () => {
     const resource = auth?.backend.remoteMcpResource() ?? null
-    return resource === null ? null : resource.slice(0, resource.length - REMOTE_MCP_PATH.length)
+    return resource === null ? null : remoteMcpOriginOf(resource)
   }
   const mcp = createMcpHandler(
     (request) => buildRemoteMcpServer({

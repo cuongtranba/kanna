@@ -1,5 +1,5 @@
 import { isRecord } from "../shared/errors"
-import { isJsonObject, safeJsonParse, type JsonObject } from "../shared/json"
+import { parseJsonObject } from "../shared/json"
 import { log } from "../shared/log"
 import type {
   CollabAgentToolCallItem,
@@ -10,6 +10,7 @@ import type {
   TurnPlanStep,
 } from "./codex-app-server-protocol"
 import { isUnifiedDiff } from "./codex-transcript-translator"
+import { parsePlanSteps } from "./codex-plan-steps"
 import type { CodexToolCallRecord, CodexToolOutputRecord } from "./codex-session-types"
 
 const EXEC_TOOL_NAMES: ReadonlySet<string> = new Set(["exec", "exec_command"])
@@ -72,21 +73,12 @@ function matchJsStringField(snippet: string, pattern: RegExp): string | null {
   return body === undefined ? null : unescapeJsString(body)
 }
 
-function parseJsonRecord(raw: string): JsonObject | null {
-  try {
-    const parsed = safeJsonParse(raw)
-    return parsed !== null && isJsonObject(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 function stringOrNull<T>(value: T): string | null {
   return typeof value === "string" ? value : null
 }
 
 function exitCodeOf(rawOutput: string): number | null {
-  const parsed = parseJsonRecord(rawOutput)
+  const parsed = parseJsonObject(rawOutput)
   if (parsed === null) return null
   const metadata = parsed.metadata
   if (!isRecord(metadata)) return null
@@ -99,7 +91,7 @@ function commandExecutionCall(
   onRegexMiss?: () => void,
 ): { command: string; cwd: string | null } | null {
   if (record.family === "function") {
-    const args = parseJsonRecord(record.input)
+    const args = parseJsonObject(record.input)
     if (args === null) return null
     const command = stringOrNull(args.cmd)
     if (command === null) return null
@@ -177,33 +169,9 @@ export function parseApplyPatch(input: string): PatchChanges | null {
   return changes.length > 0 ? changes : null
 }
 
-function planStatus<T>(raw: T): TurnPlanStep["status"] {
-  if (raw === "completed") return "completed"
-  if (raw === "in_progress" || raw === "inProgress") return "inProgress"
-  return "pending"
-}
-
-export function parsePlanSteps(
-  input: string,
-): { steps: TurnPlanStep[]; explanation: string | null } | null {
-  const args = parseJsonRecord(input)
-  if (args === null) return null
-  const plan = args.plan
-  if (!Array.isArray(plan)) return null
-  const steps: TurnPlanStep[] = []
-  for (const entry of plan) {
-    if (!isRecord(entry)) continue
-    const step = stringOrNull(entry.step)
-    if (step === null) continue
-    steps.push({ step, status: planStatus(entry.status) })
-  }
-  if (steps.length === 0) return null
-  return { steps, explanation: stringOrNull(args.explanation) }
-}
-
 function dynamicArguments(record: CodexToolCallRecord): DynamicToolCallItem["arguments"] {
   if (record.family === "function") {
-    const parsed = parseJsonRecord(record.input)
+    const parsed = parseJsonObject(record.input)
     if (parsed !== null) return parsed
   }
   return record.input
@@ -231,7 +199,7 @@ function dynamicOutput(callId: string, tool: string, rawOutput: string): Dynamic
 }
 
 function collabAgentCall(record: CodexToolCallRecord): CollabAgentToolCallItem {
-  const args = parseJsonRecord(record.input)
+  const args = parseJsonObject(record.input)
   const senderThreadId = stringOrNull(args?.sender_thread_id ?? null) ?? ""
   const rawReceivers = args?.receiver_thread_ids
   const receiverThreadIds = Array.isArray(rawReceivers)
@@ -255,13 +223,13 @@ export interface RolloutMapper {
   getMissCount(): number
 }
 
-export function createRolloutMapper(): RolloutMapper {
+export function createRolloutMapper(warn: (message: string) => void = (message) => log.warn(message)): RolloutMapper {
   let missCount = 0
 
   function onRegexMiss(): void {
     missCount += 1
     if (missCount === 1) {
-      log.warn(
+      warn(
         "[kanna/codex] exec-snippet regex miss — falling back to raw snippet as command." +
           " Codex may have changed the snippet shape.",
       )
@@ -299,7 +267,8 @@ export function createRolloutMapper(): RolloutMapper {
     }
 
     if (record.name === UPDATE_PLAN_TOOL_NAME) {
-      const plan = parsePlanSteps(record.input)
+      const args = parseJsonObject(record.input)
+      const plan = args === null ? null : parsePlanSteps(args)
       if (plan !== null) {
         return {
           kind: "plan",

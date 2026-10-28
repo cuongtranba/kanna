@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useId, useMemo } from "react"
-import type { ComponentRenderProps } from "@json-render/react"
 import { useQuery } from "@tanstack/react-query"
 import { FileCode2, MessageSquareText, X } from "lucide-react"
 import {
@@ -22,8 +21,8 @@ import { FLOW_KIND, FlowKindIcon, FlowStatus } from "../flow/flow-kinds"
 import { FLOW_HEIGHT, layoutFlowDiagram } from "../flow/flow-layout"
 import { useGenUIHost } from "../host"
 import { isString, useElementUiState } from "../useElementUiState"
-import { EmptyNotice, PropsIssue } from "./primitives"
-import { resolvedProps } from "./props"
+import { defineElement } from "./define-element"
+import { EmptyNotice } from "./primitives"
 import { useRunAction } from "./records"
 
 const LazyFlowSurface = lazy(() => import("../flow/FlowSurface"))
@@ -32,13 +31,6 @@ const FLOW_LAYOUT_QUERY_KEY = "genui-flow-layout"
 
 function isFlowView(value: JsonValue | undefined): value is "diagram" | "outline" {
   return value === "diagram" || value === "outline"
-}
-
-function parseFlowProps(props: ComponentRenderProps["element"]["props"]): FlowDiagramProps | null {
-  const json = resolvedProps(props)
-  if (!json) return null
-  const parsed = GENUI_COMPONENTS.FlowDiagram.props.safeParse(json)
-  return parsed.success ? parsed.data : null
 }
 
 function useFlowLayout(diagram: FlowDiagramProps) {
@@ -188,9 +180,8 @@ function DiagramCanvas({ diagram, height, label, selectedId, onSelect }: { diagr
   )
 }
 
-export function FlowDiagramElement({ element }: ComponentRenderProps) {
-  const diagram = useMemo(() => parseFlowProps(element.props), [element.props])
-  const outline = useMemo(() => (diagram ? flowOutline(diagram) : []), [diagram])
+export const FlowDiagramElement = defineElement(GENUI_COMPONENTS.FlowDiagram.props, ({ element, props: diagram }) => {
+  const outline = useMemo(() => flowOutline(diagram), [diagram])
   const [view, setView] = useElementUiState(element, "view", "diagram", isFlowView)
   const [selected, setSelected] = useElementUiState(element, "selected", "", isString)
   const titleId = useId()
@@ -198,7 +189,6 @@ export function FlowDiagramElement({ element }: ComponentRenderProps) {
   const toggle = useCallback((id: string) => setSelected(id === selected ? "" : id), [selected, setSelected])
   const closeDetail = useCallback(() => setSelected(""), [setSelected])
 
-  if (!diagram) return <PropsIssue component="FlowDiagram" />
   const height = FLOW_HEIGHT[diagram.height ?? "md"]
   const selectedEntry = outline.find((entry) => entry.node.id === selected) ?? null
   const label = `Diagram${diagram.title ? ` of ${diagram.title}` : ""}: ${summary(diagram)}. Switch to Outline to read it as a list.`
@@ -218,4 +208,4 @@ export function FlowDiagramElement({ element }: ComponentRenderProps) {
       {selectedEntry ? <NodeDetail diagram={diagram} entry={selectedEntry} onClose={closeDetail} /> : null}
     </figure>
   )
-}
+})

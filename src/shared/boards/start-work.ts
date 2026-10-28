@@ -1,6 +1,8 @@
 
-import type { Board, BoardColumn, Card, CardDetail, CardLink, FieldValue } from "./types"
+import type { Board, BoardColumn, Card, CardDetail, CardLink } from "./types"
 import type { WorktreeCleanupView } from "./worktree-cleanup"
+import { CARD_MOVE_TOOL_NAME } from "../tools"
+import { cardLabels, cardText, type WellKnownField } from "./well-known-fields"
 
 export type StartWorkStatus =
   | { kind: "idle" }
@@ -13,23 +15,23 @@ export interface StartWorkFacts {
   existingWorktreePaths: ReadonlySet<string>
 }
 
-function newestTarget(
+export function newestLinkTarget(
   links: readonly CardLink[],
   kind: CardLink["kind"],
-  exists: (targetId: string) => boolean,
+  accept: (targetId: string) => boolean,
 ): string | null {
   let best: CardLink | null = null
   for (const candidate of links) {
     if (candidate.kind !== kind) continue
-    if (!exists(candidate.targetId)) continue
+    if (!accept(candidate.targetId)) continue
     if (!best || candidate.createdAt > best.createdAt) best = candidate
   }
   return best?.targetId ?? null
 }
 
 export function deriveStartWorkStatus(facts: StartWorkFacts): StartWorkStatus {
-  const worktreePath = newestTarget(facts.links, "worktree", (path) => facts.existingWorktreePaths.has(path))
-  const chatId = newestTarget(facts.links, "chat", (id) => facts.liveChatIds.has(id))
+  const worktreePath = newestLinkTarget(facts.links, "worktree", (path) => facts.existingWorktreePaths.has(path))
+  const chatId = newestLinkTarget(facts.links, "chat", (id) => facts.liveChatIds.has(id))
   if (chatId) return { kind: "chat", chatId, worktreePath }
   if (worktreePath) return { kind: "worktree", worktreePath }
   return { kind: "idle" }
@@ -71,17 +73,9 @@ export function resolveStartWorkProjectId(card: Card, board: Board): string | nu
   return board.ownerKind === "project" ? board.ownerId : null
 }
 
-function textOf(value: FieldValue | undefined): string | null {
-  if (!value) return null
-  if (value.kind === "text" || value.kind === "longtext" || value.kind === "url") {
-    const trimmed = value.value.trim()
-    return trimmed === "" ? null : trimmed
-  }
-  return null
-}
-
-function labelsOf(value: FieldValue | undefined): readonly string[] {
-  return value?.kind === "label" ? value.values : []
+function promptText(card: Card, field: WellKnownField): string | null {
+  const trimmed = cardText(card.content, field)?.trim()
+  return trimmed ? trimmed : null
 }
 
 export function findAdvanceColumn(
@@ -104,23 +98,23 @@ export interface CardAdvance {
 export function buildStartWorkPrompt(card: Card, branch: string, advance: CardAdvance | null): string {
   const lines: string[] = [`Work on this card: ${card.title}`, "", `Branch: ${branch}`]
 
-  const description = textOf(card.content.description)
+  const description = promptText(card, "description")
   if (description) lines.push("", "Description:", description)
 
-  const acceptance = textOf(card.content.acceptanceCriteria)
+  const acceptance = promptText(card, "acceptanceCriteria")
   if (acceptance) lines.push("", "Acceptance criteria:", acceptance)
 
-  const labels = labelsOf(card.content.labels)
+  const labels = cardLabels(card.content)
   if (labels.length > 0) lines.push("", `Labels: ${labels.join(", ")}`)
 
-  const externalUrl = textOf(card.content.externalUrl)
+  const externalUrl = promptText(card, "externalUrl")
   if (externalUrl) lines.push("", `Source: ${externalUrl}`)
 
   if (advance) {
     lines.push(
       "",
       `When the work is done and verified, move this card to "${advance.columnTitle}":`,
-      `  mcp__kanna__card_move({ card_id: "${advance.cardId}", to_column_id: "${advance.columnId}" })`,
+      `  ${CARD_MOVE_TOOL_NAME}({ card_id: "${advance.cardId}", to_column_id: "${advance.columnId}" })`,
       "If it is unfinished or the checks do not pass, leave the card where it is and say what is blocking.",
     )
   }

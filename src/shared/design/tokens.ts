@@ -1,9 +1,8 @@
-import type { Oklch } from "./contrast"
+import { parseOklchColor, type Oklch } from "./contrast"
 
 export type Theme = "light" | "dark"
 export type TokenMap = Record<string, Oklch>
 
-const OKLCH_RE = /oklch\(\s*([0-9.]+)%\s+([0-9.]+)\s+([0-9.]+)\s*\)/
 const PROP_RE = /--([a-z0-9-]+)\s*:\s*(.+?)\s*;/g
 
 function parseBlock(block: string): Map<string, string> {
@@ -15,9 +14,8 @@ function parseBlock(block: string): Map<string, string> {
 }
 
 function parseOklch(value: string): Oklch | null {
-  const m = OKLCH_RE.exec(value)
-  if (!m) return null
-  return { l: Number(m[1]) / 100, c: Number(m[2]), h: Number(m[3]) }
+  const parsed = parseOklchColor(value)
+  return parsed === null ? null : { l: parsed.l, c: parsed.c, h: parsed.h }
 }
 
 function resolve(name: string, raw: Map<string, string>, visited = new Set<string>()): Oklch | null {

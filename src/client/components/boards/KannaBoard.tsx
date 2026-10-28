@@ -27,7 +27,7 @@ import { selectDropAtColumnEnd, selectDropBeforeCard, useBoardDragStore } from "
 import { selectBoardFilter, useBoardFilterStore } from "./BoardFilter.store"
 import { InboxFilterBar } from "./InboxFilterBar"
 import { ColumnSettings, type ColumnSettingsValue } from "./ColumnSettings"
-import { useColumnAdderStore } from "./ColumnAdder.store"
+import { ColumnAdderStore } from "./ColumnAdder.store"
 import { selectCardDraft, useCardAdderStore } from "./CardAdder.store"
 import {
   ContextMenu,
@@ -37,8 +37,6 @@ import {
 } from "../ui/context-menu"
 import type { BoardColumn, BoardViewSnapshot, Card } from "../../../shared/boards/types"
 
-
-export type { CardMoveRequest }
 
 export interface KannaBoardProps {
   view: BoardViewSnapshot
@@ -57,16 +55,15 @@ export interface KannaBoardProps {
 const CARD = "kanna-board-card"
 const COLUMN = "kanna-board-column"
 
-const liveColumns: { current: readonly BoardColumn[] } = { current: [] }
-
 export function KannaBoard(props: KannaBoardProps) {
   const { view, onCardMove, onColumnMove } = props
   const boardRef = useRef<HTMLDivElement | null>(null)
 
   const viewRef = useRef(view)
+  const columnsRef = useRef(view.columns)
   useLayoutEffect(() => {
     viewRef.current = view
-    liveColumns.current = view.columns
+    columnsRef.current = view.columns
   })
 
   const boardId = view.board.id
@@ -113,6 +110,7 @@ export function KannaBoard(props: KannaBoardProps) {
           <BoardColumnView
             key={column.id}
             column={column}
+            columnsRef={columnsRef}
             cards={displayCards}
             total={view.counts[column.id] ?? allCards.length}
             newSince={isStart ? (view.newSince ?? null) : null}
@@ -141,6 +139,7 @@ const EMPTY_CHAT_FACTS: Readonly<Record<string, CardChatFacts>> = {}
 
 interface ColumnViewProps {
   column: BoardColumn
+  columnsRef: React.RefObject<readonly BoardColumn[]>
   cards: readonly Card[]
   total: number
   newSince: number | null
@@ -158,6 +157,7 @@ interface ColumnViewProps {
 
 function BoardColumnView({
   column,
+  columnsRef,
   cards,
   total,
   newSince,
@@ -202,8 +202,8 @@ function BoardColumnView({
         canDrop: ({ source }) => source.data[COLUMN] === true,
         getData: ({ input, element }) =>
           attachClosestEdge({ columnId }, { input, element, allowedEdges: ["left", "right"] }),
-        onDragEnter: ({ self }) => { applyColumnEdge(self.data, columnId) },
-        onDrag: ({ self }) => { applyColumnEdge(self.data, columnId) },
+        onDragEnter: ({ self }) => { applyColumnEdge(self.data, columnId, columnsRef.current) },
+        onDrag: ({ self }) => { applyColumnEdge(self.data, columnId, columnsRef.current) },
       }),
       dropTargetForElements({
         element: list,
@@ -214,7 +214,7 @@ function BoardColumnView({
       }),
       autoScrollForElements({ element: list }),
     )
-  }, [columnId, onColumnDrop])
+  }, [columnId, columnsRef, onColumnDrop])
 
   const overLimit = isOverWipLimit(total, column.wipLimit)
   const settings = useMemo(
@@ -302,10 +302,10 @@ function BoardColumnView({
 
 type DropTargetData = Parameters<typeof extractClosestEdge>[0]
 
-function applyColumnEdge(data: DropTargetData, hoveredColumnId: string) {
+function applyColumnEdge(data: DropTargetData, hoveredColumnId: string, columns: readonly BoardColumn[]) {
   const edge = extractClosestEdge(data)
   if (edge !== "left" && edge !== "right") return
-  const before = dropTargetForColumnEdge(liveColumns.current, hoveredColumnId, edge)
+  const before = dropTargetForColumnEdge(columns, hoveredColumnId, edge)
   useBoardDragStore.getState().setColumnDrop(before, true)
 }
 
@@ -535,22 +535,34 @@ function CardAdder({
   )
 }
 
-function ColumnAdder({ onAdd, isFirst }: { onAdd: (title: string) => void; isFirst: boolean }) {
-  const draft = useColumnAdderStore((state) => state.draft)
+function ColumnAdder(props: { onAdd: (title: string) => void; isFirst: boolean }) {
+  return (
+    <ColumnAdderStore.Provider init={undefined}>
+      <ColumnAdderForm {...props} />
+    </ColumnAdderStore.Provider>
+  )
+}
 
-  const handleChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    useColumnAdderStore.getState().setDraft(event.currentTarget.value)
-  }, [])
+function ColumnAdderForm({ onAdd, isFirst }: { onAdd: (title: string) => void; isFirst: boolean }) {
+  const adder = ColumnAdderStore.useScopedStoreApi()
+  const draft = ColumnAdderStore.useScopedStore((state) => state.draft)
+
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      adder.getState().setDraft(event.currentTarget.value)
+    },
+    [adder],
+  )
 
   const handleSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      const title = useColumnAdderStore.getState().draft.trim()
+      const title = adder.getState().draft.trim()
       if (title === "") return
-      useColumnAdderStore.getState().clear()
+      adder.getState().clear()
       onAdd(title)
     },
-    [onAdd],
+    [adder, onAdd],
   )
 
   return (

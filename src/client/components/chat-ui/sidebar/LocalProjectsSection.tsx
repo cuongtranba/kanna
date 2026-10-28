@@ -1,4 +1,4 @@
-import { memo, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useMemo } from "react"
+import { memo, type ReactNode, useCallback, useMemo } from "react"
 import { ChevronRight, GripVertical, MoreHorizontal, SquarePen, Star } from "lucide-react"
 import {
   DndContext,
@@ -28,7 +28,8 @@ import { AnimatePresence, MotionReveal } from "../../ui/motion-reveal"
 import { MOTION_DURATION } from "../../../lib/motion"
 import type { SidebarChatRow, SidebarProjectGroup } from "../../../../shared/types"
 import { APP_NAME } from "../../../../shared/branding"
-import { getPathBasename } from "../../../lib/formatters"
+import { fileNameOfPath } from "../../../lib/pathUtils"
+import { openContextMenuFromButton } from "../../../lib/openContextMenuFromButton"
 import { cn } from "../../../lib/utils"
 import { ProjectSectionMenu } from "./Menus"
 import { InstructionsDialog } from "./InstructionsDialog"
@@ -68,36 +69,12 @@ interface Props {
   dom?: DomPort
 }
 
-interface SortableProjectGroupProps {
+type SortableProjectGroupProps = Omit<Props, "projectGroups" | "heading" | "onReorderGroups" | "dom"> & {
   group: SidebarProjectGroup
-  editorLabel: string
-  collapsedSections: Set<string>
-  expandedGroups: Set<string>
-  onToggleSection: (key: string) => void
-  onToggleExpandedGroup: (key: string) => void
-  renderChatRow: (chat: SidebarChatRow) => ReactNode
-  onShowArchivedProject?: (projectId: string) => void
-  onNewLocalChat?: (localPath: string) => Promise<void>
-  onCopyPath?: (localPath: string) => Promise<void>
-  onOpenExternalPath?: (action: "open_finder" | "open_editor", localPath: string) => Promise<void>
-  onHideProject?: (projectId: string) => Promise<void>
-  onDeleteProject?: (projectId: string) => Promise<void>
-  onOpenBoards?: (projectId: string) => void
-  onToggleStar?: (projectId: string, starred: boolean) => Promise<void>
-  onSetInstructions?: (projectId: string, instructions: string) => Promise<void>
-  isConnected?: boolean
-  startingLocalPath?: string | null
   dom: DomPort
 }
 
 const DRAG_REORDER_TRIGGER_OFFSET_PX = 20
-
-function openContextMenuFromButton(event: ReactMouseEvent<HTMLButtonElement>, dom: DomPort) {
-  event.preventDefault()
-  event.stopPropagation()
-  const rect = event.currentTarget.getBoundingClientRect()
-  dom.dispatchContextMenuEvent(event.currentTarget, rect.left + rect.width / 2, rect.bottom)
-}
 
 type RectLookup = {
   get(id: UniqueIdentifier): ClientRect | undefined
@@ -289,7 +266,7 @@ const SortableProjectGroup = memo(({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="truncate min-w-0 text-13 font-semibold text-foreground/80">
-              {getPathBasename(localPath)}
+              {fileNameOfPath(localPath)}
             </span>
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={4}>
@@ -384,7 +361,7 @@ const SortableProjectGroup = memo(({
         <InstructionsDialog
           open={instructionsOpen}
           onOpenChange={handleInstructionsOpenChange}
-          title={getPathBasename(localPath)}
+          title={fileNameOfPath(localPath)}
           description="Conventions for this project. Every chat that can write it — including a stack chat rooted elsewhere — is told these."
           initialValue={group.instructions ?? ""}
           onSave={handleSaveInstructions}
@@ -467,25 +444,9 @@ function SectionHeading({ label, pending }: { label: string; pending: boolean })
 const LocalProjectsSectionImpl = function LocalProjectsSection({
   projectGroups,
   heading,
-  editorLabel,
-  collapsedSections,
-  expandedGroups,
-  onToggleSection,
-  onToggleExpandedGroup,
-  renderChatRow,
-  onShowArchivedProject,
-  onNewLocalChat,
-  onCopyPath,
-  onOpenExternalPath,
-  onHideProject,
-  onDeleteProject,
-  onOpenBoards,
-  onToggleStar,
-  onSetInstructions,
   onReorderGroups,
-  isConnected,
-  startingLocalPath,
   dom: domProp,
+  ...groupProps
 }: Props) {
   const dom = domProp ?? domAdapter
   const reorderPending = usePendingAction(REORDER_PROJECT_GROUPS_KEY) && Boolean(onReorderGroups)
@@ -554,28 +515,7 @@ const LocalProjectsSectionImpl = function LocalProjectsSection({
       >
         <SortableContext items={groupIds} strategy={verticalListSortingStrategy} disabled={reorderPending}>
           {projectGroups.map((group) => (
-            <SortableProjectGroup
-              key={group.groupKey}
-              group={group}
-              editorLabel={editorLabel}
-              collapsedSections={collapsedSections}
-              expandedGroups={expandedGroups}
-              onToggleSection={onToggleSection}
-              onToggleExpandedGroup={onToggleExpandedGroup}
-              renderChatRow={renderChatRow}
-              onShowArchivedProject={onShowArchivedProject}
-              onNewLocalChat={onNewLocalChat}
-              onCopyPath={onCopyPath}
-              onOpenExternalPath={onOpenExternalPath}
-              onHideProject={onHideProject}
-              onDeleteProject={onDeleteProject}
-              onOpenBoards={onOpenBoards}
-              onToggleStar={onToggleStar}
-              onSetInstructions={onSetInstructions}
-              isConnected={isConnected}
-              startingLocalPath={startingLocalPath}
-              dom={dom}
-            />
+            <SortableProjectGroup key={group.groupKey} group={group} dom={dom} {...groupProps} />
           ))}
         </SortableContext>
       </DndContext>

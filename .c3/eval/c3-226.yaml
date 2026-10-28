@@ -20,3 +20,4 @@ code:
   - src/server/canonical-args.ts
   - src/server/structured-doc-io.adapter.ts
   - src/shared/structured-doc/**/*.ts
+  - src/server/mcp-server-test.ts

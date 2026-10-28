@@ -14,8 +14,8 @@ import { APP_VERSION } from "../../shared/branding"
 import { toError } from "../../shared/errors"
 import { safeJsonParse, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
-import { networkHeaders } from "../mcp-validator"
-import { projectProcessEnv } from "../project-process-env"
+import { toJsonValue } from "../json-boundary"
+import { networkHeaders, stdioEnv } from "../mcp-validator"
 import type {
   McpSourceCloseReason,
   McpSourceConnection,
@@ -81,11 +81,6 @@ interface ToolContentBlock {
   text?: string | undefined
 }
 
-function toJsonValue<T>(value: T): JsonValue | undefined {
-  const text = JSON.stringify(value)
-  return text === undefined ? undefined : (safeJsonParse(text) ?? undefined)
-}
-
 export function toolResultValue<Structured>(result: {
   content?: readonly ToolContentBlock[] | undefined
   structuredContent?: Structured | undefined
@@ -96,7 +91,7 @@ export function toolResultValue<Structured>(result: {
     .map((block) => block.text ?? "")
     .join("\n")
   if (result.isError) throw new Error(text.length > 0 ? text : "tool call failed")
-  const structured = result.structuredContent === undefined ? undefined : toJsonValue(result.structuredContent)
+  const structured = result.structuredContent === undefined ? null : toJsonValue(result.structuredContent)
   return structured ?? textValue(text, undefined)
 }
 
@@ -106,11 +101,6 @@ function withHeaders(headers: Record<string, string>): (url: string | URL, init?
     for (const [name, value] of Object.entries(headers)) merged.set(name, value)
     return fetch(url, { ...init, headers: merged })
   }
-}
-
-function stdioEnv(server: Extract<McpServerConfig, { transport: "stdio" }>): Record<string, string> {
-  const inherited = Object.entries(projectProcessEnv(process.env)).filter((entry): entry is [string, string] => entry[1] !== undefined)
-  return { ...Object.fromEntries(inherited), ...server.env }
 }
 
 export function buildSourceTransport(server: McpServerConfig, bearer: string | undefined): Transport {

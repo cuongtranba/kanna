@@ -1,8 +1,8 @@
 
 import type { ChatAttachment, QueuedChatMessage } from "../../shared/types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
-import type { SendMessageOptions } from "../claude-steer-log"
-import { AUTO_CONTINUE_EVENT_VERSION } from "../auto-continue/events"
+import type { SendMessageOptions } from "../claude-turn-starter-types"
+import { chatAutomationEnvelope } from "../auto-continue/events"
 import { deriveCronJobs, findRunningCronRuns } from "./read-model"
 import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"
 import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalescer"
@@ -25,7 +25,7 @@ export interface CronFireDeps extends CronCommandDeps {
 }
 
 export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: string): Promise<void> {
-  const now = deps.now?.() ?? Date.now()
+  const now = deps.now()
   if (!deps.getChatRecord(chatId)) return
 
   const jobs = deriveCronJobs(deps.store.getAutoContinueEvents(chatId), chatId, now)
@@ -37,11 +37,8 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
     const runChatId = stale?.spawnedChatId ?? chatId
     if (stale && !deps.isChatBusy(runChatId)) {
       await emitCronEvent(deps, {
-        v: AUTO_CONTINUE_EVENT_VERSION,
+        ...chatAutomationEnvelope(chatId, jobId, now),
         kind: "cron_run_outcome",
-        chatId,
-        scheduleId: jobId,
-        timestamp: now,
         runId: stale.runId,
         ok: false,
         errorCode: "orphaned",
@@ -68,11 +65,8 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
     await deps.clearChatContext(chatId)
     const runId = newRunId()
     await emitCronEvent(deps, {
-      v: AUTO_CONTINUE_EVENT_VERSION,
+      ...chatAutomationEnvelope(chatId, jobId, deps.now()),
       kind: "cron_run_started",
-      chatId,
-      scheduleId: jobId,
-      timestamp: deps.now?.() ?? Date.now(),
       runId,
     })
     const tag: CronRunTag = { jobId, runId, originChatId: chatId }
@@ -90,13 +84,10 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
   } catch {
   }
   const runId = newRunId()
-  const firedAt = deps.now?.() ?? Date.now()
+  const firedAt = deps.now()
   await emitCronEvent(deps, {
-    v: AUTO_CONTINUE_EVENT_VERSION,
+    ...chatAutomationEnvelope(chatId, jobId, firedAt),
     kind: "cron_run_started",
-    chatId,
-    scheduleId: jobId,
-    timestamp: firedAt,
     runId,
     spawnedChatId: spawned.id,
   })
@@ -120,11 +111,8 @@ export async function recordCronTurnOutcome(
   outcome: "finished" | "failed" | "cancelled",
 ): Promise<void> {
   await emitCronEvent(deps, {
-    v: AUTO_CONTINUE_EVENT_VERSION,
+    ...chatAutomationEnvelope(tag.originChatId, tag.jobId, deps.now()),
     kind: "cron_run_outcome",
-    chatId: tag.originChatId,
-    scheduleId: tag.jobId,
-    timestamp: deps.now?.() ?? Date.now(),
     runId: tag.runId,
     ok: outcome === "finished",
     ...(outcome === "finished" ? {} : { errorCode: outcome === "cancelled" ? "cancelled" : "error" }),
@@ -140,11 +128,8 @@ export async function reconcileCronRunsAtBoot(
 ): Promise<void> {
   for (const entry of missed) {
     await emitCronEvent(deps, {
-      v: AUTO_CONTINUE_EVENT_VERSION,
+      ...chatAutomationEnvelope(entry.chatId, entry.jobId, deps.now()),
       kind: "cron_run_skipped",
-      chatId: entry.chatId,
-      scheduleId: entry.jobId,
-      timestamp: deps.now?.() ?? Date.now(),
       reason: "server_offline",
       missedCount: entry.missedCount,
     })
@@ -157,17 +142,14 @@ export async function reconcileCronRunsAtBoot(
   }
 
   for (const chatId of chatIds) {
-    const now = deps.now?.() ?? Date.now()
+    const now = deps.now()
     for (const run of findRunningCronRuns(deps.store.getAutoContinueEvents(chatId), chatId)) {
       const runChatId = run.spawnedChatId ?? chatId
       const isQueued = deps.getQueuedMessages(runChatId).some((msg) => msg.cronRun?.runId === run.runId)
       if (isQueued) continue
       await emitCronEvent(deps, {
-        v: AUTO_CONTINUE_EVENT_VERSION,
+        ...chatAutomationEnvelope(chatId, run.jobId, now),
         kind: "cron_run_outcome",
-        chatId,
-        scheduleId: run.jobId,
-        timestamp: now,
         runId: run.runId,
         ok: false,
         errorCode: "orphaned",
@@ -182,14 +164,14 @@ async function skip(
   jobId: string,
   reason: CoalescedSkipReason,
 ): Promise<void> {
-  const now = deps.now?.() ?? Date.now()
+  const now = deps.now()
   const record = deps.skipCoalescer.record(chatId, jobId, reason, now)
   if (!record) return
   await writeSkip(deps, chatId, jobId, record.reason, record.count)
 }
 
 async function flushSkipStreak(deps: CronFireDeps, chatId: string, jobId: string): Promise<void> {
-  const record = deps.skipCoalescer.flushPending(chatId, jobId, deps.now?.() ?? Date.now())
+  const record = deps.skipCoalescer.flushPending(chatId, jobId, deps.now())
   if (!record) return
   await writeSkip(deps, chatId, jobId, record.reason, record.count)
 }
@@ -203,11 +185,8 @@ async function writeSkip(
 ): Promise<void> {
   const missed = count > 1 ? { missedCount: count } : {}
   await emitCronEvent(deps, {
-    v: AUTO_CONTINUE_EVENT_VERSION,
+    ...chatAutomationEnvelope(chatId, jobId, deps.now()),
     kind: "cron_run_skipped",
-    chatId,
-    scheduleId: jobId,
-    timestamp: deps.now?.() ?? Date.now(),
     reason,
     ...missed,
   })

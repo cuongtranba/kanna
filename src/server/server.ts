@@ -9,10 +9,13 @@ import type { ShareMode } from "../shared/share"
 import { createPasswordAuth, type PasswordAuth } from "./better-auth.adapter"
 import { createRemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { EventStore } from "./event-store"
+import { Lifetime } from "./lifetime"
 import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
 import { resolveVapidSubject } from "../shared/vapid-subject"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
+import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
+import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import type { LimitDetector } from "./auto-continue/limit-detector"
 import { KannaAnalyticsReporter } from "./analytics"
@@ -20,6 +23,7 @@ import { AppSettingsManager } from "./app-settings"
 import { DiffStore } from "./diff-store"
 import { discoverProjects, type DiscoveredProject } from "./discovery.adapter"
 import { KeybindingsManager } from "./keybindings"
+import { readIntEnv } from "./env-int"
 import { readLlmProviderSnapshot, validateLlmProviderCredentials, writeLlmProviderSnapshot } from "./llm-provider"
 import { OpenRouterModelCache } from "./openrouter-models"
 import { fetchOpenRouterModelsRaw } from "./openrouter-models-io.adapter"
@@ -34,7 +38,7 @@ import { addWorktree, isDirty, listWorktrees, localBranchExists, removeWorktree 
 import { resolveWorktreeCleanup, worktreeCleanupView, type WorktreeCleanupDeps } from "./board-worktree-cleanup"
 import type { CleanupDecision } from "../shared/boards/worktree-cleanup"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
-import { readOriginRepoSlug } from "./diff-store-git-branch.adapter"
+import { readOriginRepoSlug } from "./diff-store-git-branch"
 import { createGitHubIssuesProvider } from "./github-issues.adapter"
 import { readGitHubCliToken } from "./github-cli.adapter"
 import { UpdateManager } from "./update-manager"
@@ -54,11 +58,12 @@ import { readPackageInventory } from "./package-inventory-io.adapter"
 import type { UpdateInstallAttemptResult } from "./cli-runtime"
 import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
-import { createWsRouter, type ClientState } from "./ws-router"
+import { createWsRouter } from "./ws-router"
+import type { SocketState } from "./ws-router-utils"
+import { isAutoContinueScheduleEvent } from "./auto-continue/events"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import { setQuickResponseOAuthPool } from "./quick-response"
 import { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
@@ -91,16 +96,10 @@ import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
 import { createInbox, createInboxReplyActions, inboxHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
-import { createStoreBus, type StoreBus } from "./service-bus/service-bus-boot"
+import { createStoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
 
 export { buildAgentAppSettingsView }
-
-function parsePositiveIntEnv(raw: string | undefined, fallback: number): number {
-  if (raw === undefined) return fallback
-  const n = Number.parseInt(raw, 10)
-  return Number.isFinite(n) && n > 0 ? n : fallback
-}
 
 function resolveCloudflaredPath(settingsPath: string): string {
   if (settingsPath !== CLOUDFLARE_TUNNEL_DEFAULTS.cloudflaredPath) return settingsPath
@@ -133,44 +132,41 @@ export interface StartKannaServerOptions {
   agentOverrides?: {
     claudeLimitDetector?: LimitDetector
     codexLimitDetector?: LimitDetector
-    throwOnClaudeSessionStart?: boolean
+    startClaudeSession?: AgentCoordinatorArgs["startClaudeSession"]
   }
 }
 
 interface ApplicationServices {
   store: EventStore
-  bus: StoreBus
   diffStore: DiffStore
   auth: PasswordAuth | null
   analytics: KannaAnalyticsReporter
-  terminals: TerminalManager
   updateManager: UpdateManager | null
-  packageUpdateManager: PackageUpdateManager
   agent: AgentCoordinator
   router: ReturnType<typeof createWsRouter>
   refreshDiscovery: () => Promise<DiscoveredProject[]>
   beacon: BeaconServices
   appSettings: AppSettingsManager
-  keybindings: KeybindingsManager
   tunnelGateway: TunnelGateway
-  pushManager: PushManager
   sessionShareService: SessionShareService
   webhooks: WebhookService
-  observability: ReturnType<typeof initObservability>
   scheduleManager: ScheduleManager
   cronScheduler: CronScheduler
-  staleEmptyChatPruneInterval: ReturnType<typeof setInterval>
-  followedSessionTickInterval: ReturnType<typeof setInterval>
-  snapshotSweepHandle: { stop(): void }
+  lifetime: Lifetime
 }
 
 async function createApplicationServices(options: StartKannaServerOptions): Promise<ApplicationServices> {
   const runtimeProfile = getRuntimeProfile()
   const store = new EventStore(options.dataDir)
-  const diffStore = new DiffStore(store.dataDir)
   const machineDisplayName = getMachineDisplayName()
   await store.initialize()
+  const lifetime = new Lifetime()
   const bus = createStoreBus(store)
+  lifetime.defer("teardown", async () => {
+    await store.flush()
+    await bus.stop()
+    await store.snapshotAndTruncateLogs()
+  })
   const inbox = await createInbox(store.dataDir, bus)
   let broadcastChatState: ((chatId: string) => void) | null = null
   let pushFollowedSessions: (() => void) | null = null
@@ -183,7 +179,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
-  await diffStore.initialize()
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
 
   let discoveredProjects: DiscoveredProject[] = []
@@ -223,13 +218,17 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   }
   const keybindings = new KeybindingsManager()
   const appSettings = new AppSettingsManager(path.join(store.dataDir, "settings.json"))
+  lifetime.defer("quiesce", () => keybindings.dispose())
+  lifetime.defer("quiesce", () => appSettings.dispose())
   const beacon = createBeaconServices({ appSettings })
+  lifetime.defer("quiesce", () => beacon.stop())
   await appSettings.initialize()
   const observability = initObservability({
     dataDir: store.dataDir,
     telemetry: appSettings.getSnapshot().telemetry,
     machineName: machineDisplayName,
   })
+  lifetime.defer("quiesce", () => observability.shutdown())
   appSettings.onChange((snapshot) => observability.applyTelemetrySettings(snapshot.telemetry))
   bus.attachMirror(appSettings, store.dataDir)
   const pushManager = new PushManager({
@@ -257,6 +256,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     owner: () => "owner",
   })
   const snapshotSweepHandle = startSnapshotSweep(sessionShareService, 24 * 60 * 60 * 1000)
+  lifetime.defer("quiesce", () => snapshotSweepHandle.stop())
   await keybindings.initialize()
   const auth = options.password
     ? await createPasswordAuth({
@@ -266,12 +266,14 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
         appSettings,
       })
     : null
+  if (auth) lifetime.defer("teardown", () => auth.dispose())
   const analytics = new KannaAnalyticsReporter({
     settings: appSettings,
     currentVersion: options.update?.version ?? "unknown",
     environment: runtimeProfile === "dev" ? "dev" : "prod",
   })
   const terminals = new TerminalManager({ pidRegistry: terminalPidRegistry })
+  lifetime.defer("teardown", () => terminals.closeAll())
   const updateManager: UpdateManager | null = (() => {
     if (!options.update) return null
     let manager: UpdateManager | null = null
@@ -304,7 +306,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     checkers: [
       createSkillUpdateChecker({ fetchFn: fetch, token: null }),
       createClaudePluginUpdateChecker(
-        buildClaudePluginCheckerDeps(findClaudeBinary()),
+        buildClaudePluginCheckerDeps(),
       ),
       createCodexPluginUpdateChecker(buildCodexPluginCheckerDepsForEnv()),
     ],
@@ -313,6 +315,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     timer: { setInterval, clearInterval },
     now: Date.now, hasAnyChatBusy: () => agent.hasAnyChatBusy(),
   })
+  lifetime.defer("quiesce", () => packageUpdateManager.stop())
   const tunnelManager = new TunnelManager({
     cloudflaredPath: resolveCloudflaredPath(appSettings.getSnapshot().cloudflareTunnel.cloudflaredPath),
     onEvent: async (event) => {
@@ -330,6 +333,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     store,
     broadcast: (chatId) => broadcastChatState?.(chatId),
   })
+  lifetime.defer("quiesce", () => tunnelGateway.shutdown())
   const oauthPool = new OAuthTokenPool(
     () => appSettings.getSnapshot().claudeAuth.tokens,
     (id, patch) => {
@@ -340,7 +344,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     Date.now,
     () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
-  setQuickResponseOAuthPool(oauthPool)
+  const diffStore = new DiffStore(undefined, oauthPool)
   const localCatalog = new LocalCatalogService({
     scan: scanLocalCatalog,
     statMtimes,
@@ -352,22 +356,22 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
       await agent.fireAutoContinue(chatId, scheduleId)
     },
   })
+  lifetime.defer("quiesce", () => scheduleManager.shutdown())
   const cronScheduler = new CronScheduler({
     fire: async (chatId, jobId) => {
       await agent.fireCronJob(chatId, jobId)
     },
   })
+  let cronDrain: Promise<void> = Promise.resolve()
+  lifetime.defer("quiesce", () => { cronDrain = cronScheduler.shutdown() })
   agent = new AgentCoordinator({
     store,
     scheduleManager,
     cronScheduler,
-    openrouterFirstEntryTimeoutMs: parsePositiveIntEnv(
-      process.env.KANNA_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS,
-      2 * 60 * 1000,
-    ),
+    runtimeConfig: resolveAgentRuntimeConfig(process.env),
     claudeLimitDetector: options.agentOverrides?.claudeLimitDetector,
     codexLimitDetector: options.agentOverrides?.codexLimitDetector,
-    throwOnClaudeSessionStart: options.agentOverrides?.throwOnClaudeSessionStart,
+    startClaudeSession: options.agentOverrides?.startClaudeSession,
     analytics,
     tunnelGateway,
     oauthPool,
@@ -393,7 +397,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     onStateChange: (chatId?: string, broadcastOptions?: { immediate?: boolean }) => {
       if (chatId) {
         if (broadcastOptions?.immediate) {
-          void router.broadcastChatStateImmediately(chatId)
+          void router.broadcastChatAndSidebar(chatId)
           return
         }
         router.scheduleChatStateBroadcast(chatId)
@@ -404,7 +408,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
 
   const webhooks = await createWebhookService(store.dataDir, store, agent, bus, inbox, process.env.KANNA_WEBHOOKS !== "disabled")
-  const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox)
+  const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox, lifetime)
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -463,11 +467,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
           projectName: project.title,
           repo: named,
           boundTo: named
-            ? boardRegistry.repoBindingOwner(
-                "github-issues",
-                { provider: "github-issues", ...named },
-                boardId,
-              )
+            ? boardRegistry.repoBindingOwner({ provider: "github-issues", ...named }, boardId)
             : null,
         }
       }),
@@ -487,11 +487,11 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     isTurnActive: (chatId) => agent.hasActiveTurn(chatId),
     now: Date.now,
     onChange: () => pushFollowedSessions?.(),
-    activeWindowMs: parsePositiveIntEnv(
+    activeWindowMs: readIntEnv(
       process.env.KANNA_IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
       IMPORT_FOLLOW_ACTIVE_WINDOW_MS,
     ),
-    idleMs: parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
+    idleMs: readIntEnv(process.env.KANNA_IMPORT_FOLLOW_IDLE_MS, IMPORT_FOLLOW_IDLE_MS),
   })
 
   const router = createWsRouter({
@@ -538,6 +538,15 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
   })
 
+  lifetime.defer("teardown", () => router.dispose())
+  lifetime.defer("teardown", () => agent.dispose())
+  lifetime.defer("settle", async () => {
+    for (const chatId of agent.getActiveTurnChatIds()) {
+      await agent.cancel(chatId)
+    }
+    await agent.drainCronOutcomes()
+    await cronDrain
+  })
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
   inbox.subscribe(() => { router.pushInbox() })
   bus.subscribeStatus(() => { router.pushServiceBus() })
@@ -550,43 +559,40 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   const staleEmptyChatPruneInterval = setInterval(() => {
     void router.pruneStaleEmptyChats().then(() => router.broadcastSnapshots())
   }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
+  lifetime.defer("quiesce", () => clearInterval(staleEmptyChatPruneInterval))
   const followedSessionTickInterval = setInterval(
     () => { void followedSessionRegistry.tick() },
-    parsePositiveIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
+    readIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
   )
+  lifetime.defer("quiesce", () => clearInterval(followedSessionTickInterval))
 
   return {
     store,
-    bus,
     diffStore,
     auth,
     analytics,
-    terminals,
     updateManager,
-    packageUpdateManager,
     agent,
     router,
     refreshDiscovery,
     beacon,
     appSettings,
-    keybindings,
     tunnelGateway,
-    pushManager,
     sessionShareService,
     webhooks,
-    observability,
     scheduleManager,
     cronScheduler,
-    staleEmptyChatPruneInterval,
-    followedSessionTickInterval,
-    snapshotSweepHandle,
+    lifetime,
   }
 }
 
 function rehydrateScheduledWork(services: ApplicationServices): void {
   const { store, agent, scheduleManager, cronScheduler } = services
   scheduleManager.rehydrate(
-    store.listAutoContinueChats().flatMap((chatId) => store.getAutoContinueEvents(chatId))
+    store
+      .listAutoContinueChats()
+      .flatMap((chatId) => store.getAutoContinueEvents(chatId))
+      .filter(isAutoContinueScheduleEvent),
   )
   const cronChatIds = store.listAutoContinueChats()
   const missedCronFires = cronScheduler.rehydrate(
@@ -610,34 +616,8 @@ function rehydrateScheduledWork(services: ApplicationServices): void {
   })
 }
 
-async function shutdownServices(services: ApplicationServices, server: Server<ClientState>): Promise<void> {
-  const { store, agent, auth, appSettings, keybindings, scheduleManager, cronScheduler,
-    tunnelGateway, snapshotSweepHandle, observability, staleEmptyChatPruneInterval,
-    followedSessionTickInterval, router, terminals, packageUpdateManager, beacon, bus } = services
-
-  packageUpdateManager.stop()
-  appSettings.dispose()
-  keybindings.dispose()
-  scheduleManager.shutdown()
-  const cronDrain = cronScheduler.shutdown()
-  tunnelGateway.shutdown()
-  snapshotSweepHandle.stop()
-  await observability.shutdown()
-  clearInterval(staleEmptyChatPruneInterval)
-  clearInterval(followedSessionTickInterval)
-  beacon.stop()
-  for (const chatId of agent.getActiveTurnChatIds()) {
-    await agent.cancel(chatId)
-  }
-  await agent.drainCronOutcomes()
-  await cronDrain
-  await agent.dispose()
-  await router.dispose()
-  await auth?.dispose()
-  terminals.closeAll()
-  await store.flush()
-  await bus.stop()
-  await store.snapshotAndTruncateLogs()
+async function shutdownServices(services: ApplicationServices, server: Server<SocketState>): Promise<void> {
+  await services.lifetime.disposeAll()
   server.stop(true)
 }
 
@@ -649,19 +629,19 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets })
 
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
   const development = getRuntimeProfile() === "dev"
 
-  let server!: Server<ClientState>
+  let server!: Server<SocketState>
   let actualPort = port
 
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
     try {
-      server = serveHttp<ClientState>({
+      server = serveHttp<SocketState>({
         port: actualPort,
         hostname,
         development,
@@ -694,6 +674,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
     diffStore,
     updateManager,
     appSettings,
+    beaconTransferTickets: beacon.registry.transfer.tickets,
     stop: () => remoteMcp.stop().then(() => shutdownServices(services, server)),
   }
 }

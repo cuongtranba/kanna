@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
-import { AgentCoordinator } from "./agent"
+import { AgentCoordinator } from "./agent-coordinator"
 import { TURN_DURATION_MS } from "./observability"
 import { startMetricRecorder, type MetricRecorder } from "./test-helpers/metric-recorder"
 import type { ActiveTurn } from "./claude-session-state"
@@ -10,11 +10,16 @@ interface TerminalStore {
   onTurnTerminal:
     | ((chatId: string, outcome: "finished" | "failed" | "cancelled", error?: string) => void)
     | null
+  subscribeTurnTerminal?: (listener: NonNullable<TerminalStore["onTurnTerminal"]>) => () => void
   runningSubagentRuns?: () => never[]
   getAutoContinueEvents?: () => never[]
 }
 
 function buildCoordinator(store: TerminalStore) {
+  store.subscribeTurnTerminal = (listener) => {
+    store.onTurnTerminal = listener
+    return () => { store.onTurnTerminal = null }
+  }
   store.runningSubagentRuns = () => []
   store.getAutoContinueEvents = () => []
   return new AgentCoordinator({

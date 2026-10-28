@@ -1,11 +1,12 @@
 import type { ChatSnapshot, ShareError } from "../../shared/session-share/types"
-import type { Result } from "./index"
+import type { ShareResult } from "./index"
+import { isShareTokenId } from "./token"
 
 interface ShareReadSurface {
-  getShare(tokenId: string): Promise<Result<{ snapshot: ChatSnapshot }>>
+  getShare(tokenId: string): Promise<ShareResult<{ snapshot: ChatSnapshot }>>
 }
 
-const TOKEN_RE = /^\/api\/share\/([A-Za-z0-9_-]{20,128})$/
+const SHARE_PATH_RE = /^\/api\/share\/([^/]+)$/
 
 function jsonError(status: number, error: ShareError): Response {
   return Response.json({ ok: false, error }, { status })
@@ -23,9 +24,9 @@ function describeStatus(error: ShareError): number {
 
 export async function handleShareApiRequest(req: Request, service: ShareReadSurface): Promise<Response> {
   const { pathname } = new URL(req.url)
-  const match = TOKEN_RE.exec(pathname)
-  if (!match) return jsonError(404, { kind: "not_found" })
-  const result = await service.getShare(match[1]!)
+  const tokenId = SHARE_PATH_RE.exec(pathname)?.[1]
+  if (tokenId === undefined || !isShareTokenId(tokenId)) return jsonError(404, { kind: "not_found" })
+  const result = await service.getShare(tokenId)
   if (!result.ok) return jsonError(describeStatus(result.error), result.error)
   return Response.json({ ok: true, snapshot: result.data.snapshot })
 }

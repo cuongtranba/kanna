@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { BEACON_MENTION_PREFIX, buildBeaconMentionIndex } from "../../shared/beacon-alias"
+import { buildBeaconMentionIndex } from "../../shared/beacon-alias"
+import { matchNamespacedQuery } from "../lib/mentionNamespaces"
 import type { BeaconConfig } from "../../shared/beacon-config"
 import { selectCustomBeacons, useAppSettingsStore } from "../stores/appSettingsStore"
 
@@ -18,10 +19,7 @@ export function filterBeaconSuggestions(
   query: string,
 ): BeaconSuggestion[] {
   const { handleByBeaconId } = buildBeaconMentionIndex(beacons)
-  const normalized = query.toLowerCase()
-  const namespaced = normalized.startsWith(BEACON_MENTION_PREFIX)
-  const listsEverything = normalized === "" || BEACON_MENTION_PREFIX.startsWith(normalized)
-  const nameQuery = namespaced ? normalized.slice(BEACON_MENTION_PREFIX.length) : normalized
+  const { listsEverything, nameQuery } = matchNamespacedQuery(query, "beacon")
 
   const matches: BeaconSuggestion[] = []
   for (const beacon of beacons) {

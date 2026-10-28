@@ -1,6 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react"
-import type { AskUserQuestionItem } from "../components/messages/types"
-import type { AskUserQuestionAnswerMap, AutoContinueSchedule, QueuedChatMessage, ChatBackgroundTask } from "../../shared/types"
+import type { AskUserQuestionItem, AskUserQuestionAnswerMap, AutoContinueSchedule, QueuedChatMessage, ChatBackgroundTask } from "../../shared/types"
 import type { CronJobSnapshot } from "../../shared/cron/types"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
 import type { SubagentRunSnapshot, LoopProgressSnapshot } from "../../shared/subagent-types"
@@ -9,6 +8,8 @@ import type { CloudflareTunnelRecord } from "../../shared/settings/cloudflare-tu
 import type { WorkflowRunSummary, WorkflowRun } from "../../shared/workflow-types"
 import type { GetSubagentTranscript } from "../components/messages/subagent-fetch-context"
 import type { KannaState } from "./useKannaState"
+import { DEFAULT_EDITOR_PRESET } from "../stores/terminalPreferencesStore"
+import { NO_LATEST_TOOL_IDS } from "./derived"
 
 export interface TranscriptActionsContextValue {
   onAskUserQuestionSubmit: (toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => void | Promise<void>
@@ -69,7 +70,7 @@ export const DEFAULT_TRANSCRIPT_ACTIONS: TranscriptActionsContextValue = {
   chatId: undefined,
   onToolGroupExpandedChange: NOOP,
   subagentRuns: {},
-  editorPreset: "cursor",
+  editorPreset: DEFAULT_EDITOR_PRESET,
   editorCommandTemplate: undefined,
   platform: "darwin",
   queuedMessages: [],
@@ -80,7 +81,7 @@ export const DEFAULT_TRANSCRIPT_ACTIONS: TranscriptActionsContextValue = {
   onSteerQueuedMessage: ASYNC_NOOP,
   onRemoveQueuedMessage: ASYNC_NOOP,
   localPath: undefined,
-  latestToolIds: {},
+  latestToolIds: NO_LATEST_TOOL_IDS,
   isProcessing: false,
 }
 

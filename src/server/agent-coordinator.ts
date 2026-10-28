@@ -1,48 +1,46 @@
 import { type ChatTaskStorePort, type SetupLoopHandlerResult } from "./kanna-mcp"
 import { buildSeedTaskEvents } from "../shared/chat-tasks/seed"
-import { EMPTY_CHAT_TASK_PROJECTION, type ChatTaskProjection } from "../shared/chat-tasks/read-model"
+import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { readDoc } from "./structured-doc-io.adapter"
 import { PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
-  AgentProvider,
   ChatAttachment,
   ChatBackgroundTask,
   LlmProviderSnapshot,
   McpOAuthState,
-  McpServerConfig,
   PendingToolSnapshot,
   QueuedChatMessage,
   Subagent,
 } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
-import { EventStore } from "./event-store"
+import { EventStore, type TurnOutcome } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
+import { QuickResponseAdapter } from "./quick-response"
 import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
+import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
 import { readLlmProviderSnapshot } from "./llm-provider"
-import type { AutoContinueEvent } from "./auto-continue/events"
-import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetection, type LimitDetector } from "./auto-continue/limit-detector"
-import { ClaudeAuthErrorDetector, type AuthErrorDetection } from "./auto-continue/auth-error-detector"
+import type { ChatAutomationEvent } from "./auto-continue/events"
+import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetector } from "./auto-continue/limit-detector"
+import { ClaudeAuthErrorDetector } from "./auto-continue/auth-error-detector"
 import type { ScheduleManager } from "./auto-continue/schedule-manager"
 import type { LoopState } from "./auto-continue/read-model"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
-import { SubagentOrchestrator, type BackgroundRunOutcome, type ProviderRunStart } from "./subagent-orchestrator"
+import { SubagentOrchestrator, type BackgroundRunOutcome } from "./subagent-orchestrator"
 import {
   buildSubagentProviderRunForChat as buildSubagentProviderRunForChatFn,
   type SubagentWiringDeps,
-  type BuildSubagentProviderRunForChatArgs,
 } from "./claude-subagent-wiring"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import {
   type ClaudeSessionConfigHelpersDeps,
-  type OAuthBearers,
   getEnabledCustomMcpServers as getEnabledCustomMcpServersFn,
   buildOAuthBearers as buildOAuthBearersFn,
   resolveChatPolicy as resolveChatPolicyFn,
@@ -50,16 +48,13 @@ import {
 import { toError } from "../shared/errors"
 import type { JsonValue } from "../shared/json"
 import {
-  positiveIntegerFromEnv,
   buildBackgroundTaskWakePrompt,
   buildBackgroundTasksAbandonedMessage,
 } from "./claude-prompt-helpers"
-import { timestamped } from "./claude-message-normalizer"
+import { appendTurnError } from "./claude-turn-outcome"
 import { log } from "../shared/log"
-import {
-  type SendMessageOptions,
-  type SendToStartingProfile,
-} from "./claude-steer-log"
+import type { SendToStartingProfile } from "./claude-steer-log"
+import type { SendMessageOptions, StartTurnForChatArgs } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
@@ -73,7 +68,6 @@ import { buildCompactSummaryEntry, recordCompactionStarted } from "./compaction"
 import {
   resolveClaudeIdleMs as resolveClaudeIdleMsFn,
   hasLiveWorkflow as hasLiveWorkflowFn,
-  hasPendingBackgroundTask as hasPendingBackgroundTaskFn,
   closeClaudeSession as closeClaudeSessionFn,
   maybeRegisterSdkWorkflowsDir as maybeRegisterSdkWorkflowsDirFn,
   enforceClaudeSessionBudget as enforceClaudeSessionBudgetFn,
@@ -139,13 +133,13 @@ import {
 import {
   sendCommand as sendCommandFn,
   enqueueMessage as enqueueMessageFn,
+  deliverPrompt as deliverPromptFn,
   dequeueAndStartQueuedMessage as dequeueAndStartQueuedMessageFn,
   maybeStartNextQueuedMessage as maybeStartNextQueuedMessageFn,
   type SendCommandDeps,
 } from "./claude-send-command"
 import { clearChatContext as clearChatContextFn, type ClearChatContextDeps } from "./claude-context-commands"
 import {
-  subagentPendingKey as subagentPendingKeyFn,
   rejectPendingResolversForChat as rejectPendingResolversForChatFn,
   rejectPendingResolversForRun as rejectPendingResolversForRunFn,
   respondSubagentTool as respondSubagentToolFn,
@@ -160,14 +154,13 @@ import {
   getClaudeSessionStates as getClaudeSessionStatesFn,
   getBackgroundTasksByChatId as getBackgroundTasksByChatIdFn,
   sweepIdleClaudeSessions as sweepIdleClaudeSessionsFn,
+  isAnyChatBusy,
   isChatBusy,
   type SessionStateQueryDeps,
 } from "./claude-session-state-queries"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import { realpathAdapter } from "./paths-fs.adapter"
 import {
-  ensureTrackingFile,
-  inspectTrackingFile,
   isWorktreeOfSameRepo,
   readOracleScript,
 } from "./loop-template-io.adapter"
@@ -200,13 +193,6 @@ import type {
   AgentCoordinatorArgs,
   ClaudeSessionLifecycleOptions,
 } from "./agent-coordinator-types"
-
-const DEFAULT_CLAUDE_SESSION_IDLE_MS = 10 * 60 * 1000
-const DEFAULT_CLAUDE_SESSION_MAX_RESIDENT = 4
-const DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS = 60 * 1000
-const DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS = 30 * 60 * 1000
-const DEFAULT_BACKGROUND_TASK_MAX_WAKES = 3
-const DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS = 2 * 60 * 1000
 
 function recordTurnSpend(active: ActiveTurn): void {
   const usage = active.usage
@@ -242,6 +228,7 @@ export class AgentCoordinator {
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly cronSkipCoalescer = new CronSkipCoalescer()
   private readonly pendingCronOutcomes = new Set<Promise<void>>()
+  private readonly unsubscribeTurnTerminal: () => void
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
   private readonly _turnEndGuard: TurnEndGuard
@@ -254,11 +241,10 @@ export class AgentCoordinator {
     return this.subagentOrchestrator
   }
   hasAnyChatBusy(): boolean {
-    return this.activeTurns.size > 0 || this.startingTurns.size > 0 || !this.pendingTools.chatIds().next().done || [...this.claudeSessions.values()].some((s) => s.selfWakeActive)
+    return isAnyChatBusy(this.sessionStateQueryDeps())
   }
-  readonly throwOnClaudeSessionStart: boolean
   readonly autoResumeByChat = new Map<string, boolean>()
-  readonly openrouterFirstEntryTimeoutMs: number
+  readonly endpointFirstEntryTimeoutMs: number
   readonly tokenRotationDedupe = new Map<string, TokenRotationDedupeEntry>()
   readonly tunnelGateway: TunnelGateway | null
   readonly oauthPool: OAuthTokenPool | null
@@ -276,6 +262,8 @@ export class AgentCoordinator {
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
   private readonly skillAccess: LocalSkillAccess
+  private readonly sessionConfig: ClaudeSessionConfigHelpersDeps
+  private readonly sessionLifecycle: SessionLifecycleDeps
   readonly readLlmProvider: () => Promise<LlmProviderSnapshot>
   readonly getCustomProviderCredential: (id: string) => import("../shared/custom-providers").CustomProviderCredential | null
   readonly listOpenRouterModelsFn: (() => Promise<import("../shared/types").OpenRouterModel[]>) | null
@@ -290,24 +278,27 @@ export class AgentCoordinator {
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
-    this.generateTitle = args.generateTitle ?? generateTitleForChatDetailed
+    this.generateTitle = args.generateTitle
+      ?? ((messageContent, cwd) =>
+        generateTitleForChatDetailed(messageContent, cwd, new QuickResponseAdapter({ oauthPool: args.oauthPool })))
     this.startClaudeSessionFn = args.startClaudeSession ?? startClaudeSession
     this.claudeLimitDetector = args.claudeLimitDetector ?? new ClaudeLimitDetector()
     this.codexLimitDetector = args.codexLimitDetector ?? new CodexLimitDetector()
     this.claudeAuthErrorDetector = new ClaudeAuthErrorDetector()
     this.scheduleManager = args.scheduleManager ?? null
+    const config = args.runtimeConfig ?? DEFAULT_AGENT_RUNTIME_CONFIG
     this.cronScheduler = args.cronScheduler ?? null
     this._cronRepair = createCronRepair({
       escalation: this._buildModelEscalation({
         name: "cron/repair",
-        enabled: process.env.KANNA_CRON_REPAIR !== "disabled",
+        enabled: config.cronRepairEnabled,
         drain: true,
       }),
     })
     this._cronConfirm = createCronConfirm({
       escalation: this._buildModelEscalation({
         name: "cron/confirm",
-        enabled: process.env.KANNA_CRON_CONFIRM !== "disabled",
+        enabled: config.cronConfirmEnabled,
         drain: true,
       }),
     })
@@ -320,7 +311,7 @@ export class AgentCoordinator {
       createMermaidGuard({
         escalation: this._buildModelEscalation({
           name: "mermaid",
-          enabled: process.env.KANNA_MERMAID_GUARD !== "disabled",
+          enabled: config.mermaidGuardEnabled,
         }),
         parse: parseMermaid,
         repair: (source) => {
@@ -331,29 +322,11 @@ export class AgentCoordinator {
       createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
     )
     const onTurnOutcome = args.onTurnOutcome
-    this.store.onTurnTerminal = (chatId, outcome) => {
-      onTurnOutcome?.(chatId, outcome)
-      const active = this.activeTurns.get(chatId)
-      if (active) {
-        recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
-          provider: active.provider,
-          model: active.model,
-          outcome,
-        })
-        recordTurnSpend(active)
-      }
-      if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
-      const tag = active?.cronRun
-      if (!tag) return
-      const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
-        log.error("[kanna/cron] failed to record run outcome:", String(error))
-      })
-      this.pendingCronOutcomes.add(p)
-      p.finally(() => this.pendingCronOutcomes.delete(p))
-    }
+    this.unsubscribeTurnTerminal = this.store.subscribeTurnTerminal((chatId, outcome) => {
+      this.handleTurnTerminal(chatId, outcome, onTurnOutcome)
+    })
     this.getAutoResumePreference = args.getAutoResumePreference ?? (() => false)
-    this.openrouterFirstEntryTimeoutMs =
-      args.openrouterFirstEntryTimeoutMs ?? DEFAULT_OPENROUTER_FIRST_ENTRY_TIMEOUT_MS
+    this.endpointFirstEntryTimeoutMs = config.endpointFirstEntryTimeoutMs
     this.getSubagents = args.getSubagents ?? (() => [])
     this.getAppSettingsSnapshot = args.getAppSettingsSnapshot ?? (() => ({}))
     this.readLlmProvider = args.readLlmProvider ?? readLlmProviderSnapshot
@@ -363,7 +336,7 @@ export class AgentCoordinator {
     this.subagentOrchestrator = new SubagentOrchestrator({
       store: this.store,
       appSettings: { getSnapshot: () => ({ subagents: this.getSubagents() }) },
-      startProviderRun: (a) => this.buildSubagentProviderRunForChat({
+      startProviderRun: (a) => buildSubagentProviderRunForChatFn(this.subagentWiringDeps(), {
         subagent: a.subagent,
         chatId: a.chatId,
         primer: a.primer,
@@ -384,31 +357,26 @@ export class AgentCoordinator {
       onBackgroundRunComplete: (chatId, runId, outcome) => {
         void this.deliverSubagentToMain(chatId, runId, outcome)
       },
-      maxLive: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_MAX_LIVE, 0) || undefined,
-      liveIdleTimeoutMs: positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_IDLE_TIMEOUT_MS, 0) || undefined,
+      maxLive: config.subagentMaxLive,
+      liveIdleTimeoutMs: config.subagentIdleTimeoutMs,
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_SUBAGENT_RUN_TIMEOUT_MS, 0))
+        ?? config.subagentRunTimeoutMs)
         || undefined,
     })
-    this.throwOnClaudeSessionStart = args.throwOnClaudeSessionStart ?? false
     this.tunnelGateway = args.tunnelGateway ?? null
     this.oauthPool = args.oauthPool ?? null
     this.toolCallback = args.toolCallback ?? null
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
     this.claudeSessionLifecycle = {
-      idleMs: args.claudeSessionLifecycle?.idleMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_IDLE_MS, DEFAULT_CLAUDE_SESSION_IDLE_MS),
+      idleMs: args.claudeSessionLifecycle?.idleMs ?? config.claudeSessionLifecycle.idleMs,
       maxResidentSessions: args.claudeSessionLifecycle?.maxResidentSessions
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_MAX_RESIDENT, DEFAULT_CLAUDE_SESSION_MAX_RESIDENT),
+        ?? config.claudeSessionLifecycle.maxResidentSessions,
       sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
-        ?? positiveIntegerFromEnv(process.env.KANNA_CLAUDE_SESSION_SWEEP_INTERVAL_MS, DEFAULT_CLAUDE_SESSION_SWEEP_INTERVAL_MS),
+        ?? config.claudeSessionLifecycle.sweepIntervalMs,
       backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
-        ?? positiveIntegerFromEnv(
-          process.env.KANNA_CLAUDE_BACKGROUND_TASK_MAX_MS,
-          positiveIntegerFromEnv(process.env.KANNA_PTY_BACKGROUND_TASK_MAX_MS, DEFAULT_CLAUDE_BACKGROUND_TASK_MAX_MS),
-        ),
+        ?? config.claudeSessionLifecycle.backgroundTaskMaxMs,
       backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
-        ?? positiveIntegerFromEnv(process.env.KANNA_BACKGROUND_TASK_MAX_WAKES, DEFAULT_BACKGROUND_TASK_MAX_WAKES),
+        ?? config.claudeSessionLifecycle.backgroundTaskMaxWakes,
     }
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
@@ -424,6 +392,27 @@ export class AgentCoordinator {
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
     this.skillAccess = createLocalSkillAccess(this.localCatalog, (id) => resolveChatCwd(this.store, id), readCatalogFileBody)
+    this.sessionConfig = {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      chatPolicy: this.chatPolicy,
+      store: this.store,
+      ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
+      persistOAuthState: this.persistOAuthStateFn,
+    }
+    this.sessionLifecycle = {
+      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
+      defaultIdleMs: this.claudeSessionLifecycle.idleMs,
+      defaultMaxResidentSessions: this.claudeSessionLifecycle.maxResidentSessions,
+      claudeSessions: this.claudeSessions,
+      activeTurns: this.activeTurns,
+      startingTurns: this.startingTurns,
+      pendingTools: this.pendingTools,
+      oauthPool: this.oauthPool,
+      workflowRegistry: this.workflowRegistry,
+      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
+      store: this.store,
+      homeDir: homedir(),
+    }
   }
 
   private _buildModelEscalation(opts: { name: string; enabled: boolean; drain?: boolean }): ModelEscalation {
@@ -455,7 +444,33 @@ export class AgentCoordinator {
     this.reportBackgroundError = report
   }
 
+  private handleTurnTerminal(
+    chatId: string,
+    outcome: TurnOutcome,
+    onTurnOutcome: AgentCoordinatorArgs["onTurnOutcome"],
+  ): void {
+    onTurnOutcome?.(chatId, outcome)
+    const active = this.activeTurns.get(chatId)
+    if (active) {
+      recordHistogram(TURN_DURATION_MS, Date.now() - active.startedAt, {
+        provider: active.provider,
+        model: active.model,
+        outcome,
+      })
+      recordTurnSpend(active)
+    }
+    if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
+    const tag = active?.cronRun
+    if (!tag) return
+    const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
+      log.error("[kanna/cron] failed to record run outcome:", String(error))
+    })
+    this.pendingCronOutcomes.add(p)
+    p.finally(() => this.pendingCronOutcomes.delete(p))
+  }
+
   async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
+    this.unsubscribeTurnTerminal()
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
     const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
       const closed = session.session.closed
@@ -504,45 +519,10 @@ export class AgentCoordinator {
   }
 
 
-  private claudeSessionConfigDeps(): ClaudeSessionConfigHelpersDeps {
-    return {
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      chatPolicy: this.chatPolicy,
-      store: this.store,
-      ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
-      persistOAuthState: this.persistOAuthStateFn,
-    }
-  }
-
-  getEnabledCustomMcpServers(): readonly McpServerConfig[] {
-    return getEnabledCustomMcpServersFn(this.claudeSessionConfigDeps())
-  }
-
-  async buildOAuthBearers(servers: readonly McpServerConfig[]): Promise<OAuthBearers> {
-    return buildOAuthBearersFn(this.claudeSessionConfigDeps(), servers)
-  }
-
   resolveChatPolicy(chatId: string): ChatPermissionPolicy {
-    return resolveChatPolicyFn(this.claudeSessionConfigDeps(), chatId)
+    return resolveChatPolicyFn(this.sessionConfig, chatId)
   }
 
-
-  private sessionLifecycleDeps(): SessionLifecycleDeps {
-    return {
-      getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      defaultIdleMs: this.claudeSessionLifecycle.idleMs,
-      defaultMaxResidentSessions: this.claudeSessionLifecycle.maxResidentSessions,
-      claudeSessions: this.claudeSessions,
-      activeTurns: this.activeTurns,
-      startingTurns: this.startingTurns,
-      pendingTools: this.pendingTools,
-      oauthPool: this.oauthPool,
-      workflowRegistry: this.workflowRegistry,
-      emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
-      store: this.store,
-      homeDir: homedir(),
-    }
-  }
 
   private sessionErrorHandlerDeps(): SessionErrorHandlerDeps {
     return {
@@ -551,7 +531,7 @@ export class AgentCoordinator {
       activeTurns: this.activeTurns,
       oauthPool: this.oauthPool,
       store: this.store,
-      resolveAutoResumeFor: (chatId: string) => this.resolveAutoResumeFor(chatId),
+      resolveAutoResumeFor: (chatId: string) => resolveAutoResumeForFn(this.autoContinueDeps(), chatId),
       emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
       closeClaudeSession: (chatId, session, opts?) =>
         this.closeClaudeSession(chatId, session, opts),
@@ -566,14 +546,12 @@ export class AgentCoordinator {
       store: this.store,
       scheduleManager: this.scheduleManager,
       emitStateChange: (chatId: string) => { this.emitStateChange(chatId) },
-      enqueueMessage: (chatId, content, attachments, options) =>
-        this.enqueueMessage(chatId, content, attachments, options),
-      maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      deliverPrompt: (chatId, content, attachments, options) =>
+        this.deliverPrompt(chatId, content, attachments, options),
     }
   }
 
   private projectChatTasks(chatId: string): ChatTaskProjection {
-    if (typeof this.store.getChatTasks !== "function") return EMPTY_CHAT_TASK_PROJECTION
     return this.store.getChatTasks(chatId, { now: Date.now() })
   }
 
@@ -584,14 +562,11 @@ export class AgentCoordinator {
       activeTurns: this.activeTurns,
       startingTurns: this.startingTurns,
       pendingTools: this.pendingTools,
-      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      hasLiveWorkflow: (chatId) => hasLiveWorkflowFn(this.sessionLifecycle, chatId),
       getSubagents: () => this.getSubagents(),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       emitAutoContinueEvent: (event) => this.emitAutoContinueEvent(event),
-      ensureTrackingFile,
-      inspectTrackingFile,
       isWorktreeOfSameRepo,
       currentBranchName,
       runVerifyCommand,
@@ -601,7 +576,6 @@ export class AgentCoordinator {
       getChatTasks: (chatId) => this.projectChatTasks(chatId).tasks,
       getChatTaskProjection: (chatId) => this.projectChatTasks(chatId),
       seedChatTasks: async (chatId, tasks, failedApproaches) => {
-        if (typeof this.store.appendChatTaskEvents !== "function") return
         await this.store.appendChatTaskEvents(buildSeedTaskEvents({
           chatId,
           now: Date.now(),
@@ -622,6 +596,7 @@ export class AgentCoordinator {
       skipCoalescer: this.cronSkipCoalescer,
       emitStateChange: (chatId) => this.emitStateChange(chatId),
       pushCronJobsUpdate: () => this.onCronJobsChange?.(),
+      now: () => Date.now(),
       cronRepair: this._cronRepair,
       cronConfirm: this._cronConfirm,
       resolveChatCwd: (chatId) => resolveChatCwd(this.store, chatId),
@@ -637,8 +612,8 @@ export class AgentCoordinator {
       holdsBackgroundWork: (chatId) => {
         const session = this.claudeSessions.get(chatId)
         return Object.values(this.store.getSubagentRuns(chatId)).some((run) => run.status === "running")
-          || this.hasLiveWorkflow(chatId)
-          || (session !== undefined && this.hasPendingBackgroundTask(session, Date.now()))
+          || hasLiveWorkflowFn(this.sessionLifecycle, chatId)
+          || (session?.isHoldingWork(Date.now()) === true)
       },
       clearChatContext: (chatId) => this.clearChatContext(chatId),
       createChat: (projectId) => this.store.createChat(projectId),
@@ -721,17 +696,15 @@ export class AgentCoordinator {
       oauthPool: this.oauthPool,
       subagentPendingResolvers: this.subagentPendingResolvers,
       realpath: realpathAdapter,
-      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      getEnabledCustomMcpServers: () => getEnabledCustomMcpServersFn(this.sessionConfig),
+      buildOAuthBearers: (servers) => buildOAuthBearersFn(this.sessionConfig, servers),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
-        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+        buildPoolUnavailableMessageFn(this.sessionLifecycle, reservedFor, scopeSuffix),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       readLlmProvider: () => this.readLlmProvider(),
       getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
-      subagentPendingKey: (chatId, runId, toolUseId) =>
-        this.subagentPendingKey(chatId, runId, toolUseId),
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
       beaconRegistry: this.beaconRegistry ?? undefined,
       getBeacons: this.getBeacons,
@@ -739,13 +712,7 @@ export class AgentCoordinator {
     }
   }
 
-  resolveClaudeIdleMs(): number {
-    return resolveClaudeIdleMsFn(this.sessionLifecycleDeps())
-  }
 
-  hasLiveWorkflow(chatId: string): boolean {
-    return hasLiveWorkflowFn(this.sessionLifecycleDeps(), chatId)
-  }
 
   resolveBackgroundTaskMaxMs(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxMs
@@ -763,10 +730,9 @@ export class AgentCoordinator {
   ): void {
     const prompt = buildBackgroundTaskWakePrompt(taskIds, wakeNumber, maxWakes)
     log.info("[kanna/agent] background-task watchdog wake", { chatId, taskIds, wakeNumber, maxWakes })
-    void this.enqueueMessage(chatId, prompt, [], {
+    void this.deliverPrompt(chatId, prompt, [], {
       autoContinue: { scheduleId: `bg-task-wake-${wakeNumber}` },
     })
-      .then(() => this.maybeStartNextQueuedMessage(chatId))
       .catch((error) => {
         const message = toError(error).message
         log.error("[kanna/agent] background-task watchdog wake failed", { chatId, message })
@@ -776,16 +742,7 @@ export class AgentCoordinator {
 
   notifyBackgroundTasksAbandoned(chatId: string, taskIds: string[]): void {
     log.warn("[kanna/agent] background task(s) abandoned at session close", { chatId, taskIds })
-    void this.store.appendMessage(
-      chatId,
-      timestamped({
-        kind: "result",
-        subtype: "error",
-        isError: true,
-        durationMs: 0,
-        result: buildBackgroundTasksAbandonedMessage(taskIds),
-      }),
-    )
+    void appendTurnError(this.store, chatId, buildBackgroundTasksAbandonedMessage(taskIds))
       .then(() => { this.emitStateChange(chatId) })
       .catch((error) => {
         const message = toError(error).message
@@ -793,33 +750,24 @@ export class AgentCoordinator {
       })
   }
 
-  hasPendingBackgroundTask(session: ClaudeSessionState, now: number): boolean {
-    return hasPendingBackgroundTaskFn(session, now)
-  }
-
   closeClaudeSession(
     chatId: string,
     session: ClaudeSessionState,
     opts?: { keepReservation?: boolean },
   ): void {
-    closeClaudeSessionFn(this.sessionLifecycleDeps(), chatId, session, opts)
+    closeClaudeSessionFn(this.sessionLifecycle, chatId, session, opts)
   }
 
-  maybeRegisterSdkWorkflowsDir(session: ClaudeSessionState): void {
-    maybeRegisterSdkWorkflowsDirFn(this.sessionLifecycleDeps(), session)
+
+  enforceClaudeSessionBudget(protectedChatId?: string): void {
+    enforceClaudeSessionBudgetFn(this.sessionLifecycle, protectedChatId)
   }
 
   private sweepIdleClaudeSessions(now = Date.now()): void {
     sweepIdleClaudeSessionsFn(this.sessionStateQueryDeps(), now)
   }
 
-  enforceClaudeSessionBudget(protectedChatId?: string): void {
-    enforceClaudeSessionBudgetFn(this.sessionLifecycleDeps(), protectedChatId)
-  }
 
-  buildPoolUnavailableMessage(reservedFor: string, scopeSuffix: string): string {
-    return buildPoolUnavailableMessageFn(this.sessionLifecycleDeps(), reservedFor, scopeSuffix)
-  }
 
   private subagentToolResponseDeps(): SubagentToolResponseDeps {
     return {
@@ -847,11 +795,10 @@ export class AgentCoordinator {
       claudeSessions: this.claudeSessions,
       drainingStreams: this.drainingStreams,
       isClaudeSdkProvider: (provider) => isClaudeSdkProvider(provider),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
-      resolveClaudeIdleMs: () => this.resolveClaudeIdleMs(),
+      resolveClaudeIdleMs: () => resolveClaudeIdleMsFn(this.sessionLifecycle),
       resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
       resolveBackgroundTaskMaxWakes: () => this.resolveBackgroundTaskMaxWakes(),
-      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
+      hasLiveWorkflow: (chatId) => hasLiveWorkflowFn(this.sessionLifecycle, chatId),
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       wakeBackgroundTaskSession: (chatId, taskIds, wakeNumber, maxWakes) => {
@@ -861,10 +808,6 @@ export class AgentCoordinator {
         this.notifyBackgroundTasksAbandoned(chatId, taskIds)
       },
     }
-  }
-
-  subagentPendingKey(chatId: string, runId: string, toolUseId: string): string {
-    return subagentPendingKeyFn(chatId, runId, toolUseId)
   }
 
   rejectPendingResolversForChat(chatId: string): void {
@@ -903,6 +846,10 @@ export class AgentCoordinator {
     return enqueueMessageFn(this.sendCommandDeps(), chatId, content, attachments, options)
   }
 
+  async deliverPrompt(chatId: string, content: string, attachments: ChatAttachment[], options?: SendMessageOptions) {
+    return deliverPromptFn(this.sendCommandDeps(), chatId, content, attachments, options)
+  }
+
   async dequeueAndStartQueuedMessage(chatId: string, queuedMessage: QueuedChatMessage, options?: { steered?: boolean }) {
     return dequeueAndStartQueuedMessageFn(this.sendCommandDeps(), chatId, queuedMessage, options)
   }
@@ -922,8 +869,7 @@ export class AgentCoordinator {
       activeTurns: this.activeTurns,
       startingTurns: this.startingTurns,
       pendingTools: this.pendingTools,
-      hasLiveWorkflow: (chatId) => this.hasLiveWorkflow(chatId),
-      hasPendingBackgroundTask: (session, now) => this.hasPendingBackgroundTask(session, now),
+      hasLiveWorkflow: (chatId) => hasLiveWorkflowFn(this.sessionLifecycle, chatId),
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
       emitStateChange: (chatId) => this.emitStateChange(chatId),
@@ -948,29 +894,15 @@ export class AgentCoordinator {
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       listSkills: (chatId) => this.skillAccess.listSkills(chatId),
       generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
-        this.generateTitleInBackground(chatId, content, localPath, optimisticTitle),
+        generateTitleInBackgroundFn(this.chatManagementDeps(), chatId, content, localPath, optimisticTitle),
       pendingTools: this.pendingTools,
       startClaudeTurn: (args) => this.startClaudeTurn(args),
       findLastUserMessageId: (chatId) => this.findLastUserMessageId(chatId),
-      runTurn: (active) => this.runTurn(active),
+      runTurn: (active) => runTurnFn(this.runTurnDeps(), active),
     }
   }
 
-  async startTurnForChat(args: {
-    chatId: string
-    provider: AgentProvider
-    content: string
-    attachments: ChatAttachment[]
-    model: string
-    effort?: string
-    serviceTier?: "fast"
-    planMode: boolean
-    appendUserPrompt: boolean
-    steered?: boolean
-    autoContinue?: { scheduleId: string }
-    userClearedContext?: boolean
-    profile?: SendToStartingProfile | null
-  }) {
+  async startTurnForChat(args: StartTurnForChatArgs) {
     return startTurnForChatFn(this.startTurnDeps(), args)
   }
 
@@ -986,9 +918,9 @@ export class AgentCoordinator {
       },
       project: (chatId, ctx) => this.store.getChatTasks(chatId, ctx),
       decide: async (chatId, ctx, fn) => {
-        const decided = await this.store.decideChatTaskEvents(chatId, ctx, fn)
-        if (decided.length > 0) this.emitStateChange(chatId)
-        return decided
+        const { events, result } = await this.store.decideChatTaskEvents(chatId, ctx, fn)
+        if (events.length > 0) this.emitStateChange(chatId)
+        return result
       },
       mergeBranch: (workdir, branch) => mergeLoopBranch(workdir, branch),
     }
@@ -1020,12 +952,12 @@ export class AgentCoordinator {
       readLlmProvider: () => this.readLlmProvider(),
       getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
       buildPoolUnavailableMessage: (reservedFor, scopeSuffix) =>
-        this.buildPoolUnavailableMessage(reservedFor, scopeSuffix),
+        buildPoolUnavailableMessageFn(this.sessionLifecycle, reservedFor, scopeSuffix),
       listOpenRouterModelsFn: this.listOpenRouterModelsFn,
       getSubagents: () => this.getSubagents(),
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
-      getEnabledCustomMcpServers: () => this.getEnabledCustomMcpServers(),
-      buildOAuthBearers: (servers) => this.buildOAuthBearers(servers),
+      getEnabledCustomMcpServers: () => getEnabledCustomMcpServersFn(this.sessionConfig),
+      buildOAuthBearers: (servers) => buildOAuthBearersFn(this.sessionConfig, servers),
       setupLoop: (chatId, input) => this.setupLoop({ chatId, input }),
       armCron: (chatId, command) => this.armCron(chatId, command),
       updateCron: (chatId, jobId, patch) => this.updateCron(chatId, jobId, patch),
@@ -1064,9 +996,6 @@ export class AgentCoordinator {
     return sendCommandFn(this.sendCommandDeps(), command)
   }
 
-  buildSubagentProviderRunForChat(args: BuildSubagentProviderRunForChatArgs): ProviderRunStart {
-    return buildSubagentProviderRunForChatFn(this.subagentWiringDeps(), args)
-  }
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
     if (typeof command.autoResumeOnRateLimit === "boolean") {
@@ -1097,22 +1026,20 @@ export class AgentCoordinator {
 
   private runClaudeSessionDeps(): RunClaudeSessionDeps {
     return {
-      openrouterFirstEntryTimeoutMs: this.openrouterFirstEntryTimeoutMs,
+      endpointFirstEntryTimeoutMs: this.endpointFirstEntryTimeoutMs,
       claudeSessions: this.claudeSessions,
       activeTurns: this.activeTurns,
       pendingTools: this.pendingTools,
       oauthPool: this.oauthPool,
       claudeLimitDetector: this.claudeLimitDetector,
       claudeAuthErrorDetector: this.claudeAuthErrorDetector,
-      throwOnClaudeSessionStart: this.throwOnClaudeSessionStart,
       store: this.store,
       emitStateChange: (chatId?) => { this.emitStateChange(chatId) },
-      handleLimitDetection: (chatId, detection) => this.handleLimitDetection(chatId, detection),
-      maybeRegisterSdkWorkflowsDir: (session) => { this.maybeRegisterSdkWorkflowsDir(session) },
+      handleLimitDetection: (chatId, detection) => handleLimitDetectionFn(this.sessionErrorHandlerDeps(), chatId, detection),
+      maybeRegisterSdkWorkflowsDir: (session) => { maybeRegisterSdkWorkflowsDirFn(this.sessionLifecycle, session) },
       getSubagents: () => this.getSubagents(),
       resolveBackgroundTaskMaxMs: () => this.resolveBackgroundTaskMaxMs(),
-      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
-      handleAuthFailure: (session, detection) => this.handleAuthFailure(session, detection),
+      handleAuthFailure: (session, detection) => handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection),
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       turnEndGuard: this._turnEndGuard,
@@ -1136,9 +1063,6 @@ export class AgentCoordinator {
     return runClaudeSessionLoop(this.runClaudeSessionDeps(), session)
   }
 
-  async generateTitleInBackground(chatId: string, messageContent: string, cwd: string, expectedCurrentTitle: string) {
-    return generateTitleInBackgroundFn(this.chatManagementDeps(), chatId, messageContent, cwd, expectedCurrentTitle)
-  }
 
   private runTurnDeps(): RunTurnDeps {
     return {
@@ -1147,7 +1071,7 @@ export class AgentCoordinator {
       drainingStreams: this.drainingStreams,
       oauthPool: this.oauthPool,
       codexLimitDetector: this.codexLimitDetector,
-      handleLimitError: (chatId, detector, error) => this.handleLimitError(chatId, detector, error),
+      handleLimitError: (chatId, detector, error) => handleLimitErrorFn(this.sessionErrorHandlerDeps(), chatId, detector, error),
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
       startTurnForChat: (args) => this.startTurnForChat(args),
@@ -1157,32 +1081,14 @@ export class AgentCoordinator {
     }
   }
 
-  async runTurn(active: ActiveTurn): Promise<void> {
-    return runTurnFn(this.runTurnDeps(), active)
-  }
 
-  resolveAutoResumeFor(chatId: string): boolean {
-    return resolveAutoResumeForFn(this.autoContinueDeps(), chatId)
-  }
 
-  async emitAutoContinueEvent(event: AutoContinueEvent): Promise<void> {
+  async emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void> {
     await emitAutoContinueEventFn(this.autoContinueDeps(), event)
   }
 
-  async handleLimitError(chatId: string, detector: LimitDetector, error: Error): Promise<boolean> {
-    return handleLimitErrorFn(this.sessionErrorHandlerDeps(), chatId, detector, error)
-  }
 
-  async handleLimitDetection(chatId: string, detection: LimitDetection): Promise<boolean> {
-    return handleLimitDetectionFn(this.sessionErrorHandlerDeps(), chatId, detection)
-  }
 
-  async handleAuthFailure(
-    session: ClaudeSessionState,
-    detection: AuthErrorDetection,
-  ): Promise<boolean> {
-    return handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection)
-  }
 
   async fireAutoContinue(chatId: string, scheduleId: string) {
     return fireAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId)

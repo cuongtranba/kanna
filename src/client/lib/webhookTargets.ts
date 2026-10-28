@@ -1,9 +1,10 @@
-import type { AgentProvider } from "../../shared/core-types"
 import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
-import { isAgentProvider, type SidebarData } from "../../shared/types"
+import type { SidebarData } from "../../shared/types"
+import { encodeInboundModelChoice } from "../../shared/inbound/handler"
 import type { WebhookConfig } from "../../shared/webhooks/types"
 import type { SearchableOption } from "../components/ui/searchable-select"
-import { getPathBasename } from "./formatters"
+import { fileNameOfPath } from "./pathUtils"
+import { allProjectGroups } from "../../shared/sidebar-data"
 
 export interface WebhookTargetOption {
   value: string
@@ -11,16 +12,16 @@ export interface WebhookTargetOption {
   hint?: string
 }
 
-export interface WebhookTargets {
+export interface InboundTargets {
   chats: WebhookTargetOption[]
   projects: WebhookTargetOption[]
 }
 
-export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
+export function listInboundTargets(sidebar: SidebarData): InboundTargets {
   const chats: WebhookTargetOption[] = []
   const projects: WebhookTargetOption[] = []
-  for (const group of [...sidebar.starredProjectGroups, ...sidebar.projectGroups]) {
-    const projectName = getPathBasename(group.localPath)
+  for (const group of allProjectGroups(sidebar)) {
+    const projectName = fileNameOfPath(group.localPath)
     projects.push({ value: group.groupKey, label: projectName, hint: group.localPath })
     for (const chat of group.chats) {
       chats.push({ value: chat.chatId, label: `${projectName} / ${chat.title || "Untitled chat"}`, hint: group.localPath })
@@ -29,7 +30,7 @@ export function listWebhookTargets(sidebar: SidebarData): WebhookTargets {
   return { chats, projects }
 }
 
-export function describeWebhookTarget(hook: WebhookConfig, targets: WebhookTargets): string {
+export function describeWebhookTarget(hook: WebhookConfig, targets: InboundTargets): string {
   if (hook.mode === "spawn") {
     const project = targets.projects.find((option) => option.value === hook.projectId)
     return project ? `New chat in ${project.label}` : "Project no longer available"
@@ -38,25 +39,7 @@ export function describeWebhookTarget(hook: WebhookConfig, targets: WebhookTarge
   return chat ? chat.label : "Chat no longer available"
 }
 
-export interface WebhookModelChoice {
-  provider: AgentProvider
-  model: string
-}
-
-export function encodeWebhookModel(provider: AgentProvider, model: string): string {
-  return `${provider}:${model}`
-}
-
-export function decodeWebhookModel(value: string): WebhookModelChoice | null {
-  const split = value.indexOf(":")
-  if (split <= 0) return null
-  const provider = value.slice(0, split)
-  const model = value.slice(split + 1)
-  if (!isAgentProvider(provider) || model.length === 0) return null
-  return { provider, model }
-}
-
-export function listWebhookModelOptions(catalog: readonly ProviderCatalogEntry[]): SearchableOption[] {
+export function listInboundModelOptions(catalog: readonly ProviderCatalogEntry[]): SearchableOption[] {
   const options: SearchableOption[] = [
     {
       value: "",
@@ -67,7 +50,7 @@ export function listWebhookModelOptions(catalog: readonly ProviderCatalogEntry[]
   for (const entry of catalog) {
     for (const model of entry.models) {
       options.push({
-        value: encodeWebhookModel(entry.id, model.id),
+        value: encodeInboundModelChoice(entry.id, model.id),
         label: model.label,
         hint: model.id,
         group: entry.label,

@@ -1,7 +1,9 @@
 
+import { newestLinkTarget } from "./start-work"
 import type { CardLink, ColumnSemantic } from "./types"
 
-export type CleanupDecision = "merge" | "discard" | "leave"
+export const CLEANUP_DECISIONS = ["merge", "discard", "leave"] as const
+export type CleanupDecision = (typeof CLEANUP_DECISIONS)[number]
 
 export const CLEANUP_DECLINED: CardLink["kind"] = "cleanup_declined"
 
@@ -18,14 +20,11 @@ export function pendingCleanupWorktree(facts: CleanupFacts): string | null {
     facts.links.filter((link) => link.kind === CLEANUP_DECLINED).map((link) => link.targetId),
   )
 
-  let newest: CardLink | null = null
-  for (const link of facts.links) {
-    if (link.kind !== "worktree") continue
-    if (declined.has(link.targetId)) continue
-    if (!facts.existingWorktreePaths.has(link.targetId)) continue
-    if (!newest || link.createdAt > newest.createdAt) newest = link
-  }
-  return newest?.targetId ?? null
+  return newestLinkTarget(
+    facts.links,
+    "worktree",
+    (path) => facts.existingWorktreePaths.has(path) && !declined.has(path),
+  )
 }
 
 export interface WorktreeCleanupView {

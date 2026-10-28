@@ -1,4 +1,5 @@
 import type { Card } from "../../../shared/boards/types"
+import { cardLabels } from "../../../shared/boards/well-known-fields"
 
 export interface CardFilter {
   text: string
@@ -12,9 +13,8 @@ export function filterCards(cards: readonly Card[], filter: CardFilter): readonl
   return cards.filter((card) => {
     if (text && !card.title.toLowerCase().includes(text)) return false
     if (labels.length > 0) {
-      const labelField = card.content.labels
-      const cardLabels = labelField?.kind === "label" ? labelField.values : []
-      if (!labels.some((l) => cardLabels.includes(l))) return false
+      const present = cardLabels(card.content)
+      if (!labels.some((l) => present.includes(l))) return false
     }
     return true
   })

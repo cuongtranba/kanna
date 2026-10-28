@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vite-plus/test"
+import { listCommandDescriptors } from "../../shared/commands"
 import type { ClientCommand, CommandResult, ServerEnvelope } from "../../shared/protocol"
 import type { LlmProviderSnapshot } from "../../shared/types"
 import { PROTOCOL_VERSION } from "../../shared/types"
-import { withEgressRedaction } from "./remote-mcp-egress-redaction"
+import { redactedAckCommandTypes, withEgressRedaction } from "./remote-mcp-egress-redaction"
 
 const RAW_API_KEY = "sk-live-llm-provider-key"
 
@@ -52,5 +53,14 @@ describe("remote MCP egress redaction", () => {
 
     expect(minted).toMatchObject({ result: { data: { summary: { tokenId: "share-token-abc", url: "https://kanna.example/s/share-token-abc" } } } })
     expect(pairing).toMatchObject({ result: { code: "PAIR-1234" } })
+  })
+
+  test("every registry command whose result schema carries a secret-bearing field is redacted", () => {
+    const secretBearing = listCommandDescriptors()
+      .filter((descriptor) => /"claudeAuth"|"customMcpServers"|"apiKey"/.test(JSON.stringify(descriptor.resultSchema)))
+      .map((descriptor) => descriptor.type)
+
+    expect(secretBearing.length).toBeGreaterThan(0)
+    for (const type of secretBearing) expect(redactedAckCommandTypes().has(type)).toBe(true)
   })
 })

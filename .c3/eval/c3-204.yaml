@@ -9,3 +9,8 @@ code:
   - src/server/project-paths-io.adapter.ts
   - src/server/project-directory.adapter.ts
   - src/server/projectFileRelocation.adapter.ts
+  - src/server/home-dir.adapter.ts
+  - src/server/home-path.ts
+  - src/server/path-containment.ts
+  - src/server/path-containment.test.ts
+  - src/shared/home-path.ts

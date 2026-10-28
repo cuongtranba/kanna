@@ -1,15 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
-  DEFAULT_CLAUDE_MODEL_OPTIONS,
-  DEFAULT_CODEX_MODEL_OPTIONS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
-  normalizeClaudeContextWindow,
-  normalizeClaudeModelId,
-  normalizeCodexModelId,
-  isClaudeReasoningEffort,
-  isCodexReasoningEffort,
-  normalizeClaudeReasoningEffort,
   type AgentProvider,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
@@ -21,7 +12,8 @@ import {
   isEndpointProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
-import { claudeOptionsPatch, codexOptionsPatch, normalizeDefaultProvider } from "./providerOptionsPatch"
+import { createDefaultProviderDefaults, normalizeClaudePreference, normalizeCodexPreference } from "../../shared/settings/provider-defaults"
+import { claudeOptionsPatch, codexOptionsPatch } from "./providerOptionsPatch"
 import { providerDefaultsEqual } from "./providerDefaultsEqual"
 import { log } from "../../shared/log"
 
@@ -52,224 +44,6 @@ export type ComposerState =
   }
 
 export const NEW_CHAT_COMPOSER_ID = "__new__"
-
-type LegacyPersistedChatPreferencesState = Partial<{
-  defaultProvider: string
-  providerDefaults: {
-    claude?: {
-      model?: string
-      effort?: string
-      modelOptions?: Partial<ClaudeModelOptions>
-      planMode?: boolean
-    }
-    codex?: {
-      model?: string
-      effort?: string
-      modelOptions?: Partial<CodexModelOptions>
-      planMode?: boolean
-    }
-    openrouter?: {
-      model?: string
-      modelOptions?: Record<string, never>
-      planMode?: boolean
-    }
-    custom?: {
-      model?: string
-      modelOptions?: Record<string, never>
-      planMode?: boolean
-    }
-  }
-  composerState: PersistedComposerState
-  liveProvider: AgentProvider
-  livePreferences: {
-    claude?: {
-      model?: string
-      effort?: string
-      modelOptions?: Partial<ClaudeModelOptions>
-      planMode?: boolean
-    }
-    codex?: {
-      model?: string
-      effort?: string
-      modelOptions?: Partial<CodexModelOptions>
-      planMode?: boolean
-    }
-    openrouter?: {
-      model?: string
-      modelOptions?: Record<string, never>
-      planMode?: boolean
-    }
-  }
-}>
-
-type PersistedComposerState =
-  | {
-    provider: "claude"
-    model?: string
-    effort?: string
-    modelOptions?: Partial<ClaudeModelOptions>
-    planMode?: boolean
-  }
-  | {
-    provider: "codex"
-    model?: string
-    effort?: string
-    modelOptions?: Partial<CodexModelOptions>
-    planMode?: boolean
-  }
-  | {
-    provider: "openrouter" | "custom"
-    model?: string
-    modelOptions?: Record<string, never>
-    planMode?: boolean
-  }
-
-type PersistedChatPreferencesState = LegacyPersistedChatPreferencesState & {
-  chatStates?: Record<string, PersistedComposerState>
-  legacyComposerState?: PersistedComposerState
-}
-
-export function normalizeClaudePreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<ClaudeModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<ClaudeModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedEffort: ClaudeModelOptions["reasoningEffort"]
-  if (isClaudeReasoningEffort(reasoningEffort)) {
-    normalizedEffort = reasoningEffort
-  } else if (isClaudeReasoningEffort(value?.effort)) {
-    normalizedEffort = value.effort
-  } else {
-    normalizedEffort = DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort
-  }
-  const model = normalizeClaudeModelId(value?.model, undefined, customModels)
-  const contextWindow = normalizeClaudeContextWindow(model, value?.modelOptions?.contextWindow, customModels)
-
-  return {
-    model,
-    modelOptions: {
-      reasoningEffort: normalizeClaudeReasoningEffort(model, normalizedEffort, customModels),
-      contextWindow,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
-export function normalizeCodexPreference(value?: {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<CodexModelOptions>
-  planMode?: boolean
-}, customModels?: readonly CustomModelEntry[]): ProviderPreference<CodexModelOptions> {
-  const reasoningEffort = value?.modelOptions?.reasoningEffort
-  let normalizedCodexEffort: CodexModelOptions["reasoningEffort"]
-  if (isCodexReasoningEffort(reasoningEffort)) {
-    normalizedCodexEffort = reasoningEffort
-  } else if (isCodexReasoningEffort(value?.effort)) {
-    normalizedCodexEffort = value.effort
-  } else {
-    normalizedCodexEffort = DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort
-  }
-  return {
-    model: normalizeCodexModelId(value?.model, undefined, customModels),
-    modelOptions: {
-      reasoningEffort: normalizedCodexEffort,
-      fastMode: typeof value?.modelOptions?.fastMode === "boolean"
-        ? value.modelOptions.fastMode
-        : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
-    },
-    planMode: Boolean(value?.planMode),
-  }
-}
-
-function forcePersistedCodexPreference<T extends {
-  model?: string
-  effort?: string
-  modelOptions?: Partial<CodexModelOptions>
-  planMode?: boolean
-}>(value?: T): T | undefined {
-  if (!value) return value
-  return {
-    ...value,
-    model: "gpt-5.5",
-  }
-}
-
-function forcePersistedCodexComposerState<T extends PersistedComposerState | ComposerState>(value?: T): T | undefined {
-  if (!value || value.provider !== "codex") return value
-  return {
-    ...value,
-    model: "gpt-5.5",
-  }
-}
-
-function forcePersistedCodexChatStates(
-  value?: Record<string, PersistedComposerState | ComposerState>
-): Record<string, PersistedComposerState | ComposerState> | undefined {
-  if (!value) return value
-
-  return Object.fromEntries(
-    Object.entries(value).map(([chatId, composerState]) => [
-      chatId,
-      forcePersistedCodexComposerState(composerState) ?? composerState,
-    ])
-  )
-}
-
-export function createDefaultProviderDefaults(): ChatProviderPreferences {
-  return {
-    claude: {
-      model: "claude-opus-4-7",
-      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-      planMode: false,
-    },
-    codex: {
-      model: "gpt-5.5",
-      modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
-      planMode: false,
-    },
-    openrouter: {
-      model: DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: false,
-    },
-    custom: { model: "", modelOptions: {}, planMode: false },
-  }
-}
-
-export function normalizeProviderDefaults(value?: {
-  claude?: {
-    model?: string
-    effort?: string
-    modelOptions?: Partial<ClaudeModelOptions>
-    planMode?: boolean
-  }
-  codex?: {
-    model?: string
-    effort?: string
-    modelOptions?: Partial<CodexModelOptions>
-    planMode?: boolean
-  }
-  openrouter?: {
-    model?: string
-    modelOptions?: Record<string, never>
-    planMode?: boolean
-  }
-  custom?: { model?: string; modelOptions?: Record<string, never>; planMode?: boolean }
-}): ChatProviderPreferences {
-  return {
-    claude: normalizeClaudePreference(value?.claude),
-    codex: normalizeCodexPreference(value?.codex),
-    openrouter: {
-      model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
-      modelOptions: {},
-      planMode: Boolean(value?.openrouter?.planMode),
-    },
-    custom: { model: value?.custom?.model ?? "", modelOptions: {}, planMode: Boolean(value?.custom?.planMode) },
-  }
-}
 
 function logChatPreferences(message: string, details?: object) {
   if (details === undefined) {
@@ -338,91 +112,10 @@ function cloneComposerState(state: ComposerState): ComposerState {
   }
 }
 
-function normalizeComposerState(
-  value: PersistedComposerState | undefined,
-  providerDefaults: ChatProviderPreferences,
-  legacyLiveProvider?: AgentProvider,
-  legacyLivePreferences?: LegacyPersistedChatPreferencesState["livePreferences"]
-): ComposerState {
-  if (value?.provider === "claude") {
-    const preference = normalizeClaudePreference(value)
-    return {
-      provider: "claude",
-      model: preference.model,
-      modelOptions: preference.modelOptions,
-      planMode: preference.planMode,
-    }
-  }
-
-  if (value?.provider === "codex") {
-    const preference = normalizeCodexPreference(value)
-    return {
-      provider: "codex",
-      model: preference.model,
-      modelOptions: preference.modelOptions,
-      planMode: preference.planMode,
-    }
-  }
-
-  if (value && isEndpointProvider(value.provider)) {
-    return {
-      provider: value.provider,
-      model: value.model ?? providerDefaults[value.provider].model,
-      modelOptions: {},
-      planMode: Boolean(value.planMode),
-    }
-  }
-
-  if (legacyLiveProvider === "claude") {
-    const preference = normalizeClaudePreference(legacyLivePreferences?.claude)
-    return {
-      provider: "claude",
-      model: preference.model,
-      modelOptions: preference.modelOptions,
-      planMode: preference.planMode,
-    }
-  }
-
-  if (legacyLiveProvider === "codex") {
-    const preference = normalizeCodexPreference(legacyLivePreferences?.codex)
-    return {
-      provider: "codex",
-      model: preference.model,
-      modelOptions: preference.modelOptions,
-      planMode: preference.planMode,
-    }
-  }
-
-  return composerFromProviderDefaults("claude", providerDefaults)
-}
-
-function normalizePersistedComposerState(
-  value: PersistedComposerState | ComposerState | undefined,
-  providerDefaults: ChatProviderPreferences
-): ComposerState | null {
-  if (!value) return null
-  return normalizeComposerState(value, providerDefaults)
-}
-
-function normalizeChatStates(
-  value: Record<string, PersistedComposerState | ComposerState> | undefined,
-  providerDefaults: ChatProviderPreferences
-): Record<string, ComposerState> {
-  if (!value) return {}
-
-  return Object.fromEntries(
-    Object.entries(value).map(([chatId, composerState]) => [
-      chatId,
-      normalizeComposerState(composerState, providerDefaults),
-    ])
-  )
-}
-
 function createComposerStateForNewChat(args: {
   defaultProvider: DefaultProviderPreference
   providerDefaults: ChatProviderPreferences
   sourceState?: ComposerState | null
-  legacyComposerState?: ComposerState | null
   providerHint?: AgentProvider | null
 }): ComposerState {
   if (args.providerHint) {
@@ -441,7 +134,7 @@ function createComposerStateForNewChat(args: {
 }
 
 function getStoredComposerState(
-  state: Pick<ChatPreferencesState, "chatStates" | "defaultProvider" | "providerDefaults" | "legacyComposerState">,
+  state: Pick<ChatPreferencesState, "chatStates" | "defaultProvider" | "providerDefaults">,
   chatId: string
 ): ComposerState {
   const existingState = state.chatStates[chatId]
@@ -452,12 +145,11 @@ function getStoredComposerState(
   return createComposerStateForNewChat({
     defaultProvider: state.defaultProvider,
     providerDefaults: state.providerDefaults,
-    legacyComposerState: state.legacyComposerState,
   })
 }
 
 function withChatComposerState(
-  state: Pick<ChatPreferencesState, "chatStates" | "defaultProvider" | "providerDefaults" | "legacyComposerState">,
+  state: Pick<ChatPreferencesState, "chatStates" | "defaultProvider" | "providerDefaults">,
   chatId: string,
   transform: (composerState: ComposerState) => ComposerState
 ) {
@@ -474,7 +166,6 @@ interface ChatPreferencesState {
   defaultProvider: DefaultProviderPreference
   providerDefaults: ChatProviderPreferences
   chatStates: Record<string, ComposerState>
-  legacyComposerState: ComposerState | null
   pendingProviderSyncChatIds: Set<string>
   setDefaultProvider: (provider: DefaultProviderPreference) => void
   applyServerDefaults: (
@@ -504,34 +195,6 @@ interface ChatPreferencesState {
   forgetChats: (chatIds: readonly string[]) => void
 }
 
-export function migrateChatPreferencesState(
-  persistedState: Partial<PersistedChatPreferencesState> | undefined
-): Pick<ChatPreferencesState, "defaultProvider" | "providerDefaults" | "chatStates" | "legacyComposerState"> {
-  const providerDefaults = normalizeProviderDefaults({
-    ...persistedState?.providerDefaults,
-    codex: forcePersistedCodexPreference(persistedState?.providerDefaults?.codex),
-  })
-  const legacyComposerState = normalizePersistedComposerState(
-    forcePersistedCodexComposerState(persistedState?.legacyComposerState ?? persistedState?.composerState),
-    providerDefaults
-  )
-
-  return {
-    defaultProvider: normalizeDefaultProvider(persistedState?.defaultProvider),
-    providerDefaults,
-    chatStates: normalizeChatStates(forcePersistedCodexChatStates(persistedState?.chatStates), providerDefaults),
-    legacyComposerState: legacyComposerState ?? normalizeComposerState(
-      undefined,
-      providerDefaults,
-      persistedState?.liveProvider,
-      {
-        ...persistedState?.livePreferences,
-        codex: forcePersistedCodexPreference(persistedState?.livePreferences?.codex),
-      }
-    ),
-  }
-}
-
 export const useChatPreferencesStore = create<ChatPreferencesState>()(
   persist(
     (set, get) => ({
@@ -539,12 +202,6 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
     providerDefaults: createDefaultProviderDefaults(),
     chatStates: {},
     pendingProviderSyncChatIds: new Set<string>(),
-    legacyComposerState: {
-      provider: "claude",
-      model: "claude-opus-4-7",
-      modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS },
-      planMode: false,
-    },
     setDefaultProvider: (defaultProvider) => set({ defaultProvider }),
       applyServerDefaults: (defaultProvider, providerDefaults) =>
         set((state) => {
@@ -662,7 +319,6 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
             defaultProvider: state.defaultProvider,
             providerDefaults: state.providerDefaults,
             sourceState: options?.sourceState,
-            legacyComposerState: state.legacyComposerState,
             providerHint,
           })
 
@@ -680,14 +336,17 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
       setComposerState: (chatId, composerState) =>
         set((state) => {
           const customModels = currentCustomModels()
+          const normalizedClaude = composerState.provider === "claude"
+            ? normalizeClaudePreference(composerState, customModels)
+            : null
           return {
             chatStates: {
               ...state.chatStates,
-              [chatId]: composerState.provider === "claude"
+              [chatId]: normalizedClaude
                 ? {
                   provider: "claude",
-                  model: normalizeClaudePreference(composerState, customModels).model,
-                  modelOptions: normalizeClaudePreference(composerState, customModels).modelOptions,
+                  model: normalizedClaude.model,
+                  modelOptions: normalizedClaude.modelOptions,
                   planMode: composerState.planMode,
                 }
                 : cloneComposerState(composerState),
@@ -796,10 +455,7 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
     {
       name: "chat-preferences-state",
       version: 1,
-      partialize: (state) => ({
-        chatStates: state.chatStates,
-        legacyComposerState: state.legacyComposerState,
-      }),
+      partialize: (state) => ({ chatStates: state.chatStates }),
     }
   )
 )

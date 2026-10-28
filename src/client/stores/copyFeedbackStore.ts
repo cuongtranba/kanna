@@ -1,6 +1,10 @@
+import { useCallback, useMemo } from "react"
 import { create } from "zustand"
+import { clipboardAdapter } from "../adapters/clipboard.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import type { ClipboardPort } from "../ports/clipboardPort"
 import type { TimerPort } from "../ports/timerPort"
+import { omitKeyOrEmpty } from "../lib/recordOps"
 
 export const COPIED_FEEDBACK_MS = 2000
 
@@ -24,8 +28,7 @@ export const useCopyFeedbackStore = create<CopyFeedbackState>()((set, get) => ({
   clearCopied: (key, token) => {
     const { copiedTokens } = get()
     if (copiedTokens[key] !== token) return
-    const rest = Object.fromEntries(Object.entries(copiedTokens).filter(([copiedKey]) => copiedKey !== key))
-    set({ copiedTokens: Object.keys(rest).length > 0 ? rest : NO_COPIES })
+    set({ copiedTokens: omitKeyOrEmpty(copiedTokens, key, NO_COPIES) })
   },
 }))
 
@@ -41,4 +44,28 @@ export async function copyWithFeedback(
 
 export function useCopied(key: string): boolean {
   return useCopyFeedbackStore((state) => state.copiedTokens[key] !== undefined)
+}
+
+export interface CopyFeedbackPorts {
+  clipboard?: ClipboardPort
+  timer?: TimerPort
+}
+
+let copyFeedbackSequence = 0
+
+function nextCopyFeedbackKey(): string {
+  copyFeedbackSequence += 1
+  return `copy:${copyFeedbackSequence}`
+}
+
+export function useCopyFeedback(ports: CopyFeedbackPorts = {}): { copied: boolean; copy: (text: string) => Promise<void> } {
+  const key = useMemo(nextCopyFeedbackKey, [])
+  const copied = useCopied(key)
+  const clipboard = ports.clipboard ?? clipboardAdapter
+  const timer = ports.timer ?? timerAdapter
+  const copy = useCallback(
+    (text: string) => copyWithFeedback(key, () => clipboard.writeText(text), timer),
+    [clipboard, key, timer],
+  )
+  return { copied, copy }
 }

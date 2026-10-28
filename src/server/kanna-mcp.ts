@@ -7,11 +7,11 @@ import type { BeaconRegistry } from "./beacon-registry"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { buildPluginToolList } from "./kanna-mcp-plugins"
 import { getPluginService } from "./plugins/plugin-service-host"
-import { bindChatTaskRun, buildChatTaskToolList, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
+import { bindChatTaskRun, buildChatTaskToolList, newShortId, type ChatTaskToolDeps } from "./kanna-mcp-tools/chat-tasks"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
-import { ok, fail } from "./kanna-mcp-tool"
+import { ok, fail, type KannaSdkTool, type KannaSdkToolList, type SdkToolExtra } from "./kanna-mcp-tool"
 import type { BoardRegistry } from "./board-registry"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import { z } from "zod"
@@ -19,10 +19,10 @@ import path from "node:path"
 import { randomUUID } from "node:crypto"
 import type { JsonObject } from "../shared/json"
 import { isRecord } from "../shared/errors"
-import { statPathOrNull } from "./fs-stat.adapter"
+import { resolveExistingProjectFile } from "./project-file-path"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/projectFileUrl"
-import { inferAttachmentContentType, inferProjectFileContentType } from "./uploads"
+import { inferAttachmentContentType } from "./uploads"
 import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
 import { createReadTool } from "./kanna-mcp-tools/read.adapter"
@@ -33,6 +33,7 @@ import { createEditTool } from "./kanna-mcp-tools/edit.adapter"
 import { createWriteTool } from "./kanna-mcp-tools/write.adapter"
 import { createWebFetchTool } from "./kanna-mcp-tools/webfetch"
 import { createWebSearchTool } from "./kanna-mcp-tools/websearch"
+import type { BuiltinShim, ToolHandlerContext } from "./kanna-mcp-tools/tool-callback-shim"
 import {
   createDelegateSubagentTool,
   DELEGATE_SUBAGENT_DESCRIPTION,
@@ -47,7 +48,7 @@ import { confinePathToDir } from "./input-validation"
 import { resolveStructuredDoc } from "../shared/structured-doc/registry"
 import { renderTaskDocSkeleton } from "../shared/task-doc"
 import { readDoc, writeDoc } from "./structured-doc-io.adapter"
-import { withFileLock } from "./tracking-file-lock"
+import { createKeyedLanes } from "./serial-lane"
 import { computeWorkspaceDigest, runVerifyCommand } from "./loop-verify-io.adapter"
 import { getCachedVerify, setCachedVerify } from "./loop-verify-cache"
 import { parseMermaid } from "./mermaid-parse.adapter"
@@ -59,7 +60,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 
-type KannaSdkToolList = NonNullable<Parameters<typeof createSdkMcpServer>[0]["tools"]>
 
 export interface OfferDownloadArgs {
   projectId: string
@@ -110,11 +110,11 @@ export interface ArmedLoopInfo {
 export interface ChatTaskStorePort {
   appendEvents: (events: readonly ChatTaskEvent[]) => Promise<void>
   project: (chatId: string, ctx: ChatTaskScheduleContext) => ChatTaskProjection
-  decide: (
+  decide: <R>(
     chatId: string,
     ctx: ChatTaskScheduleContext,
-    fn: (projection: ChatTaskProjection) => readonly ChatTaskEvent[],
-  ) => Promise<readonly ChatTaskEvent[]>
+    fn: (projection: ChatTaskProjection) => { events: readonly ChatTaskEvent[]; result: R },
+  ) => Promise<R>
   mergeBranch: (
     workdir: string,
     branch: string,
@@ -124,77 +124,11 @@ export interface ChatTaskStorePort {
 export type SetupLoopHandlerResult =
   | {
       ok: true
-      trackingFileRel: string
-      created: boolean
-      reconciled: boolean
-      reconcileActions: string[]
+      imported: { trackingFileRel: string; taskCount: number } | null
       oracleWarnings: string[]
       prompt: string
     }
   | { ok: false; errors: string[] }
-
-export interface ResolvedOfferDownload {
-  contentUrl: string
-  relativePath: string
-  fileName: string
-  displayName: string
-  size: number
-  mimeType: string
-}
-
-export async function resolveOfferDownload(
-  args: OfferDownloadArgs,
-  input: { path: string; label?: string },
-): Promise<{ ok: true; payload: ResolvedOfferDownload } | { ok: false; error: string }> {
-  const rawPath = (input.path ?? "").trim()
-  if (!rawPath) {
-    return { ok: false, error: "path is required" }
-  }
-
-  const relativePath = path.posix.normalize(rawPath.replaceAll("\\", "/"))
-  if (
-    !relativePath
-    || relativePath === "."
-    || relativePath.startsWith("../")
-    || relativePath.includes("/../")
-    || path.posix.isAbsolute(relativePath)
-  ) {
-    return { ok: false, error: `Invalid project file path: ${input.path}` }
-  }
-
-  const projectRoot = path.resolve(args.localPath)
-  const absolutePath = path.resolve(args.localPath, relativePath)
-  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
-    return { ok: false, error: "Path resolves outside the project root" }
-  }
-
-  const info = await statPathOrNull(absolutePath)
-  if (!info) {
-    return { ok: false, error: `File not found: ${relativePath}` }
-  }
-  if (!info.isFile()) {
-    return { ok: false, error: `Not a file: ${relativePath}` }
-  }
-
-  const fileName = path.posix.basename(relativePath)
-  const mimeType = inferProjectFileContentType(fileName)
-  const contentUrl = buildProjectFileContentUrl(args.projectId, relativePath)
-  if (!contentUrl) {
-    return { ok: false, error: "Failed to build project file URL" }
-  }
-
-  return {
-    ok: true,
-    payload: {
-      contentUrl,
-      relativePath,
-      fileName,
-      displayName: input.label?.trim() || fileName,
-      size: info.size,
-      mimeType,
-    },
-  }
-}
 
 export interface ResolvedWorkspaceFile {
   contentUrl: string
@@ -204,6 +138,34 @@ export interface ResolvedWorkspaceFile {
   size: number
   mimeType: string
 }
+
+type WorkspaceFileResolution =
+  | { ok: true; payload: ResolvedWorkspaceFile }
+  | { ok: false; error: string }
+
+export async function resolveOfferDownload(
+  args: OfferDownloadArgs,
+  input: { path: string; label?: string },
+): Promise<WorkspaceFileResolution> {
+  const file = await resolveExistingProjectFile(args.localPath, input.path ?? "")
+  if (!file.ok) return file
+  const fileName = path.posix.basename(file.relativePath)
+  const contentUrl = buildProjectFileContentUrl(args.projectId, file.relativePath)
+  if (!contentUrl) return { ok: false, error: "Failed to build project file URL" }
+  return {
+    ok: true,
+    payload: {
+      contentUrl,
+      relativePath: file.relativePath,
+      fileName,
+      displayName: input.label?.trim() || fileName,
+      size: file.size,
+      mimeType: inferAttachmentContentType(fileName),
+    },
+  }
+}
+
+const trackingFileLanes = createKeyedLanes()
 
 const PREVIEWABLE_MIME_PREFIXES = ["text/", "image/", "audio/", "video/"]
 const PREVIEWABLE_EXACT_MIMES = new Set(["application/json", "application/pdf"])
@@ -217,57 +179,25 @@ function isPreviewableMime(mimeType: string): boolean {
 export async function resolveWorkspaceFile(
   args: { localPath: string },
   input: { path: string; label?: string },
-): Promise<{ ok: true; payload: ResolvedWorkspaceFile } | { ok: false; error: string }> {
-  const rawPath = (input.path ?? "").trim()
-  if (!rawPath) {
-    return { ok: false, error: "path is required" }
-  }
-
-  const relativePath = path.posix.normalize(rawPath.replaceAll("\\", "/"))
-  if (
-    !relativePath
-    || relativePath === "."
-    || relativePath.startsWith("../")
-    || relativePath.includes("/../")
-    || path.posix.isAbsolute(relativePath)
-  ) {
-    return { ok: false, error: `Invalid project file path: ${input.path}` }
-  }
-
-  const projectRoot = path.resolve(args.localPath)
-  const absolutePath = path.resolve(args.localPath, relativePath)
-  if (absolutePath !== projectRoot && !absolutePath.startsWith(`${projectRoot}${path.sep}`)) {
-    return { ok: false, error: "Path resolves outside the project root" }
-  }
-
-  const info = await statPathOrNull(absolutePath)
-  if (!info) {
-    return { ok: false, error: `File not found: ${relativePath}` }
-  }
-  if (!info.isFile()) {
-    return { ok: false, error: `Not a file: ${relativePath}` }
-  }
-
-  const fileName = path.posix.basename(relativePath)
+): Promise<WorkspaceFileResolution> {
+  const file = await resolveExistingProjectFile(args.localPath, input.path ?? "")
+  if (!file.ok) return file
+  const fileName = path.posix.basename(file.relativePath)
   const mimeType = inferAttachmentContentType(fileName)
-
   if (!isPreviewableMime(mimeType)) {
     return {
       ok: false,
-      error: `"${relativePath}" is not a previewable kind (${mimeType}) — use offer_download to let the user download it instead.`,
+      error: `"${file.relativePath}" is not a previewable kind (${mimeType}) — use offer_download to let the user download it instead.`,
     }
   }
-
-  const contentUrl = buildLocalFileContentUrl(absolutePath)
-
   return {
     ok: true,
     payload: {
-      contentUrl,
-      relativePath,
+      contentUrl: buildLocalFileContentUrl(file.absolutePath),
+      relativePath: file.relativePath,
       fileName,
       displayName: input.label?.trim() || fileName,
-      size: info.size,
+      size: file.size,
       mimeType,
     },
   }
@@ -343,9 +273,6 @@ function buildDelegateSubagentToolList(args: {
   orchestrator?: SubagentOrchestrator
   delegationContext?: KannaMcpDelegationContext
   chatId: string | null
-  cwd: string
-  getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  isRunAlive?: (chatId: string, runId: string) => boolean
   chatTaskDeps?: ChatTaskToolDeps | null
 }): KannaSdkToolList {
   if (!args.orchestrator || !args.delegationContext || !args.chatId) return []
@@ -364,13 +291,6 @@ function buildDelegateSubagentToolList(args: {
       DELEGATE_SUBAGENT_DESCRIPTION,
       delegate.schema.shape,
       async (input, extra) => {
-        if (input.keep_alive) {
-          const subagent = orchestrator.findSubagent(input.subagent_id)
-          if (subagent && subagent.provider !== "claude") {
-            return fail("keep_alive is only supported for Claude subagents")
-          }
-        }
-        const onEntry = buildDelegateProgressEmitter(extra)
         const handlerCtx: DelegateSubagentContext = {
           chatId,
           parentSubagentId: ctx.parentSubagentId,
@@ -379,23 +299,10 @@ function buildDelegateSubagentToolList(args: {
           depth: ctx.depth,
           getParentUserMessageId: ctx.getParentUserMessageId,
           getMentionedSubagentIds: ctx.getMentionedSubagentIds,
-          onEntry,
+          onEntry: buildDelegateProgressEmitter(extra),
           ...(bindClaimToRun ? { bindClaimToRun } : {}),
         }
-        const result = await delegate.handler(input, handlerCtx)
-        if (input.keep_alive && !result.isError && result.content.length > 0) {
-          const parsed = (() => {
-            try {
-              const p: { status?: string; run_id?: string } = JSON.parse(result.content[0].text)
-              return p
-            } catch { return null }
-          })()
-          if (parsed?.status === "completed" && parsed.run_id) {
-            const hint = `\n\n[run_id: ${parsed.run_id}] — session kept alive; use send_subagent_message({run_id, prompt}) for more turns, close_subagent({run_id}) when done.`
-            return ok(result.content[0].text + hint)
-          }
-        }
-        return result
+        return delegate.handler(input, handlerCtx)
       },
     ),
     tool(
@@ -430,15 +337,15 @@ function buildDelegateSubagentToolList(args: {
 export const SETUP_LOOP_DESCRIPTION =
   "Set up an autonomous loop bound to a measurable goal. Kanna renders a "
   + "deterministic recurring prompt from your input, VALIDATES it (rejects "
-  + "vague goals / unparseable verify commands / paths outside cwd), ensures "
-  + "the tracking file exists (writes a skeleton if absent), then wipes this "
-  + "chat's main-agent context and enqueues the templated prompt so the loop "
-  + "starts on the next turn. Every iteration the main agent will: (1) read the "
-  + "tracking file, (2) run the verify command, (3) if verify exits 0 print "
-  + "'GOAL MET' and END the turn (loop terminates by absence of delegation), "
-  + "otherwise (4) delegate the next chunk to a background subagent that "
-  + "updates the tracking file. Use this instead of writing loop prompts by "
-  + "hand — free-form prompts drift and lose the invariants."
+  + "vague goals / unparseable verify commands / paths outside cwd), seeds the "
+  + "chat's task list, then wipes this chat's main-agent context and enqueues "
+  + "the templated prompt so the loop starts on the next turn. Every iteration "
+  + "the main agent will: (1) read the task list, (2) run the verify command, "
+  + "(3) if verify exits 0 print 'GOAL MET' and END the turn (loop terminates "
+  + "by absence of delegation), otherwise (4) delegate the next chunk to a "
+  + "background subagent that records progress in the task list. Use this "
+  + "instead of writing loop prompts by hand — free-form prompts drift and lose "
+  + "the invariants."
 
 const STOP_LOOP_DESCRIPTION =
   "Disarm the autonomous loop armed by setup_loop on this chat. Call this "
@@ -486,13 +393,13 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Path (relative to cwd or absolute-inside-cwd). Default PROGRESS.md at cwd root. Skeleton is auto-created if missing.",
+            "Optional path (relative to cwd or absolute-inside-cwd) of an existing tracking file whose Task queue and Failed approaches are imported once into the task list. Nothing is written to it.",
           ),
         chunk_hint: z
           .string()
           .optional()
           .describe(
-            "Optional starter description for the first chunk written into the tracking-file skeleton. Ignored if the file already exists.",
+            "Optional starter description, seeded as the first task when no tracking file is imported.",
           ),
         subagent_id: z
           .string()
@@ -504,7 +411,7 @@ function buildSetupLoopToolList(args: {
           .string()
           .optional()
           .describe(
-            "Absolute directory the loop works in — where the verify command runs and where tracking_file is rooted. Defaults to this chat's working directory, which is already the card's worktree on a chat started from a board. Pass it only to point the loop at a DIFFERENT tree; it must be the project checkout or a worktree of the same repo.",
+            "Absolute directory the loop works in — where the verify command runs and where tracking_file is resolved. Defaults to this chat's working directory, which is already the card's worktree on a chat started from a board. Pass it only to point the loop at a DIFFERENT tree; it must be the project checkout or a worktree of the same repo.",
           ),
         parallelism: z
           .number()
@@ -517,7 +424,7 @@ function buildSetupLoopToolList(args: {
           .boolean()
           .optional()
           .describe(
-            "Override two safety refusals: overwriting a git-tracked tracking file that records a different goal, and arming when the verify command already exits 0. Use only when you are sure.",
+            "Override the arm-time refusals: unfinished tasks already in the list, and a verify command that already exits 0. Use only when you are sure.",
           ),
       },
       async (input) => {
@@ -534,17 +441,14 @@ function buildSetupLoopToolList(args: {
         if (!result.ok) {
           return fail(`setup_loop rejected:\n- ${result.errors.join("\n- ")}`)
         }
-        let fileNote = " (existing file already conforms to the loop schema)"
-        if (result.created) {
-          fileNote = " (created skeleton)"
-        } else if (result.reconciled) {
-          fileNote = ` (existing file reconciled to the loop schema: ${result.reconcileActions.join("; ")})`
-        }
+        const importNote = result.imported !== null
+          ? ` Imported ${String(result.imported.taskCount)} task(s) from ${result.imported.trackingFileRel} into the task list.`
+          : ""
         const auditNote = result.oracleWarnings.length > 0
           ? `\nOracle audit:\n- ${result.oracleWarnings.join("\n- ")}`
           : ""
         return ok(
-          `Loop armed. Tracking file: ${result.trackingFileRel}${fileNote}.`
+          `Loop armed.${importNote}`
           + ` Your main-agent context has been cleared; the next turn will replay the loop prompt.${auditNote}`,
         )
       },
@@ -632,7 +536,6 @@ function buildTrackingDocToolList(args: {
   cwd: string
   chatId: string | null
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
-  isRunAlive?: (chatId: string, runId: string) => boolean
 }): KannaSdkToolList {
   if (!args.chatId) return []
   const chatId = args.chatId
@@ -710,7 +613,7 @@ function buildTrackingDocToolList(args: {
         if (!doc) {
           return fail(`structured append supports .md files only (got ${confined.rel})`)
         }
-        return withFileLock(confined.abs, async () => {
+        return trackingFileLanes.run(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
             return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
@@ -763,7 +666,7 @@ function buildReplaceTrackingSectionTool(
         if (!doc) {
           return fail(`structured replace supports .md files only (got ${confined.rel})`)
         }
-        return withFileLock(confined.abs, async () => {
+        return trackingFileLanes.run(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
             return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
@@ -975,7 +878,27 @@ function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTas
     requireWorktree: () => (getArmedLoop?.(chatId)?.parallelism ?? 1) > 1,
     integrationWorkdir: () => getArmedLoop?.(chatId)?.workdirAbs ?? null,
     mergeBranch: (workdir, branch) => store.mergeBranch(workdir, branch),
+    now: Date.now,
+    newId: newShortId,
   }
+}
+
+const BUILTIN_SHIM_FACTORIES: readonly ((deps: { toolCallback: ToolCallbackService }) => BuiltinShim)[] = [
+  createReadTool,
+  createGlobTool,
+  createGrepTool,
+  createBashTool,
+  createEditTool,
+  createWriteTool,
+  createWebFetchTool,
+  createWebSearchTool,
+]
+
+function toolUseIdOf(extra: SdkToolExtra): string {
+  if (isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number")) {
+    return String(extra.requestId)
+  }
+  return randomUUID()
 }
 
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
@@ -1016,16 +939,13 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
       orchestrator: args.subagentOrchestrator,
       delegationContext: args.delegationContext,
       chatId,
-      cwd,
-      getArmedLoop: args.getArmedLoop,
-      isRunAlive: args.isRunAlive,
       chatTaskDeps: resolveChatTaskDeps(args, chatId),
     }),
     ...buildSetupLoopToolList({ setupLoop: args.setupLoop, stopLoop: args.stopLoop, resumeLoop: args.resumeLoop, chatId }),
-    ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop, isRunAlive: args.isRunAlive }),
-    ...buildBoardToolList({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
-    ...buildInboxToolList(args.inboxRegistry, chatId, args.delegationContext?.depth ?? 0, tool),
-    ...buildBeaconToolList({
+    ...buildTrackingDocToolList({ cwd, chatId, getArmedLoop: args.getArmedLoop }),
+    ...buildBoardToolList<KannaSdkTool>({ boardRegistry: args.boardRegistry, chatId, projectId: args.projectId ?? null }, tool),
+    ...buildInboxToolList<KannaSdkTool>(args.inboxRegistry, chatId, args.delegationContext?.depth ?? 0, tool),
+    ...buildBeaconToolList<KannaSdkTool, SdkToolExtra>({
       beaconRegistry: args.beaconRegistry,
       getBeacons: args.getBeacons ?? (() => []),
       chatId,
@@ -1035,8 +955,8 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         ? { toolCallback: args.toolCallback, sessionId, cwd, chatPolicy, restrictedAllowedPaths: args.restrictedAllowedPaths }
         : undefined,
     }, tool),
-    ...buildPluginToolList(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
-    ...buildChatTaskToolList(resolveChatTaskDeps(args, chatId), tool),
+    ...buildPluginToolList<KannaSdkTool>(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
+    ...buildChatTaskToolList<KannaSdkTool>(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),
     ...buildValidateMermaidToolList({ chatId, parse: args.parseMermaid ?? parseMermaid }),
     ...buildValidateUiToolList(chatId, cwd),
@@ -1063,55 +983,19 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
     )
   }
 
-  const builtinShimsEnabled = process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && Boolean(args.toolCallback)
-
-  if (builtinShimsEnabled && args.toolCallback) {
-    const readTool = createReadTool({ toolCallback: args.toolCallback })
-    const globTool = createGlobTool({ toolCallback: args.toolCallback })
-    const grepTool = createGrepTool({ toolCallback: args.toolCallback })
-    const bashTool = createBashTool({ toolCallback: args.toolCallback })
-    const editTool = createEditTool({ toolCallback: args.toolCallback })
-    const writeTool = createWriteTool({ toolCallback: args.toolCallback })
-    const webfetchTool = createWebFetchTool({ toolCallback: args.toolCallback })
-    const websearchTool = createWebSearchTool({ toolCallback: args.toolCallback })
-
-    function registerShim<TSchema extends z.ZodObject<z.ZodRawShape>>(shim: {
-      name: string
-      schema: TSchema
-      handler: (input: z.infer<TSchema>, ctx: import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerContext) => Promise<import("./kanna-mcp-tools/tool-callback-shim").ToolHandlerResult>
-    }) {
-      tools.push(
-        tool(
-          shim.name,
-          `Kanna built-in replacement for ${shim.name}.`,
-          shim.schema.shape,
-          async (input, extra) => {
-            const requestId = isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number") ? extra.requestId : undefined
-            const toolUseId = requestId != null ? String(requestId) : randomUUID()
-            const parsed = shim.schema.safeParse(input)
-            if (!parsed.success) {
-              return fail(`Invalid arguments for ${shim.name}: ${parsed.error.message}`)
-            }
-            return await shim.handler(parsed.data, {
-              chatId: chatId ?? "",
-              sessionId,
-              toolUseId,
-              cwd,
-              chatPolicy,
-              restrictedAllowedPaths: args.restrictedAllowedPaths,
-            })
-          },
-        ),
-      )
+  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
+    const toolCallback = args.toolCallback
+    const contextOf = (extra: SdkToolExtra): ToolHandlerContext => ({
+      chatId: chatId ?? "",
+      sessionId,
+      toolUseId: toolUseIdOf(extra),
+      cwd,
+      chatPolicy,
+      restrictedAllowedPaths: args.restrictedAllowedPaths,
+    })
+    for (const createShim of BUILTIN_SHIM_FACTORIES) {
+      tools.push(createShim({ toolCallback }).register<KannaSdkTool>(tool, contextOf))
     }
-    registerShim(readTool)
-    registerShim(globTool)
-    registerShim(grepTool)
-    registerShim(bashTool)
-    registerShim(editTool)
-    registerShim(writeTool)
-    registerShim(webfetchTool)
-    registerShim(websearchTool)
   }
 
   return tools

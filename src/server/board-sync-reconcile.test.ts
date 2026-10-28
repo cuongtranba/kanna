@@ -1,12 +1,14 @@
 import { describe, expect, test } from "vite-plus/test"
 import {
   advanceWatermarks,
+  contentFromRemote,
+  SYNCED_FIELDS,
   reconcileItem,
-  watermarksAfterPush,
   type LocalCardState,
   type SyncLinkState,
 } from "./board-sync-reconcile"
 import type { RemoteItem } from "../shared/boards/sync-types"
+import { GITHUB_MIRRORED_FIELDS } from "../shared/boards/well-known-fields"
 
 const T0 = 1_700_000_000_000
 const MINUTE = 60_000
@@ -167,12 +169,12 @@ describe("reconcileItem", () => {
 
 describe("watermarks", () => {
   test("taken fields advance, kept fields do not", () => {
-    const next = advanceWatermarks({ title: T0, state: T0 }, remote({ updatedAt: T0 + MINUTE }), ["title"])
+    const next = advanceWatermarks({ title: T0, state: T0 }, T0 + MINUTE, ["title"])
     expect(next).toEqual({ title: T0 + MINUTE, state: T0 })
   })
 
   test("a successful push stamps the remote timestamp our write produced", () => {
-    expect(watermarksAfterPush({ title: T0 }, T0 + 5 * MINUTE, ["title", "state"])).toEqual({
+    expect(advanceWatermarks({ title: T0 }, T0 + 5 * MINUTE, ["title", "state"])).toEqual({
       title: T0 + 5 * MINUTE,
       state: T0 + 5 * MINUTE,
     })
@@ -180,7 +182,7 @@ describe("watermarks", () => {
 
   test("a push watermark makes the very next reconcile a no-op", () => {
     const pushed = remote({ title: "Ours", updatedAt: T0 + 5 * MINUTE })
-    const marks = watermarksAfterPush(link().fieldWatermarks, pushed.updatedAt, ["title"])
+    const marks = advanceWatermarks(link().fieldWatermarks, pushed.updatedAt, ["title"])
     expect(
       reconcileItem({
         remote: pushed,
@@ -188,5 +190,19 @@ describe("watermarks", () => {
         link: { fieldWatermarks: marks, lastSyncedAt: T0 + 5 * MINUTE },
       }),
     ).toEqual({ kind: "unchanged", cardId: "card-1" })
+  })
+})
+
+describe("synced fields and the card content they land in", () => {
+  test("every field the drawer treats as GitHub-owned is written by sync", () => {
+    const written = Object.keys(contentFromRemote(remote(), SYNCED_FIELDS))
+    for (const field of GITHUB_MIRRORED_FIELDS) expect(written).toContain(field)
+  })
+
+  test("taking a field writes only that field's content, plus the source link", () => {
+    expect(contentFromRemote(remote({ assignee: "ana" }), ["assignee", "title"])).toEqual({
+      assignee: { kind: "text", value: "ana" },
+      externalUrl: { kind: "url", value: "https://github.com/o/r/issues/412" },
+    })
   })
 })

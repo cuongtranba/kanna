@@ -4,10 +4,10 @@ import {
   describeClaudeApiError,
   type ClaudeApiErrorDescription,
 } from "../../../shared/claude-api-error-classification"
-import type { ProcessedApiErrorMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedApiErrorMessage
+  message: TranscriptMessageOf<"api_error">
 }
 
 const STATUS_PAGE_URL = "https://status.claude.com"

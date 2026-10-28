@@ -30,11 +30,16 @@ export interface TransferTicket extends TransferTicketSpec {
   outcome?: TransferOutcome
 }
 
+export interface BeaconTransferHost {
+  tickets: BeaconTransferTickets
+  maxPullBytes: () => number | undefined
+}
+
 export type TicketEndListener = (reason: TicketEndReason) => void
 
 export interface BeaconTransferTickets {
   mint(spec: TransferTicketSpec): TransferTicket
-  lookup(token: string, direction: TransferDirection): TransferTicket | null
+  claim(token: string, direction: TransferDirection): TransferTicket | null
   inspect(token: string): TransferTicket | null
   touch(token: string): void
   complete(token: string, outcome: TransferOutcome): void
@@ -85,9 +90,11 @@ export function createBeaconTransferTickets(
       records.set(token, { ticket, endedAt: null, endReason: null, listeners: new Set() })
       return ticket
     },
-    lookup(token, direction) {
+    claim(token, direction) {
       const record = activeRecord(token)
-      return record !== null && record.ticket.direction === direction ? record.ticket : null
+      if (record === null || record.ticket.direction !== direction) return null
+      record.ticket = { ...record.ticket, lastActivityAt: now() }
+      return record.ticket
     },
     inspect(token) {
       return records.get(token)?.ticket ?? null

@@ -1,43 +1,16 @@
-import os from "node:os"
-import { assertSafeSkillId, getGlobalSkillLockPath } from "./ws-router-skills"
-import { readTextFileOrThrow } from "./ws-router-io.adapter"
+import { assertSafeSkillId, assertSafeSkillSource, getGlobalSkillLockPath, NPX, skillsCliEnv } from "./skills-cli"
+import { readTextFileOrThrow } from "./diff-store-io.adapter"
 import { isJsonObject, type JsonValue } from "../shared/json"
 import { deriveSkillFolder, repinTarget } from "../shared/packages/skill-update-classifier"
 import type { PackageUpdateApplier, PackageApplyResult, PackageUpdateEntry } from "../shared/packages/types"
-
-const APPLY_TIMEOUT_MS = 120_000
-
-const NPX = process.platform === "win32" ? "npx.cmd" : "npx"
-
-async function spawnCapture(
-  command: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  signal: AbortSignal,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const proc = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe", env })
-  const onAbort = () => { try { proc.kill() } catch { } }
-  signal.addEventListener("abort", onAbort, { once: true })
-  try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-    return { stdout, stderr, exitCode }
-  } finally {
-    signal.removeEventListener("abort", onAbort)
-  }
-}
+import { applyDeadline, applyFailure, exitFailure, runApplyCommand, thrownFailure } from "./package-apply-command.adapter"
 
 function buildUpdateSkillCommand(skillName: string): string[] {
   return [NPX, "skills", "update", assertSafeSkillId(skillName), "--global", "--yes"]
 }
 
 export function buildRepinSkillCommand(source: string, installPath: string | null, ref: string): string[] {
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source)) {
-    throw new Error("Skill source must be an owner/repo pair.")
-  }
+  const safeSource = assertSafeSkillSource(source)
   if (!/^[A-Za-z0-9][A-Za-z0-9_.\-/]{0,127}$/.test(ref) || ref.includes("..")) {
     throw new Error("Skill ref is invalid.")
   }
@@ -45,7 +18,7 @@ export function buildRepinSkillCommand(source: string, installPath: string | nul
   if (folder !== null && (!/^[A-Za-z0-9_.\-/]+$/.test(folder) || folder.includes(".."))) {
     throw new Error("Skill path is invalid.")
   }
-  const withFolder = folder ? `${source}/${folder}` : source
+  const withFolder = folder ? `${safeSource}/${folder}` : safeSource
   return [NPX, "skills", "add", `${withFolder}#${ref}`, "--global", "--yes"]
 }
 
@@ -65,8 +38,6 @@ export const skillUpdateApplier: PackageUpdateApplier = {
   kind: "skill",
 
   async apply(pkg: PackageUpdateEntry, signal: AbortSignal): Promise<PackageApplyResult> {
-    const cwd = os.homedir()
-    const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(APPLY_TIMEOUT_MS)])
     const fromRevision = pkg.revision
 
     let command: string[]
@@ -75,49 +46,32 @@ export const skillUpdateApplier: PackageUpdateApplier = {
       command = ref
         ? buildRepinSkillCommand(pkg.source, pkg.installPath, ref)
         : buildUpdateSkillCommand(pkg.name)
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
-      return { id: pkg.id, ok: false, fromRevision, toRevision: null, command: [], stdout: "", stderr: "", error }
+    } catch (error) {
+      return thrownFailure(pkg, [], error)
     }
 
     try {
-      const { stdout, stderr, exitCode } = await spawnCapture(
+      const run = await runApplyCommand(
         command,
-        cwd,
-        { ...process.env, DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY ?? "1" },
-        combinedSignal,
+        skillsCliEnv(),
+        applyDeadline(signal),
       )
-      if (exitCode !== 0) {
-        return {
-          id: pkg.id,
-          ok: false,
-          fromRevision,
-          toRevision: null,
-          command,
-          stdout,
-          stderr,
-          error: stderr.trim() || stdout.trim() || `skills CLI exited with code ${exitCode}`,
-        }
-      }
+      if (run.exitCode !== 0) return exitFailure(pkg, command, run, "skills CLI")
 
       const toRevision = await readLockRevision(pkg.name)
       if (pkg.pinnedRef && toRevision !== null && toRevision === fromRevision) {
-        return {
-          id: pkg.id,
-          ok: false,
-          fromRevision,
-          toRevision,
+        return applyFailure(pkg, {
           command,
-          stdout,
-          stderr,
+          stdout: run.stdout,
+          stderr: run.stderr,
+          toRevision,
           error: `skills CLI reported success but ${pkg.name} is unchanged — it is pinned to ${pkg.pinnedRef}.`,
-        }
+        })
       }
 
-      return { id: pkg.id, ok: true, fromRevision, toRevision, command, stdout, stderr, error: null }
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
-      return { id: pkg.id, ok: false, fromRevision, toRevision: null, command, stdout: "", stderr: "", error }
+      return { id: pkg.id, ok: true, fromRevision, toRevision, command, stdout: run.stdout, stderr: run.stderr, error: null }
+    } catch (error) {
+      return thrownFailure(pkg, command, error)
     }
   },
 }

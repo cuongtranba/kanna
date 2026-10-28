@@ -16,3 +16,4 @@ code:
   - src/server/followed-session-registry.ts
   - src/server/followed-session-io.adapter.ts
   - src/server/imported-subagents-dir.ts
+  - src/server/claude-session-decode.ts

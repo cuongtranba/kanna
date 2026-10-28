@@ -1,4 +1,5 @@
 import { type JsonObject, type JsonArray, type JsonValue } from "./json"
+import { oneOf } from "./vocab"
 
 
 export interface AskUserQuestionOption {
@@ -16,9 +17,13 @@ export interface AskUserQuestionItem {
 
 export type AskUserQuestionAnswerMap = Record<string, string[]>
 
+export const TASK_STATUSES = ["pending", "in_progress", "completed"] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
+export const isTaskStatus = oneOf(TASK_STATUSES)
+
 export interface TodoItem {
   content: string
-  status: "pending" | "in_progress" | "completed"
+  status: TaskStatus
   activeForm: string
 }
 
@@ -41,7 +46,6 @@ export interface ExitPlanModeToolCall
 export interface TodoWriteToolCall
   extends ToolCallBase<"todo_write", { todos: TodoItem[] }> { }
 
-export type TaskStatus = TodoItem["status"]
 
 export interface TaskCreateToolCall
   extends ToolCallBase<"task_create", { subject: string; description: string; activeForm?: string }> { }

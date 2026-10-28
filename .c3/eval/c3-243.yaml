@@ -36,7 +36,7 @@ code:
   - src/server/test-helpers/webhook-harness.ts
   - src/server/ws-router-webhooks.ts
   - src/shared/webhooks/types.ts
-  - src/shared/webhooks/template.ts
-  - src/shared/webhooks/template.test.ts
   - src/shared/webhooks/validate.ts
   - src/shared/webhooks/validate.test.ts
+  - src/server/secret-json-store.adapter.ts
+  - src/server/webhooks/webhook-response.ts

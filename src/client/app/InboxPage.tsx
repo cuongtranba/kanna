@@ -12,8 +12,8 @@ import {
   type InboxRecord,
   type InboxTabId,
 } from "../lib/inboxFilter"
-import { readInboxPage, sendInboxCommand } from "../lib/inboxCommands"
-import { listWebhookTargets } from "../lib/webhookTargets"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
+import { listInboundTargets } from "../lib/webhookTargets"
 import {
   selectInboxFilter,
   selectInboxItems,
@@ -33,6 +33,7 @@ import { InboxFilterBar } from "./InboxFilterBar"
 import { InboxThreadDetail } from "./InboxThreadDetail"
 import { InboxThreadRow } from "./InboxThreadRow"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
+import { chatPath } from "../lib/paneTree"
 
 interface Props {
   threadId: string | null
@@ -80,7 +81,7 @@ export function InboxPage({ threadId }: Props) {
   const snapshotAt = useInboxStore(selectSnapshotAt)
   const selected = useInboxStore(selectSelectedThread)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
   const markAllPending = usePendingAction(MARK_ALL_KEY)
   const olderPending = usePendingAction(LOAD_OLDER_KEY)
 
@@ -97,7 +98,7 @@ export function InboxPage({ threadId }: Props) {
   useEffect(() => {
     if (selectedId === null || !selectedUnread) return
     runPendingAction(pendingActionKey("inbox.markRead", selectedId), async () => {
-      await sendInboxCommand(socket, { type: "inbox.markRead", ids: [selectedId] })
+      await sendCommandWithFeedback(socket, { type: "inbox.markRead", ids: [selectedId] })
     })
   }, [selectedId, selectedUnread, socket])
 
@@ -117,17 +118,17 @@ export function InboxPage({ threadId }: Props) {
     (item: InboxActivityItem) => {
       if (item.unread) {
         runPendingAction(pendingActionKey("inbox.markRead", item.id), async () => {
-          await sendInboxCommand(socket, { type: "inbox.markRead", ids: [item.id] })
+          await sendCommandWithFeedback(socket, { type: "inbox.markRead", ids: [item.id] })
         })
       }
-      if (item.chatId !== undefined) navigate(`/chat/${item.chatId}`)
+      if (item.chatId !== undefined) navigate(chatPath(item.chatId))
     },
     [navigate, socket],
   )
 
   const handleMarkAll = useCallback(() => {
     runPendingAction(MARK_ALL_KEY, async () => {
-      await sendInboxCommand(socket, { type: "inbox.markAllRead" })
+      await sendCommandWithFeedback(socket, { type: "inbox.markAllRead" })
     })
   }, [socket])
 
@@ -136,12 +137,12 @@ export function InboxPage({ threadId }: Props) {
       const state = useInboxStore.getState()
       const cursors = olderPageCursors(state.threads, state.items, state.filter)
       const [olderThreads, olderItems] = await Promise.all([
-        sendInboxCommand(socket, { type: "inbox.page", beforeTs: cursors.threadBefore, limit: 50, filter: state.filter }),
-        sendInboxCommand(socket, { type: "inbox.page", beforeTs: cursors.itemBefore, limit: 50, filter: state.filter }),
+        sendCommandWithFeedback(socket, { type: "inbox.page", beforeTs: cursors.threadBefore, limit: 50, filter: state.filter }),
+        sendCommandWithFeedback(socket, { type: "inbox.page", beforeTs: cursors.itemBefore, limit: 50, filter: state.filter }),
       ])
       useInboxStore.getState().appendPage({
-        threads: readInboxPage(olderThreads).threads,
-        items: readInboxPage(olderItems).items,
+        threads: olderThreads.threads,
+        items: olderItems.items,
       })
     })
   }, [socket])

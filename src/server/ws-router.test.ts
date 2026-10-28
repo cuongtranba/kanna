@@ -10,17 +10,15 @@ import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import type { ClientCommand } from "../shared/protocol"
 import type { AppSettingsSnapshot, ChatActivity, KeybindingsSnapshot, LlmProviderSnapshot, McpServerConfig, McpServerTestResult, OpenRouterModel, UpdateSnapshot } from "../shared/types"
 import { createEmptyState } from "./events"
+import { assertSafeSkillId, assertSafeSkillSource } from "./skills-cli"
+import { createWsRouter } from "./ws-router"
 import {
-  assertSafeSkillId,
-  assertSafeSkillSource,
   buildInstallSkillCommand,
   buildUninstallSkillCommand,
-  createWsRouter,
-  isBenignStaleStateMessage,
   listInstalledSkills,
   parseInstalledSkillsLock,
-  resolveMcpTestBearer,
-} from "./ws-router"
+} from "./ws-router-skills"
+import { resolveMcpTestBearer } from "./ws-router-settings"
 import { createToolCallbackService } from "./tool-callback"
 import { createTestEventStore } from "./storage/test-helpers"
 import { createBoardRegistry } from "./board-registry"
@@ -32,6 +30,12 @@ import type { McpSourceStatus } from "../shared/mcp-sources/types"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry } from "./beacon-registry"
 import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
+
+function routerStore<Fields extends object>(fields: Fields): Fields {
+  if (!("getSidebarProjectOrder" in fields)) Object.assign(fields, { getSidebarProjectOrder: (): string[] => [] })
+  if (!("chatOps" in fields)) Object.assign(fields, { chatOps: { currentSeq: () => undefined, record: () => {} } })
+  return fields
+}
 
 function withSidebarGroupDefaults(group: {
   groupKey: string
@@ -162,21 +166,6 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   installedPlugins: [],
 }
 
-describe("isBenignStaleStateMessage", () => {
-  test("matches known stale-state errors", () => {
-    expect(isBenignStaleStateMessage("Chat not found")).toBe(true)
-    expect(isBenignStaleStateMessage("Queued message not found")).toBe(true)
-    expect(isBenignStaleStateMessage("File is no longer changed: foo/bar.ts")).toBe(true)
-    expect(isBenignStaleStateMessage("Project not found")).toBe(true)
-  })
-
-  test("does not match unrelated errors", () => {
-    expect(isBenignStaleStateMessage("Exactly one primary binding required")).toBe(false)
-    expect(isBenignStaleStateMessage("")).toBe(false)
-    expect(isBenignStaleStateMessage("Chat not found, plus extra")).toBe(false)
-  })
-})
-
 describe("skills helpers", () => {
   test("parses installed global skills from a lock payload", () => {
     const snapshot = parseInstalledSkillsLock({
@@ -245,7 +234,7 @@ describe("skills helpers", () => {
   })
 
   test("builds a global install command for the default agents and an uninstall command for every agent", () => {
-    expect(buildInstallSkillCommand("owner/repo", "my-skill").slice(1)).toEqual([
+    expect(buildInstallSkillCommand("owner/repo", "my-skill").argv.slice(1)).toEqual([
       "skills",
       "add",
       "owner/repo",
@@ -258,7 +247,7 @@ describe("skills helpers", () => {
       "codex",
       "--yes",
     ])
-    expect(buildUninstallSkillCommand("my-skill").slice(1)).toEqual([
+    expect(buildUninstallSkillCommand("my-skill").argv.slice(1)).toEqual([
       "skills",
       "remove",
       "my-skill",
@@ -309,10 +298,10 @@ const NOOP_PUSH_MANAGER = {
 
 function baseRouterDeps(state: ReturnType<typeof createEmptyState>) {
   return {
-    store: {
+    store: routerStore({
       state,
       getProject: (id: string) => state.projectsById.get(id) ?? null,
-    } as never,
+    }) as never,
     terminals: {
       getSnapshot: () => null,
       onEvent: () => () => {},
@@ -332,7 +321,7 @@ function baseRouterDeps(state: ReturnType<typeof createEmptyState>) {
 describe("ws-router", () => {
   test("acks system.ping without broadcasting snapshots", async () => {
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -374,7 +363,7 @@ describe("ws-router", () => {
   test("reads and writes llm provider settings via commands", async () => {
     const writes: Array<Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">> = []
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -469,7 +458,7 @@ describe("ws-router", () => {
     const writes: Array<{ analyticsEnabled: boolean }> = []
     let analyticsEnabled = DEFAULT_APP_SETTINGS_SNAPSHOT.analyticsEnabled
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -550,7 +539,7 @@ describe("ws-router", () => {
     let snapshot: AppSettingsSnapshot = DEFAULT_APP_SETTINGS_SNAPSHOT
     let listener: ((nextSnapshot: AppSettingsSnapshot) => void) | null = null
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -682,7 +671,7 @@ describe("ws-router", () => {
     let snapshot: AppSettingsSnapshot = { ...DEFAULT_APP_SETTINGS_SNAPSHOT, customBeacons: [beacon("b1"), beacon("b2")] }
     let listener: ((nextSnapshot: AppSettingsSnapshot) => void) | null = null
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -732,12 +721,11 @@ describe("ws-router", () => {
     expect(beaconIdsPushed).toEqual([["b1", "b2"], ["b1"]])
   })
 
-  test("pushes MCP source status changes to subscribers and stops the runner on dispose", async () => {
+  test("pushes MCP source status changes to subscribers", async () => {
     const statuses: McpSourceStatus[] = [{ id: "s1", state: "connecting", lastError: null, lastItemAt: null, itemCount: 0 }]
     let notify: () => void = () => {}
-    let stopped = false
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -749,9 +737,6 @@ describe("ws-router", () => {
           return () => {
             notify = () => {}
           }
-        },
-        stop: async () => {
-          stopped = true
         },
       },
       refreshDiscovery: async () => [],
@@ -765,21 +750,20 @@ describe("ws-router", () => {
     await router.handleMessage(ws as never, JSON.stringify({ v: 1, type: "subscribe", id: "src-1", topic: { type: "mcp-sources" } }))
     statuses[0] = { ...statuses[0]!, state: "listening" }
     notify()
-    await router.dispose()
+    router.dispose()
 
     const states = ws.sent.flatMap((envelope) => {
       const pushed = envelope as { id?: string; snapshot?: { data?: { sources?: Array<{ state: string }> } } }
       return pushed.id === "src-1" ? [pushed.snapshot?.data?.sources?.map((row) => row.state) ?? []] : []
     })
     expect(states).toEqual([["connecting"], ["listening"]])
-    expect(stopped).toBe(true)
   })
 
   test("tracks analytics preference transitions in the correct order", async () => {
     const analyticsEvents: string[] = []
     let analyticsEnabled = true
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -869,7 +853,7 @@ describe("ws-router", () => {
 
     try {
       const router = createWsRouter({
-        store: {
+        store: routerStore({
           state,
           openProject: async (localPath: string, title?: string) => {
             const project = {
@@ -890,7 +874,7 @@ describe("ws-router", () => {
           }),
           listChatsByProject: () => [{ id: "chat-1" }, { id: "chat-2" }],
           removeProject: async () => {},
-        } as never,
+        }) as never,
         agent: {
           cancel: async () => {},
           closeChat: async () => {},
@@ -958,7 +942,7 @@ describe("ws-router", () => {
 
     try {
       const router = createWsRouter({
-        store: {
+        store: routerStore({
           state,
           getProject: () => ({
             id: "project-1",
@@ -966,7 +950,7 @@ describe("ws-router", () => {
           }),
           listChatsByProject: () => [],
           removeProject: async () => {},
-        } as never,
+        }) as never,
         agent: {
           cancel: async () => {},
           closeChat: async () => {},
@@ -1076,7 +1060,7 @@ describe("ws-router", () => {
 
   test("acks terminal.input without rebroadcasting terminal snapshots", async () => {
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -1121,7 +1105,7 @@ describe("ws-router", () => {
 
   test("subscribes and unsubscribes chat topics", async () => {
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -1188,7 +1172,7 @@ describe("ws-router", () => {
 
     let activeStatusCalls = 0
     const router = createWsRouter({
-      store: { state } as never,
+      store: routerStore({ state }) as never,
       agent: {
         getActiveStatuses: () => {
           activeStatusCalls += 1
@@ -1237,10 +1221,10 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getProject: () => state.projectsById.get("project-1") ?? null,
-      } as never,
+      }) as never,
       diffStore: {
         getSnapshot: () => ({
           status: "ready",
@@ -1402,10 +1386,10 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
-      } as never,
+      }) as never,
       diffStore: {
         getSnapshot: () => null,
         refreshSnapshot: async () => false,
@@ -1485,11 +1469,11 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
         getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
-      } as never,
+      }) as never,
       diffStore: {
         getSnapshot: () => ({ status: "ready", branchName: "main", files: [], branchHistory: { entries: [] } }),
         refreshSnapshot: async () => false,
@@ -1602,7 +1586,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getMessagesPageBefore: () => ({
           messages: [{
@@ -1615,7 +1599,7 @@ describe("ws-router", () => {
           olderCursor: null,
         }),
         getChat: () => state.chatsById.get("chat-1") ?? null,
-      } as never,
+      }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -1689,7 +1673,7 @@ describe("ws-router", () => {
       lastTurnOutcome: null,
     })
 
-    const store = {
+    const store = routerStore({
       state,
       getTunnelEvents: (_chatId: string) => [] as never[],
       async setChatReadState(chatId: string, unread: boolean) {
@@ -1697,10 +1681,10 @@ describe("ws-router", () => {
         if (!chat) throw new Error("Chat not found")
         chat.unread = unread
       },
-    }
+    })
 
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -1836,7 +1820,7 @@ describe("ws-router", () => {
     const setSidebarProjectOrderCalls: string[][] = []
     let sidebarProjectOrder: string[] = []
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getSidebarProjectOrder() {
           return [...sidebarProjectOrder]
@@ -1845,7 +1829,7 @@ describe("ws-router", () => {
           setSidebarProjectOrderCalls.push(projectIds)
           sidebarProjectOrder = [...projectIds]
         },
-      } as never,
+      }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -1942,7 +1926,7 @@ describe("ws-router", () => {
 
     const forkChatCalls: string[] = []
     const router = createWsRouter({
-      store: { state } as never,
+      store: routerStore({ state }) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -2080,14 +2064,14 @@ describe("ws-router", () => {
 
     let pruneCalls = 0
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         async pruneStaleEmptyChats() {
           pruneCalls += 1
           state.chatsById.delete("chat-stale")
           return ["chat-stale"]
         },
-      } as never,
+      }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -2164,13 +2148,13 @@ describe("ws-router", () => {
 
     let capturedProtectedChatIds: string[] = []
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         async pruneStaleEmptyChats(args?: { protectedChatIds?: Iterable<string> }) {
           capturedProtectedChatIds = [...(args?.protectedChatIds ?? [])]
           return []
         },
-      } as never,
+      }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -2224,7 +2208,7 @@ describe("ws-router", () => {
   test("broadcasts background title-generation errors to connected clients", () => {
     let reportBackgroundError: ((message: string) => void) | null | undefined
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getWaitStartedAtByChatId: () => new Map(),
@@ -2275,7 +2259,7 @@ describe("ws-router", () => {
     }
 
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -2385,7 +2369,7 @@ describe("ws-router", () => {
     }
 
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -2519,13 +2503,13 @@ describe("ws-router", () => {
     }
 
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
         getRecentChatHistory: () => ({ entries: [], hasOlder: false, olderCursor: null }),
         getTunnelEvents: (_chatId: string) => [] as never[],
-      } as never,
+      }) as never,
       diffStore: diffStore as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
@@ -2607,11 +2591,11 @@ describe("ws-router", () => {
 
     const ignoreCalls: Array<{ projectPath: string; path: string }> = []
     const router = createWsRouter({
-      store: {
+      store: routerStore({
         state,
         getChat: (chatId: string) => state.chatsById.get(chatId) ?? null,
         getProject: (projectId: string) => state.projectsById.get(projectId) ?? null,
-      } as never,
+      }) as never,
       diffStore: {
         getSnapshot: () => ({ status: "ready" as const, files: [], defaultBranchName: "main", originRepoSlug: "acme/repo", aheadCount: 0, behindCount: 0, lastFetchedAt: undefined }),
         refreshSnapshot: async () => false,
@@ -2704,7 +2688,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: makeAutoContinueStore(createEmptyState()) as never,
+      store: routerStore(makeAutoContinueStore(createEmptyState())) as never,
       agent: agent as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -2746,7 +2730,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: makeAutoContinueStore(createEmptyState()) as never,
+      store: routerStore(makeAutoContinueStore(createEmptyState())) as never,
       agent: agent as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -2787,7 +2771,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: makeAutoContinueStore(createEmptyState()) as never,
+      store: routerStore(makeAutoContinueStore(createEmptyState())) as never,
       agent: agent as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -2827,7 +2811,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: makeAutoContinueStore(createEmptyState()) as never,
+      store: routerStore(makeAutoContinueStore(createEmptyState())) as never,
       agent: agent as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -2875,7 +2859,7 @@ describe("ws-router", () => {
     })
 
     const router = createWsRouter({
-      store: makeAutoContinueStore(createEmptyState()) as never,
+      store: routerStore(makeAutoContinueStore(createEmptyState())) as never,
       agent: agent as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -2912,7 +2896,7 @@ describe("ws-router project.setStar", () => {
 
     try {
       const router = createWsRouter({
-        store: {
+        store: routerStore({
           state,
           getProject: () => ({
             id: "project-star-1",
@@ -2923,7 +2907,7 @@ describe("ws-router project.setStar", () => {
             setProjectStarCalls.push({ projectId, starred })
             starredAt = starred ? Date.now() : undefined
           },
-        } as never,
+        }) as never,
         agent: {
           cancel: async () => {},
           closeChat: async () => {},
@@ -2977,7 +2961,7 @@ describe("ws-router project.setStar", () => {
 
     try {
       const router = createWsRouter({
-        store: {
+        store: routerStore({
           state,
           getProject: () => ({
             id: "project-star-2",
@@ -2987,7 +2971,7 @@ describe("ws-router project.setStar", () => {
           setProjectStar: async (_projectId: string, starred: boolean) => {
             starredAt = starred ? Date.now() : undefined
           },
-        } as never,
+        }) as never,
         agent: {
           cancel: async () => {},
           closeChat: async () => {},
@@ -3039,14 +3023,14 @@ describe("ws-router project.setStar", () => {
 
     try {
       const router = createWsRouter({
-        store: {
+        store: routerStore({
           state,
           getProject: () => undefined,
           listChatsByProject: () => [],
           setProjectStar: async () => {
             throw new Error("Project not found")
           },
-        } as never,
+        }) as never,
         agent: {
           cancel: async () => {},
           closeChat: async () => {},
@@ -3122,7 +3106,7 @@ test("ws-router: chat.toolRequestAnswer broadcasts chat snapshot after answering
     const toolRequestId = pending[0].id
 
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -3204,7 +3188,7 @@ test("ws-router: chat.toolRequestAnswer throws when toolRequestId belongs to dif
     const toolRequestId = pending[0].id
 
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -3282,7 +3266,7 @@ test("ws-router: chat.toolRequestAnswer throws on invalid decision.kind", async 
     const toolRequestId = pending[0].id
 
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -3360,7 +3344,7 @@ test("ws-router: chat.toolRequestAnswer resolves a pending tool request", async 
     const toolRequestId = pending[0].id
 
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -3504,7 +3488,7 @@ function makeAppSettingsStub(initial?: Partial<AppSettingsSnapshot>) {
 
 function makeTestRouter(appSettings: ReturnType<typeof makeAppSettingsStub>) {
   return createWsRouter({
-    store: { state: createEmptyState() } as never,
+    store: routerStore({ state: createEmptyState() }) as never,
     agent: {
       getActiveStatuses: () => new Map(),
       getDrainingChatIds: () => new Set(),
@@ -4006,7 +3990,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const fakeSessionShare = { mintToken, revokeToken: async () => ({ ok: true as const, data: { tokenId: "tok-1" } }), listSharesForChat: () => [] } as never
 
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -4034,7 +4018,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const fakeSessionShare = { mintToken: async () => revokeResult, revokeToken, listSharesForChat: () => [] } as never
 
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -4062,7 +4046,7 @@ describe("settings.writeAppSettingsPatch auto-test", () => {
     const fakeSessionShare = { mintToken: async () => ({ ok: false as const, error: { kind: "no_tunnel" as const } }), revokeToken: async () => ({ ok: false as const, error: { kind: "not_found" as const } }), listSharesForChat } as never
 
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -4089,7 +4073,7 @@ describe("settings.listOpenRouterModels", () => {
   test("returns the model list from injected listOpenRouterModels dep", async () => {
     const MODELS: OpenRouterModel[] = [{ id: "a/b", label: "A B", contextLength: 100 }]
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -4113,7 +4097,7 @@ describe("settings.listOpenRouterModels", () => {
 
   test("returns empty array when listOpenRouterModels dep is not provided", async () => {
     const router = createWsRouter({
-      store: { state: createEmptyState() } as never,
+      store: routerStore({ state: createEmptyState() }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: { getSnapshot: () => null, onEvent: () => () => {} } as never,
       keybindings: { getSnapshot: () => DEFAULT_KEYBINDINGS_SNAPSHOT, onChange: () => () => {} } as never,
@@ -4142,7 +4126,7 @@ describe("chat.ops delta broadcast", () => {
     const project = await store.openProject("/tmp/ops-project")
     const chat = await store.createChat(project.id)
     const router = createWsRouter({
-      store: store as never,
+      store: routerStore(store) as never,
       agent: {
         getActiveStatuses: () => new Map(),
         getDrainingChatIds: () => new Set(),
@@ -4178,7 +4162,7 @@ describe("chat.ops delta broadcast", () => {
 
     await store.appendMessage(chat.id, { _id: "t-1", createdAt: 1, kind: "assistant_text", text: "hello" })
     await store.flush()
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
 
     const second = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(second)) throw new Error("missing broadcast envelope")
@@ -4203,7 +4187,7 @@ describe("chat.ops delta broadcast", () => {
         entries: [{ _id: `gap-${i}`, createdAt: i, kind: "assistant_text", text: String(i) }],
       })
     }
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
 
     const last = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(last)) throw new Error("missing envelope after gap")
@@ -4216,7 +4200,7 @@ describe("chat.ops delta broadcast", () => {
 
     await store.appendMessage(chat.id, { _id: "after-gap", createdAt: 999, kind: "assistant_text", text: "back" })
     await store.flush()
-    await router.broadcastChatStateImmediately(chat.id)
+    await router.broadcastChatAndSidebar(chat.id)
     const afterGap = ws.sent[ws.sent.length - 1]
     if (!isRecordEnvelope(afterGap)) throw new Error("missing envelope after re-arm")
     expect(afterGap.type).toBe("event")
@@ -4227,7 +4211,7 @@ describe("ws-router programmatic access", () => {
   function createProgrammaticRouter(storeOverrides: object = {}, routerOptions: object = {}) {
     return createWsRouter({
       ...routerOptions,
-      store: { state: createEmptyState(), ...storeOverrides } as never,
+      store: routerStore({ state: createEmptyState(), ...storeOverrides }) as never,
       agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
       terminals: {
         getSnapshot: () => null,
@@ -4313,7 +4297,7 @@ describe("ws-router programmatic access", () => {
     function routerRecordingSends() {
       const sent: ClientCommand[] = []
       const router = createWsRouter({
-        store: { state: createEmptyState() } as never,
+        store: routerStore({ state: createEmptyState() }) as never,
         agent: {
           getActiveStatuses: () => new Map(),
           getDrainingChatIds: () => new Set(),

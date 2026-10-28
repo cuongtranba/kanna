@@ -11,12 +11,9 @@ import {
   MermaidNode,
   LocalFileLinkNode,
 } from "../nodes"
-import { isAbsoluteLocalFilePath, parseLocalFileLink } from "../../../lib/pathUtils"
-import {
-  MERMAID_FENCE_END_REGEX,
-  MERMAID_FENCE_START_REGEX,
-  scanFenceBody,
-} from "../../../../shared/mermaid-fences"
+import { LOCAL_FILE_HREF_PREFIX_PATTERN, parseLocalFileLink } from "../../../lib/pathUtils"
+import { MERMAID_FENCE_START_REGEX } from "../../../../shared/mermaid-fences"
+import { FENCE_END_REGEX, scanFenceBody } from "../../../../shared/markdown-fences"
 import { KANNA_BUILTIN_TRANSFORMERS } from "./gfmTransformers"
 import { KANNA_UI_FENCE, KANNA_UI_INTENT_FENCE } from "./kannaUiTransformers"
 
@@ -30,7 +27,7 @@ export const MERMAID_FENCE: MultilineElementTransformer = {
 
   regExpEnd: {
     optional: true,
-    regExp: MERMAID_FENCE_END_REGEX,
+    regExp: FENCE_END_REGEX,
   },
 
   handleImportAfterStartMatch({ lines, rootNode, startLineIndex, startMatch }) {
@@ -58,14 +55,12 @@ export const MERMAID_FENCE: MultilineElementTransformer = {
 }
 
 
-const LOCAL_FILE_PREFIXES = "(?:file://|/(?:Users|home|private|tmp|var|opt|root)/)"
-
 const LOCAL_FILE_LINK_IMPORT_REGEXP = new RegExp(
-  `\\[(.+?)\\]\\((${LOCAL_FILE_PREFIXES}[^)\\s]*)\\)`,
+  `\\[(.+?)\\]\\((${LOCAL_FILE_HREF_PREFIX_PATTERN}[^)\\s]*)\\)`,
 )
 
 const LOCAL_FILE_LINK_REGEXP = new RegExp(
-  `\\[([^[\\]]+)\\]\\((${LOCAL_FILE_PREFIXES}[^)\\s]*)\\)$`,
+  `\\[([^[\\]]+)\\]\\((${LOCAL_FILE_HREF_PREFIX_PATTERN}[^)\\s]*)\\)$`,
 )
 
 export const LOCAL_FILE_LINK: TextMatchTransformer = {
@@ -83,10 +78,6 @@ export const LOCAL_FILE_LINK: TextMatchTransformer = {
     const parsed = parseLocalFileLink(rawHref)
     if (!parsed) return
 
-    if (!isAbsoluteLocalFilePath(parsed.path) && !rawHref.startsWith("/")) {
-      return
-    }
-
     const localFileLinkNode = $createLocalFileLinkNode({
       path: parsed.path,
       line: parsed.line,
@@ -97,8 +88,8 @@ export const LOCAL_FILE_LINK: TextMatchTransformer = {
 
   export(node: LexicalNode): string | null {
     if (!(node instanceof LocalFileLinkNode)) return null
-    const path = node.getTextContent()
-    return `[${path}](${path})`
+    const href = node.toHref()
+    return `[${href}](${href})`
   },
 }
 

@@ -1,6 +1,6 @@
 ---
 id: c3-246
-c3-seal: 0751a305dc12cadf28e8432b2b7d491aa79894c542710cab650dfca7f1110d74
+c3-seal: 424782af5873e0b61f738ada8b0dfc384a8fb045bc237ac05bbff4acef080b48
 title: service-bus
 type: component
 category: feature
@@ -48,6 +48,7 @@ Owns the BusEnvelope contract in src/shared/service-bus, the NATS-style subject 
 | JetStream reconcile | OUT | On every connect the stream named in settings is created or updated from the configured limits, subjects, discard and duplicate window, and the configured durable consumers are created or updated; consumers Kanna created earlier and no longer lists are deleted by their kanna-managed metadata tag, consumers it did not create are never touched | A change to retention, storage or replicas, or to an existing consumer's ack or deliver policy, is reported as an error naming the field rather than applied, because the server refuses it; a stream is never deleted | src/server/service-bus/jetstream-reconcile.ts |
 | Embedded nats-server | IN/OUT | In embedded mode Kanna downloads the pinned nats-server release for darwin and linux into the data dir, verifies it against SHA256SUMS, writes a 0600 config with a loopback listener, the JetStream store limits and a generated token, starts it, restarts it with backoff after an unexpected exit and stops it at shutdown; Windows reports that external mode is required | The token lives only in settings.json and the 0600 config file, never in argv; the child inherits PATH only | src/server/service-bus/nats-server-process.adapter.ts |
 | NATS mirror | OUT | When settings.serviceBus is enabled, every envelope is also published to a JetStream stream with Nats-Msg-Id set to its idempotencyKey; the first subject token is swapped for the configured prefix and the JSON body keeps the original subject; publishes queue in a bounded ring of 2000 and drop oldest with a counter when the broker is away | publish only pushes to the ring; connect, reconcile and drain never throw into the caller, so a broker outage never fails an EventStore append | src/server/service-bus/nats-mirror.ts |
+| Subject vocabulary | OUT | BUS_SUBJECT_SUFFIX is the single table of bus subjects; namedBusSubject, transcriptBusSubject, webhookDeliverySubject, mcpMessageSubject and inboxBusSubject build every subject from it, and isInboxSubject and subjectFamily classify one | c3-247 | src/shared/service-bus/subjects.ts |
 
 ## Derived Materials
 
@@ -63,4 +64,4 @@ Owns the BusEnvelope contract in src/shared/service-bus, the NATS-style subject 
 | Boot replay publishes the whole history to subscribers | Setting store.tap before store.initialize resolves | The tap test asserts a second initialize on the same data dir publishes nothing | bun test --conditions production src/server/service-bus/event-store-tap.test.ts |
 | A secret-bearing event reaches a mirror | Mapping session_token_set or pending_fork_session_token_set to a subject | The subject table test pins the null kinds | bun test --conditions production src/server/service-bus/store-event-subjects.test.ts |
 | A subscriber failure breaks an EventStore write | Removing the guarded call in the in-memory bus | The bus test throws from a handler and asserts later handlers and mirrors still run | bun test --conditions production src/server/service-bus/in-memory-service-bus.test.ts |
-| event-store.ts crosses the 700 line module budget | Adding a second tap call site or an import line | The architecture budget test fails module_unlisted | bun test --conditions production src/ops/architecture/budget.test.ts |
+| event-store.ts grows back past the 700 line module threshold | Adding bus logic or a second tap call site to event-store.ts | The architecture budget test fails module_unlisted | bun test --conditions production src/ops/architecture/budget.test.ts |

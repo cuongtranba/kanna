@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import { handleShareApiRequest } from "./http-routes"
 import { CHAT_SNAPSHOT_VERSION, type ChatSnapshot } from "../../shared/session-share/types"
-import type { Result } from "./index"
+import type { ShareResult } from "./index"
 
 const TOKEN = "a".repeat(40)
 
@@ -11,7 +11,7 @@ const snap: ChatSnapshot = {
   entries: [], datasets: {}, attachmentsManifest: [],
 }
 
-function service(impl: (tokenId: string) => Promise<Result<{ snapshot: ChatSnapshot }>>) {
+function service(impl: (tokenId: string) => Promise<ShareResult<{ snapshot: ChatSnapshot }>>) {
   return { getShare: impl } as Parameters<typeof handleShareApiRequest>[1]
 }
 

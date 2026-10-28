@@ -1,9 +1,10 @@
-import path from "node:path"
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
-import type { StoreState } from "./events"
+import { resetStoreState, type StoreState } from "./events"
 import type { StorageBackend } from "./storage/backend"
 import type { TranscriptCache } from "./event-store-messages.adapter"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
+import { loadShareEvents, loadTunnelEvents, type PeripheralEventsDeps } from "./event-store-peripheral-events.adapter"
+import { ALL_LOGS, LOGS_CLEARED_ON_STORAGE_RESET, type StoreLayout } from "./event-logs"
 import {
   buildSnapshotFile,
   calcShouldTruncateLogs,
@@ -14,60 +15,35 @@ import {
   migrateLegacyTranscripts as migrateLegacyTranscriptsImpl,
   truncateLogsAfterSnapshot,
   type LegacyTranscriptStats,
-  type SnapshotLogPaths,
 } from "./event-store-snapshot"
 
 export type { LegacyTranscriptStats }
 
 
+export interface BootState {
+  storageReset: boolean
+  snapshotHasLegacyMessages: boolean
+  legacySidebarProjectOrder: string[]
+}
+
+export function createBootState(): BootState {
+  return { storageReset: false, snapshotHasLegacyMessages: false, legacySidebarProjectOrder: [] }
+}
+
 export interface EventStoreInitDeps {
   readonly storage: StorageBackend
-  readonly dataDir: string
-  readonly snapshotPath: string
-  readonly projectsLogPath: string
-  readonly chatsLogPath: string
-  readonly messagesLogPath: string
-  readonly queuedMessagesLogPath: string
-  readonly turnsLogPath: string
-  readonly schedulesLogPath: string
-  readonly tunnelLogPath: string
-  readonly sharesLogPath: string
-  readonly pushLogPath: string
-  readonly stacksLogPath: string
-  readonly toolRequestsLogPath: string
-  readonly chatTasksLogPath: string
-  readonly transcriptsDir: string
-  readonly sidebarProjectOrderPath: string
+  readonly layout: StoreLayout
   readonly state: StoreState
   readonly legacyMessagesByChatId: Map<string, TranscriptEntry[]>
   readonly tunnelEventsByChatId: Map<string, CloudflareTunnelEvent[]>
   readonly transcriptCache: TranscriptCache
   readonly sidebarProjectOrderRef: { value: string[] }
-  getLegacySidebarProjectOrder: () => string[]
-  setLegacySidebarProjectOrder: (v: string[]) => void
-  getSnapshotHasLegacyMessages: () => boolean
-  setSnapshotHasLegacyMessages: (v: boolean) => void
-  getStorageReset: () => boolean
-  setStorageReset: (v: boolean) => void
+  readonly boot: BootState
+  readonly peripheral: PeripheralEventsDeps
   replayChatProvider: Map<string, AgentProvider | null>
   applyEvent: (event: Parameters<typeof import("./event-store-apply").applyStoreEvent>[0]) => void
 }
 
-
-function getLogPaths(deps: EventStoreInitDeps): SnapshotLogPaths {
-  return {
-    snapshotPath: deps.snapshotPath,
-    projectsLogPath: deps.projectsLogPath,
-    chatsLogPath: deps.chatsLogPath,
-    messagesLogPath: deps.messagesLogPath,
-    queuedMessagesLogPath: deps.queuedMessagesLogPath,
-    turnsLogPath: deps.turnsLogPath,
-    schedulesLogPath: deps.schedulesLogPath,
-    stacksLogPath: deps.stacksLogPath,
-    toolRequestsLogPath: deps.toolRequestsLogPath,
-    chatTasksLogPath: deps.chatTasksLogPath,
-  }
-}
 
 async function ensureFile(deps: EventStoreInitDeps, filePath: string): Promise<void> {
   if (!(await deps.storage.exists(filePath))) {
@@ -76,64 +52,46 @@ async function ensureFile(deps: EventStoreInitDeps, filePath: string): Promise<v
 }
 
 function resetState(deps: EventStoreInitDeps): void {
-  deps.state.projectsById.clear()
-  deps.state.projectIdsByPath.clear()
-  deps.state.chatsById.clear()
-  deps.state.queuedMessagesByChatId.clear()
-  deps.state.sidebarProjectOrder = []
-  deps.state.autoContinueEventsByChatId.clear()
-  deps.state.stacksById.clear()
+  resetStoreState(deps.state)
   deps.tunnelEventsByChatId.clear()
   deps.sidebarProjectOrderRef.value = []
-  deps.setLegacySidebarProjectOrder([])
+  deps.boot.legacySidebarProjectOrder = []
   deps.transcriptCache.invalidateAll()
 }
 
 function clearLegacyTranscriptState(deps: EventStoreInitDeps): void {
   deps.legacyMessagesByChatId.clear()
-  deps.setSnapshotHasLegacyMessages(false)
+  deps.boot.snapshotHasLegacyMessages = false
 }
 
-export async function clearStorage(deps: EventStoreInitDeps): Promise<void> {
-  if (deps.getStorageReset()) return
-  deps.setStorageReset(true)
+async function clearStorage(deps: EventStoreInitDeps): Promise<void> {
+  if (deps.boot.storageReset) return
+  deps.boot.storageReset = true
   resetState(deps)
   clearLegacyTranscriptState(deps)
   await Promise.all([
-    deps.storage.writeText(deps.snapshotPath, ""),
-    deps.storage.writeText(deps.projectsLogPath, ""),
-    deps.storage.writeText(deps.chatsLogPath, ""),
-    deps.storage.writeText(deps.messagesLogPath, ""),
-    deps.storage.writeText(deps.queuedMessagesLogPath, ""),
-    deps.storage.writeText(deps.turnsLogPath, ""),
-    deps.storage.writeText(deps.schedulesLogPath, ""),
-    deps.storage.writeText(deps.tunnelLogPath, ""),
-    deps.storage.writeText(deps.sharesLogPath, ""),
-    deps.storage.writeText(deps.stacksLogPath, ""),
-    deps.storage.writeText(deps.toolRequestsLogPath, ""),
-    deps.storage.writeText(deps.chatTasksLogPath, ""),
+    deps.storage.writeText(deps.layout.snapshotPath, ""),
+    ...LOGS_CLEARED_ON_STORAGE_RESET.map((name) => deps.storage.writeText(deps.layout.logPath(name), "")),
   ])
 }
 
 async function loadSnapshot(deps: EventStoreInitDeps): Promise<void> {
   const result = await loadSnapshotIntoState(
     deps.storage,
-    deps.snapshotPath,
+    deps.layout.snapshotPath,
     deps.state,
     deps.legacyMessagesByChatId,
     () => clearStorage(deps),
   )
-  deps.setSnapshotHasLegacyMessages(result.snapshotHasLegacyMessages)
-  deps.setLegacySidebarProjectOrder(result.legacySidebarProjectOrder)
+  deps.boot.snapshotHasLegacyMessages = result.snapshotHasLegacyMessages
+  deps.boot.legacySidebarProjectOrder = result.legacySidebarProjectOrder
 }
 
 async function loadSidebarProjectOrder(deps: EventStoreInitDeps): Promise<void> {
   deps.sidebarProjectOrderRef.value = await loadSidebarOrder(
     deps.storage,
-    deps.sidebarProjectOrderPath,
-    deps.projectsLogPath,
-    deps.dataDir,
-    deps.getLegacySidebarProjectOrder(),
+    deps.layout,
+    deps.boot.legacySidebarProjectOrder,
   )
 }
 
@@ -141,8 +99,8 @@ async function replayLogs(deps: EventStoreInitDeps): Promise<{ replayedProjectDe
   let replayedProjectDeletion = false
   await loadAndReplayLogs(
     deps.storage,
-    getLogPaths(deps),
-    () => deps.getStorageReset(),
+    deps.layout,
+    () => deps.boot.storageReset,
     (event) => {
       if ("type" in event && event.type === "project_deleted") replayedProjectDeletion = true
       deps.applyEvent(event)
@@ -153,60 +111,32 @@ async function replayLogs(deps: EventStoreInitDeps): Promise<{ replayedProjectDe
   return { replayedProjectDeletion }
 }
 
-export async function shouldSnapshotLogs(deps: EventStoreInitDeps): Promise<boolean> {
-  return calcShouldTruncateLogs(deps.storage, getLogPaths(deps))
+async function shouldSnapshotLogs(deps: EventStoreInitDeps): Promise<boolean> {
+  return calcShouldTruncateLogs(deps.storage, deps.layout)
 }
 
 
-export async function initializeEventStore(
-  deps: EventStoreInitDeps,
-  callbacks: {
-    loadTunnelEvents: () => Promise<void>
-    loadShareEvents: () => Promise<void>
-    hasLegacyTranscriptData: () => Promise<boolean>
-    snapshotAndTruncateLogs: () => Promise<void>
-  },
-): Promise<void> {
-  await deps.storage.mkdir(deps.dataDir)
-  await deps.storage.mkdir(deps.transcriptsDir)
-  await ensureFile(deps, deps.projectsLogPath)
-  await ensureFile(deps, deps.chatsLogPath)
-  await ensureFile(deps, deps.messagesLogPath)
-  await ensureFile(deps, deps.queuedMessagesLogPath)
-  await ensureFile(deps, deps.turnsLogPath)
-  await ensureFile(deps, deps.schedulesLogPath)
-  await ensureFile(deps, deps.tunnelLogPath)
-  await ensureFile(deps, deps.sharesLogPath)
-  await ensureFile(deps, deps.pushLogPath)
-  await ensureFile(deps, deps.stacksLogPath)
-  await ensureFile(deps, deps.toolRequestsLogPath)
-  await ensureFile(deps, deps.chatTasksLogPath)
+export async function initializeEventStore(deps: EventStoreInitDeps): Promise<void> {
+  await deps.storage.mkdir(deps.layout.dataDir)
+  await deps.storage.mkdir(deps.layout.transcriptsDir)
+  for (const name of ALL_LOGS) await ensureFile(deps, deps.layout.logPath(name))
   await loadSnapshot(deps)
   const { replayedProjectDeletion } = await replayLogs(deps)
-  await callbacks.loadTunnelEvents()
-  await callbacks.loadShareEvents()
+  await loadTunnelEvents(deps.peripheral)
+  await loadShareEvents(deps.peripheral)
   await loadSidebarProjectOrder(deps)
-  if (!(await callbacks.hasLegacyTranscriptData()) && (replayedProjectDeletion || await shouldSnapshotLogs(deps))) {
-    await callbacks.snapshotAndTruncateLogs()
+  if (!(await hasLegacyTranscriptData(deps)) && (replayedProjectDeletion || await shouldSnapshotLogs(deps))) {
+    await snapshotAndTruncateLogs(deps)
   }
 }
-
-export function resetEventStoreState(deps: EventStoreInitDeps): void {
-  resetState(deps)
-}
-
-export function clearEventStoreLegacyTranscriptState(deps: EventStoreInitDeps): void {
-  clearLegacyTranscriptState(deps)
-}
-
 
 export async function getLegacyTranscriptStats(
   deps: EventStoreInitDeps,
 ): Promise<LegacyTranscriptStats> {
   return computeLegacyTranscriptStats(
     deps.storage,
-    deps.messagesLogPath,
-    deps.getSnapshotHasLegacyMessages(),
+    deps.layout,
+    deps.boot.snapshotHasLegacyMessages,
     deps.legacyMessagesByChatId,
   )
 }
@@ -218,19 +148,7 @@ export async function hasLegacyTranscriptData(deps: EventStoreInitDeps): Promise
 export async function snapshotAndTruncateLogs(deps: EventStoreInitDeps): Promise<void> {
   const projects = [...deps.state.projectsById.values()]
   const snapshot = buildSnapshotFile(deps.state, projects)
-  const logPaths: SnapshotLogPaths = {
-    snapshotPath: deps.snapshotPath,
-    projectsLogPath: deps.projectsLogPath,
-    chatsLogPath: deps.chatsLogPath,
-    messagesLogPath: deps.messagesLogPath,
-    queuedMessagesLogPath: deps.queuedMessagesLogPath,
-    turnsLogPath: deps.turnsLogPath,
-    schedulesLogPath: deps.schedulesLogPath,
-    stacksLogPath: deps.stacksLogPath,
-    toolRequestsLogPath: deps.toolRequestsLogPath,
-    chatTasksLogPath: deps.chatTasksLogPath,
-  }
-  await truncateLogsAfterSnapshot(deps.storage, logPaths, JSON.stringify(snapshot, null, 2))
+  await truncateLogsAfterSnapshot(deps.storage, deps.layout, JSON.stringify(snapshot, null, 2))
 }
 
 export async function migrateLegacyTranscripts(
@@ -240,11 +158,10 @@ export async function migrateLegacyTranscripts(
   const stats = await getLegacyTranscriptStats(deps)
   return migrateLegacyTranscriptsImpl(
     deps.storage,
-    deps.transcriptsDir,
+    deps.layout,
     stats,
     deps.legacyMessagesByChatId,
-    (chatId) => path.join(deps.transcriptsDir, `${chatId}.jsonl`),
-    () => { clearEventStoreLegacyTranscriptState(deps) },
+    () => { clearLegacyTranscriptState(deps) },
     () => snapshotAndTruncateLogs(deps),
     () => { deps.transcriptCache.invalidateAll() },
     onProgress,

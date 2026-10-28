@@ -12,16 +12,16 @@ import { useAppSettingsStore, selectTextSnippets } from "../stores/appSettingsSt
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import type { TextSnippet, TextSnippetInput, TextSnippetPatch } from "../../shared/types"
 import type { KannaState } from "./useKannaState"
+import type { SectionEditing } from "../lib/sectionEditing"
 import {
   useAppSettingsCrudHandlers,
   type AppSettingsCrudHandlers,
-  type AppSettingsPatchWrapper,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import {
   useTextSnippetsSectionStore,
-  type SnippetEditingState,
 } from "../stores/textSnippetsSectionStore"
+import { SNIPPET_SHORTCUT_PATTERN } from "../../shared/settings/validation"
 import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 
@@ -30,24 +30,18 @@ export type TextSnippetsSectionHandlers = AppSettingsCrudHandlers<
   TextSnippetPatch
 >
 
-const wrapSnippetsPatch: AppSettingsPatchWrapper<TextSnippetInput, TextSnippetPatch> = (
-  textSnippets,
-) => ({ textSnippets })
-
 interface TextSnippetsSectionProps {
   snippets: readonly TextSnippet[]
   handlers: TextSnippetsSectionHandlers
   dom?: DomPort
 }
 
-const SHORTCUT_REGEX = /^\S{1,32}$/
-
 export function TextSnippetsSection({ snippets, handlers, dom = domAdapter }: TextSnippetsSectionProps) {
   const editing = useTextSnippetsSectionStore((state) => state.editing)
   const setEditing = useTextSnippetsSectionStore((state) => state.setEditing)
   const resetEditorForm = useTextSnippetsSectionStore((state) => state.resetEditorForm)
 
-  function navigate(next: SnippetEditingState) {
+  function navigate(next: SectionEditing) {
     if (next.kind === "create") {
       resetEditorForm("", "")
     } else if (next.kind === "edit") {
@@ -156,11 +150,13 @@ function SnippetEditor({
   const editorForm = useTextSnippetsSectionStore((state) => state.editorForm)
   const patchEditorForm = useTextSnippetsSectionStore((state) => state.patchEditorForm)
 
-  const { shortcut, expansion, submitting, error } = editorForm
+  const { shortcut, expansion, error } = editorForm
+  const saveKey = pendingActionKey("textSnippets.save", initial?.id ?? "new")
+  const submitting = usePendingAction(saveKey)
 
   const isEdit = initial !== null
   const trimmedShortcut = shortcut.trim()
-  const shortcutValid = SHORTCUT_REGEX.test(trimmedShortcut)
+  const shortcutValid = SNIPPET_SHORTCUT_PATTERN.test(trimmedShortcut)
   const duplicate = useMemo(
     () => existing.some((s) => s.shortcut === trimmedShortcut && s.id !== initial?.id),
     [existing, trimmedShortcut, initial?.id],
@@ -179,7 +175,6 @@ function SnippetEditor({
         }
       },
       onDone,
-      fallbackMessage: "Failed to save snippet",
     })
 
   const submitLabel = editorSubmitLabel({ submitting, isEdit, addLabel: "Add snippet" })
@@ -222,7 +217,7 @@ function SnippetEditor({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => {
-            runPendingAction(pendingActionKey("textSnippets.save", initial?.id ?? "new"), onSubmit)
+            runPendingAction(saveKey, onSubmit)
           }}
           pending={submitting}
           disabled={!canSave}
@@ -242,6 +237,6 @@ export function TextSnippetsSettingsBranch(props: {
   state: Pick<KannaState, "handleWriteAppSettings">
 }) {
   const snippets = useAppSettingsStore(selectTextSnippets)
-  const handlers = useAppSettingsCrudHandlers(wrapSnippetsPatch, props.state)
+  const handlers = useAppSettingsCrudHandlers("textSnippets", props.state)
   return <TextSnippetsSection snippets={snippets} handlers={handlers} />
 }

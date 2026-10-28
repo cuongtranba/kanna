@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from "react"
-import { renderToStaticMarkup } from "react-dom/server"
+import { log } from "../../shared/log"
 
 export interface PluginBoundaryProps {
   readonly pluginId: string
@@ -28,14 +28,11 @@ export class PluginBoundary extends Component<PluginBoundaryProps, PluginBoundar
     return { failed: true }
   }
 
-  render() {
-    if (this.state.failed) return fallback(this.props.pluginId)
+  componentDidCatch(error: Error) {
+    log.warn("[kanna/plugins] plugin failed to render", { pluginId: this.props.pluginId, message: error.message })
+  }
 
-    try {
-      renderToStaticMarkup(<>{this.props.children}</>)
-    } catch {
-      return fallback(this.props.pluginId)
-    }
-    return this.props.children
+  render() {
+    return this.state.failed ? fallback(this.props.pluginId) : this.props.children
   }
 }

@@ -98,6 +98,29 @@ export function fileNameOfPath(filePath: string): string {
   return segments.length > 0 ? segments[segments.length - 1] : filePath
 }
 
+function stripTrailingSeparators(path: string): string {
+  return path.replace(/[\\/]+$/, "")
+}
+
+export function shortenHomePath(localPath: string, homeDir: string): string {
+  const path = stripTrailingSeparators(localPath)
+  const home = stripTrailingSeparators(homeDir)
+  if (home === "") return path
+  if (path === home) return "~"
+  for (const separator of ["/", "\\"]) {
+    if (path.startsWith(home + separator)) {
+      return `~/${path.slice(home.length + 1).replace(/\\/g, "/")}`
+    }
+  }
+  return path
+}
+
+export function parentDirOfPath(filePath: string): string {
+  const trimmed = stripTrailingSeparators(filePath)
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"))
+  return index >= 0 ? trimmed.slice(0, index) : ""
+}
+
 export function shouldOpenLocalFileLinkInEditor(filePath: string) {
   const fileName = fileNameOfPath(filePath)
   if (EDITOR_OPEN_FILENAMES.has(fileName)) return true
@@ -111,6 +134,8 @@ export function shouldOpenLocalFileLinkInEditor(filePath: string) {
 
 
 const ABSOLUTE_LOCAL_PATH_PREFIXES = ["/Users/", "/home/", "/private/", "/tmp/", "/var/", "/opt/", "/root/"]
+
+export const LOCAL_FILE_HREF_PREFIX_PATTERN = `(?:file://|${ABSOLUTE_LOCAL_PATH_PREFIXES.join("|")})`
 
 export function isAbsoluteLocalFilePath(value: string): boolean {
   if (!value) return false

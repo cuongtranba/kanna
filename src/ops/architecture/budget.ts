@@ -2,22 +2,18 @@
 export const MODULE_LINE_THRESHOLD = 700
 
 export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
-  "src/client/app/KannaSidebar.tsx": 987,
-  "src/client/app/KannaTranscript.tsx": 1053,
-  "src/client/app/SettingsPage.tsx": 2300,
-  "src/client/app/SubagentsSection.tsx": 939,
-  "src/client/app/useAppGlobalState.ts": 1421,
-  "src/client/app/useKannaState.ts": 1447,
-  "src/client/components/chat-ui/ChatInput.tsx": 1369,
-  "src/client/components/chat-ui/RightSidebar.tsx": 2075,
-  "src/client/stores/chatPreferencesStore.ts": 810,
-  "src/server/agent-coordinator.ts": 1484,
-  "src/server/app-settings.ts": 1900,
-  "src/server/board-store.adapter.ts": 1366,
-  "src/server/codex-app-server.ts": 1023,
-  "src/server/codex-transcript-translator.ts": 767,
-  "src/server/kanna-mcp.ts": 1326,
-  "src/server/subagent-orchestrator.ts": 1375,
+  "src/client/app/KannaSidebar.tsx": 918,
+  "src/client/app/SubagentsSection.tsx": 739,
+  "src/client/app/useAppGlobalState.ts": 1174,
+  "src/client/app/useKannaState.ts": 800,
+  "src/client/components/chat-ui/ChatInput.tsx": 879,
+  "src/client/components/chat-ui/RightSidebar.tsx": 1975,
+  "src/server/agent-coordinator.ts": 1222,
+  "src/server/app-settings.ts": 1546,
+  "src/server/board-store.adapter.ts": 1294,
+  "src/server/codex-app-server.ts": 997,
+  "src/server/kanna-mcp.ts": 1009,
+  "src/server/subagent-orchestrator.ts": 1043,
 }
 
 export const PRODUCTION_EXCLUDES: readonly string[] = [
@@ -29,13 +25,16 @@ export const PRODUCTION_EXCLUDES: readonly string[] = [
   "/testing/",
 ]
 
-export interface PatternBudget {
+export interface CountBudget {
   readonly id: string
-  readonly include: readonly string[]
-  readonly pattern: string
   readonly max: number
   readonly issue: number
   readonly rationale: string
+}
+
+export interface PatternBudget extends CountBudget {
+  readonly include: readonly string[]
+  readonly pattern: string
 }
 
 export const PATTERN_BUDGETS: readonly PatternBudget[] = [
@@ -43,7 +42,7 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "deps-bundles",
     include: ["src/server/"],
     pattern: "interface [A-Za-z]*Deps\\b|type [A-Za-z]*Deps\\b *=|deps: \\{$",
-    max: 83,
+    max: 82,
     issue: 893,
     rationale:
       "Each deps bundle is a hand-maintained slice of the coordinator's fields. Every field is optional, so a builder that omits one compiles and the consumer's fallback is indistinguishable from the feature being off — this is how getArmedLoop shipped declared-but-never-passed. Respelling a bundle as a type alias or an inline parameter object removes nothing, so all three spellings count. Re-baselined 85 → 83 when the file-based loop tracking (TaskQueueToolDeps and its adapters) was replaced by the event-sourced chat-task store, whose one bundle is ChatTaskToolDeps.",
@@ -51,11 +50,11 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
   {
     id: "coordinator-passthroughs",
     include: ["src/server/agent-coordinator.ts"],
-    pattern: "Fn\\(this\\.build",
-    max: 0,
+    pattern: "^\\s+return [A-Za-z]+Fn\\(",
+    max: 36,
     issue: 893,
     rationale:
-      "A method whose whole body is `return xFn(this.buildYDeps(), ...)` adds interface without adding implementation, and costs three hops through two files to reach one line of logic.",
+      "A method whose whole body is `return xFn(this.yDeps(), ...)` adds interface without adding implementation, and costs three hops through two files to reach one line of logic. The first pattern, `Fn\\(this\\.build`, went blind when #928 renamed buildXDeps() to xDeps() and still read 0; this one counts the forwarding method itself in every spelling. Each remaining one is a facade method that only supplies private wiring, which #1379 should collapse; the two that took no deps at all (hasPendingBackgroundTask, subagentPendingKey) and fourteen internal-only forwarders were deleted outright (49 → 36).",
   },
   {
     id: "event-store-passthroughs",
@@ -106,10 +105,28 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "settings-bound-throws",
     include: ["src/server/app-settings.ts"],
     pattern: "throw new Error\\(",
-    max: 13,
+    max: 4,
     issue: 898,
     rationale:
-      "Each restates a bound that a normalize* function also enforces, with opposite semantics — the WS path throws where the file path clamps, so the same out-of-range value is rejected or silently corrected depending on how it arrived.",
+      "The numeric bounds now live once in src/shared/settings/bounds.ts, which owns each bound's message and gives the write path its single throw (assertWithinBound) while the file path keeps its clamp or fall-back policy. The throws left here are type and identity checks (cloudflare mode, unknown subagent id, globalPromptAppend, claudeAuth) that no bound table covers.",
+  },
+  {
+    id: "store-event-discriminator-probes",
+    include: ["src/server/"],
+    pattern: '"kind" in event',
+    max: 1,
+    issue: 1379,
+    rationale:
+      "Which StoreEvent variant is discriminated by kind instead of type is a fact about the event union, so events.ts owns it through isChatAutomationEvent and storeEventKind. A site that probes the field itself learns the union's layout and has to be found and edited whenever a second variant joins the exception.",
+  },
+  {
+    id: "settings-snapshot-application",
+    include: ["src/client/"],
+    pattern: "applyServerDefaults\\(",
+    max: 1,
+    issue: 1379,
+    rationale:
+      "Which stores an app-settings snapshot feeds, and in what order, is one decision. Five handlers in useAppGlobalState each restated the set-from-server, apply-chat-defaults, clear-error triple, so adding a store meant finding every copy; applyAppSettingsSnapshot is the single caller of applyServerDefaults.",
   },
   {
     id: "shared-types-star-exports",
@@ -119,6 +136,94 @@ export const PATTERN_BUDGETS: readonly PatternBudget[] = [
     issue: 889,
     rationale:
       "types.ts re-exports eight modules wholesale, giving 227 importers a dependency on 306 declarations to use two or three. Extraction moved the code out but preserved the fan-in, so nothing in the import graph says which part of the domain a module touches.",
+  },
+]
+
+export const TEST_SOURCE_SUFFIXES: readonly string[] = [".test.ts", ".test.tsx"]
+
+const TEST_SCOPE: readonly string[] = ["src/beacon/", "src/client/", "src/server/", "src/shared/"]
+
+export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
+  {
+    id: "test-mock-functions",
+    include: TEST_SCOPE,
+    pattern: "(^|[^.\\w])mock\\(|\\bjest\\.fn\\b|(?<!typeof )\\bvi\\.(fn|spyOn)\\b(?!\\s*[>,)\\]])",
+    max: 519,
+    issue: 1375,
+    rationale:
+      "A mock function or spy asserts that a call happened, not that the user-visible result did, so it keeps passing when the real collaborator breaks and fails when an equivalent refactor reorders calls. Hand the code a real, in-memory, or deterministic fake through a parameter and assert the public outcome; a callback recorder is a plain array the fake pushes into. Re-baselined 516 → 519 when the suite moved to Vitest: the pattern now counts generic vi.fn<T>( and vi.spyOn( mocks that the bun spelling never matched.",
+  },
+  {
+    id: "test-global-patches",
+    include: TEST_SCOPE,
+    pattern:
+      "^\\s*(globalThis|window|console|Date|Math)\\.[A-Za-z_$]+\\s*=[^=]|process\\.env(\\.[A-Za-z_$]+|\\[[^\\]]+\\])\\s*=[^=]|delete process\\.env",
+    max: 94,
+    issue: 1375,
+    rationale:
+      "Reassigning Date.now, fetch, window.confirm, console, or process.env changes state shared by every test in the one bun process. A failing assertion before the restore line leaks the patch into whichever test runs next, in filesystem order. Inject the clock, the dialog, the logger, the fetch, or the environment as a parameter with the production default instead.",
+  },
+  {
+    id: "test-sleeps",
+    include: TEST_SCOPE,
+    pattern: "\\bBun\\.sleep\\(|new Promise.*\\bsetTimeout\\b",
+    max: 104,
+    issue: 1375,
+    rationale:
+      "A fixed delay is either too short on a slow CI runner, which makes the test flaky, or too long everywhere else, which makes the suite slow. Wait for the public state the test actually expects, by awaiting the promise that produces it or polling for it.",
+  },
+  {
+    id: "test-focused",
+    include: TEST_SCOPE,
+    pattern: "\\b(test|it|describe)\\.only\\(",
+    max: 0,
+    issue: 1375,
+    rationale:
+      "A committed .only silently turns every other test in the file off, and CI stays green while checking almost nothing.",
+  },
+  {
+    id: "test-skips",
+    include: TEST_SCOPE,
+    pattern: "\\b(test|it|describe)\\.(skip|skipIf|todo)\\(",
+    max: 3,
+    issue: 1375,
+    rationale:
+      "A skipped test is a promise the suite no longer checks. Delete a test that is wrong, fix one that is broken, and mark a documented known bug with test.failing so it reports when the bug is fixed.",
+  },
+  {
+    id: "test-double-casts",
+    include: TEST_SCOPE,
+    pattern: "\\bas unknown as\\b",
+    max: 304,
+    issue: 1375,
+    rationale:
+      "A double cast builds a value the type system says cannot exist, so the test exercises a state production never reaches and keeps compiling when the real type changes underneath it. Build the fixture through the public constructor or a complete literal.",
+  },
+  {
+    id: "test-nested-describes",
+    include: TEST_SCOPE,
+    pattern: "^\\s+describe(\\.[a-zA-Z]+)?\\(",
+    max: 48,
+    issue: 1375,
+    rationale:
+      "Tests stay flat, with at most one describe per file. A nested describe spreads a test's setup across scopes the reader has to assemble by hand, and usually marks a file that tests several public seams at once and should be split.",
+  },
+]
+
+export const COUNT_BUDGETS: readonly CountBudget[] = [
+  {
+    id: "leaked-protocol-literals",
+    max: 12,
+    issue: 1379,
+    rationale:
+      "Distinct env-var names, HTTP routes, bus subjects and storage keys hard-coded in two or more production modules. Each is one protocol decision known by several modules, so a rename has to find every copy and a missed one fails only at runtime. Export it from the module that owns the protocol and import it everywhere else.",
+  },
+  {
+    id: "code-clones",
+    max: 82,
+    issue: 1379,
+    rationale:
+      "Maximal runs of duplicated 8-line windows (whitespace-normalized, structural lines skipped) across production modules. A copied block is a rule with several owners: a fix lands in one copy and the others drift. Give the rule one home and call it.",
   },
 ]
 
@@ -132,17 +237,17 @@ export interface LintLimitPin {
 export const LINT_LIMIT_PINS: readonly LintLimitPin[] = [
   {
     rule: "eslint-js/complexity",
-    max: 127,
+    max: 96,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is the SettingsPage component in SettingsPage.tsx (127). runClaudeSession in claude-session-runner.ts dropped from 131 to 122 when the PTY driver's compact_boundary finalize branch was deleted, and handleCommand dropped from 138 → 116 after the settings pre-dispatch refactor (#951).",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (96), down from 122 when turn-failure settlement moved into claude-turn-failure.ts (#1379). The previous peak, the SettingsPage component (127), fell when the page became a table of per-page components; normalizeClaudeStreamMessage (82) is next.",
   },
   {
     rule: "eslint-js/max-params",
-    max: 11,
+    max: 9,
     issue: 892,
     rationale:
-      "The peak is deriveChatSnapshot's 11 positional parameters, lowered from 12 when getLoopTracking was removed (the loop panel now reads chat tasks off state, parameter #1). Most are defaulted, so a caller wanting the last must spell out ones it does not care about, and two adjacent Map parameters can be swapped with no type error.",
+      "The peak is useAppGlobalState's 9 injected ports (migrateLegacyTranscripts is also 9). deriveChatSnapshot, the old peak at 11 positional parameters, now takes (state, chatId, sources, runtime) (#1379). Every parameter past a handful is one a caller must spell out even when it does not care, and adjacent same-typed ones can be swapped with no type error.",
   },
   {
     rule: "eslint-js/max-depth",
@@ -242,7 +347,7 @@ export function checkModuleBudget(
 
 export function checkPatternBudget(
   measured: readonly PatternMeasurement[],
-  budgets: readonly PatternBudget[] = PATTERN_BUDGETS,
+  budgets: readonly CountBudget[] = PATTERN_BUDGETS,
 ): BudgetBreach[] {
   const breaches: BudgetBreach[] = []
   const byId = new Map(budgets.map((b) => [b.id, b]))
@@ -284,9 +389,9 @@ export function formatBreach(breach: BudgetBreach): string {
         + `  ${rationaleOf(breach.id)}`
     case "pattern_shrank":
       return `"${breach.id}" dropped to ${breach.actual} (pinned at ${breach.max}) — lower the pin in this PR.\n`
-        + `  Set max: ${breach.actual} in PATTERN_BUDGETS so the population cannot creep back up.`
+        + `  Set max: ${breach.actual} in ${manifestOf(breach.id)} so the population cannot creep back up.`
     case "pattern_unknown":
-      return `Measured "${breach.id}" has no PATTERN_BUDGETS entry.`
+      return `Measured "${breach.id}" has no PATTERN_BUDGETS, TEST_PATTERN_BUDGETS or COUNT_BUDGETS entry.`
     case "limit_raised":
       return `lint.config.ts raised "${breach.rule}" to ${breach.actual} (pinned at ${breach.max}) — this PR regresses #${breach.issue}.\n`
         + `  ${lintRationaleOf(breach.rule)}`
@@ -301,13 +406,18 @@ export function formatBreach(breach: BudgetBreach): string {
         + `  Restore the rule, or drop the pin deliberately. Do NOT leave a pin with no enforcement behind it.`
     case "pattern_unmeasured":
       return `"${breach.id}" scanned no files — its include paths are stale, so this gate is currently inert.\n`
-        + `  Repoint include in PATTERN_BUDGETS. Do NOT pin it at 0: a renamed target reads as a population\n`
+        + `  Repoint include in ${manifestOf(breach.id)}. Do NOT pin it at 0: a renamed target reads as a population\n`
         + `  that vanished, and pinning that in would retire the check instead of the defect.`
   }
 }
 
 function rationaleOf(id: string): string {
-  return PATTERN_BUDGETS.find((b) => b.id === id)?.rationale ?? ""
+  return [...PATTERN_BUDGETS, ...TEST_PATTERN_BUDGETS, ...COUNT_BUDGETS].find((b) => b.id === id)?.rationale ?? ""
+}
+
+function manifestOf(id: string): string {
+  if (COUNT_BUDGETS.some((b) => b.id === id)) return "COUNT_BUDGETS"
+  return TEST_PATTERN_BUDGETS.some((b) => b.id === id) ? "TEST_PATTERN_BUDGETS" : "PATTERN_BUDGETS"
 }
 
 function lintRationaleOf(rule: string): string {

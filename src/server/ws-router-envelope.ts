@@ -2,15 +2,15 @@ import os from "node:os"
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ChatSnapshot } from "../shared/types"
-import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
+import type { ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../shared/protocol"
 import type { ServerWebSocket } from "bun"
-import { catalogSourcesOf, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData } from "./read-models"
+import { catalogSourcesOf, deriveChatSnapshot, deriveLocalProjectsSnapshot, deriveSidebarData, type ChatRuntimeView } from "./read-models"
 import { deriveCronJobs } from "./cron/read-model"
 import type { CronJobsGlobalRow } from "../shared/cron/types"
 import { localCommandsForCwd } from "./claude-slash-commands"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { resolveChatCwd } from "./claude-session-config"
 import type { EventStore } from "./event-store"
-import type { AgentCoordinator } from "./agent"
+import type { AgentCoordinator } from "./agent-coordinator"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { WorkflowRegistry } from "./workflow-registry"
@@ -25,15 +25,12 @@ import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
 import type { WebhookRegistry } from "./webhooks/webhook-registry"
 import type { ServiceBusController } from "./service-bus/service-bus-boot"
 import { DISABLED_SERVICE_BUS_STATUS } from "../shared/service-bus/jetstream-config"
-import type { UpdateManager } from "./update-manager"
+import { idleUpdateSnapshot, type UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
 import type { PushManager } from "./push/push-manager"
 import type { DiffStore } from "./diff-store"
 import type { DiscoveredProject } from "./discovery.adapter"
-import {
-  getSidebarProjectOrder,
-  isSendToStartingProfilingEnabled,
-} from "./ws-router-utils"
+import { isSendToStartingProfilingEnabled } from "./ws-router-utils"
 import type { ClientState, SnapshotComputationCache } from "./ws-router-utils"
 import type { ResolvedAppSettings } from "./ws-router-defaults"
 
@@ -41,7 +38,6 @@ const DEFAULT_CHAT_RECENT_LIMIT = 200
 
 const MAX_BOARD_PAGE_SIZE = 500
 
-export
 function resolveTopicRepoPath(
   store: EventStore,
   projectId: string,
@@ -50,9 +46,7 @@ function resolveTopicRepoPath(
   const project = store.getProject(projectId)
   if (!project) return null
   if (chatId === undefined) return project.localPath
-  const chat = store.getChat(chatId)
-  if (!chat) return null
-  return resolveSpawnPaths(chat, project.localPath).cwd
+  return resolveChatCwd(store, chatId) ?? null
 }
 
 export function resolveBoardPageSize(requested: number | undefined): number | undefined {
@@ -67,11 +61,7 @@ export interface EnvelopeDeps {
   agent: AgentCoordinator
   resolvedAppSettings: ResolvedAppSettings
   keybindings: KeybindingsManager
-  resolvedDiffStore: Pick<DiffStore,
-    "getSnapshot" | "refreshSnapshot" | "initializeGit" | "getGitHubPublishInfo" |
-    "checkGitHubRepoAvailability" | "publishToGitHub" | "listBranches" | "previewMergeBranch" |
-    "mergeBranch" | "syncBranch" | "checkoutBranch" | "createBranch" | "generateCommitMessage" |
-    "commitFiles" | "discardFile" | "ignoreFile" | "readPatch">
+  resolvedDiffStore: Pick<DiffStore, "getSnapshot">
   workflowRegistry?: WorkflowRegistry
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   boardRegistry?: BoardRegistry
@@ -90,6 +80,17 @@ export interface EnvelopeDeps {
 }
 
 
+function chatRuntimeViewOf(agent: AgentCoordinator): ChatRuntimeView {
+  return {
+    activeStatuses: agent.getActiveStatuses(),
+    drainingChatIds: agent.getDrainingChatIds(),
+    waitStartedAtByChatId: agent.getWaitStartedAtByChatId(),
+    claudeSessionStates: agent.getClaudeSessionStates?.() ?? new Map(),
+    backgroundTasksByChatId: agent.getBackgroundTasksByChatId?.() ?? new Map(),
+    nowMs: Date.now(),
+  }
+}
+
 function buildSidebarSnapshotCacheEntry(
   deps: EnvelopeDeps,
   cache?: SnapshotComputationCache
@@ -103,13 +104,10 @@ function buildSidebarSnapshotCacheEntry(
   const discoveredProvidersByPath = new Map(
     deps.getDiscoveredProjects().map((p) => [p.localPath, p.discoveredByProviders])
   )
-  const data = deriveSidebarData(store.state, agent.getActiveStatuses(), {
-    sidebarProjectOrder: getSidebarProjectOrder(store),
-    drainingChatIds: agent.getDrainingChatIds(),
-    claudeSessionStates: agent.getClaudeSessionStates?.(),
+  const data = deriveSidebarData(store.state, chatRuntimeViewOf(agent), {
+    sidebarProjectOrder: store.getSidebarProjectOrder(),
     discoveredProvidersByPath,
     workflowRegistry,
-    backgroundTasksByChatId: agent.getBackgroundTasksByChatId?.() ?? new Map(),
   })
   const observed = data.projectGroups.flatMap((group) =>
     group.chats.map((chat) => ({
@@ -191,147 +189,53 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
     return buildSidebarSnapshotCacheEntry(deps, cache)
   }
 
-  function deriveChatMeta(chatId: string): ChatSnapshot | null {
+  function deriveChat(chatId: string, recentLimit: number): ChatSnapshot | null {
     return deriveChatSnapshot(
       store.state,
-      agent.getActiveStatuses(),
-      agent.getDrainingChatIds(),
       chatId,
-      (id) => store.getRecentChatHistory(id, 0),
-      (id) => store.getTunnelEvents(id),
-      agent.getWaitStartedAtByChatId(),
-      Date.now(),
-      agent.getClaudeSessionStates?.() ?? new Map(),
-      catalogSourcesOf(resolvedAppSettings.getSnapshot()),
-      agent.getBackgroundTasksByChatId?.() ?? new Map(),
+      {
+        getMessages: (id) => store.getRecentChatHistory(id, recentLimit),
+        getTunnelEvents: (id) => store.getTunnelEvents(id),
+        catalogSources: catalogSourcesOf(resolvedAppSettings.getSnapshot()),
+      },
+      chatRuntimeViewOf(agent),
     )
   }
 
-  function createEnvelope(
-    id: string,
+  function deriveChatMeta(chatId: string): ChatSnapshot | null {
+    return deriveChat(chatId, 0)
+  }
+
+  function snapshotFor(
     topic: SubscriptionTopic,
     cache?: SnapshotComputationCache,
     connection?: ServerWebSocket<ClientState>,
-  ): ServerEnvelope {
-    if (topic.type === "sidebar") {
-      const sidebar = getSidebarSnapshotCacheEntry(cache)
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "sidebar",
-          data: sidebar.data,
-        },
-      }
-    }
-
-    if (topic.type === "local-projects") {
-      const discoveredProjects = getDiscoveredProjects()
-      const data = deriveLocalProjectsSnapshot(store.state, discoveredProjects, machineDisplayName, os.homedir())
-
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+  ): ServerSnapshot {
+    switch (topic.type) {
+      case "sidebar":
+        return { type: "sidebar", data: getSidebarSnapshotCacheEntry(cache).data }
+      case "local-projects":
+        return {
           type: "local-projects",
-          data,
-        },
+          data: deriveLocalProjectsSnapshot(store.state, getDiscoveredProjects(), machineDisplayName, os.homedir()),
+        }
+      case "keybindings":
+        return { type: "keybindings", data: keybindings.getSnapshot() }
+      case "app-settings":
+        return { type: "app-settings", data: resolvedAppSettings.getSnapshot() }
+      case "push-config":
+        return { type: "push-config", data: pushManager.getConfigSnapshot(connection?.data.pushDeviceId ?? null) }
+      case "update":
+        return { type: "update", data: updateManager?.getSnapshot() ?? idleUpdateSnapshot("unknown") }
+      case "terminal":
+        return { type: "terminal", data: terminals.getSnapshot(topic.terminalId) }
+      case "project-git": {
+        const repoPath = resolveTopicRepoPath(store, topic.projectId, topic.chatId)
+        return { type: "project-git", data: repoPath === null ? null : resolvedDiffStore.getSnapshot(repoPath) }
       }
-    }
-
-    if (topic.type === "keybindings") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "keybindings",
-          data: keybindings.getSnapshot(),
-        },
-      }
-    }
-
-    if (topic.type === "app-settings") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "app-settings",
-          data: resolvedAppSettings.getSnapshot(),
-        },
-      }
-    }
-
-    if (topic.type === "push-config") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "push-config",
-          data: pushManager.getConfigSnapshot(connection?.data.pushDeviceId ?? null),
-        },
-      }
-    }
-
-    if (topic.type === "update") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "update",
-          data: updateManager?.getSnapshot() ?? {
-            currentVersion: "unknown",
-            latestVersion: null,
-            status: "idle",
-            updateAvailable: false,
-            lastCheckedAt: null,
-            error: null,
-            installAction: "restart",
-            reloadRequestedAt: null,
-          },
-        },
-      }
-    }
-
-    if (topic.type === "terminal") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "terminal",
-          data: terminals.getSnapshot(topic.terminalId),
-        },
-      }
-    }
-
-    if (topic.type === "project-git") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "project-git",
-          data: (() => {
-            const repoPath = resolveTopicRepoPath(store, topic.projectId, topic.chatId)
-            return repoPath === null ? null : resolvedDiffStore.getSnapshot(repoPath)
-          })(),
-        },
-      }
-    }
-
-    if (topic.type === "project-commands") {
-      const project = store.getProject(topic.projectId)
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+      case "project-commands": {
+        const project = store.getProject(topic.projectId)
+        return {
           type: "project-commands",
           data: {
             projectId: topic.projectId,
@@ -339,29 +243,13 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
               ? localCommandsForCwd({ localCatalog: agent.localCatalog }, project.localPath)
               : [],
           },
-        },
+        }
       }
-    }
-
-    if (topic.type === "workflows") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "workflows",
-          data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] },
-        },
-      }
-    }
-
-    if (topic.type === "background-task-output") {
-      const output = backgroundTaskOutputRegistry?.getOutput(topic.chatId, topic.taskId)
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+      case "workflows":
+        return { type: "workflows", data: { chatId: topic.chatId, runs: workflowRegistry?.snapshot(topic.chatId) ?? [] } }
+      case "background-task-output": {
+        const output = backgroundTaskOutputRegistry?.getOutput(topic.chatId, topic.taskId)
+        return {
           type: "background-task-output",
           data: {
             chatId: topic.chatId,
@@ -369,108 +257,39 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
             content: output?.content ?? "",
             truncated: output?.truncated ?? false,
           },
-        },
+        }
       }
-    }
-
-    if (topic.type === "boards") {
-      const owner = { kind: topic.ownerKind, id: topic.ownerId }
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+      case "boards":
+        return {
           type: "boards",
           data: {
             ownerKind: topic.ownerKind,
             ownerId: topic.ownerId,
-            boards: boardRegistry?.listBoards(owner) ?? [],
+            boards: boardRegistry?.listBoards({ kind: topic.ownerKind, id: topic.ownerId }) ?? [],
           },
-        },
-      }
-    }
-
-    if (topic.type === "board") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+        }
+      case "board":
+        return {
           type: "board",
           data: {
             boardId: topic.boardId,
             view: boardRegistry?.boardView(topic.boardId, resolveBoardPageSize(topic.pageSize)) ?? null,
           },
-        },
-      }
-    }
-
-    if (topic.type === "followed-sessions") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "followed-sessions",
-          data: { chatIds: followedSessionRegistry?.followedChatIds() ?? [] },
-        },
-      }
-    }
-
-    if (topic.type === "cron-jobs") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
-          type: "cron-jobs",
-          data: { rows: buildCronJobsGlobalRows(store) },
-        },
-      }
-    }
-
-    if (topic.type === "webhooks") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: { type: "webhooks", data: webhooks?.snapshot() ?? { hooks: [] } },
-      }
-    }
-
-    if (topic.type === "inbox") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: { type: "inbox", data: inbox?.snapshot() ?? { threads: [], items: [], unreadCount: 0, total: 0 } },
-      }
-    }
-
-    if (topic.type === "mcp-sources") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: { type: "mcp-sources", data: mcpSources?.snapshot() ?? { sources: [] } },
-      }
-    }
-
-    if (topic.type === "service-bus") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: { type: "service-bus", data: serviceBus?.status() ?? DISABLED_SERVICE_BUS_STATUS },
-      }
-    }
-
-    if (topic.type === "beacons") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+        }
+      case "followed-sessions":
+        return { type: "followed-sessions", data: { chatIds: followedSessionRegistry?.followedChatIds() ?? [] } }
+      case "cron-jobs":
+        return { type: "cron-jobs", data: { rows: buildCronJobsGlobalRows(store) } }
+      case "webhooks":
+        return { type: "webhooks", data: webhooks?.snapshot() ?? { hooks: [] } }
+      case "inbox":
+        return { type: "inbox", data: inbox?.snapshot() ?? { threads: [], items: [], unreadCount: 0, total: 0 } }
+      case "mcp-sources":
+        return { type: "mcp-sources", data: mcpSources?.snapshot() ?? { sources: [] } }
+      case "service-bus":
+        return { type: "service-bus", data: serviceBus?.status() ?? DISABLED_SERVICE_BUS_STATUS }
+      case "beacons":
+        return {
           type: "beacons",
           data: {
             beacons: buildBeaconStatusRows(
@@ -478,16 +297,9 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
               beaconRegistry?.live() ?? [],
             ),
           },
-        },
-      }
-    }
-
-    if (topic.type === "package-updates") {
-      return {
-        v: PROTOCOL_VERSION,
-        type: "snapshot",
-        id,
-        snapshot: {
+        }
+      case "package-updates":
+        return {
           type: "package-updates",
           data: packageUpdateManager?.getSnapshot() ?? {
             status: "idle",
@@ -497,35 +309,22 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
             applying: [],
             autoApplyHistory: [],
           },
-        },
+        }
+      case "chat": {
+        const seq = store.chatOps.currentSeq(topic.chatId)
+        const data = deriveChat(topic.chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT)
+        return { type: "chat", data: data && seq !== undefined ? { ...data, seq } : data }
       }
     }
+  }
 
-    const seq = typeof store.chatOps?.currentSeq === "function"
-      ? store.chatOps.currentSeq(topic.chatId)
-      : undefined
-    const data = deriveChatSnapshot(
-      store.state,
-      agent.getActiveStatuses(),
-      agent.getDrainingChatIds(),
-      topic.chatId,
-      (chatId) => store.getRecentChatHistory(chatId, topic.recentLimit ?? DEFAULT_CHAT_RECENT_LIMIT),
-      (chatId) => store.getTunnelEvents(chatId),
-      agent.getWaitStartedAtByChatId(),
-      Date.now(),
-      agent.getClaudeSessionStates?.() ?? new Map(),
-      catalogSourcesOf(resolvedAppSettings.getSnapshot()),
-      agent.getBackgroundTasksByChatId?.() ?? new Map(),
-    )
-    return {
-      v: PROTOCOL_VERSION,
-      type: "snapshot",
-      id,
-      snapshot: {
-        type: "chat",
-        data: data && seq !== undefined ? { ...data, seq } : data,
-      },
-    }
+  function createEnvelope(
+    id: string,
+    topic: SubscriptionTopic,
+    cache?: SnapshotComputationCache,
+    connection?: ServerWebSocket<ClientState>,
+  ): ServerEnvelope {
+    return { v: PROTOCOL_VERSION, type: "snapshot", id, snapshot: snapshotFor(topic, cache, connection) }
   }
 
   return { getSidebarSnapshotCacheEntry, createEnvelope, deriveChatMeta }

@@ -1,14 +1,11 @@
-import type { AttachmentKind, UploadedAttachment } from "../../shared/types"
+import { ATTACHMENT_KINDS, type UploadedAttachment } from "../../shared/types"
 import type { DetailedError, PreviousUpload, UploadOptions } from "tus-js-client"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
+import { oneOf } from "../../shared/vocab"
 import { runDetached } from "./runDetached"
 import { buildRoutePath, HTTP_ROUTES } from "../../shared/http-routes"
 
-const ATTACHMENT_KINDS = new Set<string>(["image", "file", "mention"] satisfies AttachmentKind[])
-
-function isAttachmentKind(value: JsonValue): value is AttachmentKind {
-  return typeof value === "string" && ATTACHMENT_KINDS.has(value)
-}
+const isAttachmentKind = oneOf(ATTACHMENT_KINDS)
 
 function stringOr(value: JsonValue, fallback: string): string {
   return typeof value === "string" ? value : fallback

@@ -1,8 +1,6 @@
 import { useCallback, type ReactNode } from "react"
 import { Pause, Pencil, Play, X } from "lucide-react"
 import { hasActiveRun, type CronJobPatch, type CronJobSnapshot } from "../../shared/cron/types"
-import { errorMessage } from "../../shared/errors"
-import type { ClientCommand } from "../../shared/protocol"
 import { humanizeSchedule } from "../../shared/cron/humanize"
 import { CronPausedPill, CronRunStatusPill } from "../components/messages/CronRunMessage"
 import { Spinner } from "../components/ui/spinner"
@@ -10,8 +8,8 @@ import { HoverHint } from "../components/ui/truncated-text"
 import { formatCompactDuration, formatLiveDuration } from "../lib/formatDuration"
 import { useNow } from "../hooks/useNow"
 import { cn } from "../lib/utils"
-import { useKannaStateStore } from "../stores/kannaStateStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { CronJobEditDialog } from "./CronJobEditDialog"
 import { CronJobRowStore } from "./CronJobRow.store"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -23,26 +21,12 @@ interface Props {
   divider: boolean
 }
 
+type CronJobActionType = "cron.pause" | "cron.resume" | "cron.remove"
+
 const ICON_BUTTON_CLASS = "rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
 
 const EDIT_BLOCKED_REASON = "cannot edit while a run is in flight"
 
-type CronRowCommandType = "cron.pause" | "cron.resume" | "cron.remove"
-
-function cronRowActionKey(type: CronRowCommandType, chatId: string, jobId: string): string {
-  return pendingActionKey(type, chatId, jobId)
-}
-
-async function sendCronCommand(socket: ReturnType<typeof useOptionalKannaSocket>, command: ClientCommand): Promise<void> {
-  if (!socket) return
-  try {
-    await socket.command(command)
-    useKannaStateStore.getState().setCommandError(null)
-  } catch (error) {
-    useKannaStateStore.getState().setCommandError(errorMessage(error))
-    throw error
-  }
-}
 
 function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const now = useNow(1_000)
@@ -51,16 +35,16 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const openEditor = CronJobRowStore.useScopedStore((state) => state.openEditor)
   const setEditing = CronJobRowStore.useScopedStore((state) => state.setEditing)
 
-  const pauseKey = cronRowActionKey("cron.pause", chatId, job.jobId)
-  const resumeKey = cronRowActionKey("cron.resume", chatId, job.jobId)
-  const removeKey = cronRowActionKey("cron.remove", chatId, job.jobId)
+  const pauseKey = pendingActionKey("cron.pause", chatId, job.jobId)
+  const resumeKey = pendingActionKey("cron.resume", chatId, job.jobId)
+  const removeKey = pendingActionKey("cron.remove", chatId, job.jobId)
   const pausePending = usePendingAction(pauseKey)
   const resumePending = usePendingAction(resumeKey)
   const removePending = usePendingAction(removeKey)
 
   const send = useCallback(
-    (command: { type: CronRowCommandType; chatId: string; jobId: string }) => {
-      runPendingAction(cronRowActionKey(command.type, command.chatId, command.jobId), () => sendCronCommand(socket, command))
+    (command: { type: CronJobActionType; chatId: string; jobId: string }) => {
+      runPendingAction(pendingActionKey(command.type, command.chatId, command.jobId), () => sendCommandWithFeedback(socket, command))
     },
     [socket],
   )
@@ -83,7 +67,9 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   }, [job, openEditor])
 
   const handleSave = useCallback(
-    (patch: CronJobPatch) => sendCronCommand(socket, { type: "cron.update", chatId, jobId: job.jobId, patch }),
+    async (patch: CronJobPatch) => {
+      await sendCommandWithFeedback(socket, { type: "cron.update", chatId, jobId: job.jobId, patch })
+    },
     [chatId, job.jobId, socket],
   )
 

@@ -1,16 +1,16 @@
 import { describe, expect, test } from "vite-plus/test"
 import { deriveChatSchedules, deriveLoopState } from "./read-model"
-import type { AutoContinueEvent } from "./events"
+import type { ChatAutomationEvent } from "./events"
 
-function armed(chatId: string, subagentId: string, prompt: string, at = 1_000): AutoContinueEvent {
+function armed(chatId: string, subagentId: string, prompt: string, at = 1_000): ChatAutomationEvent {
   return { v: 3, kind: "loop_armed", timestamp: at, chatId, scheduleId: `arm-${at}`, subagentId, prompt }
 }
 
-function outcome(chatId: string, ok: boolean, at = 1_500, errorCode?: string): AutoContinueEvent {
+function outcome(chatId: string, ok: boolean, at = 1_500, errorCode?: string): ChatAutomationEvent {
   return { v: 3, kind: "loop_run_outcome", timestamp: at, chatId, scheduleId: `out-${at}`, ok, errorCode }
 }
 
-function disarmed(chatId: string, at = 2_000): AutoContinueEvent {
+function disarmed(chatId: string, at = 2_000): ChatAutomationEvent {
   return { v: 3, kind: "loop_disarmed", timestamp: at, chatId, scheduleId: `dis-${at}`, reason: "goal_met" }
 }
 
@@ -25,7 +25,7 @@ describe("deriveLoopState", () => {
   })
 
   test("carries trackingFileRel through; legacy events without it replay as null", () => {
-    const withFile: AutoContinueEvent = {
+    const withFile: ChatAutomationEvent = {
       v: 3,
       kind: "loop_armed",
       timestamp: 1_000,
@@ -100,7 +100,7 @@ describe("deriveLoopState", () => {
   })
 })
 
-function proposed(chatId: string, scheduleId: string, at = 1_000): AutoContinueEvent {
+function proposed(chatId: string, scheduleId: string, at = 1_000): ChatAutomationEvent {
   return {
     v: 3,
     kind: "auto_continue_proposed",
@@ -114,7 +114,7 @@ function proposed(chatId: string, scheduleId: string, at = 1_000): AutoContinueE
   }
 }
 
-function accepted(chatId: string, scheduleId: string, at = 2_000, source: "user" | "auto_setting" = "user"): AutoContinueEvent {
+function accepted(chatId: string, scheduleId: string, at = 2_000, source: "user" | "auto_setting" = "user"): ChatAutomationEvent {
   return {
     v: 3,
     kind: "auto_continue_accepted",
@@ -137,7 +137,7 @@ describe("deriveChatSchedules", () => {
   })
 
   test("subagent_background accepted event carries prompt onto the schedule", () => {
-    const wake: AutoContinueEvent = {
+    const wake: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_accepted",
       timestamp: 2_000,

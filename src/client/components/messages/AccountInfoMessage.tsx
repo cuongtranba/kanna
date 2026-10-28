@@ -1,11 +1,13 @@
 import { ChevronRight } from "lucide-react"
-import type { ProcessedAccountInfoMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { MetaCodeBlock, MetaRow, VerticalLineContainer } from "./shared"
 import { cn } from "../../lib/utils"
-import { AccountInfoMessageStore } from "./AccountInfoMessage.store"
+import { createToggleStore } from "../../lib/createToggleStore"
+
+const AccountInfoMessageStore = createToggleStore("AccountInfoMessage")
 
 interface Props {
-  message: ProcessedAccountInfoMessage
+  message: TranscriptMessageOf<"account_info">
 }
 
 const TOKEN_SOURCE_LABEL: Record<string, string> = {
@@ -26,8 +28,8 @@ function AccountInfoMessageInner({ message }: Props) {
   const { organization, tokenSource, apiKeySource, subscriptionType, email, oauthKeyMasked } = message.accountInfo
   const primaryKey = oauthKeyMasked ?? organization ?? email ?? "Unknown account"
   const sourceLabel = describeSource(tokenSource, apiKeySource)
-  const expanded = AccountInfoMessageStore.useScopedStore((s) => s.expanded)
-  const setExpanded = AccountInfoMessageStore.useScopedStore((s) => s.setExpanded)
+  const expanded = AccountInfoMessageStore.useScopedStore((s) => s.value)
+  const setExpanded = AccountInfoMessageStore.useScopedStore((s) => s.set)
 
   return (
     <MetaRow>
@@ -105,7 +107,7 @@ function AccountInfoMessageInner({ message }: Props) {
 
 export function AccountInfoMessage({ message }: Props) {
   return (
-    <AccountInfoMessageStore.Provider init={undefined}>
+    <AccountInfoMessageStore.Provider init={false}>
       <AccountInfoMessageInner message={message} />
     </AccountInfoMessageStore.Provider>
   )

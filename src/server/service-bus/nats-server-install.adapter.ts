@@ -2,16 +2,15 @@ import { createHash } from "node:crypto"
 import { access, chmod, mkdir, rename, rm, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { errorMessage } from "../../shared/errors"
-import { SHA256SUMS_ASSET, parseSha256Sums } from "../../shared/release-sums"
+import { SHA256SUMS_ASSET, parseSha256Sums, releaseAssetUrl } from "../../shared/release-sums"
 import {
   NATS_RELEASE_BASE,
-  NATS_SERVER_VERSION,
   installedBinaryPath,
-  natsAssetUrl,
   natsServerTarget,
   unsupportedTargetMessage,
 } from "./nats-server-release"
 import { extractTarGzFile } from "./tar-gz"
+import { NATS_SERVER_VERSION } from "../../shared/service-bus/jetstream-config"
 
 export type ReleaseFetch = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>
 
@@ -94,11 +93,11 @@ export async function installNatsServer(options: InstallNatsServerOptions): Prom
   const part = `${binaryPath}${PART_SUFFIX}`
 
   try {
-    const sums = await fetchWithRetries(fetchFn, sleep, natsAssetUrl(base, version, SHA256SUMS_ASSET), SHA256SUMS_ASSET, SUMS_TIMEOUT_MS)
+    const sums = await fetchWithRetries(fetchFn, sleep, releaseAssetUrl(base, version, SHA256SUMS_ASSET), SHA256SUMS_ASSET, SUMS_TIMEOUT_MS)
     const expected = parseSha256Sums(await sums.text()).get(target.asset)
     if (expected === undefined) throw new MissingReleaseFile(`nats-server v${version} has no ${target.asset}`)
 
-    const archive = await fetchWithRetries(fetchFn, sleep, natsAssetUrl(base, version, target.asset), target.asset, ARCHIVE_TIMEOUT_MS)
+    const archive = await fetchWithRetries(fetchFn, sleep, releaseAssetUrl(base, version, target.asset), target.asset, ARCHIVE_TIMEOUT_MS)
     const bytes = new Uint8Array(await archive.arrayBuffer())
     const actual = createHash("sha256").update(bytes).digest("hex")
     if (actual !== expected) throw new Error(`the downloaded ${target.asset} does not match the checksum in ${SHA256SUMS_ASSET}`)

@@ -6,12 +6,12 @@ import type { BackgroundTaskOutputRegistry } from "./background-task-output-regi
 import type { BoardChange, BoardRegistry } from "./board-registry"
 import type { BeaconRegistry } from "./beacon-registry"
 import type { EventStore } from "./event-store"
-import type { AgentCoordinator } from "./agent"
+import type { AgentCoordinator } from "./agent-coordinator"
 import type { TerminalManager } from "./terminal-manager"
 import type { KeybindingsManager } from "./keybindings"
 import type { UpdateManager } from "./update-manager"
 import type { PackageUpdateManager } from "./package-update-manager"
-import type { ServerEnvelope } from "../shared/protocol"
+import type { ServerEnvelope, SubscriptionTopic } from "../shared/protocol"
 import type { LiveBlock } from "../shared/live-block"
 import type { LiveBlockHub } from "./live-block-throttle"
 import type { ResolvedAppSettings } from "./ws-router-defaults"
@@ -92,128 +92,39 @@ export class BroadcastManager {
     }) ?? (() => {})
 
     this.disposeKeybindingEvents = keybindings.onChange(() => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "keybindings") continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "keybindings")
     })
 
     this.disposeAppSettingsEvents = resolvedAppSettings.onChange(() => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "app-settings" && topic.type !== "beacons") continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "app-settings" || topic.type === "beacons")
     })
 
     this.disposeUpdateEvents = updateManager?.onChange(() => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "update") continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "update")
     }) ?? (() => {})
 
     this.disposeWorkflows = workflowRegistry?.subscribe((chatId) => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "workflows" || topic.chatId !== chatId) continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "workflows" && topic.chatId === chatId)
       this.scheduleChatStateBroadcast(chatId)
     }) ?? (() => {})
 
     this.disposeBoards = boardRegistry?.subscribe((change: BoardChange) => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          const matchesBoard = topic.type === "board" && topic.boardId === change.boardId
-          const matchesList = topic.type === "boards"
-            && topic.ownerKind === change.owner.kind
-            && topic.ownerId === change.owner.id
-          if (!matchesBoard && !matchesList) continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) =>
+        (topic.type === "board" && topic.boardId === change.boardId)
+        || (topic.type === "boards" && topic.ownerKind === change.owner.kind && topic.ownerId === change.owner.id))
     }) ?? (() => {})
 
     this.disposeBeacons = beaconRegistry?.subscribe(() => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "beacons") continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "beacons")
     }) ?? (() => {})
 
     this.disposeBackgroundTaskOutput = backgroundTaskOutputRegistry?.subscribe((chatId, taskId) => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "background-task-output" || topic.chatId !== chatId || topic.taskId !== taskId) continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) =>
+        topic.type === "background-task-output" && topic.chatId === chatId && topic.taskId === taskId)
     }) ?? (() => {})
 
     this.disposePackageUpdateEvents = packageUpdateManager?.onChange(() => {
-      for (const ws of this.sockets) {
-        const snapshotSignatures = ensureSnapshotSignatures(ws)
-        for (const [id, topic] of ws.data.subscriptions.entries()) {
-          if (topic.type !== "package-updates") continue
-          const envelope = deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-          if (envelope.type !== "snapshot") continue
-          const signature = JSON.stringify(envelope.snapshot)
-          if (snapshotSignatures.get(id) === signature) continue
-          snapshotSignatures.set(id, signature)
-          send(ws, envelope)
-        }
-      }
+      this.pushMatching((topic) => topic.type === "package-updates")
     }) ?? (() => {})
   }
 
@@ -230,12 +141,9 @@ export class BroadcastManager {
   getProtectedChatIds(): Set<string> {
     const { agent } = this.deps
     const activeStatuses = agent.getActiveStatuses()
-    const drainingChatIds = typeof agent.getDrainingChatIds === "function"
-      ? agent.getDrainingChatIds()
-      : new Set<string>()
     return new Set([
       ...activeStatuses.keys(),
-      ...drainingChatIds.values(),
+      ...agent.getDrainingChatIds().values(),
     ])
   }
 
@@ -282,8 +190,6 @@ export class BroadcastManager {
 
   private recordMetaOps(chatId: string, cache?: SnapshotComputationCache): void {
     const { store, envelopeBuilder } = this.deps
-    if (typeof store.chatOps?.record !== "function") return
-    if (typeof envelopeBuilder.deriveChatMeta !== "function") return
     if (cache) {
       cache.chatMetaOpsRecordedChatIds ??= new Set()
       if (cache.chatMetaOpsRecordedChatIds.has(chatId)) return
@@ -315,7 +221,7 @@ export class BroadcastManager {
       if (!shouldIncludeTopic(topic, options?.filter)) {
         continue
       }
-      if (topic.type === "chat" && typeof this.deps.store.chatOps?.since === "function") {
+      if (topic.type === "chat") {
         const seqMap = ensureChatOpSeqMap(ws)
         const tracked = seqMap.get(id)
         if (tracked !== undefined) {
@@ -443,52 +349,39 @@ export class BroadcastManager {
   scheduleBroadcast(): void {
     this.pendingBroadcastAll = true
     this.pendingBroadcastChatIds.clear()
-    if (this.pendingBroadcastTimer) {
-      return
-    }
-    this.pendingBroadcastTimer = setTimeout(() => {
-      this.pendingBroadcastTimer = null
-      const shouldBroadcastAll = this.pendingBroadcastAll
-      const chatIds = new Set(this.pendingBroadcastChatIds)
-      this.pendingBroadcastAll = false
-      this.pendingBroadcastChatIds.clear()
-      if (shouldBroadcastAll) {
-        void this.broadcastSnapshots()
-        return
-      }
-      if (chatIds.size > 0) {
-        void this.broadcastFilteredSnapshots({
-          includeSidebar: true,
-          chatIds,
-        })
-      }
-    }, 16)
+    this.armBroadcastTimer()
   }
 
   scheduleChatStateBroadcast(chatId: string): void {
     if (!this.pendingBroadcastAll) {
       this.pendingBroadcastChatIds.add(chatId)
     }
+    this.armBroadcastTimer()
+  }
+
+  private armBroadcastTimer(): void {
     if (this.pendingBroadcastTimer) {
       return
     }
-    this.pendingBroadcastTimer = setTimeout(() => {
-      this.pendingBroadcastTimer = null
-      const shouldBroadcastAll = this.pendingBroadcastAll
-      const chatIds = new Set(this.pendingBroadcastChatIds)
-      this.pendingBroadcastAll = false
-      this.pendingBroadcastChatIds.clear()
-      if (shouldBroadcastAll) {
-        void this.broadcastSnapshots()
-        return
-      }
-      if (chatIds.size > 0) {
-        void this.broadcastFilteredSnapshots({
-          includeSidebar: true,
-          chatIds,
-        })
-      }
-    }, 16)
+    this.pendingBroadcastTimer = setTimeout(() => this.flushPendingBroadcast(), 16)
+  }
+
+  private flushPendingBroadcast(): void {
+    this.pendingBroadcastTimer = null
+    const shouldBroadcastAll = this.pendingBroadcastAll
+    const chatIds = new Set(this.pendingBroadcastChatIds)
+    this.pendingBroadcastAll = false
+    this.pendingBroadcastChatIds.clear()
+    if (shouldBroadcastAll) {
+      void this.broadcastSnapshots()
+      return
+    }
+    if (chatIds.size > 0) {
+      void this.broadcastFilteredSnapshots({
+        includeSidebar: true,
+        chatIds,
+      })
+    }
   }
 
   async broadcastChatAndSidebar(chatId: string): Promise<void> {
@@ -496,10 +389,6 @@ export class BroadcastManager {
       includeSidebar: true,
       chatIds: new Set([chatId]),
     })
-  }
-
-  async broadcastChatStateImmediately(chatId: string): Promise<void> {
-    await this.broadcastChatAndSidebar(chatId)
   }
 
   broadcastError(message: string): void {
@@ -514,18 +403,7 @@ export class BroadcastManager {
 
 
   pushTerminalSnapshot(terminalId: string): void {
-    for (const ws of this.sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "terminal" || topic.terminalId !== terminalId) continue
-        const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
+    this.pushMatching((topic) => topic.type === "terminal" && topic.terminalId === terminalId)
   }
 
   pushTerminalEvent(
@@ -574,18 +452,7 @@ export class BroadcastManager {
   }
 
   pushFollowedSessions(): void {
-    for (const ws of this.sockets) {
-      const snapshotSignatures = ensureSnapshotSignatures(ws)
-      for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== "followed-sessions") continue
-        const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
-        if (envelope.type !== "snapshot") continue
-        const signature = JSON.stringify(envelope.snapshot)
-        if (snapshotSignatures.get(id) === signature) continue
-        snapshotSignatures.set(id, signature)
-        send(ws, envelope)
-      }
-    }
+    this.pushTopic("followed-sessions")
   }
 
   pushCronJobs(): void {
@@ -608,11 +475,15 @@ export class BroadcastManager {
     this.pushTopic("service-bus")
   }
 
-  private pushTopic(topicType: "cron-jobs" | "webhooks" | "inbox" | "mcp-sources" | "service-bus"): void {
+  private pushTopic(topicType: "followed-sessions" | "cron-jobs" | "webhooks" | "inbox" | "mcp-sources" | "service-bus"): void {
+    this.pushMatching((topic) => topic.type === topicType)
+  }
+
+  private pushMatching(match: (topic: SubscriptionTopic) => boolean): void {
     for (const ws of this.sockets) {
       const snapshotSignatures = ensureSnapshotSignatures(ws)
       for (const [id, topic] of ws.data.subscriptions.entries()) {
-        if (topic.type !== topicType) continue
+        if (!match(topic)) continue
         const envelope = this.deps.envelopeBuilder.createEnvelope(id, topic, undefined, ws)
         if (envelope.type !== "snapshot") continue
         const signature = JSON.stringify(envelope.snapshot)

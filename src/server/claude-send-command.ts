@@ -4,15 +4,11 @@ import { resolveClaudeApiModelId } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
 import {
   logSendToStartingProfile,
-  type SendMessageOptions,
   type SendToStartingProfile,
 } from "./claude-steer-log"
+import type { SendMessageOptions } from "./claude-turn-starter-types"
 import type { StartTurnForChatArgs } from "./claude-turn-starter"
-import {
-  getLatestContextWindowUsage,
-  MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
-  shouldProactivelyCompact,
-} from "./proactive-compact"
+import { MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, shouldProactivelyCompact } from "./proactive-compact"
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
@@ -21,9 +17,9 @@ import {
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
-import { buildSteeredMessageContent } from "./claude-prompt-helpers"
+import { wrapSteeredMessage } from "../shared/steered-message"
 import { isChatBusy } from "./claude-session-state-queries"
-import type { CompactionTurnKind, SessionBackgroundTask } from "./claude-session-state"
+import type { SessionBackgroundTask } from "./claude-session-state"
 import {
   buildCodexCompactPrompt,
   parseBuiltinCommand,
@@ -43,20 +39,19 @@ interface SendCommandStore {
   createChat(projectId: string): Promise<{ id: string }>
   requireChat(chatId: string): { provider: AgentProvider | null; model?: string; modelOptions?: ModelOptions }
   getChat(chatId: string): { compactFailureCount?: number } | null
-  setChatModel?: (chatId: string, model: string, modelOptions?: ModelOptions) => Promise<void>
+  setChatModel(chatId: string, model: string, modelOptions?: ModelOptions): Promise<void>
   enqueueMessage(
     chatId: string,
     message: Omit<QueuedChatMessage, "id" | "createdAt"> & Partial<Pick<QueuedChatMessage, "id" | "createdAt">>,
   ): Promise<QueuedChatMessage>
   removeQueuedMessage(chatId: string, queuedMessageId: string): Promise<void>
-  getQueuedMessages?: (chatId: string) => readonly QueuedChatMessage[]
+  getQueuedMessages(chatId: string): readonly QueuedChatMessage[]
   getMessages(chatId: string): readonly TranscriptEntry[]
-  getLatestContextWindowUsage?: (chatId: string) => ContextWindowUsageSnapshot | null
+  getLatestContextWindowUsage(chatId: string): ContextWindowUsageSnapshot | null
 }
 
 interface ActiveTurnsMap {
   has(chatId: string): boolean
-  get(chatId: string): { compactionTurn?: CompactionTurnKind } | undefined
 }
 
 interface StartingTurnsMap {
@@ -220,10 +215,7 @@ export function shouldInjectProactiveCompact(
   if (!isProactiveCompactEnabled()) return false
   const failures = deps.store.getChat(chatId)?.compactFailureCount ?? 0
   if (failures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES) return false
-  const usage = deps.store.getLatestContextWindowUsage
-    ? deps.store.getLatestContextWindowUsage(chatId)
-    : getLatestContextWindowUsage(deps.store.getMessages(chatId))
-  return shouldProactivelyCompact(usage)
+  return shouldProactivelyCompact(deps.store.getLatestContextWindowUsage(chatId))
 }
 
 export async function enqueueMessage(
@@ -281,10 +273,8 @@ export async function runBuiltinCommand(
     planMode: false,
     appendUserPrompt: false,
     onTurnRecorded: onCommitted,
+    compactionTurn: cliPassthrough ? "user" : "codex_summary",
   })
-
-  const active = deps.activeTurns.get(chatId)
-  if (active) active.compactionTurn = cliPassthrough ? "user" : "codex_summary"
 }
 
 function resolveSlashExpansion(
@@ -351,7 +341,7 @@ export async function dequeueAndStartQueuedMessage(
   await deps.startTurnForChat({
     chatId,
     provider,
-    content: options?.steered ? buildSteeredMessageContent(queuedMessage.content) : queuedMessage.content,
+    content: options?.steered ? wrapSteeredMessage(queuedMessage.content) : queuedMessage.content,
     ...expansionTurnArgs(expansion),
     attachments: queuedMessage.attachments,
     model: settings.model,
@@ -373,12 +363,22 @@ export async function maybeStartNextQueuedMessage(
   options?: { replay?: boolean },
 ): Promise<boolean> {
   if (isChatBusy(deps, chatId)) return false
-  const nextQueuedMessage = typeof deps.store.getQueuedMessages === "function"
-    ? deps.store.getQueuedMessages(chatId)[0]
-    : undefined
+  const nextQueuedMessage = deps.store.getQueuedMessages(chatId)[0]
   if (!nextQueuedMessage) return false
   await dequeueAndStartQueuedMessage(deps, chatId, nextQueuedMessage, options)
   return true
+}
+
+export async function deliverPrompt(
+  deps: SendCommandDeps,
+  chatId: string,
+  content: string,
+  attachments: ChatAttachment[],
+  options?: SendMessageOptions,
+): Promise<QueuedChatMessage> {
+  const queued = await enqueueMessage(deps, chatId, content, attachments, options)
+  await maybeStartNextQueuedMessage(deps, chatId)
+  return queued
 }
 
 export async function sendCommand(
@@ -417,7 +417,7 @@ export async function sendCommand(
     deps.autoResumeByChat.set(chatId, command.autoResumeOnRateLimit)
   }
 
-  if (command.model && deps.store.setChatModel) {
+  if (command.model) {
     await deps.store.setChatModel(chatId, command.model, command.modelOptions)
   }
 
@@ -468,9 +468,8 @@ export async function sendCommand(
       planMode: settings.planMode,
       appendUserPrompt: false,
       profile,
+      compactionTurn: "proactive",
     })
-    const compactActive = deps.activeTurns.get(chatId)
-    if (compactActive) compactActive.compactionTurn = "proactive"
 
     logSendToStartingProfile(profile, "chat_send.proactive_compact_injected", {
       chatId,

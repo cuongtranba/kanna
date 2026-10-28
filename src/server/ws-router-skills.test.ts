@@ -4,77 +4,13 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { assertSafeSkillAgents } from "../shared/skill-agents"
 import {
-  assertSafeSkillId,
-  assertSafeSkillSource,
   buildInstallSkillCommand,
   buildUninstallSkillCommand,
-  getGlobalSkillLockPath,
   listInstalledSkills,
   parseInstalledSkillsLock,
 } from "./ws-router-skills"
 
 describe("ws-router-skills", () => {
-  describe("assertSafeSkillSource", () => {
-    test("trims and accepts valid owner/repo pairs", () => {
-      expect(assertSafeSkillSource("owner/repo")).toBe("owner/repo")
-      expect(assertSafeSkillSource(" owner/repo ")).toBe("owner/repo")
-      expect(assertSafeSkillSource("Org-Name/my.skill_1")).toBe("Org-Name/my.skill_1")
-    })
-
-    test("rejects invalid sources", () => {
-      expect(() => assertSafeSkillSource("https://github.com/owner/repo")).toThrow("owner/repo")
-      expect(() => assertSafeSkillSource("just-a-name")).toThrow("owner/repo")
-      expect(() => assertSafeSkillSource("")).toThrow()
-      expect(() => assertSafeSkillSource("owner/repo/extra")).toThrow()
-    })
-  })
-
-  describe("assertSafeSkillId", () => {
-    test("trims and accepts valid skill ids", () => {
-      expect(assertSafeSkillId("my-skill")).toBe("my-skill")
-      expect(assertSafeSkillId(" my-skill_1 ")).toBe("my-skill_1")
-      expect(assertSafeSkillId("A")).toBe("A")
-    })
-
-    test("rejects invalid skill ids", () => {
-      expect(() => assertSafeSkillId("../nope")).toThrow("Skill id is invalid.")
-      expect(() => assertSafeSkillId("")).toThrow()
-      expect(() => assertSafeSkillId("-bad-start")).toThrow()
-    })
-  })
-
-  describe("getGlobalSkillLockPath", () => {
-    test("returns XDG_STATE_HOME path when env var is set", () => {
-      const orig = process.env.XDG_STATE_HOME
-      try {
-        process.env.XDG_STATE_HOME = "/custom/state"
-        const lockPath = getGlobalSkillLockPath()
-        expect(lockPath).toContain("/custom/state")
-        expect(lockPath).toContain(".skill-lock.json")
-      } finally {
-        if (orig === undefined) {
-          delete process.env.XDG_STATE_HOME
-        } else {
-          process.env.XDG_STATE_HOME = orig
-        }
-      }
-    })
-
-    test("falls back to ~/.agents/.skill-lock.json", () => {
-      const orig = process.env.XDG_STATE_HOME
-      try {
-        delete process.env.XDG_STATE_HOME
-        const lockPath = getGlobalSkillLockPath()
-        expect(lockPath).toContain(".agents")
-        expect(lockPath).toContain(".skill-lock.json")
-      } finally {
-        if (orig !== undefined) {
-          process.env.XDG_STATE_HOME = orig
-        }
-      }
-    })
-  })
-
   describe("parseInstalledSkillsLock", () => {
     test("parses installed global skills from a lock payload", () => {
       const snapshot = parseInstalledSkillsLock({
@@ -181,7 +117,7 @@ describe("ws-router-skills", () => {
   describe("buildInstallSkillCommand", () => {
     test("builds global install command with default agents (universal, claude-code, codex)", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill")
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "add",
         "owner/repo",
@@ -198,7 +134,7 @@ describe("ws-router-skills", () => {
 
     test("builds install command with a custom single-agent override", () => {
       const cmd = buildInstallSkillCommand("owner/repo", "my-skill", ["codex"])
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "add",
         "owner/repo",
@@ -226,7 +162,7 @@ describe("ws-router-skills", () => {
   describe("buildUninstallSkillCommand", () => {
     test("removes from every agent, so a detected agent sharing ~/.agents/skills cannot keep the skill installed", () => {
       const cmd = buildUninstallSkillCommand("my-skill")
-      expect(cmd.slice(1)).toEqual([
+      expect(cmd.argv.slice(1)).toEqual([
         "skills",
         "remove",
         "my-skill",

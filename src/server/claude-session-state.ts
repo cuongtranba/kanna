@@ -178,6 +178,49 @@ export class ClaudeSessionState {
     return now >= this.backgroundTaskDeadlineAt
   }
 
+  beginPrompt(): number {
+    const promptSeq = this.nextPromptSeq + 1
+    this.nextPromptSeq = promptSeq
+    this.pendingPromptSeqs.push(promptSeq)
+    this.cancelledResultPending = 0
+    return promptSeq
+  }
+
+  completePrompt(): number | null {
+    return this.pendingPromptSeqs.shift() ?? null
+  }
+
+  cancelPrompt(promptSeq: number): void {
+    const index = this.pendingPromptSeqs.indexOf(promptSeq)
+    if (index >= 0) this.pendingPromptSeqs.splice(index, 1)
+    this.cancelledResultPending += 1
+  }
+
+  cancelSelfWake(): void {
+    this.selfWakeActive = false
+    this.suppressBackgroundWake()
+    this.cancelledResultPending += 1
+  }
+
+  suppressBackgroundWake(): void {
+    if (this.hasBackgroundTasks()) this.backgroundTaskWakeSuppressed = true
+  }
+
+  swallowCancelledErrorResult(): boolean {
+    if (this.cancelledResultPending === 0) return false
+    this.cancelledResultPending -= 1
+    this.selfWakeActive = false
+    return true
+  }
+
+  persistsSessionToken(): boolean {
+    return this.cancelledResultPending === 0 && !this.suppressSessionTokenPersist
+  }
+
+  canArmSelfWake(): boolean {
+    return !this.backgroundTaskWakeSuppressed && this.cancelledResultPending === 0
+  }
+
   noteUserSend(maxMs: number, now: number): void {
     if (this.backgroundTasks.size > 0) {
       this.backgroundTaskDeadlineAt = now + maxMs

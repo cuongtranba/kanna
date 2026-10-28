@@ -1,9 +1,8 @@
-import { beforeEach, describe, expect, test } from "vite-plus/test"
+import { describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
 import { BoardSyncPanel, type BoardSyncPanelSocket } from "./BoardSyncPanel"
-import { useBoardSyncPanelStore } from "./BoardSyncPanel.store"
 import type { BoardSyncStatus } from "../../../shared/boards/sync-types"
 import type { SyncBinding, SyncConflict } from "../../../shared/boards/types"
 import type { ClientCommand } from "../../../shared/protocol"
@@ -104,10 +103,6 @@ function type(input: HTMLInputElement, value: string) {
   })
 }
 
-beforeEach(() => {
-  useBoardSyncPanelStore.getState().reset()
-})
-
 describe("BoardSyncPanel", () => {
   test("every project in the workspace is offered as its own row", async () => {
     const harness = await mount(status())
@@ -200,6 +195,7 @@ describe("BoardSyncPanel", () => {
       direction: "pull",
       allowAgentPush: false,
       projectId: null,
+      detachFromBoardId: null,
     })
     harness.unmount()
   })
@@ -218,6 +214,7 @@ describe("BoardSyncPanel", () => {
       direction: "pull",
       allowAgentPush: false,
       projectId: "p1",
+      detachFromBoardId: null,
     })
     harness.unmount()
   })

@@ -6,9 +6,10 @@ import {
   renderInboundMessage,
   renderInboundPrompt,
 } from "../../shared/inbound/template"
-import { busSubject, type BusEnvelope, type BusSource } from "../../shared/service-bus/envelope"
+import { createBusEnvelope, inboundIdempotencyKey, inboundSourceId, type BusEnvelope, type InboundBusSource } from "../../shared/service-bus/envelope"
+import { mcpMessageSubject, webhookDeliverySubject } from "../../shared/service-bus/subjects"
 import type { AgentCoordinator } from "../agent-coordinator"
-import { timestamped } from "../claude-message-normalizer"
+import { timestamped } from "../../shared/transcript-entry"
 import type { EventStore } from "../event-store"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import type { BusSink } from "../service-bus/service-bus"
@@ -16,7 +17,7 @@ import type { BusSink } from "../service-bus/service-bus"
 export type InboundDeliveryStore = Pick<EventStore, "getChat" | "getProject" | "createChat" | "appendMessage" | "renameChat">
 export type InboundDeliveryAgent = Pick<AgentCoordinator, "enqueueMessage" | "maybeStartNextQueuedMessage" | "emitStateChange">
 
-export type InboundSource = Extract<BusSource, { kind: "webhook" | "mcp" }>
+export type InboundSource = InboundBusSource
 
 export interface InboundDelivery {
   source: InboundSource
@@ -33,10 +34,6 @@ export type InboundDeliveryResult = { ok: true; chatId?: string; threadId: strin
 
 type ChatTarget = { ok: true; chatId: string } | { ok: false; detail: string }
 
-function sourceId(source: InboundSource): string {
-  return source.kind === "webhook" ? source.hookId : source.sourceId
-}
-
 export function inboundScheduleId(source: InboundSource, deliveryId: string): string {
   return source.kind === "webhook" ? `webhook-${source.hookId}-${deliveryId}` : `mcp-${source.sourceId}-${deliveryId}`
 }
@@ -47,17 +44,15 @@ function noticeFor(delivery: InboundDelivery): string {
 
 function inboundEnvelope(delivery: InboundDelivery): BusEnvelope {
   const { source } = delivery
-  const id = sourceId(source)
-  return {
-    v: 1,
-    id: crypto.randomUUID(),
-    subject: source.kind === "webhook" ? busSubject("webhook", id, "delivery") : busSubject("mcp", id, "message"),
+  const id = inboundSourceId(source)
+  return createBusEnvelope({
+    subject: source.kind === "webhook" ? webhookDeliverySubject(id) : mcpMessageSubject(id),
     ts: delivery.at,
     source,
     direction: "inbound",
-    idempotencyKey: `${source.kind}:${id}:${delivery.deliveryId}`,
+    idempotencyKey: inboundIdempotencyKey(source.kind, id, delivery.deliveryId),
     payload: delivery.body,
-  }
+  })
 }
 
 function checkTarget(store: InboundDeliveryStore, handler: InboundHandler): string | null {
@@ -115,6 +110,20 @@ async function appendCard(
   agent.emitStateChange(chatId)
 }
 
+export async function queueHandlerTurn(
+  agent: Pick<InboundDeliveryAgent, "enqueueMessage" | "maybeStartNextQueuedMessage">,
+  chatId: string,
+  handler: InboundHandler | null,
+  prompt: string,
+  scheduleId: string,
+): Promise<void> {
+  await agent.enqueueMessage(chatId, prompt, [], {
+    autoContinue: { scheduleId },
+    ...(handler?.provider && handler.model ? { provider: handler.provider, model: handler.model } : {}),
+  })
+  await agent.maybeStartNextQueuedMessage(chatId)
+}
+
 async function queuePrompt(
   agent: InboundDeliveryAgent,
   inbox: InboxRegistry,
@@ -134,11 +143,7 @@ async function queuePrompt(
     }),
   ].join("\n\n")
   await inbox.markPending(threadId, scheduleId)
-  await agent.enqueueMessage(chatId, prompt, [], {
-    autoContinue: { scheduleId },
-    ...(handler.provider && handler.model ? { provider: handler.provider, model: handler.model } : {}),
-  })
-  await agent.maybeStartNextQueuedMessage(chatId)
+  await queueHandlerTurn(agent, chatId, handler, prompt, scheduleId)
 }
 
 export async function deliverInbound(

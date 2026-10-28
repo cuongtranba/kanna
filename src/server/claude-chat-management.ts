@@ -1,5 +1,6 @@
 import type { JsonObject } from "../shared/json"
 
+import { errorMessage, queuedMessageNotFound } from "../shared/errors"
 import type { AgentProvider, QueuedChatMessage } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
 import type { ClaudeSessionState, CompactionTurnKind } from "./claude-session-state"
@@ -89,7 +90,7 @@ export async function steer(
 ): Promise<void> {
   const queuedMessage = deps.store.getQueuedMessage(command.chatId, command.queuedMessageId)
   if (!queuedMessage) {
-    throw new Error("Queued message not found")
+    throw queuedMessageNotFound()
   }
 
   logClaudeSteer("steer_requested", {
@@ -121,7 +122,7 @@ export async function dequeue(
 ): Promise<void> {
   const queuedMessage = deps.store.getQueuedMessage(command.chatId, command.queuedMessageId)
   if (!queuedMessage) {
-    throw new Error("Queued message not found")
+    throw queuedMessageNotFound()
   }
 
   const active = deps.activeTurns.get(command.chatId)
@@ -178,7 +179,7 @@ export async function generateTitleInBackground(
     await deps.store.renameChat(chatId, result.title)
     deps.emitStateChange(chatId)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = errorMessage(error)
     deps.reportBackgroundError?.(
       `[title-generation] chat ${chatId} failed background title generation: ${message}`,
     )

@@ -3,9 +3,8 @@ import { z } from "zod"
 import type { BoardRegistry } from "./board-registry"
 import { BoardStoreError } from "./board-store"
 import { errorMessage } from "../shared/errors"
-import type { JsonValue } from "../shared/json"
 import type { CardActor } from "../shared/boards/types"
-import { ok, fail, type KannaToolFactory, type ToolResult } from "./kanna-mcp-tool"
+import { ok, fail, requireNonBlank, type KannaToolFactory, type ToolResult } from "./kanna-mcp-tool"
 
 const CARD_WINDOW = 20
 
@@ -33,16 +32,7 @@ export interface BoardToolDeps {
   projectId: string | null
 }
 
-function requireString(value: JsonValue | undefined, name: string): string {
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new BoardStoreError("invalid_input", `${name} is required`)
-  }
-  return value
-}
-
-export type BoardToolFactory<TTool> = KannaToolFactory<TTool>
-
-export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFactory<TTool>): TTool[] {
+export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: KannaToolFactory<TTool>): TTool[] {
   const { boardRegistry, chatId, projectId } = deps
   if (!boardRegistry || !chatId || !projectId) return []
 
@@ -100,8 +90,8 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
       },
       (input) =>
         guarded(() => {
-          const boardIdArg = requireString(input.board_id, "board_id")
-          const columnIdArg = typeof input.column_id === "string" ? input.column_id : null
+          const boardIdArg = requireNonBlank(input.board_id, "board_id")
+          const columnIdArg = input.column_id ?? null
           const view = requireBoard(boardIdArg)
           const columns = columnIdArg
             ? view.columns.filter((column) => column.id === columnIdArg)
@@ -128,10 +118,10 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
       },
       (input) =>
         guarded(() => {
-          const card = requireCardBoard(requireString(input.card_id, "card_id"))
+          const card = requireCardBoard(requireNonBlank(input.card_id, "card_id"))
           const moved = registry.moveCard({
             cardId: card.id,
-            toColumnId: requireString(input.to_column_id, "to_column_id"),
+            toColumnId: requireNonBlank(input.to_column_id, "to_column_id"),
             aboveCardId: null,
             belowCardId: null,
             actor,
@@ -150,12 +140,12 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
       },
       (input) =>
         guarded(() => {
-          const boardIdArg = requireString(input.board_id, "board_id")
+          const boardIdArg = requireNonBlank(input.board_id, "board_id")
           requireBoard(boardIdArg)
           const card = registry.createCard({
             boardId: boardIdArg,
-            columnId: requireString(input.column_id, "column_id"),
-            title: requireString(input.title, "title"),
+            columnId: requireNonBlank(input.column_id, "column_id"),
+            title: requireNonBlank(input.title, "title"),
             projectId: owner,
             actor,
           })
@@ -172,8 +162,8 @@ export function buildBoardToolList<TTool>(deps: BoardToolDeps, tool: BoardToolFa
       },
       (input) =>
         guarded(() => {
-          const card = requireCardBoard(requireString(input.card_id, "card_id"))
-          registry.addComment(card.id, actor, requireString(input.body, "body"))
+          const card = requireCardBoard(requireNonBlank(input.card_id, "card_id"))
+          registry.addComment(card.id, actor, requireNonBlank(input.body, "body"))
           return ok(`Commented on "${card.title}".`)
         }),
     ),

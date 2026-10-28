@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vite-plus/test"
+import { afterEach, describe, expect, test } from "vite-plus/test"
 import type { ToolRequest } from "../shared/permission-policy"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import type { TranscriptEntry } from "../shared/types"
 import type { SnapshotFile } from "./events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { EventStore } from "./event-store"
 import { getLatestContextWindowUsage } from "./proactive-compact"
 import { deriveCronJobs, findRunningCronRuns } from "./cron/read-model"
@@ -413,7 +413,7 @@ describe("EventStore", () => {
     const project = await store.openProject("/tmp/project")
     const chat = await store.createChat(project.id)
 
-    const armed: AutoContinueEvent = {
+    const armed: ChatAutomationEvent = {
       v: 3,
       kind: "cron_armed",
       chatId: chat.id,
@@ -425,12 +425,12 @@ describe("EventStore", () => {
       schedule: { type: "interval", ms: 300_000 },
     }
     await store.appendAutoContinueEvent(armed)
-    const full: AutoContinueEvent[] = [armed]
+    const full: ChatAutomationEvent[] = [armed]
     for (let i = 0; i < 120; i += 1) {
-      const started: AutoContinueEvent = {
+      const started: ChatAutomationEvent = {
         v: 3, kind: "cron_run_started", chatId: chat.id, scheduleId: "job-1", timestamp: 100 + i * 10, runId: `r${i}`,
       }
-      const outcome: AutoContinueEvent = {
+      const outcome: ChatAutomationEvent = {
         v: 3, kind: "cron_run_outcome", chatId: chat.id, scheduleId: "job-1", timestamp: 101 + i * 10, runId: `r${i}`, ok: true,
       }
       await store.appendAutoContinueEvent(started)
@@ -691,22 +691,16 @@ describe("EventStore", () => {
     const dataDir = await createTempDataDir()
     await writeFile(join(dataDir, "sidebar-order.json"), "{not-json", "utf8")
 
-    const originalWarn = console.warn
-    console.warn = () => {}
-    try {
-      const store = new EventStore(dataDir)
-      await store.initialize()
+    const store = new EventStore(dataDir)
+    await store.initialize()
 
-      const project = await store.openProject("/tmp/project")
+    const project = await store.openProject("/tmp/project")
 
-      const reloaded = new EventStore(dataDir)
-      await reloaded.initialize()
+    const reloaded = new EventStore(dataDir)
+    await reloaded.initialize()
 
-      expect(reloaded.getProject(project.id)?.localPath).toBe("/tmp/project")
-      expect(reloaded.getSidebarProjectOrder()).toEqual([])
-    } finally {
-      console.warn = originalWarn
-    }
+    expect(reloaded.getProject(project.id)?.localPath).toBe("/tmp/project")
+    expect(reloaded.getSidebarProjectOrder()).toEqual([])
   })
 
   test("prunes stale empty chats after thirty minutes", async () => {
@@ -1324,24 +1318,18 @@ describe("EventStore subagent runs", () => {
     await rm(turnsLogPath, { force: true })
     await mkdir(turnsLogPath)
 
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
-    try {
-      await store.appendSubagentEvent({
-        v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
-        entry: {
-          _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
-          text: "will this appear?", messageId: "m-fail",
-        } as unknown as TranscriptEntry,
-      }).catch(() => {})
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_entry_appended", timestamp: baseTs + 1, chatId, runId,
+      entry: {
+        _id: "e-fail", createdAt: baseTs + 1, kind: "assistant_text",
+        text: "will this appear?", messageId: "m-fail",
+      },
+    })
+    await store.flush()
 
-      await new Promise<void>((resolve) => setTimeout(resolve, 20))
-
-      const run = store.getSubagentRuns(chatId)[runId]
-      expect(run.entries).toHaveLength(1)
-      expect(run.entries[0]._id).toBe("e-fail")
-    } finally {
-      errorSpy.mockRestore()
-    }
+    const run = store.getSubagentRuns(chatId)[runId]
+    expect(run.entries).toHaveLength(1)
+    expect(run.entries[0]._id).toBe("e-fail")
   })
 
   test("subagent_entry_appended caps tool_result over threshold", async () => {
@@ -1382,14 +1370,14 @@ describe("EventStore subagent runs", () => {
 })
 
 describe("EventStore auto-continue schedules", () => {
-  test("appends and replays AutoContinueEvent sequence", async () => {
+  test("appends and replays ChatAutomationEvent sequence", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
     await store.initialize()
     const project = await store.openProject("/tmp/p1")
     const chat = await store.createChat(project.id)
 
-    const proposed: AutoContinueEvent = {
+    const proposed: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_proposed",
       timestamp: 1_000,
@@ -1400,7 +1388,7 @@ describe("EventStore auto-continue schedules", () => {
       tz: "Asia/Saigon",
 
     }
-    const accepted: AutoContinueEvent = {
+    const accepted: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_accepted",
       timestamp: 1_100,
@@ -2172,7 +2160,7 @@ describe("getRecentRawEntries (EventStore delegate)", () => {
 })
 
 describe("EventStore deleteChat clears per-chat private caches", () => {
-  test("seenMessageIdsByChatId, lastUserMessageIdByChatId, and transcriptCache are freed on chat deletion", async () => {
+  test("seenMessageIds, lastUserMessageIdByChatId, and transcriptCache are freed on chat deletion", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
     await store.initialize()
@@ -2189,19 +2177,19 @@ describe("EventStore deleteChat clears per-chat private caches", () => {
     store.getMessages(chat.id)
 
     type StoreInternals = {
-      seenMessageIdsByChatId: Map<string, Set<string>>
+      seenMessageIds: { tracks(chatId: string): boolean }
       lastUserMessageIdByChatId: Map<string, string>
       transcriptCache: { has(chatId: string): boolean }
     }
     const internals = store as unknown as StoreInternals
 
-    expect(internals.seenMessageIdsByChatId.has(chat.id)).toBe(true)
+    expect(internals.seenMessageIds.tracks(chat.id)).toBe(true)
     expect(internals.lastUserMessageIdByChatId.has(chat.id)).toBe(true)
     expect(internals.transcriptCache.has(chat.id)).toBe(true)
 
     await store.deleteChat(chat.id)
 
-    expect(internals.seenMessageIdsByChatId.has(chat.id)).toBe(false)
+    expect(internals.seenMessageIds.tracks(chat.id)).toBe(false)
     expect(internals.lastUserMessageIdByChatId.has(chat.id)).toBe(false)
     expect(internals.transcriptCache.has(chat.id)).toBe(false)
   })

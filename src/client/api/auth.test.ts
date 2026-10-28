@@ -12,11 +12,10 @@ describe("fetchAuthStatus", () => {
       response: { ok: true, status: 200, body: { enabled: true, authenticated: false } },
     })
     const result = await fetchAuthStatus(undefined, http)
-    expect(result.enabled).toBe(true)
-    expect(result.authenticated).toBe(false)
+    expect(result).toEqual({ kind: "ok", status: { enabled: true, authenticated: false } })
   })
 
-  test("returns empty object when response is not ok", async () => {
+  test("asks for a retry when response is not ok", async () => {
     const http = makeFakeHttpPort()
     http.routes.push({
       method: "GET",
@@ -24,7 +23,13 @@ describe("fetchAuthStatus", () => {
       response: { ok: false, status: 503, body: null },
     })
     const result = await fetchAuthStatus(undefined, http)
-    expect(result).toEqual({})
+    expect(result).toEqual({ kind: "retry" })
+  })
+
+  test("asks for a retry when the server cannot be reached", async () => {
+    const http = makeFakeHttpPort()
+    const result = await fetchAuthStatus(undefined, http)
+    expect(result).toEqual({ kind: "retry" })
   })
 
   test("calls GET /auth/status with no-store cache", async () => {

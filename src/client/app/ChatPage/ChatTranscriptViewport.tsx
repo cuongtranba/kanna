@@ -19,17 +19,17 @@ import {
   useStableResolvedRows,
 } from "../KannaTranscript"
 import { useTranscriptActions } from "../transcriptActionsContext"
+import type { LatestToolIds } from "../derived"
 import { CronJobsSection } from "../CronJobsSection"
 import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
-import type { SubagentRunSnapshot } from "../../../shared/types"
+import type { SubagentRunSnapshot, HydratedToolCall } from "../../../shared/types"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
 import { TranscriptRenderOptionsProvider } from "../../components/messages/render-context"
 import { GenUIHostProvider } from "../../components/genui/host"
 import { useChatGenUIHost } from "../../components/genui/useChatGenUIHost"
-import type { ProcessedToolCall } from "../../components/messages/types"
 import { renderChatLinks } from "../../components/messages/renderChatLinks"
 import React from "react"
 import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelCard"
@@ -37,8 +37,9 @@ import {
   CHAT_NAVBAR_OFFSET_PX,
   EMPTY_STATE_TEXT,
   scrollTranscriptListToEnd,
-} from "./utils"
+} from "./transcriptViewport"
 import { runDetached } from "../../lib/runDetached"
+import { MAX_FILES_PER_DROP } from "../../lib/composerLimits"
 import { pendingActionKey, runPendingAction } from "../../stores/pendingActionsStore"
 import { WorkflowsSectionWithDetail } from "../WorkflowsSection"
 import { domAdapter } from "../../adapters/dom.adapter"
@@ -64,7 +65,7 @@ export type PendingQuestionRun = SubagentRunSnapshot & {
   pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
 }
 
-export type PendingMainQuestion = Extract<ProcessedToolCall, { toolKind: "ask_user_question" }>
+export type PendingMainQuestion = Extract<HydratedToolCall, { toolKind: "ask_user_question" }>
 
 interface ScrollEventLike {
   readonly currentTarget?: EventTarget | null
@@ -76,9 +77,9 @@ const INLINE_SURFACE_OPTIONS = { askUserQuestionSurface: "inline" } as const
 
 export function selectPendingMainQuestion(
   messages: readonly KannaState["messages"][number][],
-  latestToolIds: Record<string, string | null>,
+  latestToolIds: Pick<LatestToolIds, "askUserQuestion">,
 ): PendingMainQuestion | null {
-  const id = latestToolIds.AskUserQuestion
+  const id = latestToolIds.askUserQuestion
   if (!id) return null
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
@@ -408,12 +409,7 @@ export const ChatTranscriptViewport = memo(({
       {isHistoryLoading ? (
         <div className="flex justify-center pb-4">
           <span className="text-sm translate-y-[-0.5px]">
-            <AnimatedShinyText
-              animate
-              shimmerWidth={Math.max(20, "Loading more messages...".length * 3)}
-            >
-              Loading more messages...
-            </AnimatedShinyText>
+            <AnimatedShinyText animate>Loading more messages...</AnimatedShinyText>
           </span>
         </div>
       ) : null}
@@ -627,7 +623,7 @@ export const ChatTranscriptViewport = memo(({
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center justify-center gap-3 text-center">
                 <Upload className="mx-auto size-14 text-foreground" strokeWidth={1.75} />
-                <div className="text-xl font-medium text-foreground">Drop up to 10 files</div>
+                <div className="text-xl font-medium text-foreground">Drop up to {MAX_FILES_PER_DROP} files</div>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 ---
 name: kanna-subagents
-description: Subagent delegation — how the main agent hands work to a subagent and gets it back, covering delegate_subagent, send_subagent_message, close_subagent, the roster injected into the system prompt, the spawn gate that decides whether a run may start, keep-alive multi-turn sessions, and background runs that deliver back into the main chat. Use whenever a task involves delegating to a subagent, an @agent/<name> mention, a run that failed AUTH_REQUIRED / LOOP_DETECTED / DEPTH_EXCEEDED / CAP_EXCEEDED / MAX_TURNS / NO_LIVE_SESSION, keep_alive or run_in_background, the permit pool and its concurrency limits, KANNA_SUBAGENT_MAX_LIVE or KANNA_SUBAGENT_IDLE_TIMEOUT_MS, or a background subagent whose result never came back to the main chat. Read it before changing SubagentOrchestrator, subagent-provider-run.ts, or the delegation tools in kanna-mcp.ts.
+description: Subagent delegation — how the main agent hands work to a subagent and gets it back, covering delegate_subagent, send_subagent_message, close_subagent, the roster injected into the system prompt, the spawn gate that decides whether a run may start, keep-alive multi-turn sessions, and background runs that deliver back into the main chat. Use whenever a task involves delegating to a subagent, an @agent/name mention, a run that failed AUTH_REQUIRED / LOOP_DETECTED / DEPTH_EXCEEDED / CAP_EXCEEDED / MAX_TURNS / NO_LIVE_SESSION, keep_alive or run_in_background, the permit pool and its concurrency limits, KANNA_SUBAGENT_MAX_LIVE or KANNA_SUBAGENT_IDLE_TIMEOUT_MS, or a background subagent whose result never came back to the main chat. Read it before changing SubagentOrchestrator, subagent-provider-run.ts, or the delegation tools in kanna-mcp.ts.
 ---
 
 # Subagent delegation (Anthropic Task-tool pattern)
@@ -15,7 +15,7 @@ the main model then synthesizes it into its own response.
 - **Roster injection:** `buildKannaSystemPromptAppend(subagents)` in
   `src/shared/kanna-system-prompt.ts` builds a dynamic system-prompt
   suffix listing every configured subagent's `name`, `id`, and
-  `description`. Computed per-spawn in `agent.ts` and passed to the Claude
+  `description`. Computed per-spawn in `claude-session-spawner.ts` and passed to the Claude
   session via `systemPrompt.append`. Truncated at 20 entries by `updatedAt`
   descending; remainder surfaced as "(N more subagents omitted ...)".
 - **MCP tool:** registered in `kanna-mcp.ts` only when the spawn
@@ -121,7 +121,8 @@ calling these tools.
   - `close_subagent({ run_id })` — tears down + frees the process.
 - **Env vars:** `KANNA_SUBAGENT_MAX_LIVE` (default 5),
   `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — both wired into the
-  orchestrator deps at `AgentCoordinator` construction (`agent.ts`); the
+  orchestrator deps at `AgentCoordinator` construction (`agent-coordinator.ts`,
+  env read in `agent-runtime-config.ts`); the
   orchestrator itself reads only its deps (side-effect seal).
 
 ## Background subagents (`delegate_subagent run_in_background`)
@@ -146,7 +147,7 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   is wired as `onBackgroundRunComplete`. Every delivery emits
   `auto_continue_accepted { source: "subagent_background", delayMs: 0 }` whose
   prompt is the structured `<task-notification>` XML (`buildTaskNotification`
-  in `agent.ts` — same format Claude Code's LocalAgentTask uses, so the model
+  in `claude-session-config.ts` — same format Claude Code's LocalAgentTask uses, so the model
   parses task identity/status natively). An ARMED loop delivery first (1) wipes
   the chat's Claude `session_token` (main /clear equivalent — same machinery
   `exit_plan_mode`'s clearContext branch uses) and (2) appends a

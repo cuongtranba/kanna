@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
-import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
+import { defaultAppSettingsSnapshot } from "../../server/app-settings"
 import { DISABLED_SERVICE_BUS_STATUS, SERVICE_BUS_PUBLIC_DEFAULTS, type ServiceBusSettingsPublic, type ServiceBusStatus } from "../../shared/service-bus/jetstream-config"
 import type { AppSettingsPatch } from "../../shared/types"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
@@ -22,7 +22,7 @@ afterEach(() => {
 
 function seed(serviceBus: Partial<ServiceBusSettingsPublic>, status: Partial<ServiceBusStatus> = {}) {
   useAppSettingsStore.getState().setFromServer({
-    ...buildInitialAppSettingsSnapshot(),
+    ...defaultAppSettingsSnapshot(),
     serviceBus: { ...SERVICE_BUS_PUBLIC_DEFAULTS, ...serviceBus },
   })
   useServiceBusStore.getState().setStatus({ ...DISABLED_SERVICE_BUS_STATUS, ...status })

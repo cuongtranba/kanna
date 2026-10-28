@@ -1,5 +1,4 @@
 import { useMemo, type ComponentType, type ReactNode } from "react"
-import { CopyButtonStore } from "./CopyButton.store"
 import {
   Check,
   ChevronRight,
@@ -12,25 +11,21 @@ import {
   SquarePen,
   Terminal,
 } from "lucide-react"
-import { APP_NAME, getCliInvocation, SDK_CLIENT_APP } from "../../shared/branding"
+import { APP_NAME, APP_VERSION, getCliInvocation } from "../../shared/branding"
+import { PROD_SERVER_PORT } from "../../shared/ports"
 import type { LocalProjectsSnapshot } from "../../shared/types"
 import type { SocketStatus } from "../app/socket"
 import { PageHeader } from "../app/PageHeader"
-import { getPathBasename } from "../lib/formatters"
+import { fileNameOfPath } from "../lib/pathUtils"
 import { cn } from "../lib/utils"
 import { NewProjectModal } from "./NewProjectModal"
 import { Button } from "./ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip"
-import type { ClipboardPort, TimerPort } from "../ports"
-import { clipboardAdapter, timerAdapter } from "../adapters"
+import { useCopyFeedback } from "../stores/copyFeedbackStore"
 import { runDetached } from "../lib/runDetached"
+import type { ProjectRequest } from "../lib/projectRequest"
 import { runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { CREATE_PROJECT_KEY, openProjectKey } from "./chat-ui/sidebar/sidebarPendingActions"
-
-type CopyPorts = {
-  clipboard?: ClipboardPort
-  timer?: TimerPort
-}
 
 interface LocalDevProps {
   connectionStatus: SocketStatus
@@ -41,20 +36,11 @@ interface LocalDevProps {
   newProjectOpen: boolean
   onNewProjectOpenChange: (open: boolean) => void
   onOpenProject: (localPath: string) => Promise<void>
-  onCreateProject: (project: { mode: "new" | "existing"; localPath: string; title: string }) => Promise<void>
+  onCreateProject: (project: ProjectRequest) => Promise<void>
 }
 
-function CopyButtonInner({ text, ports = {} }: { text: string; ports?: CopyPorts }) {
-  const copied = CopyButtonStore.useScopedStore((s) => s.copied)
-  const setCopied = CopyButtonStore.useScopedStore((s) => s.setCopied)
-  const clipboard = ports.clipboard ?? clipboardAdapter
-  const timer = ports.timer ?? timerAdapter
-
-  async function handleCopy() {
-    await clipboard.writeText(text)
-    setCopied(true)
-    timer.setTimeout(() => setCopied(false), 2000)
-  }
+function CopyButton({ text }: { text: string }) {
+  const { copied, copy } = useCopyFeedback()
 
   return (
     <Button
@@ -62,18 +48,10 @@ function CopyButtonInner({ text, ports = {} }: { text: string; ports?: CopyPorts
       size="icon-mobile"
       aria-label={copied ? "Copied" : "Copy to clipboard"}
       className="text-muted-foreground hover:text-foreground"
-      onClick={() => runDetached("copy command", handleCopy())}
+      onClick={() => runDetached("copy command", copy(text))}
     >
       {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4" />}
     </Button>
-  )
-}
-
-function CopyButton({ text }: { text: string }) {
-  return (
-    <CopyButtonStore.Provider init={{}}>
-      <CopyButtonInner text={text} />
-    </CopyButtonStore.Provider>
   )
 }
 
@@ -173,7 +151,7 @@ function ProjectCard({
         >
           <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <span className="font-medium text-foreground truncate flex-1">
-            {getPathBasename(localPath)}
+            {fileNameOfPath(localPath)}
           </span>
           {loading ? (
             <Loader2 className="h-4 w-4 text-muted-foreground group-hover:text-primary animate-spin flex-shrink-0" />
@@ -263,7 +241,7 @@ export function LocalDev({
 
                   <Step number={2} title="Open the local UI">
                     <p>{APP_NAME} serves the app locally and opens the Local Projects page in an app-style browser window.</p>
-                    <CodeBlock>http://localhost:3210/local</CodeBlock>
+                    <CodeBlock>{`http://localhost:${PROD_SERVER_PORT}/local`}</CodeBlock>
                   </Step>
 
                   <div className="mt-8">
@@ -336,7 +314,7 @@ export function LocalDev({
       />
 
       <div className="py-4 text-center">
-        <span className="text-xs text-muted-foreground/50">v{SDK_CLIENT_APP.split("/")[1]}</span>
+        <span className="text-xs text-muted-foreground/50">v{APP_VERSION}</span>
       </div>
     </div>
   )

@@ -3,76 +3,19 @@ import { handleSettingsCommand, isSubagentValidationError } from "./ws-router-se
 import type { SettingsCommandDeps } from "./ws-router-settings"
 import type { AppSettingsSnapshot, Subagent, SubagentValidationError } from "../shared/types"
 import type { ClientCommand } from "../shared/protocol"
-import {
-  AUTH_DEFAULTS,
-  CLAUDE_AUTH_DEFAULTS,
-  CLAUDE_DRIVER_DEFAULTS,
-  CLAUDE_LIFECYCLE_DEFAULTS,
-  CLOUDFLARE_TUNNEL_DEFAULTS,
-  DEFAULT_OPENROUTER_SDK_MODEL,
-  PACKAGE_UPDATE_SETTINGS_DEFAULTS,
-  PLUGIN_SETTINGS_DEFAULTS,
-  REMOTE_MCP_SETTINGS_DEFAULTS,
-  PROTOCOL_VERSION,
-  PUSH_DEFAULTS,
-  TELEMETRY_DEFAULTS,
-  TYPOGRAPHY_DEFAULTS,
-  UPLOAD_DEFAULTS,
-} from "../shared/types"
+import { PROTOCOL_VERSION } from "../shared/types"
 import { KeybindingsManager } from "./keybindings"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
-import { DEFAULT_TAB_MIN_WIDTH } from "../shared/pane-tab-width"
 import { UPDATE_PROTOCOL } from "../shared/beacon-protocol"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
 import { createBeaconRegistry } from "./beacon-registry"
-import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-config"
+import { defaultAppSettingsSnapshot } from "./app-settings"
 
 
 function makeSnapshot(): AppSettingsSnapshot {
-  return {
-    analyticsEnabled: true,
-    browserSettingsMigrated: false,
-    theme: "system",
-    typography: TYPOGRAPHY_DEFAULTS,
-    chatSoundPreference: "always",
-    chatSoundId: "funk",
-    terminal: { scrollbackLines: 1_000, minColumnWidth: 450 },
-    panes: { tabMinWidth: DEFAULT_TAB_MIN_WIDTH },
-    editor: { preset: "cursor", commandTemplate: "cursor {path}" },
-    defaultProvider: "last_used",
-    providerDefaults: {
-      claude: { model: "claude-opus-4-7", modelOptions: { reasoningEffort: "high", contextWindow: "200k" }, planMode: false },
-      codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
-      openrouter: { model: DEFAULT_OPENROUTER_SDK_MODEL, modelOptions: {}, planMode: false },
-      custom: { model: "", modelOptions: {}, planMode: false },
-    },
-    warning: null,
-    filePathDisplay: "~/.kanna/data/settings.json",
-    cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
-    push: PUSH_DEFAULTS,
-    telemetry: TELEMETRY_DEFAULTS,
-    auth: AUTH_DEFAULTS,
-    claudeAuth: CLAUDE_AUTH_DEFAULTS,
-    uploads: UPLOAD_DEFAULTS,
-    subagents: [],
-    customMcpServers: [],
-    customBeacons: [],
-    customModels: [],
-    customProviders: [],
-    textSnippets: [],
-    mcpSources: [],
-    claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
-    globalPromptAppend: "",
-    shareDefaultTtlHours: 24,
-    subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
-    packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
-    plugins: PLUGIN_SETTINGS_DEFAULTS,
-    remoteMcp: REMOTE_MCP_SETTINGS_DEFAULTS,
-    serviceBus: SERVICE_BUS_PUBLIC_DEFAULTS,
-    installedPlugins: [],
-  }
+  return defaultAppSettingsSnapshot()
 }
 
 async function makeDeps(tmpDir: string): Promise<SettingsCommandDeps & { sent: unknown[] }> {
@@ -184,6 +127,44 @@ describe("handleSettingsCommand", () => {
     } finally {
       await rm(tmpD, { recursive: true, force: true })
     }
+  })
+})
+
+describe("analytics toggles", () => {
+  async function runPatch(analyticsEnabled: boolean, startsEnabled: boolean) {
+    const tmpD = await mkdtemp(path.join(tmpdir(), "ws-settings-test-"))
+    try {
+      const deps = await makeDeps(tmpD)
+      let enabled = startsEnabled
+      const events: string[] = []
+      deps.resolvedAppSettings.getSnapshot = () => ({ ...makeSnapshot(), analyticsEnabled: enabled })
+      deps.resolvedAppSettings.writePatch = async (patch) => {
+        events.push("write")
+        enabled = patch.analyticsEnabled ?? enabled
+        return { ...makeSnapshot(), analyticsEnabled: enabled }
+      }
+      deps.resolvedAnalytics = { track: (name) => { events.push(name) } }
+      await handleSettingsCommand(
+        deps,
+        { type: "settings.writeAppSettingsPatch", patch: { analyticsEnabled } },
+        "req-analytics",
+      )
+      return events
+    } finally {
+      await rm(tmpD, { recursive: true, force: true })
+    }
+  }
+
+  test("a patch that disables analytics reports analytics_disabled before the write turns the reporter off", async () => {
+    expect(await runPatch(false, true)).toEqual(["analytics_disabled", "write"])
+  })
+
+  test("a patch that enables analytics reports analytics_enabled after the write", async () => {
+    expect(await runPatch(true, false)).toEqual(["write", "analytics_enabled"])
+  })
+
+  test("a patch that leaves analytics unchanged reports nothing", async () => {
+    expect(await runPatch(true, true)).toEqual(["write"])
   })
 })
 

@@ -1,6 +1,6 @@
 
 import { useCallback } from "react"
-import { useKannaStateStore } from "../stores/kannaStateStore"
+import { surfaceCommandError } from "../lib/commandFeedback"
 import type { KannaSocket } from "./socket"
 
 export interface StackCommands {
@@ -15,12 +15,7 @@ export interface StackCommands {
 
 export function useStackCommands(socket: KannaSocket): StackCommands {
   const run = useCallback(async (command: Parameters<KannaSocket["command"]>[0]) => {
-    try {
-      await socket.command(command)
-      useKannaStateStore.getState().setCommandError(null)
-    } catch (error) {
-      useKannaStateStore.getState().setCommandError(error instanceof Error ? error.message : String(error))
-    }
+    await surfaceCommandError(() => socket.command(command))
   }, [socket])
 
   const handleCreateStack = useCallback(

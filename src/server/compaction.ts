@@ -5,7 +5,7 @@ import type {
   CompactionTrigger,
   CompactSummaryEntry,
 } from "../shared/transcript-types"
-import { timestamped } from "./claude-message-normalizer"
+import { timestamped } from "../shared/transcript-entry"
 import {
   addCounter,
   recordHistogram,

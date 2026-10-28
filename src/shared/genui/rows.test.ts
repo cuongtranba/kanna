@@ -25,3 +25,10 @@ test("explains what shape it expected when the data is not a table", () => {
   const parsed = rowsFromJson({ answer: 42 })
   expect(parsed.ok).toBe(false)
 })
+
+test("a rowsPath naming an inherited object key reports that the path does not exist", () => {
+  expect(rowsFromJson({ rows: [{ a: 1 }] }, "constructor")).toEqual({
+    ok: false,
+    message: 'rowsPath "constructor" does not exist in the data',
+  })
+})

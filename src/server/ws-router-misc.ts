@@ -1,10 +1,12 @@
+import { projectNotFound } from "../shared/errors"
 import type { JsonObject } from "../shared/json"
 
 import { ackResult } from "./ws-router-ack"
 import type { GitWorktree } from "../shared/types"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import type { TerminalSnapshot } from "../shared/protocol"
-import type { MintRequest, MintResponse, RevokeRequest, ShareError, ShareSummary } from "../shared/session-share/types"
+import type { MintRequest, MintResponse, RevokeRequest, ShareSummary } from "../shared/session-share/types"
+import type { ShareResult } from "./session-share"
 
 
 export interface MiscStoreDep {
@@ -39,8 +41,6 @@ export interface MiscAgentDep {
 export interface MiscAnalyticsDep {
   track(event: string, props?: JsonObject): void
 }
-
-export type ShareResult<T> = { ok: true; data: T } | { ok: false; error: ShareError }
 
 export interface MiscSessionShareDep {
   mintToken(req: MintRequest, baseUrl: string): Promise<ShareResult<MintResponse>>
@@ -93,7 +93,7 @@ export async function handleMiscCommand(
     case "terminal.create": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
       const snapshot = terminals.createTerminal({
         projectPath: project.localPath,
@@ -166,7 +166,7 @@ export async function handleMiscCommand(
     case "stack.listWorktrees": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
       const worktrees = await listWorktrees(project.localPath)
       send(ackResult(id, command, { worktrees }))

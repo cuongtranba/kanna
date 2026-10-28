@@ -27,7 +27,7 @@ function fakeSocket() {
   const frames: BeaconFrame[] = []
   const state = { closed: false }
   const socket: BeaconConnectionSocket = {
-    data: { subscriptions: new Map(), snapshotSignatures: new Map(), kind: "beacon" },
+    data: { kind: "beacon" },
     send(payload: SendPayload): number {
       frames.push(JSON.parse(String(payload)))
       return frames.length

@@ -1,5 +1,6 @@
 
 import {
+  CRON_MODES,
   isCronMode,
   type CronCommand,
   type CronJobPatch,
@@ -21,6 +22,16 @@ type Outcome =
 
 const MODE_HINT = "`inline` (runs in this chat, cleared each cycle) or `spawn` (a new chat per run)"
 const ARM_SHAPE = "`/cron <instruction> <inline|spawn> <schedule>`"
+
+export const CRON_USAGE_LINES: readonly string[] = [
+  "/cron <instruction> inline|spawn <schedule>",
+  "/cron list · /cron remove <id> · /cron pause <id> · /cron resume <id>",
+  "schedules: `0 9 * * 1-5` · `*/30 * * * * *` (leading second) · @hourly @daily @weekly @monthly · every 30s / every 5m / every 2h",
+]
+
+export function formatCronCommand(command: { instruction: string; mode: CronMode; scheduleText: string }): string {
+  return `/cron ${command.instruction} ${command.mode} ${command.scheduleText}`
+}
 
 export function parseCronCommand(content: string): CronParseResult | null {
   const line = content.trim()
@@ -302,7 +313,7 @@ function finishArm(instruction: string, mode: CronMode, scheduleText: string): O
         message: parsed.message,
         suggestion:
           parsed.correctedSchedule !== undefined
-            ? validateSuggestion(`/cron ${instruction} ${mode} ${parsed.correctedSchedule}`)
+            ? validateSuggestion(formatCronCommand({ instruction, mode, scheduleText: parsed.correctedSchedule }))
             : undefined,
       },
     }
@@ -342,7 +353,7 @@ function missingModeError(line: string, tokens: Token[]): Outcome {
       error: {
         part: "mode",
         message: `missing mode — expected ${MODE_HINT} between the instruction and the schedule`,
-        suggestion: validateSuggestion(`/cron ${instruction} inline ${scheduleText.trim()}`),
+        suggestion: validateSuggestion(formatCronCommand({ instruction, mode: "inline", scheduleText: scheduleText.trim() })),
       },
     }
   }
@@ -358,9 +369,7 @@ function missingModeError(line: string, tokens: Token[]): Outcome {
 
 function nearestMode(token: string): CronMode | null {
   const lowered = token.toLowerCase()
-  if (levenshtein(lowered, "inline", 2) <= 2) return "inline"
-  if (levenshtein(lowered, "spawn", 2) <= 2) return "spawn"
-  return null
+  return CRON_MODES.find((mode) => levenshtein(lowered, mode, 2) <= 2) ?? null
 }
 
 function stripQuotes(text: string): string {

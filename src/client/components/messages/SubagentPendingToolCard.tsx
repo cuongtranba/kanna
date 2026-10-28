@@ -6,7 +6,7 @@ import type {
   SubagentPendingTool,
 } from "../../../shared/types"
 import { useCallback } from "react"
-import { isRecord } from "../../../shared/errors"
+import { CLAUDE_ASK_USER_QUESTION_TOOL_NAME, CLAUDE_EXIT_PLAN_MODE_TOOL_NAME, normalizeToolCall } from "../../../shared/tools"
 import { Spinner } from "../ui/spinner"
 import { AskUserQuestionMessage } from "./AskUserQuestionMessage"
 import { ExitPlanModeMessage, useExitPlanModeResponding } from "./ExitPlanModeMessage"
@@ -45,19 +45,24 @@ export function SubagentPendingToolCard({
     [onExitPlanModeSubmit],
   )
 
-  if (pendingTool.toolKind === "ask_user_question") {
-    const questionsRaw = pendingTool.input.questions
-    const questions: AskUserQuestionItem[] = Array.isArray(questionsRaw)
-      ? questionsRaw.filter((q): q is AskUserQuestionItem => isRecord(q))
-      : []
+  const call = normalizeToolCall({
+    toolName: pendingTool.toolKind === "ask_user_question"
+      ? CLAUDE_ASK_USER_QUESTION_TOOL_NAME
+      : CLAUDE_EXIT_PLAN_MODE_TOOL_NAME,
+    toolId: pendingTool.toolUseId,
+    input: pendingTool.input,
+  })
+  const timestamp = new Date(pendingTool.requestedAt).toISOString()
+
+  if (call.toolKind === "ask_user_question") {
     const message: HydratedAskUserQuestionToolCall = {
       id: pendingTool.toolUseId,
       kind: "tool",
-      toolKind: "ask_user_question",
-      toolName: "AskUserQuestion",
-      toolId: pendingTool.toolUseId,
-      input: { questions },
-      timestamp: new Date(pendingTool.requestedAt).toISOString(),
+      toolKind: call.toolKind,
+      toolName: call.toolName,
+      toolId: call.toolId,
+      input: call.input,
+      timestamp,
     }
     return (
       <div data-testid={`subagent-pending-tool:${pendingTool.toolUseId}`}>
@@ -71,19 +76,15 @@ export function SubagentPendingToolCard({
     )
   }
 
-  if (pendingTool.toolKind === "exit_plan_mode") {
-    const rawInput = pendingTool.input
+  if (call.toolKind === "exit_plan_mode") {
     const message: HydratedExitPlanModeToolCall = {
       id: pendingTool.toolUseId,
       kind: "tool",
-      toolKind: "exit_plan_mode",
-      toolName: "ExitPlanMode",
-      toolId: pendingTool.toolUseId,
-      input: {
-        plan: typeof rawInput.plan === "string" ? rawInput.plan : undefined,
-        summary: typeof rawInput.summary === "string" ? rawInput.summary : undefined,
-      },
-      timestamp: new Date(pendingTool.requestedAt).toISOString(),
+      toolKind: call.toolKind,
+      toolName: call.toolName,
+      toolId: call.toolId,
+      input: call.input,
+      timestamp,
     }
     return (
       <div

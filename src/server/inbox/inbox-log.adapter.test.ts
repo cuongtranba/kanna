@@ -40,3 +40,35 @@ test("rewrite replaces the whole log atomically", async () => {
   expect(await log.readAll()).toEqual([read])
   expect(await readFile(path.join(dir, "inbox.jsonl"), "utf8")).toBe(`${JSON.stringify(read)}\n`)
 })
+
+test("a non-string chatId, projectId or draftReply drops only that field, not the whole line", async () => {
+  const log = createFileInboxLog(dir)
+  const item = {
+    id: "i1",
+    ts: 5,
+    subject: "s",
+    source: { kind: "inbox" },
+    chatId: 7,
+    projectId: { bad: true },
+    title: "t",
+    preview: "p",
+    payload: null,
+    attention: false,
+    unread: true,
+  }
+  const report = { verdict: "fyi", summary: "sum", draftReply: 42, at: 6, chatId: "c1" }
+  const lines = [
+    { v: 1, ts: 5, kind: "inbox_activity_added", item },
+    { v: 1, ts: 6, kind: "inbox_thread_reported", threadId: "t1", report },
+  ]
+  await appendFile(path.join(dir, "inbox.jsonl"), lines.map((line) => `${JSON.stringify(line)}\n`).join(""), "utf8")
+  const events = await log.readAll()
+  expect(events).toHaveLength(2)
+  const [added, reported] = events
+  if (added.kind !== "inbox_activity_added" || reported.kind !== "inbox_thread_reported") throw new Error("unexpected kinds")
+  expect(added.item.id).toBe("i1")
+  expect(added.item.chatId).toBeUndefined()
+  expect(added.item.projectId).toBeUndefined()
+  expect(reported.report.summary).toBe("sum")
+  expect(reported.report.draftReply).toBeUndefined()
+})

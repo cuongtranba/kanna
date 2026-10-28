@@ -1,5 +1,4 @@
 import { useCallback, useMemo, type ChangeEvent, type ReactNode } from "react"
-import type { InboundHandlerMode } from "../../shared/inbound/handler"
 import type { McpSource, McpSourceMode } from "../../shared/mcp-sources/types"
 import type { McpServerConfig, SidebarData } from "../../shared/types"
 import { Button } from "../components/ui/button"
@@ -8,23 +7,18 @@ import { SearchableSelect, type SearchableOption } from "../components/ui/search
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
 import { mcpSourceInputFromDraft, mcpSourcePatchFromInput, type McpSourceDraft } from "../lib/mcpSourceDraft"
+import { surfaceErrorIn } from "../lib/commandFeedback"
 import { mcpSourceModeConsequence, mcpSourceModeLabel } from "../lib/mcpSourcePresentation"
-import { webhookModeConsequence, webhookModeLabel } from "../lib/webhookPresentation"
-import { listWebhookModelOptions, listWebhookTargets } from "../lib/webhookTargets"
+import { listInboundModelOptions, listInboundTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useMcpSourcesSectionStore } from "../stores/mcpSourcesSectionStore"
-import { WebhookTargetSelect } from "./WebhookTargetSelect"
+import { InboundHandlerFields } from "./InboundHandlerFields"
 import { useProviderCatalog } from "./useProviderCatalog"
 import type { McpSourcesSectionHandlers } from "./McpSourcesSection"
 
 const MODE_OPTIONS: SegmentedOption<McpSourceMode>[] = (["subscribe", "poll"] as const).map((mode) => ({
   value: mode,
   label: mcpSourceModeLabel(mode),
-}))
-
-const HANDLER_OPTIONS: SegmentedOption<InboundHandlerMode>[] = (["notify", "inline", "spawn"] as const).map((mode) => ({
-  value: mode,
-  label: webhookModeLabel(mode),
 }))
 
 function Field({ id, label, hint, children }: { id: string; label: string; hint?: ReactNode; children: ReactNode }) {
@@ -105,8 +99,8 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
   const setError = useMcpSourcesSectionStore((state) => state.setError)
   const saveKey = pendingActionKey("mcpSources.save", editing?.id ?? "new")
   const saving = usePendingAction(saveKey)
-  const targets = useMemo(() => listWebhookTargets(sidebarData), [sidebarData])
-  const modelOptions = useMemo(() => listWebhookModelOptions(catalog), [catalog])
+  const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
+  const modelOptions = useMemo(() => listInboundModelOptions(catalog), [catalog])
   const options = useMemo(() => serverOptions(servers, draft.serverId), [servers, draft.serverId])
   const result = useMemo(() => mcpSourceInputFromDraft(draft), [draft])
   const startsTurn = draft.handlerMode !== "notify"
@@ -114,16 +108,11 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
   const handleNameChange = useCallback((event: ChangeEvent<HTMLInputElement>) => patchDraft({ name: event.target.value }), [patchDraft])
   const handleSave = useCallback(() => {
     if (!result.ok) return
-    runPendingAction(saveKey, async () => {
-      setError(null)
-      try {
-        if (editing) await handlers.onUpdate(editing.id, mcpSourcePatchFromInput(result.input))
-        else await handlers.onCreate(result.input)
-        closeEditor()
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Failed to save the MCP source")
-      }
-    })
+    runPendingAction(saveKey, () => surfaceErrorIn(setError, async () => {
+      if (editing) await handlers.onUpdate(editing.id, mcpSourcePatchFromInput(result.input))
+      else await handlers.onCreate(result.input)
+      closeEditor()
+    }))
   }, [closeEditor, editing, handlers, result, saveKey, setError])
 
   return (
@@ -170,32 +159,22 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
         </Field>
       </div>
 
-      <div className="space-y-1.5">
-        <span className="block text-sm font-medium text-foreground">Action</span>
-        <SegmentedControl value={draft.handlerMode} onValueChange={(handlerMode) => patchDraft({ handlerMode })} options={HANDLER_OPTIONS} size="sm" />
-        <p className="text-xs text-muted-foreground">{webhookModeConsequence(draft.handlerMode)}</p>
-      </div>
-
-      <Field id="mcp-source-target" label={draft.handlerMode === "spawn" ? "Project" : "Chat"}>
-        {draft.handlerMode === "spawn" ? (
-          <WebhookTargetSelect id="mcp-source-target" value={draft.projectId} options={targets.projects} placeholder="Choose a project" searchPlaceholder="Search projects..." onValueChange={(projectId) => patchDraft({ projectId })} />
-        ) : (
-          <WebhookTargetSelect id="mcp-source-target" value={draft.chatId} options={targets.chats} placeholder="Choose a chat" searchPlaceholder="Search chats..." onValueChange={(chatId) => patchDraft({ chatId })} />
-        )}
-      </Field>
-
-      {startsTurn ? (
-        <Field id="mcp-source-model" label="Model" hint="The model the turn started by each message runs with.">
-          <SearchableSelect
-            id="mcp-source-model"
-            value={draft.modelValue}
-            options={modelOptions}
-            placeholder="Choose a model"
-            searchPlaceholder="Search models..."
-            onValueChange={(modelValue) => patchDraft({ modelValue })}
-          />
-        </Field>
-      ) : null}
+      <InboundHandlerFields
+        idPrefix="mcp-source"
+        mode={draft.handlerMode}
+        chatId={draft.chatId}
+        projectId={draft.projectId}
+        modelValue={draft.modelValue}
+        targets={targets}
+        modelOptions={modelOptions}
+        modelHint="The model the turn started by each message runs with."
+        showModeControl
+        startsTurn={startsTurn}
+        onModeChange={(handlerMode) => patchDraft({ handlerMode })}
+        onChatChange={(chatId) => patchDraft({ chatId })}
+        onProjectChange={(projectId) => patchDraft({ projectId })}
+        onModelChange={(modelValue) => patchDraft({ modelValue })}
+      />
 
       <Field id="mcp-source-template" label="Instruction template" hint={<>Insert fields from the message with <code className="font-mono">{"{{senderName}}"}</code>. The message is appended as untrusted data.</>}>
         <Textarea id="mcp-source-template" rows={4} value={draft.template} onChange={(event) => patchDraft({ template: event.target.value })} />

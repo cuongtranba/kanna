@@ -1,35 +1,30 @@
 import { create } from "zustand"
+import { LIST_EDITING, type SectionEditing } from "../lib/sectionEditing"
 import {
   deriveDraftId,
   emptyCustomProviderDraft,
   type CustomProviderDraft,
 } from "../lib/customProviderDraft"
 
-export type CustomProvidersEditingState =
-  | { kind: "list" }
-  | { kind: "create" }
-  | { kind: "edit"; id: string }
-
 export interface CustomProviderEditorForm extends CustomProviderDraft {
-  submitting: boolean
   error: string | null
 }
 
 export type ModelRowField = "id" | "label"
 
 function createEditorForm(draft: CustomProviderDraft): CustomProviderEditorForm {
-  return { ...draft, submitting: false, error: null }
+  return { ...draft, error: null }
 }
 
 interface CustomProvidersSectionState {
-  editing: CustomProvidersEditingState
+  editing: SectionEditing
   menuOpen: boolean
   listError: string | null
   editorForm: CustomProviderEditorForm
 
   setMenuOpen: (open: boolean) => void
   setListError: (message: string | null) => void
-  startEditing: (editing: CustomProvidersEditingState, draft: CustomProviderDraft) => void
+  startEditing: (editing: SectionEditing, draft: CustomProviderDraft) => void
   discardEditor: () => void
   patchEditorForm: (patch: Partial<CustomProviderEditorForm>) => void
   setLabel: (label: string, takenIds: readonly string[]) => void
@@ -40,7 +35,7 @@ interface CustomProvidersSectionState {
 }
 
 export const useCustomProvidersSectionStore = create<CustomProvidersSectionState>()((set) => ({
-  editing: { kind: "list" },
+  editing: LIST_EDITING,
   menuOpen: false,
   listError: null,
   editorForm: createEditorForm(emptyCustomProviderDraft()),
@@ -52,7 +47,7 @@ export const useCustomProvidersSectionStore = create<CustomProvidersSectionState
     set({ editing, menuOpen: false, listError: null, editorForm: createEditorForm(draft) }),
 
   discardEditor: () =>
-    set({ editing: { kind: "list" }, menuOpen: false, editorForm: createEditorForm(emptyCustomProviderDraft()) }),
+    set({ editing: LIST_EDITING, menuOpen: false, editorForm: createEditorForm(emptyCustomProviderDraft()) }),
 
   patchEditorForm: (patch) =>
     set((state) => ({ editorForm: { ...state.editorForm, ...patch } })),

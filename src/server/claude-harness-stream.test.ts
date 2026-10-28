@@ -13,15 +13,13 @@ function fakeQuery(messages: unknown[]): AsyncGenerator<ClaudeRawSdkMessage> {
 async function collect(
   messages: unknown[],
   configuredContextWindow?: number,
-  resolveTurnPrice?: () => ModelPrice | null,
+  turnPrice?: ModelPrice | null,
   costBaselineUsd?: number,
 ): Promise<HarnessEvent[]> {
   const events: HarnessEvent[] = []
   for await (const ev of createClaudeHarnessStream(
     fakeQuery(messages),
-    configuredContextWindow,
-    resolveTurnPrice,
-    costBaselineUsd,
+    { contextWindow: configuredContextWindow, turnPrice, costBaselineUsd },
   )) {
     events.push(ev)
   }
@@ -244,7 +242,7 @@ describe("createClaudeHarnessStream", () => {
     expect(costs.map((c) => c.cumulativeCostUsd)).toEqual([0.01, 0.025])
   })
 
-  test("resolveTurnPrice callback used when total_cost_usd absent", async () => {
+  test("turn price used when total_cost_usd absent", async () => {
     const price: ModelPrice = { inputPerMTok: 3, outputPerMTok: 15, cachedInputPerMTok: 0.3 }
     const events = await collect(
       [
@@ -265,7 +263,7 @@ describe("createClaudeHarnessStream", () => {
         },
       ],
       undefined,
-      () => price,
+      price,
     )
     const resultEntries = events.flatMap((e) =>
       e.type === "transcript" && e.entry?.kind === "result" ? [e.entry] : [],
@@ -318,7 +316,7 @@ describe("createClaudeHarnessStream", () => {
         },
       ],
       undefined,
-      () => price,
+      price,
     )
     const resultEntries = events.flatMap((e) =>
       e.type === "transcript" && e.entry?.kind === "result" ? [e.entry] : [],
@@ -430,7 +428,7 @@ describe("createClaudeHarnessStream cost attachment", () => {
         },
       ],
       undefined,
-      () => price,
+      price,
     )
 
     const cwuEntries = events.flatMap((ev) =>
@@ -497,7 +495,7 @@ describe("result entry usage + cost enrichment", () => {
         },
       ],
       undefined,
-      () => price,
+      price,
     )
 
     const resultEntries = events.flatMap((ev) =>

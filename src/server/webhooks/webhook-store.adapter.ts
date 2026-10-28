@@ -1,12 +1,10 @@
-import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { join } from "node:path"
 import { isJsonArray, isJsonObject, safeJsonParse, type JsonValue } from "../../shared/json"
 import { isAgentProvider } from "../../shared/types"
-import { isWebhookMode } from "../../shared/webhooks/validate"
-import type { StoredWebhook, WebhookStorePort } from "./webhook-registry"
+import { isInboundHandlerMode } from "../../shared/inbound/handler"
+import { createSecretJsonStore } from "../secret-json-store.adapter"
+import { optionalHookFields, type StoredWebhook, type WebhookStorePort } from "./webhook-registry"
 
 const FILE_NAME = "webhooks.json"
-const FILE_MODE = 0o600
 
 function optionalString(value: JsonValue | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined
@@ -21,21 +19,24 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
   if (!isJsonObject(value)) return null
   const { id, name, secret, template, mode, enabled, createdAt, updatedAt } = value
   if (typeof id !== "string" || typeof name !== "string" || typeof secret !== "string") return null
-  if (typeof template !== "string" || typeof mode !== "string" || !isWebhookMode(mode)) return null
+  if (typeof template !== "string" || typeof mode !== "string" || !isInboundHandlerMode(mode)) return null
   if (typeof enabled !== "boolean" || typeof createdAt !== "number" || typeof updatedAt !== "number") return null
   const kind = value.kind === undefined ? "generic" : value.kind
   if (kind !== "generic" && kind !== "slack") return null
   const slackBotToken = optionalString(value.slackBotToken)
   if (kind === "slack" && !slackBotToken) return null
-  const chatId = optionalString(value.chatId)
-  const projectId = optionalString(value.projectId)
-  const provider = typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined
-  const model = optionalString(value.model)
-  const threadKeyPath = optionalString(value.threadKeyPath)
-  const senderPath = optionalString(value.senderPath)
-  const replyHint = optionalString(value.replyHint)
-  const filter = optionalString(value.filter)
-  const handling = value.handling === "task" ? value.handling : undefined
+  const optional = optionalHookFields({
+    kind,
+    handling: value.handling === "task" ? value.handling : undefined,
+    chatId: optionalString(value.chatId),
+    projectId: optionalString(value.projectId),
+    provider: typeof value.provider === "string" && isAgentProvider(value.provider) ? value.provider : undefined,
+    model: optionalString(value.model),
+    threadKeyPath: optionalString(value.threadKeyPath),
+    senderPath: optionalString(value.senderPath),
+    replyHint: optionalString(value.replyHint),
+    filter: optionalString(value.filter),
+  })
   return {
     id,
     name,
@@ -49,14 +50,7 @@ function parseStoredWebhook(value: JsonValue): StoredWebhook | null {
     ...(kind === "slack" && slackBotToken
       ? { slack: { allowedUserIds: parseSlackIds(value.slack) }, slackBotToken }
       : {}),
-    ...(kind === "generic" && handling ? { handling } : {}),
-    ...(chatId ? { chatId } : {}),
-    ...(projectId ? { projectId } : {}),
-    ...(provider && model ? { provider, model } : {}),
-    ...(threadKeyPath ? { threadKeyPath } : {}),
-    ...(senderPath ? { senderPath } : {}),
-    ...(replyHint ? { replyHint } : {}),
-    ...(filter ? { filter } : {}),
+    ...optional,
   }
 }
 
@@ -72,21 +66,5 @@ export function parseStoredWebhooks(text: string): StoredWebhook[] {
 }
 
 export function createFileWebhookStore(dataDir: string): WebhookStorePort {
-  const path = join(dataDir, FILE_NAME)
-  const tempPath = `${path}.tmp`
-  return {
-    async load() {
-      try {
-        return parseStoredWebhooks(await readFile(path, "utf8"))
-      } catch {
-        return []
-      }
-    },
-    async save(hooks) {
-      await mkdir(dataDir, { recursive: true })
-      await writeFile(tempPath, JSON.stringify({ hooks }, null, 2), { mode: FILE_MODE })
-      await chmod(tempPath, FILE_MODE)
-      await rename(tempPath, path)
-    },
-  }
+  return createSecretJsonStore(dataDir, FILE_NAME, "hooks", parseStoredWebhooks)
 }

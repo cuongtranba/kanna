@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { ProcessedLoopDisarmedMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 import { LoopDisarmedMessage } from "./LoopDisarmedMessage"
 
 const base = { id: "m-1", timestamp: "2026-08-30T00:00:00Z" }
 
-function render(message: Omit<ProcessedLoopDisarmedMessage, "id" | "timestamp" | "kind">) {
+function render(message: Omit<TranscriptMessageOf<"loop_disarmed">, "id" | "timestamp" | "kind">) {
   return renderToStaticMarkup(
     <LoopDisarmedMessage message={{ ...base, kind: "loop_disarmed", ...message }} />,
   )

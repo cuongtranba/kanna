@@ -53,6 +53,20 @@ describe("normalizeToolCall", () => {
     expect(tool.input.questions[0]?.multiSelect).toBe(false)
   })
 
+  test("mcp__kanna__ask_user_question accepts question as well as text and keeps the id", () => {
+    const tool = normalizeToolCall({
+      toolName: "mcp__kanna__ask_user_question",
+      toolId: "tool-mcp-2",
+      input: { questions: [{ id: "lang", question: "Favorite language?" }, { id: "ed", text: "Daily editor?" }] },
+    })
+
+    if (tool.toolKind !== "ask_user_question") throw new Error("unexpected tool kind")
+    expect(tool.input.questions.map((q) => [q.id, q.question])).toEqual([
+      ["lang", "Favorite language?"],
+      ["ed", "Daily editor?"],
+    ])
+  })
+
   test("mcp__kanna__exit_plan_mode normalizes same as ExitPlanMode", () => {
     const tool = normalizeToolCall({
       toolName: "mcp__kanna__exit_plan_mode",

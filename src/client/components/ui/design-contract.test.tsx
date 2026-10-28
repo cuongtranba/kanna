@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { Button } from "./button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./dialog"
-import { StatusPill } from "./status-pill"
+import { StateMarkLabel } from "./state-mark"
 
 describe("shared interaction design contract", () => {
   test("buttons use explicit motion, editorial radii, and coarse-pointer hit areas", async () => {
@@ -45,7 +45,7 @@ describe("shared interaction design contract", () => {
   })
 
   test("status labels use sentence case label typography without pulsing", async () => {
-    const rendered = await renderForLoopCheck(<StatusPill tone="attention" label="Running" pulse />)
+    const rendered = await renderForLoopCheck(<StateMarkLabel tone="attention" label="Running" />)
     try {
       const pill = document.querySelector("span")
       expect(pill?.className).toContain("text-xs")

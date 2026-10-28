@@ -6,6 +6,7 @@ import {
   cleanupDecisionSchema,
   columnColorTokenSchema,
   columnSemanticSchema,
+  fieldDefInputSchema,
   syncDirectionSchema,
 } from "../boards/types.schema"
 import {
@@ -56,7 +57,7 @@ export const boardCommands = defineCommands(
       boardId: z.string(),
       title: z.string().optional(),
       description: z.string().nullable().optional(),
-      cardFields: jsonValueSchema.optional(),
+      cardFields: z.array(fieldDefInputSchema).readonly().optional(),
     }),
     summary: "Update a board's title, description or card fields.",
     risk: "write",

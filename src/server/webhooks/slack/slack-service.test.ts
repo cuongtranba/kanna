@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test"
-import { timestamped } from "../../claude-message-normalizer"
+import { timestamped } from "../../../shared/transcript-entry"
 import {
   createSlackHookHarness,
   mentionBody,

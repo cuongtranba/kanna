@@ -8,5 +8,5 @@ code:
   - src/client/app/PluginsFooterSection.tsx
   - src/client/app/PluginsFooterSlot.tsx
   - src/client/app/PluginsFooterSlot.test.tsx
-  - src/client/app/PluginsSection.tsx
+  - src/client/app/KannaPluginsSection.tsx
   - src/client/app/KannaPluginsSettingsBranch.tsx

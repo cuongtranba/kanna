@@ -1,9 +1,10 @@
 import path from "node:path"
 
-export { persistProjectUpload, deleteProjectUpload, finalizeUploadFromFile } from "./uploads.adapter"
+import { DEFAULT_BINARY_MIME_TYPE } from "./uploads.adapter"
+
+export { persistProjectUpload, deleteProjectUpload, finalizeUploadFromFile, isSafeStoredName } from "./uploads.adapter"
 
 const TEXT_PLAIN_CONTENT_TYPE = "text/plain; charset=utf-8"
-const DEFAULT_BINARY_MIME_TYPE = "application/octet-stream"
 
 const TEXT_CONTENT_TYPE_BY_EXTENSION = new Map<string, string>([
   [".avif", "image/avif"],
@@ -49,8 +50,4 @@ export function inferAttachmentContentType(fileName: string, fallbackType?: stri
   }
 
   return fallbackType || DEFAULT_BINARY_MIME_TYPE
-}
-
-export function inferProjectFileContentType(fileName: string, fallbackType?: string): string {
-  return inferAttachmentContentType(fileName, fallbackType)
 }

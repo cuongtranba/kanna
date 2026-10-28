@@ -18,18 +18,22 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/
 import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import {
   useMcpServersSectionStore,
-  type EditingState,
 } from "../stores/mcpServersSectionStore"
 import type { McpServerConfig, McpServerInput, McpServerPatch, McpServerTransport } from "../../shared/types"
+import type { McpOAuthCompleteResult, McpOAuthStartResult } from "../../shared/mcp-types.schema"
+import { mcpServerInputFromDraft } from "../lib/mcpServerDraft"
+import { mcpServerNameIssue } from "../../shared/settings/validation"
 import type { KannaState } from "./useKannaState"
+import type { SectionEditing } from "../lib/sectionEditing"
 import {
   useAppSettingsCrudHandlers,
+  useAppSettingsSetEnabled,
   type AppSettingsCrudHandlers,
-  type AppSettingsPatchWrapper,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
 import type { ClipboardPort } from "../ports/clipboardPort"
 import { clipboardAdapter } from "../adapters/clipboard.adapter"
+import type { DomPort } from "../ports/domPort"
 import { McpRow, OAuthPill } from "./McpServerRow"
 
 const MCP_TRANSPORT_SET = new Set<string>(["stdio", "http", "sse", "ws"])
@@ -37,19 +41,12 @@ function isMcpServerTransport(v: string): v is McpServerTransport {
   return MCP_TRANSPORT_SET.has(v)
 }
 
-interface OAuthStartResult {
-  ok: boolean
-  authorizationUrl?: string
-  alreadyAuthenticated?: boolean
-  error?: string
-}
-
 interface McpServersSectionHandlers
   extends AppSettingsCrudHandlers<McpServerInput, McpServerPatch> {
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
   onTest: (id: string) => Promise<void>
-  onStartMcpOAuth: (id: string) => Promise<OAuthStartResult>
-  onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<{ ok: boolean; error?: string }>
+  onStartMcpOAuth: (id: string) => Promise<McpOAuthStartResult>
+  onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<McpOAuthCompleteResult>
 }
 
 const NEW_SERVER_ID = "new"
@@ -60,17 +57,14 @@ function CopyAuthUrlIcon({ pending, copied }: { pending: boolean; copied: boolea
   return <Copy className="h-3 w-3" />
 }
 
-const wrapMcpServersPatch: AppSettingsPatchWrapper<McpServerInput, McpServerPatch> = (
-  customMcpServers,
-) => ({ customMcpServers })
-
 interface McpServersSectionProps {
   servers: readonly McpServerConfig[]
-  editing: EditingState
+  editing: SectionEditing
   onSelect: (id: string) => void
   onStartCreate: () => void
   onCancelEditing: () => void
   handlers: McpServersSectionHandlers
+  dom?: DomPort
 }
 
 export function McpServersSection(props: McpServersSectionProps) {
@@ -122,6 +116,7 @@ export function McpServersSection(props: McpServersSectionProps) {
             server={s}
             handlers={props.handlers}
             onEdit={() => props.onSelect(s.id)}
+            dom={props.dom}
           />
         ))}
       </SettingsList>
@@ -159,7 +154,6 @@ function McpServerEditor({
     url,
     headersText,
     error,
-    submitting,
     oauthEnabled,
     authFlowUrl,
     callbackInput,
@@ -175,6 +169,8 @@ function McpServerEditor({
 
   const currentOauth = initial !== null && initial.transport !== "stdio" ? initial.oauth : undefined
   const serverKeyId = initial?.id ?? NEW_SERVER_ID
+  const saveKey = pendingActionKey("mcpServers.save", serverKeyId)
+  const submitting = usePendingAction(saveKey)
   const toggleOAuthKey = pendingActionKey("mcpServers.toggleOAuth", serverKeyId)
   const toggleOAuthPending = usePendingAction(toggleOAuthKey)
   const copyAuthUrlKey = pendingActionKey("mcpServers.copyAuthUrl", serverKeyId)
@@ -202,12 +198,10 @@ function McpServerEditor({
     patchEditorForm({ authenticating: true, oauthError: null })
     try {
       const result = await handlers.onStartMcpOAuth(initial.id)
-      if (result.ok && result.authorizationUrl) {
-        patchEditorForm({ authFlowUrl: result.authorizationUrl })
-      } else if (result.ok && result.alreadyAuthenticated) {
-        patchEditorForm({ authFlowUrl: null })
+      if (!result.ok) {
+        patchEditorForm({ oauthError: result.error })
       } else {
-        patchEditorForm({ oauthError: result.error ?? "Failed to start OAuth flow" })
+        patchEditorForm({ authFlowUrl: "authorizationUrl" in result ? result.authorizationUrl : null })
       }
     } finally {
       patchEditorForm({ authenticating: false })
@@ -222,7 +216,7 @@ function McpServerEditor({
       if (result.ok) {
         patchEditorForm({ authFlowUrl: null, callbackInput: "" })
       } else {
-        patchEditorForm({ oauthError: result.error ?? "Failed to complete OAuth flow" })
+        patchEditorForm({ oauthError: result.error })
       }
     } finally {
       patchEditorForm({ completing: false })
@@ -249,10 +243,11 @@ function McpServerEditor({
 
   const nameError = useMemo(() => {
     if (name.length === 0) return null
-    if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,31}$/.test(name)) {
+    const issue = mcpServerNameIssue(name)
+    if (issue === "INVALID_NAME") {
       return "Name must start with a letter and contain only letters, digits, '_' or '-' (max 32 chars)."
     }
-    if (name === "kanna") return "'kanna' is reserved."
+    if (issue === "RESERVED_NAME") return `'${name}' is reserved.`
     const dup = existingNames.find((e) => e.name === name && e.id !== initial?.id)
     if (dup) return "Name already taken."
     return null
@@ -263,36 +258,14 @@ function McpServerEditor({
     await submitEditorForm({
       patch: patchEditorForm,
       save: async () => {
-        const args = argsText
-          .split("\n")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0)
-        const env: Record<string, string> = {}
-        for (const line of envText.split("\n")) {
-          const idx = line.indexOf("=")
-          if (idx > 0) env[line.slice(0, idx).trim()] = line.slice(idx + 1)
-        }
-        const headers: Record<string, string> = {}
-        for (const line of headersText.split("\n")) {
-          const idx = line.indexOf(":")
-          if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim()
-        }
+        const input = mcpServerInputFromDraft({ name, transport, command, argsText, envText, cwd, url, headersText })
         if (initial) {
-          const patch: McpServerPatch =
-            transport === "stdio"
-              ? { name, transport, command, args, env, cwd: cwd || undefined }
-              : { name, transport, url, headers }
-          await handlers.onUpdate(initial.id, patch)
+          await handlers.onUpdate(initial.id, input)
         } else {
-          const input: McpServerInput =
-            transport === "stdio"
-              ? { name, transport: "stdio", command, args, env, cwd: cwd || undefined }
-              : { name, transport, url, headers }
           await handlers.onCreate(input)
         }
       },
       onDone: onCancel,
-      fallbackMessage: "Failed to save MCP server",
     })
   }, [
     argsText,
@@ -311,8 +284,8 @@ function McpServerEditor({
   ])
 
   const onSubmitClick = useCallback(() => {
-    runPendingAction(pendingActionKey("mcpServers.save", serverKeyId), submit)
-  }, [serverKeyId, submit])
+    runPendingAction(saveKey, submit)
+  }, [saveKey, submit])
 
   const submitLabel = editorSubmitLabel({
     submitting,
@@ -566,7 +539,8 @@ export function McpServersSettingsBranch(props: {
   const editing = useMcpServersSectionStore((s) => s.editing)
   const setEditing = useMcpServersSectionStore((s) => s.setEditing)
 
-  const crud = useAppSettingsCrudHandlers(wrapMcpServersPatch, props.state)
+  const crud = useAppSettingsCrudHandlers("customMcpServers", props.state)
+  const onSetEnabled = useAppSettingsSetEnabled("customMcpServers", props.state)
 
   const handlers = useMemo<McpServersSectionHandlers>(
     () => ({
@@ -575,18 +549,14 @@ export function McpServersSettingsBranch(props: {
         await crud.onDelete(id)
         setEditing({ kind: "list" })
       },
-      onSetEnabled: async (id, enabled) => {
-        await props.state.handleWriteAppSettings({
-          customMcpServers: { setEnabled: { id, enabled } },
-        })
-      },
+      onSetEnabled,
       onTest: async (id) => {
         await props.state.handleTestMcpServer(id)
       },
       onStartMcpOAuth: async (id) => props.state.handleStartMcpOAuth(id),
       onCompleteMcpOAuth: async (id, callbackUrl) => props.state.handleCompleteMcpOAuth(id, callbackUrl),
     }),
-    [crud, props.state, setEditing],
+    [crud, onSetEnabled, props.state, setEditing],
   )
 
   return (

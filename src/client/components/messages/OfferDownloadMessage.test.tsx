@@ -5,6 +5,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { HydratedOfferDownloadToolCall } from "../../../shared/types"
 import { OfferDownloadMessage } from "./OfferDownloadMessage"
+import { makeFakeHttpPort } from "../../adapters/testing/makeFakePorts"
+import type { HttpPort } from "../../ports/httpPort"
 
 function buildMessage(overrides: Partial<HydratedOfferDownloadToolCall> = {}): HydratedOfferDownloadToolCall {
   return {
@@ -102,12 +104,10 @@ describe("OfferDownloadMessage", () => {
 })
 
 describe("OfferDownloadMessage HEAD probe", () => {
-  const originalFetch = globalThis.fetch
   let root: Root | null = null
   let container: HTMLElement | null = null
 
   afterEach(async () => {
-    globalThis.fetch = originalFetch
     await act(async () => {
       root?.unmount()
     })
@@ -116,47 +116,49 @@ describe("OfferDownloadMessage HEAD probe", () => {
     container = null
   })
 
-  function mockFetch(response: () => Promise<Response>) {
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === "HEAD") return response()
-      return originalFetch(input, init)
-    }) as typeof fetch
+  function headReturning(status: number): HttpPort {
+    const http = makeFakeHttpPort()
+    http.routes.push({ method: "HEAD", url: "/api/projects/", response: { ok: status < 400, status, body: null } })
+    return http
   }
 
-  async function mount(message: HydratedOfferDownloadToolCall): Promise<HTMLElement> {
+  function headFailing(): HttpPort {
+    return {
+      ...makeFakeHttpPort(),
+      head: async () => {
+        throw new TypeError("Failed to fetch")
+      },
+    }
+  }
+
+  async function mount(message: HydratedOfferDownloadToolCall, http: HttpPort): Promise<HTMLElement> {
     container = document.createElement("div")
     document.body.appendChild(container)
     await act(async () => {
       root = createRoot(container!)
-      root.render(<OfferDownloadMessage message={message} />)
+      root.render(<OfferDownloadMessage message={message} http={http} />)
     })
     return container
   }
 
   test("404 marks the file as no longer available", async () => {
-    mockFetch(async () => new Response(null, { status: 404 }))
-    const el = await mount(buildMessage())
+    const el = await mount(buildMessage(), headReturning(404))
     expect(el.innerHTML).toContain("File no longer available")
   })
 
   test("401 keeps the card clickable (auth failure is not a missing file)", async () => {
-    mockFetch(async () => new Response(null, { status: 401 }))
-    const el = await mount(buildMessage())
+    const el = await mount(buildMessage(), headReturning(401))
     expect(el.innerHTML).not.toContain("File no longer available")
     expect(el.innerHTML).toContain('href="/api/projects/p1/files/dist/build.zip/content"')
   })
 
   test("5xx keeps the card clickable (transient proxy error is not a missing file)", async () => {
-    mockFetch(async () => new Response(null, { status: 502 }))
-    const el = await mount(buildMessage())
+    const el = await mount(buildMessage(), headReturning(502))
     expect(el.innerHTML).not.toContain("File no longer available")
   })
 
   test("network failure keeps the card clickable", async () => {
-    mockFetch(async () => {
-      throw new TypeError("Failed to fetch")
-    })
-    const el = await mount(buildMessage())
+    const el = await mount(buildMessage(), headFailing())
     expect(el.innerHTML).not.toContain("File no longer available")
   })
 })

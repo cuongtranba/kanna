@@ -8,9 +8,8 @@ import type {
   RemoteMcpPrincipal,
 } from "./auth-backend"
 import type { KannaAuthInstance } from "./better-auth.adapter"
-import { isRemoteMcpOAuthPath, REMOTE_MCP_PATH, rewriteBareDiscoveryPath } from "./remote-mcp/oauth-paths"
+import { AUTH_BASE_PATH, isRemoteMcpOAuthPath, remoteMcpResourceUrl, rewriteBareDiscoveryPath } from "./remote-mcp/oauth-paths"
 
-const AUTH_BASE_PATH = "/api/auth"
 const DEFAULT_ORIGIN = "http://localhost"
 
 export type OAuthPort = Pick<
@@ -92,9 +91,9 @@ export function createOAuthPort(source: OAuthPortSource): OAuthPort {
         const payload = await verifyJwsAccessToken(token, {
           jwksFetch: async () => instance.api.getJwks(),
           jwksCacheKey: cacheKeyFor(instance),
-          verifyOptions: { issuer: `${origin}${AUTH_BASE_PATH}`, audience: `${origin}${REMOTE_MCP_PATH}` },
+          verifyOptions: { issuer: `${origin}${AUTH_BASE_PATH}`, audience: remoteMcpResourceUrl(origin) },
         })
-        if (!audienceOf(payload).includes(`${origin}${REMOTE_MCP_PATH}`)) return null
+        if (!audienceOf(payload).includes(remoteMcpResourceUrl(origin))) return null
         const clientId = typeof payload.azp === "string" ? payload.azp : null
         if (!clientId) return null
         return {

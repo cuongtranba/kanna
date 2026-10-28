@@ -1,25 +1,11 @@
-
-import { randomUUID } from "node:crypto"
 import type { TranscriptEntry } from "../shared/types"
+import { timestamped } from "../shared/transcript-entry"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type {
   ToolRequestUserInputParams,
   ToolRequestUserInputQuestion,
   ToolRequestUserInputResponse,
 } from "./codex-app-server-protocol"
-
-export function createTranscriptEntry<T extends Omit<TranscriptEntry, "_id" | "createdAt">>(
-  entry: T,
-  createdAt = Date.now()
-): T & { _id: string; createdAt: number } {
-  return {
-    _id: randomUUID(),
-    createdAt,
-    ...entry,
-  }
-}
-
-const timestamped = createTranscriptEntry
 
 export function dynamicToolPayload(value: JsonValue | undefined): JsonObject {
   if (value !== undefined && value !== null && isJsonObject(value)) return value

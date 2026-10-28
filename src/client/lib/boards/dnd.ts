@@ -46,7 +46,7 @@ export function resolveCardDrop(
   return { cardId, toColumnId: target.columnId, aboveCardId, belowCardId }
 }
 
-function findCardColumn(
+export function findCardColumn(
   view: BoardViewSnapshot,
   cardId: string,
 ): { columnId: string; index: number; cards: BoardViewSnapshot["cards"][string] } | null {

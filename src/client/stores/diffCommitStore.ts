@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { omitKey, reconcileFlags } from "../lib/recordOps"
 
 interface DiffCommitState {
   checkedPathsByProjectId: Record<string, Record<string, boolean>>
@@ -15,13 +16,8 @@ export const useDiffCommitStore = create<DiffCommitState>()(
       checkedPathsByProjectId: {},
       reconcileProject: (projectId, paths) => set((state) => {
         const current = state.checkedPathsByProjectId[projectId] ?? {}
-        const next = Object.fromEntries(paths.map((path) => [path, current[path] ?? true]))
-        if (
-          Object.keys(current).length === Object.keys(next).length
-          && Object.entries(next).every(([path, checked]) => current[path] === checked)
-        ) {
-          return state
-        }
+        const next = reconcileFlags(current, paths, true)
+        if (next === current) return state
         return {
           checkedPathsByProjectId: {
             ...state.checkedPathsByProjectId,
@@ -54,8 +50,7 @@ export const useDiffCommitStore = create<DiffCommitState>()(
         }
       }),
       clearProject: (projectId) => set((state) => {
-        const { [projectId]: _, ...rest } = state.checkedPathsByProjectId
-        return { checkedPathsByProjectId: rest }
+        return { checkedPathsByProjectId: omitKey(state.checkedPathsByProjectId, projectId) }
       }),
     }),
     {

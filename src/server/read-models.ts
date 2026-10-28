@@ -35,6 +35,7 @@ import type { WorkflowRegistry } from "./workflow-registry"
 const EMPTY_CRON_JOBS: readonly CronJobSnapshot[] = []
 import { deriveChatTunnels } from "./cloudflare-tunnel/read-model"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
+import { liveRecord } from "./event-store-lookup"
 
 export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
@@ -166,28 +167,43 @@ function computeSourceProvider(
   return null
 }
 
+export interface ChatRuntimeView {
+  activeStatuses: Map<string, KannaStatus>
+  drainingChatIds: Set<string>
+  waitStartedAtByChatId: Map<string, number>
+  claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus>
+  backgroundTasksByChatId: Map<string, ChatBackgroundTask[]>
+  nowMs: number
+}
+
+function completeRuntimeView(partial: Partial<ChatRuntimeView>): ChatRuntimeView {
+  return {
+    activeStatuses: partial.activeStatuses ?? new Map(),
+    drainingChatIds: partial.drainingChatIds ?? new Set(),
+    waitStartedAtByChatId: partial.waitStartedAtByChatId ?? new Map(),
+    claudeSessionStates: partial.claudeSessionStates ?? new Map(),
+    backgroundTasksByChatId: partial.backgroundTasksByChatId ?? new Map(),
+    nowMs: partial.nowMs ?? Date.now(),
+  }
+}
+
 export function deriveSidebarData(
   state: StoreState,
-  activeStatuses: Map<string, KannaStatus>,
+  partialRuntime: Partial<ChatRuntimeView> = {},
   options?: {
-    nowMs?: number
     sidebarProjectOrder?: string[]
-    drainingChatIds?: Set<string>
-    claudeSessionStates?: Map<string, ClaudeSessionLifecycleStatus>
     discoveredProvidersByPath?: Map<string, AgentProvider[]>
     workflowRegistry?: Pick<WorkflowRegistry, "snapshot">
-    backgroundTasksByChatId?: Map<string, ChatBackgroundTask[]>
   }
 ): SidebarData {
-  const nowMs = options?.nowMs ?? Date.now()
-  const drainingChatIds = options?.drainingChatIds ?? new Set<string>()
-  const claudeSessionStates = options?.claudeSessionStates ?? new Map<string, ClaudeSessionLifecycleStatus>()
+  const { activeStatuses, drainingChatIds, claudeSessionStates, backgroundTasksByChatId, nowMs } =
+    completeRuntimeView(partialRuntime)
   const discoveredProvidersByPath = options?.discoveredProvidersByPath ?? new Map<string, AgentProvider[]>()
   const activityDeps: ComputeChatActivityDeps = {
     state,
     activeStatuses,
     workflowRegistry: options?.workflowRegistry,
-    backgroundTasksByChatId: options?.backgroundTasksByChatId,
+    backgroundTasksByChatId,
     nowMs,
   }
   const chatsByProjectId = new Map<string, ChatRecord[]>()
@@ -436,23 +452,31 @@ export function providerCatalogOf(sources: ProviderCatalogSources): ProviderCata
   )
 }
 
+export interface ChatSnapshotSources {
+  getMessages: (chatId: string) => Pick<ChatSnapshot, "messages" | "history">
+  getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[]
+  catalogSources?: ProviderCatalogSources
+}
+
 export function deriveChatSnapshot(
   state: StoreState,
-  activeStatuses: Map<string, KannaStatus>,
-  drainingChatIds: Set<string>,
   chatId: string,
-  getMessages: (chatId: string) => Pick<ChatSnapshot, "messages" | "history">,
-  getTunnelEvents: (chatId: string) => readonly CloudflareTunnelEvent[],
-  waitStartedAtByChatId: Map<string, number> = new Map(),
-  nowMs: number = Date.now(),
-  claudeSessionStates: Map<string, ClaudeSessionLifecycleStatus> = new Map(),
-  catalogSources: ProviderCatalogSources = EMPTY_CATALOG_SOURCES,
-  backgroundTasksByChatId: Map<string, ChatBackgroundTask[]> = new Map(),
+  sources: ChatSnapshotSources,
+  partialRuntime: Partial<ChatRuntimeView> = {},
 ): ChatSnapshot | null {
-  const chat = state.chatsById.get(chatId)
-  if (!chat || chat.deletedAt) return null
-  const project = state.projectsById.get(chat.projectId)
-  if (!project || project.deletedAt) return null
+  const {
+    activeStatuses,
+    drainingChatIds,
+    waitStartedAtByChatId,
+    claudeSessionStates,
+    backgroundTasksByChatId,
+    nowMs,
+  } = completeRuntimeView(partialRuntime)
+  const { getMessages, getTunnelEvents, catalogSources = EMPTY_CATALOG_SOURCES } = sources
+  const chat = liveRecord(state.chatsById, chatId)
+  if (!chat) return null
+  const project = liveRecord(state.projectsById, chat.projectId)
+  if (!project) return null
 
   const runtime: ChatRuntime = {
     chatId: chat.id,

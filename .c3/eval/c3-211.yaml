@@ -10,3 +10,5 @@ code:
   - src/server/codex-spawn.adapter.ts
   - src/server/codex-tool-payloads.ts
   - src/server/codex-transcript-translator.ts
+  - src/server/codex-plan-steps.ts
+  - src/server/codex-plan-steps.test.ts

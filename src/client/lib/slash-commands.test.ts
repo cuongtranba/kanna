@@ -1,40 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
-import { applyCommandToInput, shouldShowPicker, filterCommands } from "./slash-commands"
+import { filterCommands } from "./slash-commands"
 import type { SlashCommand } from "../../shared/types"
-
-describe("shouldShowPicker", () => {
-  test("opens when value starts with / and caret inside token", () => {
-    expect(shouldShowPicker("/rev", 4)).toEqual({ open: true, query: "rev" })
-  })
-
-  test("opens on bare slash with caret after it", () => {
-    expect(shouldShowPicker("/", 1)).toEqual({ open: true, query: "" })
-  })
-
-  test("closes after space", () => {
-    expect(shouldShowPicker("/review ", 8)).toEqual({ open: false, query: "" })
-  })
-
-  test("closes after newline", () => {
-    expect(shouldShowPicker("/review\n", 8)).toEqual({ open: false, query: "" })
-  })
-
-  test("closes when caret before slash", () => {
-    expect(shouldShowPicker("/rev", 0)).toEqual({ open: false, query: "" })
-  })
-
-  test("closes when first char not slash", () => {
-    expect(shouldShowPicker("hi /rev", 7)).toEqual({ open: false, query: "" })
-  })
-
-  test("closes for empty value", () => {
-    expect(shouldShowPicker("", 0)).toEqual({ open: false, query: "" })
-  })
-
-  test("closes when caret beyond first token", () => {
-    expect(shouldShowPicker("/review arg", 11)).toEqual({ open: false, query: "" })
-  })
-})
 
 describe("filterCommands", () => {
   const all: SlashCommand[] = [
@@ -101,40 +67,3 @@ describe("filterCommands", () => {
   })
 })
 
-describe("applyCommandToInput", () => {
-  test("replaces the /token at caret with /name and trailing space when argumentHint present", () => {
-    const result = applyCommandToInput({
-      value: "/rev",
-      caret: 4,
-      command: { name: "review", description: "", argumentHint: "<pr>" },
-    })
-    expect(result).toEqual({ value: "/review ", caret: 8 })
-  })
-
-  test("omits trailing space when argumentHint is empty", () => {
-    const result = applyCommandToInput({
-      value: "/hel",
-      caret: 4,
-      command: { name: "help", description: "", argumentHint: "" },
-    })
-    expect(result).toEqual({ value: "/help", caret: 5 })
-  })
-
-  test("leaves input unchanged if caret is not inside a slash token", () => {
-    const result = applyCommandToInput({
-      value: "hello",
-      caret: 5,
-      command: { name: "review", description: "", argumentHint: "" },
-    })
-    expect(result).toEqual({ value: "hello", caret: 5 })
-  })
-
-  test("preserves content after caret", () => {
-    const result = applyCommandToInput({
-      value: "/rev rest",
-      caret: 4,
-      command: { name: "review", description: "", argumentHint: "" },
-    })
-    expect(result).toEqual({ value: "/review rest", caret: 7 })
-  })
-})

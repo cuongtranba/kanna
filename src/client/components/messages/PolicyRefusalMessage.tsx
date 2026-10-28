@@ -1,8 +1,8 @@
 import { ShieldAlert } from "lucide-react"
-import type { ProcessedPolicyRefusalMessage } from "./types"
+import type { TranscriptMessageOf } from "../../../shared/types"
 
 interface Props {
-  message: ProcessedPolicyRefusalMessage
+  message: TranscriptMessageOf<"policy_refusal">
 }
 
 const USAGE_POLICY_URL = "https://www.anthropic.com/legal/aup"

@@ -2,7 +2,6 @@ import type { z } from "zod"
 import type { ClientCommand, CommandResult, NoResultClientCommand } from "./commands"
 import type { editorOpenSettingsSchema } from "./core-types.schema"
 import type { BeaconsSnapshot } from "./beacon-status"
-import { isJsonObject, type JsonValue } from "./json"
 import type {
   AppSettingsSnapshot,
   ChatDiffSnapshot,
@@ -173,13 +172,3 @@ export type ServerEnvelope =
   | { v: 1; type: "event"; id: string; event: WsEvent }
   | { v: 1; type: "ack"; id: string; result?: CommandResult<ClientCommand> }
   | { v: 1; type: "error"; id?: string; message: string }
-
-export function isClientEnvelope(value: JsonValue): value is JsonValue & ClientEnvelope {
-  if (!isJsonObject(value)) return false
-  return value.v === 1 && typeof value.type === "string"
-}
-
-export function isServerEnvelope(value: JsonValue): value is JsonValue & ServerEnvelope {
-  if (!isJsonObject(value)) return false
-  return value.v === 1 && typeof value.type === "string"
-}

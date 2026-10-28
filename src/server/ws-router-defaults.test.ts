@@ -2,15 +2,15 @@ import { describe, expect, test } from "vite-plus/test"
 import {
   buildFallbackDiffStore,
   buildFallbackLlmProvider,
-  buildInitialAppSettingsSnapshot,
   buildResolvedAppSettings,
-  mergeAppSettingsPatch,
+  applyFallbackSettingsPatch,
 } from "./ws-router-defaults"
+import { defaultAppSettingsSnapshot } from "./app-settings"
 import type { AppSettingsSnapshot, SubagentInput } from "../shared/types"
 
 
 function makeSnapshot(): AppSettingsSnapshot {
-  return buildInitialAppSettingsSnapshot()
+  return defaultAppSettingsSnapshot()
 }
 
 const BASE_SUBAGENT_INPUT: SubagentInput = {
@@ -24,10 +24,10 @@ const BASE_SUBAGENT_INPUT: SubagentInput = {
 }
 
 
-describe("mergeAppSettingsPatch", () => {
+describe("applyFallbackSettingsPatch", () => {
   test("subagents.create appends a new subagent with generated id and trims name", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       subagents: {
         create: { ...BASE_SUBAGENT_INPUT, name: "  My Bot  ", triggerMode: "manual" },
       },
@@ -44,35 +44,35 @@ describe("mergeAppSettingsPatch", () => {
 
   test("subagents.create defaults triggerMode to 'auto' when omitted", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       subagents: { create: BASE_SUBAGENT_INPUT },
     })
     expect(result.subagents[0]?.triggerMode).toBe("auto")
   })
 
   test("subagents.update patches matching subagent name", () => {
-    const withSubagent = mergeAppSettingsPatch(makeSnapshot(), {
+    const withSubagent = applyFallbackSettingsPatch(makeSnapshot(), {
       subagents: { create: BASE_SUBAGENT_INPUT },
     })
     const id = withSubagent.subagents[0]!.id
-    const updated = mergeAppSettingsPatch(withSubagent, {
+    const updated = applyFallbackSettingsPatch(withSubagent, {
       subagents: { update: { id, patch: { name: "New Name" } } },
     })
     expect(updated.subagents[0]?.name).toBe("New Name")
   })
 
   test("subagents.delete removes the matching subagent", () => {
-    const withSubagent = mergeAppSettingsPatch(makeSnapshot(), {
+    const withSubagent = applyFallbackSettingsPatch(makeSnapshot(), {
       subagents: { create: BASE_SUBAGENT_INPUT },
     })
     const id = withSubagent.subagents[0]!.id
-    const result = mergeAppSettingsPatch(withSubagent, { subagents: { delete: { id } } })
+    const result = applyFallbackSettingsPatch(withSubagent, { subagents: { delete: { id } } })
     expect(result.subagents).toHaveLength(0)
   })
 
   test("terminal and editor are deep-merged (unset fields preserved)", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       terminal: { scrollbackLines: 2_000 },
       editor: { preset: "vscode" },
     })
@@ -84,7 +84,7 @@ describe("mergeAppSettingsPatch", () => {
 
   test("providerDefaults.claude modelOptions are deep-merged", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       providerDefaults: {
         claude: { modelOptions: { reasoningEffort: "low", contextWindow: "200k" } },
       },
@@ -96,7 +96,7 @@ describe("mergeAppSettingsPatch", () => {
 
   test("claudeDriver lifecycle is deep-merged", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       claudeDriver: { lifecycle: { idleTimeoutMs: 9_000 } },
     })
     expect(result.claudeDriver.lifecycle).toEqual({ ...snapshot.claudeDriver.lifecycle, idleTimeoutMs: 9_000 })
@@ -107,7 +107,7 @@ describe("mergeAppSettingsPatch", () => {
       ...makeSnapshot(),
       subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: "abc" },
     }
-    const result = mergeAppSettingsPatch(snapshot, {
+    const result = applyFallbackSettingsPatch(snapshot, {
       subagentRuntime: { defaultLoopSubagentId: null },
     })
     expect(result.subagentRuntime.defaultLoopSubagentId).toBeNull()
@@ -115,7 +115,7 @@ describe("mergeAppSettingsPatch", () => {
 
   test("returns a new snapshot object (does not mutate input)", () => {
     const snapshot = makeSnapshot()
-    const result = mergeAppSettingsPatch(snapshot, { analyticsEnabled: false })
+    const result = applyFallbackSettingsPatch(snapshot, { analyticsEnabled: false })
     expect(result).not.toBe(snapshot)
     expect(snapshot.analyticsEnabled).toBe(true)
     expect(result.analyticsEnabled).toBe(false)
@@ -124,11 +124,11 @@ describe("mergeAppSettingsPatch", () => {
   test("typography is preserved across an unrelated patch, and mergeable on its own", () => {
     const snapshot = { ...makeSnapshot(), typography: { scale: "lg" as const } }
 
-    const unrelated = mergeAppSettingsPatch(snapshot, { theme: "dark" })
+    const unrelated = applyFallbackSettingsPatch(snapshot, { theme: "dark" })
     expect(unrelated.typography).toEqual({ scale: "lg" })
     expect(unrelated.theme).toBe("dark")
 
-    const merged = mergeAppSettingsPatch(snapshot, { typography: { scale: "xl" } })
+    const merged = applyFallbackSettingsPatch(snapshot, { typography: { scale: "xl" } })
     expect(merged.typography).toEqual({ scale: "xl" })
   })
 })

@@ -1,4 +1,4 @@
-import type { DomPort, ServiceWorkerRegistrationLike } from "../../ports/domPort"
+import type { DomPort } from "../../ports/domPort"
 import type { StoragePort } from "../../ports/storagePort"
 import type { TimerPort } from "../../ports/timerPort"
 
@@ -33,7 +33,6 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     getSearch: () => new URL(currentHref).search,
     reload: () => { },
     getUserAgent: () => "FakeBrowser/1.0",
-    isSecureContext: () => true,
     getInnerWidth: () => innerWidth,
     getInnerHeight: () => innerHeight,
     setBodyStyle: () => { },
@@ -47,14 +46,7 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     hasFocusOverlay: () => false,
     addWindowCaptureListener: () => noopUnsubscribe,
     addWindowCustomListener: () => noopUnsubscribe,
-    getHostname: () => new URL(currentHref).hostname,
     getOrigin: () => new URL(currentHref).origin,
-    isServiceWorkerSupported: () => false,
-    isPushManagerSupported: () => false,
-    registerServiceWorker: () =>
-      Promise.reject(new Error("fake DomPort: service workers are not supported")),
-    getReadyServiceWorkerRegistration: (): Promise<ServiceWorkerRegistrationLike> =>
-      Promise.reject(new Error("fake DomPort: service workers are not supported")),
     upsertHeadMeta: () => { },
     getComputedBackgroundColor: () => "",
     setDocumentElementColorScheme: () => { },
@@ -65,7 +57,7 @@ export function makeFakeDomPort(options: FakeDomPortOptions = {}): DomPort {
     addWindowListenerWithOptions: () => noopUnsubscribe,
     isWebShareSupported: () => false,
     webShare: () => Promise.resolve(),
-    getBaseURI: () => currentHref,
+    resolveUrl: (path: string) => new URL(path, currentHref).toString(),
     triggerDownload: () => { },
     getCssVar: (_name, fallback) => fallback,
     measureTextWidth: () => null,

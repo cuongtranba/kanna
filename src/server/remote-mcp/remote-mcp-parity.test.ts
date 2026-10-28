@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vite-plus/test"
+import { failingClaudeSession } from "../test-helpers/failing-claude-session"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -28,7 +29,7 @@ beforeAll(async () => {
     password: PASSWORD,
     trustProxy: false,
     discoverProjects: () => [],
-    agentOverrides: { throwOnClaudeSessionStart: true },
+    agentOverrides: { startClaudeSession: failingClaudeSession() },
   })
   projectId = (await server.store.openProject(projectDir, "Project")).id
   client = new Client({ name: "parity-test", version: "1.0.0" })

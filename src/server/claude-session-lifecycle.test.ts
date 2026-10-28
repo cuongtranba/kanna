@@ -4,8 +4,6 @@ import {
   resolveClaudeIdleMs,
   resolveClaudeMaxResident,
   hasLiveWorkflow,
-  hasPendingBackgroundTask,
-  backgroundTaskGuardExpired,
   closeClaudeSession,
   maybeRegisterSdkWorkflowsDir,
   enforceClaudeSessionBudget,
@@ -218,10 +216,10 @@ describe("hasLiveWorkflow", () => {
 })
 
 
-describe("hasPendingBackgroundTask", () => {
+describe("ClaudeSessionState.isHoldingWork", () => {
   test("returns false when backgroundTaskIds is empty", () => {
     const session = makeSession({ backgroundTasks: new Map(), backgroundTaskDeadlineAt: 0 })
-    expect(hasPendingBackgroundTask(session, Date.now())).toBe(false)
+    expect(session.isHoldingWork(Date.now())).toBe(false)
   })
 
   test("returns true when task ids present and deadline not expired", () => {
@@ -230,7 +228,7 @@ describe("hasPendingBackgroundTask", () => {
       backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now + 60_000,
     })
-    expect(hasPendingBackgroundTask(session, now)).toBe(true)
+    expect(session.isHoldingWork(now)).toBe(true)
   })
 
   test("returns false when deadline expired WITHOUT clearing state", () => {
@@ -239,7 +237,7 @@ describe("hasPendingBackgroundTask", () => {
       backgroundTasks: new Map([["task-1", { taskType: null, description: null, startedAt: 0, outputPath: null }]]),
       backgroundTaskDeadlineAt: now - 1,
     })
-    const result = hasPendingBackgroundTask(session, now)
+    const result = session.isHoldingWork(now)
     expect(result).toBe(false)
     expect(session.backgroundTasks.size).toBe(1)
     expect(session.backgroundTaskDeadlineAt).toBe(now - 1)
@@ -251,24 +249,24 @@ describe("background-task guard with an SDK level signal", () => {
   const oneTask = () =>
     new Map([["ba35e96q4", { taskType: "local_bash", description: "task dev", startedAt: 0, outputPath: null }]])
 
-  test("hasPendingBackgroundTask stays true long after the deadline lapsed", () => {
+  test("isHoldingWork stays true long after the deadline lapsed", () => {
     const now = Date.now()
     const session = makeSession({
       backgroundTasks: oneTask(),
       backgroundTaskDeadlineAt: now - 60 * 60_000,
       backgroundTasksLevelSourced: true,
     })
-    expect(hasPendingBackgroundTask(session, now)).toBe(true)
+    expect(session.isHoldingWork(now)).toBe(true)
   })
 
-  test("backgroundTaskGuardExpired never fires for a level-sourced session", () => {
+  test("guardExpired never fires for a level-sourced session", () => {
     const now = Date.now()
     const session = makeSession({
       backgroundTasks: oneTask(),
       backgroundTaskDeadlineAt: now - 60 * 60_000,
       backgroundTasksLevelSourced: true,
     })
-    expect(backgroundTaskGuardExpired(session, now)).toBe(false)
+    expect(session.guardExpired(now)).toBe(false)
   })
 
   test("the flag does not resurrect a guard once the set is empty", () => {
@@ -278,8 +276,8 @@ describe("background-task guard with an SDK level signal", () => {
       backgroundTaskDeadlineAt: 0,
       backgroundTasksLevelSourced: true,
     })
-    expect(hasPendingBackgroundTask(session, now)).toBe(false)
-    expect(backgroundTaskGuardExpired(session, now)).toBe(false)
+    expect(session.isHoldingWork(now)).toBe(false)
+    expect(session.guardExpired(now)).toBe(false)
   })
 
   test("without a level signal the deadline still governs (before the first snapshot, or an old CLI)", () => {
@@ -289,8 +287,8 @@ describe("background-task guard with an SDK level signal", () => {
       backgroundTaskDeadlineAt: now - 1,
       backgroundTasksLevelSourced: false,
     })
-    expect(hasPendingBackgroundTask(session, now)).toBe(false)
-    expect(backgroundTaskGuardExpired(session, now)).toBe(true)
+    expect(session.isHoldingWork(now)).toBe(false)
+    expect(session.guardExpired(now)).toBe(true)
   })
 })
 

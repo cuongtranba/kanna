@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from "vite-plus/test"
-import { buildInitialAppSettingsSnapshot } from "../../server/ws-router-defaults"
+import { defaultAppSettingsSnapshot } from "../../server/app-settings"
 import { renderForLoopCheck } from "../lib/testing/renderForLoopCheck"
 import { usePluginContributions } from "./usePluginContributions"
 import type { LoadedPluginContributions } from "./loadPluginContributions"
@@ -17,7 +17,7 @@ afterEach(async () => {
 })
 
 function setPluginsEnabled(enabled: boolean): void {
-  const snapshot = buildInitialAppSettingsSnapshot()
+  const snapshot = defaultAppSettingsSnapshot()
   useAppSettingsStore.getState().setFromServer({ ...snapshot, plugins: { ...snapshot.plugins, enabled } })
 }
 

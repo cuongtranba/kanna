@@ -19,12 +19,11 @@ beforeEach(() => {
   const store = useMcpServersSectionStore.getState()
   store.setEditing({ kind: "list" })
   store.resetEditorForm(null)
-  for (const id of store.testingServerIds) store.setServerTesting(id, false)
 })
 
 describe("mcpServersSectionStore — editor form", () => {
   test("resetEditorForm derives the whole draft from the server config", () => {
-    useMcpServersSectionStore.getState().patchEditorForm({ name: "stale", submitting: true })
+    useMcpServersSectionStore.getState().patchEditorForm({ name: "stale", error: "stale" })
     useMcpServersSectionStore.getState().resetEditorForm(httpServer)
 
     const form = useMcpServersSectionStore.getState().editorForm
@@ -33,7 +32,6 @@ describe("mcpServersSectionStore — editor form", () => {
     expect(form.url).toBe("https://example.com/mcp")
     expect(form.headersText).toBe("X-Team: kanna")
     expect(form.oauthEnabled).toBe(true)
-    expect(form.submitting).toBe(false)
     expect(form.error).toBeNull()
   })
 
@@ -65,28 +63,5 @@ describe("mcpServersSectionStore — editor form", () => {
     expect(form.authFlowUrl).toBeNull()
     expect(form.callbackInput).toBe("")
     expect(form.name).toBe("design")
-  })
-})
-
-describe("mcpServersSectionStore — setServerTesting", () => {
-  test("tracks membership per server id", () => {
-    const store = useMcpServersSectionStore.getState()
-    store.setServerTesting("fs", true)
-    store.setServerTesting("design", true)
-
-    const ids = useMcpServersSectionStore.getState().testingServerIds
-    expect(ids.has("fs")).toBe(true)
-    expect(ids.has("design")).toBe(true)
-  })
-
-  test("returns to the shared empty ref once the last id clears", () => {
-    const empty = useMcpServersSectionStore.getState().testingServerIds
-    expect(empty.size).toBe(0)
-
-    useMcpServersSectionStore.getState().setServerTesting("fs", true)
-    expect(useMcpServersSectionStore.getState().testingServerIds).not.toBe(empty)
-
-    useMcpServersSectionStore.getState().setServerTesting("fs", false)
-    expect(useMcpServersSectionStore.getState().testingServerIds).toBe(empty)
   })
 })

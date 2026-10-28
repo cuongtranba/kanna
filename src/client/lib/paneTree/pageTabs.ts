@@ -9,6 +9,12 @@ import {
   type PaneTab,
 } from "./types"
 
+export const CHAT_ROUTE_PATTERN = "/chat/:chatId"
+
+export function chatPath(chatId: string): string {
+  return `/chat/${chatId}`
+}
+
 export interface PageRoute {
   page: PageKind
   params: Record<string, string>
@@ -50,7 +56,7 @@ function collectLeaves(node: PaneNode): PaneLeaf[] {
 }
 
 function pathOfTab(tab: PaneTab): string | null {
-  if (tab.target.kind === "chat") return `/chat/${tab.target.chatId}`
+  if (tab.target.kind === "chat") return chatPath(tab.target.chatId)
   if (tab.target.kind === "page") return tab.target.path
   return null
 }

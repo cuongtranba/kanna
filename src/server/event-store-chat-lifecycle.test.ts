@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { AgentProvider } from "../shared/types"
 import type { ChatRecord, ChatTimingState, ProjectRecord, StackRecord, StoreState } from "./events"
-import type { AutoContinueEvent } from "./auto-continue/events"
+import type { ChatAutomationEvent } from "./auto-continue/events"
 import { MAX_RECENT_CRON_RUNS } from "../shared/cron/types"
 import {
   applyChatLifecycleEvent,
@@ -9,6 +9,8 @@ import {
   applyAutoContinueToState,
   applyProjectEvent,
   applyStackEvent,
+  getForkedChatTitle,
+  normalizeSidebarProjectOrder,
   updateChatTiming,
 } from "./event-store-chat-lifecycle"
 
@@ -328,8 +330,8 @@ describe("applyChatLifecycleEvent — queued message events", () => {
 
 describe("applyAutoContinueToState", () => {
   test("appends event to list", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
-    const ev: AutoContinueEvent = {
+    const m = new Map<string, ChatAutomationEvent[]>()
+    const ev: ChatAutomationEvent = {
       v: 3,
       kind: "auto_continue_accepted",
       chatId: "c1",
@@ -348,7 +350,7 @@ describe("applyAutoContinueToState", () => {
   })
 
   test("keeps cron run history bounded as events arrive one at a time", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
+    const m = new Map<string, ChatAutomationEvent[]>()
     applyAutoContinueToState(m, {
       v: 3,
       kind: "cron_armed",
@@ -376,8 +378,8 @@ describe("applyAutoContinueToState", () => {
   })
 
   test("leaves the array reference untouched when nothing is dropped", () => {
-    const m = new Map<string, AutoContinueEvent[]>()
-    const ev: AutoContinueEvent = {
+    const m = new Map<string, ChatAutomationEvent[]>()
+    const ev: ChatAutomationEvent = {
       v: 3, kind: "loop_run_outcome", chatId: "c1", scheduleId: "loop-1", timestamp: TS, ok: true,
     }
     applyAutoContinueToState(m, ev)
@@ -430,5 +432,52 @@ describe("applyChatMessageMetadata", () => {
       _id: "msg-3", kind: "user_prompt", createdAt: TS, content: "hi", attachments: [],
     })
     expect(chatsById.size).toBe(0)
+  })
+})
+
+describe("normalizeSidebarProjectOrder", () => {
+  test("returns empty array for non-array input", () => {
+    expect(normalizeSidebarProjectOrder(null)).toEqual([])
+    expect(normalizeSidebarProjectOrder(42)).toEqual([])
+    expect(normalizeSidebarProjectOrder({ a: 1 })).toEqual([])
+  })
+
+  test("filters out non-string entries", () => {
+    expect(normalizeSidebarProjectOrder(["a", 2, null, "b"])).toEqual(["a", "b"])
+  })
+
+  test("trims whitespace and skips blank strings", () => {
+    expect(normalizeSidebarProjectOrder(["  a  ", "  ", "b"])).toEqual(["a", "b"])
+  })
+
+  test("deduplicates preserving first occurrence", () => {
+    expect(normalizeSidebarProjectOrder(["x", "y", "x", "z"])).toEqual(["x", "y", "z"])
+  })
+
+  test("returns ordered array for clean input", () => {
+    expect(normalizeSidebarProjectOrder(["proj-1", "proj-2"])).toEqual(["proj-1", "proj-2"])
+  })
+})
+
+
+describe("getForkedChatTitle", () => {
+  test("prefixes non-fork titles", () => {
+    expect(getForkedChatTitle("My Chat")).toBe("Fork: My Chat")
+  })
+
+  test("does not double-prefix already-forked titles", () => {
+    expect(getForkedChatTitle("Fork: My Chat")).toBe("Fork: My Chat")
+  })
+
+  test("returns default for empty title", () => {
+    expect(getForkedChatTitle("")).toBe("Fork: New Chat")
+  })
+
+  test("returns default for whitespace-only title", () => {
+    expect(getForkedChatTitle("   ")).toBe("Fork: New Chat")
+  })
+
+  test("trims whitespace before prefixing", () => {
+    expect(getForkedChatTitle("  Hello  ")).toBe("Fork: Hello")
   })
 })

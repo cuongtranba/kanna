@@ -1,11 +1,12 @@
 
-import type { JsonValue } from "../shared/json"
-import type {
-  CustomModelEntry,
-  LlmProviderSnapshot,
-  McpServerConfig,
-  Subagent,
+import {
+  STORE_VERSION,
+  type CustomModelEntry,
+  type LlmProviderSnapshot,
+  type McpServerConfig,
+  type Subagent,
 } from "../shared/types"
+import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
 import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
@@ -17,11 +18,12 @@ import type { CodexAppServerManager } from "./codex-app-server"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
 import { toJsonObject } from "./json-boundary"
+import { subagentPendingKey } from "./claude-subagent-tool-response"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { openrouterAuthReady, claudeAuthReady } from "./provider-catalog"
 import { resolveSdkEndpoint } from "./sdk-endpoint"
 import { parseCustomModelId, type CustomProviderCredential } from "../shared/custom-providers"
-import { OAuthPoolUnavailableError } from "./oauth-errors"
+import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { startClaudeSession as StartClaudeSessionFn } from "./claude-session-start"
 import type { OAuthBearers } from "./claude-session-config-helpers"
 import type { BeaconRegistry } from "./beacon-registry"
@@ -68,7 +70,6 @@ export interface SubagentWiringDeps {
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   getCustomProviderCredential: (id: string) => CustomProviderCredential | null
-  subagentPendingKey: (chatId: string, runId: string, toolUseId: string) => string
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   chatTaskStore?: ChatTaskStorePort
   beaconRegistry?: BeaconRegistry
@@ -90,10 +91,15 @@ export interface BuildSubagentProviderRunForChatArgs {
 }
 
 
+export interface SubagentSessionScope {
+  delegationContext: KannaMcpDelegationContext
+  beaconToolsAllowed: boolean
+}
+
 export function buildClaudeSubagentStarter(
   deps: SubagentWiringDeps,
-  beaconToolsAllowed = false,
-): NonNullable<BuildSubagentProviderRunArgs["startClaudeSession"]> {
+  scope: SubagentSessionScope,
+): BuildSubagentProviderRunArgs["startClaudeSession"] {
   return async (a) => {
     const enabledMcpServers = deps.getEnabledCustomMcpServers()
     const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
@@ -101,10 +107,16 @@ export function buildClaudeSubagentStarter(
       ...a,
       customMcpServers: enabledMcpServers,
       oauthBearers,
-      beaconRegistry: deps.beaconRegistry,
-      getBeacons: deps.getBeacons,
-      beaconToolsAllowed,
-      toolCallback: beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,
+      toolCallback: scope.beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,
+      kannaMcp: {
+        subagentOrchestrator: deps.subagentOrchestrator,
+        delegationContext: scope.delegationContext,
+        getArmedLoop: deps.getArmedLoop,
+        chatTaskStore: deps.chatTaskStore,
+        beaconRegistry: deps.beaconRegistry,
+        getBeacons: deps.getBeacons,
+        beaconToolsAllowed: scope.beaconToolsAllowed,
+      },
     })
   }
 }
@@ -135,9 +147,9 @@ export function buildSubagentProviderRunForChat(
       return null
     }
     const toolUseId = request.tool.toolId
-    const key = deps.subagentPendingKey(args.chatId, args.runId, toolUseId)
+    const key = subagentPendingKey(args.chatId, args.runId, toolUseId)
     await deps.store.appendSubagentEvent({
-      v: 3,
+      v: STORE_VERSION,
       type: "subagent_tool_pending",
       timestamp: Date.now(),
       chatId: args.chatId,
@@ -190,11 +202,10 @@ export function buildSubagentProviderRunForChat(
     },
     allowedPaths: restriction?.allowedPaths,
     projectId: project.id,
-    startClaudeSession: buildClaudeSubagentStarter(deps, args.subagent.allowBeaconTools === true),
-    subagentOrchestrator: deps.subagentOrchestrator,
-    delegationContext,
-    getArmedLoop: deps.getArmedLoop,
-    chatTaskStore: deps.chatTaskStore,
+    startClaudeSession: buildClaudeSubagentStarter(deps, {
+      delegationContext,
+      beaconToolsAllowed: args.subagent.allowBeaconTools === true,
+    }),
     codexManager: deps.codexManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
@@ -214,13 +225,11 @@ export function buildSubagentProviderRunForChat(
       return true
     },
     pickOauthToken: () => {
-      const picked = deps.oauthPool?.pickActive(args.chatId) ?? null
-      if (deps.oauthPool && deps.oauthPool.hasAnyToken() && !picked) {
-        throw new OAuthPoolUnavailableError(
-          deps.buildPoolUnavailableMessage(args.chatId, " for subagent run"),
-        )
-      }
-      if (picked) deps.oauthPool!.markUsed(picked.id)
+      const picked = pickOAuthTokenOrRefuse(
+        deps.oauthPool,
+        args.chatId,
+        () => deps.buildPoolUnavailableMessage(args.chatId, " for subagent run"),
+      )
       if (!picked) return null
       return { token: picked.token, baseUrl: picked.baseUrl }
     },

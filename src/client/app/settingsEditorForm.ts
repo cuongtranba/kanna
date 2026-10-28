@@ -1,5 +1,6 @@
+import { errorMessage } from "../../shared/errors"
+
 export interface EditorSubmitState {
-  submitting?: boolean
   error?: string | null
 }
 
@@ -7,16 +8,13 @@ export async function submitEditorForm(args: {
   patch: (patch: EditorSubmitState) => void
   save: () => Promise<void>
   onDone: () => void
-  fallbackMessage: string
 }): Promise<void> {
-  args.patch({ submitting: true, error: null })
+  args.patch({ error: null })
   try {
     await args.save()
     args.onDone()
   } catch (cause) {
-    args.patch({ error: cause instanceof Error ? cause.message : args.fallbackMessage })
-  } finally {
-    args.patch({ submitting: false })
+    args.patch({ error: errorMessage(cause) })
   }
 }
 

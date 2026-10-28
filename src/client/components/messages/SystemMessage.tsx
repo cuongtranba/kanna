@@ -1,20 +1,26 @@
 import { useMemo, type ReactNode } from "react"
 import { Asterisk, ChevronRight, Slash, UserRound } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import type { ProcessedSystemMessage } from "./types"
-import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer, toolIcons, defaultToolIcon, getToolIcon } from "./shared"
+import type { TranscriptMessageOf } from "../../../shared/types"
+import { MetaRow, MetaLabel, MetaText, MetaPill, ExpandableRow, VerticalLineContainer } from "./shared"
 import { toTitleCase } from "../../lib/formatters"
+import { toolIconByName } from "../../lib/toolPresentation"
 import { cn } from "../../lib/utils"
-import { CollapsibleSectionStore, ExpandableMcpServerStore, RawMessageSectionStore } from "./SystemMessage.store"
+import { mcpToolName, parseMcpToolName } from "../../../shared/tools"
+import { createToggleStore } from "../../lib/createToggleStore"
+
+const CollapsibleSectionStore = createToggleStore("CollapsibleSection")
+const ExpandableMcpServerStore = createToggleStore("ExpandableMcpServer")
+const RawMessageSectionStore = createToggleStore("RawMessageSection")
 
 interface Props {
-  message: ProcessedSystemMessage
+  message: TranscriptMessageOf<"system_init">
   rawJson?: string
 }
 
 function CollapsibleSectionInner({ title, count, children, badge }: { title: string; count: number; children: ReactNode; badge?: ReactNode }) {
-  const open = CollapsibleSectionStore.useScopedStore((s) => s.open)
-  const setOpen = CollapsibleSectionStore.useScopedStore((s) => s.setOpen)
+  const open = CollapsibleSectionStore.useScopedStore((s) => s.value)
+  const setOpen = CollapsibleSectionStore.useScopedStore((s) => s.set)
   if (count === 0) return null
   return (
     <div className="flex flex-col gap-1.5">
@@ -31,7 +37,7 @@ function CollapsibleSectionInner({ title, count, children, badge }: { title: str
 
 function CollapsibleSection({ title, count, children, badge }: { title: string; count: number; children: ReactNode; badge?: ReactNode }) {
   return (
-    <CollapsibleSectionStore.Provider init={undefined}>
+    <CollapsibleSectionStore.Provider init={false}>
       <CollapsibleSectionInner title={title} count={count} badge={badge}>{children}</CollapsibleSectionInner>
     </CollapsibleSectionStore.Provider>
   )
@@ -55,12 +61,6 @@ function PillSection({ title, items, icon, getIcon }: PillSectionProps) {
       </div>
     </CollapsibleSection>
   )
-}
-
-function parseMcpTool(name: string): { server: string; tool: string } | null {
-  const match = name.match(/^mcp__([^_]+)__(.+)$/)
-  if (!match) return null
-  return { server: match[1], tool: match[2] }
 }
 
 interface McpServerWithTools {
@@ -94,8 +94,8 @@ function statusLabel(status: string): string {
 }
 
 function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
-  const open = ExpandableMcpServerStore.useScopedStore((s) => s.open)
-  const setOpen = ExpandableMcpServerStore.useScopedStore((s) => s.setOpen)
+  const open = ExpandableMcpServerStore.useScopedStore((s) => s.value)
+  const setOpen = ExpandableMcpServerStore.useScopedStore((s) => s.set)
   const isConnected = server.status === "connected"
 
   return (
@@ -124,7 +124,7 @@ function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
       {open && server.tools.length > 0 && (
         <div className="flex flex-wrap gap-1.5 ml-5">
           {server.tools.map((tool) => (
-            <MetaPill key={tool} icon={getToolIcon(`mcp__${server.name}__${tool}`)}>{tool}</MetaPill>
+            <MetaPill key={tool} icon={toolIconByName(mcpToolName(server.name, tool))}>{tool}</MetaPill>
           ))}
         </div>
       )}
@@ -134,7 +134,7 @@ function ExpandableMcpServerInner({ server }: { server: McpServerWithTools }) {
 
 function ExpandableMcpServer({ server }: { server: McpServerWithTools }) {
   return (
-    <ExpandableMcpServerStore.Provider init={undefined}>
+    <ExpandableMcpServerStore.Provider init={false}>
       <ExpandableMcpServerInner server={server} />
     </ExpandableMcpServerStore.Provider>
   )
@@ -168,8 +168,8 @@ function McpServerSection({ servers }: { servers: McpServerWithTools[] }) {
 }
 
 function RawMessageSectionInner({ rawJson }: { rawJson: string }) {
-  const open = RawMessageSectionStore.useScopedStore((s) => s.open)
-  const setOpen = RawMessageSectionStore.useScopedStore((s) => s.setOpen)
+  const open = RawMessageSectionStore.useScopedStore((s) => s.value)
+  const setOpen = RawMessageSectionStore.useScopedStore((s) => s.set)
   return (
     <div className="flex flex-col gap-1.5">
       <button onClick={() => setOpen(!open)} className="flex items-center gap-1 cursor-pointer group/section hover:opacity-60 transition-opacity">
@@ -187,7 +187,7 @@ function RawMessageSectionInner({ rawJson }: { rawJson: string }) {
 
 function RawMessageSection({ rawJson }: { rawJson: string }) {
   return (
-    <RawMessageSectionStore.Provider init={undefined}>
+    <RawMessageSectionStore.Provider init={false}>
       <RawMessageSectionInner rawJson={rawJson} />
     </RawMessageSectionStore.Provider>
   )
@@ -199,7 +199,7 @@ export function SystemMessage({ message, rawJson }: Props) {
     const core: string[] = []
 
     for (const tool of message.tools) {
-      const parsed = parseMcpTool(tool)
+      const parsed = parseMcpToolName(tool)
       if (parsed) {
         const existing = mcpToolsByServer.get(parsed.server) || []
         existing.push(parsed.tool)
@@ -226,7 +226,7 @@ export function SystemMessage({ message, rawJson }: Props) {
           <VerticalLineContainer className="my-4 text-xs">
             <div className="flex flex-col gap-3">
               <MetaText>{message.model}</MetaText>
-              <PillSection title="Tools" items={coreTools} getIcon={(tool) => toolIcons[tool] ?? defaultToolIcon} />
+              <PillSection title="Tools" items={coreTools} getIcon={(tool) => toolIconByName(tool)} />
               <PillSection title="Agents" items={message.agents} icon={UserRound} />
               <PillSection title="Commands" items={message.slashCommands} icon={Slash} />
               <McpServerSection servers={mcpServersWithTools} />

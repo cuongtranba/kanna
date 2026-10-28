@@ -15,6 +15,7 @@ import {
 } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
 import { InboxReplyComposer } from "./InboxReplyComposer"
+import { chatPath } from "../lib/paneTree"
 
 interface Props {
   thread: InboxThread
@@ -72,7 +73,7 @@ export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
             <StateMarkLabel tone={display.tone} label={display.label} />
             {thread.chatId === undefined ? null : (
               <Link
-                to={`/chat/${thread.chatId}`}
+                to={chatPath(thread.chatId)}
                 className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
               >
                 Open chat

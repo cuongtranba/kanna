@@ -26,3 +26,27 @@ export function encodeAskUserQuestionResult(
   }
   return { questions: questions.map(encodeQuestion), answers: encodedAnswers }
 }
+
+const CUSTOM_ANSWER_SEPARATOR = ", "
+
+export function askUserQuestionKey(question: AskUserQuestionItem): string {
+  return question.id || question.question
+}
+
+export function effectiveAskUserQuestionAnswers(
+  question: AskUserQuestionItem,
+  selected: readonly string[],
+  customInput: string | undefined,
+): string[] {
+  const custom = customInput?.trim()
+  if (question.multiSelect) {
+    const customParts = custom ? custom.split(CUSTOM_ANSWER_SEPARATOR).filter(Boolean) : []
+    return [...selected, ...customParts]
+  }
+  const value = custom || selected[0]
+  return value ? [value] : []
+}
+
+export function askUserQuestionAnswerFor(question: AskUserQuestionItem, answers: AskUserQuestionAnswerMap): string[] {
+  return answers[askUserQuestionKey(question)] || answers[question.question] || []
+}

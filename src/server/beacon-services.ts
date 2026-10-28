@@ -2,8 +2,8 @@ import type { ServerWebSocket } from "bun"
 import type { AppSettingsManager } from "./app-settings"
 import { createBeaconConnection, type BeaconConnection, type BeaconConnectionSettings } from "./beacon-connection"
 import { createBeaconRegistry, PING_INTERVAL_MS, type BeaconRegistry } from "./beacon-registry"
-import { getBeaconTransferTickets, setBeaconTransferMaxBytes } from "./beacon-transfer-host"
-import type { ClientState } from "./ws-router-utils"
+import { createBeaconTransferTickets } from "./beacon-transfer-tickets"
+import { isBeaconSocket, isBrowserSocket, type ClientState, type SocketState } from "./ws-router-utils"
 
 const TRANSFER_SWEEP_INTERVAL_MS = 5_000
 const BYTES_PER_MB = 1024 * 1024
@@ -23,11 +23,15 @@ export interface ClientSocketRouter {
 export type BeaconServicesSettings = BeaconConnectionSettings & Pick<AppSettingsManager, "onChange">
 
 export function createBeaconServices(deps: { appSettings: BeaconServicesSettings }): BeaconServices {
-  const registry = createBeaconRegistry()
+  const registry = createBeaconRegistry({
+    transfer: {
+      tickets: createBeaconTransferTickets(),
+      maxPullBytes: () => deps.appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB,
+    },
+  })
   const connection = createBeaconConnection({ registry, appSettings: deps.appSettings })
   const sweepTimer = setInterval(() => registry.sweep(), PING_INTERVAL_MS)
-  setBeaconTransferMaxBytes(() => deps.appSettings.getSnapshot().uploads.maxFileSizeMb * BYTES_PER_MB)
-  const transferSweepTimer = setInterval(() => getBeaconTransferTickets().sweep(), TRANSFER_SWEEP_INTERVAL_MS)
+  const transferSweepTimer = setInterval(() => registry.transfer.tickets.sweep(), TRANSFER_SWEEP_INTERVAL_MS)
   const stopScopePush = deps.appSettings.onChange((snapshot) => {
     const configuredIds = new Set(snapshot.customBeacons.map((beacon) => beacon.id))
     for (const live of registry.live()) {
@@ -48,17 +52,17 @@ export function createBeaconServices(deps: { appSettings: BeaconServicesSettings
 
 export function buildBeaconAwareWebsocket(clientRouter: ClientSocketRouter, connection: BeaconConnection) {
   return {
-    open(ws: ServerWebSocket<ClientState>) {
-      if (ws.data.kind === "beacon") connection.handleOpen(ws)
-      else clientRouter.handleOpen(ws)
+    open(ws: ServerWebSocket<SocketState>) {
+      if (isBeaconSocket(ws)) connection.handleOpen(ws)
+      else if (isBrowserSocket(ws)) clientRouter.handleOpen(ws)
     },
-    message(ws: ServerWebSocket<ClientState>, raw: string | Buffer): void | Promise<void> {
-      if (ws.data.kind === "beacon") return connection.handleMessage(ws, raw)
-      return clientRouter.handleMessage(ws, raw)
+    message(ws: ServerWebSocket<SocketState>, raw: string | Buffer): void | Promise<void> {
+      if (isBeaconSocket(ws)) return connection.handleMessage(ws, raw)
+      if (isBrowserSocket(ws)) return clientRouter.handleMessage(ws, raw)
     },
-    close(ws: ServerWebSocket<ClientState>) {
-      if (ws.data.kind === "beacon") connection.handleClose(ws)
-      else clientRouter.handleClose(ws)
+    close(ws: ServerWebSocket<SocketState>) {
+      if (isBeaconSocket(ws)) connection.handleClose(ws)
+      else if (isBrowserSocket(ws)) clientRouter.handleClose(ws)
     },
   }
 }

@@ -1,5 +1,6 @@
-import { errorMessage } from "../shared/errors"
-import { resolveSpawnPaths } from "./claude-session-config"
+import { errorMessage, projectNotFound } from "../shared/errors"
+import { resolveChatCwd } from "./claude-session-config"
+import { UPDATE_MANAGER_UNAVAILABLE, unavailableUpdateSnapshot } from "./update-manager"
 import type { ChatRecord } from "./events"
 import type { UpdateInstallResult, UpdateSnapshot } from "../shared/types"
 import type { ClientCommand, ImportSessionsByIdsResult, ProjectDeleteResult, ServerEnvelope } from "../shared/protocol"
@@ -10,7 +11,7 @@ import { ackResult } from "./ws-router-ack"
 
 export interface ProjectStoreDep {
   getProject(projectId: string): { id: string; localPath: string } | null | undefined
-  getChat(chatId: string): Pick<ChatRecord, "id" | "stackBindings"> | null | undefined
+  getChat(chatId: string): Pick<ChatRecord, "id" | "projectId" | "stackBindings"> | null | undefined
   openProject(localPath: string, title?: string): Promise<{ id: string }>
   removeProject(projectId: string): Promise<void>
   setProjectStar(projectId: string, starred: boolean): Promise<void>
@@ -63,7 +64,6 @@ export interface ProjectCommandDeps {
   boards?: {
     purgeProject(projectId: string, chatIds: readonly string[]): { deletedBoardIds: string[]; worktreePaths: readonly string[] }
   }
-  shares?: { revokeSharesForChat(chatId: string): Promise<void> }
   push: ProjectPushDep
   removeWorktree: (repoRoot: string, worktreePath: string) => Promise<void>
   removeProjectKannaFiles: (localPath: string) => Promise<void>
@@ -105,25 +105,15 @@ export async function handleProjectCommand(
     }
 
     case "update.check": {
-      const unavailableSnapshot: UpdateSnapshot = {
-        currentVersion: "unknown",
-        latestVersion: null,
-        status: "error",
-        updateAvailable: false,
-        lastCheckedAt: Date.now(),
-        error: "Update manager unavailable.",
-        installAction: "restart",
-        reloadRequestedAt: null,
-      }
       const snapshot = updateManager
         ? await updateManager.checkForUpdates({ force: command.force })
-        : unavailableSnapshot
+        : unavailableUpdateSnapshot()
       send(ackResult(id, command, snapshot))
       return true
     }
     case "update.install": {
       if (!updateManager) {
-        throw new Error("Update manager unavailable.")
+        throw new Error(UPDATE_MANAGER_UNAVAILABLE)
       }
       const result = await updateManager.installUpdate({ version: command.version })
       send(ackResult(id, command, result))
@@ -131,7 +121,7 @@ export async function handleProjectCommand(
     }
     case "update.reload": {
       if (!updateManager) {
-        throw new Error("Update manager unavailable.")
+        throw new Error(UPDATE_MANAGER_UNAVAILABLE)
       }
       const result = await updateManager.forceReload()
       send(ackResult(id, command, result))
@@ -196,11 +186,11 @@ export async function handleProjectCommand(
     case "project.readDiffPatch": {
       const project = store.getProject(command.projectId)
       if (!project) {
-        throw new Error("Project not found")
+        throw projectNotFound()
       }
-      const chat = command.chatId === undefined ? null : store.getChat(command.chatId)
+      const chatCwd = command.chatId === undefined ? undefined : resolveChatCwd(store, command.chatId)
       const result = await diffStore.readPatch({
-        projectPath: chat ? resolveSpawnPaths(chat, project.localPath).cwd : project.localPath,
+        projectPath: chatCwd ?? project.localPath,
         path: command.path,
       })
       send(ackResult(id, command, result))
@@ -241,12 +231,11 @@ export async function handleProjectCommand(
 
 async function deleteProjectData(deps: ProjectCommandDeps, projectId: string): Promise<ProjectDeleteResult> {
   const project = deps.store.getProject(projectId)
-  if (!project) throw new Error("Project not found")
+  if (!project) throw projectNotFound()
   const chatIds = [...deps.store.state.chatsById.values()]
     .filter((chat) => chat.projectId === projectId && !chat.deletedAt)
     .map((chat) => chat.id)
   for (const chatId of chatIds) {
-    await deps.shares?.revokeSharesForChat(chatId)
     await deps.deleteChat(chatId)
   }
   deps.terminals.closeByCwd(project.localPath)

@@ -1,4 +1,4 @@
-import { isJsonObject, type JsonObject, type JsonValue } from "../json"
+import { isJsonObject, stringField, type JsonValue } from "../json"
 
 export const KANNA_PLUGIN_MANIFEST_FILENAME = "kanna-plugin.json"
 
@@ -38,11 +38,6 @@ export function resolvePluginEntry(entry: string | null): string {
   return entry ?? "index.ts"
 }
 
-function readString(source: JsonObject, key: string): string | null {
-  const value = source[key]
-  return typeof value === "string" ? value : null
-}
-
 function isContainedRelativePath(value: string): boolean {
   if (value.length === 0) return false
   if (value.startsWith("/")) return false
@@ -68,12 +63,12 @@ export function parseKannaPluginManifest(raw: string): PluginManifestResult {
     return fail("invalid_json", `${KANNA_PLUGIN_MANIFEST_FILENAME} is not valid JSON.`)
   }
   const parsed = body.value
-  if (!isJsonObject(parsed) || Array.isArray(parsed)) {
+  if (!isJsonObject(parsed)) {
     return fail("not_an_object", `${KANNA_PLUGIN_MANIFEST_FILENAME} must contain a JSON object.`)
   }
 
-  const id = readString(parsed, "id")
-  if (id === null || !PLUGIN_ID_PATTERN.test(id)) {
+  const id = stringField(parsed, "id")
+  if (id === undefined || !PLUGIN_ID_PATTERN.test(id)) {
     return fail(
       "invalid_id",
       `Plugin "id" must match ${PLUGIN_ID_PATTERN.source} — lowercase letters, digits and hyphens, starting with a letter, 2-64 characters.`,
@@ -83,13 +78,13 @@ export function parseKannaPluginManifest(raw: string): PluginManifestResult {
     return fail("reserved_id", `Plugin "id" cannot be "${id}" — that name is reserved by Kanna.`)
   }
 
-  const name = readString(parsed, "name")
-  if (name === null || name.trim().length === 0) {
+  const name = stringField(parsed, "name")
+  if (name === undefined || name.trim().length === 0) {
     return fail("invalid_name", 'Plugin "name" must be a non-empty string.')
   }
 
-  const version = readString(parsed, "version")
-  if (version === null || version.trim().length === 0) {
+  const version = stringField(parsed, "version")
+  if (version === undefined || version.trim().length === 0) {
     return fail("invalid_version", 'Plugin "version" must be a non-empty string.')
   }
 

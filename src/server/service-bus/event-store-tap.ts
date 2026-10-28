@@ -1,24 +1,20 @@
-import { safeJsonParse, type JsonValue } from "../../shared/json"
-import { busSubject, type BusEnvelope } from "../../shared/service-bus/envelope"
+import { createBusEnvelope } from "../../shared/service-bus/envelope"
+import { subjectOfSuffix, transcriptBusSubject } from "../../shared/service-bus/subjects"
 import type { TranscriptEntry } from "../../shared/types"
-import { LOG_OF_EVENT, type StoreEvent } from "../events"
+import { toJsonValue } from "../json-boundary"
+import { storeEventKind, type StoreEvent } from "../events"
+import { EVENT_ROUTES } from "../event-routes"
 import type { BusSink } from "./service-bus"
 import {
   storeEventChatId,
   storeEventEntityId,
-  storeEventKind,
   storeEventSubject,
-  storeEventTimestamp,
   TRANSCRIPT_BUS_KINDS,
 } from "./store-event-subjects"
 
 export interface EventStoreTap {
   onEventApplied(event: StoreEvent): void
   onEntryAppended(chatId: string, entry: TranscriptEntry): void
-}
-
-function toJsonValue(value: StoreEvent | TranscriptEntry): JsonValue {
-  return safeJsonParse(JSON.stringify(value))
 }
 
 export function createBusTap(
@@ -36,27 +32,23 @@ export function createBusTap(
       const kind = storeEventKind(event)
       const chatId = storeEventChatId(event)
       const projectId = "projectId" in event ? event.projectId : projectOfChat(chatId)
-      const envelope: BusEnvelope = {
-        v: 1,
-        id: crypto.randomUUID(),
-        subject: busSubject(...suffix.split(".")),
+      const envelope = createBusEnvelope({
+        subject: subjectOfSuffix(suffix),
         ts: now(),
-        source: { kind: "store", log: LOG_OF_EVENT[kind] },
+        source: { kind: "store", log: EVENT_ROUTES[kind].log },
         direction: "internal",
-        idempotencyKey: `store:${kind}:${storeEventEntityId(event)}:${storeEventTimestamp(event)}`,
+        idempotencyKey: `store:${kind}:${storeEventEntityId(event)}:${event.timestamp}`,
         payload: toJsonValue(event),
         ...(chatId === undefined ? {} : { chatId }),
         ...(projectId === undefined ? {} : { projectId }),
-      }
+      })
       bus.publish(envelope)
     },
     onEntryAppended(chatId, entry) {
       if (!TRANSCRIPT_BUS_KINDS.has(entry.kind)) return
       const projectId = projectOfChat(chatId)
-      const envelope: BusEnvelope = {
-        v: 1,
-        id: crypto.randomUUID(),
-        subject: busSubject("transcript", entry.kind),
+      const envelope = createBusEnvelope({
+        subject: transcriptBusSubject(entry.kind),
         ts: now(),
         source: { kind: "transcript", chatId },
         direction: "internal",
@@ -64,7 +56,7 @@ export function createBusTap(
         chatId,
         payload: toJsonValue(entry),
         ...(projectId === undefined ? {} : { projectId }),
-      }
+      })
       bus.publish(envelope)
     },
   }

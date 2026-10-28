@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { HydratedTranscriptMessage } from "../../shared/transcript-types"
 import { buildResolvedTranscriptRows } from "./KannaTranscript"
+import { NO_LATEST_TOOL_IDS } from "./derived"
 import {
   TRANSCRIPT_GAP_CLASS,
   TRANSCRIPT_ROW_TONE_BY_MESSAGE_KIND,
@@ -117,7 +118,7 @@ describe("buildTranscriptGapClassMap over real resolved rows", () => {
   function gapsFor(messages: HydratedTranscriptMessage[]) {
     const rows = buildResolvedTranscriptRows(messages, {
       isLoading: false,
-      latestToolIds: { AskUserQuestion: null, ExitPlanMode: null, TodoWrite: null },
+      latestToolIds: NO_LATEST_TOOL_IDS,
     })
     const gapById = buildTranscriptGapClassMap(rows)
     return rows.map((row) => gapById.get(row.id))

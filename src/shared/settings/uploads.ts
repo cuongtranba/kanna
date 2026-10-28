@@ -1,4 +1,5 @@
-import { isPlainObject, clampToRange } from "./plain-object"
+import { normalizeBounded, type NumericBound } from "../numeric"
+import { readSettingsSection } from "./read-fields"
 
 export interface UploadSettings {
   maxFileSizeMb: number
@@ -11,33 +12,22 @@ export const UPLOAD_DEFAULTS: UploadSettings = {
 export const UPLOAD_MAX_FILE_SIZE_MB_MIN = 1
 export const UPLOAD_MAX_FILE_SIZE_MB_MAX = 51200
 
+export const UPLOAD_MAX_FILE_SIZE_MB_BOUND = {
+  path: "uploads.maxFileSizeMb",
+  min: UPLOAD_MAX_FILE_SIZE_MB_MIN,
+  max: UPLOAD_MAX_FILE_SIZE_MB_MAX,
+  integer: false,
+} as const satisfies NumericBound
+
 export function normalizeUploadSettings<T>(value: T, warnings: string[]): UploadSettings {
-  const source = isPlainObject(value) ? value : null
-  if (value !== undefined && !source) {
-    warnings.push("uploads must be an object")
+  const source = readSettingsSection(value, "uploads", warnings).source
+  return {
+    maxFileSizeMb: normalizeBounded(
+      UPLOAD_MAX_FILE_SIZE_MB_BOUND,
+      source?.maxFileSizeMb,
+      UPLOAD_DEFAULTS.maxFileSizeMb,
+      "clamp",
+      warnings,
+    ),
   }
-
-  const rawSize = source?.maxFileSizeMb
-  if (rawSize === undefined) return { ...UPLOAD_DEFAULTS }
-
-  if (typeof rawSize !== "number" || !Number.isFinite(rawSize)) {
-    warnings.push("uploads.maxFileSizeMb must be a number")
-    return { ...UPLOAD_DEFAULTS }
-  }
-
-  if (rawSize < UPLOAD_MAX_FILE_SIZE_MB_MIN || rawSize > UPLOAD_MAX_FILE_SIZE_MB_MAX) {
-    warnings.push(
-      `uploads.maxFileSizeMb must be between ${UPLOAD_MAX_FILE_SIZE_MB_MIN} and ${UPLOAD_MAX_FILE_SIZE_MB_MAX}`,
-    )
-    return {
-      maxFileSizeMb: clampToRange(
-        rawSize,
-        UPLOAD_MAX_FILE_SIZE_MB_MIN,
-        UPLOAD_MAX_FILE_SIZE_MB_MAX,
-        UPLOAD_DEFAULTS.maxFileSizeMb,
-      ),
-    }
-  }
-
-  return { maxFileSizeMb: Math.round(rawSize) }
 }
