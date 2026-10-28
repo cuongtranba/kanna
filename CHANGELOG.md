@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.94.0](https://github.com/cuongtranba/kanna/compare/v1.93.0...v1.94.0) (2026-10-28)
+
+
+### Tests
+
+* **uploads:** fix a CI race in the tus resume test, and release 1.94.0 ([#1388](https://github.com/cuongtranba/kanna/issues/1388)) ([8fae1dc](https://github.com/cuongtranba/kanna/commit/8fae1dca4db2ccad131e628fb85cd0351e5b9a60))
+
 ## [1.93.0](https://github.com/cuongtranba/kanna/compare/v1.92.1...v1.93.0) (2026-10-26)
 
 
