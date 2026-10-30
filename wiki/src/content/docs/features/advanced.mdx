@@ -17,7 +17,7 @@ One click installs the new version and restarts Kanna on it. Works under pm2, sy
 
 ## Expose port (Cloudflare tunnel)
 
-The agent can call `mcp__kanna__expose_port` right after it starts a dev server, to surface that localhost port through a Cloudflare quick tunnel. Enable it under **Settings → Cloudflare Tunnel** (off by default) and pick a mode: **Always ask** shows a card in the chat that you accept, **Auto-expose** starts `cloudflared` immediately. Tunnels stop when the chat closes or the server restarts. Requires `cloudflared` on your `PATH`; see [Cloudflare tunnel](/guides/ops/cloudflare-tunnel/).
+The agent can call `mcp__kanna__expose_port` right after it starts a dev server, to surface that localhost port through a Cloudflare quick tunnel. Enable it under **Settings → Cloudflare Tunnel** (off by default) and pick a mode: **Always ask** shows a card in the chat that you accept, **Auto-expose** starts `cloudflared` immediately. After you accept, the card shows **Exposing** until the Cloudflare URL actually answers, then shows the link. Tunnels stop when the chat closes or the server restarts. Requires `cloudflared` on your `PATH`; see [Cloudflare tunnel](/guides/ops/cloudflare-tunnel/).
 
 <Screenshot
   light="/screenshots/light/settings-general.png"

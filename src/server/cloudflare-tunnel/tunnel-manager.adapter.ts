@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { spawn as nodeSpawn } from "node:child_process"
 import { tunnelEnvelope, type CloudflareTunnelEvent, type TunnelStopReason } from "./events"
+import { createReachabilityProbe, type WaitUntilReachable } from "./tunnel-reachability.adapter"
 
 export interface ChildHandle {
   pid: number
@@ -18,6 +19,7 @@ export interface TunnelManagerArgs {
   cloudflaredPath: string
   onEvent: (event: CloudflareTunnelEvent) => void
   now?: () => number
+  waitUntilReachable?: WaitUntilReachable
 }
 
 interface TunnelRecord {
@@ -26,7 +28,8 @@ interface TunnelRecord {
   port: number
   sourcePid: number | null
   child: ChildHandle
-  state: "starting" | "active" | "stopped" | "failed"
+  abort: AbortController
+  state: "starting" | "probing" | "active" | "stopped" | "failed"
 }
 
 const TRYCF_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i
@@ -36,6 +39,7 @@ export class TunnelManager {
   private readonly cloudflaredPath: string
   private readonly onEvent: (event: CloudflareTunnelEvent) => void
   private readonly now: () => number
+  private readonly waitUntilReachable: WaitUntilReachable
   private readonly byPort = new Map<number, string>()
   private readonly byTunnel = new Map<string, TunnelRecord>()
 
@@ -44,6 +48,7 @@ export class TunnelManager {
     this.cloudflaredPath = args.cloudflaredPath
     this.onEvent = args.onEvent
     this.now = args.now ?? (() => Date.now())
+    this.waitUntilReachable = args.waitUntilReachable ?? createReachabilityProbe()
   }
 
   async start(input: { chatId: string; port: number; sourcePid: number | null; tunnelId?: string }): Promise<string> {
@@ -70,6 +75,7 @@ export class TunnelManager {
       port: input.port,
       sourcePid: input.sourcePid,
       child,
+      abort: new AbortController(),
       state: "starting",
     }
     this.byPort.set(input.port, tunnelId)
@@ -87,6 +93,7 @@ export class TunnelManager {
     if (!record) return
     if (record.state === "stopped" || record.state === "failed") return
     record.state = "stopped"
+    record.abort.abort()
     record.child.kill()
     this.byPort.delete(record.port)
     this.onEvent({
@@ -106,22 +113,31 @@ export class TunnelManager {
     if (record.state !== "starting") return
     const match = TRYCF_URL_RE.exec(chunk)
     if (!match) return
+    record.state = "probing"
+    void this.announceWhenReachable(record, match[0])
+  }
+
+  private async announceWhenReachable(record: TunnelRecord, url: string): Promise<void> {
+    await this.waitUntilReachable(url, record.abort.signal)
+    if (record.state !== "probing") return
     record.state = "active"
     this.onEvent({
       ...tunnelEnvelope(record.chatId, record.tunnelId, this.now()),
       kind: "tunnel_active",
-      url: match[0],
+      url,
     })
   }
 
   private handleExit(record: TunnelRecord, code: number): void {
     this.byPort.delete(record.port)
-    if (record.state === "starting") {
+    record.abort.abort()
+    if (record.state === "starting" || record.state === "probing") {
+      const before = record.state === "starting" ? "tunnel URL appeared" : "the tunnel became reachable"
       record.state = "failed"
       this.onEvent({
         ...tunnelEnvelope(record.chatId, record.tunnelId, this.now()),
         kind: "tunnel_failed",
-        error: `cloudflared exited (code ${code}) before tunnel URL appeared`,
+        error: `cloudflared exited (code ${code}) before ${before}`,
       })
       return
     }

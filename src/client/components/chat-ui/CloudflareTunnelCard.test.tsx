@@ -31,6 +31,21 @@ describe("CloudflareTunnelCard", () => {
     expect(html).toContain("Dismiss")
   })
 
+  test("starting state shows a pending Exposing button and Cancel", () => {
+    const html = renderToStaticMarkup(
+      <CloudflareTunnelCard
+        record={{ ...baseRecord, state: "starting" }}
+        onAccept={() => {}}
+        onStop={() => {}}
+        onRetry={() => {}}
+        onDismiss={() => {}}
+      />,
+    )
+    expect(html).toContain("Exposing port 5173")
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("Cancel")
+  })
+
   test("active state renders URL + Copy/Stop", () => {
     const html = renderToStaticMarkup(
       <CloudflareTunnelCard

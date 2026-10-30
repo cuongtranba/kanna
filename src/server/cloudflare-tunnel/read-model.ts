@@ -7,7 +7,7 @@ export interface ChatTunnelsProjection {
 }
 
 export function isLiveTunnel(record: CloudflareTunnelRecord): boolean {
-  return record.state === "proposed" || record.state === "active"
+  return record.state === "proposed" || record.state === "starting" || record.state === "active"
 }
 
 const EMPTY: ChatTunnelsProjection = { tunnels: {}, liveTunnelId: null }
@@ -49,8 +49,12 @@ function applyOne(tunnels: Record<string, CloudflareTunnelRecord>, event: Cloudf
         stoppedAt: null,
       }
       return
-    case "tunnel_accepted":
+    case "tunnel_accepted": {
+      const existing = tunnels[event.tunnelId]
+      if (!existing) return
+      tunnels[event.tunnelId] = { ...existing, state: "starting", error: null }
       return
+    }
     case "tunnel_active": {
       const existing = tunnels[event.tunnelId]
       if (!existing) return

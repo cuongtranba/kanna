@@ -14,6 +14,7 @@ export interface CardAction {
   onClick: () => void | Promise<void>
   variant?: CardActionVariant
   disabled?: boolean
+  pending?: boolean
 }
 
 export type CardTone = "neutral" | "muted" | "success" | "error"
@@ -128,7 +129,7 @@ function TranscriptActionCardContent({
                 size="sm"
                 variant={VARIANT_TO_BUTTON[action.variant ?? "ghost"]}
                 disabled={action.disabled || (isBusy && !isThisBusy)}
-                pending={isThisBusy}
+                pending={isThisBusy || action.pending === true}
                 onClick={() => handleClick(action)}
                 className="gap-1.5"
               >

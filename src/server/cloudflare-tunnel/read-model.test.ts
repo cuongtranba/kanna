@@ -46,16 +46,14 @@ describe("deriveChatTunnels", () => {
     expect(deriveChatTunnels(events, "c1")).toEqual({ tunnels: {}, liveTunnelId: null })
   })
 
-  test("tunnel_accepted does not allocate a fresh record (no-op semantics)", () => {
-    const proposedOnly: CloudflareTunnelEvent[] = [
+  test("tunnel_accepted marks the proposal starting and keeps it live", () => {
+    const events: CloudflareTunnelEvent[] = [
       { ...base, kind: "tunnel_proposed", timestamp: 1, port: 5173, sourcePid: null },
-    ]
-    const proposedThenAccepted: CloudflareTunnelEvent[] = [
-      ...proposedOnly,
       { ...base, kind: "tunnel_accepted", timestamp: 2, source: "user" },
     ]
-    expect(deriveChatTunnels(proposedThenAccepted, "c1").tunnels.t1)
-      .toEqual(deriveChatTunnels(proposedOnly, "c1").tunnels.t1)
+    const proj = deriveChatTunnels(events, "c1")
+    expect(proj.tunnels.t1.state).toBe("starting")
+    expect(proj.liveTunnelId).toBe("t1")
   })
 
   test("orphan tunnel_active without prior tunnel_proposed yields empty projection", () => {
