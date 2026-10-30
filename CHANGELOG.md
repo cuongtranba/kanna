@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.94.2](https://github.com/cuongtranba/kanna/compare/v1.94.1...v1.94.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* **tunnel:** keep the expose card loading until the Cloudflare URL answers ([#1395](https://github.com/cuongtranba/kanna/issues/1395)) ([c46e845](https://github.com/cuongtranba/kanna/commit/c46e8456d34e9680bcde4010da1ce0b99f0c190e))
+
 ## [1.94.1](https://github.com/cuongtranba/kanna/compare/v1.94.0...v1.94.1) (2026-10-30)
 
 
