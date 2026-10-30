@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { GitWorktree } from "../../shared/types"
+import type { GitWorktree, SidebarProjectGroup } from "../../shared/types"
 import { clampRounded } from "../../shared/numeric"
 import { localStorageAdapter } from "../adapters/storage.adapter"
 import type { StoragePort } from "../ports/storagePort"
@@ -60,6 +60,17 @@ function toggleInSet(previous: Set<string>, key: string): Set<string> {
   return next
 }
 
+function withKey(previous: Set<string>, key: string): Set<string> {
+  return previous.has(key) ? previous : new Set(previous).add(key)
+}
+
+function withoutKey(previous: Set<string>, key: string): Set<string> {
+  if (!previous.has(key)) return previous
+  const next = new Set(previous)
+  next.delete(key)
+  return next
+}
+
 function sameKeys(a: Set<string>, b: Set<string>) {
   return a.size === b.size && [...a].every((key) => b.has(key))
 }
@@ -74,6 +85,7 @@ interface KannaSidebarState {
   expandedGroups: Set<string>
   expandedGroupsSnapshot: Set<string>
   initializedCollapsedGroupKeys: Set<string>
+  revealedChatId: string | null
   nowMs: number
   showNumberJumpHints: boolean
   sidebarWidth: number
@@ -94,6 +106,7 @@ interface KannaSidebarState {
   toggleSectionCollapsed: (key: string) => void
   toggleGroupExpanded: (key: string) => void
   toggleAllSectionsCollapsed: (allGroupKeys: string[]) => void
+  revealSidebarChat: (chatId: string, groups: SidebarProjectGroup[]) => void
 
   setSidebarWidth: (width: number) => void
   nudgeSidebarWidth: (delta: number) => void
@@ -125,6 +138,7 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
   expandedGroups: new Set<string>(),
   expandedGroupsSnapshot: new Set<string>(),
   initializedCollapsedGroupKeys: new Set<string>(),
+  revealedChatId: null,
   nowMs: Date.now(),
   showNumberJumpHints: false,
   sidebarWidth: readStoredSidebarWidth(),
@@ -190,6 +204,27 @@ export const useKannaSidebarStore = create<KannaSidebarState>()((set) => ({
         collapsedSections: new Set(allGroupKeys),
         expandedGroups: new Set<string>(),
       }
+    }),
+
+  revealSidebarChat: (chatId, groups) =>
+    set((state) => {
+      if (state.revealedChatId === chatId) return state
+
+      for (const group of groups) {
+        const chat = group.chats.find((row) => row.chatId === chatId)
+        if (!chat) continue
+        if (chat.stackId) {
+          return { revealedChatId: chatId, expandedStackIds: withKey(state.expandedStackIds, chat.stackId) }
+        }
+        const inOlderChats = group.olderChats.some((row) => row.chatId === chatId)
+        return {
+          revealedChatId: chatId,
+          collapsedSections: withoutKey(state.collapsedSections, group.groupKey),
+          expandedGroups: inOlderChats ? withKey(state.expandedGroups, group.groupKey) : state.expandedGroups,
+        }
+      }
+
+      return state
     }),
 
   setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),

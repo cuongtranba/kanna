@@ -205,6 +205,8 @@ function KannaSidebarImpl({
   const toggleSectionCollapsed = useKannaSidebarStore((s) => s.toggleSectionCollapsed)
   const toggleGroupExpanded = useKannaSidebarStore((s) => s.toggleGroupExpanded)
   const toggleAllSectionsCollapsed = useKannaSidebarStore((s) => s.toggleAllSectionsCollapsed)
+  const revealSidebarChat = useKannaSidebarStore((s) => s.revealSidebarChat)
+  const revealedChatId = useKannaSidebarStore((s) => s.revealedChatId)
   const setNowMs = useKannaSidebarStore((s) => s.setNowMs)
   const setShowNumberJumpHints = useKannaSidebarStore((s) => s.setShowNumberJumpHints)
   const setSidebarWidth = useKannaSidebarStore((s) => s.setSidebarWidth)
@@ -368,11 +370,8 @@ function KannaSidebarImpl({
 
   useEffect(() => {
     reconcileSidebarGroups(allGroups)
-  }, [allGroups, reconcileSidebarGroups])
-
-  const toggleSection = toggleSectionCollapsed
-
-  const toggleExpandedGroup = toggleGroupExpanded
+    if (activeChatId) revealSidebarChat(activeChatId, allGroups)
+  }, [activeChatId, allGroups, reconcileSidebarGroups, revealSidebarChat])
 
   const allSidebarGroupKeys = useMemo(
     () => allGroups.map((g) => g.groupKey),
@@ -545,7 +544,7 @@ function KannaSidebarImpl({
         container.scrollTo({ top: elementCenter - containerCenter, behavior: "smooth" })
       }
     })
-  }, [activeChatId, timer])
+  }, [activeChatId, revealedChatId, timer])
 
   useEffect(() => {
     if (!isResizingSidebar) return
@@ -608,8 +607,8 @@ function KannaSidebarImpl({
     editorLabel,
     collapsedSections,
     expandedGroups,
-    onToggleSection: toggleSection,
-    onToggleExpandedGroup: toggleExpandedGroup,
+    onToggleSection: toggleSectionCollapsed,
+    onToggleExpandedGroup: toggleGroupExpanded,
     renderChatRow,
     onShowArchivedProject: setArchivedProjectId,
     onNewLocalChat: handleNewLocalChat,

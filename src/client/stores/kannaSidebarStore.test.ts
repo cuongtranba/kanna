@@ -8,6 +8,7 @@ import {
   resolveSidebarWidth,
   useKannaSidebarStore,
 } from "./kannaSidebarStore"
+import { EMPTY_CHAT_ACTIVITY, type SidebarProjectGroup } from "../../shared/types"
 
 function reset() {
   useKannaSidebarStore.setState({
@@ -15,6 +16,7 @@ function reset() {
     expandedGroups: new Set<string>(),
     expandedGroupsSnapshot: new Set<string>(),
     initializedCollapsedGroupKeys: new Set<string>(),
+    revealedChatId: null,
     expandedStackIds: new Set<string>(),
     stackCreatePanelOpen: false,
     stackEditId: null,
@@ -26,6 +28,22 @@ function reset() {
 }
 
 const s = () => useKannaSidebarStore.getState()
+
+function group(groupKey: string, rows: { chatId: string; stackId?: string }[]): SidebarProjectGroup {
+  const chats = rows.map((row) => ({
+    _id: row.chatId,
+    _creationTime: 1,
+    chatId: row.chatId,
+    title: row.chatId,
+    status: "idle" as const,
+    unread: false,
+    localPath: `/tmp/${groupKey}`,
+    provider: "claude" as const,
+    activity: EMPTY_CHAT_ACTIVITY,
+    ...(row.stackId ? { stackId: row.stackId } : {}),
+  }))
+  return { groupKey, localPath: `/tmp/${groupKey}`, chats, previewChats: chats, olderChats: [], defaultCollapsed: true }
+}
 
 describe("kannaSidebarStore — stacks", () => {
   beforeEach(reset)
@@ -196,6 +214,23 @@ describe("kannaSidebarStore — sections and groups", () => {
 
       expect(s().collapsedSections).toBe(before)
     })
+  })
+
+  test("revealSidebarChat does not reopen a project the user collapsed while its chat stays open", () => {
+    const groups = [group("g1", [{ chatId: "c1" }])]
+    s().reconcileSidebarGroups(groups)
+    s().revealSidebarChat("c1", groups)
+    s().toggleSectionCollapsed("g1")
+
+    s().revealSidebarChat("c1", groups)
+
+    expect(s().collapsedSections.has("g1")).toBe(true)
+  })
+
+  test("revealSidebarChat expands the stack that holds a stack chat", () => {
+    s().revealSidebarChat("c1", [group("g1", [{ chatId: "c1", stackId: "stack-1" }])])
+
+    expect(s().expandedStackIds.has("stack-1")).toBe(true)
   })
 })
 

@@ -6,6 +6,7 @@ import "../lib/testing/setupHappyDom"
 import { MemoryRouter } from "react-router-dom"
 import { TooltipProvider } from "../components/ui/tooltip"
 import { EMPTY_CHAT_ACTIVITY, type SidebarChatRow, type SidebarData, type SidebarProjectGroup } from "../../shared/types"
+import { useKannaSidebarStore } from "../stores/kannaSidebarStore"
 import { useSidebarSelectionStore } from "../stores/sidebarSelectionStore"
 import { KannaSidebar } from "./KannaSidebar"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
@@ -233,5 +234,64 @@ describe("KannaSidebar modifier multi-select", () => {
     })
 
     expect(archived).toEqual([["A", "B", "C", "D"]])
+  })
+})
+
+function mountSidebar(data: SidebarData) {
+  const container = document.createElement("div")
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  unmountSidebar = () => {
+    act(() => {
+      for (const node of container.querySelectorAll("*")) {
+        for (const animation of node.getAnimations()) animation.finish()
+      }
+    })
+    act(() => root.unmount())
+    container.remove()
+  }
+  const show = (activeChatId: string | null) => act(() => {
+    root.render(createElement(
+      MemoryRouter,
+      null,
+      createElement(TooltipProvider, null, createElement(KannaSidebar, sidebarProps(data, { activeChatId }))),
+    ))
+  })
+  return { container, show }
+}
+
+function projectGroup(groupKey: string, previewIds: string[], olderIds: string[], defaultCollapsed: boolean): SidebarProjectGroup {
+  const previewChats = previewIds.map(chatRow)
+  const olderChats = olderIds.map(chatRow)
+  return { ...createGroup(groupKey), chats: [...previewChats, ...olderChats], previewChats, olderChats, defaultCollapsed }
+}
+
+const hasRow = (container: HTMLElement, chatId: string) => container.querySelector(`[data-chat-id="${chatId}"]`) !== null
+
+describe("KannaSidebar reveals the active chat", () => {
+  test("opening a chat whose project is collapsed expands that project", () => {
+    const collapsed = projectGroup("collapsed-project", ["hidden-chat"], [], true)
+    useKannaSidebarStore.getState().reconcileSidebarGroups([collapsed])
+    const { container, show } = mountSidebar({ starredProjectGroups: [], projectGroups: [collapsed], stacks: [] })
+    show(null)
+    expect(hasRow(container, "hidden-chat")).toBe(false)
+
+    show("hidden-chat")
+
+    expect(hasRow(container, "hidden-chat")).toBe(true)
+  })
+
+  test("opening a chat listed under Show more expands the project's older chats", () => {
+    const { container, show } = mountSidebar({
+      starredProjectGroups: [],
+      projectGroups: [projectGroup("long-project", ["recent-chat"], ["old-chat"], false)],
+      stacks: [],
+    })
+    show(null)
+    expect(hasRow(container, "old-chat")).toBe(false)
+
+    show("old-chat")
+
+    expect(hasRow(container, "old-chat")).toBe(true)
   })
 })
