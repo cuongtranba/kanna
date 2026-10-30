@@ -15,7 +15,7 @@ export const CLOUDFLARE_TUNNEL_DEFAULTS: CloudflareTunnelSettings = {
   mode: "always-ask",
 }
 
-export type CloudflareTunnelState = "proposed" | "active" | "stopped" | "failed"
+export type CloudflareTunnelState = "proposed" | "starting" | "active" | "stopped" | "failed"
 
 export interface CloudflareTunnelRecord {
   tunnelId: string

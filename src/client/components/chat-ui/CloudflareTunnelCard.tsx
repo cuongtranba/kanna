@@ -86,6 +86,34 @@ export function CloudflareTunnelCard({
     )
   }
 
+  if (record.state === "starting") {
+    const actions: CardAction[] = [
+      {
+        id: "exposing",
+        label: "Exposing",
+        variant: "primary",
+        pending: true,
+        onClick: () => {},
+      },
+      {
+        id: "cancel",
+        label: "Cancel",
+        variant: "ghost",
+        onClick: async () => {
+          await onStop(record.tunnelId)
+          await waitForStateChange()
+        },
+      },
+    ]
+    return (
+      <TranscriptActionCard
+        title={`Exposing port ${record.port}`}
+        description="Waiting for the Cloudflare tunnel to become reachable…"
+        actions={actions}
+      />
+    )
+  }
+
   if (record.state === "active") {
     const url = record.url ?? ""
     const actions: CardAction[] = [

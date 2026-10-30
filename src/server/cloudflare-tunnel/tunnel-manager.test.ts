@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vite-plus/test"
 import { TunnelManager, type SpawnFn, type ChildHandle } from "./tunnel-manager.adapter"
+import { waitFor } from "../test-helpers/wait-for"
 import type { CloudflareTunnelEvent } from "./events"
 
 interface FakeChild extends ChildHandle {
@@ -33,6 +34,7 @@ describe("TunnelManager", () => {
       spawn,
       cloudflaredPath: "cloudflared",
       onEvent: (e: CloudflareTunnelEvent) => events.push(e),
+      waitUntilReachable: async () => {},
     })
 
     const tunnelId = await mgr.start({ chatId: "c1", port: 5173, sourcePid: 100 })
@@ -112,5 +114,57 @@ describe("TunnelManager", () => {
     await mgr.start({ chatId: "c1", port: 5173, sourcePid: 100 })
     child.emitExit(1)
     expect(events.some((e) => e.kind === "tunnel_failed")).toBe(true)
+  })
+
+  test("announces the tunnel only once its URL is reachable", async () => {
+    const child = fakeChild()
+    const reachable = Promise.withResolvers<void>()
+    const probed: string[] = []
+    const events: CloudflareTunnelEvent[] = []
+    const mgr = new TunnelManager({
+      spawn: () => child,
+      cloudflaredPath: "cloudflared",
+      onEvent: (e: CloudflareTunnelEvent) => events.push(e),
+      waitUntilReachable: (url) => {
+        probed.push(url)
+        return reachable.promise
+      },
+    })
+
+    await mgr.start({ chatId: "c1", port: 5173, sourcePid: 100 })
+    child.emitStdout("https://abc-def.trycloudflare.com\n")
+    await waitFor(() => probed.length === 1, 2000, "reachability probe")
+    expect(events.some((e) => e.kind === "tunnel_active")).toBe(false)
+
+    reachable.resolve()
+    await waitFor(() => events.some((e) => e.kind === "tunnel_active"), 2000, "tunnel_active event")
+
+    const active = events.find((e) => e.kind === "tunnel_active")
+    expect(active?.kind === "tunnel_active" ? active.url : null).toBe("https://abc-def.trycloudflare.com")
+  })
+
+  test("stopping while waiting for reachability never announces the tunnel", async () => {
+    const child = fakeChild()
+    const reachable = Promise.withResolvers<void>()
+    const signals: AbortSignal[] = []
+    const events: CloudflareTunnelEvent[] = []
+    const mgr = new TunnelManager({
+      spawn: () => child,
+      cloudflaredPath: "cloudflared",
+      onEvent: (e: CloudflareTunnelEvent) => events.push(e),
+      waitUntilReachable: (_url, signal) => {
+        signals.push(signal)
+        return reachable.promise
+      },
+    })
+
+    const id = await mgr.start({ chatId: "c1", port: 5173, sourcePid: 100 })
+    child.emitStdout("https://abc-def.trycloudflare.com\n")
+    await mgr.stop(id, "user")
+    reachable.resolve()
+    await reachable.promise
+
+    expect(events.some((e) => e.kind === "tunnel_active")).toBe(false)
+    expect(signals[0]?.aborted).toBe(true)
   })
 })

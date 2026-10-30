@@ -75,6 +75,7 @@ describe("cloudflare tunnel e2e", () => {
 
     manager = new TunnelManager({
       cloudflaredPath: "cloudflared",
+      waitUntilReachable: async () => {},
       spawn: () => {
         const child = fakeChild()
         pendingChildren.push(child)
@@ -122,6 +123,7 @@ describe("cloudflare tunnel e2e", () => {
 
     await gateway.accept("c1", proposed.tunnelId)
     expect(pendingChildren).toHaveLength(1)
+    expect(deriveChatTunnels(store.getTunnelEvents("c1"), "c1").tunnels[proposal.tunnelId].state).toBe("starting")
 
     pendingChildren[0].emitStdout("https://abc.trycloudflare.com\n")
 
