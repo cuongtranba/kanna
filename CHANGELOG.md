@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.94.1](https://github.com/cuongtranba/kanna/compare/v1.94.0...v1.94.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **sidebar:** expand the open chat's project so its row is visible ([#1393](https://github.com/cuongtranba/kanna/issues/1393)) ([115028b](https://github.com/cuongtranba/kanna/commit/115028b3845f62d036dbdd195f0163040831b647))
+
 ## [1.94.0](https://github.com/cuongtranba/kanna/compare/v1.93.0...v1.94.0) (2026-10-28)
 
 
