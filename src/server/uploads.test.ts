@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import { createHash } from "node:crypto"
-import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { deleteProjectUpload, inferAttachmentContentType, persistProjectUpload } from "./uploads"
@@ -491,16 +491,20 @@ describe("resumable uploads (tus)", () => {
   })
 
   test("an interrupted PATCH keeps its prefix and the upload continues from the reported offset", async () => {
-    const { server, project, base } = await startProject("kanna-tus-resume-")
+    const { server, project, projectDir, base } = await startProject("kanna-tus-resume-")
     try {
       const bytes = patternBytes(3 * MIB)
       const created = await createTusUpload(base, project.id, { size: bytes.byteLength, filename: "resume.bin" })
       expect(created.response.status).toBe(201)
+      const partialPath = path.join(getProjectUploadDir(projectDir), ".partial", path.basename(new URL(created.url).pathname))
 
       let sent = 0
       const cutBody = new ReadableStream<Uint8Array>({
-        pull(controller) {
+        async pull(controller) {
           if (sent >= MIB) {
+            let persisted = 0
+            const persistDeadline = Date.now() + 15_000
+            while (persisted === 0 && Date.now() < persistDeadline) persisted = (await stat(partialPath)).size
             controller.error(new Error("connection lost"))
             return
           }
