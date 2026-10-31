@@ -718,6 +718,22 @@ describe("EventStore", () => {
     expect(store.getChat(chat.id)).toBeNull()
   })
 
+  test("prunes only the requested chats when onlyChatIds is given", async () => {
+    const dataDir = await createTempDataDir()
+    const store = new EventStore(dataDir)
+    await store.initialize()
+
+    const project = await store.openProject("/tmp/project")
+    const requested = await store.createChat(project.id)
+    const other = await store.createChat(project.id)
+
+    const pruned = await store.pruneStaleEmptyChats({ onlyChatIds: [requested.id], maxAgeMs: 0 })
+
+    expect(pruned).toEqual([requested.id])
+    expect(store.getChat(requested.id)).toBeNull()
+    expect(store.getChat(other.id)?.id).toBe(other.id)
+  })
+
   test("does not prune recent empty chats", async () => {
     const dataDir = await createTempDataDir()
     const store = new EventStore(dataDir)
