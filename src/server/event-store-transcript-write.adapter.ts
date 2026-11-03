@@ -160,6 +160,7 @@ export async function pruneStaleEmptyChats(
     maxAgeMs?: number
     activeChatIds?: Iterable<string>
     protectedChatIds?: Iterable<string>
+    onlyChatIds?: Iterable<string>
   },
 ): Promise<string[]> {
   const now = args?.now ?? Date.now()
@@ -168,9 +169,11 @@ export async function pruneStaleEmptyChats(
     ...(args?.activeChatIds ?? []),
     ...(args?.protectedChatIds ?? []),
   ])
+  const onlyChatIds = args?.onlyChatIds ? new Set(args.onlyChatIds) : null
   const prunedChatIds: string[] = []
 
   for (const chat of deps.read.chatsById.values()) {
+    if (onlyChatIds && !onlyChatIds.has(chat.id)) continue
     if (chat.deletedAt || chat.archivedAt || protectedChatIds.has(chat.id)) continue
     if (now - chat.createdAt < maxAgeMs) continue
     if (chat.hasMessages) continue

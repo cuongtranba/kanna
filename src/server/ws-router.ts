@@ -85,7 +85,7 @@ import {
 } from "./ws-router-utils"
 import type { ClientState, CommandConnection } from "./ws-router-utils"
 import { createEnvelopeBuilder } from "./ws-router-envelope"
-import { BroadcastManager } from "./ws-router-broadcast"
+import { BroadcastManager, type BroadcastManagerDeps } from "./ws-router-broadcast"
 import type { RepoSuggestion } from "../shared/boards/sync-types"
 import type { PackageUpdateManager } from "./package-update-manager"
 
@@ -138,6 +138,7 @@ interface CreateWsRouterArgs {
   serviceBus?: Pick<ServiceBusController, "status" | "resetStore">
   authEnabled?: boolean
   plugins?: PluginsHostDep
+  scheduleChatCheck?: BroadcastManagerDeps["scheduleChatCheck"]
 }
 
 export function createWsRouter({
@@ -180,6 +181,7 @@ export function createWsRouter({
   serviceBus,
   authEnabled,
   plugins,
+  scheduleChatCheck,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -224,6 +226,7 @@ export function createWsRouter({
     backgroundTaskOutputRegistry,
     liveBlocks,
     envelopeBuilder,
+    scheduleChatCheck,
   })
   const unsubscribeMcpSources = mcpSources?.onStatus(() => { broadcast.pushMcpSources() })
 
@@ -549,6 +552,7 @@ export function createWsRouter({
 
       if (parsed.type === "unsubscribe") {
         const snapshotSignatures = ensureSnapshotSignatures(ws)
+        const releasedTopic = ws.data.subscriptions.get(parsed.id)
         ws.data.subscriptions.delete(parsed.id)
         snapshotSignatures.delete(parsed.id)
         ws.data.chatOpSeqBySubId?.delete(parsed.id)
@@ -558,6 +562,7 @@ export function createWsRouter({
           ws.data.backgroundTaskWatchers!.delete(parsed.id)
         }
         send(ws, { v: PROTOCOL_VERSION, type: "ack", id: parsed.id })
+        if (releasedTopic?.type === "chat") broadcast.releaseChatViewer(releasedTopic.chatId)
         return
       }
 

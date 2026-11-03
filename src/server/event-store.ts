@@ -338,6 +338,7 @@ export class EventStore implements PushEventStore {
     maxAgeMs?: number
     activeChatIds?: Iterable<string>
     protectedChatIds?: Iterable<string>
+    onlyChatIds?: Iterable<string>
   }) {
     return TranscriptWrite.pruneStaleEmptyChats(this.chatTranscriptDeps, args)
   }

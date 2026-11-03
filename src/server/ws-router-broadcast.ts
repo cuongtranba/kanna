@@ -1,3 +1,4 @@
+import { toError } from "../shared/errors"
 import { log } from "../shared/log"
 import { PROTOCOL_VERSION } from "../shared/types"
 import type { ServerWebSocket } from "bun"
@@ -26,10 +27,12 @@ import {
   send,
   shouldIncludeTopic,
 } from "./ws-router-utils"
+import { defaultSchedule } from "./service-bus/scheduler"
 import { diffChatMeta } from "./chat-ops-diff"
 import type { ChatMetaSignatures } from "./chat-ops-diff"
 import type { ClientState, SnapshotBroadcastFilter, SnapshotComputationCache } from "./ws-router-utils"
 
+export const ABANDONED_EMPTY_CHAT_GRACE_MS = 5_000
 
 export interface BroadcastManagerDeps {
   agent: AgentCoordinator
@@ -45,6 +48,7 @@ export interface BroadcastManagerDeps {
   backgroundTaskOutputRegistry?: BackgroundTaskOutputRegistry
   liveBlocks?: LiveBlockHub
   envelopeBuilder: EnvelopeBuilder
+  scheduleChatCheck?: typeof defaultSchedule
 }
 
 
@@ -54,6 +58,7 @@ export class BroadcastManager {
   private pendingBroadcastTimer: ReturnType<typeof setTimeout> | null = null
   private pendingBroadcastAll = false
   private readonly pendingBroadcastChatIds = new Set<string>()
+  private readonly pendingAbandonedChatChecks = new Map<string, () => void>()
 
   private readonly disposeTerminalEvents: () => void
   private readonly disposeKeybindingEvents: () => void
@@ -165,6 +170,43 @@ export class BroadcastManager {
     return protectedChatIds
   }
 
+  private getViewedChatIds(extraSockets?: Iterable<ServerWebSocket<ClientState>>): Set<string> {
+    const viewedChatIds = new Set<string>()
+    for (const socket of [...this.sockets, ...(extraSockets ?? [])]) {
+      for (const topic of socket.data.subscriptions.values()) {
+        if (topic.type === "chat") viewedChatIds.add(topic.chatId)
+      }
+    }
+    return viewedChatIds
+  }
+
+  releaseChatViewer(chatId: string): void {
+    if (this.pendingAbandonedChatChecks.has(chatId)) return
+    const schedule = this.deps.scheduleChatCheck ?? defaultSchedule
+    const cancel = schedule(() => {
+      this.pendingAbandonedChatChecks.delete(chatId)
+      this.pruneAbandonedChat(chatId).catch((error) => {
+        log.warn("[kanna/ws] abandoned empty chat check failed", toError(error).message)
+      })
+    }, ABANDONED_EMPTY_CHAT_GRACE_MS)
+    this.pendingAbandonedChatChecks.set(chatId, cancel)
+  }
+
+  private async pruneAbandonedChat(chatId: string): Promise<void> {
+    const { store } = this.deps
+    const viewedChatIds = this.getViewedChatIds()
+    if (viewedChatIds.has(chatId)) return
+    const prunedChatIds = await store.pruneStaleEmptyChats({
+      onlyChatIds: [chatId],
+      maxAgeMs: 0,
+      activeChatIds: this.getProtectedChatIds(),
+      protectedChatIds: new Set([...this.getProtectedDraftChatIds(), ...viewedChatIds]),
+    })
+    if (prunedChatIds.length > 0) {
+      await this.broadcastFilteredSnapshots({ includeSidebar: true })
+    }
+  }
+
   async maybePruneStaleEmptyChats(extraSockets?: Iterable<ServerWebSocket<ClientState>>): Promise<void> {
     const { store } = this.deps
     const startedAt = performance.now()
@@ -172,7 +214,7 @@ export class BroadcastManager {
     const protectedDraftChatIds = this.getProtectedDraftChatIds(extraSockets)
     const prunedChatIds = await store.pruneStaleEmptyChats?.({
       activeChatIds,
-      protectedChatIds: protectedDraftChatIds,
+      protectedChatIds: new Set([...protectedDraftChatIds, ...this.getViewedChatIds(extraSockets)]),
     })
     if (isSendToStartingProfilingEnabled()) {
       log.info("[kanna/send->starting][server]", JSON.stringify({
@@ -500,6 +542,8 @@ export class BroadcastManager {
       clearTimeout(this.pendingBroadcastTimer)
       this.pendingBroadcastTimer = null
     }
+    for (const cancel of this.pendingAbandonedChatChecks.values()) cancel()
+    this.pendingAbandonedChatChecks.clear()
     this.deps.agent.setBackgroundErrorReporter?.(null)
     this.disposeTerminalEvents()
     this.disposeKeybindingEvents()
