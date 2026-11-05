@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.100.1](https://github.com/cuongtranba/kanna/compare/v1.100.0...v1.100.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **security:** one origin guard for /api and /ws, and a Host check in no-password mode ([#1425](https://github.com/cuongtranba/kanna/issues/1425)) ([182e7b1](https://github.com/cuongtranba/kanna/commit/182e7b1ca4c53d4b1ffaa6bc34376c4911da16cb))
+
 ## [1.100.0](https://github.com/cuongtranba/kanna/compare/v1.99.0...v1.100.0) (2026-11-05)
 
 
