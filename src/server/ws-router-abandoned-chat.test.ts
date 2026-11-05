@@ -33,6 +33,7 @@ async function setup() {
   const project = await store.openProject("/tmp/project")
   const chat = await store.createChat(project.id)
   const scheduledChecks: Array<() => void> = []
+  const referencedChatIds = new Set<string>()
   const router = createWsRouter({
     store,
     agent: { getActiveStatuses: () => new Map(), getDrainingChatIds: () => new Set(), getWaitStartedAtByChatId: () => new Map() } as never,
@@ -50,6 +51,7 @@ async function setup() {
       scheduledChecks.push(run)
       return () => {}
     },
+    referencedChatIds: () => referencedChatIds,
   })
   const open = (subscriptionId: string) => {
     const ws = new FakeWebSocket()
@@ -60,7 +62,7 @@ async function setup() {
       unsubscribe: () => send({ type: "unsubscribe", id: subscriptionId }),
     }
   }
-  return { store, chat, router, scheduledChecks, open }
+  return { store, chat, router, scheduledChecks, referencedChatIds, open }
 }
 
 test("deletes an empty chat once the user navigates away without typing", async () => {
@@ -84,6 +86,20 @@ test("keeps an empty chat that another tab is still viewing", async () => {
   await leaving.subscribe()
   await staying.subscribe()
   await leaving.unsubscribe()
+
+  scheduledChecks[0]()
+  await new Promise((resolve) => setImmediate(resolve))
+
+  expect(store.getChat(chat.id)?.id).toBe(chat.id)
+  router.dispose()
+})
+
+test("keeps an empty chat that an integration points at", async () => {
+  const { store, chat, router, scheduledChecks, referencedChatIds, open } = await setup()
+  referencedChatIds.add(chat.id)
+  const viewer = open("chat-sub")
+  await viewer.subscribe()
+  await viewer.unsubscribe()
 
   scheduledChecks[0]()
   await new Promise((resolve) => setImmediate(resolve))

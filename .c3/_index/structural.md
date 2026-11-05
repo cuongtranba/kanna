@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:fc82e35f8b7cf3767e075b6c14b5190f5a3700422480a4a5e30af3bcac213a2f -->
+<!-- hash: sha256:b715cb3179e311804ed1b1745842fa7cb3f5b3da34da4276a5ee1dd5a1e484e9 -->
 
 ## c3-0 — Kanna (system)
 
@@ -343,7 +343,7 @@ files: src/client/app/ServiceBusConsumersGroup.tsx, src/client/app/ServiceBusEmb
 ## c3-247 — inbox (component)
 container: c3-2 | context: c3-0
 refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing
-files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/types.ts
+files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbound/referenced-chat-ids.test.ts, src/server/inbound/referenced-chat-ids.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/types.ts
 
 ## c3-248 — mcp-sources (component)
 container: c3-2 | context: c3-0
@@ -1273,6 +1273,8 @@ src/server/inbound/deliver-inbound.test.ts → c3-247
 src/server/inbound/deliver-inbound.ts → c3-247
 src/server/inbound/inbox-reply.test.ts → c3-247
 src/server/inbound/inbox-reply.ts → c3-247
+src/server/inbound/referenced-chat-ids.test.ts → c3-247
+src/server/inbound/referenced-chat-ids.ts → c3-247
 src/server/inbox/inbox-boot.ts → c3-247
 src/server/inbox/inbox-log.adapter.test.ts → c3-247
 src/server/inbox/inbox-log.adapter.ts → c3-247

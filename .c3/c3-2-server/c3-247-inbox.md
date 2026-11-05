@@ -1,6 +1,6 @@
 ---
 id: c3-247
-c3-seal: d9c4547bc4cc000f5e8247d133142c136571dc71e621415fb0ae7c3d08607ebe
+c3-seal: 14b4c1128a16cdc0f193690c309cacd5551509b331d0e86010f4ac1645bf16ed
 title: inbox
 type: component
 category: feature
@@ -47,6 +47,7 @@ Owns the inbox feature: the InboxRegistry projection over an append-only inbox.j
 | inbox.jsonl | IN/OUT | Append-only InboxEvent log under the data dir, replayed at boot, capped at 2000 live records with unread threads younger than seven days always kept | Compaction rewrites the file only at boot and keeps the last inbox_all_read | src/server/inbox/inbox-log.adapter.ts |
 | InboxOutbox | IN/OUT | send(threadId, text) validates the text, resolves the source reply arguments against the latest inbound payload, appends inbox_thread_outbound_queued, calls the tool without blocking the command and appends inbox_thread_outbound_settled; retry(threadId, outboundId, confirmDuplicate) re-sends the same text as a new outbound | failed means nothing was sent or the tool rejected the call, unknown means the request may have gone out; only sent sets the thread to replied; a pending outbound at boot settles unknown and is never resent; a retry of unknown needs confirmDuplicate | src/server/inbox/inbox-outbox.ts |
 | onNeedsYou | OUT | Fires once when a thread enters needs_you, by report, by notify-mode escalation or by the turn-end fallback | The only signal the notification layer consumes | src/server/inbox/inbox-registry.ts |
+| referencedChatIds | OUT | Every chat id named by an MCP source handler, a webhook, an inbox thread binding or an inbox report, read on each prune | The empty-chat pruner never deletes a chat in this set, so a handler chat created ahead of its first delivery survives | src/server/inbound/referenced-chat-ids.ts |
 
 ## Derived Materials
 

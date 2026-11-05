@@ -49,6 +49,7 @@ export interface BroadcastManagerDeps {
   liveBlocks?: LiveBlockHub
   envelopeBuilder: EnvelopeBuilder
   scheduleChatCheck?: typeof defaultSchedule
+  referencedChatIds?: () => Iterable<string>
 }
 
 
@@ -144,11 +145,12 @@ export class BroadcastManager {
 
 
   getProtectedChatIds(): Set<string> {
-    const { agent } = this.deps
+    const { agent, referencedChatIds } = this.deps
     const activeStatuses = agent.getActiveStatuses()
     return new Set([
       ...activeStatuses.keys(),
       ...agent.getDrainingChatIds().values(),
+      ...(referencedChatIds?.() ?? []),
     ])
   }
 
