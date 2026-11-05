@@ -480,7 +480,7 @@ describe("password auth", () => {
     })
     const tusProbe = (port: number, cookie: string) => fetch(`http://localhost:${port}/api/projects/project-1/uploads/tus`, {
       method: "POST",
-      headers: { Cookie: cookie, "Tus-Resumable": "1.0.0", "Upload-Length": "10" },
+      headers: { Cookie: cookie, Origin: `http://localhost:${port}`, "Tus-Resumable": "1.0.0", "Upload-Length": "10" },
       redirect: "manual",
     })
 

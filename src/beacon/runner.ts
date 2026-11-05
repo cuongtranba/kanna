@@ -1,4 +1,5 @@
 import {
+  BEACON_SOCKET_ROUTE,
   type BeaconFrame,
   type BeaconOs,
   type BeaconScopeChange,
@@ -28,7 +29,7 @@ export function backoffMs(attempt: number): number {
 }
 
 export function beaconSocketUrl(kannaUrl: string): string {
-  return `${kannaUrl.replace(/\/+$/, "").replace(/^http/, "ws")}/beacon`
+  return `${kannaUrl.replace(/\/+$/, "").replace(/^http/, "ws")}${BEACON_SOCKET_ROUTE}`
 }
 
 export type BeaconOfflineReason = "unreachable" | "disabled"

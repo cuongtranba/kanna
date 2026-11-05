@@ -250,7 +250,7 @@ describe("WebSocket upgrade", () => {
       const res = await fetch(`http://127.0.0.1:${server.port}/ws`, {
         headers: { Origin: "http://evil.example.com" },
       })
-      expect(res.status).toBeOneOf([400, 403])
+      expect(res.status).toBe(403)
     } finally {
       await server.stop()
     }

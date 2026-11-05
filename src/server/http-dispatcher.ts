@@ -26,6 +26,9 @@ import { createBeaconTransferHandler } from "./beacon-transfer-http.adapter"
 import { TRANSFER_COMPLETE_ROUTE, TRANSFER_ROUTE } from "../shared/beacon-transfer"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type { BeaconInput } from "../shared/beacon-config"
+import { API_PATH_PREFIX } from "../shared/http-routes"
+import { BEACON_SOCKET_ROUTE } from "../shared/beacon-protocol"
+import { createRequestOriginGuard } from "./request-origin-guard"
 
 const BYTES_PER_MB = 1024 * 1024
 const TUS_UPLOAD_ROUTE = /^\/api\/projects\/([^/]+)\/uploads\/tus(\/(?!content$)[^/]+)?$/
@@ -45,6 +48,8 @@ export interface HttpDispatcherDeps {
   beaconTransferTickets: BeaconTransferTickets
   inboxApproveProposal: InboxActions["approveProposal"]
   distDir: string
+  bindHost: string
+  trustProxy: boolean
 }
 
 function deriveOriginFromUpgrade(req: Request, url: URL): string {
@@ -102,9 +107,11 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<SocketState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, inboxApproveProposal, distDir } = deps
+  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, inboxApproveProposal, distDir, bindHost, trustProxy } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
+
+  const guardOrigin = createRequestOriginGuard({ hasPassword: auth !== null, trustProxy, bindHost })
 
   const beaconTransfer = createBeaconTransferHandler(beaconTransferTickets)
 
@@ -115,6 +122,9 @@ export function createHttpDispatcher(
 
   return async function dispatch(req: Request, server: Server<SocketState>): Promise<Response | undefined> {
     const url = new URL(req.url)
+
+    const rejected = guardOrigin(req, url)
+    if (rejected) return rejected
 
     if (url.pathname === "/auth/status") {
       return auth
@@ -147,9 +157,8 @@ export function createHttpDispatcher(
       }
 
       if (url.pathname === "/ws") {
-        if (!auth.validateOrigin(req)) return new Response("Forbidden", { status: 403 })
         if (!(await auth.isAuthenticated(req))) return new Response("Unauthorized", { status: 401 })
-      } else if (url.pathname.startsWith("/api/") && !(await auth.isAuthenticated(req))) {
+      } else if (url.pathname.startsWith(API_PATH_PREFIX) && !(await auth.isAuthenticated(req))) {
         return Response.json({ error: "Unauthorized" }, { status: 401 })
       }
     }
@@ -164,7 +173,7 @@ export function createHttpDispatcher(
       return beaconTransfer(req, url)
     }
 
-    if (url.pathname === "/beacon") {
+    if (url.pathname === BEACON_SOCKET_ROUTE) {
       if (!auth) return new Response("Beacons require a password", { status: 403 })
       const upgraded = server.upgrade(req, {
         data: {
@@ -198,7 +207,7 @@ export function createHttpDispatcher(
       if (pluginResponse) return pluginResponse
     }
 
-    const proposalApproveResponse = await handleProposalApproveRequest(req, url, inboxApproveProposal, auth)
+    const proposalApproveResponse = await handleProposalApproveRequest(req, url, inboxApproveProposal)
     if (proposalApproveResponse) return proposalApproveResponse
 
     const tusMatch = TUS_UPLOAD_ROUTE.exec(url.pathname)

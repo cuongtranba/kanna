@@ -90,6 +90,7 @@ import { createSnapshotSources } from "./session-share/snapshot-sources"
 import { startSnapshotSweep } from "./session-share/sweep"
 import { log } from "../shared/log"
 import { createHttpDispatcher } from "./http-dispatcher"
+import { unprotectedExposureWarning } from "./request-origin-guard"
 import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } from "./beacon-services"
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
@@ -643,10 +644,13 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets, inboxApproveProposal: services.inboxActions.approveProposal })
+  const hostname = options.host ?? "127.0.0.1"
+  const trustProxy = options.trustProxy ?? false
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets, inboxApproveProposal: services.inboxActions.approveProposal, bindHost: hostname, trustProxy })
+  const exposureWarning = unprotectedExposureWarning({ hasPassword: auth !== null, trustProxy, bindHost: hostname })
+  if (exposureWarning !== null) log.warn(exposureWarning)
 
   const port = options.port ?? 3210
-  const hostname = options.host ?? "127.0.0.1"
   const strictPort = options.strictPort ?? false
   const development = getRuntimeProfile() === "dev"
 

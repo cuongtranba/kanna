@@ -43,6 +43,35 @@ Use it for any instance reachable beyond localhost. Kanna does not terminate
 TLS — put it behind a reverse proxy or a Cloudflare tunnel
 ([Self-host basics](/guides/ops/self-host/#reverse-proxy)).
 
+## Cross-site request guard
+
+Every request passes one origin guard before any route runs, with or without a
+password. It stops a web page you happen to visit from driving Kanna through your
+browser:
+
+- **`/ws` and `/beacon`.** A browser always sends an `Origin` header on a
+  WebSocket upgrade. If it is present and is not this server's own origin, the
+  upgrade answers `403`. Beacons and scripts send no `Origin` and are not
+  affected.
+- **`/api` writes** (`POST`, `PUT`, `PATCH`, `DELETE`). A browser that reports
+  `Sec-Fetch-Site` must report `same-origin` (or `none`); otherwise a present
+  `Origin` must match. A request with a session cookie but neither header is
+  refused. Reads such as downloads and share links are never blocked.
+- **Left to their own credentials.** Webhooks (`/hooks/:id`), the remote MCP
+  server and its OAuth endpoints, beacon transfers and `/auth/*` skip the guard;
+  each carries a secret or token, or checks the origin itself.
+
+Without `--password`, Kanna on the default `127.0.0.1` bind also checks the
+`Host` header and answers `403` unless it is `127.0.0.1`, `localhost` or
+`[::1]`. That defeats DNS rebinding, where a hostile site re-points its own name
+at your loopback address. Open the app through one of those names; a LAN IP or
+machine name needs `--remote` or `--host`.
+
+`--remote`, `--host` and `--share` without `--password` are **unprotected**: the
+`Host` check is off, and anyone who can reach the port can start agent turns that
+run commands on your machine. Kanna still starts, and logs a warning. Set
+`--password` for any instance reachable beyond your own machine.
+
 ## Share links are public by token
 
 A [read-only share link](/sharing/session-share/) is unauthenticated by design:
