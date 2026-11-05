@@ -964,6 +964,7 @@ describe("EventStore subagent runs", () => {
       finalContent: "hello world",
     })
 
+    await store.flush()
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     const runs = reloaded.getSubagentRuns(chat.id)
@@ -1061,6 +1062,7 @@ describe("EventStore subagent runs", () => {
     expect(done.status).toBe("completed")
     expect(done.finalText).toBe("Hello world!")
 
+    await store.flush()
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     expect(reloaded.getSubagentRuns(chat.id)[runId].finalText).toBe("Hello world!")
@@ -1100,6 +1102,7 @@ describe("EventStore subagent runs", () => {
 
     await store.deleteChat(chat.id)
 
+    await store.flush()
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     expect(reloaded.getSubagentRuns(chat.id)).toEqual({})
@@ -1147,6 +1150,7 @@ describe("EventStore subagent runs", () => {
     expect(live.entries[2].kind).toBe("result")
     expect(live.usage).toEqual({ inputTokens: 50, outputTokens: 7, cachedInputTokens: 0, costUsd: 0.01 })
 
+    await store.flush()
     const reloaded = new EventStore(dir)
     await reloaded.initialize()
     const replayed = reloaded.getSubagentRuns(chatId)[runId]
@@ -1177,6 +1181,7 @@ describe("EventStore subagent runs", () => {
     const live = store.getSubagentRuns(chatId)[runId]
     expect(live.usage?.outputTokens).toBe(9)
 
+    await store.flush()
     const reloaded = new EventStore(dir)
     await reloaded.initialize()
     expect(reloaded.getSubagentRuns(chatId)[runId].usage?.outputTokens).toBe(9)
@@ -1262,6 +1267,7 @@ describe("EventStore subagent runs", () => {
       chatId: chat.id, runId, toolUseId: "tool-3",
       toolKind: "ask_user_question", input: { questions: [] },
     })
+    await store.flush()
     const reloaded = new EventStore(dataDir)
     await reloaded.initialize()
     const run = reloaded.getSubagentRuns(chat.id)[runId]

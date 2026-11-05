@@ -254,8 +254,10 @@ describe("handleLimitDetection", () => {
     const closedSessions: string[] = []
     const emitted: ChatAutomationEvent[] = []
     const turnsFailed: string[] = []
+    const detectedAt = 1_800_000_000_000
 
     const deps = makeDeps({
+      now: () => detectedAt,
       oauthPool: {
         markLimited: () => {},
         markError: () => {},
@@ -279,7 +281,7 @@ describe("handleLimitDetection", () => {
     expect(emitted[0]?.kind).toBe("auto_continue_accepted")
     if (emitted[0]?.kind === "auto_continue_accepted") {
       expect(emitted[0].source).toBe("token_rotation")
-      expect(emitted[0].scheduledAt).toBeGreaterThanOrEqual(Date.now() + TOKEN_ROTATION_SCHEDULE_DELAY_MS - 1)
+      expect(emitted[0].scheduledAt).toBe(detectedAt + TOKEN_ROTATION_SCHEDULE_DELAY_MS)
     }
     expect(closedSessions).toContain("chat-1")
     expect(turnsFailed).toHaveLength(0)

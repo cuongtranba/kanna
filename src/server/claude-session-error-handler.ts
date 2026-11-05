@@ -57,6 +57,12 @@ export interface SessionErrorHandlerDeps {
     session: ClaudeSessionState,
     opts?: { keepReservation?: boolean },
   ): void
+
+  now?: () => number
+}
+
+function nowOf(deps: SessionErrorHandlerDeps): number {
+  return (deps.now ?? Date.now)()
 }
 
 
@@ -65,7 +71,7 @@ export function acquireRotationSlot(
   tokenId: string | null,
 ): { extraDelayMs: number; isFirst: boolean } {
   if (!tokenId) return { extraDelayMs: 0, isFirst: true }
-  const now = Date.now()
+  const now = nowOf(deps)
   const existing = deps.tokenRotationDedupe.get(tokenId)
   if (!existing || now - existing.firstSeenAt > TOKEN_ROTATION_DEDUPE_WINDOW_MS) {
     deps.tokenRotationDedupe.set(tokenId, { firstSeenAt: now, staggerCount: 0 })
@@ -123,7 +129,7 @@ async function rotateOrPropose(deps: SessionErrorHandlerDeps, failure: RotationF
     })
   }
 
-  const now = Date.now()
+  const now = nowOf(deps)
   const scheduleId = crypto.randomUUID()
   const base: ChatAutomationEventBase = { v: AUTO_CONTINUE_EVENT_VERSION, timestamp: now, chatId, scheduleId }
 
