@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.96.0](https://github.com/cuongtranba/kanna/compare/v1.95.0...v1.96.0) (2026-11-05)
+
+
+### Features
+
+* **mcp-sources:** show message text in the inbox via textPath ([#1412](https://github.com/cuongtranba/kanna/issues/1412)) ([7407455](https://github.com/cuongtranba/kanna/commit/7407455692d17acd6a3083e58522eafd1ef134f6))
+* **mcp-sources:** spec-compliant subscribe mode with per-item reads, catch-up and liveness ([#1410](https://github.com/cuongtranba/kanna/issues/1410)) ([af336d3](https://github.com/cuongtranba/kanna/commit/af336d30a864ebe82a00bba91625e3e2d05c8cdc))
+
 ## [1.95.0](https://github.com/cuongtranba/kanna/compare/v1.94.2...v1.95.0) (2026-11-05)
 
 
