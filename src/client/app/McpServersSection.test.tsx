@@ -140,6 +140,24 @@ describe("McpServersSection — list", () => {
     expect(container.textContent).toContain("Failed")
     await cleanup()
   })
+
+  test("focusing the failed pill reveals the full error detail", async () => {
+    const { container, cleanup } = await mount({
+      servers: [stdio("fs", "error")],
+      editing: { kind: "list" },
+      onSelect: () => {},
+      onStartCreate: () => {},
+      onCancelEditing: () => {},
+      handlers: noopHandlers,
+    })
+    const pill = [...container.querySelectorAll<HTMLElement>("[tabindex]")].find((el) => el.textContent === "Failed")
+    expect(pill).toBeDefined()
+    await act(async () => {
+      pill!.focus()
+    })
+    expect(document.body.textContent).toContain("boom")
+    await cleanup()
+  })
 })
 
 describe("McpServersSection — editor", () => {

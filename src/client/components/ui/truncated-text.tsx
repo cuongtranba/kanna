@@ -38,14 +38,15 @@ type HoverHintProps = {
   label: React.ReactNode
   children: React.ReactElement
   side?: React.ComponentProps<typeof TooltipContent>["side"]
+  contentClassName?: string
 }
 
-export function HoverHint({ label, children, side }: HoverHintProps) {
+export function HoverHint({ label, children, side, contentClassName }: HoverHintProps) {
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent side={side}>{label}</TooltipContent>
+        <TooltipContent side={side} className={contentClassName}>{label}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   )
