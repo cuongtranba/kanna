@@ -1,7 +1,9 @@
 import type { JsonValue } from "../../shared/json"
+import { quickPromptLabel } from "../../shared/inbox/quick-prompts"
 import type {
   InboundMessage,
   InboxActivityItem,
+  InboxDraft,
   InboxOutboundMessage,
   InboxSourceKind,
   InboxThread,
@@ -161,3 +163,22 @@ export function fencedJson(payload: JsonValue): string {
 }
 
 export const NO_CHAT_REPLY_REASON = "This source has no reply tool and no chat is handling it, so there is nobody to reply through."
+
+export const ASK_NEEDS_CHAT_REASON = "Ask agent needs a source that runs in a chat (Run in chat or New chat)"
+
+export function inboxAskBlockedReason(thread: Pick<InboxThread, "chatId" | "state">): string | null {
+  if (thread.chatId === undefined) return ASK_NEEDS_CHAT_REASON
+  return thread.state === "archived" ? "This thread is archived" : null
+}
+
+const CHIP_INSTRUCTION_MAX_CHARS = 24
+
+export function draftChipLabel(draft: InboxDraft, version: number): string {
+  if (draft.origin === "triage") return `v${version} · triage`
+  const instruction = draft.instruction ?? ""
+  const named = quickPromptLabel(instruction)
+  if (named !== undefined) return `v${version} · ask: ${named}`
+  if (instruction.length === 0) return `v${version} · ask`
+  const short = instruction.length > CHIP_INSTRUCTION_MAX_CHARS ? `${instruction.slice(0, CHIP_INSTRUCTION_MAX_CHARS)}…` : instruction
+  return `v${version} · ask: ${short}`
+}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
-import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
-import { fencedJson, formatUnreadBadge, inboxReplyMode, itemStateDisplay, reportSummaryText, subjectLabel, threadPreview, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
+import type { InboxActivityItem, InboxDraft, InboxThread } from "../../shared/inbox/types"
+import { ASK_NEEDS_CHAT_REASON, draftChipLabel, fencedJson, formatUnreadBadge, inboxAskBlockedReason, inboxReplyMode, itemStateDisplay, reportSummaryText, subjectLabel, threadPreview, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
 
 function thread(overrides: Partial<InboxThread>): InboxThread {
   return {
@@ -137,5 +137,28 @@ describe("inboxReplyMode", () => {
     expect(inboxReplyMode(thread({ sourceKind: "mcp", sourceId: "src1", chatId: "c1" }), [noReply])).toBe("agent")
     expect(inboxReplyMode(thread({ sourceKind: "mcp", sourceId: "src1" }), [noReply])).toBe("none")
     expect(inboxReplyMode(thread({ sourceKind: "webhook", sourceId: "src1" }), [source])).toBe("none")
+  })
+})
+
+describe("inboxAskBlockedReason", () => {
+  test("a thread without a handler chat explains that Ask agent needs a source that runs in a chat", () => {
+    expect(inboxAskBlockedReason(thread({}))).toBe(ASK_NEEDS_CHAT_REASON)
+    expect(ASK_NEEDS_CHAT_REASON).toContain("Run in chat or New chat")
+  })
+
+  test("a thread with a chat can be asked unless it is archived", () => {
+    expect(inboxAskBlockedReason(thread({ chatId: "c1" }))).toBeNull()
+    expect(inboxAskBlockedReason(thread({ chatId: "c1", state: "archived" }))).toBe("This thread is archived")
+  })
+})
+
+describe("draftChipLabel", () => {
+  const triage: InboxDraft = { id: "d", text: "t", at: 1, origin: "triage" }
+
+  test("labels the origin, the quick prompt name or a shortened instruction", () => {
+    expect(draftChipLabel(triage, 1)).toBe("v1 · triage")
+    expect(draftChipLabel({ ...triage, origin: "ask", instruction: "Rewrite the draft shorter, keeping its meaning." }, 3)).toBe("v3 · ask: Shorter")
+    expect(draftChipLabel({ ...triage, origin: "ask", instruction: "mention the invoice number and the due date" }, 2)).toBe("v2 · ask: mention the invoice numb…")
+    expect(draftChipLabel({ ...triage, origin: "ask" }, 2)).toBe("v2 · ask")
   })
 })

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "vite-plus/test"
-import type { InboxActivityItem, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
-import { selectInboxItems, selectInboxThreads, selectSelectedThread, useInboxStore } from "./inboxStore"
+import type { InboxActivityItem, InboxDraft, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
+import { displayedReplyDraft, selectInboxItems, selectInboxThreads, selectSelectedThread, useInboxStore } from "./inboxStore"
 
 function thread(id: string, lastMessageAt: number): InboxThread {
   return {
@@ -114,10 +114,22 @@ describe("selection and drafts", () => {
     expect(useInboxStore.getState().rawOpen).toBe(initial)
   })
 
-  test("clearing a draft records an explicit empty draft so the agent seed does not return", () => {
-    useInboxStore.getState().setReplyDraft("t1", "hello")
-    expect(useInboxStore.getState().replyDrafts.t1).toBe("hello")
-    useInboxStore.getState().clearReplyDraft("t1")
-    expect(useInboxStore.getState().replyDrafts.t1).toBe("")
+  test("typing wins over the agent's draft, and a dismissed draft does not come back but a newer one seeds", () => {
+    const first: InboxDraft = { id: "d1", text: "first draft", at: 1, origin: "triage" }
+    const second: InboxDraft = { id: "d2", text: "second draft", at: 2, origin: "ask" }
+    const store = useInboxStore.getState()
+    expect(displayedReplyDraft(useInboxStore.getState().replyDrafts.t1, [first])).toBe("first draft")
+    store.setReplyDraft("t1", "typed")
+    expect(displayedReplyDraft(useInboxStore.getState().replyDrafts.t1, [first])).toBe("typed")
+    store.settleReplyDraft("t1", first.id)
+    expect(displayedReplyDraft(useInboxStore.getState().replyDrafts.t1, [first])).toBe("")
+    expect(displayedReplyDraft(useInboxStore.getState().replyDrafts.t1, [first, second])).toBe("second draft")
+  })
+
+  test("loading a draft version puts its text in the box even after the draft was dismissed", () => {
+    const first: InboxDraft = { id: "d1", text: "first draft", at: 1, origin: "triage" }
+    useInboxStore.getState().settleReplyDraft("t1", first.id)
+    useInboxStore.getState().loadDraftVersion("t1", first)
+    expect(displayedReplyDraft(useInboxStore.getState().replyDrafts.t1, [first])).toBe("first draft")
   })
 })
