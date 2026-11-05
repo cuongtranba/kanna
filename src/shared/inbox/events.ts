@@ -5,6 +5,7 @@ import {
   INBOX_OUTBOUND_SETTLED_STATUSES,
   type InboundMessage,
   type InboxActivityItem,
+  type InboxDraft,
   type InboxOutboundMessage,
   type InboxOutboundSettledStatus,
   type InboxReport,
@@ -13,6 +14,7 @@ import {
 import {
   inboundMessageSchema,
   inboxActivityItemSchema,
+  inboxDraftSchema,
   inboxOutboundMessageSchema,
   inboxReportSchema,
   inboxThreadHeaderSchema,
@@ -32,7 +34,8 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_thread_message_added"; thread: InboxThreadHeader; message: InboundMessage })
   | (InboxEventBase & { kind: "inbox_thread_chat_bound"; threadId: string; chatId: string })
   | (InboxEventBase & { kind: "inbox_thread_reported"; threadId: string; report: InboxReport })
-  | (InboxEventBase & { kind: "inbox_thread_pending"; threadId: string; scheduleId: string })
+  | (InboxEventBase & { kind: "inbox_thread_pending"; threadId: string; scheduleId: string; instruction?: string })
+  | (InboxEventBase & { kind: "inbox_thread_draft_added"; threadId: string; draft: InboxDraft })
   | (InboxEventBase & { kind: "inbox_thread_read"; ids: string[] })
   | (InboxEventBase & { kind: "inbox_all_read"; beforeTs: number })
   | (InboxEventBase & { kind: "inbox_thread_replied"; threadId: string; chatId: string; scheduleId: string })
@@ -62,7 +65,14 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_chat_bound"), threadId: z.string(), chatId: z.string() }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_reported"), threadId: z.string(), report: inboxReportSchema }),
-  z.object({ ...eventBase, kind: z.literal("inbox_thread_pending"), threadId: z.string(), scheduleId: z.string() }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_pending"),
+    threadId: z.string(),
+    scheduleId: z.string(),
+    instruction: z.string().optional(),
+  }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_draft_added"), threadId: z.string(), draft: inboxDraftSchema }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_read"), ids: z.array(z.string()) }),
   z.object({ ...eventBase, kind: z.literal("inbox_all_read"), beforeTs: z.number() }),
   z.object({

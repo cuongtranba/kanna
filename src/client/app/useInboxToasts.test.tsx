@@ -16,6 +16,7 @@ function thread(id: string, state: InboxThreadState = "needs_you"): InboxThread 
     sender: `sender-${id}`,
     messages: [],
     outbound: [],
+    drafts: [],
     state,
     unread: true,
     lastMessageAt: 100,

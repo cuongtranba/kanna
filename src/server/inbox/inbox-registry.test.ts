@@ -235,3 +235,59 @@ test("page filters by source kind and attention and pages by timestamp", async (
   const older = inbox.page(attention.items[0].ts, 10, {})
   expect(older.items.map((item) => item.subject)).toEqual(["kanna.chat.created"])
 })
+
+async function threadWithHandler(harness: Awaited<ReturnType<typeof createInboxHarness>>) {
+  const thread = await harness.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await harness.inbox.bindChat(thread.id, "chat-1")
+  return thread
+}
+
+test("a report with a draft reply keeps it as a triage draft version and a report without one adds none", async () => {
+  const harness = await createInboxHarness({ now: tick })
+  const thread = await threadWithHandler(harness)
+  await harness.inbox.report(thread.id, "chat-1", "fyi", "Nothing to say")
+  expect(harness.inbox.getThread(thread.id)?.drafts).toEqual([])
+  await harness.inbox.report(thread.id, "chat-1", "needs_you", "Pay it", "  On it, thanks  ")
+  expect(harness.inbox.getThread(thread.id)?.drafts).toEqual([
+    { id: expect.any(String), text: "On it, thanks", at: expect.any(Number), origin: "triage" },
+  ])
+})
+
+test("a draft requested by an instruction is an ask draft that remembers the instruction", async () => {
+  const harness = await createInboxHarness({ now: tick })
+  const thread = await threadWithHandler(harness)
+  await harness.inbox.markPending(thread.id, `inbox-instruct-${thread.id}-1`, "Make it shorter")
+  await harness.inbox.report(thread.id, "chat-1", "needs_you", "Rewritten", "Thanks")
+  expect(harness.inbox.getThread(thread.id)?.drafts).toEqual([
+    { id: expect.any(String), text: "Thanks", at: expect.any(Number), origin: "ask", instruction: "Make it shorter" },
+  ])
+  await harness.inbox.markPending(thread.id, "webhook-hook1-d2")
+  await harness.inbox.report(thread.id, "chat-1", "needs_you", "Again", "Thanks again")
+  expect(harness.inbox.getThread(thread.id)?.drafts.map((draft) => draft.origin)).toEqual(["ask", "triage"])
+})
+
+test("only the five newest drafts of a thread are kept, oldest dropped first", async () => {
+  const harness = await createInboxHarness({ now: tick })
+  const thread = await threadWithHandler(harness)
+  for (let index = 1; index <= 6; index += 1) {
+    await harness.inbox.report(thread.id, "chat-1", "needs_you", "s", `draft ${index}`)
+  }
+  expect(harness.inbox.getThread(thread.id)?.drafts.map((draft) => draft.text)).toEqual([
+    "draft 2",
+    "draft 3",
+    "draft 4",
+    "draft 5",
+    "draft 6",
+  ])
+})
+
+test("draft versions survive a restart and a new inbound message", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await threadWithHandler(first)
+  await first.inbox.report(thread.id, "chat-1", "needs_you", "s", "keep me")
+  await first.inbox.ingestInbound(inbound("d2"), meta("d2"))
+  expect(first.inbox.getThread(thread.id)?.report).toBeUndefined()
+  expect(first.inbox.getThread(thread.id)?.drafts.map((draft) => draft.text)).toEqual(["keep me"])
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)?.drafts).toEqual(first.inbox.getThread(thread.id)?.drafts)
+})

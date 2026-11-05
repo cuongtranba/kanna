@@ -4,10 +4,13 @@ import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
 import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
 import { isAttention } from "../../shared/inbox/policy"
 import {
+  INBOX_DRAFT_INSTRUCTION_MAX_CHARS,
   INBOX_DRAFT_MAX_CHARS,
   INBOX_OUTBOUND_RESTART_ERROR,
   INBOX_SUMMARY_MAX_CHARS,
+  isInboxInstructScheduleId,
   type InboundMessage,
+  type InboxDraft,
   type InboxActivityItem,
   type InboxFilter,
   type InboxOutboundSettledStatus,
@@ -60,7 +63,12 @@ const DEFAULT_SNAPSHOT_LIMIT = 200
 const TURN_END_SUBJECTS: readonly string[] = [namedBusSubject("turnFinished"), namedBusSubject("turnFailed")]
 
 function cloneThread(thread: InboxThread): InboxThread {
-  return { ...thread, messages: [...thread.messages], outbound: thread.outbound.map((outbound) => ({ ...outbound })) }
+  return {
+    ...thread,
+    messages: [...thread.messages],
+    outbound: thread.outbound.map((outbound) => ({ ...outbound })),
+    drafts: thread.drafts.map((draft) => ({ ...draft })),
+  }
 }
 
 function sourceOf(envelope: BusEnvelope): { kind: InboxSourceKind; id: string } | null {
@@ -202,9 +210,16 @@ export class InboxRegistry {
     await this.flush()
   }
 
-  async markPending(threadId: string, scheduleId: string): Promise<void> {
+  async markPending(threadId: string, scheduleId: string, instruction?: string): Promise<void> {
     if (!this.state.threads.has(threadId)) return
-    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_pending", threadId, scheduleId })
+    this.record({
+      v: 1,
+      ts: this.now(),
+      kind: "inbox_thread_pending",
+      threadId,
+      scheduleId,
+      ...(instruction === undefined ? {} : { instruction: instruction.slice(0, INBOX_DRAFT_INSTRUCTION_MAX_CHARS) }),
+    })
     await this.flush()
   }
 
@@ -229,6 +244,7 @@ export class InboxRegistry {
       chatId,
       ...(draft ? { draftReply: draft.slice(0, INBOX_DRAFT_MAX_CHARS) } : {}),
     }
+    if (report.draftReply !== undefined) this.recordDraft(thread, report.draftReply, report.at)
     await this.applyReport(threadId, report)
     return { ok: true }
   }
@@ -290,6 +306,19 @@ export class InboxRegistry {
     this.record({ v: 1, ts: this.now(), kind: "inbox_thread_archived", threadId })
     this.publishInbox("archived", { threadId })
     await this.flush()
+  }
+
+  private recordDraft(thread: InboxThread, text: string, at: number): void {
+    const asked = isInboxInstructScheduleId(thread.pendingScheduleId)
+    const instruction = asked ? this.state.pendingInstruction.get(thread.id) : undefined
+    const draft: InboxDraft = {
+      id: crypto.randomUUID(),
+      text,
+      at,
+      origin: asked ? "ask" : "triage",
+      ...(instruction === undefined ? {} : { instruction }),
+    }
+    this.record({ v: 1, ts: at, kind: "inbox_thread_draft_added", threadId: thread.id, draft })
   }
 
   private async settleInterruptedOutbound(): Promise<void> {

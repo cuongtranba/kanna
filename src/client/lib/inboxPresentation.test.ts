@@ -12,6 +12,7 @@ function thread(overrides: Partial<InboxThread>): InboxThread {
     sender: "ada",
     messages: [],
     outbound: [],
+    drafts: [],
     state: "new",
     unread: true,
     lastMessageAt: 1,

@@ -2,6 +2,7 @@ import type { InboxEvent } from "../../shared/inbox/events"
 import { isAttention, isToolRequestPutFor, settledToolRequestId } from "../../shared/inbox/policy"
 import {
   INBOX_MAX_ITEMS,
+  INBOX_THREAD_MAX_DRAFTS,
   INBOX_THREAD_MAX_MESSAGES,
   INBOX_UNREAD_KEEP_MS,
   type InboxActivityItem,
@@ -12,10 +13,11 @@ export interface InboxState {
   threads: Map<string, InboxThread>
   items: InboxActivityItem[]
   pendingSince: Map<string, number>
+  pendingInstruction: Map<string, string>
 }
 
 export function createInboxState(): InboxState {
-  return { threads: new Map(), items: [], pendingSince: new Map() }
+  return { threads: new Map(), items: [], pendingSince: new Map(), pendingInstruction: new Map() }
 }
 
 export function threadLookupKey(sourceKind: string, sourceId: string, threadKey: string): string {
@@ -33,6 +35,7 @@ export function findThreadByKey(state: InboxState, sourceKind: string, sourceId:
 function clearPending(state: InboxState, thread: InboxThread): void {
   delete thread.pendingScheduleId
   state.pendingSince.delete(thread.id)
+  state.pendingInstruction.delete(thread.id)
 }
 
 function addActivityItem(state: InboxState, incoming: InboxActivityItem): void {
@@ -61,6 +64,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
         ...event.thread,
         messages: [],
         outbound: [],
+        drafts: [],
         state: "new",
         unread: true,
         lastMessageAt: event.message.ts,
@@ -98,6 +102,17 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       if (!thread) return
       thread.pendingScheduleId = event.scheduleId
       state.pendingSince.set(thread.id, event.ts)
+      if (event.instruction === undefined) state.pendingInstruction.delete(thread.id)
+      else state.pendingInstruction.set(thread.id, event.instruction)
+      return
+    }
+    case "inbox_thread_draft_added": {
+      const thread = state.threads.get(event.threadId)
+      if (!thread || thread.drafts.some((draft) => draft.id === event.draft.id)) return
+      thread.drafts.push(event.draft)
+      if (thread.drafts.length > INBOX_THREAD_MAX_DRAFTS) {
+        thread.drafts.splice(0, thread.drafts.length - INBOX_THREAD_MAX_DRAFTS)
+      }
       return
     }
     case "inbox_thread_read": {
@@ -192,6 +207,7 @@ export function trimInboxState(state: InboxState, now: number): Set<string> {
     } else if (oldestThread !== null) {
       state.threads.delete(oldestThread.id)
       state.pendingSince.delete(oldestThread.id)
+      state.pendingInstruction.delete(oldestThread.id)
       dropped.add(oldestThread.id)
     } else {
       break
@@ -209,6 +225,7 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_chat_bound":
     case "inbox_thread_reported":
     case "inbox_thread_pending":
+    case "inbox_thread_draft_added":
     case "inbox_thread_replied":
     case "inbox_thread_archived":
     case "inbox_thread_outbound_queued":

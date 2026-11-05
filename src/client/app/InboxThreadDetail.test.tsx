@@ -28,6 +28,7 @@ function thread(outboundMessages: InboxOutboundMessage[]): InboxThread {
       { id: "m2", deliveryId: "d2", ts: 3000, payload: { text: "hello?" }, preview: "hello?" },
     ],
     outbound: outboundMessages,
+    drafts: [],
     state: "needs_you",
     unread: false,
     lastMessageAt: 3000,
