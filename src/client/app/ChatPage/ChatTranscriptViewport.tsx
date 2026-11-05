@@ -8,6 +8,7 @@ import { DrainingIndicator } from "../../components/messages/DrainingIndicator"
 import { QueuedUserMessage } from "../../components/messages/QueuedUserMessage"
 import { OpenLocalLinkProvider, type OpenLocalLinkTarget } from "../../components/messages/shared"
 import { SubagentTranscriptFetchProvider } from "../../components/messages/subagent-fetch-context"
+import { SubagentRunEntriesProvider } from "../../components/messages/subagent-run-entries-context"
 import { LiveTurnIndicator } from "../../components/messages/LiveTurnIndicator"
 import { ContextMenu, ContextMenuTrigger } from "../../components/ui/context-menu"
 import { OpenExternalContextMenuContent } from "../../components/open-external-menu"
@@ -23,7 +24,7 @@ import type { LatestToolIds } from "../derived"
 import { CronJobsSection } from "../CronJobsSection"
 import { buildTranscriptGapClassMap } from "../transcriptSpacing"
 import type { KannaState } from "../useKannaState"
-import type { SubagentRunSnapshot, HydratedToolCall } from "../../../shared/types"
+import type { SubagentRunSummary, HydratedToolCall } from "../../../shared/types"
 import { SubagentMessage } from "../../components/messages/SubagentMessage"
 import { SubagentPendingToolCard } from "../../components/messages/SubagentPendingToolCard"
 import { AskUserQuestionMessage } from "../../components/messages/AskUserQuestionMessage"
@@ -61,8 +62,8 @@ export interface ChatTranscriptViewportPorts {
   timer?: TimerPort
 }
 
-export type PendingQuestionRun = SubagentRunSnapshot & {
-  pendingTool: NonNullable<SubagentRunSnapshot["pendingTool"]>
+export type PendingQuestionRun = SubagentRunSummary & {
+  pendingTool: NonNullable<SubagentRunSummary["pendingTool"]>
 }
 
 export type PendingMainQuestion = Extract<HydratedToolCall, { toolKind: "ask_user_question" }>
@@ -91,7 +92,7 @@ export function selectPendingMainQuestion(
 }
 
 export function collectPendingQuestionRuns(
-  subagentRuns: Record<string, SubagentRunSnapshot> | undefined,
+  subagentRuns: Record<string, SubagentRunSummary> | undefined,
 ): PendingQuestionRun[] {
   const pending = Object.values(subagentRuns ?? {}).filter(
     (run): run is PendingQuestionRun => run.pendingTool !== null,
@@ -171,6 +172,7 @@ export const ChatTranscriptViewport = memo(({
     backgroundTasks,
     getWorkflowRunDetail,
     getSubagentTranscript,
+    getSubagentRunEntries,
     editorPreset,
     editorCommandTemplate,
     platform,
@@ -220,14 +222,14 @@ export const ChatTranscriptViewport = memo(({
     const topLevelRuns = Object.values(subagentRuns).filter((r) => r.parentRunId === null)
     const { matched } = matchRunsToDelegateCalls(delegateCalls, topLevelRuns)
 
-    const byParent = new Map<string, SubagentRunSnapshot[]>()
+    const byParent = new Map<string, SubagentRunSummary[]>()
     for (const run of Object.values(subagentRuns)) {
       if (run.parentRunId === null) continue
       const list = byParent.get(run.parentRunId) ?? []
       list.push(run)
       byParent.set(run.parentRunId, list)
     }
-    const cmp = (a: SubagentRunSnapshot, b: SubagentRunSnapshot) =>
+    const cmp = (a: SubagentRunSummary, b: SubagentRunSummary) =>
       a.startedAt - b.startedAt || a.runId.localeCompare(b.runId)
     for (const list of byParent.values()) list.sort(cmp)
 
@@ -242,7 +244,7 @@ export const ChatTranscriptViewport = memo(({
 
   const renderRunTree = useMemo(
     () =>
-      function renderRun(run: SubagentRunSnapshot, depth: number): React.ReactNode {
+      function renderRun(run: SubagentRunSummary, depth: number): React.ReactNode {
         const children = childrenByParentRunId.get(run.runId) ?? []
         return (
           <React.Fragment key={run.runId}>
@@ -521,6 +523,7 @@ export const ChatTranscriptViewport = memo(({
   return (
     <>
       <SubagentTranscriptFetchProvider value={getSubagentTranscript ?? null}>
+      <SubagentRunEntriesProvider value={getSubagentRunEntries ?? null}>
       <OpenLocalLinkProvider onOpenLocalLink={handleOpenLocalLinkClick}>
       <TranscriptRenderOptionsProvider
         value={pendingMainQuestion ? FOOTER_SURFACE_OPTIONS : INLINE_SURFACE_OPTIONS}
@@ -548,6 +551,7 @@ export const ChatTranscriptViewport = memo(({
       </GenUIHostProvider>
       </TranscriptRenderOptionsProvider>
       </OpenLocalLinkProvider>
+      </SubagentRunEntriesProvider>
       </SubagentTranscriptFetchProvider>
 
       <ContextMenu onOpenChange={setLocalLinkMenuOpen}>

@@ -274,6 +274,13 @@ export const chatCommands = defineCommands(
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("subagentRun.getEntries", {
+    result: transcriptEntriesSchema,
+    params: z.object({ ...chatIdShape, runId: z.string().describe("Id of the subagent run") }),
+    summary: "Read the full entry log of a subagent run held by the chat.",
+    risk: "read",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("backgroundTasks.getOutput", {
     result: backgroundTaskOutputReplySchema,
     params: z.object({ ...chatIdShape, taskId: z.string().describe("Id of the background task") }),

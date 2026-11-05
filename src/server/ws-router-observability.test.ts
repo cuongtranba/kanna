@@ -4,6 +4,7 @@ import { handleObservabilityCommand } from "./ws-router-observability"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
 import { encodeCwd } from "./claude-projects-path.adapter"
+import { createTestEventStore } from "./storage/test-helpers"
 
 const REAL_CWD = process.cwd()
 
@@ -17,7 +18,7 @@ function makeDeps(
   return {
     workflowRegistry: wfOverride,
     subagentTranscriptRegistry: saOverride,
-    store: storeOverride ?? { getChat: () => null, getProject: () => null },
+    store: storeOverride ?? { getChat: () => null, getProject: () => null, getSubagentRunEntries: () => null },
     send: (envelope) => { sent.push(envelope) },
     sent,
   }
@@ -143,6 +144,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => chat),
       getProject: vi.fn(() => project),
+      getSubagentRunEntries: () => null,
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -169,6 +171,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => { throw new Error("should not be reached") }),
       getProject: vi.fn(() => { throw new Error("should not be reached") }),
+      getSubagentRunEntries: () => null,
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -191,6 +194,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => chat),
       getProject: vi.fn(() => { throw new Error("should not be reached") }),
+      getSubagentRunEntries: () => null,
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -200,5 +204,31 @@ describe("handleObservabilityCommand", () => {
     )
     expect(handled).toBe(true)
     expect(sa.register).not.toHaveBeenCalled()
+  })
+
+  test("subagentRun.getEntries — returns the full log of the run held by the store, [] for an unknown run", async () => {
+    const store = createTestEventStore("/virtual-observability-run-entries")
+    await store.initialize()
+    const project = await store.openProject("/tmp/p-run-entries")
+    const chat = await store.createChat(project.id)
+    await store.appendSubagentEvent({
+      v: 3, type: "subagent_run_started", timestamp: 1, chatId: chat.id, runId: "run-1",
+      subagentId: "s1", subagentName: "alpha", provider: "claude", model: "claude-opus-4-7",
+      parentUserMessageId: "u1", parentRunId: null, depth: 0,
+    })
+    for (const index of [1, 2, 3]) {
+      await store.appendSubagentEvent({
+        v: 3, type: "subagent_entry_appended", timestamp: index, chatId: chat.id, runId: "run-1",
+        entry: { _id: `e${index}`, createdAt: index, kind: "assistant_text", text: `step ${index}` },
+      })
+    }
+    const deps = makeDeps(undefined, undefined, store)
+
+    await handleObservabilityCommand(deps, { type: "subagentRun.getEntries", chatId: chat.id, runId: "run-1" }, "r-full")
+    await handleObservabilityCommand(deps, { type: "subagentRun.getEntries", chatId: chat.id, runId: "missing" }, "r-none")
+
+    const [full, none] = deps.sent as Array<{ result: Array<{ _id: string }> }>
+    expect(full?.result.map((entry) => entry._id)).toEqual(["e1", "e2", "e3"])
+    expect(none?.result).toEqual([])
   })
 })

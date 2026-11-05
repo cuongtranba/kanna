@@ -9,7 +9,7 @@ import { ackResult } from "./ws-router-ack"
 export interface ObservabilityCommandDeps {
   workflowRegistry: Pick<WorkflowRegistry, "getRun" | "getAgentTranscript"> | undefined
   subagentTranscriptRegistry: Pick<SubagentTranscriptRegistry, "has" | "register" | "getAgentTranscript"> | undefined
-  store: Pick<EventStore, "getChat" | "getProject">
+  store: Pick<EventStore, "getChat" | "getProject" | "getSubagentRunEntries">
   send: (envelope: ServerEnvelope) => void
 }
 
@@ -50,6 +50,10 @@ export async function handleObservabilityCommand(
       if (subagentTranscriptRegistry) ensureSubagentDirRegistered(subagentTranscriptRegistry, store, command.chatId)
       const entries = subagentTranscriptRegistry?.getAgentTranscript(command.chatId, command.agentId) ?? []
       send(ackResult(id, command, entries))
+      return true
+    }
+    case "subagentRun.getEntries": {
+      send(ackResult(id, command, store.getSubagentRunEntries(command.chatId, command.runId) ?? []))
       return true
     }
     default:

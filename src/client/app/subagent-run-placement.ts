@@ -1,4 +1,4 @@
-import type { HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
+import type { HydratedTranscriptMessage, SubagentRunSummary } from "../../shared/types"
 import { log } from "../../shared/log"
 
 export const DELEGATE_SUBAGENT_TOOL_NAME = "mcp__kanna__delegate_subagent"
@@ -9,8 +9,8 @@ export interface DelegateCall {
 }
 
 export interface RunPlacement {
-  matched: Map<string, SubagentRunSnapshot>
-  orphans: SubagentRunSnapshot[]
+  matched: Map<string, SubagentRunSummary>
+  orphans: SubagentRunSummary[]
 }
 
 export function extractDelegateCalls(messages: HydratedTranscriptMessage[]): DelegateCall[] {
@@ -28,9 +28,9 @@ export function extractDelegateCalls(messages: HydratedTranscriptMessage[]): Del
 
 export function matchRunsToDelegateCalls(
   delegateCalls: DelegateCall[],
-  topLevelRuns: SubagentRunSnapshot[],
+  topLevelRuns: SubagentRunSummary[],
 ): RunPlacement {
-  const runsBySubagent = new Map<string, SubagentRunSnapshot[]>()
+  const runsBySubagent = new Map<string, SubagentRunSummary[]>()
   for (const run of topLevelRuns) {
     if (run.subagentId === null) continue
     const list = runsBySubagent.get(run.subagentId) ?? []
@@ -41,7 +41,7 @@ export function matchRunsToDelegateCalls(
     list.sort((a, b) => a.startedAt - b.startedAt || a.runId.localeCompare(b.runId))
   }
 
-  const matched = new Map<string, SubagentRunSnapshot>()
+  const matched = new Map<string, SubagentRunSummary>()
   const claimed = new Set<string>()
   const cursorBySubagent = new Map<string, number>()
   for (const call of delegateCalls) {
@@ -59,7 +59,7 @@ export function matchRunsToDelegateCalls(
   return { matched, orphans }
 }
 
-export function reportOrphanRuns(orphans: SubagentRunSnapshot[], isDev: boolean): void {
+export function reportOrphanRuns(orphans: SubagentRunSummary[], isDev: boolean): void {
   if (orphans.length === 0) return
   const detail = orphans.map((run) => `${run.runId} (subagentId=${run.subagentId})`).join(", ")
   const message = `Subagent run placement: ${orphans.length} orphan top-level run(s) with no delegate_subagent tool call: ${detail}`

@@ -161,6 +161,15 @@ export function getSubagentRuns(
   return Object.fromEntries(map.entries())
 }
 
+export function getSubagentRunEntries(
+  subagentRunsByChatId: Map<string, SubagentRunMap>,
+  chatId: string,
+  runId: string,
+): TranscriptEntry[] | null {
+  const run = subagentRunsByChatId.get(chatId)?.get(runId)
+  return run ? [...run.entries] : null
+}
+
 export function* runningSubagentRuns(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
 ): Iterable<SubagentRunSnapshot> {

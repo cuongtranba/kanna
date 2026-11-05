@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import type { HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
+import type { HydratedTranscriptMessage, SubagentRunSummary } from "../../shared/types"
 import {
   DELEGATE_SUBAGENT_TOOL_NAME,
   extractDelegateCalls,
@@ -7,7 +7,7 @@ import {
   reportOrphanRuns,
 } from "./subagent-run-placement"
 
-function makeRun(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
+function makeRun(overrides: Partial<SubagentRunSummary>): SubagentRunSummary {
   return {
     runId: "run-1",
     chatId: "chat-1",
@@ -25,7 +25,8 @@ function makeRun(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
     finalText: null,
     error: null,
     usage: null,
-    entries: [],
+    entryCount: 0,
+    recentEntries: [],
     pendingTool: null,
     ...overrides,
   }

@@ -135,6 +135,13 @@ export interface SubagentRunSnapshot {
   pendingTool: SubagentPendingTool | null
 }
 
+export const SUBAGENT_RECENT_ENTRY_LIMIT = 8
+
+export type SubagentRunSummary = Omit<SubagentRunSnapshot, "entries"> & {
+  entryCount: number
+  recentEntries: TranscriptEntry[]
+}
+
 export type LoopRowStatus = "pending" | "blocked" | "running" | "done" | "failed"
 
 export interface LoopRow {

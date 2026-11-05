@@ -32,7 +32,7 @@ import { gitInitializeKey, projectOpenExternalKey } from "./projectActionKeys"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
-import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types"
+import type { SubagentRunSummary, TranscriptEntry } from "../../../shared/types"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
@@ -44,7 +44,7 @@ import type { EditorOpenSettings, OpenExternalAction } from "../../../shared/pro
 import { isUntitledChat } from "../../../shared/core-types"
 
 const EMPTY_MUTED_CHAT_IDS: string[] = []
-const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSnapshot> = {}
+const EMPTY_SUBAGENT_RUNS: Record<string, SubagentRunSummary> = {}
 
 
 
@@ -348,6 +348,9 @@ export function ChatTabContent({
     return socket.command({ type: "subagents.getRun", chatId: activeChatId, agentId })
   }, [activeChatId, socket])
 
+  const handleGetSubagentRunEntries = useCallback(async (chatId: string, runId: string): Promise<TranscriptEntry[]> => {
+    return socket.command({ type: "subagentRun.getEntries", chatId, runId })
+  }, [socket])
 
   const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
     onAskUserQuestionSubmit: state.handleAskUserQuestion,
@@ -369,6 +372,7 @@ export function ChatTabContent({
     editorCommandTemplate,
     onCancelSubagentRun: handleCancelSubagentRun,
     getSubagentTranscript: handleGetSubagentTranscript,
+    getSubagentRunEntries: handleGetSubagentRunEntries,
     platform: state.localProjects?.machine.platform ?? "darwin",
     tunnels: state.chatSnapshot?.tunnels,
     liveTunnelId: state.chatSnapshot?.liveTunnelId,
@@ -409,6 +413,7 @@ export function ChatTabContent({
     editorCommandTemplate,
     handleCancelSubagentRun,
     handleGetSubagentTranscript,
+    handleGetSubagentRunEntries,
     state.localProjects?.machine.platform,
     state.chatSnapshot?.tunnels,
     state.chatSnapshot?.liveTunnelId,

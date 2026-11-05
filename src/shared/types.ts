@@ -22,7 +22,7 @@ import type {
   ClaudeSessionLifecycleStatus,
   CloudflareTunnelRecord,
 } from "./app-settings-types"
-import type { SubagentErrorCode, SubagentRunSnapshot, LoopProgressSnapshot } from "./subagent-types"
+import type { SubagentErrorCode, SubagentRunSummary, LoopProgressSnapshot } from "./subagent-types"
 
 export interface SkillSearchResult {
   id: string
@@ -433,7 +433,7 @@ export interface ChatSnapshot {
   tunnels: Record<string, CloudflareTunnelRecord>
   liveTunnelId: string | null
   resolvedBindings?: ResolvedStackBinding[]
-  subagentRuns: Record<string, SubagentRunSnapshot>
+  subagentRuns: Record<string, SubagentRunSummary>
   loopProgress: LoopProgressSnapshot
   cronJobs: readonly import("./cron/types").CronJobSnapshot[]
   seq?: number

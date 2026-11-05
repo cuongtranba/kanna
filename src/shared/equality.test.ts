@@ -118,7 +118,7 @@ describe("sameChatSnapshotCore tunnel fields", () => {
   })
 })
 
-function createMinimalSubagentRun(overrides: Partial<import("./types").SubagentRunSnapshot> = {}): import("./types").SubagentRunSnapshot {
+function createMinimalSubagentRun(overrides: Partial<import("./types").SubagentRunSummary> = {}): import("./types").SubagentRunSummary {
   return {
     runId: "run-1",
     chatId: "chat-1",
@@ -136,7 +136,8 @@ function createMinimalSubagentRun(overrides: Partial<import("./types").SubagentR
     finalText: null,
     error: null,
     usage: null,
-    entries: [],
+    entryCount: 0,
+    recentEntries: [],
     pendingTool: null,
     ...overrides,
   }
@@ -150,12 +151,8 @@ describe("sameChatSnapshotCore subagent fields", () => {
   })
 
   test("returns false when subagent entries grew between snapshots", () => {
-    const runA = createMinimalSubagentRun({ entries: [] })
-    const runB = createMinimalSubagentRun({
-      entries: [
-        { _id: "e1", createdAt: 1, kind: "assistant_text", text: "hi", messageId: "m1" } as unknown as import("./types").TranscriptEntry,
-      ],
-    })
+    const runA = createMinimalSubagentRun({ entryCount: 0, recentEntries: [] })
+    const runB = createMinimalSubagentRun({ entryCount: 1 })
     const a = createMinimalChatSnapshot({ subagentRuns: { "run-1": runA } })
     const b = createMinimalChatSnapshot({ subagentRuns: { "run-1": runB } })
     expect(sameChatSnapshotCore(a, b)).toBe(false)
@@ -196,7 +193,7 @@ describe("sameChatSnapshotCore subagent fields", () => {
     const b = createMinimalChatSnapshot({
       subagentRuns: {
         "run-1": createMinimalSubagentRun({
-          pendingTool: { toolUseId: "tu-1", toolKind: "ask_user_question", input: { questions: [] }, askedAt: 100 } as unknown as import("./types").SubagentRunSnapshot["pendingTool"],
+          pendingTool: { toolUseId: "tu-1", toolKind: "ask_user_question", input: { questions: [] }, askedAt: 100 } as unknown as import("./types").SubagentRunSummary["pendingTool"],
         }),
       },
     })

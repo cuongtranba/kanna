@@ -1,8 +1,11 @@
+import { useCallback } from "react"
 import { Bot, X } from "lucide-react"
+import { onRejected } from "../../../shared/errors"
 import type {
   AskUserQuestionAnswerMap,
   AskUserQuestionItem,
-  SubagentRunSnapshot,
+  SubagentRunSummary,
+  TranscriptEntry,
 } from "../../../shared/types"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "../../app/chatFocusPolicy"
 import { toolActivity } from "../../lib/toolPresentation"
@@ -12,11 +15,21 @@ import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
 import { SubagentPendingToolCard } from "./SubagentPendingToolCard"
 import { Spinner } from "../ui/spinner"
+import { Button } from "../ui/button"
+import { withScopedStore } from "../../lib/createScopedStore"
+import { SubagentMessageStore } from "./SubagentMessage.store"
+import { useSubagentRunEntries } from "./subagent-run-entries-context"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 
-function deriveSubagentActivity(run: SubagentRunSnapshot, localPath: string): string {
+function mergeEntriesById(full: TranscriptEntry[], recent: TranscriptEntry[]): TranscriptEntry[] {
+  const known = new Set(full.map((entry) => entry._id))
+  const fresh = recent.filter((entry) => !known.has(entry._id))
+  return fresh.length === 0 ? full : [...full, ...fresh]
+}
+
+function deriveSubagentActivity(run: SubagentRunSummary, localPath: string): string {
   if (run.pendingTool) return "waiting for input..."
-  const entries = run.entries
+  const entries = run.recentEntries
   const resolved = new Set<string>()
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]
@@ -32,7 +45,7 @@ function deriveSubagentActivity(run: SubagentRunSnapshot, localPath: string): st
 }
 
 interface SubagentMessageProps {
-  run: SubagentRunSnapshot
+  run: SubagentRunSummary
   indentDepth: number
   localPath: string
   onOpenSettings?: () => void
@@ -56,7 +69,7 @@ function SubagentCancelButton({
   run,
   onCancel,
 }: {
-  run: SubagentRunSnapshot
+  run: SubagentRunSummary
   onCancel: (chatId: string, runId: string) => Promise<void>
 }) {
   const pendingKey = pendingActionKey("chat.cancelSubagentRun", run.runId)
@@ -76,7 +89,55 @@ function SubagentCancelButton({
   )
 }
 
-export function SubagentMessage({
+function SubagentLogToggle({ run }: { run: SubagentRunSummary }) {
+  const getEntries = useSubagentRunEntries()
+  const expanded = SubagentMessageStore.useScopedStore((s) => s.expanded)
+  const error = SubagentMessageStore.useScopedStore((s) => s.error)
+  const openLog = SubagentMessageStore.useScopedStore((s) => s.openLog)
+  const closeLog = SubagentMessageStore.useScopedStore((s) => s.closeLog)
+  const receiveEntries = SubagentMessageStore.useScopedStore((s) => s.receiveEntries)
+  const failLoad = SubagentMessageStore.useScopedStore((s) => s.failLoad)
+  const pendingKey = pendingActionKey("subagentRun.getEntries", run.runId)
+  const pending = usePendingAction(pendingKey)
+
+  const onToggle = useCallback(() => {
+    if (!getEntries) return
+    if (expanded) {
+      closeLog()
+      return
+    }
+    openLog()
+    runPendingAction(pendingKey, () =>
+      getEntries(run.chatId, run.runId).then(receiveEntries, onRejected((cause) => failLoad(cause.message))),
+    )
+  }, [getEntries, expanded, closeLog, openLog, pendingKey, run.chatId, run.runId, receiveEntries, failLoad])
+
+  if (!getEntries) return null
+  if (!expanded && run.entryCount <= run.recentEntries.length) return null
+
+  return (
+    <div className="space-y-1">
+      <Button
+        variant="ghost"
+        size="none"
+        className="px-1.5 py-0.5 text-xs"
+        data-testid={`subagent-log-toggle:${run.runId}`}
+        aria-expanded={expanded}
+        pending={pending}
+        onClick={onToggle}
+      >
+        {expanded ? "Hide full log" : `Show full log (${run.entryCount} entries)`}
+      </Button>
+      {error && (
+        <div data-testid={`subagent-log-error:${run.runId}`} className="text-xs text-destructive-text">
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SubagentMessageInner({
   run,
   indentDepth,
   localPath,
@@ -87,7 +148,9 @@ export function SubagentMessage({
   onCancelSubagentRun,
   suppressPendingTool = false,
 }: SubagentMessageProps) {
-  const messages = processTranscriptMessages(run.entries)
+  const fullEntries = SubagentMessageStore.useScopedStore((s) => s.fullEntries)
+  const shownEntries = fullEntries ? mergeEntriesById(fullEntries, run.recentEntries) : run.recentEntries
+  const messages = processTranscriptMessages(shownEntries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
   const isStreaming = run.status === "running" && hasAnyText
   const activityLabel = run.status === "running" ? deriveSubagentActivity(run, localPath) : ""
@@ -118,6 +181,7 @@ export function SubagentMessage({
           <SubagentCancelButton run={run} onCancel={onCancelSubagentRun} />
         )}
       </header>
+      <SubagentLogToggle run={run} />
       {messages.map((m) => (
         <SubagentEntryRow
           key={m.id}
@@ -157,3 +221,5 @@ export function SubagentMessage({
     </div>
   )
 }
+
+export const SubagentMessage = withScopedStore(SubagentMessageStore, SubagentMessageInner)
