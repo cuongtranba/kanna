@@ -1,6 +1,6 @@
 import type { InboundHandler } from "../../shared/inbound/handler"
 import { renderInstructPrompt, renderReplyPrompt } from "../../shared/inbound/reply-prompt"
-import type { InboxThread } from "../../shared/inbox/types"
+import { inboxInstructScheduleId, type InboxThread } from "../../shared/inbox/types"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import { queueHandlerTurn, type InboundDeliveryAgent, type InboundDeliveryStore } from "./deliver-inbound"
 
@@ -62,19 +62,21 @@ export async function instructInboxThread(
   resolveHandler: InboundHandlerResolver,
   threadId: string,
   text: string,
+  draft?: string,
   now: () => number = Date.now,
 ): Promise<InboxReplyResult> {
   const target = resolveTarget(store, inbox, resolveHandler, threadId)
   if (typeof target === "string") return { ok: false, error: target }
-  const scheduleId = `inbox-instruct-${threadId}-${now()}`
+  if (target.thread.state === "archived") return { ok: false, error: "This thread is archived" }
+  const scheduleId = inboxInstructScheduleId(threadId, now())
   const prompt = renderInstructPrompt({
     sourceName: target.thread.sourceName,
-    replyHint: target.handler?.replyHint ?? "",
     threadId,
     latestMessage: latestPayload(target.thread),
     text,
+    ...(draft === undefined ? {} : { draft }),
   })
-  await inbox.markPending(threadId, scheduleId)
+  await inbox.markPending(threadId, scheduleId, text)
   await queueHandlerTurn(agent, target.chatId, target.handler, prompt, scheduleId)
   return { ok: true, chatId: target.chatId }
 }

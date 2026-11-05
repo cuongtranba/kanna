@@ -45,18 +45,38 @@ test("a reply queues the rendered prompt under an incrementing schedule id and m
   expect(inbox.getThread(threadId)).toMatchObject({ state: "replied", replyCount: 2 })
 })
 
-test("an instruction marks the thread pending and asks the agent to report again", async () => {
+test("an instruction asks the agent for a draft, fences instruction and draft apart and marks the thread pending", async () => {
   const { store, agent, inbox, chat, handler, threadId } = await threadWithChat()
-  const result = await instructInboxThread(store, agent, inbox, () => handler, threadId, "Check the amount", () => 77)
+  const result = await instructInboxThread(store, agent, inbox, () => handler, threadId, "Make it shorter", "Dear Ada, thank you very much.", () => 77)
   expect(result).toEqual({ ok: true, chatId: chat.id })
   const queued = store.getQueuedMessages(chat.id).at(-1)
   expect(queued?.autoContinue).toEqual({ scheduleId: `inbox-instruct-${threadId}-77` })
-  expect(queued?.content).toContain("Check the amount")
+  expect(queued?.content).toContain("```text\nMake it shorter\n```")
+  expect(queued?.content).toContain("```text\nDear Ada, thank you very much.\n```")
+  expect(queued?.content).toContain("NEVER send anything to the sender")
   expect(queued?.content).toContain(`thread_id ${threadId}`)
+  expect(queued?.content).toContain("draft_reply")
   expect(inbox.getThread(threadId)?.pendingScheduleId).toBe(`inbox-instruct-${threadId}-77`)
 })
 
-test("on the agent path a notify thread has no handler chat, so reply and instruct are refused", async () => {
+test("the draft the agent reports after an instruction becomes an ask draft carrying that instruction", async () => {
+  const { store, agent, inbox, chat, handler, threadId } = await threadWithChat()
+  await instructInboxThread(store, agent, inbox, () => handler, threadId, "Make it shorter", undefined, () => 77)
+  await inbox.report(threadId, chat.id, "needs_you", "Rewritten", "Thanks, paid.")
+  expect(inbox.getThread(threadId)?.drafts).toMatchObject([{ text: "Thanks, paid.", origin: "ask", instruction: "Make it shorter" }])
+})
+
+test("an archived thread cannot be asked for a draft", async () => {
+  const { store, agent, inbox, chat, handler, threadId } = await threadWithChat()
+  await inbox.archive(threadId)
+  const queuedBefore = store.getQueuedMessages(chat.id).length
+  const result = await instructInboxThread(store, agent, inbox, () => handler, threadId, "Make it shorter")
+  expect(result).toEqual({ ok: false, error: "This thread is archived" })
+  expect(store.getQueuedMessages(chat.id)).toHaveLength(queuedBefore)
+  expect(inbox.getThread(threadId)?.pendingScheduleId).toBeUndefined()
+})
+
+test("on the agent path a notify thread has no handler chat, so reply and ask are refused", async () => {
   const { store, agent, inbox, bus, chat } = await createWebhookHarness()
   const result = await deliverInbound(store, agent, bus, inbox, {
     source: { kind: "mcp", sourceId: "mail1", sourceName: "Mail", serverId: "s", serverName: "mail" },

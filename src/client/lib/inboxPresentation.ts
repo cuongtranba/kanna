@@ -29,8 +29,8 @@ const THREAD_STATE_DISPLAY: Readonly<Record<InboxThreadState, InboxStateDisplay>
 
 const AGENT_READING: InboxStateDisplay = { tone: "active", label: "Agent reading" }
 
-export function isAgentReading(thread: Pick<InboxThread, "pendingScheduleId" | "report">): boolean {
-  return thread.pendingScheduleId !== undefined && thread.report === undefined
+export function isAgentReading(thread: Pick<InboxThread, "pendingScheduleId">): boolean {
+  return thread.pendingScheduleId !== undefined
 }
 
 export function threadStateDisplay(thread: InboxThread): InboxStateDisplay {

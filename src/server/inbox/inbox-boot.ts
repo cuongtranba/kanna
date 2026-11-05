@@ -65,7 +65,7 @@ export function createInboxReplyActions(
         const replied = await replyToInboxThread(store, agent, inbox, resolveHandler, threadId, text)
         return replied.ok ? { ok: true, mode: "agent", chatId: replied.chatId } : replied
       },
-      instruct: (threadId, text) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text),
+      instruct: (threadId, text, draft) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text, draft),
       retrySend: (threadId, outboundId, confirmDuplicate) => outbox.retry(threadId, outboundId, confirmDuplicate),
     },
   }

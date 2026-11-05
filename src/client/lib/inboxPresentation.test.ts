@@ -37,8 +37,17 @@ function item(overrides: Partial<InboxActivityItem>): InboxActivityItem {
 }
 
 describe("threadStateDisplay", () => {
-  test("shows the agent reading while a handler is pending and has not reported", () => {
+  test("shows the agent reading while a handler is pending", () => {
     expect(threadStateDisplay(thread({ pendingScheduleId: "s1" }))).toEqual({ tone: "active", label: "Agent reading" })
+  })
+
+  test("a reported thread with a pending ask shows the agent reading again", () => {
+    const reported = thread({
+      state: "needs_you",
+      pendingScheduleId: "inbox-instruct-t-1",
+      report: { verdict: "needs_you", summary: "Pay it", at: 1, chatId: "c1" },
+    })
+    expect(threadStateDisplay(reported)).toEqual({ tone: "active", label: "Agent reading" })
   })
 
   test("needs you and new threads are attention, everything settled is muted", () => {
