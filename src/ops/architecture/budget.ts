@@ -2,7 +2,7 @@
 export const MODULE_LINE_THRESHOLD = 700
 
 export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
-  "src/client/app/KannaSidebar.tsx": 918,
+  "src/client/app/KannaSidebar.tsx": 906,
   "src/client/app/SubagentsSection.tsx": 739,
   "src/client/app/useAppGlobalState.ts": 1174,
   "src/client/app/useKannaState.ts": 800,
