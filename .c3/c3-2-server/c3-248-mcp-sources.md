@@ -1,6 +1,6 @@
 ---
 id: c3-248
-c3-seal: 5680f3639ab7b1b38327c8c5053e6fb7097d1d0eb6c09f2a18f3f496357efb9b
+c3-seal: c8bcaadf848a27b6ddc5de0845b9789106a6d73a22d4650a562c393779a311b5
 title: mcp-sources
 type: component
 category: feature
@@ -41,7 +41,7 @@ Owns the MCP sources feature: the McpSource contract with its subscribe and poll
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| McpSource settings | IN | subscribe mode names resource URIs, an optional items path and item key path that split a resource into messages, and an optional resync interval clamped like the poll interval; poll mode names a tool, args, cursor argument, cursor path, items path, optional item key path and an interval clamped to 5 s to 1 h; both name a server, thread key path, sender path and an InboundHandler | Stored in settings.json through the mcpSources CRUD branch; the server id must exist in customMcpServers; the ws transport is refused | src/shared/mcp-sources/validate.ts |
+| McpSource settings | IN | subscribe mode names resource URIs, an optional items path and item key path that split a resource into messages, and an optional resync interval clamped like the poll interval; poll mode names a tool, args, cursor argument, cursor path, items path, optional item key path and an interval clamped to 5 s to 1 h; both name a server, thread key path, sender path, an optional text path that feeds only the inbox preview and an InboundHandler | Stored in settings.json through the mcpSources CRUD branch; the server id must exist in customMcpServers; the ws transport is refused | src/shared/mcp-sources/validate.ts |
 | Subscribe loop | IN | listen with resourceSubscriptions, then resources/read the notified URI on every resources/updated, after every subscribe (catch-up) and on the optional resync timer; items are split at itemsPath and deduped per item key, or per hash of uri and contents when no items path is set; pushes coalesce into one drain in flight plus one pending; a remote close re-listens with exponential backoff that resets only after a session held for 60 s, a graceful close reconnects after 30 s | A 2025-era server is subscribed per URI only when it advertises resources.subscribe, else the honored set is empty and the source is in error; a read failing with a JSON-RPC error keeps the session, a transport failure or a failed GET stream ends it as remote; closing sends DELETE for the session | src/server/mcp-sources/mcp-source-client.adapter.ts |
 | Poll loop | IN | call the tool with the persisted cursor (fetched by the tool fetcher in mcp-source-fetch.ts), read the items at itemsPath, dedupe on the item key or the item hash, deliver, persist the new cursor; polls never overlap and errors back off up to five intervals | The first poll of a cursorless source delivers everything the tool returns; a 401 refreshes the bearer and reconnects once | src/server/mcp-sources/mcp-source-runner.ts |
 | Delivery | OUT | Every item becomes an InboundDelivery with source kind mcp, the thread key and sender resolved from the item, and the source handler, through deliverInbound | The inbox thread, card and handler prompt follow the inbox contract unchanged | src/server/mcp-sources/mcp-sources-boot.ts |

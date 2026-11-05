@@ -17,6 +17,7 @@ export interface McpSourceBase {
   enabled: boolean
   threadKeyPath: string
   senderPath: string
+  textPath: string
   handler: InboundHandler
   createdAt: number
   updatedAt: number
@@ -49,6 +50,7 @@ interface McpSourceInputBase {
   enabled?: boolean
   threadKeyPath: string
   senderPath: string
+  textPath?: string
   handler: InboundHandler
 }
 
@@ -78,6 +80,7 @@ export type McpSourcePatch = Partial<{
   mode: McpSourceMode
   threadKeyPath: string
   senderPath: string
+  textPath: string
   handler: InboundHandler
   resourceUris: string[]
   tool: string

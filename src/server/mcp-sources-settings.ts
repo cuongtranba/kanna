@@ -30,6 +30,7 @@ interface FlatSource {
   enabled: boolean
   threadKeyPath: string
   senderPath: string
+  textPath: string
   handler: InboundHandler
   resourceUris: string[]
   tool: string
@@ -51,6 +52,7 @@ function flatten(source: McpSourceInput | McpSource): FlatSource {
     enabled: source.enabled ?? true,
     threadKeyPath: source.threadKeyPath,
     senderPath: source.senderPath,
+    textPath: source.textPath ?? "",
     handler: source.handler,
   }
   if (source.mode === "subscribe") {
@@ -69,6 +71,7 @@ function assemble(flat: FlatSource, id: string, createdAt: number, updatedAt: nu
     enabled: flat.enabled,
     threadKeyPath: flat.threadKeyPath.trim(),
     senderPath: flat.senderPath.trim(),
+    textPath: flat.textPath.trim(),
     handler: flat.handler,
     createdAt,
     updatedAt,
@@ -186,6 +189,7 @@ function readSource(raw: JsonObject): McpSource | null {
     enabled: raw.enabled !== false,
     threadKeyPath: readString(raw, "threadKeyPath") ?? "",
     senderPath: readString(raw, "senderPath") ?? "",
+    textPath: readString(raw, "textPath") ?? "",
     handler,
     resourceUris: readStrings(raw.resourceUris),
     tool: readString(raw, "tool") ?? "",

@@ -94,6 +94,13 @@ test("the inbound envelope is published on the bus under the source subject", as
   expect(seen).toEqual(["kanna.mcp.mail1.message|mcp:mail1:d1|inbound"])
 })
 
+test("a delivery with text stores it as the thread preview while the payload stays the raw body", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const result = await deliverInbound(store, agent, bus, inbox, delivery({ text: "Invoice is due Friday" }, { projectId: project.id }))
+  if (!result.ok) throw new Error(result.detail)
+  expect(inbox.getThread(result.threadId)?.messages).toMatchObject([{ preview: "Invoice is due Friday", payload: { subject: "Invoice due" } }])
+})
+
 test("a missing target fails before anything is stored", async () => {
   const { store, agent, bus, inbox } = await createWebhookHarness()
   const result = await deliverInbound(store, agent, bus, inbox, delivery({}, { mode: "inline", chatId: "gone" }))

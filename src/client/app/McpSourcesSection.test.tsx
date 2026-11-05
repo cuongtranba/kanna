@@ -28,6 +28,7 @@ const SOURCE: McpPollSource = {
   enabled: true,
   threadKeyPath: "threadId",
   senderPath: "senderName",
+  textPath: "",
   handler: { mode: "spawn", projectId: "p1", template: "t", replyHint: "", pushEnabled: true },
   tool: "zalo_get_messages",
   args: {},

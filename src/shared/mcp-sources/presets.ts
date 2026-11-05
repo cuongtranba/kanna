@@ -19,6 +19,7 @@ export const MCP_SOURCE_PRESETS: Readonly<Record<McpSourcePresetId, McpSourcePre
     resyncIntervalMs: ZALO_RESYNC_MS,
     threadKeyPath: "threadId",
     senderPath: "senderName",
+    textPath: "text",
     handler: {
       mode: "spawn",
       template:

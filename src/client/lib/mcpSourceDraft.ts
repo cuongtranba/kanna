@@ -32,6 +32,7 @@ export interface McpSourceDraft {
   intervalSeconds: string
   threadKeyPath: string
   senderPath: string
+  textPath: string
   handlerMode: InboundHandlerMode
   chatId: string
   projectId: string
@@ -64,6 +65,7 @@ export function emptyMcpSourceDraft(): McpSourceDraft {
     intervalSeconds: DEFAULT_INTERVAL_SECONDS,
     threadKeyPath: "",
     senderPath: "",
+    textPath: "",
     handlerMode: "spawn",
     chatId: "",
     projectId: "",
@@ -94,6 +96,7 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
     mode: source.mode,
     threadKeyPath: source.threadKeyPath,
     senderPath: source.senderPath,
+    textPath: source.textPath,
     ...handlerFields(source.handler),
   }
   if (source.mode === "subscribe") {
@@ -129,6 +132,7 @@ export function applyPreset(draft: McpSourceDraft, presetId: McpSourcePresetId):
     mode: preset.mode,
     threadKeyPath: preset.threadKeyPath,
     senderPath: preset.senderPath,
+    textPath: preset.textPath ?? "",
     ...handlerFields({ ...preset.handler, projectId: draft.projectId || undefined }),
   }
   if (preset.mode === "subscribe") {
@@ -172,6 +176,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
     serverId: draft.serverId,
     threadKeyPath: draft.threadKeyPath.trim(),
     senderPath: draft.senderPath.trim(),
+    textPath: draft.textPath.trim(),
     handler: handlerFromDraft(draft),
   }
   if (draft.mode === "subscribe") {

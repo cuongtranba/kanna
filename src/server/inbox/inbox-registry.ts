@@ -41,6 +41,7 @@ export interface InboundIngestMeta {
   sender: string
   sourceName: string
   deliveryId: string
+  text?: string
 }
 
 export type InboxReportResult = { ok: true } | { ok: false; error: string }
@@ -163,7 +164,7 @@ export class InboxRegistry {
       deliveryId: meta.deliveryId,
       ts: envelope.ts,
       payload: envelope.payload,
-      preview: previewOfPayload(envelope.payload),
+      preview: previewOfPayload(meta.text ?? envelope.payload),
     }
     const thread = existing ?? null
     this.record({
