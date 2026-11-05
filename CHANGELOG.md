@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.95.0](https://github.com/cuongtranba/kanna/compare/v1.94.2...v1.95.0) (2026-11-05)
+
+
+### Features
+
+* **sidebar:** open project search from the phone's sidebar drawer ([#1408](https://github.com/cuongtranba/kanna/issues/1408)) ([45341a2](https://github.com/cuongtranba/kanna/commit/45341a24fda6afe1ee53c701bf39fd5b7c7e12ee))
+
+
+### Bug Fixes
+
+* **chat:** delete an empty chat once the user leaves it ([#1400](https://github.com/cuongtranba/kanna/issues/1400)) ([d3d9794](https://github.com/cuongtranba/kanna/commit/d3d9794109c7612be3d0f24ad63ed867755a9fb6))
+
 ## [1.94.2](https://github.com/cuongtranba/kanna/compare/v1.94.1...v1.94.2) (2026-10-30)
 
 
