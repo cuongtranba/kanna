@@ -39,6 +39,7 @@ interface FlatSource {
   itemsPath: string
   itemKeyPath: string | null
   intervalMs: number
+  resyncIntervalMs: number | null
 }
 
 const EMPTY_HANDLER: InboundHandler = { mode: "notify", template: "", replyHint: "", pushEnabled: true }
@@ -53,10 +54,11 @@ function flatten(source: McpSourceInput | McpSource): FlatSource {
     handler: source.handler,
   }
   if (source.mode === "subscribe") {
-    return { ...common, mode: "subscribe", resourceUris: source.resourceUris, tool: "", args: {}, cursorArg: "", cursorPath: "", itemsPath: "", itemKeyPath: null, intervalMs: MCP_SOURCE_INTERVAL_MIN_MS }
+    const { resourceUris, itemsPath, itemKeyPath, resyncIntervalMs } = source
+    return { ...common, mode: "subscribe", resourceUris, tool: "", args: {}, cursorArg: "", cursorPath: "", itemsPath, itemKeyPath, intervalMs: MCP_SOURCE_INTERVAL_MIN_MS, resyncIntervalMs }
   }
   const { tool, args, cursorArg, cursorPath, itemsPath, itemKeyPath, intervalMs } = source
-  return { ...common, mode: "poll", resourceUris: [], tool, args, cursorArg, cursorPath, itemsPath, itemKeyPath, intervalMs }
+  return { ...common, mode: "poll", resourceUris: [], tool, args, cursorArg, cursorPath, itemsPath, itemKeyPath, intervalMs, resyncIntervalMs: null }
 }
 
 function assemble(flat: FlatSource, id: string, createdAt: number, updatedAt: number): McpSource {
@@ -72,7 +74,14 @@ function assemble(flat: FlatSource, id: string, createdAt: number, updatedAt: nu
     updatedAt,
   }
   if (flat.mode === "subscribe") {
-    return { ...common, mode: "subscribe", resourceUris: flat.resourceUris.map((uri) => uri.trim()).filter((uri) => uri.length > 0) }
+    return {
+      ...common,
+      mode: "subscribe",
+      resourceUris: flat.resourceUris.map((uri) => uri.trim()).filter((uri) => uri.length > 0),
+      itemsPath: flat.itemsPath.trim(),
+      itemKeyPath: flat.itemKeyPath?.trim() || null,
+      resyncIntervalMs: flat.resyncIntervalMs === null ? null : clampMcpSourceInterval(flat.resyncIntervalMs),
+    }
   }
   return {
     ...common,
@@ -99,9 +108,10 @@ export function createMcpSource(input: McpSourceInput): McpSource {
 }
 
 export function updateMcpSource(existing: McpSource, patch: McpSourcePatch): McpSource {
-  const { itemKeyPath, ...rest } = patch
+  const { itemKeyPath, resyncIntervalMs, ...rest } = patch
   const merged: FlatSource = { ...flatten(existing), ...rest }
   if (itemKeyPath !== undefined) merged.itemKeyPath = itemKeyPath
+  if (resyncIntervalMs !== undefined) merged.resyncIntervalMs = resyncIntervalMs
   return checked(assemble(merged, existing.id, existing.createdAt, Date.now()))
 }
 
@@ -168,6 +178,7 @@ function readSource(raw: JsonObject): McpSource | null {
   const args = raw.args
   const itemKeyPath = readString(raw, "itemKeyPath")
   const interval = raw.intervalMs
+  const resync = raw.resyncIntervalMs
   const flat: FlatSource = {
     mode,
     name: readString(raw, "name") ?? "",
@@ -184,6 +195,7 @@ function readSource(raw: JsonObject): McpSource | null {
     itemsPath: readString(raw, "itemsPath") ?? "",
     itemKeyPath: itemKeyPath ?? null,
     intervalMs: typeof interval === "number" && Number.isFinite(interval) ? interval : MCP_SOURCE_INTERVAL_MIN_MS,
+    resyncIntervalMs: typeof resync === "number" && Number.isFinite(resync) ? resync : null,
   }
   const id = readString(raw, "id")
   const created = raw.createdAt

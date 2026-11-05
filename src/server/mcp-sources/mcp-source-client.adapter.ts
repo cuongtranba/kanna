@@ -1,5 +1,6 @@
 import {
   Client,
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   SSEClientTransport,
@@ -24,11 +25,17 @@ import type {
 } from "./mcp-source-runner"
 
 const CONNECT_TIMEOUT_MS = 20_000
+const TERMINATE_TIMEOUT_MS = 3000
 const JSON_LOOKING = /^\s*[{[]/
 
 export interface McpListenClient {
   listen(filter: SubscriptionFilter): Promise<McpSubscription>
   subscribeResource(params: { uri: string }): Promise<EmptyResult>
+  getServerCapabilities(): { resources?: { subscribe?: boolean | undefined } | undefined } | undefined
+}
+
+interface SessionTerminator {
+  terminateSession(): Promise<void>
 }
 
 export function isLegacyProtocolError(error: Error): boolean {
@@ -38,21 +45,28 @@ export function isLegacyProtocolError(error: Error): boolean {
 export async function openListening(
   client: McpListenClient,
   uris: string[],
-  transportClosed: Promise<McpSourceCloseReason>,
+  sessionLost: Promise<McpSourceCloseReason>,
 ): Promise<McpSourceListening> {
   try {
     const subscription = await client.listen({ resourceSubscriptions: uris })
     return {
       honoredUris: subscription.honoredFilter.resourceSubscriptions ?? [],
-      closed: subscription.closed,
+      closed: Promise.race([subscription.closed, sessionLost]),
       close: () => subscription.close(),
     }
   } catch (error) {
     const failure = toError(error)
     if (!isLegacyProtocolError(failure)) throw failure
   }
+  if (client.getServerCapabilities()?.resources?.subscribe !== true) {
+    return { honoredUris: [], closed: sessionLost, close: async () => {} }
+  }
   for (const uri of uris) await client.subscribeResource({ uri })
-  return { honoredUris: uris, closed: transportClosed, close: async () => {} }
+  return { honoredUris: uris, closed: sessionLost, close: async () => {} }
+}
+
+function isStreamOpenFailure(error: Error): boolean {
+  return SdkError.isInstance(error) && error.code === SdkErrorCode.ClientHttpFailedToOpenStream
 }
 
 function textValue(text: string, mimeType: string | undefined): JsonValue {
@@ -116,27 +130,57 @@ export function buildSourceTransport(server: McpServerConfig, bearer: string | u
   }
 }
 
-export function createClientConnection(client: Client): McpSourceConnection {
-  let closing = false
-  const transportClosed = new Promise<McpSourceCloseReason>((resolve) => {
-    client.onclose = () => { resolve(closing ? "local" : "remote") }
+async function terminateQuietly(terminator: SessionTerminator | null): Promise<void> {
+  if (terminator === null) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, TERMINATE_TIMEOUT_MS)
   })
+  try {
+    await Promise.race([terminator.terminateSession(), expired])
+  } catch {
+    return
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export function createClientConnection(client: Client, terminator: SessionTerminator | null = null): McpSourceConnection {
+  let closing = false
+  let markLost: () => void = () => {}
+  const sessionLost = new Promise<McpSourceCloseReason>((resolve) => {
+    markLost = () => { resolve(closing ? "local" : "remote") }
+  })
+  client.onclose = markLost
+  client.onerror = (error) => {
+    if (isStreamOpenFailure(error)) markLost()
+  }
+  async function reachable<Result>(operation: () => Promise<Result>): Promise<Result> {
+    try {
+      return await operation()
+    } catch (error) {
+      const failure = toError(error)
+      if (!ProtocolError.isInstance(failure)) markLost()
+      throw failure
+    }
+  }
   return {
     async listen(uris, onUpdated) {
       client.setNotificationHandler("notifications/resources/updated", (notification) => {
         onUpdated(notification.params.uri)
       })
-      return openListening(client, uris, transportClosed)
+      return openListening(client, uris, sessionLost)
     },
     async readResource(uri) {
-      const result = await client.readResource({ uri })
+      const result = await reachable(() => client.readResource({ uri }))
       return resourceContentsValue(result.contents)
     },
     async callTool(name, args) {
-      return toolResultValue(await client.callTool({ name, arguments: args }))
+      return toolResultValue(await reachable(() => client.callTool({ name, arguments: args })))
     },
     async close() {
       closing = true
+      await terminateQuietly(terminator)
       await client.close()
     },
   }
@@ -146,13 +190,15 @@ export function createMcpSourceConnector(): McpSourceConnector {
   return {
     async open(server, bearer) {
       const client = new Client({ name: "kanna-source", version: APP_VERSION })
+      const transport = buildSourceTransport(server, bearer)
+      const connection = createClientConnection(client, transport instanceof StreamableHTTPClientTransport ? transport : null)
       try {
-        await client.connect(buildSourceTransport(server, bearer), { signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS) })
+        await client.connect(transport, { signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS) })
       } catch (error) {
         await client.close().catch(() => {})
         throw toError(error)
       }
-      return createClientConnection(client)
+      return connection
     },
   }
 }

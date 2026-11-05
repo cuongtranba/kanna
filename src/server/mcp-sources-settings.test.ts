@@ -104,4 +104,16 @@ describe("mcpSources settings", () => {
     expect(snapshot.mcpSources.map((source) => source.id)).toEqual(["s1"])
     expect(snapshot.warning).toContain("mcpSources: dropped Bad")
   })
+
+  test("a subscribe source stored before item splitting existed loads as a whole-payload source", async () => {
+    const stored = { id: "s1", name: "Feed", mode: "subscribe", serverId: "x", enabled: true, threadKeyPath: "", senderPath: "", handler: { mode: "notify", chatId: "c1", template: "hi", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"], createdAt: 1, updatedAt: 1 }
+    const manager = await startManager({ mcpSources: [stored] })
+    expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ id: "s1", mode: "subscribe", itemsPath: "", itemKeyPath: null, resyncIntervalMs: null })
+  })
+
+  test("a resync interval is clamped to the interval bounds", async () => {
+    const stored = { id: "s1", name: "Feed", mode: "subscribe", serverId: "x", enabled: true, threadKeyPath: "", senderPath: "", handler: { mode: "notify", chatId: "c1", template: "hi", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"], itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 10, createdAt: 1, updatedAt: 1 }
+    const manager = await startManager({ mcpSources: [stored] })
+    expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 5000 })
+  })
 })

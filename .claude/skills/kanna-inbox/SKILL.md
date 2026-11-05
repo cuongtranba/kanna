@@ -222,24 +222,44 @@ item it ingests goes through `deliverInbound` exactly like a webhook delivery
 `thread.sourceKind === "mcp"` through `inboxHandlerResolver`, so `inbox.reply`
 and `inbox.instruct` need nothing new.
 
-- **Two modes, one runner.** `subscribe` opens MCP revision 2026-07-28
-  `subscriptions/listen` with `resourceSubscriptions: [uri…]` and reads each
-  resource on `notifications/resources/updated`; the body handed to the handler
-  is `{ uri, contents }` so `threadKeyPath` can address either. `poll` calls a
-  list tool every `intervalMs` (5 s to 1 h) with the persisted cursor under
-  `cursorArg`, takes the array at `itemsPath`, keys each item by `itemKeyPath`
-  (else a hash of the item) and stores the value at `cursorPath` afterwards.
-  Polls never overlap: the loop is `call → sleep → call`, never a timer that
-  re-arms while a call is in flight.
-- **The legacy fallback is in the adapter, not the runner.** `openListening`
+- **Two modes, one runner, two seams.** Subscribe and poll share `drain`:
+  `fetcherFor(source)` (`mcp-source-fetch.ts`) returns the fetch strategy for the
+  mode, the runner ingests each `FetchedItem` (`body`, `key`, `threadKey`) and
+  stores the cursor if the fetcher returned one. `resourceFetcher` (subscribe)
+  sends `resources/read` per URI. With no `itemsPath` the body is
+  `{ uri, contents }` keyed `sha256(uri + contents)` (what stored sources did
+  before items existed); with `itemsPath` each array element is one item keyed by
+  `itemKeyPath` or its hash. `toolFetcher` (poll) calls the list tool every
+  `intervalMs` (5 s to 1 h) with the persisted cursor under `cursorArg`, takes
+  the array at `itemsPath`, and stores the value at `cursorPath`. Polls never
+  overlap: the loop is `call → sleep → call`.
+- **Subscribe follows the spec flow.** A notification names a URI, never carries
+  content, so every `resources/updated` triggers a read of the notified URI (it
+  may be a sub-resource, so it is not matched against the subscribed URIs). The
+  runner also drains all honored URIs once after (re)subscribing (catch-up) and
+  every `resyncIntervalMs` if set (5 s to 1 h). A tool call on a notification was
+  rejected as off-spec; cursor tools belong to poll mode. Drains go through a
+  coalescing lane: one in flight plus one pending URI set.
+- **The subscription protocol is in the adapter, not the runner.** `openListening`
   (`mcp-source-client.adapter.ts`) tries `listen()`; only the typed
   `SdkErrorCode.MethodNotSupportedByProtocolVersion` error — a 2025-era server —
-  falls back to `subscribeResource` per URI with `honoredUris = uris` and
-  `closed` taken from the transport. Any other failure is a real failure and
-  must not be mistaken for "old server". The runner sees one `McpSourceListening`
-  and treats an empty `honoredUris` as `error: "server honored no subscriptions"`.
+  falls back to `resources/subscribe`, and only when the negotiated
+  `resources.subscribe` capability is true (otherwise `honoredUris = []`). Any
+  other failure is a real failure and must not be mistaken for "old server". The
+  runner sees one `McpSourceListening` and treats an empty `honoredUris` as
+  `error: "server does not support resource subscriptions (no URI was honored)"`.
+- **Liveness is the adapter's.** The connection resolves `closed` as `remote`
+  when `onclose` fires, when `onerror` reports
+  `SdkErrorCode.ClientHttpFailedToOpenStream` (a dead 2025 GET stream never fires
+  `onclose`), or when `readResource` / `callTool` fails with anything but a
+  `ProtocolError`. A `ProtocolError` (resource not found) means the server
+  answered, so the runner records `lastError` and keeps the session. `close()`
+  calls `terminateSession()` (DELETE, best effort, 3 s cap) before closing the
+  client, so a reconnect does not leave a server session behind.
 - **Reconnect policy.** `remote` close backs off 1 s doubling to 60 s with
-  jitter, `graceful` reconnects after 30 s, `local` ends the loop. A poll error
+  jitter; the attempt counter resets only after a session lasted 60 s
+  (`STABLE_SESSION_MS`), so a server that accepts and drops at once keeps
+  growing. `graceful` reconnects after 30 s, `local` ends the loop. A poll error
   backs off to at most 5x the interval. A 401-shaped error drops the
   connection and reconnects once at once (the bearer is re-resolved on every
   open, which refreshes an OAuth token); a second 401 backs off.
@@ -247,7 +267,7 @@ and `inbox.instruct` need nothing new.
   `<dataDir>/mcp-source-cursors.json` holds `{ [sourceId]: { cursor, recentKeys } }`
   (newest 256 keys, temp file + rename) behind `McpSourceCursorStorePort`. A
   failed delivery records neither its key nor the cursor, so the item is retried
-  by the next poll. Deleting a source prunes its entry. The first poll of a
+  by the next poll, notification, reconnect or resync. Deleting a source prunes its entry. The first poll of a
   source with no cursor delivers whatever the tool returns, so a `spawn` source
   pointed at a busy account creates one chat per thread at once.
 - **Configuration is `settings.mcpSources`,** a CRUD branch exactly like
@@ -274,12 +294,16 @@ and `inbox.instruct` need nothing new.
 - **`resolveMcpBearer` moved to `src/server/mcp-bearer.ts`** so the runner does
   not import `ws-router-settings.ts`; `resolveMcpTestBearer` is still exported
   from the old place for the dataset service and the router.
-- **The Zalo preset** (`MCP_SOURCE_PRESETS.zalo`) is data, not code: tool
-  `zalo_get_messages`, `since` / `cursor` / `messages` / `messageId`, thread key
-  `threadId`, sender `senderName`, 15 s, `spawn`. The user picks the server and
-  project in the form. Settings → MCP sources shows the live state per source
-  from the `mcp-sources` topic (`McpSourcesSnapshot`), pushed on every status
-  change and deduplicated by snapshot signature like the other global topics.
+- **Presets are data** (`MCP_SOURCE_PRESETS`, a registry of input templates of
+  either mode; the form renders one button per entry and `applyPreset(draft, id)`
+  is the only client entry point). The Zalo preset is a subscribe source on
+  `zalo://inbox` with items at `messages` keyed `id`, a 300 s resync, thread key
+  `threadId`, sender `senderName`, `spawn`, and a reply hint mapping threadType
+  `dm` to 0 and `group` to 1; it needs a zalo-mcp build that pushes resource
+  updates. The user picks the server and project in the form. Settings → MCP
+  sources shows the live state per source from the `mcp-sources` topic
+  (`McpSourcesSnapshot`), pushed on every status change and deduplicated by
+  snapshot signature like the other global topics.
 
 ## Inbound Webhooks (KANNA_WEBHOOKS)
 

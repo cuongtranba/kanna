@@ -1,40 +1,30 @@
-import type { InboundHandler } from "../inbound/handler"
-import type { JsonObject } from "../json"
+import type { McpSourceInput } from "./types"
 
-export interface McpSourcePollPreset {
-  label: string
-  mode: "poll"
-  tool: string
-  args: JsonObject
-  cursorArg: string
-  cursorPath: string
-  itemsPath: string
-  itemKeyPath: string
-  threadKeyPath: string
-  senderPath: string
-  intervalMs: number
-  handler: Pick<InboundHandler, "mode" | "template" | "replyHint" | "pushEnabled">
-}
+type PresetTemplate<Input> = Input extends McpSourceInput ? Omit<Input, "name" | "serverId" | "enabled"> : never
 
-export const MCP_SOURCE_PRESETS: Readonly<Record<"zalo", McpSourcePollPreset>> = {
+export type McpSourcePreset = PresetTemplate<McpSourceInput> & { label: string }
+
+export const MCP_SOURCE_PRESET_IDS = ["zalo"] as const
+export type McpSourcePresetId = (typeof MCP_SOURCE_PRESET_IDS)[number]
+
+const ZALO_RESYNC_MS = 300_000
+
+export const MCP_SOURCE_PRESETS: Readonly<Record<McpSourcePresetId, McpSourcePreset>> = {
   zalo: {
     label: "Zalo",
-    mode: "poll",
-    tool: "zalo_get_messages",
-    args: { limit: 50 },
-    cursorArg: "since",
-    cursorPath: "cursor",
+    mode: "subscribe",
+    resourceUris: ["zalo://inbox"],
     itemsPath: "messages",
-    itemKeyPath: "messageId",
+    itemKeyPath: "id",
+    resyncIntervalMs: ZALO_RESYNC_MS,
     threadKeyPath: "threadId",
     senderPath: "senderName",
-    intervalMs: 15000,
     handler: {
       mode: "spawn",
       template:
         "A new Zalo message arrived in a conversation. Read it, decide whether the user needs to act, and draft a reply in the same language the sender used.",
       replyHint:
-        "Send the reply with zalo_send_message using threadId {{threadId}} and threadType {{threadType}} (0 for a direct message, 1 for a group).",
+        'Send the reply with zalo_send_message using threadId {{threadId}} and threadType {{threadType}}: pass 0 when threadType is "dm" and 1 when it is "group".',
       pushEnabled: true,
     },
   },

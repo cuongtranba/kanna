@@ -46,7 +46,7 @@ export function validateMcpSource(shape: McpSourceShape): string[] {
   if (!nonEmpty(shape.serverId)) errors.push("An MCP server is required")
   if (!isMcpSourceMode(shape.mode)) errors.push("Mode must be subscribe or poll")
   else errors.push(...validateModeFields(shape))
-  errors.push(...inboundPathErrors([shape.threadKeyPath, shape.senderPath]))
+  errors.push(...inboundPathErrors([shape.threadKeyPath, shape.senderPath, shape.itemsPath, shape.itemKeyPath]))
   errors.push(...validateHandler(shape))
   return errors
 }

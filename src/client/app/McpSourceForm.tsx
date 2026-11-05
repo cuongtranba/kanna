@@ -1,4 +1,5 @@
 import { useCallback, useMemo, type ChangeEvent, type ReactNode } from "react"
+import { MCP_SOURCE_PRESET_IDS, MCP_SOURCE_PRESETS, type McpSourcePresetId } from "../../shared/mcp-sources/presets"
 import type { McpSource, McpSourceMode } from "../../shared/mcp-sources/types"
 import type { McpServerConfig, SidebarData } from "../../shared/types"
 import { Button } from "../components/ui/button"
@@ -8,7 +9,7 @@ import { SegmentedControl, type SegmentedOption } from "../components/ui/segment
 import { Textarea } from "../components/ui/textarea"
 import { mcpSourceInputFromDraft, mcpSourcePatchFromInput, type McpSourceDraft } from "../lib/mcpSourceDraft"
 import { surfaceErrorIn } from "../lib/commandFeedback"
-import { mcpSourceModeConsequence, mcpSourceModeLabel } from "../lib/mcpSourcePresentation"
+import { mcpSourceIntervalHint, mcpSourceModeConsequence, mcpSourceModeLabel } from "../lib/mcpSourcePresentation"
 import { listInboundModelOptions, listInboundTargets } from "../lib/webhookTargets"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useMcpSourcesSectionStore } from "../stores/mcpSourcesSectionStore"
@@ -40,15 +41,28 @@ function serverOptions(servers: readonly McpServerConfig[], selectedId: string):
 
 function SubscribeFields({ draft, onChange }: { draft: McpSourceDraft; onChange: (patch: Partial<McpSourceDraft>) => void }) {
   return (
-    <Field id="mcp-source-uris" label="Resource URIs" hint="One URI per line. Kanna subscribes to each and reads it whenever the server says it changed.">
-      <Textarea
-        id="mcp-source-uris"
-        rows={3}
-        className="font-mono"
-        value={draft.resourceUris}
-        onChange={(event) => onChange({ resourceUris: event.target.value })}
-      />
-    </Field>
+    <div className="space-y-4">
+      <Field id="mcp-source-uris" label="Resource URIs" hint="One URI per line. Kanna subscribes to each and reads it whenever the server says it changed.">
+        <Textarea
+          id="mcp-source-uris"
+          rows={3}
+          className="font-mono"
+          value={draft.resourceUris}
+          onChange={(event) => onChange({ resourceUris: event.target.value })}
+        />
+      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field id="mcp-source-sub-items-path" label="Items path" hint="Optional. Where the array of messages sits in the resource. Leave empty to deliver the whole resource as one message.">
+          <Input id="mcp-source-sub-items-path" className="font-mono" value={draft.subscribeItemsPath} onChange={(event) => onChange({ subscribeItemsPath: event.target.value })} />
+        </Field>
+        <Field id="mcp-source-sub-item-key" label="Item key path" hint="Optional. A field that is unique per message. Leave empty to hash the whole item.">
+          <Input id="mcp-source-sub-item-key" className="font-mono" value={draft.subscribeItemKeyPath} onChange={(event) => onChange({ subscribeItemKeyPath: event.target.value })} />
+        </Field>
+        <Field id="mcp-source-resync" label="Resync every (seconds)" hint={`Optional. Re-reads the resources on a timer to catch missed notifications. ${mcpSourceIntervalHint()}`}>
+          <Input id="mcp-source-resync" inputMode="numeric" className="tabular-nums" value={draft.resyncSeconds} onChange={(event) => onChange({ resyncSeconds: event.target.value })} />
+        </Field>
+      </div>
+    </div>
   )
 }
 
@@ -74,12 +88,17 @@ function PollFields({ draft, onChange }: { draft: McpSourceDraft; onChange: (pat
         <Field id="mcp-source-item-key" label="Item key path" hint="A field that is unique per message. Leave empty to hash the whole item.">
           <Input id="mcp-source-item-key" className="font-mono" value={draft.itemKeyPath} onChange={(event) => onChange({ itemKeyPath: event.target.value })} />
         </Field>
-        <Field id="mcp-source-interval" label="Interval (seconds)" hint="Between 5 and 3600.">
+        <Field id="mcp-source-interval" label="Interval (seconds)" hint={mcpSourceIntervalHint()}>
           <Input id="mcp-source-interval" inputMode="numeric" className="tabular-nums" value={draft.intervalSeconds} onChange={(event) => onChange({ intervalSeconds: event.target.value })} />
         </Field>
       </div>
     </div>
   )
+}
+
+function PresetButton({ presetId, onApply }: { presetId: McpSourcePresetId; onApply: (presetId: McpSourcePresetId) => void }) {
+  const handleClick = useCallback(() => onApply(presetId), [onApply, presetId])
+  return <Button variant="secondary" size="sm" onClick={handleClick}>{MCP_SOURCE_PRESETS[presetId].label} preset</Button>
 }
 
 interface FormProps {
@@ -94,7 +113,7 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
   const draft = useMcpSourcesSectionStore((state) => state.draft)
   const error = useMcpSourcesSectionStore((state) => state.error)
   const patchDraft = useMcpSourcesSectionStore((state) => state.patchDraft)
-  const applyPreset = useMcpSourcesSectionStore((state) => state.applyZaloPreset)
+  const applyPreset = useMcpSourcesSectionStore((state) => state.applyPreset)
   const closeEditor = useMcpSourcesSectionStore((state) => state.closeEditor)
   const setError = useMcpSourcesSectionStore((state) => state.setError)
   const saveKey = pendingActionKey("mcpSources.save", editing?.id ?? "new")
@@ -119,7 +138,9 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
     <div className="flex flex-col gap-5 px-6 py-6">
       <div className="flex items-start justify-between gap-4">
         <h2 className="text-base font-medium">{editing ? "Edit MCP source" : "Add MCP source"}</h2>
-        <Button variant="secondary" size="sm" onClick={applyPreset}>Zalo preset</Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {MCP_SOURCE_PRESET_IDS.map((presetId) => <PresetButton key={presetId} presetId={presetId} onApply={applyPreset} />)}
+        </div>
       </div>
 
       <Field id="mcp-source-name" label="Name">
