@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.97.0](https://github.com/cuongtranba/kanna/compare/v1.96.0...v1.97.0) (2026-11-05)
+
+
+### Features
+
+* **settings:** show MCP server error detail behind a hoverable alert icon ([#1409](https://github.com/cuongtranba/kanna/issues/1409)) ([8eb85da](https://github.com/cuongtranba/kanna/commit/8eb85da9a103fc40f171a08b693a1239f3bbb963))
+
+
+### Bug Fixes
+
+* **mcp:** end the server session after a connect test ([#1414](https://github.com/cuongtranba/kanna/issues/1414)) ([ec6c50d](https://github.com/cuongtranba/kanna/commit/ec6c50d2276c0cab59d7b8a2520575a2de7f803c))
+
 ## [1.96.0](https://github.com/cuongtranba/kanna/compare/v1.95.0...v1.96.0) (2026-11-05)
 
 
