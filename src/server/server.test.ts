@@ -153,6 +153,7 @@ describe("buildAgentAppSettingsView", () => {
       "customModels",
       "customProviders",
       "globalPromptAppend",
+      "mcpSources",
       "providerDefaults",
       "subagentRuntime",
     ])
