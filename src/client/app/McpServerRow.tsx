@@ -1,5 +1,5 @@
 import { useCallback, type ChangeEvent } from "react"
-import { RefreshCw } from "lucide-react"
+import { CircleAlert, RefreshCw } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Spinner } from "../components/ui/spinner"
 import { HoverHint } from "../components/ui/truncated-text"
@@ -97,6 +97,20 @@ function TransportBadge({ transport }: { transport: McpServerTransport }) {
   )
 }
 
+function ErrorPill({ label, detail }: { label: string; detail: string | undefined }) {
+  return (
+    <HoverHint
+      label={detail || "No error details were recorded."}
+      contentClassName="max-w-sm whitespace-pre-wrap break-words"
+    >
+      <span tabIndex={0} className="inline-flex cursor-help items-center gap-1 text-xs text-destructive-text">
+        <CircleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+        {label}
+      </span>
+    </HoverHint>
+  )
+}
+
 function TestPill({ result, pending }: { result: McpServerTestResult; pending: boolean }) {
   if (pending || result.status === "pending") {
     return <span className="text-xs text-muted-foreground">Testing…</span>
@@ -110,11 +124,7 @@ function TestPill({ result, pending }: { result: McpServerTestResult; pending: b
       )
     case "error":
       return (
-        <HoverHint label={result.message}>
-          <span className="text-xs text-red-600">
-            Failed
-          </span>
-        </HoverHint>
+        <ErrorPill label="Failed" detail={result.message} />
       )
     case "untested":
     default:
@@ -129,11 +139,7 @@ export function OAuthPill({ oauth }: { oauth: McpOAuthState | undefined }) {
       return <span className="text-xs text-green-600">OAuth ✓</span>
     case "error":
       return (
-        <HoverHint label={oauth.errorMessage}>
-          <span className="text-xs text-red-600">
-            OAuth error
-          </span>
-        </HoverHint>
+        <ErrorPill label="OAuth error" detail={oauth.errorMessage} />
       )
     default:
       return <span className="text-xs text-muted-foreground">OAuth: unauth</span>

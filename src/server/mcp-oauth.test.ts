@@ -365,7 +365,7 @@ test("completeMcpOAuth returns error and persists error state when token exchang
   const failingFetch = (async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input.toString()
     if (url === "https://as.test/oauth/token") {
-      return new Response(JSON.stringify({ error: "invalid_grant" }), {
+      return new Response(JSON.stringify({ error: "invalid_grant", error_description: "refresh token revoked" }), {
         status: 400,
         headers: { "content-type": "application/json" },
       })
@@ -387,6 +387,7 @@ test("completeMcpOAuth returns error and persists error state when token exchang
   const last = persistedStates.at(-1)!
   expect(last.status).toBe("error")
   expect(last.flow).toBeUndefined()
+  expect(last.errorMessage).toMatch(/^token exchange failed: .*refresh token revoked/)
 })
 
 test("completeMcpOAuth rejects when callback URL has no code", async () => {
@@ -436,7 +437,7 @@ test("completeMcpOAuth keeps tokens when listTools throws (Fix 1)", async () => 
   )
   expect(result.status).toBe("error")
   if (result.status !== "error") throw new Error("unreachable")
-  expect(result.message).toMatch(/tool check failed/)
+  expect(result.message).toBe("authenticated but tool check failed: connection refused")
   const last = persistedStates.at(-1)!
   expect(last.status).toBe("authenticated")
   expect(last.tokens?.access_token).toBe("AT")
@@ -518,7 +519,7 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
   const failRefreshFetch = (async (input: string | URL | Request) => {
     const url = typeof input === "string" ? input : input.toString()
     if (url === "https://as.test/oauth/token") {
-      return new Response(JSON.stringify({ error: "invalid_grant" }), {
+      return new Response(JSON.stringify({ error: "invalid_grant", error_description: "refresh token revoked" }), {
         status: 400,
         headers: { "content-type": "application/json" },
       })
@@ -536,6 +537,7 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
   ).rejects.toThrow()
   expect(persistedStates.length).toBeGreaterThan(0)
   expect(persistedStates.at(-1)!.status).toBe("error")
+  expect(persistedStates.at(-1)!.errorMessage).toMatch(/^token refresh failed: .*refresh token revoked/)
 })
 
 test("ensureFreshMcpToken returns cached token without refresh when expires_in is absent", async () => {

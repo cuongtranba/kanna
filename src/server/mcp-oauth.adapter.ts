@@ -9,7 +9,12 @@ import type {
   OAuthTokens,
   AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
+import { toError } from "../shared/errors"
 import type { McpServerConfig, McpOAuthState, McpServerTestResult } from "../shared/types"
+
+function causeText(error: Error): string {
+  return error.message || error.name
+}
 
 const REDIRECT_URI = "http://localhost:8765/callback"
 
@@ -187,10 +192,11 @@ export async function completeMcpOAuth(
       resource: new URL(requireNetworkUrl(config)),
       fetchFn,
     })
-  } catch {
-    const next: McpOAuthState = { ...oauth, status: "error", errorMessage: "token exchange failed", flow: undefined }
+  } catch (err) {
+    const message = `token exchange failed: ${causeText(toError(err))}`
+    const next: McpOAuthState = { ...oauth, status: "error", errorMessage: message, flow: undefined }
     deps.persist(next)
-    return { status: "error", testedAt: new Date().toISOString(), message: "token exchange failed" }
+    return { status: "error", testedAt: new Date().toISOString(), message }
   }
 
   const authenticatedState: McpOAuthState = {
@@ -209,8 +215,8 @@ export async function completeMcpOAuth(
   try {
     const toolCount = await deps.listTools(requireNetworkUrl(config), tokens.access_token)
     return { status: "ok", testedAt, toolCount }
-  } catch {
-    return { status: "error", testedAt, message: "authenticated but tool check failed" }
+  } catch (err) {
+    return { status: "error", testedAt, message: `authenticated but tool check failed: ${causeText(toError(err))}` }
   }
 }
 
@@ -272,7 +278,7 @@ export async function ensureFreshMcpToken(
     deps.persist(updated)
     return next.access_token
   } catch (err) {
-    deps.persist({ ...oauth, status: "error", errorMessage: "token refresh failed" })
-    throw err instanceof Error ? err : new Error("token refresh failed")
+    deps.persist({ ...oauth, status: "error", errorMessage: `token refresh failed: ${causeText(toError(err))}` })
+    throw toError(err)
   }
 }
