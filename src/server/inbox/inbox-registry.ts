@@ -97,6 +97,7 @@ export class InboxRegistry {
   private readonly writes = createSerialQueue()
   private readonly listeners = new Set<() => void>()
   private readonly needsYouListeners = new Set<(thread: InboxThread) => void>()
+  private readonly proposalOpenedListeners = new Set<(thread: InboxThread, proposal: InboxProposal) => void>()
   private readonly proposalListeners = new Set<(threadId: string, proposal: InboxProposeSend) => Promise<void>>()
   private unsubscribe: (() => void) | null = null
 
@@ -135,6 +136,13 @@ export class InboxRegistry {
     this.needsYouListeners.add(listener)
     return () => {
       this.needsYouListeners.delete(listener)
+    }
+  }
+
+  onProposalOpened(listener: (thread: InboxThread, proposal: InboxProposal) => void): () => void {
+    this.proposalOpenedListeners.add(listener)
+    return () => {
+      this.proposalOpenedListeners.delete(listener)
     }
   }
 
@@ -289,6 +297,10 @@ export class InboxRegistry {
     }
     this.record({ v: 1, ts: this.now(), kind: "inbox_thread_proposal_added", threadId, proposal })
     await this.flush()
+    const current = this.state.threads.get(threadId)
+    if (proposal.status === "open" && current?.proposal?.id === proposal.id) {
+      for (const listener of this.proposalOpenedListeners) listener(cloneThread(current), proposal)
+    }
   }
 
   async resolveProposal(

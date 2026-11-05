@@ -72,6 +72,18 @@ export function McpSourceAutonomyFields({ draft, onChange }: Props) {
         />
         Allow links in auto-sent replies
       </label>
+      <label className="flex cursor-pointer items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={draft.autonomySendFromNotification}
+          onChange={(event) => onChange({ autonomySendFromNotification: event.target.checked })}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-foreground"
+        />
+        <span>
+          Add a Send button to the notification of an approval card
+          <span className="block text-xs text-muted-foreground">Off by default. Pressing it sends the proposed text without opening Kanna, using your signed-in browser session. It needs push notifications for this source.</span>
+        </span>
+      </label>
     </section>
   )
 }

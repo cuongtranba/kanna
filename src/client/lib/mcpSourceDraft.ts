@@ -42,6 +42,7 @@ export interface McpSourceDraft extends McpSourceAutonomyDraft {
   template: string
   replyHint: string
   pushEnabled: boolean
+  pushPreview: boolean
   replyTool: string
   replyArgsText: string
   replyResultIdPath: string
@@ -78,6 +79,7 @@ export function emptyMcpSourceDraft(): McpSourceDraft {
     template: DEFAULT_MCP_SOURCE_TEMPLATE,
     replyHint: "",
     pushEnabled: true,
+    pushPreview: false,
     ...replyFields(null),
     ...emptyAutonomyDraft(),
   }
@@ -91,7 +93,7 @@ function replyFields(reply: McpSourceReply | null): Pick<McpSourceDraft, "replyT
   }
 }
 
-function handlerFields(handler: InboundHandler): Pick<McpSourceDraft, "handlerMode" | "chatId" | "projectId" | "modelValue" | "template" | "replyHint" | "pushEnabled"> {
+function handlerFields(handler: InboundHandler): Pick<McpSourceDraft, "handlerMode" | "chatId" | "projectId" | "modelValue" | "template" | "replyHint" | "pushEnabled" | "pushPreview"> {
   return {
     handlerMode: handler.mode,
     chatId: handler.chatId ?? "",
@@ -100,6 +102,7 @@ function handlerFields(handler: InboundHandler): Pick<McpSourceDraft, "handlerMo
     template: handler.template,
     replyHint: handler.replyHint,
     pushEnabled: handler.pushEnabled,
+    pushPreview: handler.pushPreview === true,
   }
 }
 
@@ -181,6 +184,7 @@ function handlerFromDraft(draft: McpSourceDraft): InboundHandler {
     template: draft.template,
     replyHint: draft.replyHint,
     pushEnabled: draft.pushEnabled,
+    ...(draft.pushPreview ? { pushPreview: true } : {}),
     ...inboundHandlerTarget(draft.handlerMode, draft.chatId, draft.projectId),
     ...(choice ? { provider: choice.provider, model: choice.model } : {}),
   }

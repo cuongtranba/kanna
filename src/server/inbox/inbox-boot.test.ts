@@ -80,7 +80,7 @@ function thread(sourceKind: InboxThread["sourceKind"], sourceId: string): InboxT
 async function escalatedThread(resolve: (thread: InboxThread) => InboundHandler | null) {
   const { inbox } = await createInboxHarness({ now: () => 200 })
   const pushed: string[] = []
-  wireInboxPush(inbox, { notifyInbox: async (thread) => void pushed.push(thread.id) }, resolve)
+  wireInboxPush(inbox, { notifyInbox: async (thread) => void pushed.push(thread.id), notifyInboxProposal: async () => {} }, resolve, () => null)
   const thread = await inbox.ingestInbound(inbound(), { threadKey: "k1", sender: "ada", sourceName: "CI", deliveryId: "d1" })
   await inbox.bindChat(thread.id, "chat-1")
   await inbox.report(thread.id, "chat-1", "needs_you", "Pay it")

@@ -1,7 +1,8 @@
 import webpush from "web-push"
 import { log } from "../../shared/log"
 import { isRecord } from "../../shared/errors"
-import type { InboxThread } from "../../shared/inbox/types"
+import { INBOX_PUSH_PROPOSAL_BODY, INBOX_PUSH_SEND_ACTION, inboxPushPreview } from "../../shared/inbox/push"
+import type { InboxProposal, InboxThread } from "../../shared/inbox/types"
 import type {
   KannaStatus,
   PushPayload,
@@ -351,22 +352,47 @@ export class PushManager {
     return false
   }
 
-  async notifyInbox(thread: InboxThread): Promise<void> {
+  async notifyInbox(thread: InboxThread, withPreview = false): Promise<void> {
     if (this.isDuplicate(`inbox:${thread.id}:${thread.lastMessageAt}`)) return
+    const preview = withPreview ? inboxPushPreview(thread.messages.at(-1)?.preview ?? "") : ""
     await this.fanOut(
       {
-        v: 1,
-        kind: "inbox",
-        projectLocalPath: "",
-        projectTitle: thread.sourceName,
-        chatId: thread.chatId ?? "",
-        chatTitle: `${thread.sender}`.slice(0, 80),
-        chatUrl: `/inbox/${thread.id}`,
-        threadId: thread.id,
-        ts: this.now(),
+        ...this.inboxPayload(thread, "inbox"),
+        ...(preview.length > 0 ? { body: preview } : {}),
       },
       false,
     )
+  }
+
+  async notifyInboxProposal(
+    thread: InboxThread,
+    proposal: InboxProposal,
+    options: { withPreview: boolean; withSendAction: boolean },
+  ): Promise<void> {
+    if (this.isDuplicate(`inbox-proposal:${proposal.id}`)) return
+    await this.fanOut(
+      {
+        ...this.inboxPayload(thread, "inbox_proposal"),
+        proposalId: proposal.id,
+        body: options.withPreview ? inboxPushPreview(proposal.text) : INBOX_PUSH_PROPOSAL_BODY,
+        ...(options.withSendAction ? { actions: [INBOX_PUSH_SEND_ACTION] } : {}),
+      },
+      false,
+    )
+  }
+
+  private inboxPayload(thread: InboxThread, kind: "inbox" | "inbox_proposal"): PushPayload {
+    return {
+      v: 1,
+      kind,
+      projectLocalPath: "",
+      projectTitle: thread.sourceName,
+      chatId: thread.chatId ?? "",
+      chatTitle: `${thread.sender}`.slice(0, 80),
+      chatUrl: `/inbox/${thread.id}`,
+      threadId: thread.id,
+      ts: this.now(),
+    }
   }
 
   private async fanOut(payload: PushPayload, skipFocusedChat = true): Promise<void> {

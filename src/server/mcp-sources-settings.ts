@@ -166,6 +166,7 @@ function readHandler(value: JsonValue | undefined): InboundHandler | null {
     template: readString(value, "template") ?? "",
     replyHint: readString(value, "replyHint") ?? "",
     pushEnabled: value.pushEnabled !== false,
+    ...(value.pushPreview === true ? { pushPreview: true } : {}),
     ...(chatId ? { chatId } : {}),
     ...(projectId ? { projectId } : {}),
     ...(provider && isAgentProvider(provider) && model ? { provider, model } : {}),
@@ -202,6 +203,7 @@ function readAutonomy(value: JsonValue | undefined): McpSourceAutonomy {
     ...(typeof value.maxChars === "number" ? { maxChars: value.maxChars } : {}),
     ...(typeof value.sendDelaySeconds === "number" ? { sendDelaySeconds: value.sendDelaySeconds } : {}),
     ...(typeof value.allowUrls === "boolean" ? { allowUrls: value.allowUrls } : {}),
+    ...(typeof value.sendFromNotification === "boolean" ? { sendFromNotification: value.sendFromNotification } : {}),
     quietHours,
     allowlist: readStrings(value.allowlist),
   })

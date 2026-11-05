@@ -22,6 +22,7 @@ export interface McpSourceAutonomy {
   allowUrls: boolean
   maxChars: number
   sendDelaySeconds: number
+  sendFromNotification: boolean
 }
 
 export const MCP_SOURCE_AUTONOMY_DEFAULTS: McpSourceAutonomy = {
@@ -34,6 +35,7 @@ export const MCP_SOURCE_AUTONOMY_DEFAULTS: McpSourceAutonomy = {
   allowUrls: false,
   maxChars: 1000,
   sendDelaySeconds: 30,
+  sendFromNotification: false,
 }
 
 export const MCP_SOURCE_AUTONOMY_BOUNDS = {
@@ -103,6 +105,7 @@ export function normalizeMcpSourceAutonomy(input: Partial<McpSourceAutonomy> | u
     allowUrls: input?.allowUrls ?? defaults.allowUrls,
     maxChars: clampRounded(input?.maxChars, bounds.maxChars, defaults.maxChars),
     sendDelaySeconds: clampRounded(input?.sendDelaySeconds, bounds.sendDelaySeconds, defaults.sendDelaySeconds),
+    sendFromNotification: input?.sendFromNotification ?? defaults.sendFromNotification,
   }
 }
 

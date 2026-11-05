@@ -204,6 +204,30 @@ describe("mcpSources settings", () => {
     expect(reloaded.getSnapshot().mcpSources[0]!.autonomy).toMatchObject({ level: "auto", allowlist: ["t-9", "t-10"], sendDelaySeconds: 10 })
   })
 
+  test("the message preview and Send-from-notification opt-ins default off and survive a reload", async () => {
+    const { manager, serverId } = await withServer()
+    await manager.writePatch({ mcpSources: { create: pollInput(serverId) } })
+    expect(manager.getSnapshot().mcpSources[0]!.handler.pushPreview).toBeUndefined()
+    expect(manager.getSnapshot().mcpSources[0]!.autonomy.sendFromNotification).toBe(false)
+
+    await manager.writePatch({
+      mcpSources: {
+        create: {
+          ...pollInput(serverId),
+          name: "Zalo 2",
+          handler: { ...pollInput(serverId).handler, pushPreview: true },
+          autonomy: { sendFromNotification: true },
+        },
+      },
+    })
+    const reloaded = new AppSettingsManager(manager.filePath)
+    managers.push(reloaded)
+    await reloaded.initialize()
+    const second = reloaded.getSnapshot().mcpSources.find((source) => source.name === "Zalo 2")!
+    expect(second.handler.pushPreview).toBe(true)
+    expect(second.autonomy.sendFromNotification).toBe(true)
+  })
+
   test("a level above suggest without a reply target is refused", async () => {
     const { manager, serverId } = await withServer()
     await expect(manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), autonomy: { level: "approve" } } } }))

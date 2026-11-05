@@ -15,6 +15,7 @@ export const inboundHandlerSchema = z.object({
   template: z.string(),
   replyHint: z.string(),
   pushEnabled: z.boolean(),
+  pushPreview: z.boolean().optional(),
   provider: agentProviderSchema.optional(),
   model: z.string().optional(),
 })
