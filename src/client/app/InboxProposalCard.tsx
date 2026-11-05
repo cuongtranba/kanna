@@ -3,6 +3,7 @@ import type { InboxProposal, InboxThread } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { useNow } from "../hooks/useNow"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
+import { approveInboxProposal } from "../lib/inboxActions"
 import { confidencePercent, formatCountdown } from "../lib/inboxAutonomy"
 import { useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -32,11 +33,7 @@ function OpenProposal({ threadId, proposal }: CardProps) {
   const sending = usePendingAction(sendKey)
   const rejecting = usePendingAction(rejectKey)
 
-  const handleSend = useCallback(() => {
-    runPendingAction(sendKey, async () => {
-      await sendCommandWithFeedback(socket, { type: "inbox.approveProposal", threadId, proposalId: proposal.id })
-    })
-  }, [proposal.id, sendKey, socket, threadId])
+  const handleSend = useCallback(() => approveInboxProposal(socket, threadId, proposal.id), [proposal.id, socket, threadId])
   const handleEdit = useCallback(() => useInboxStore.getState().setReplyDraft(threadId, proposal.text), [proposal.text, threadId])
   const handleReject = useCallback(() => {
     runPendingAction(rejectKey, async () => {

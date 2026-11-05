@@ -32,6 +32,7 @@ import { InboxActivityRow } from "./InboxActivityRow"
 import { InboxFilterBar } from "./InboxFilterBar"
 import { InboxThreadDetail } from "./InboxThreadDetail"
 import { InboxThreadRow } from "./InboxThreadRow"
+import { useInboxKeyboard } from "./useInboxKeyboard"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 import { chatPath } from "../lib/paneTree"
 
@@ -146,6 +147,8 @@ export function InboxPage({ threadId }: Props) {
       })
     })
   }, [socket])
+
+  useInboxKeyboard(records, selected, handleOpenThread, handleCloseDetail)
 
   const hasMore = tab === "activity" && !exhausted && threads.length + items.length < total
 

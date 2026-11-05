@@ -1,5 +1,5 @@
 import type { KeybindingAction, KeybindingsSnapshot } from "../../../shared/app-settings-types"
-import { bindingHasModifier, findMatchingActionBinding } from "../../lib/keybindings"
+import { resolveBoundCommand } from "../../lib/keybindings"
 import type { PaneDirection, SplitPosition } from "../../lib/paneTree"
 
 
@@ -41,12 +41,5 @@ export function resolvePaneCommand(
   event: KeyboardEvent,
   typing: boolean,
 ): PaneCommand | null {
-  for (const [action, command] of PANE_COMMANDS) {
-    const binding = findMatchingActionBinding(keybindings, action, event)
-    if (!binding) continue
-    if (typing && !bindingHasModifier(binding)) return null
-    return command
-  }
-
-  return null
+  return resolveBoundCommand(PANE_COMMANDS, keybindings, event, typing)
 }
