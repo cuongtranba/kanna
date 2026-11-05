@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.100.2](https://github.com/cuongtranba/kanna/compare/v1.100.1...v1.100.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **test:** flush detached subagent writes before replay and inject the clock into limit handling ([#1429](https://github.com/cuongtranba/kanna/issues/1429)) ([f8bedd8](https://github.com/cuongtranba/kanna/commit/f8bedd8daf59b4a7e0981d1b1a3a38235ac6bc19))
+
 ## [1.100.1](https://github.com/cuongtranba/kanna/compare/v1.100.0...v1.100.1) (2026-11-05)
 
 
