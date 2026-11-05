@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
+import { MCP_SOURCE_PRESETS } from "../../shared/mcp-sources/presets"
 import type { McpPollSource, McpSubscribeSource } from "../../shared/mcp-sources/types"
 import {
   applyPreset,
@@ -18,6 +19,7 @@ const POLL: McpPollSource = {
   senderPath: "senderName",
   textPath: "",
   handler: { mode: "inline", chatId: "c1", provider: "claude", model: "claude-sonnet-4-6", template: "t", replyHint: "h", pushEnabled: false },
+  reply: null,
   tool: "zalo_get_messages",
   args: { limit: 50 },
   cursorArg: "since",
@@ -39,6 +41,7 @@ const SUBSCRIBE: McpSubscribeSource = {
   senderPath: "senderName",
   textPath: "",
   handler: { mode: "notify", chatId: "c1", template: "t", replyHint: "", pushEnabled: true },
+  reply: null,
   resourceUris: ["feed://inbox"],
   itemsPath: "messages",
   itemKeyPath: "id",
@@ -60,6 +63,7 @@ describe("mcp source draft", () => {
         senderPath: "senderName",
         textPath: "",
         handler: POLL.handler,
+        reply: null,
         tool: "zalo_get_messages",
         args: { limit: 50 },
         cursorArg: "since",
@@ -123,5 +127,48 @@ describe("mcp source draft", () => {
     const patch = mcpSourcePatchFromInput(result.input)
     expect(patch).toMatchObject({ mode: "poll", tool: "zalo_get_messages", itemKeyPath: null })
     expect("enabled" in patch).toBe(false)
+  })
+})
+
+describe("mcp source reply target", () => {
+  const REPLY = {
+    tool: "zalo_send_message",
+    args: {
+      threadId: "{{message.threadId}}",
+      threadType: { from: "message.threadType", map: { dm: 0, group: 1 } },
+      text: "{{reply.text}}",
+    },
+    resultIdPath: "result.id",
+  }
+
+  test("a stored reply target round-trips through the form unchanged", () => {
+    const draft = draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY })
+    expect(mcpSourceInputFromDraft(draft)).toMatchObject({ ok: true, input: { reply: REPLY } })
+  })
+
+  test("an empty tool name means no reply target, and the patch clears a stored one", () => {
+    const draft = { ...draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY }), replyTool: "" }
+    const result = mcpSourceInputFromDraft(draft)
+    if (!result.ok) throw new Error("draft should be valid")
+    expect(result.input.reply).toBeNull()
+    expect(mcpSourcePatchFromInput(result.input).reply).toBeNull()
+  })
+
+  test("the Zalo preset fills in the reply target", () => {
+    const filled = applyPreset({ ...emptyMcpSourceDraft(), serverId: "srv", projectId: "p1" }, "zalo")
+    expect(filled.replyTool).toBe("zalo_send_message")
+    expect(mcpSourceInputFromDraft(filled)).toMatchObject({ ok: true, input: { reply: MCP_SOURCE_PRESETS.zalo.reply } })
+  })
+
+  test("reply arguments that are not a JSON object of strings or value maps are reported", () => {
+    const base = { ...draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY }) }
+    expect(mcpSourceInputFromDraft({ ...base, replyArgsText: "[1]" })).toEqual({
+      ok: false,
+      errors: ["Reply arguments must be a JSON object"],
+    })
+    expect(mcpSourceInputFromDraft({ ...base, replyArgsText: '{"threadType": 3}' })).toMatchObject({
+      ok: false,
+      errors: ['Reply argument "threadType" must be a string or an object with "from" and "map"'],
+    })
   })
 })

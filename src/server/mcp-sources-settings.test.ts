@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AppSettingsManager } from "./app-settings"
-import type { McpSourceInput } from "../shared/mcp-sources/types"
+import type { McpSourceInput, McpSourceReply } from "../shared/mcp-sources/types"
 
 let dirs: string[] = []
 let managers: AppSettingsManager[] = []
@@ -127,5 +127,46 @@ describe("mcpSources settings", () => {
     const stored = { id: "s1", name: "Feed", mode: "subscribe", serverId: "x", enabled: true, threadKeyPath: "", senderPath: "", handler: { mode: "notify", chatId: "c1", template: "hi", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"], itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 10, createdAt: 1, updatedAt: 1 }
     const manager = await startManager({ mcpSources: [stored] })
     expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 5000 })
+  })
+  const REPLY: McpSourceReply = {
+    tool: "zalo_send_message",
+    args: { threadId: "{{message.threadId}}", threadType: { from: "message.threadType", map: { dm: 0, group: 1 } }, text: "{{reply.text}}" },
+    resultIdPath: "msgId",
+  }
+
+  const storedFeed = { id: "s1", name: "Feed", mode: "subscribe", serverId: "x", enabled: true, threadKeyPath: "", senderPath: "", handler: { mode: "notify", chatId: "c1", template: "hi", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"], createdAt: 1, updatedAt: 1 }
+
+  test("a reply target round-trips through create, reload, patch and clear", async () => {
+    const { manager, serverId } = await withServer()
+    await manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), reply: REPLY } } })
+    expect(manager.getSnapshot().mcpSources[0]!.reply).toEqual(REPLY)
+
+    const reloaded = new AppSettingsManager(manager.filePath)
+    managers.push(reloaded)
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().mcpSources[0]!.reply).toEqual(REPLY)
+
+    const id = manager.getSnapshot().mcpSources[0]!.id
+    await manager.writePatch({ mcpSources: { update: { id, patch: { name: "Renamed" } } } })
+    expect(manager.getSnapshot().mcpSources[0]!.reply).toEqual(REPLY)
+    await manager.writePatch({ mcpSources: { update: { id, patch: { reply: null } } } })
+    expect(manager.getSnapshot().mcpSources[0]!.reply).toBeNull()
+  })
+
+  test("a reply target with an empty tool name is refused", async () => {
+    const { manager, serverId } = await withServer()
+    await expect(manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), reply: { ...REPLY, tool: " " } } } }))
+      .rejects.toThrow("Reply tool is required")
+  })
+
+  test("a stored source without a reply target loads with reply null", async () => {
+    const manager = await startManager({ mcpSources: [storedFeed] })
+    expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ id: "s1", reply: null })
+  })
+
+  test("a malformed stored reply loads as null and the source is kept", async () => {
+    const manager = await startManager({ mcpSources: [{ ...storedFeed, reply: { tool: 3, args: "nope" } }, { ...storedFeed, id: "s2", reply: { tool: "t", args: { a: { from: "x", map: {} } }, resultIdPath: "" } }] })
+    const sources = manager.getSnapshot().mcpSources
+    expect(sources.map((source) => [source.id, source.reply])).toEqual([["s1", null], ["s2", null]])
   })
 })

@@ -60,6 +60,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       const thread: InboxThread = existing ?? {
         ...event.thread,
         messages: [],
+        outbound: [],
         state: "new",
         unread: true,
         lastMessageAt: event.message.ts,
@@ -134,6 +135,35 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       thread.state = "archived"
       thread.unread = false
       clearPending(state, thread)
+      return
+    }
+    case "inbox_thread_outbound_queued": {
+      const thread = state.threads.get(event.threadId)
+      if (!thread || thread.outbound.some((outbound) => outbound.id === event.outbound.id)) return
+      thread.outbound.push({ ...event.outbound, status: "pending" })
+      if (thread.outbound.length > INBOX_THREAD_MAX_MESSAGES) {
+        thread.outbound.splice(0, thread.outbound.length - INBOX_THREAD_MAX_MESSAGES)
+      }
+      return
+    }
+    case "inbox_thread_outbound_settled": {
+      const thread = state.threads.get(event.threadId)
+      const outbound = thread?.outbound.find((candidate) => candidate.id === event.outboundId)
+      if (!thread || !outbound || outbound.status !== "pending") return
+      outbound.status = event.status
+      outbound.settledAt = event.at
+      if (event.error !== undefined) outbound.error = event.error
+      if (event.resultId !== undefined) outbound.resultId = event.resultId
+      if (event.status !== "sent") return
+      thread.state = "replied"
+      thread.unread = false
+      thread.replyCount += 1
+      clearPending(state, thread)
+      return
+    }
+    default: {
+      const _never: never = event
+      void _never
     }
   }
 }
@@ -181,6 +211,8 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_pending":
     case "inbox_thread_replied":
     case "inbox_thread_archived":
+    case "inbox_thread_outbound_queued":
+    case "inbox_thread_outbound_settled":
       return [event.threadId]
     case "inbox_thread_read":
       return event.ids

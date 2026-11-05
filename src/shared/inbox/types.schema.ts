@@ -1,5 +1,7 @@
 import { z } from "zod"
 import {
+  INBOX_OUTBOUND_BYS,
+  INBOX_OUTBOUND_STATUSES,
   INBOX_SOURCE_KINDS,
   INBOX_THREAD_STATES,
   INBOX_VERDICTS,
@@ -50,6 +52,18 @@ export const inboxReportSchema = z.object({
   chatId: z.string(),
 })
 
+export const inboxOutboundMessageSchema = z.object({
+  id: z.string(),
+  ts: z.number(),
+  text: z.string(),
+  by: z.enum(INBOX_OUTBOUND_BYS),
+  status: z.enum(INBOX_OUTBOUND_STATUSES),
+  error: z.string().optional(),
+  resultId: z.string().optional(),
+  settledAt: z.number().optional(),
+  retryOf: z.string().optional(),
+})
+
 const inboxThreadSchema = z.object({
   id: z.string(),
   sourceKind: z.enum(INBOX_SOURCE_KINDS),
@@ -58,6 +72,7 @@ const inboxThreadSchema = z.object({
   threadKey: z.string(),
   sender: z.string(),
   messages: z.array(inboundMessageSchema),
+  outbound: z.array(inboxOutboundMessageSchema),
   chatId: z.string().optional(),
   state: z.enum(INBOX_THREAD_STATES),
   report: inboxReportSchema.optional(),

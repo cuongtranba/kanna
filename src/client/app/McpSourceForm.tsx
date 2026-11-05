@@ -7,6 +7,7 @@ import { Input } from "../components/ui/input"
 import { SearchableSelect, type SearchableOption } from "../components/ui/searchable-select"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import { Textarea } from "../components/ui/textarea"
+import { parseMcpReplyArgs } from "../../shared/mcp-sources/validate"
 import { mcpSourceInputFromDraft, mcpSourcePatchFromInput, type McpSourceDraft } from "../lib/mcpSourceDraft"
 import { surfaceErrorIn } from "../lib/commandFeedback"
 import { mcpSourceIntervalHint, mcpSourceModeConsequence, mcpSourceModeLabel } from "../lib/mcpSourcePresentation"
@@ -93,6 +94,40 @@ function PollFields({ draft, onChange }: { draft: McpSourceDraft; onChange: (pat
         </Field>
       </div>
     </div>
+  )
+}
+
+function ReplyFields({ draft, onChange }: { draft: McpSourceDraft; onChange: (patch: Partial<McpSourceDraft>) => void }) {
+  const argsError = useMemo(() => {
+    if (draft.replyTool.trim().length === 0) return null
+    const parsed = parseMcpReplyArgs(draft.replyArgsText)
+    return "error" in parsed ? parsed.error : null
+  }, [draft.replyArgsText, draft.replyTool])
+  return (
+    <section aria-label="Reply tool" className="space-y-4">
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium text-foreground">Reply tool</h3>
+        <p className="text-xs text-muted-foreground">
+          Optional. When set, Send in the Inbox calls this tool on the server itself, with no agent, in every handler mode. Leave the tool name empty to reply through the handler chat instead.
+        </p>
+      </div>
+      <Field id="mcp-source-reply-tool" label="Tool name">
+        <Input id="mcp-source-reply-tool" className="font-mono" value={draft.replyTool} onChange={(event) => onChange({ replyTool: event.target.value })} />
+      </Field>
+      <Field
+        id="mcp-source-reply-args"
+        label="Arguments"
+        hint={<>
+          A JSON object. Use <code className="font-mono">{"{{message.<field>}}"}</code> for a field of the latest message and <code className="font-mono">{"{{reply.text}}"}</code> for your reply. A value that is exactly one placeholder keeps its type. Turn a value into another with <code className="font-mono">{'{"from": "message.threadType", "map": {"dm": 0, "group": 1}}'}</code>; add <code className="font-mono">default</code> for unmatched values.
+        </>}
+      >
+        <Textarea id="mcp-source-reply-args" rows={6} className="font-mono" value={draft.replyArgsText} onChange={(event) => onChange({ replyArgsText: event.target.value })} />
+      </Field>
+      {argsError ? <p className="text-xs text-destructive-text">{argsError}</p> : null}
+      <Field id="mcp-source-reply-result-id" label="Result id path" hint="Optional. Where the sent message's id sits in the tool result, so Kanna does not ingest its own message when it comes back.">
+        <Input id="mcp-source-reply-result-id" className="font-mono" value={draft.replyResultIdPath} onChange={(event) => onChange({ replyResultIdPath: event.target.value })} />
+      </Field>
+    </section>
   )
 }
 
@@ -204,7 +239,9 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
         <Textarea id="mcp-source-template" rows={4} value={draft.template} onChange={(event) => patchDraft({ template: event.target.value })} />
       </Field>
 
-      <Field id="mcp-source-reply-hint" label="Reply hint" hint="Tells the agent how to send a reply through the server's tools when you answer from the Inbox.">
+      <ReplyFields draft={draft} onChange={patchDraft} />
+
+      <Field id="mcp-source-reply-hint" label="Reply hint" hint="Used only when there is no reply tool: tells the agent how to send a reply through the server's tools when you answer from the Inbox.">
         <Textarea id="mcp-source-reply-hint" rows={3} value={draft.replyHint} onChange={(event) => patchDraft({ replyHint: event.target.value })} />
       </Field>
 

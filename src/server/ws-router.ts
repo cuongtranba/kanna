@@ -63,7 +63,7 @@ import { createPluginsHost } from "./plugins/plugin-service-host"
 import { listProjectPaths } from "./project-paths"
 import { deleteProjectUpload } from "./uploads"
 import { handleGenUICommand } from "./ws-router-genui"
-import { handleInboxCommand, type InboxReplyAction } from "./ws-router-inbox"
+import { handleInboxCommand, type InboxActions } from "./ws-router-inbox"
 import { handleWebhooksCommand } from "./ws-router-webhooks"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { McpSourcesTopic } from "./mcp-sources/mcp-sources-boot"
@@ -133,8 +133,7 @@ interface CreateWsRouterArgs {
   webhooks?: WebhookRegistry
   inbox?: InboxRegistry
   mcpSources?: McpSourcesTopic
-  inboxReply?: InboxReplyAction
-  inboxInstruct?: InboxReplyAction
+  inboxActions?: InboxActions
   serviceBus?: Pick<ServiceBusController, "status" | "resetStore">
   authEnabled?: boolean
   plugins?: PluginsHostDep
@@ -177,8 +176,7 @@ export function createWsRouter({
   webhooks,
   inbox,
   mcpSources,
-  inboxReply,
-  inboxInstruct,
+  inboxActions,
   serviceBus,
   authEnabled,
   plugins,
@@ -412,7 +410,7 @@ export function createWsRouter({
       ),
       () => command.type === "backgroundTasks.getOutput" && sendBackgroundTaskOutput(ws, command, id),
       () => handleGenUICommand(genuiDatasets, sendToClient, command, id),
-      () => handleInboxCommand(inbox, inboxReply, inboxInstruct, sendToClient, command, id),
+      () => handleInboxCommand(inbox, inboxActions, sendToClient, command, id),
       () => handleServiceBusCommand(serviceBus, sendToClient, command, id),
       () => handleWebhooksCommand(
         webhooks,

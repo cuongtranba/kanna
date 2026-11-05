@@ -1,6 +1,6 @@
 ---
 id: c3-247
-c3-seal: d5d91a42bab5fe955d945a6873439c759ed1a3563b3459a2346ea377f41e68e3
+c3-seal: 14b4c1128a16cdc0f193690c309cacd5551509b331d0e86010f4ac1645bf16ed
 title: inbox
 type: component
 category: feature
@@ -22,12 +22,12 @@ Turn every inbound message Kanna receives, from a webhook or an MCP source, into
 | --- | --- |
 | Container | c3-2 Server |
 | Runtime | In-process. createInboxServices builds the registry over inbox.jsonl after the bus exists; the registry subscribes to the bus and the webhook service, the ws-router and the Kanna MCP server receive it. |
-| Consumers | c3-243 webhooks delivers through deliverInbound; c3-208 ws-router serves the inbox topic and the six inbox commands; c3-226 kanna-mcp-host registers the inbox_report tool for main chats; c3-246 service-bus is the feed. |
-| Boundary | Owns threads, activity items, verdicts, read state and the reply and instruct prompts. It does not own chat state, the queue or any source credential; it calls EventStore and AgentCoordinator through narrow Pick types. |
+| Consumers | c3-243 webhooks delivers through deliverInbound; c3-208 ws-router serves the inbox topic and the seven inbox commands; c3-248 mcp-sources supplies the callTool and rememberKey the outbox sends through; c3-226 kanna-mcp-host registers the inbox_report tool for main chats; c3-246 service-bus is the feed. |
+| Boundary | Owns threads, outbound messages, activity items, verdicts, read state and the reply and instruct prompts. It does not own chat state, the queue or any source credential; it calls EventStore and AgentCoordinator through narrow Pick types. |
 
 ## Purpose
 
-Owns the inbox feature: the InboxRegistry projection over an append-only inbox.jsonl log, threads keyed by source and thread key with one handler chat per thread, the activity items derived from every internal bus envelope, the inbox_report MCP tool through which the handler chat records a verdict and a draft, the fallback that marks a thread needs_you when its handler turn ends without a report, and the reply and instruct prompts the user sends from the Inbox. deliverInbound is the one delivery path for every inbound source. Non-goals: it does not call a source tool itself, does not render the page, and does not decide push or toast; it only fires onNeedsYou.
+Owns the inbox feature: the InboxRegistry projection over an append-only inbox.jsonl log, threads keyed by source and thread key with one handler chat per thread, the activity items derived from every internal bus envelope, the inbox_report MCP tool through which the handler chat records a verdict and a draft, the fallback that marks a thread needs_you when its handler turn ends without a report, and the reply and instruct prompts the user sends from the Inbox. The InboxOutbox is the one owner of direct outbound sends: when a source declares a reply target it resolves the arguments, records the message as queued, calls the source's reply tool through the runner and records sent, failed or unknown. deliverInbound is the one delivery path for every inbound source. Non-goals: it does not call a source tool except through the outbox, never resends on its own, does not render the page, and does not decide push or toast; it only fires onNeedsYou.
 
 ## Governance
 
@@ -43,8 +43,9 @@ Owns the inbox feature: the InboxRegistry projection over an append-only inbox.j
 | --- | --- | --- | --- | --- |
 | deliverInbound | IN | Publishes the inbound envelope, upserts the thread, resolves the handler chat (notify none, inline fixed, spawn one chat per thread created on first message and renamed source and sender), appends the card, queues the handler prompt under scheduleId webhook-hookId-deliveryId or mcp-sourceId-deliveryId and marks the thread pending | A webhook delivery keeps its webhook_delivery card and schedule id unchanged; an MCP delivery appends an inbound_delivery card that stays out of share links | src/server/inbound/deliver-inbound.ts |
 | inbox_report tool | IN | thread_id, verdict needs_you or fyi or handled, summary up to 600 characters, optional draft_reply up to 4000; accepted only from the thread's bound chat and only for main chats | A report never sends anything to the sender; a report from another chat is refused | src/server/kanna-mcp-inbox.ts |
-| inbox topic and commands | OUT | InboxSnapshot with threads, items, unreadCount and total; commands markRead, markAllRead, archive, page, reply and instruct | reply and instruct enqueue a prompt into the thread chat under inbox-reply-threadId-n and inbox-instruct-threadId-ts; text is capped at 8000 characters | src/server/ws-router-inbox.ts |
+| inbox topic and commands | OUT | InboxSnapshot with threads, items, unreadCount and total; commands markRead, markAllRead, archive, page, reply, instruct and retrySend | reply answers direct with an outboundId when the source has a reply target and agent with a chatId otherwise; reply and instruct enqueue a prompt into the thread chat under inbox-reply-threadId-n and inbox-instruct-threadId-ts; text is capped at 8000 characters | src/server/ws-router-inbox.ts |
 | inbox.jsonl | IN/OUT | Append-only InboxEvent log under the data dir, replayed at boot, capped at 2000 live records with unread threads younger than seven days always kept | Compaction rewrites the file only at boot and keeps the last inbox_all_read | src/server/inbox/inbox-log.adapter.ts |
+| InboxOutbox | IN/OUT | send(threadId, text) validates the text, resolves the source reply arguments against the latest inbound payload, appends inbox_thread_outbound_queued, calls the tool without blocking the command and appends inbox_thread_outbound_settled; retry(threadId, outboundId, confirmDuplicate) re-sends the same text as a new outbound | failed means nothing was sent or the tool rejected the call, unknown means the request may have gone out; only sent sets the thread to replied; a pending outbound at boot settles unknown and is never resent; a retry of unknown needs confirmDuplicate | src/server/inbox/inbox-outbox.ts |
 | onNeedsYou | OUT | Fires once when a thread enters needs_you, by report, by notify-mode escalation or by the turn-end fallback | The only signal the notification layer consumes | src/server/inbox/inbox-registry.ts |
 | referencedChatIds | OUT | Every chat id named by an MCP source handler, a webhook, an inbox thread binding or an inbox report, read on each prune | The empty-chat pruner never deletes a chat in this set, so a handler chat created ahead of its first delivery survives | src/server/inbound/referenced-chat-ids.ts |
 
@@ -60,6 +61,7 @@ Owns the inbox feature: the InboxRegistry projection over an append-only inbox.j
 | Risk | Trigger | Detection | Required Verification |
 | --- | --- | --- | --- |
 | A webhook delivery changes its schedule id and queue replay duplicates a prompt | Editing inboundScheduleId | The webhook delivery test pins webhook-hookId-deliveryId | bun test --conditions production src/server/webhooks/webhook-delivery.test.ts |
+| An outbound send is delivered twice | Resending a pending outbound at boot, or retrying an unknown one without confirmDuplicate | The outbox test settles a pending outbound as unknown on restart and refuses an unconfirmed retry | bun run test src/server/inbox/inbox-outbox.test.ts |
 | A chat reports on a thread it does not handle | Removing the bound-chat check in report | The registry test refuses a report from another chat | bun test --conditions production src/server/inbox/inbox-registry.test.ts |
 | A handler that never reports leaves a thread silent forever | Removing the turn-end subscription | The registry test escalates a pending thread when its chat's turn ends | bun test --conditions production src/server/inbox/inbox-registry.test.ts |
 | The inbox log grows without bound | Removing the cap or the boot compaction | The registry test keeps 2000 records and rewrites the log | bun test --conditions production src/server/inbox/inbox-registry.test.ts |

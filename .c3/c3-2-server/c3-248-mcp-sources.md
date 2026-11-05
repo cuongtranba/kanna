@@ -1,6 +1,6 @@
 ---
 id: c3-248
-c3-seal: c8bcaadf848a27b6ddc5de0845b9789106a6d73a22d4650a562c393779a311b5
+c3-seal: 9ffe3aad37718b3d688f6effec77320feb7c25d76052de193b867a7cb45f9cb6
 title: mcp-sources
 type: component
 category: feature
@@ -23,11 +23,11 @@ Let Kanna itself hold a long-lived connection to a user-configured MCP server an
 | Container | c3-2 Server |
 | Runtime | In-process. startMcpSources builds one McpSourceRunner over the sources in settings; each enabled source owns one client connection and one loop; cursors and dedupe keys persist in mcp-source-cursors.json under the data dir. |
 | Consumers | c3-247 inbox receives every item through deliverInbound; c3-208 ws-router serves the mcp-sources status topic; c3-116 settings-page edits the sources through the mcpSources patch branch; c3-226 kanna-mcp-host owns the OAuth bearer helper the runner reuses. |
-| Boundary | Owns source configuration, the subscribe and poll loops, dedupe and cursor state, and the status snapshot. It does not own the MCP server credentials (customMcpServers does), does not decide verdicts, and never replies to a sender. |
+| Boundary | Owns source configuration, the subscribe and poll loops, dedupe and cursor state, and the status snapshot. It does not own the MCP server credentials (customMcpServers does), does not decide verdicts, and never decides when to reply; it only exposes callTool and rememberKey to the inbox outbox. |
 
 ## Purpose
 
-Owns the MCP sources feature: the McpSource contract with its subscribe and poll modes and the Zalo preset, the AppSettings mcpSources CRUD branch and normaliser, the McpSourceRunner with its reconcile, backoff, legacy fallback, dedupe ring and persisted cursor, the client adapter on the 2.x MCP client, the cursor store adapter, the mcp-sources status topic and the Settings section. Non-goals: it does not support the ws transport, does not call a source tool to send anything, and keeps item counts in memory only.
+Owns the MCP sources feature: the McpSource contract with its subscribe and poll modes and the Zalo preset, the AppSettings mcpSources CRUD branch and normaliser, the McpSourceRunner with its reconcile, backoff, legacy fallback, dedupe ring and persisted cursor, the client adapter on the 2.x MCP client, the cursor store adapter, the mcp-sources status topic and the Settings section. A source may also declare a reply target (a tool, templated or value-mapped arguments and a result id path); the runner exposes callTool, over the live subscribe or poll connection or a one-shot one, and rememberKey so the echo of a sent message is not ingested. Non-goals: it does not support the ws transport, does not decide when a reply is sent, and keeps item counts in memory only.
 
 ## Governance
 
@@ -45,6 +45,7 @@ Owns the MCP sources feature: the McpSource contract with its subscribe and poll
 | Subscribe loop | IN | listen with resourceSubscriptions, then resources/read the notified URI on every resources/updated, after every subscribe (catch-up) and on the optional resync timer; items are split at itemsPath and deduped per item key, or per hash of uri and contents when no items path is set; pushes coalesce into one drain in flight plus one pending; a remote close re-listens with exponential backoff that resets only after a session held for 60 s, a graceful close reconnects after 30 s | A 2025-era server is subscribed per URI only when it advertises resources.subscribe, else the honored set is empty and the source is in error; a read failing with a JSON-RPC error keeps the session, a transport failure or a failed GET stream ends it as remote; closing sends DELETE for the session | src/server/mcp-sources/mcp-source-client.adapter.ts |
 | Poll loop | IN | call the tool with the persisted cursor (fetched by the tool fetcher in mcp-source-fetch.ts), read the items at itemsPath, dedupe on the item key or the item hash, deliver, persist the new cursor; polls never overlap and errors back off up to five intervals | The first poll of a cursorless source delivers everything the tool returns; a 401 refreshes the bearer and reconnects once | src/server/mcp-sources/mcp-source-runner.ts |
 | Delivery | OUT | Every item becomes an InboundDelivery with source kind mcp, the thread key and sender resolved from the item, and the source handler, through deliverInbound | The inbox thread, card and handler prompt follow the inbox contract unchanged | src/server/mcp-sources/mcp-sources-boot.ts |
+| Reply target | IN/OUT | An optional reply on the source names a tool, arguments that are templates over message and reply.text or value maps, and a result id path; McpSourceRunner.callTool uses the live connection when there is one and otherwise opens a one-shot connection and closes it, and wraps a tool rejection as McpToolRejectedError and an unusable source as McpSourceUnavailableError | Calling a reply tool never reconciles or restarts the source; the Zalo preset carries zalo_send_message with a dm and group map for threadType | src/server/mcp-sources/mcp-source-runner.ts |
 | mcp-sources topic | OUT | McpSourcesSnapshot with one status per source: state, last error, last item time, item count, honored URIs and cursor | Item counts are runtime only and reset at boot; the cursor survives | src/server/mcp-sources/mcp-sources-boot.ts |
 
 ## Derived Materials
@@ -64,4 +65,5 @@ Owns the MCP sources feature: the McpSource contract with its subscribe and poll
 | A source names a server that no longer exists | Removing the serverId check in the settings writer | The settings test expects the create to be refused | bun run test src/server/mcp-sources-settings.test.ts |
 | A dead 2025 session is never reopened | Dropping the typed stream failure signal or the lost-on-transport-error rule in the adapter | The adapter tests expect a 404 on the GET stream to end the session as remote and a dead server to end it after a failed read | bun run test src/server/mcp-sources/mcp-source-client.adapter.test.ts |
 | A reconnect leaves a server session behind or a read error forces reconnect loops | Removing terminateSession on close, or treating a JSON-RPC error as a lost connection | The adapter tests expect a DELETE with the session id and an open session after a not-found read | bun run test src/server/mcp-sources/mcp-source-client.adapter.test.ts |
+| A reply call restarts or drops the source loop | Routing callTool through reconcile or closing the live connection | The runner test calls the tool during a live subscribe session and expects the session to survive | bun run test src/server/mcp-sources/mcp-source-runner.test.ts |
 | A list resource redelivers its backlog on every push | Keying a subscribe item on the whole payload when an items path is set | The runner test expects a repeated read to deliver only the new item | bun run test src/server/mcp-sources/mcp-source-runner.test.ts |

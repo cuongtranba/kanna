@@ -64,7 +64,9 @@ is running are merged into one more read.
 5. Choose what happens to each message, the same three actions as a webhook:
    **Notify**, **Run in chat** or **New chat**. Write the instruction template,
    and the **Reply hint** that tells the agent how to send a reply through the
-   server's tools when you answer from the Inbox.
+   server's tools when you answer from the Inbox without a reply tool.
+6. Optionally fill in the **Reply tool** so Kanna can send replies itself; see
+   [Reply from the Inbox](#reply-from-the-inbox).
 
 The first poll of a source with no cursor delivers whatever the tool returns. If
 the tool returns a long history and the action is **New chat**, you get a chat
@@ -76,9 +78,10 @@ for every conversation in it.
 `zalo://inbox` resource and pushes resource updates (a `zalo-mcp` build with
 resource subscriptions). It subscribes to `zalo://inbox`, splits it at
 `messages` with `id` as the item key, resyncs every 5 minutes, groups messages
-by `threadId`, shows `senderName`, previews `text`, and starts a new chat per conversation. The
-reply hint maps a `threadType` of `dm` to 0 and `group` to 1 for
-`zalo_send_message`. Pick the server and the project, then save.
+by `threadId`, shows `senderName`, previews `text`, and starts a new chat per conversation. Its
+reply tool is `zalo_send_message`, with the thread's `threadId`, a `threadType`
+of 0 for `dm` and 1 for `group`, and your text. Pick the server and the project,
+then save.
 
 ## Reading the status
 
@@ -106,7 +109,28 @@ resync.
 
 ## Reply from the Inbox
 
-Replying to a thread sends your text through the same server: the handler chat is
-told to use the server's tools, following your reply hint. For Zalo that is
-`zalo_send_message` with the thread's `threadId`. Kanna never sends anything to
-the sender by itself.
+Replying to a thread sends your text through the same server.
+
+**With a reply tool**, Kanna calls the tool itself when you press **Send**, with
+no agent turn, in every action including **Notify**. Fill in the **Reply tool**
+section of the source:
+
+- **Tool name**: the server's send tool. Leave it empty to send through the
+  handler chat instead.
+- **Arguments**: a JSON object sent with the call. A string may contain
+  `{{message.<field>}}`, a field of the latest message in the thread, and
+  `{{reply.text}}`, your reply. A value that is exactly one placeholder keeps its
+  type, so `"{{message.count}}"` stays a number. To turn a value into another,
+  use `{"from": "message.threadType", "map": {"dm": 0, "group": 1}}`; add a
+  `default` for values the map does not list. A field that is missing or empty
+  fails the send before anything is sent.
+- **Result id path**: optional, where the sent message's id sits in the tool
+  result, so Kanna does not ingest its own message when it comes back.
+
+The Inbox shows whether each message was sent, failed or could not be confirmed.
+Kanna never sends a message twice on its own; see
+[What happened to a message you sent](/guides/user/inbox/#what-happened-to-a-message-you-sent).
+
+**Without a reply tool**, the handler chat is told to use the server's tools,
+following your reply hint, and it sends the text. Kanna does not send anything
+itself, and a source in **Notify** mode has no chat to do it.

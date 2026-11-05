@@ -12,8 +12,9 @@ import {
   type McpSourceInput,
   type McpSourceMode,
   type McpSourcePatch,
+  type McpSourceReply,
 } from "../../shared/mcp-sources/types"
-import { parseMcpSourceArgs, validateMcpSource } from "../../shared/mcp-sources/validate"
+import { parseMcpReplyArgs, parseMcpSourceArgs, validateMcpSource } from "../../shared/mcp-sources/validate"
 
 export interface McpSourceDraft {
   name: string
@@ -40,6 +41,9 @@ export interface McpSourceDraft {
   template: string
   replyHint: string
   pushEnabled: boolean
+  replyTool: string
+  replyArgsText: string
+  replyResultIdPath: string
 }
 
 export const DEFAULT_MCP_SOURCE_TEMPLATE =
@@ -73,6 +77,15 @@ export function emptyMcpSourceDraft(): McpSourceDraft {
     template: DEFAULT_MCP_SOURCE_TEMPLATE,
     replyHint: "",
     pushEnabled: true,
+    ...replyFields(null),
+  }
+}
+
+function replyFields(reply: McpSourceReply | null): Pick<McpSourceDraft, "replyTool" | "replyArgsText" | "replyResultIdPath"> {
+  return {
+    replyTool: reply?.tool ?? "",
+    replyArgsText: JSON.stringify(reply?.args ?? {}, null, 2),
+    replyResultIdPath: reply?.resultIdPath ?? "",
   }
 }
 
@@ -98,6 +111,7 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
     senderPath: source.senderPath,
     textPath: source.textPath,
     ...handlerFields(source.handler),
+    ...replyFields(source.reply),
   }
   if (source.mode === "subscribe") {
     return {
@@ -134,6 +148,7 @@ export function applyPreset(draft: McpSourceDraft, presetId: McpSourcePresetId):
     senderPath: preset.senderPath,
     textPath: preset.textPath ?? "",
     ...handlerFields({ ...preset.handler, projectId: draft.projectId || undefined }),
+    ...replyFields(preset.reply ?? null),
   }
   if (preset.mode === "subscribe") {
     return {
@@ -168,9 +183,18 @@ function handlerFromDraft(draft: McpSourceDraft): InboundHandler {
   }
 }
 
+function replyFromDraft(draft: McpSourceDraft): { reply: McpSourceReply | null; errors: string[] } {
+  const tool = draft.replyTool.trim()
+  if (tool.length === 0) return { reply: null, errors: [] }
+  const parsed = parseMcpReplyArgs(draft.replyArgsText)
+  if ("error" in parsed) return { reply: null, errors: [parsed.error] }
+  return { reply: { tool, args: parsed.args, resultIdPath: draft.replyResultIdPath.trim() }, errors: [] }
+}
+
 export type McpSourceDraftResult = { ok: true; input: McpSourceInput } | { ok: false; errors: string[] }
 
 export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftResult {
+  const { reply, errors: replyErrors } = replyFromDraft(draft)
   const common = {
     name: draft.name.trim(),
     serverId: draft.serverId,
@@ -178,6 +202,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
     senderPath: draft.senderPath.trim(),
     textPath: draft.textPath.trim(),
     handler: handlerFromDraft(draft),
+    reply,
   }
   if (draft.mode === "subscribe") {
     const resyncText = draft.resyncSeconds.trim()
@@ -191,7 +216,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
       itemKeyPath: draft.subscribeItemKeyPath.trim() || null,
       resyncIntervalMs: resyncText.length > 0 && resyncValid ? Math.round(resyncSeconds * 1000) : null,
     }
-    const errors = [...(resyncValid ? [] : ["Resync interval must be a number of seconds"]), ...validateMcpSource(input)]
+    const errors = [...(resyncValid ? [] : ["Resync interval must be a number of seconds"]), ...replyErrors, ...validateMcpSource(input)]
     return errors.length > 0 ? { ok: false, errors } : { ok: true, input }
   }
   const parsedArgs = parseMcpSourceArgs(draft.argsText)
@@ -210,6 +235,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
   const errors = [
     ...("error" in parsedArgs ? [parsedArgs.error] : []),
     ...(Number.isFinite(seconds) && seconds > 0 ? [] : ["Interval must be a number of seconds"]),
+    ...replyErrors,
     ...validateMcpSource(input),
   ]
   return errors.length > 0 ? { ok: false, errors } : { ok: true, input }

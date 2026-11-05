@@ -14,6 +14,7 @@ function thread(id: string, overrides: Partial<InboxThread> = {}): InboxThread {
     threadKey: id,
     sender: `sender-${id}`,
     messages: [{ id: `m-${id}`, deliveryId: "d", ts: 1, payload: { text: "build failed" }, preview: "build failed" }],
+    outbound: [],
     state: "needs_you",
     unread: true,
     lastMessageAt: 1_000,

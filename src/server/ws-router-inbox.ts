@@ -1,10 +1,24 @@
-import { INBOX_REPLY_MAX_CHARS } from "../shared/inbox/types"
+import { inboxReplyTextError } from "../shared/inbox/policy"
 import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import { ackResult } from "./ws-router-ack"
 import type { InboxReplyResult } from "./inbound/inbox-reply"
 import type { InboxRegistry } from "./inbox/inbox-registry"
+import type { InboxSendResult } from "./inbox/inbox-outbox"
 
-export type InboxReplyAction = (threadId: string, text: string) => Promise<InboxReplyResult>
+export type InboxReplyOutcome =
+  | { ok: true; mode: "direct"; outboundId: string }
+  | { ok: true; mode: "agent"; chatId: string }
+  | { ok: false; error: string }
+
+export type InboxReplyAction = (threadId: string, text: string) => Promise<InboxReplyOutcome>
+export type InboxInstructAction = (threadId: string, text: string) => Promise<InboxReplyResult>
+export type InboxRetrySendAction = (threadId: string, outboundId: string, confirmDuplicate: boolean) => Promise<InboxSendResult>
+
+export interface InboxActions {
+  reply: InboxReplyAction
+  instruct: InboxInstructAction
+  retrySend: InboxRetrySendAction
+}
 
 const PAGE_LIMIT_MAX = 200
 const PAGE_LIMIT_DEFAULT = 50
@@ -16,8 +30,8 @@ function clampLimit(value: number): number {
 
 function requireText(text: string): string {
   const trimmed = text.trim()
-  if (trimmed.length === 0) throw new Error("Text is required")
-  if (trimmed.length > INBOX_REPLY_MAX_CHARS) throw new Error(`Text must be at most ${INBOX_REPLY_MAX_CHARS} characters`)
+  const invalid = inboxReplyTextError(trimmed)
+  if (invalid !== null) throw new Error(invalid)
   return trimmed
 }
 
@@ -26,15 +40,24 @@ function requireId(value: string, name: string): string {
   return value
 }
 
-function unwrap(result: InboxReplyResult): { chatId: string } {
+function unwrapChat(result: InboxReplyResult): { chatId: string } {
   if (!result.ok) throw new Error(result.error)
   return { chatId: result.chatId }
 }
 
+function unwrapReply(result: InboxReplyOutcome): { mode: "direct"; outboundId: string } | { mode: "agent"; chatId: string } {
+  if (!result.ok) throw new Error(result.error)
+  return result.mode === "direct" ? { mode: "direct", outboundId: result.outboundId } : { mode: "agent", chatId: result.chatId }
+}
+
+function unwrapSend(result: InboxSendResult): { outboundId: string } {
+  if (!result.ok) throw new Error(result.error)
+  return { outboundId: result.outboundId }
+}
+
 async function run(
   registry: InboxRegistry,
-  reply: InboxReplyAction,
-  instruct: InboxReplyAction,
+  actions: InboxActions,
   command: ClientCommand,
   id: string,
 ): Promise<ServerEnvelope | null> {
@@ -55,9 +78,15 @@ async function run(
         command.filter ?? {},
       ))
     case "inbox.reply":
-      return ackResult(id, command, unwrap(await reply(requireId(command.threadId, "threadId"), requireText(command.text))))
+      return ackResult(id, command, unwrapReply(await actions.reply(requireId(command.threadId, "threadId"), requireText(command.text))))
+    case "inbox.retrySend":
+      return ackResult(id, command, unwrapSend(await actions.retrySend(
+        requireId(command.threadId, "threadId"),
+        requireId(command.outboundId, "outboundId"),
+        command.confirmDuplicate === true,
+      )))
     case "inbox.instruct":
-      return ackResult(id, command, unwrap(await instruct(requireId(command.threadId, "threadId"), requireText(command.text))))
+      return ackResult(id, command, unwrapChat(await actions.instruct(requireId(command.threadId, "threadId"), requireText(command.text))))
     default:
       return null
   }
@@ -65,15 +94,14 @@ async function run(
 
 export async function handleInboxCommand(
   registry: InboxRegistry | undefined,
-  reply: InboxReplyAction | undefined,
-  instruct: InboxReplyAction | undefined,
+  actions: InboxActions | undefined,
   send: (envelope: ServerEnvelope) => void,
   command: ClientCommand,
   id: string,
 ): Promise<boolean> {
   if (!command.type.startsWith("inbox.")) return false
-  if (!registry || !reply || !instruct) throw new Error("The inbox is not available on this server")
-  const envelope = await run(registry, reply, instruct, command, id)
+  if (!registry || !actions) throw new Error("The inbox is not available on this server")
+  const envelope = await run(registry, actions, command, id)
   if (envelope === null) return false
   send(envelope)
   return true

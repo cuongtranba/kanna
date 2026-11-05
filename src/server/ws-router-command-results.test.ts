@@ -373,8 +373,11 @@ describe("command results", () => {
     const router = createRouterOver(store, {
       webhooks: registry,
       inbox,
-      inboxReply: async () => ({ ok: true, chatId: "chat-1" }),
-      inboxInstruct: async () => ({ ok: true, chatId: "chat-1" }),
+      inboxActions: {
+        reply: async () => ({ ok: true, mode: "direct", outboundId: "out-1" }),
+        instruct: async () => ({ ok: true, chatId: "chat-1" }),
+        retrySend: async () => ({ ok: true, outboundId: "out-2" }),
+      },
       pushManager: pushManager as never,
     })
     const created = await router.dispatchCommand({
@@ -406,6 +409,7 @@ describe("command results", () => {
       { type: "inbox.markAllRead" },
       { type: "inbox.archive", threadId: "thread-1" },
       { type: "inbox.reply", threadId: "thread-1", text: "thanks" },
+      { type: "inbox.retrySend", threadId: "thread-1", outboundId: "out-1" },
       { type: "inbox.instruct", threadId: "thread-1", text: "look into it" },
       { type: "share.mint", payload: { chatId: "chat-1" } },
       { type: "share.revoke", payload: { tokenId: "token-1" } },

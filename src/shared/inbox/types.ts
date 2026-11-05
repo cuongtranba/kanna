@@ -11,6 +11,29 @@ export type InboxVerdict = (typeof INBOX_VERDICTS)[number]
 export const INBOX_SOURCE_KINDS = ["webhook", "mcp"] as const
 export type InboxSourceKind = (typeof INBOX_SOURCE_KINDS)[number]
 
+export const INBOX_OUTBOUND_SETTLED_STATUSES = ["sent", "failed", "unknown"] as const
+export type InboxOutboundSettledStatus = (typeof INBOX_OUTBOUND_SETTLED_STATUSES)[number]
+
+export const INBOX_OUTBOUND_STATUSES = ["pending", ...INBOX_OUTBOUND_SETTLED_STATUSES] as const
+export type InboxOutboundStatus = (typeof INBOX_OUTBOUND_STATUSES)[number]
+
+export const INBOX_OUTBOUND_BYS = ["you"] as const
+export type InboxOutboundBy = (typeof INBOX_OUTBOUND_BYS)[number]
+
+export interface InboxOutboundMessage {
+  id: string
+  ts: number
+  text: string
+  by: InboxOutboundBy
+  status: InboxOutboundStatus
+  error?: string
+  resultId?: string
+  settledAt?: number
+  retryOf?: string
+}
+
+export const INBOX_OUTBOUND_RESTART_ERROR = "Kanna restarted before the send finished"
+
 export interface InboundMessage {
   id: string
   deliveryId: string
@@ -35,6 +58,7 @@ export interface InboxThread {
   threadKey: string
   sender: string
   messages: InboundMessage[]
+  outbound: InboxOutboundMessage[]
   chatId?: string
   state: InboxThreadState
   report?: InboxReport

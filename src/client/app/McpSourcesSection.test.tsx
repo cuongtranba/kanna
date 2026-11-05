@@ -30,6 +30,7 @@ const SOURCE: McpPollSource = {
   senderPath: "senderName",
   textPath: "",
   handler: { mode: "spawn", projectId: "p1", template: "t", replyHint: "", pushEnabled: true },
+  reply: null,
   tool: "zalo_get_messages",
   args: {},
   cursorArg: "since",

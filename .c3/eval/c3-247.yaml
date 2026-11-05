@@ -10,11 +10,15 @@ code:
   - src/shared/inbound/handler.ts
   - src/shared/inbound/template.ts
   - src/shared/inbound/template.test.ts
+  - src/shared/inbound/reply-args.ts
+  - src/shared/inbound/reply-args.test.ts
   - src/shared/inbound/reply-prompt.ts
   - src/shared/inbound/reply-prompt.test.ts
   - src/server/inbox/inbox-registry.ts
   - src/server/inbox/inbox-registry.test.ts
   - src/server/inbox/inbox-projection.ts
+  - src/server/inbox/inbox-outbox.ts
+  - src/server/inbox/inbox-outbox.test.ts
   - src/server/inbox/inbox-log.adapter.ts
   - src/server/inbox/inbox-log.adapter.test.ts
   - src/server/inbox/inbox-boot.ts

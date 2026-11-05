@@ -5,8 +5,9 @@ import type { ServiceBus } from "../service-bus/service-bus"
 import type { PushManager } from "../push/push-manager"
 import { webhookHandler } from "../webhooks/webhook-delivery"
 import type { WebhookRegistry } from "../webhooks/webhook-registry"
-import type { InboxReplyAction } from "../ws-router-inbox"
+import type { InboxActions } from "../ws-router-inbox"
 import { createFileInboxLog } from "./inbox-log.adapter"
+import type { InboxOutbox, OutboxSourceResolver } from "./inbox-outbox"
 import { InboxRegistry } from "./inbox-registry"
 
 export async function createInbox(dataDir: string, bus: ServiceBus): Promise<InboxRegistry> {
@@ -39,15 +40,34 @@ export function inboxHandlerResolver(
   return (thread) => fromWebhook(thread) ?? fromMcp(thread)
 }
 
+export function mcpOutboxSourceResolver(mcpSources: Pick<McpSourcesRuntime, "sources">): OutboxSourceResolver {
+  return (thread) => {
+    if (thread.sourceKind !== "mcp") return null
+    const source = mcpSources.sources().find((candidate) => candidate.id === thread.sourceId)
+    return source?.reply ? { id: source.id, reply: source.reply } : null
+  }
+}
+
 export function createInboxReplyActions(
   store: InboxReplyStore,
   agent: InboxReplyAgent,
   inbox: InboxRegistry,
   resolveHandler: InboundHandlerResolver,
-): { inboxReply: InboxReplyAction; inboxInstruct: InboxReplyAction } {
+  outbox: InboxOutbox,
+): { inboxActions: InboxActions } {
   return {
-    inboxReply: (threadId, text) => replyToInboxThread(store, agent, inbox, resolveHandler, threadId, text),
-    inboxInstruct: (threadId, text) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text),
+    inboxActions: {
+      async reply(threadId, text) {
+        if (outbox.hasReplyTarget(threadId)) {
+          const sent = await outbox.send(threadId, text, "you")
+          return sent.ok ? { ok: true, mode: "direct", outboundId: sent.outboundId } : sent
+        }
+        const replied = await replyToInboxThread(store, agent, inbox, resolveHandler, threadId, text)
+        return replied.ok ? { ok: true, mode: "agent", chatId: replied.chatId } : replied
+      },
+      instruct: (threadId, text) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text),
+      retrySend: (threadId, outboundId, confirmDuplicate) => outbox.retry(threadId, outboundId, confirmDuplicate),
+    },
   }
 }
 

@@ -15,6 +15,7 @@ const SOURCE: McpPollSource = {
   threadKeyPath: "threadId",
   senderPath: "senderName",
   textPath: "",
+  reply: null,
   handler: { mode: "notify", chatId: "source-chat", template: "t", replyHint: "", pushEnabled: true },
   tool: "zalo_get_messages",
   args: {},

@@ -5,6 +5,7 @@ import type { McpServerConfig } from "../../shared/mcp-types"
 import type { InboundDelivery, InboundDeliveryResult } from "../inbound/deliver-inbound"
 import {
   McpSourceRunner,
+  McpSourceUnavailableError,
   type McpSourceClock,
   type McpSourceConnection,
   type McpSourceCursors,
@@ -36,6 +37,7 @@ const POLL: McpPollSource = {
   senderPath: "senderName",
   textPath: "",
   handler: HANDLER,
+  reply: null,
   tool: "zalo_get_messages",
   args: { limit: 50 },
   cursorArg: "since",
@@ -57,6 +59,7 @@ const SUBSCRIBE: McpSubscribeSource = {
   senderPath: "",
   textPath: "",
   handler: HANDLER,
+  reply: null,
   resourceUris: ["feed://inbox"],
   itemsPath: "",
   itemKeyPath: null,
@@ -625,5 +628,71 @@ describe("McpSourceRunner reconcile", () => {
     await h.runner.reconcile([{ ...POLL, enabled: false }], [SERVER])
 
     expect(heard).toBeGreaterThan(0)
+  })
+})
+
+describe("McpSourceRunner callTool", () => {
+  test("a reply tool call rides the live subscribe connection without opening another", async () => {
+    const h = createHarness()
+    const live = new FakeConnection()
+    live.toolResults = [{ id: "sent-1" }]
+    h.connections.push(() => live)
+    await h.runner.reconcile([SUBSCRIBE], [SERVER])
+    await waitFor(() => h.runner.statuses()[0]?.state === "listening")
+
+    const result = await h.runner.callTool("sub", "send", { text: "hi" })
+
+    expect([result, live.toolCalls, h.opened.length, live.closed]).toEqual([{ id: "sent-1" }, [{ text: "hi" }], 1, false])
+    await h.runner.stop()
+  })
+
+  test("without a live connection a reply tool call opens a one-shot connection and closes it afterwards", async () => {
+    const h = createHarness({ bearer: "tok" })
+    const session = new FakeConnection()
+    session.honored = []
+    const oneShot = new FakeConnection()
+    oneShot.toolResults = [{ id: "sent-2" }]
+    h.connections.push(() => session, () => oneShot)
+    await h.runner.reconcile([SUBSCRIBE], [SERVER])
+    await waitFor(() => h.runner.statuses()[0]?.state === "error")
+
+    const result = await h.runner.callTool("sub", "send", { text: "hi" })
+
+    expect(result).toEqual({ id: "sent-2" })
+    expect(h.opened[1]).toMatchObject({ bearer: "tok", connection: oneShot })
+    expect([oneShot.toolCalls, oneShot.closed]).toEqual([[{ text: "hi" }], true])
+    await h.runner.stop()
+  })
+
+  test("an unknown or disabled source and a connection that cannot open are unavailable, not a tool failure", async () => {
+    const h = createHarness()
+    await h.runner.reconcile([{ ...SUBSCRIBE, enabled: false }], [SERVER])
+    for (const id of ["ghost", "sub"]) await expect(h.runner.callTool(id, "send", {})).rejects.toBeInstanceOf(McpSourceUnavailableError)
+    expect(h.opened).toHaveLength(0)
+
+    const session = new FakeConnection()
+    session.honored = []
+    h.connections.push(() => session, () => { throw new Error("connection refused") })
+    await h.runner.reconcile([{ ...SUBSCRIBE, updatedAt: 2 }], [SERVER])
+    await waitFor(() => h.runner.statuses()[0]?.state === "error")
+    await expect(h.runner.callTool("sub", "send", {})).rejects.toThrow("connection refused")
+    await h.runner.stop()
+  })
+
+  test("a remembered key keeps the echo of a sent message from being ingested", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    h.connections.push(() => connection)
+    await h.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => h.runner.statuses()[0]?.state === "listening")
+
+    h.runner.rememberKey("sub", "m1")
+    connection.resource = inbox("m1", "m2")
+    connection.notify("feed://inbox")
+    await waitFor(() => h.deliveries.length === 1)
+    await h.runner.stop()
+
+    expect(h.deliveries.map((delivery) => delivery.deliveryId)).toEqual(["m2"])
+    expect(h.cursors.saved.sub?.recentKeys).toEqual(["m1", "m2"])
   })
 })

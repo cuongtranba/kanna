@@ -10,6 +10,8 @@ function makeHarness() {
     statuses: () => [],
     onStatus: () => () => {},
     stop: async () => { calls.push("runner.stop") },
+    callTool: async (sourceId, name) => `${sourceId}:${name}`,
+    rememberKey: (sourceId, key) => { calls.push(`remember ${sourceId} ${key}`) },
   }
   const settings: McpSourcesSettings = {
     getSnapshot: () => ({ mcpSources: [], customMcpServers: [] }),
@@ -43,5 +45,14 @@ describe("runMcpSources", () => {
 
     expect(calls).toEqual(["reconcile", "unsubscribe", "runner.stop"])
     expect(listeners.size).toBe(0)
+  })
+
+  test("the runtime exposes the reply tool call and key memory of its runner", async () => {
+    const { calls, runner, settings } = makeHarness()
+    const runtime = runMcpSources(runner, settings, new Lifetime())
+
+    expect(await runtime.callTool("s1", "send", {})).toBe("s1:send")
+    runtime.rememberKey("s1", "k1")
+    expect(calls).toContain("remember s1 k1")
   })
 })
