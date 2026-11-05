@@ -8,6 +8,18 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.98.0](https://github.com/cuongtranba/kanna/compare/v1.97.0...v1.98.0) (2026-11-05)
+
+
+### Features
+
+* **inbox:** reply directly through the source's reply tool (phase 1) ([#1417](https://github.com/cuongtranba/kanna/issues/1417)) ([d77f8a1](https://github.com/cuongtranba/kanna/commit/d77f8a1099b3bc4f88092cbd8903f7084bfaf506))
+
+
+### Bug Fixes
+
+* **chat:** never prune a chat that a source, webhook or inbox thread points at ([#1416](https://github.com/cuongtranba/kanna/issues/1416)) ([55f706e](https://github.com/cuongtranba/kanna/commit/55f706ee27da54f4c8413629f1c6ffb3b2369f10))
+
 ## [1.97.0](https://github.com/cuongtranba/kanna/compare/v1.96.0...v1.97.0) (2026-11-05)
 
 
