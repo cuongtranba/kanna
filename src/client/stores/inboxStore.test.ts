@@ -11,6 +11,7 @@ function thread(id: string, lastMessageAt: number): InboxThread {
     threadKey: id,
     sender: "ada",
     messages: [],
+    outbound: [],
     state: "needs_you",
     unread: true,
     lastMessageAt,

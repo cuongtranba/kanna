@@ -10,6 +10,20 @@ export const MCP_SOURCE_INTERVAL_MIN_MS = 5000
 export const MCP_SOURCE_INTERVAL_MAX_MS = 3_600_000
 export const MCP_SOURCE_DEDUPE_KEYS = 256
 
+export interface McpReplyValueMap {
+  from: string
+  map: JsonObject
+  default?: JsonValue
+}
+
+export type McpReplyArg = string | McpReplyValueMap
+
+export interface McpSourceReply {
+  tool: string
+  args: Record<string, McpReplyArg>
+  resultIdPath: string
+}
+
 export interface McpSourceBase {
   id: string
   name: string
@@ -19,6 +33,7 @@ export interface McpSourceBase {
   senderPath: string
   textPath: string
   handler: InboundHandler
+  reply: McpSourceReply | null
   createdAt: number
   updatedAt: number
 }
@@ -52,6 +67,7 @@ interface McpSourceInputBase {
   senderPath: string
   textPath?: string
   handler: InboundHandler
+  reply?: McpSourceReply | null
 }
 
 export type McpSourceInput =
@@ -82,6 +98,7 @@ export type McpSourcePatch = Partial<{
   senderPath: string
   textPath: string
   handler: InboundHandler
+  reply: McpSourceReply | null
   resourceUris: string[]
   tool: string
   args: JsonObject

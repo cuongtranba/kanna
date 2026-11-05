@@ -1,14 +1,16 @@
 import type { InboxPage } from "../../shared/inbox/types.schema"
 import { toError } from "../../shared/errors"
-import type { InboxEvent } from "../../shared/inbox/events"
+import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
 import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
 import { isAttention } from "../../shared/inbox/policy"
 import {
   INBOX_DRAFT_MAX_CHARS,
+  INBOX_OUTBOUND_RESTART_ERROR,
   INBOX_SUMMARY_MAX_CHARS,
   type InboundMessage,
   type InboxActivityItem,
   type InboxFilter,
+  type InboxOutboundSettledStatus,
   type InboxReport,
   type InboxSnapshot,
   type InboxSourceKind,
@@ -46,13 +48,19 @@ export interface InboundIngestMeta {
 
 export type InboxReportResult = { ok: true } | { ok: false; error: string }
 
+export interface InboxOutboundOutcome {
+  status: InboxOutboundSettledStatus
+  error?: string
+  resultId?: string
+}
+
 export type { InboxPage }
 
 const DEFAULT_SNAPSHOT_LIMIT = 200
 const TURN_END_SUBJECTS: readonly string[] = [namedBusSubject("turnFinished"), namedBusSubject("turnFailed")]
 
 function cloneThread(thread: InboxThread): InboxThread {
-  return { ...thread, messages: [...thread.messages] }
+  return { ...thread, messages: [...thread.messages], outbound: thread.outbound.map((outbound) => ({ ...outbound })) }
 }
 
 function sourceOf(envelope: BusEnvelope): { kind: InboxSourceKind; id: string } | null {
@@ -98,6 +106,7 @@ export class InboxRegistry {
     if (events.length > 2 * liveRecordCount(this.state)) {
       await this.logPort.rewrite(compactInboxEvents(events, dropped))
     }
+    await this.settleInterruptedOutbound()
     this.unsubscribe?.()
     this.unsubscribe = this.bus.subscribe(ALL_BUS_SUBJECTS, (envelope) => this.onEnvelope(envelope))
   }
@@ -250,11 +259,47 @@ export class InboxRegistry {
     await this.flush()
   }
 
+  async queueOutbound(threadId: string, outbound: Omit<InboxQueuedOutbound, "ts">): Promise<void> {
+    if (!this.state.threads.has(threadId)) return
+    const ts = this.now()
+    this.record({ v: 1, ts, kind: "inbox_thread_outbound_queued", threadId, outbound: { ...outbound, ts } })
+    await this.flush()
+  }
+
+  async settleOutbound(threadId: string, outboundId: string, outcome: InboxOutboundOutcome): Promise<void> {
+    const outbound = this.state.threads.get(threadId)?.outbound.find((candidate) => candidate.id === outboundId)
+    if (outbound?.status !== "pending") return
+    const at = this.now()
+    this.record({
+      v: 1,
+      ts: at,
+      kind: "inbox_thread_outbound_settled",
+      threadId,
+      outboundId,
+      status: outcome.status,
+      at,
+      ...(outcome.error === undefined ? {} : { error: outcome.error }),
+      ...(outcome.resultId === undefined ? {} : { resultId: outcome.resultId }),
+    })
+    this.publishInbox("outbound", { threadId, outboundId, status: outcome.status })
+    await this.flush()
+  }
+
   async archive(threadId: string): Promise<void> {
     if (!this.state.threads.has(threadId)) return
     this.record({ v: 1, ts: this.now(), kind: "inbox_thread_archived", threadId })
     this.publishInbox("archived", { threadId })
     await this.flush()
+  }
+
+  private async settleInterruptedOutbound(): Promise<void> {
+    for (const thread of this.state.threads.values()) {
+      for (const outbound of thread.outbound) {
+        if (outbound.status === "pending") {
+          await this.settleOutbound(thread.id, outbound.id, { status: "unknown", error: INBOX_OUTBOUND_RESTART_ERROR })
+        }
+      }
+    }
   }
 
   private async applyReport(threadId: string, report: InboxReport): Promise<void> {

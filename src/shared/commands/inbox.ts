@@ -11,6 +11,7 @@ import {
   webhookPatchSchema,
 } from "../webhooks/types.schema"
 import { chatIdResultSchema } from "./results/chat"
+import { inboxReplyResultSchema, inboxRetrySendResultSchema } from "./results/inbox"
 import { okResultSchema } from "./results/common"
 
 const WEBHOOK_SECRET_REASON =
@@ -48,9 +49,16 @@ export const inboxCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("inbox.reply", {
-    result: chatIdResultSchema,
+    result: inboxReplyResultSchema,
     params: threadTextParams,
-    summary: "Send a reply to an inbox thread through its handler chat and source tools.",
+    summary: "Send a reply to an inbox thread: directly through its source's reply tool when it has one, otherwise through its handler chat.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.retrySend", {
+    result: inboxRetrySendResultSchema,
+    params: z.object({ threadId: z.string(), outboundId: z.string(), confirmDuplicate: z.boolean().optional() }),
+    summary: "Send an inbox reply that failed again as a new message; one that may already have been delivered needs confirmDuplicate.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),

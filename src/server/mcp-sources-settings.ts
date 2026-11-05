@@ -7,11 +7,13 @@ import {
   clampMcpSourceInterval,
   isMcpSourceMode,
   MCP_SOURCE_INTERVAL_MIN_MS,
+  type McpReplyArg,
   type McpSource,
   type McpSourceInput,
   type McpSourcePatch,
+  type McpSourceReply,
 } from "../shared/mcp-sources/types"
-import { validateMcpSource } from "../shared/mcp-sources/validate"
+import { validateMcpSource, validateMcpSourceReply } from "../shared/mcp-sources/validate"
 import { isAgentProvider } from "../shared/types"
 
 type McpSourcesPatch = NonNullable<AppSettingsPatch["mcpSources"]>
@@ -23,15 +25,9 @@ export class McpSourceValidationException extends Error {
   }
 }
 
-interface FlatSource {
+interface FlatSource
+  extends Pick<McpSource, "name" | "serverId" | "enabled" | "threadKeyPath" | "senderPath" | "textPath" | "handler" | "reply"> {
   mode: McpSourceInput["mode"]
-  name: string
-  serverId: string
-  enabled: boolean
-  threadKeyPath: string
-  senderPath: string
-  textPath: string
-  handler: InboundHandler
   resourceUris: string[]
   tool: string
   args: JsonObject
@@ -54,6 +50,7 @@ function flatten(source: McpSourceInput | McpSource): FlatSource {
     senderPath: source.senderPath,
     textPath: source.textPath ?? "",
     handler: source.handler,
+    reply: source.reply ?? null,
   }
   if (source.mode === "subscribe") {
     const { resourceUris, itemsPath, itemKeyPath, resyncIntervalMs } = source
@@ -73,6 +70,7 @@ function assemble(flat: FlatSource, id: string, createdAt: number, updatedAt: nu
     senderPath: flat.senderPath.trim(),
     textPath: flat.textPath.trim(),
     handler: flat.handler,
+    reply: flat.reply === null ? null : { ...flat.reply, tool: flat.reply.tool.trim(), resultIdPath: flat.reply.resultIdPath.trim() },
     createdAt,
     updatedAt,
   }
@@ -111,8 +109,9 @@ export function createMcpSource(input: McpSourceInput): McpSource {
 }
 
 export function updateMcpSource(existing: McpSource, patch: McpSourcePatch): McpSource {
-  const { itemKeyPath, resyncIntervalMs, ...rest } = patch
+  const { itemKeyPath, resyncIntervalMs, reply, ...rest } = patch
   const merged: FlatSource = { ...flatten(existing), ...rest }
+  if (reply !== undefined) merged.reply = reply
   if (itemKeyPath !== undefined) merged.itemKeyPath = itemKeyPath
   if (resyncIntervalMs !== undefined) merged.resyncIntervalMs = resyncIntervalMs
   return checked(assemble(merged, existing.id, existing.createdAt, Date.now()))
@@ -169,6 +168,29 @@ function readHandler(value: JsonValue | undefined): InboundHandler | null {
   }
 }
 
+function readReplyArg(value: JsonValue): McpReplyArg | null {
+  if (typeof value === "string") return value
+  if (!isJsonObject(value)) return null
+  const { from, map } = value
+  if (typeof from !== "string" || map === undefined || !isJsonObject(map)) return null
+  return value.default === undefined ? { from, map } : { from, map, default: value.default }
+}
+
+function readReply(value: JsonValue | undefined): McpSourceReply | null {
+  if (value === undefined || !isJsonObject(value)) return null
+  const tool = readString(value, "tool")
+  const rawArgs = value.args
+  if (tool === undefined || rawArgs === undefined || !isJsonObject(rawArgs)) return null
+  const args: Record<string, McpReplyArg> = {}
+  for (const [key, rawArg] of Object.entries(rawArgs)) {
+    const arg = readReplyArg(rawArg)
+    if (arg === null) return null
+    args[key] = arg
+  }
+  const reply: McpSourceReply = { tool, args, resultIdPath: readString(value, "resultIdPath") ?? "" }
+  return validateMcpSourceReply(reply).length === 0 ? reply : null
+}
+
 function readStrings(value: JsonValue | undefined): string[] {
   if (value === undefined || !isJsonArray(value)) return []
   return value.filter((item): item is string => typeof item === "string")
@@ -191,6 +213,7 @@ function readSource(raw: JsonObject): McpSource | null {
     senderPath: readString(raw, "senderPath") ?? "",
     textPath: readString(raw, "textPath") ?? "",
     handler,
+    reply: readReply(raw.reply),
     resourceUris: readStrings(raw.resourceUris),
     tool: readString(raw, "tool") ?? "",
     args: args !== undefined && isJsonObject(args) ? args : {},

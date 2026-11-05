@@ -94,7 +94,8 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
-import { createInbox, createInboxReplyActions, inboxHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxPush } from "./inbox/inbox-boot"
+import { createInboxOutbox } from "./inbox/inbox-outbox"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
 import { createStoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
@@ -409,6 +410,12 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
 
   const webhooks = await createWebhookService(store.dataDir, store, agent, bus, inbox, process.env.KANNA_WEBHOOKS !== "disabled")
   const mcpSources = startMcpSources(appSettings, store, agent, bus, inbox, lifetime)
+  const inboxOutbox = createInboxOutbox({
+    registry: inbox,
+    resolveSource: mcpOutboxSourceResolver(mcpSources),
+    callTool: mcpSources.callTool,
+    rememberKey: mcpSources.rememberKey,
+  })
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -535,7 +542,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     inbox,
     mcpSources,
     serviceBus: bus,
-    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
+    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources), inboxOutbox),
   })
 
   lifetime.defer("teardown", () => router.dispose())

@@ -41,6 +41,15 @@ describe("validateMcpSource", () => {
     expect(validateMcpSource(poll)).toEqual([])
   })
 
+  test("a reply target needs a tool, named arguments and a non-empty value map", () => {
+    const reply = { tool: "send", args: { text: "{{reply.text}}" }, resultIdPath: "" }
+    expect(validateMcpSource({ ...subscribe, reply })).toEqual([])
+    expect(validateMcpSource({ ...subscribe, reply: { ...reply, tool: " " } })).toEqual(["Reply tool is required"])
+    expect(validateMcpSource({ ...subscribe, reply: { ...reply, args: { "": "x" } } })).toEqual(["Reply argument names must not be empty"])
+    expect(validateMcpSource({ ...subscribe, reply: { ...reply, args: { kind: { from: "message.type", map: {} } } } })).toEqual(['Reply argument "kind" needs at least one mapping'])
+    expect(validateMcpSource({ ...subscribe, reply: { ...reply, resultIdPath: "x".repeat(INBOUND_LIMITS.pathMaxChars + 1) } })).toEqual([`Paths must be at most ${INBOUND_LIMITS.pathMaxChars} characters`])
+  })
+
   test("a subscribe source without a resource URI is refused", () => {
     expect(validateMcpSource({ ...subscribe, resourceUris: ["  "] })).toEqual(["At least one resource URI is required"])
   })

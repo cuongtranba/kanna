@@ -24,9 +24,17 @@ export const MCP_SOURCE_PRESETS: Readonly<Record<McpSourcePresetId, McpSourcePre
       mode: "spawn",
       template:
         "A new Zalo message arrived in a conversation. Read it, decide whether the user needs to act, and draft a reply in the same language the sender used.",
-      replyHint:
-        'Send the reply with zalo_send_message using threadId {{threadId}} and threadType {{threadType}}: pass 0 when threadType is "dm" and 1 when it is "group".',
+      replyHint: "Send the reply with zalo_send_message to the conversation the message came from.",
       pushEnabled: true,
+    },
+    reply: {
+      tool: "zalo_send_message",
+      args: {
+        threadId: "{{message.threadId}}",
+        threadType: { from: "message.threadType", map: { dm: 0, group: 1 } },
+        text: "{{reply.text}}",
+      },
+      resultIdPath: "",
     },
   },
 }

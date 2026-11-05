@@ -12,7 +12,7 @@ import {
   toolResultValue,
   type McpListenClient,
 } from "./mcp-source-client.adapter"
-import type { McpSourceCloseReason, McpSourceConnection } from "./mcp-source-runner"
+import { McpToolRejectedError, type McpSourceCloseReason, type McpSourceConnection } from "./mcp-source-runner"
 
 const stoppers: (() => void)[] = []
 
@@ -109,6 +109,11 @@ describe("against a real MCP server", () => {
         { description: "messages", inputSchema: z.object({ since: z.number().optional(), limit: z.number().optional() }) },
         async ({ since }) => ({ content: [{ type: "text", text: JSON.stringify({ messages: [{ messageId: "m1", since: since ?? null }], cursor: 11 }) }] }),
       )
+      server.registerTool(
+        "always_fails",
+        { description: "fails", inputSchema: z.object({}) },
+        async () => ({ isError: true, content: [{ type: "text", text: "recipient is blocked" }] }),
+      )
       server.registerResource("inbox", "feed://inbox", { mimeType: "application/json" }, async (uri) => ({
         contents: [{ uri: uri.href, mimeType: "application/json", text: '{"unread":2}' }],
       }))
@@ -129,6 +134,18 @@ describe("against a real MCP server", () => {
       const args: JsonObject = { since: 4 }
       expect(await connection.callTool("get_messages", args)).toEqual({ messages: [{ messageId: "m1", since: 4 }], cursor: 11 })
       expect(await connection.readResource("feed://inbox")).toEqual({ unread: 2 })
+    } finally {
+      await connection.close()
+    }
+  }, 30_000)
+
+  test("a tool that answers with isError is a rejection carrying the tool's message", async () => {
+    const config = await startServer()
+    const connection = await createMcpSourceConnector().open(config, undefined)
+    try {
+      const failure = await connection.callTool("always_fails", {}).catch((error: Error) => error)
+      expect(failure).toBeInstanceOf(McpToolRejectedError)
+      expect(failure).toMatchObject({ message: "recipient is blocked" })
     } finally {
       await connection.close()
     }
@@ -179,6 +196,11 @@ describe("against a 2025-era streamable HTTP server", () => {
               capabilities: { resources: { subscribe: options.subscribe } },
               serverInfo: { name: "legacy", version: "1.0.0" },
             })
+          case "tools/call":
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32602, message: "Unknown tool" } },
+              { headers: { "mcp-session-id": SESSION_ID } },
+            )
           case "resources/read":
             return Response.json(
               { jsonrpc: "2.0", id: body.id, error: { code: -32002, message: "Resource not found" } },
@@ -225,6 +247,21 @@ describe("against a 2025-era streamable HTTP server", () => {
     try {
       const listening = await connection.listen(["feed://inbox"], () => {})
       expect(await listening.closed).toBe("remote")
+    } finally {
+      await connection.close()
+    }
+  }, 30_000)
+
+  test("a JSON-RPC error answering a tool call is a rejection, a dead server is not", async () => {
+    const server = startLegacyServer({ subscribe: true, streamGone: false })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    try {
+      await expect(connection.callTool("send", {})).rejects.toBeInstanceOf(McpToolRejectedError)
+
+      server.stop()
+      const failure = await connection.callTool("send", {}).catch((error: Error) => error)
+      expect(failure).toBeInstanceOf(Error)
+      expect(failure).not.toBeInstanceOf(McpToolRejectedError)
     } finally {
       await connection.close()
     }

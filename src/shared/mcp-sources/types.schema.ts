@@ -1,10 +1,21 @@
 import { z } from "zod"
 import { MCP_SOURCE_MODES, type McpSource, type McpSourceInput, type McpSourcePatch } from "./types"
-import { jsonObjectSchema } from "../genui/json-schema"
+import { jsonObjectSchema, jsonValueSchema } from "../genui/json-schema"
 import { inboundHandlerSchema } from "../inbound/handler.schema"
 import { assertParity } from "../type-parity"
 
 export const mcpSourceModeSchema = z.enum(MCP_SOURCE_MODES)
+
+const mcpReplyArgSchema = z.union([
+  z.string(),
+  z.object({ from: z.string(), map: jsonObjectSchema, default: jsonValueSchema.optional() }),
+])
+
+export const mcpSourceReplySchema = z.object({
+  tool: z.string(),
+  args: z.record(z.string(), mcpReplyArgSchema),
+  resultIdPath: z.string(),
+})
 
 const mcpSourceInputBaseShape = {
   name: z.string(),
@@ -14,6 +25,7 @@ const mcpSourceInputBaseShape = {
   senderPath: z.string(),
   textPath: z.string().optional(),
   handler: inboundHandlerSchema,
+  reply: mcpSourceReplySchema.nullable().optional(),
 }
 
 const subscribeInputFieldsShape = {
@@ -57,6 +69,7 @@ const mcpSourceBaseShape = {
   senderPath: z.string(),
   textPath: z.string(),
   handler: inboundHandlerSchema,
+  reply: mcpSourceReplySchema.nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 }
@@ -75,6 +88,7 @@ export const mcpSourcePatchSchema = z.object({
   senderPath: z.string().optional(),
   textPath: z.string().optional(),
   handler: inboundHandlerSchema.optional(),
+  reply: mcpSourceReplySchema.nullable().optional(),
   resourceUris: z.array(z.string()).optional(),
   tool: z.string().optional(),
   args: jsonObjectSchema.optional(),

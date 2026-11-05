@@ -1,15 +1,26 @@
 import { z } from "zod"
 import type { JsonValue } from "../json"
 import { assertParity } from "../type-parity"
-import type { InboundMessage, InboxActivityItem, InboxReport, InboxThread } from "./types"
+import {
+  INBOX_OUTBOUND_SETTLED_STATUSES,
+  type InboundMessage,
+  type InboxActivityItem,
+  type InboxOutboundMessage,
+  type InboxOutboundSettledStatus,
+  type InboxReport,
+  type InboxThread,
+} from "./types"
 import {
   inboundMessageSchema,
   inboxActivityItemSchema,
+  inboxOutboundMessageSchema,
   inboxReportSchema,
   inboxThreadHeaderSchema,
 } from "./types.schema"
 
 export type InboxThreadHeader = Pick<InboxThread, "id" | "sourceKind" | "sourceId" | "sourceName" | "threadKey" | "sender">
+
+export type InboxQueuedOutbound = Pick<InboxOutboundMessage, "id" | "ts" | "text" | "by">
 
 interface InboxEventBase {
   v: 1
@@ -26,6 +37,16 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_all_read"; beforeTs: number })
   | (InboxEventBase & { kind: "inbox_thread_replied"; threadId: string; chatId: string; scheduleId: string })
   | (InboxEventBase & { kind: "inbox_thread_archived"; threadId: string })
+  | (InboxEventBase & { kind: "inbox_thread_outbound_queued"; threadId: string; outbound: InboxQueuedOutbound })
+  | (InboxEventBase & {
+      kind: "inbox_thread_outbound_settled"
+      threadId: string
+      outboundId: string
+      status: InboxOutboundSettledStatus
+      error?: string
+      resultId?: string
+      at: number
+    })
 
 export type InboxEventKind = InboxEvent["kind"]
 
@@ -52,6 +73,22 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     scheduleId: z.string(),
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_archived"), threadId: z.string() }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_outbound_queued"),
+    threadId: z.string(),
+    outbound: inboxOutboundMessageSchema.pick({ id: true, ts: true, text: true, by: true }),
+  }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_outbound_settled"),
+    threadId: z.string(),
+    outboundId: z.string(),
+    status: z.enum(INBOX_OUTBOUND_SETTLED_STATUSES),
+    error: z.string().optional(),
+    resultId: z.string().optional(),
+    at: z.number(),
+  }),
 ])
 
 assertParity<z.output<typeof inboxEventSchema>, InboxEvent>()

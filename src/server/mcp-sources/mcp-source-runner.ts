@@ -14,6 +14,20 @@ import type { InboundDelivery, InboundDeliveryResult } from "../inbound/deliver-
 import { addCounter, MCP_SOURCE_ERRORS, MCP_SOURCE_ITEMS } from "../observability"
 import { fetcherFor, textAt, type McpSourceFetcher } from "./mcp-source-fetch"
 
+export class McpToolRejectedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "McpToolRejectedError"
+  }
+}
+
+export class McpSourceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "McpSourceUnavailableError"
+  }
+}
+
 export type McpSourceCloseReason = "local" | "graceful" | "remote"
 
 export interface McpSourceListening {
@@ -57,7 +71,9 @@ export type McpSourceDeliver = (delivery: InboundDelivery) => Promise<InboundDel
 
 interface Entry {
   source: McpSource
+  server: McpServerConfig | null
   version: string
+  connection: McpSourceConnection | null
   status: McpSourceStatus
   abort: AbortController
   done: Promise<void>
@@ -159,6 +175,31 @@ export class McpSourceRunner {
     await this.saving.run(async () => {})
   }
 
+  rememberKey(sourceId: string, key: string): void {
+    if (this.entries.has(sourceId)) this.recordKey(sourceId, key)
+  }
+
+  async callTool(sourceId: string, name: string, args: JsonObject): Promise<JsonValue> {
+    const entry = this.entries.get(sourceId)
+    if (entry === undefined) throw new McpSourceUnavailableError("MCP source not found")
+    if (entry.connection !== null) return entry.connection.callTool(name, args)
+    const blocked = blockedStatus(entry.source, entry.server)
+    if (blocked !== null || entry.server === null) {
+      throw new McpSourceUnavailableError(blocked?.lastError ?? "MCP source is disabled")
+    }
+    let connection: McpSourceConnection
+    try {
+      connection = await this.open(entry.server)
+    } catch (error) {
+      throw new McpSourceUnavailableError(toError(error).message)
+    }
+    try {
+      return await connection.callTool(name, args)
+    } finally {
+      await closeQuietly(connection)
+    }
+  }
+
   statuses(): McpSourceStatus[] {
     return [...this.entries.values()].map((entry) => entry.status)
   }
@@ -227,7 +268,9 @@ export class McpSourceRunner {
     const blocked = blockedStatus(source, server)
     const entry: Entry = {
       source,
+      server,
       version,
+      connection: null,
       status: blocked ?? initialStatus(source, "connecting", null),
       abort,
       done: Promise.resolve(),
@@ -266,6 +309,22 @@ export class McpSourceRunner {
     return this.cursors[sourceId] ?? { cursor: null, recentKeys: [] }
   }
 
+  private recordKey(sourceId: string, key: string): void {
+    const state = this.cursorState(sourceId)
+    if (state.recentKeys.includes(key)) return
+    this.cursors = {
+      ...this.cursors,
+      [sourceId]: { ...state, recentKeys: [...state.recentKeys, key].slice(-MCP_SOURCE_DEDUPE_KEYS) },
+    }
+    this.persist()
+  }
+
+  private async dropConnection(entry: Entry): Promise<void> {
+    const { connection } = entry
+    entry.connection = null
+    await closeQuietly(connection)
+  }
+
   private async ingest(
     entry: Entry,
     server: McpServerConfig,
@@ -274,8 +333,7 @@ export class McpSourceRunner {
     fallbackThreadKey: string,
   ): Promise<void> {
     const { source } = entry
-    const state = this.cursorState(source.id)
-    if (state.recentKeys.includes(key)) return
+    if (this.cursorState(source.id).recentKeys.includes(key)) return
     const at = this.clock.now()
     const text = textAt(item, source.textPath)
     const result = await this.deliver({
@@ -290,11 +348,7 @@ export class McpSourceRunner {
       at,
     })
     if (!result.ok) throw new Error(result.detail)
-    this.cursors = {
-      ...this.cursors,
-      [source.id]: { ...state, recentKeys: [...state.recentKeys, key].slice(-MCP_SOURCE_DEDUPE_KEYS) },
-    }
-    this.persist()
+    this.recordKey(source.id, key)
     addCounter(MCP_SOURCE_ITEMS, 1, { mode: source.mode })
     this.patch(entry, { lastItemAt: at, itemCount: entry.status.itemCount + 1, lastError: null })
   }
@@ -360,6 +414,7 @@ export class McpSourceRunner {
         if (signal.aborted) break
         if (listening.honoredUris.length === 0) throw new Error(NO_SUBSCRIPTIONS_ERROR)
         authRetried = false
+        entry.connection = opened
         const startedAt = this.clock.now()
         this.patch(entry, { state: "listening", honoredUris: listening.honoredUris, lastError: null })
         sessionLane.push(listening.honoredUris)
@@ -392,6 +447,7 @@ export class McpSourceRunner {
         this.patch(entry, { state: failure.message === NO_SUBSCRIPTIONS_ERROR ? "error" : "backoff" })
       } finally {
         session.abort()
+        entry.connection = null
         await closeQuietly(listening)
         await closeQuietly(connection)
         await resyncing
@@ -404,7 +460,6 @@ export class McpSourceRunner {
   private async runPoll(entry: Entry, source: McpPollSource, server: McpServerConfig): Promise<void> {
     const { signal } = entry.abort
     const fetcher = fetcherFor(source)
-    let connection: McpSourceConnection | null = null
     let failures = 0
     let authRetried = false
     try {
@@ -412,7 +467,8 @@ export class McpSourceRunner {
         let delay = source.intervalMs
         this.patch(entry, { state: "polling" })
         try {
-          connection ??= await this.open(server)
+          const connection = entry.connection ?? await this.open(server)
+          entry.connection = connection
           if (signal.aborted) break
           await this.drain(entry, server, connection, fetcher, [])
           failures = 0
@@ -420,8 +476,7 @@ export class McpSourceRunner {
           this.patch(entry, { state: "polling", lastError: null })
         } catch (error) {
           const failure = toError(error)
-          await closeQuietly(connection)
-          connection = null
+          await this.dropConnection(entry)
           if (isUnauthorized(failure) && !authRetried) {
             authRetried = true
             continue
@@ -435,7 +490,7 @@ export class McpSourceRunner {
         await this.clock.sleep(delay, signal)
       }
     } finally {
-      await closeQuietly(connection)
+      await this.dropConnection(entry)
     }
   }
 }

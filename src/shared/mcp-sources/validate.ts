@@ -6,7 +6,7 @@ import {
   validateInboundTarget,
 } from "../inbound/handler"
 import { isJsonObject, safeJsonParse, type JsonObject } from "../json"
-import { isMcpSourceMode, type McpSource, type McpSourceInput } from "./types"
+import { isMcpSourceMode, type McpSource, type McpSourceInput, type McpSourceReply } from "./types"
 
 type McpSourceShape = McpSourceInput | McpSource
 
@@ -40,6 +40,20 @@ function validateModeFields(shape: McpSourceShape): string[] {
   return errors
 }
 
+export function validateMcpSourceReply(reply: McpSourceReply | null | undefined): string[] {
+  if (reply === null || reply === undefined) return []
+  const errors: string[] = []
+  if (!nonEmpty(reply.tool)) errors.push("Reply tool is required")
+  for (const [key, arg] of Object.entries(reply.args)) {
+    if (!nonEmpty(key)) errors.push("Reply argument names must not be empty")
+    if (typeof arg !== "string" && Object.keys(arg.map).length === 0) {
+      errors.push(`Reply argument "${key}" needs at least one mapping`)
+    }
+  }
+  errors.push(...inboundPathErrors([reply.resultIdPath]))
+  return errors
+}
+
 export function validateMcpSource(shape: McpSourceShape): string[] {
   const errors: string[] = []
   errors.push(...inboundNameErrors(shape.name))
@@ -48,6 +62,7 @@ export function validateMcpSource(shape: McpSourceShape): string[] {
   else errors.push(...validateModeFields(shape))
   errors.push(...inboundPathErrors([shape.threadKeyPath, shape.senderPath, shape.textPath, shape.itemsPath, shape.itemKeyPath]))
   errors.push(...validateHandler(shape))
+  errors.push(...validateMcpSourceReply(shape.reply))
   return errors
 }
 

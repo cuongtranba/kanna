@@ -3,6 +3,7 @@ import { INBOX_REPORT_TOOL_NAME } from "../tools"
 import { INBOUND_PROMPT_BODY_MAX_CHARS, type InboundHandling } from "./handler"
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_.-]*)\s*\}\}/g
+const EXACT_PLACEHOLDER = /^\s*\{\{\s*([A-Za-z0-9_.-]*)\s*\}\}\s*$/
 
 export const INBOUND_TRUNCATION_MARKER = "[truncated]"
 
@@ -12,6 +13,14 @@ export function inboundUntrustedNotice(sourceLabel: string): string {
 
 export function substituteInboundTemplate(template: string, body: JsonValue): string {
   return template.replace(PLACEHOLDER, (_match, path: string) => jsonText(resolveJsonPath(body, path)))
+}
+
+export function exactPlaceholderPath(template: string): string | null {
+  return EXACT_PLACEHOLDER.exec(template)?.[1] ?? null
+}
+
+export function placeholderPaths(template: string): string[] {
+  return [...template.matchAll(PLACEHOLDER)].map((match) => match[1] ?? "")
 }
 
 function serializeBody(body: JsonValue): string {

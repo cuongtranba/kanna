@@ -616,6 +616,7 @@ describe("PushManager.notifyInbox", () => {
     threadKey: "k1",
     sender: "ada",
     messages: [],
+    outbound: [],
     chatId: "c9",
     state: "needs_you",
     unread: true,

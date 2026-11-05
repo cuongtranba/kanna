@@ -56,7 +56,7 @@ test("an instruction marks the thread pending and asks the agent to report again
   expect(inbox.getThread(threadId)?.pendingScheduleId).toBe(`inbox-instruct-${threadId}-77`)
 })
 
-test("a notify thread has no handler chat, so reply and instruct are refused", async () => {
+test("on the agent path a notify thread has no handler chat, so reply and instruct are refused", async () => {
   const { store, agent, inbox, bus, chat } = await createWebhookHarness()
   const result = await deliverInbound(store, agent, bus, inbox, {
     source: { kind: "mcp", sourceId: "mail1", sourceName: "Mail", serverId: "s", serverName: "mail" },

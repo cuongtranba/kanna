@@ -17,11 +17,12 @@ import { safeJsonParse, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import { toJsonValue } from "../json-boundary"
 import { networkHeaders, stdioEnv, terminateQuietly, type SessionTerminator } from "../mcp-validator"
-import type {
-  McpSourceCloseReason,
-  McpSourceConnection,
-  McpSourceConnector,
-  McpSourceListening,
+import {
+  McpToolRejectedError,
+  type McpSourceCloseReason,
+  type McpSourceConnection,
+  type McpSourceConnector,
+  type McpSourceListening,
 } from "./mcp-source-runner"
 
 const CONNECT_TIMEOUT_MS = 20_000
@@ -99,7 +100,7 @@ export function toolResultValue<Structured>(result: {
     .filter((block) => block.type === "text" && block.text !== undefined)
     .map((block) => block.text ?? "")
     .join("\n")
-  if (result.isError) throw new Error(text.length > 0 ? text : "tool call failed")
+  if (result.isError) throw new McpToolRejectedError(text.length > 0 ? text : "tool call failed")
   const structured = result.structuredContent === undefined ? null : toJsonValue(result.structuredContent)
   return structured ?? textValue(text, undefined)
 }
@@ -156,7 +157,12 @@ export function createClientConnection(client: Client, terminator: SessionTermin
       return resourceContentsValue(result.contents)
     },
     async callTool(name, args) {
-      return toolResultValue(await reachable(() => client.callTool({ name, arguments: args })))
+      try {
+        return toolResultValue(await reachable(() => client.callTool({ name, arguments: args })))
+      } catch (error) {
+        const failure = toError(error)
+        throw ProtocolError.isInstance(failure) ? new McpToolRejectedError(failure.message) : failure
+      }
     },
     async close() {
       closing = true

@@ -12,6 +12,7 @@ function thread(state: InboxThreadState): InboxThread {
     threadKey: "k",
     sender: "s",
     messages: [],
+    outbound: [],
     state,
     unread: true,
     lastMessageAt: 1,

@@ -11,6 +11,7 @@ function thread(overrides: Partial<InboxThread>): InboxThread {
     threadKey: "k",
     sender: "ada",
     messages: [],
+    outbound: [],
     state: "new",
     unread: true,
     lastMessageAt: 1,

@@ -1,3 +1,4 @@
+import type { JsonObject, JsonValue } from "../../shared/json"
 import type { McpSource, McpSourcesSnapshot } from "../../shared/mcp-sources/types"
 import type { McpServerConfig } from "../../shared/types"
 import type { Lifetime } from "../lifetime"
@@ -15,6 +16,8 @@ export interface McpSourcesRuntime {
   snapshot(): McpSourcesSnapshot
   onStatus(listener: () => void): () => void
   sources(): readonly McpSource[]
+  callTool(sourceId: string, name: string, args: JsonObject): Promise<JsonValue>
+  rememberKey(sourceId: string, key: string): void
 }
 
 export type McpSourcesTopic = Pick<McpSourcesRuntime, "snapshot" | "onStatus">
@@ -36,7 +39,7 @@ const realClock: McpSourceClock = {
     }),
 }
 
-export type McpSourceRunnerPort = Pick<McpSourceRunner, "reconcile" | "statuses" | "onStatus" | "stop">
+export type McpSourceRunnerPort = Pick<McpSourceRunner, "reconcile" | "statuses" | "onStatus" | "stop" | "callTool" | "rememberKey">
 
 export interface McpSourcesSettings {
   getSnapshot(): { mcpSources: readonly McpSource[]; customMcpServers: readonly McpServerConfig[] }
@@ -64,6 +67,8 @@ export function runMcpSources(
     snapshot: () => ({ sources: runner.statuses() }),
     onStatus: (listener) => runner.onStatus(listener),
     sources: () => appSettings.getSnapshot().mcpSources,
+    callTool: (sourceId, name, args) => runner.callTool(sourceId, name, args),
+    rememberKey: (sourceId, key) => { runner.rememberKey(sourceId, key) },
   }
 }
 
