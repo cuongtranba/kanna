@@ -263,7 +263,8 @@ function sameSubagentRuns(
     const r = right[key]
     if (!l || !r) return false
     return l.status === r.status
-      && l.entries.length === r.entries.length
+      && l.entryCount === r.entryCount
+      && l.recentEntries.at(-1)?._id === r.recentEntries.at(-1)?._id
       && (l.finalText ?? "") === (r.finalText ?? "")
       && (l.pendingTool?.toolUseId ?? null) === (r.pendingTool?.toolUseId ?? null)
       && (l.usage?.outputTokens ?? null) === (r.usage?.outputTokens ?? null)

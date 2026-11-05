@@ -80,6 +80,12 @@ string. The rules every change follows:
   never `import.meta.dir`. No `vi.mock` or `vi.doMock`: inject the dependency as a
   defaulted parameter. Unmount every React root you mount. Subprocesses get
   `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` (`kanna-test` has the runner facts).
+- **Snapshot size:** the chat snapshot never embeds per-run subagent logs. Measured: a 24 MB
+  snapshot, 97.6% subagent entries, ~5 s blank chat; the diff stream also re-sends the
+  `subagentRuns` map on every entry append. `deriveChatSnapshot` emits `SubagentRunSummary`
+  (`entryCount` and a recent tail for running runs) and the client fetches a full log with
+  `subagentRun.getEntries`. Transcript memory is bounded by bytes (`kanna-sessions`) for the
+  same reason.
 - **Secrets:** a synthetic credential in a fixture gets one narrow `regexes` entry in
   `.gitleaks.toml`, never a `paths` glob. gitleaks is pinned at v8.30.1, which has no
   `protect` command.

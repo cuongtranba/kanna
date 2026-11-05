@@ -1,10 +1,16 @@
 import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
-import type { SubagentRunSnapshot, TranscriptEntry } from "../../../shared/types"
+import { act } from "react"
+import { createRoot } from "react-dom/client"
+import "../../lib/testing/setupHappyDom"
+import type { SubagentRunSummary, TranscriptEntry } from "../../../shared/types"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { SubagentMessage } from "./SubagentMessage"
+import { SubagentRunEntriesProvider } from "./subagent-run-entries-context"
 
-function makeRunSnapshot(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
+type RunOverrides = Partial<Omit<SubagentRunSummary, "recentEntries">> & { entries?: TranscriptEntry[] }
+
+function makeRunSnapshot({ entries = [], ...over }: RunOverrides = {}): SubagentRunSummary {
   return {
     runId: "r1",
     chatId: "c1",
@@ -22,7 +28,8 @@ function makeRunSnapshot(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSn
     finalText: null,
     error: null,
     usage: null,
-    entries: [],
+    entryCount: entries.length,
+    recentEntries: entries,
     pendingTool: null,
     ...over,
   }
@@ -659,6 +666,53 @@ describe("SubagentMessage", () => {
       expect(result.thrown).toBeNull()
     } finally {
       await result.cleanup()
+    }
+  })
+
+  test("settled run shows its final text plus a toggle that loads the full log on demand", async () => {
+    const fullLog: TranscriptEntry[] = [
+      { _id: "e1", createdAt: 1, kind: "assistant_text", text: "First fetched step" } as TranscriptEntry,
+      { _id: "e2", createdAt: 2, kind: "assistant_text", text: "Second fetched step" } as TranscriptEntry,
+    ]
+    const requested: string[] = []
+    const fetchEntries = async (chatId: string, runId: string) => {
+      requested.push(`${chatId}/${runId}`)
+      return fullLog
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(
+          <SubagentRunEntriesProvider value={fetchEntries}>
+            <SubagentMessage
+              run={makeRunSnapshot({ status: "completed", finalText: "All done", entryCount: 2 })}
+              indentDepth={0}
+              localPath="/tmp"
+            />
+          </SubagentRunEntriesProvider>,
+        )
+      })
+      expect(container.textContent).toContain("All done")
+      expect(container.textContent).not.toContain("First fetched step")
+      const toggle = container.querySelector<HTMLButtonElement>('[data-testid="subagent-log-toggle:r1"]')
+      expect(toggle?.textContent).toBe("Show full log (2 entries)")
+
+      await act(async () => { toggle?.click() })
+
+      expect(requested).toEqual(["c1/r1"])
+      expect(container.textContent).toContain("First fetched step")
+      expect(container.textContent).toContain("Second fetched step")
+      expect(toggle?.textContent).toBe("Hide full log")
+
+      await act(async () => { toggle?.click() })
+
+      expect(container.textContent).not.toContain("First fetched step")
+      expect(toggle?.textContent).toBe("Show full log (2 entries)")
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
     }
   })
 })

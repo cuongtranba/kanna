@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vite-plus/test"
-import type { SubagentPendingTool, SubagentRunSnapshot } from "../../../shared/types"
+import type { SubagentPendingTool, SubagentRunSummary } from "../../../shared/types"
 import { collectPendingQuestionRuns, selectPendingMainQuestion } from "./ChatTranscriptViewport"
 
-function makeRun(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
+function makeRun(over: Partial<SubagentRunSummary> = {}): SubagentRunSummary {
   return {
     runId: "r1",
     chatId: "c1",
@@ -20,7 +20,8 @@ function makeRun(over: Partial<SubagentRunSnapshot> = {}): SubagentRunSnapshot {
     finalText: null,
     error: null,
     usage: null,
-    entries: [],
+    entryCount: 0,
+    recentEntries: [],
     pendingTool: null,
     ...over,
   }
@@ -46,7 +47,7 @@ describe("collectPendingQuestionRuns", () => {
   })
 
   test("selects only runs with a pendingTool, oldest request first", () => {
-    const runs: Record<string, SubagentRunSnapshot> = {
+    const runs: Record<string, SubagentRunSummary> = {
       r1: makeRun({ runId: "r1", pendingTool: pending(300) }),
       r2: makeRun({ runId: "r2", pendingTool: null }),
       r3: makeRun({ runId: "r3", pendingTool: pending(100) }),
@@ -57,7 +58,7 @@ describe("collectPendingQuestionRuns", () => {
   })
 
   test("ties on requestedAt break deterministically by runId", () => {
-    const runs: Record<string, SubagentRunSnapshot> = {
+    const runs: Record<string, SubagentRunSummary> = {
       rb: makeRun({ runId: "rb", pendingTool: pending(100) }),
       ra: makeRun({ runId: "ra", pendingTool: pending(100) }),
     }

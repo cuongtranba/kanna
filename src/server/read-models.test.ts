@@ -3,8 +3,8 @@ import { canForkChat, computeChatActivity, deriveChatSnapshot, deriveLocalProjec
 import type { ComputeChatActivityDeps } from "./read-models"
 import type { ChatRecord } from "./events"
 import { createEmptyState } from "./events"
-import type { AgentProvider } from "../shared/types"
-import type { SubagentRunSnapshot } from "../shared/subagent-types"
+import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import { SUBAGENT_RECENT_ENTRY_LIMIT, type SubagentRunSnapshot } from "../shared/subagent-types"
 
 describe("read models", () => {
   test("include provider data in sidebar rows", () => {
@@ -718,8 +718,12 @@ describe("read models", () => {
   })
 })
 
-describe("deriveChatSnapshot subagent immutability", () => {
-  test("entries array is cloned per snapshot so later state mutations do not grow earlier snapshots", () => {
+describe("deriveChatSnapshot subagent run summaries", () => {
+  function entry(index: number): TranscriptEntry {
+    return { _id: `e${index}`, createdAt: index, kind: "assistant_text", text: `step ${index}` }
+  }
+
+  function snapshotWithRuns(runs: Array<{ id: string; status: SubagentRunSnapshot["status"]; entryTotal: number }>) {
     const state = createEmptyState()
     state.projectsById.set("p1", {
       id: "p1", localPath: "/tmp/p", title: "P", createdAt: 1, updatedAt: 1,
@@ -730,29 +734,32 @@ describe("deriveChatSnapshot subagent immutability", () => {
       unread: false, provider: "claude", planMode: false,
       sessionTokensByProvider: {}, sourceHash: null, lastTurnOutcome: null,
     })
-
-    type SubagentRunSnapshot = Parameters<typeof state.subagentRunsByChatId.set>[1] extends Map<string, infer V> ? V : never
-    const run = {
-      runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "alpha",
-      provider: "claude" as const, model: "claude-opus-4-7", status: "running" as const,
+    state.subagentRunsByChatId.set("c1", new Map(runs.map(({ id, status, entryTotal }): [string, SubagentRunSnapshot] => [id, {
+      runId: id, chatId: "c1", subagentId: "s1", subagentName: "alpha", label: null,
+      provider: "claude", model: "claude-opus-4-7", status,
       parentUserMessageId: "u1", parentRunId: null, depth: 0,
-      startedAt: 1000, finishedAt: null, finalText: null, error: null, usage: null,
-      entries: [
-        { _id: "e1", createdAt: 1, kind: "assistant_text", text: "a", messageId: "m1" },
-      ],
+      startedAt: 1000, finishedAt: status === "running" ? null : 2000, finalText: null, error: null, usage: null,
+      entries: Array.from({ length: entryTotal }, (_, index) => entry(index)),
       pendingTool: null,
-    } as unknown as SubagentRunSnapshot
-    const runMap = new Map<string, SubagentRunSnapshot>([["r1", run]])
-    state.subagentRunsByChatId.set("c1", runMap)
+    }])))
+    return deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] })
+  }
 
-    const snap1 = deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] })
-    const capturedEntries = snap1!.subagentRuns.r1!.entries
-    expect(capturedEntries).toHaveLength(1)
+  test("a running run carries its entry count and only the newest entries", () => {
+    const total = SUBAGENT_RECENT_ENTRY_LIMIT + 5
+    const run = snapshotWithRuns([{ id: "r1", status: "running", entryTotal: total }])!.subagentRuns.r1!
+    expect(run.entryCount).toBe(total)
+    expect(run.recentEntries.map((e) => e._id)).toEqual(
+      Array.from({ length: SUBAGENT_RECENT_ENTRY_LIMIT }, (_, i) => `e${total - SUBAGENT_RECENT_ENTRY_LIMIT + i}`),
+    )
+    expect("entries" in run).toBe(false)
+  })
 
-    ;(run.entries as unknown[]).push({ _id: "e2", createdAt: 2, kind: "assistant_text", text: "b", messageId: "m2" })
-
-    expect(capturedEntries).toHaveLength(1)
-    expect(run.entries).toHaveLength(2)
+  test("a settled run carries its entry count but no entries", () => {
+    const run = snapshotWithRuns([{ id: "r1", status: "completed", entryTotal: 50 }])!.subagentRuns.r1!
+    expect(run.entryCount).toBe(50)
+    expect(run.recentEntries).toEqual([])
+    expect("entries" in run).toBe(false)
   })
 })
 

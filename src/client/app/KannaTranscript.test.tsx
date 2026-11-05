@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import React from "react"
 import { CollapsedToolGroup } from "../components/messages/CollapsedToolGroup"
 import { SubagentMessage } from "../components/messages/SubagentMessage"
-import type { HydratedPreviewFileToolCall, HydratedTranscriptMessage, SubagentRunSnapshot } from "../../shared/types"
+import type { HydratedPreviewFileToolCall, HydratedTranscriptMessage, SubagentRunSummary } from "../../shared/types"
 import {
   buildResolvedTranscriptRows,
   computeStableResolvedTranscriptRows,
@@ -702,7 +702,7 @@ function makeDelegateTool(toolId: string, subagentId = "sa-1"): HydratedTranscri
   } as unknown as HydratedTranscriptMessage
 }
 
-function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUserMessageId: string }): SubagentRunSnapshot {
+function makeRun(over: Partial<SubagentRunSummary> & { runId: string; parentUserMessageId: string }): SubagentRunSummary {
   return {
     chatId: "c1",
     subagentId: "sa-1",
@@ -718,7 +718,8 @@ function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUse
     finalText: "done",
     error: null,
     usage: null,
-    entries: [],
+    entryCount: 0,
+    recentEntries: [],
     pendingTool: null,
     ...over,
   }
@@ -726,13 +727,13 @@ function makeRun(over: Partial<SubagentRunSnapshot> & { runId: string; parentUse
 
 function renderTranscriptWithRuns(
   messages: HydratedTranscriptMessage[],
-  subagentRuns: Record<string, SubagentRunSnapshot>,
+  subagentRuns: Record<string, SubagentRunSummary>,
 ) {
   const delegateCalls = extractDelegateCalls(messages)
   const topLevelRuns = Object.values(subagentRuns).filter((r) => r.parentRunId === null)
   const { matched: runsByDelegateToolId } = matchRunsToDelegateCalls(delegateCalls, topLevelRuns)
 
-  const childrenByParentRunId = new Map<string, SubagentRunSnapshot[]>()
+  const childrenByParentRunId = new Map<string, SubagentRunSummary[]>()
   for (const run of Object.values(subagentRuns)) {
     if (run.parentRunId === null) continue
     const list = childrenByParentRunId.get(run.parentRunId) ?? []
@@ -740,7 +741,7 @@ function renderTranscriptWithRuns(
     childrenByParentRunId.set(run.parentRunId, list)
   }
 
-  function renderRunTree(run: SubagentRunSnapshot, depth: number): React.ReactNode {
+  function renderRunTree(run: SubagentRunSummary, depth: number): React.ReactNode {
     const children = childrenByParentRunId.get(run.runId) ?? []
     return (
       <React.Fragment key={run.runId}>

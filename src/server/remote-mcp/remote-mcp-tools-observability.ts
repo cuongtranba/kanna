@@ -31,6 +31,15 @@ export const observabilityTools: readonly RemoteTool[] = [
     handle: (args, { run }) => run({ type: "subagents.getRun", ...args }),
   }),
   commandTool({
+    name: "get_subagent_run_entries",
+    title: "Read a subagent run log",
+    description: "Read the full entry log of one subagent run held by a chat.",
+    annotations: { readOnlyHint: true },
+    command: "subagentRun.getEntries",
+    input: (params) => params,
+    handle: (args, { run }) => run({ type: "subagentRun.getEntries", ...args }),
+  }),
+  commandTool({
     name: "get_background_task_output",
     title: "Read background task output",
     description: "Read the captured output of a background task started by a chat.",

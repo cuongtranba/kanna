@@ -16,8 +16,9 @@ import type {
   SidebarProjectGroup,
   StackSummary,
   SubagentRunSnapshot,
+  SubagentRunSummary,
 } from "../shared/types"
-import { mergeCustomModels } from "../shared/types"
+import { mergeCustomModels, SUBAGENT_RECENT_ENTRY_LIMIT } from "../shared/types"
 import type { ProviderCatalogEntry } from "../shared/provider-model-types"
 import { withCustomProviders, type CustomProviderPublic } from "../shared/custom-providers"
 import { buildLoopProgress } from "../shared/loop-progress"
@@ -40,6 +41,15 @@ import { liveRecord } from "./event-store-lookup"
 export const ACTIVE_SESSION_IDLE_GAP_MS = 30 * 60 * 1_000
 const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
 const SIDEBAR_FALLBACK_PREVIEW_LIMIT = 5
+
+function summarizeSubagentRun(run: SubagentRunSnapshot): SubagentRunSummary {
+  const { entries, ...rest } = run
+  return {
+    ...rest,
+    entryCount: entries.length,
+    recentEntries: run.status === "running" ? entries.slice(-SUBAGENT_RECENT_ENTRY_LIMIT) : [],
+  }
+}
 
 function projectChatTasksFromState(state: StoreState, chatId: string, nowMs: number): ChatTaskProjection {
   const events = state.chatTasksByChatId.get(chatId) ?? []
@@ -515,7 +525,7 @@ export function deriveChatSnapshot(
   const subagentRunsMap = state.subagentRunsByChatId.get(chat.id)
   const subagentRuns: ChatSnapshot["subagentRuns"] = subagentRunsMap
     ? Object.fromEntries(
-        Array.from(subagentRunsMap.entries(), ([id, run]) => [id, { ...run, entries: [...run.entries] }]),
+        Array.from(subagentRunsMap.entries(), ([id, run]) => [id, summarizeSubagentRun(run)]),
       )
     : {}
 

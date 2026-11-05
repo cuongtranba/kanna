@@ -2,11 +2,12 @@ import { createContext, useContext, type ReactNode } from "react"
 import type { AskUserQuestionItem, AskUserQuestionAnswerMap, AutoContinueSchedule, QueuedChatMessage, ChatBackgroundTask } from "../../shared/types"
 import type { CronJobSnapshot } from "../../shared/cron/types"
 import type { ToolRequestDecision } from "../../shared/permission-policy"
-import type { SubagentRunSnapshot, LoopProgressSnapshot } from "../../shared/subagent-types"
+import type { SubagentRunSummary, LoopProgressSnapshot } from "../../shared/subagent-types"
 import type { EditorPreset } from "../../shared/protocol"
 import type { CloudflareTunnelRecord } from "../../shared/settings/cloudflare-tunnel"
 import type { WorkflowRunSummary, WorkflowRun } from "../../shared/workflow-types"
 import type { GetSubagentTranscript } from "../components/messages/subagent-fetch-context"
+import type { GetSubagentRunEntries } from "../components/messages/subagent-run-entries-context"
 import type { KannaState } from "./useKannaState"
 import { DEFAULT_EDITOR_PRESET } from "../stores/terminalPreferencesStore"
 import { NO_LATEST_TOOL_IDS } from "./derived"
@@ -26,11 +27,12 @@ export interface TranscriptActionsContextValue {
   onToolGroupExpandedChange: (groupId: string, next: boolean) => void
   onSubagentAskUserQuestionSubmit?: (runId: string, toolUseId: string, questions: AskUserQuestionItem[], answers: AskUserQuestionAnswerMap) => Promise<void>
   onSubagentExitPlanModeSubmit?: (runId: string, toolUseId: string, response: { confirmed: boolean; clearContext?: boolean; message?: string }) => Promise<void>
-  subagentRuns: Record<string, SubagentRunSnapshot>
+  subagentRuns: Record<string, SubagentRunSummary>
   editorPreset: EditorPreset
   editorCommandTemplate: string | undefined
   onCancelSubagentRun?: (chatId: string, runId: string) => Promise<void>
   getSubagentTranscript?: GetSubagentTranscript
+  getSubagentRunEntries?: GetSubagentRunEntries
   platform: string
   tunnels?: Record<string, CloudflareTunnelRecord>
   liveTunnelId?: string | null
