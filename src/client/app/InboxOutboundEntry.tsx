@@ -3,8 +3,10 @@ import { outboundRetryState } from "../../shared/inbox/policy"
 import type { InboxOutboundMessage, InboxThread } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { StateMarkLabel } from "../components/ui/state-mark"
+import { HoverHint } from "../components/ui/truncated-text"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { formatStartedClock } from "../lib/formatters"
+import { outboundAuthorLabel, outboundProvenanceHint } from "../lib/inboxAutonomy"
 import { outboundStatusDisplay } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -13,6 +15,12 @@ import { useOptionalKannaSocket } from "./KannaSocketProvider"
 interface Props {
   thread: InboxThread
   outbound: InboxOutboundMessage
+}
+
+function AuthorLabel({ outbound }: { outbound: InboxOutboundMessage }) {
+  const label = <span className="font-medium">{outboundAuthorLabel(outbound)}</span>
+  const hint = outboundProvenanceHint(outbound)
+  return hint === null ? label : <HoverHint label={hint} side="top">{label}</HoverHint>
 }
 
 export function InboxOutboundEntry({ thread, outbound }: Props) {
@@ -50,7 +58,7 @@ export function InboxOutboundEntry({ thread, outbound }: Props) {
     <li className="py-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="min-w-0 whitespace-pre-wrap break-words text-sm text-foreground">
-          <span className="font-medium">You</span>
+          <AuthorLabel outbound={outbound} />
           <span className="text-muted-foreground"> · </span>
           {outbound.text}
         </p>

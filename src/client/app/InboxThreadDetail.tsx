@@ -15,7 +15,9 @@ import {
   verdictDisplay,
 } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
+import { InboxAutonomyControls } from "./InboxAutonomyControls"
 import { InboxOutboundEntry } from "./InboxOutboundEntry"
+import { InboxProposalCard } from "./InboxProposalCard"
 import { InboxReplyComposer } from "./InboxReplyComposer"
 import { chatPath } from "../lib/paneTree"
 
@@ -84,6 +86,7 @@ export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
               </Link>
             )}
           </div>
+          <InboxAutonomyControls thread={thread} />
         </header>
         <section aria-label="Agent's read" className="space-y-2">
           <h3 className="text-sm font-semibold text-foreground">Agent&apos;s read</h3>
@@ -103,6 +106,7 @@ export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
             )}
           </ul>
         </section>
+        <InboxProposalCard thread={thread} />
         <InboxReplyComposer thread={thread} onArchived={onArchived} />
       </div>
     </article>

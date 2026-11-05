@@ -4,7 +4,7 @@ import { isInboxInstructScheduleId } from "../../shared/inbound/handler-turn"
 import { INBOX_PROPOSAL_REASON_MAX_CHARS, type InboxAutonomyLevel } from "../../shared/inbox/autonomy"
 import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
 import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
-import { isAttention, threadSentByAgent } from "../../shared/inbox/policy"
+import { inboxItemMatchesFilter, inboxThreadMatchesFilter, isAttention } from "../../shared/inbox/policy"
 import {
   INBOX_DRAFT_INSTRUCTION_MAX_CHARS,
   INBOX_DRAFT_MAX_CHARS,
@@ -92,23 +92,6 @@ function sourceOf(envelope: BusEnvelope): { kind: InboxSourceKind; id: string } 
   return { kind: source.kind, id: inboundSourceId(source) }
 }
 
-function threadMatches(thread: InboxThread, filter: InboxFilter): boolean {
-  if (filter.sourceKind !== undefined && thread.sourceKind !== filter.sourceKind) return false
-  if (filter.projectId !== undefined) return false
-  if (filter.chatId !== undefined && thread.chatId !== filter.chatId) return false
-  if (filter.attentionOnly === true && thread.state !== "needs_you" && thread.state !== "new") return false
-  if (filter.sentByAgent === true && !threadSentByAgent(thread)) return false
-  return true
-}
-
-function itemMatches(item: InboxActivityItem, filter: InboxFilter): boolean {
-  if (filter.sourceKind !== undefined && item.source.kind !== filter.sourceKind) return false
-  if (filter.projectId !== undefined && item.projectId !== filter.projectId) return false
-  if (filter.chatId !== undefined && item.chatId !== filter.chatId) return false
-  if (filter.attentionOnly === true && !item.attention) return false
-  return true
-}
-
 export class InboxRegistry {
   private state: InboxState = createInboxState()
   private readonly writes = createSerialQueue()
@@ -194,12 +177,12 @@ export class InboxRegistry {
 
   page(beforeTs: number, limit: number, filter: InboxFilter = {}): InboxPage {
     const threads = [...this.state.threads.values()]
-      .filter((thread) => thread.lastMessageAt < beforeTs && threadMatches(thread, filter))
+      .filter((thread) => thread.lastMessageAt < beforeTs && inboxThreadMatchesFilter(thread, filter))
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
       .slice(0, limit)
       .map(cloneThread)
     const items = this.state.items
-      .filter((item) => item.ts < beforeTs && itemMatches(item, filter))
+      .filter((item) => item.ts < beforeTs && inboxItemMatchesFilter(item, filter))
       .sort((a, b) => b.ts - a.ts)
       .slice(0, limit)
     return { threads, items }

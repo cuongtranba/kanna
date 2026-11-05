@@ -119,7 +119,9 @@ export function newestOutbound(thread: InboxThread): InboxOutboundMessage | unde
 export function threadPreview(thread: InboxThread): string {
   const lastInbound = thread.messages[thread.messages.length - 1]
   const lastOutbound = newestOutbound(thread)
-  if (lastOutbound !== undefined && lastOutbound.ts > (lastInbound?.ts ?? 0)) return `You: ${lastOutbound.text}`
+  if (lastOutbound !== undefined && lastOutbound.ts > (lastInbound?.ts ?? 0)) {
+    return `${lastOutbound.by === "agent" ? "Agent" : "You"}: ${lastOutbound.text}`
+  }
   const summary = thread.report?.summary.trim() ?? ""
   if (summary.length > 0) return summary
   return lastInbound?.preview ?? ""

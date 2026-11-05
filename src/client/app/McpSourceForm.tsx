@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ChangeEvent, type ReactNode } from "react"
+import { useCallback, useMemo, type ChangeEvent } from "react"
 import { MCP_SOURCE_PRESET_IDS, MCP_SOURCE_PRESETS, type McpSourcePresetId } from "../../shared/mcp-sources/presets"
 import type { McpSource, McpSourceMode } from "../../shared/mcp-sources/types"
 import type { McpServerConfig, SidebarData } from "../../shared/types"
@@ -15,6 +15,8 @@ import { listInboundModelOptions, listInboundTargets } from "../lib/webhookTarge
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useMcpSourcesSectionStore } from "../stores/mcpSourcesSectionStore"
 import { InboundHandlerFields } from "./InboundHandlerFields"
+import { McpSourceAutonomyFields } from "./McpSourceAutonomyFields"
+import { Field } from "./McpSourceFormField"
 import { useProviderCatalog } from "./useProviderCatalog"
 import type { McpSourcesSectionHandlers } from "./McpSourcesSection"
 
@@ -22,16 +24,6 @@ const MODE_OPTIONS: SegmentedOption<McpSourceMode>[] = (["subscribe", "poll"] as
   value: mode,
   label: mcpSourceModeLabel(mode),
 }))
-
-function Field({ id, label, hint, children }: { id: string; label: string; hint?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-sm font-medium text-foreground">{label}</label>
-      {children}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  )
-}
 
 function serverOptions(servers: readonly McpServerConfig[], selectedId: string): SearchableOption[] {
   const usable = servers.filter((server) => server.transport !== "ws" && (server.enabled || server.id === selectedId))
@@ -240,6 +232,8 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
       </Field>
 
       <ReplyFields draft={draft} onChange={patchDraft} />
+
+      <McpSourceAutonomyFields draft={draft} onChange={patchDraft} />
 
       <Field id="mcp-source-reply-hint" label="Reply hint" hint="Used only when there is no reply tool: tells the agent how to send a reply through the server's tools when you answer from the Inbox.">
         <Textarea id="mcp-source-reply-hint" rows={3} value={draft.replyHint} onChange={(event) => patchDraft({ replyHint: event.target.value })} />

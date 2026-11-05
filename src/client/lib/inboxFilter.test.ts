@@ -115,3 +115,17 @@ describe("olderPageCursors", () => {
     expect(cursors).toEqual({ threadBefore: Number.MAX_SAFE_INTEGER, itemBefore: Number.MAX_SAFE_INTEGER })
   })
 })
+
+describe("sent by agent filter", () => {
+  test("keeps only threads the agent sent on and drops activity items", () => {
+    const sentByAgent = thread("agent", "replied", 300, {
+      outbound: [{ id: "o1", ts: 250, text: "on my way", by: "agent", status: "sent" }],
+    })
+    const sentByYou = thread("you", "replied", 400, {
+      outbound: [{ id: "o2", ts: 350, text: "hi", by: "you", status: "sent" }],
+    })
+    const records = visibleRecords("activity", [sentByAgent, sentByYou, thread("quiet", "fyi", 200)], [item("i1", 100)], { sentByAgent: true })
+    expect(ids(records)).toEqual(["agent"])
+    expect(hasActiveFilter({ sentByAgent: true })).toBe(true)
+  })
+})

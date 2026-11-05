@@ -14,9 +14,10 @@ import {
   type McpSourcePatch,
   type McpSourceReply,
 } from "../../shared/mcp-sources/types"
+import { autonomyDraftFrom, autonomyFromDraft, emptyAutonomyDraft, type McpSourceAutonomyDraft } from "./mcpSourceAutonomyDraft"
 import { parseMcpReplyArgs, parseMcpSourceArgs, validateMcpSource } from "../../shared/mcp-sources/validate"
 
-export interface McpSourceDraft {
+export interface McpSourceDraft extends McpSourceAutonomyDraft {
   name: string
   serverId: string
   mode: McpSourceMode
@@ -78,6 +79,7 @@ export function emptyMcpSourceDraft(): McpSourceDraft {
     replyHint: "",
     pushEnabled: true,
     ...replyFields(null),
+    ...emptyAutonomyDraft(),
   }
 }
 
@@ -112,6 +114,7 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
     textPath: source.textPath,
     ...handlerFields(source.handler),
     ...replyFields(source.reply),
+    ...autonomyDraftFrom(source.autonomy),
   }
   if (source.mode === "subscribe") {
     return {
@@ -195,6 +198,7 @@ export type McpSourceDraftResult = { ok: true; input: McpSourceInput } | { ok: f
 
 export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftResult {
   const { reply, errors: replyErrors } = replyFromDraft(draft)
+  const { autonomy, errors: autonomyErrors } = autonomyFromDraft(draft)
   const common = {
     name: draft.name.trim(),
     serverId: draft.serverId,
@@ -203,6 +207,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
     textPath: draft.textPath.trim(),
     handler: handlerFromDraft(draft),
     reply,
+    autonomy,
   }
   if (draft.mode === "subscribe") {
     const resyncText = draft.resyncSeconds.trim()
@@ -216,7 +221,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
       itemKeyPath: draft.subscribeItemKeyPath.trim() || null,
       resyncIntervalMs: resyncText.length > 0 && resyncValid ? Math.round(resyncSeconds * 1000) : null,
     }
-    const errors = [...(resyncValid ? [] : ["Resync interval must be a number of seconds"]), ...replyErrors, ...validateMcpSource(input)]
+    const errors = [...(resyncValid ? [] : ["Resync interval must be a number of seconds"]), ...replyErrors, ...autonomyErrors, ...validateMcpSource(input)]
     return errors.length > 0 ? { ok: false, errors } : { ok: true, input }
   }
   const parsedArgs = parseMcpSourceArgs(draft.argsText)
@@ -236,6 +241,7 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
     ...("error" in parsedArgs ? [parsedArgs.error] : []),
     ...(Number.isFinite(seconds) && seconds > 0 ? [] : ["Interval must be a number of seconds"]),
     ...replyErrors,
+    ...autonomyErrors,
     ...validateMcpSource(input),
   ]
   return errors.length > 0 ? { ok: false, errors } : { ok: true, input }

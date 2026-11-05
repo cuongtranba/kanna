@@ -31,6 +31,7 @@ function FilterChip({ label, active, onToggle }: { label: string; active: boolea
 
 export function InboxFilterBar({ filter, targets }: Props) {
   const toggleAttentionOnly = useInboxStore((state) => state.toggleAttentionOnly)
+  const toggleSentByAgent = useInboxStore((state) => state.toggleSentByAgent)
   const toggleSourceKind = useInboxStore((state) => state.toggleSourceKind)
   const setProjectFilter = useInboxStore((state) => state.setProjectFilter)
   const setChatFilter = useInboxStore((state) => state.setChatFilter)
@@ -56,6 +57,7 @@ export function InboxFilterBar({ filter, targets }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter activity">
       <FilterChip label="Needs attention" active={filter.attentionOnly === true} onToggle={toggleAttentionOnly} />
+      <FilterChip label="Sent by agent" active={filter.sentByAgent === true} onToggle={toggleSentByAgent} />
       {INBOX_SOURCE_FILTERS.map((entry) => (
         <FilterChip
           key={entry.kind}
