@@ -180,9 +180,29 @@ not an implementation detail.
   `{{path}}` substituted from the latest payload, the reply fenced, the original
   re-fenced under the untrusted notice) under
   `inbox-reply-<threadId>-<replyCount+1>` and marks the thread `replied`.
-  `inbox.instruct` always goes through the thread chat: it enqueues the
-  instruction plus the handler instruction so the agent reports a fresh draft,
-  under `inbox-instruct-<threadId>-<ts>`.
+  `inbox.instruct` ("Ask agent") always goes through the thread chat: it
+  enqueues `renderInstructPrompt`, which fences the user's instruction and the
+  optional current `draft` apart, forbids sending and asks for `inbox_report`
+  with `draft_reply`, under `inbox-instruct-<threadId>-<ts>` (built once by
+  `inboxInstructScheduleId`). An archived thread is refused. A quick prompt
+  (`INBOX_QUICK_PROMPTS`, one definition in `src/shared/inbox/quick-prompts.ts`)
+  sends its canned instruction plus the composer text as `draft`.
+- **Draft versions are thread-owned and persisted.** A report with a non-empty
+  `draft_reply` also records `inbox_thread_draft_added { threadId, draft }`;
+  `InboxThread.drafts` holds at most `INBOX_THREAD_MAX_DRAFTS` (5), oldest first,
+  each `{ id, text, at, origin: "triage" | "ask", instruction? }`. The origin is
+  `ask` when the thread's pending schedule id is an instruct id
+  (`isInboxInstructScheduleId`), and the instruction rides
+  `inbox_thread_pending.instruction` into the projection's `pendingInstruction`
+  map. A new inbound message deletes `report` but keeps `drafts`. The triage
+  prompt asks for a draft only for `needs_you`; no server filter, the prompt is
+  the one owner.
+- **Composer seeding rule** (`displayedReplyDraft` in `inboxStore.ts`): typed
+  text wins; otherwise the latest draft shows unless its id is the
+  `dismissedDraftId`. Send, Ask and Discard call `settleReplyDraft(threadId,
+  latestDraftId)`, so a Discard never re-seeds the same draft and a newer one
+  seeds. `isAgentReading` is just `pendingScheduleId !== undefined`, so a
+  reported thread with a pending ask reads "Agent reading".
 - **Outbound is never mixed with inbound.** `InboxThread.outbound` holds what
   the user sent; `messages` stays inbound only, because `latestPayload`,
   `threadPreview` and the message count read it. The Inbox UI interleaves the
@@ -213,7 +233,7 @@ not an implementation detail.
   `c3-126`). `/inbox` and `/inbox/:threadId` are page-kind `inbox`
   (`adr-20261013-pages-as-workspace-tabs`): the thread id rides the tab path
   and reaches `InboxPage` as a prop, never through `useParams`. Opening a
-  thread sends `inbox.markRead`; Send / Instruct / Archive / Mark all read /
+  thread sends `inbox.markRead`; Send / Ask agent / Archive / Mark all read /
   Load older go through `runPendingAction` and render pending. The composer's
   reply mode comes from `inboxReplyMode` (`direct` when the thread's MCP source
   has a `reply` target, `agent` when only a handler chat exists, else `none`);

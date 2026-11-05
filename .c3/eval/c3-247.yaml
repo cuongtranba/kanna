@@ -4,6 +4,7 @@ code:
   - src/shared/inbox/types.ts
   - src/shared/inbox/events.ts
   - src/shared/inbox/describe.ts
+  - src/shared/inbox/quick-prompts.ts
   - src/shared/inbox/describe.test.ts
   - src/shared/inbox/policy.ts
   - src/shared/inbox/policy.test.ts

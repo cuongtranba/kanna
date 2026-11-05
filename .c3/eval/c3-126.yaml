@@ -8,6 +8,7 @@ code:
   - src/client/app/InboxThreadDetail.tsx
   - src/client/app/InboxOutboundEntry.tsx
   - src/client/app/InboxThreadDetail.test.tsx
+  - src/client/app/InboxAskControls.tsx
   - src/client/app/InboxReplyComposer.tsx
   - src/client/app/InboxReplyComposer.test.tsx
   - src/client/app/InboxFilterBar.tsx

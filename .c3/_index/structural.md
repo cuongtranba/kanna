@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:fc82e35f8b7cf3767e075b6c14b5190f5a3700422480a4a5e30af3bcac213a2f -->
+<!-- hash: sha256:7f866ef52e05bb522d4470d346bb2c6f9c77cf0a44d541b3b3f1ef320943981f -->
 
 ## c3-0 — Kanna (system)
 
@@ -109,7 +109,7 @@ files: src/client/app/InboundHandlerFields.tsx, src/client/app/WebhookCopyButton
 ## c3-126 — inbox-ui (component)
 container: c3-1 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, ref-zustand-store, rule-zustand-store
-files: src/client/app/InboxActivityRow.tsx, src/client/app/InboxFilterBar.tsx, src/client/app/InboxOutboundEntry.tsx, src/client/app/InboxPage.test.tsx, src/client/app/InboxPage.tsx, src/client/app/InboxReplyComposer.test.tsx, src/client/app/InboxReplyComposer.tsx, src/client/app/InboxThreadDetail.test.tsx, src/client/app/InboxThreadDetail.tsx, src/client/app/InboxThreadRow.tsx, src/client/app/useInboxToasts.test.tsx, src/client/app/useInboxToasts.ts, src/client/lib/inboxFilter.test.ts, src/client/lib/inboxFilter.ts, src/client/lib/inboxPresentation.test.ts, src/client/lib/inboxPresentation.ts, src/client/stores/inboxStore.test.ts, src/client/stores/inboxStore.ts
+files: src/client/app/InboxActivityRow.tsx, src/client/app/InboxAskControls.tsx, src/client/app/InboxFilterBar.tsx, src/client/app/InboxOutboundEntry.tsx, src/client/app/InboxPage.test.tsx, src/client/app/InboxPage.tsx, src/client/app/InboxReplyComposer.test.tsx, src/client/app/InboxReplyComposer.tsx, src/client/app/InboxThreadDetail.test.tsx, src/client/app/InboxThreadDetail.tsx, src/client/app/InboxThreadRow.tsx, src/client/app/useInboxToasts.test.tsx, src/client/app/useInboxToasts.ts, src/client/lib/inboxFilter.test.ts, src/client/lib/inboxFilter.ts, src/client/lib/inboxPresentation.test.ts, src/client/lib/inboxPresentation.ts, src/client/stores/inboxStore.test.ts, src/client/stores/inboxStore.ts
 
 ## c3-2 — Server (container)
 context: c3-0
@@ -343,7 +343,7 @@ files: src/client/app/ServiceBusConsumersGroup.tsx, src/client/app/ServiceBusEmb
 ## c3-247 — inbox (component)
 container: c3-2 | context: c3-0
 refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing
-files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/types.ts
+files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/quick-prompts.ts, src/shared/inbox/types.ts
 
 ## c3-248 — mcp-sources (component)
 container: c3-2 | context: c3-0
@@ -701,6 +701,7 @@ src/client/lib/webhookTargets.test.ts → c3-125
 src/client/lib/webhookTargets.ts → c3-125
 src/client/stores/webhooksStore.ts → c3-125
 src/client/app/InboxActivityRow.tsx → c3-126
+src/client/app/InboxAskControls.tsx → c3-126
 src/client/app/InboxFilterBar.tsx → c3-126
 src/client/app/InboxOutboundEntry.tsx → c3-126
 src/client/app/InboxPage.test.tsx → c3-126
@@ -1296,6 +1297,7 @@ src/shared/inbox/describe.ts → c3-247
 src/shared/inbox/events.ts → c3-247
 src/shared/inbox/policy.test.ts → c3-247
 src/shared/inbox/policy.ts → c3-247
+src/shared/inbox/quick-prompts.ts → c3-247
 src/shared/inbox/types.ts → c3-247
 src/client/app/McpSourceForm.tsx → c3-248
 src/client/app/McpSourcesSection.test.tsx → c3-248
