@@ -1,7 +1,7 @@
 ---
 id: c3-202
 c3-version: 4
-c3-seal: b12bce7353d815013780827dba4f801f71cb76c19015ce993047303fd082d5aa
+c3-seal: 521f0a9481499fb76e4d483e3d4bca72eeef42e9066266f62e20100b6ef6232d
 title: http-ws-server
 type: component
 category: foundation
@@ -73,6 +73,7 @@ Hosts the Bun-side HTTP server, serves built client assets, exposes API + upgrad
 | /beacon scope sync | IN/OUT | Persists a validated set-scope, deletes the beacon on unpair, refuses unknown or disabled beacons before the challenge, and pushes the stored scope to connected protocol-2 beacons on every settings change | c3-241 | src/server/beacon-connection.ts |
 | /beacon update | IN/OUT | Sends the server version in ready and incompatible, keeps each beacon's last update_status until it reconnects, and answers beacons.update with a field-less update frame, refusing a beacon that is offline or below protocol 4; it never sends a URL or a version | c3-241 | src/server/beacon-registry.ts |
 | HTTP route inventory | IN | Every route and method listed in HTTP_ROUTES is answered by the dispatcher itself rather than falling through to the client bundle, proven against a real server with a signed-in session | c3-302 | src/server/http-route-inventory.test.ts, src/shared/http-routes.ts |
+| /api/inbox/proposals/approve | IN | POST of threadId and proposalId runs the same approveProposal as the inbox.approveProposal command and answers outboundId, 409 when the proposal is not open, 400 for a bad body | Behind the /api session gate (401 without a session when a password is set) and additionally refuses, with 403, a request whose Origin header is missing or not the server's own, with or without a password; the service worker's same-origin fetch satisfies both (c3-247) | src/server/inbox/proposal-approve-http.ts, src/server/http-dispatcher.ts |
 | /mcp | IN | Remote MCP Streamable HTTP endpoint, dispatched BEFORE the cookie gate because it authenticates with a bearer; answers 404 without --password or when remoteMcp.enabled is off | c3-242 | src/server/http-dispatcher.ts |
 
 ## Change Safety

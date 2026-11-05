@@ -177,6 +177,21 @@ describe("mcp source reply target", () => {
   })
 })
 
+describe("mcp source notification opt-ins", () => {
+  test("a new source keeps the message preview and the Send button off", () => {
+    const result = mcpSourceInputFromDraft({ ...emptyMcpSourceDraft(), name: "Feed", serverId: "srv", resourceUris: "feed://a", handlerMode: "notify", chatId: "c1" })
+    expect(result).toMatchObject({ ok: true, input: { autonomy: { sendFromNotification: false } } })
+    if (!result.ok) throw new Error("draft should be valid")
+    expect(result.input.handler.pushPreview).toBeUndefined()
+  })
+
+  test("a stored message preview opt-in round-trips through the form", () => {
+    const draft = draftFromMcpSource({ ...SUBSCRIBE, handler: { ...SUBSCRIBE.handler, pushPreview: true } })
+    expect(draft.pushPreview).toBe(true)
+    expect(mcpSourceInputFromDraft(draft)).toMatchObject({ ok: true, input: { handler: { pushPreview: true } } })
+  })
+})
+
 describe("mcp source autonomy", () => {
   const REPLY = { tool: "send", args: { text: "{{reply.text}}" }, resultIdPath: "" }
   const TUNED: McpSourceAutonomy = {
@@ -189,6 +204,7 @@ describe("mcp source autonomy", () => {
     allowUrls: true,
     maxChars: 500,
     sendDelaySeconds: 45,
+    sendFromNotification: true,
   }
 
   test("a stored autonomy config round-trips through the form unchanged", () => {

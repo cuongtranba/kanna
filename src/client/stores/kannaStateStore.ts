@@ -114,3 +114,5 @@ export const useKannaStateStore = create<KannaStateStoreState>()((set) => ({
     })),
   incrementFocusEpoch: () => set((state) => ({ focusEpoch: state.focusEpoch + 1 })),
 }))
+
+export const selectKeybindings = (state: KannaStateStoreState) => state.keybindings

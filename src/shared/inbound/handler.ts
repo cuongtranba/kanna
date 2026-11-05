@@ -24,6 +24,7 @@ export interface InboundHandler {
   template: string
   replyHint: string
   pushEnabled: boolean
+  pushPreview?: boolean
   provider?: AgentProvider
   model?: string
 }

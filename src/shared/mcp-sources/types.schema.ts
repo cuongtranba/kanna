@@ -28,6 +28,7 @@ export const mcpSourceAutonomySchema = z.object({
   allowUrls: z.boolean(),
   maxChars: z.number(),
   sendDelaySeconds: z.number(),
+  sendFromNotification: z.boolean(),
 })
 
 const mcpSourceAutonomyPartialSchema = mcpSourceAutonomySchema.partial()

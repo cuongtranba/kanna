@@ -85,6 +85,12 @@ export const HTTP_ROUTES = {
     purpose: "Create a resumable tus upload of an attachment into a project; the tus client continues with HEAD, PATCH and DELETE on the Location URL beneath this path.",
     remote: { kind: "mcp-tool", tool: "upload_attachment" },
   }),
+  inboxProposalApprove: defineRoute({
+    methods: ["POST"],
+    path: "/api/inbox/proposals/approve",
+    purpose: "Send an open inbox reply proposal from a push notification action; same-origin session only, and it runs the same approval as the inbox.approveProposal command.",
+    remote: { kind: "command", type: "inbox.approveProposal" },
+  }),
   pluginClientBundle: defineRoute({
     methods: ["GET"],
     path: "/api/plugins/:pluginId/client.js",

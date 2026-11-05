@@ -15,6 +15,7 @@ export interface McpSourceAutonomyDraft {
   autonomyAllowUrls: boolean
   autonomyMaxChars: string
   autonomySendDelaySeconds: string
+  autonomySendFromNotification: boolean
 }
 
 export function autonomyDraftFrom(autonomy: McpSourceAutonomy): McpSourceAutonomyDraft {
@@ -29,6 +30,7 @@ export function autonomyDraftFrom(autonomy: McpSourceAutonomy): McpSourceAutonom
     autonomyAllowUrls: autonomy.allowUrls,
     autonomyMaxChars: String(autonomy.maxChars),
     autonomySendDelaySeconds: String(autonomy.sendDelaySeconds),
+    autonomySendFromNotification: autonomy.sendFromNotification,
   }
 }
 
@@ -74,6 +76,7 @@ export function autonomyFromDraft(draft: McpSourceAutonomyDraft): { autonomy: Mc
     allowUrls: draft.autonomyAllowUrls,
     maxChars: numberOf({ text: draft.autonomyMaxChars, label: "Max characters", fallback: defaults.maxChars }, errors),
     sendDelaySeconds: numberOf({ text: draft.autonomySendDelaySeconds, label: "Send delay", fallback: defaults.sendDelaySeconds }, errors),
+    sendFromNotification: draft.autonomySendFromNotification,
   }
   return { autonomy, errors }
 }

@@ -209,6 +209,11 @@ export const KEYBINDING_ACTIONS = [
   "resizePaneRight",
   "resizePaneUp",
   "resizePaneDown",
+  "inboxNextThread",
+  "inboxPrevThread",
+  "inboxFocusComposer",
+  "inboxArchiveThread",
+  "inboxApproveProposal",
 ] as const
 
 export type KeybindingAction = (typeof KEYBINDING_ACTIONS)[number]
@@ -241,6 +246,11 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   resizePaneRight: ["cmd+ctrl+shift+arrowright", "ctrl+alt+shift+arrowright"],
   resizePaneUp: ["cmd+ctrl+shift+arrowup", "ctrl+alt+shift+arrowup"],
   resizePaneDown: ["cmd+ctrl+shift+arrowdown", "ctrl+alt+shift+arrowdown"],
+  inboxNextThread: ["j"],
+  inboxPrevThread: ["k"],
+  inboxFocusComposer: ["r"],
+  inboxArchiveThread: ["e"],
+  inboxApproveProposal: ["a"],
 }
 
 

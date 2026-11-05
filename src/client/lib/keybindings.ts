@@ -28,6 +28,11 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   resizePaneRight: "Resize Pane Right",
   resizePaneUp: "Resize Pane Up",
   resizePaneDown: "Resize Pane Down",
+  inboxNextThread: "Inbox: Next Thread",
+  inboxPrevThread: "Inbox: Previous Thread",
+  inboxFocusComposer: "Inbox: Reply To Thread",
+  inboxArchiveThread: "Inbox: Archive Thread",
+  inboxApproveProposal: "Inbox: Send Agent Proposal",
 }
 
 export function formatKeybindingInput(bindings: string[] | undefined) {
@@ -124,6 +129,21 @@ export function findMatchingActionBinding(
   event: KeyboardEvent
 ) {
   return getBindingsForAction(snapshot, action).find((binding) => bindingMatchesEvent(binding, event)) ?? null
+}
+
+export function resolveBoundCommand<Command>(
+  table: ReadonlyArray<readonly [KeybindingAction, Command]>,
+  snapshot: KeybindingsSnapshot | null,
+  event: KeyboardEvent,
+  typing: boolean,
+): Command | null {
+  for (const [action, command] of table) {
+    const binding = findMatchingActionBinding(snapshot, action, event)
+    if (!binding) continue
+    if (typing && !bindingHasModifier(binding)) return null
+    return command
+  }
+  return null
 }
 
 export function getBindingsForAction(

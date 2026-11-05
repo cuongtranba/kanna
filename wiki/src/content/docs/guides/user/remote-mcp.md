@@ -118,6 +118,7 @@ their MCP counterpart is:
 | --- | --- |
 | Resumable upload at `/api/projects/:projectId/uploads/tus` | `upload_attachment` |
 | File bytes at `/api/projects/:projectId/files/*/content` and `/api/projects/:projectId/uploads/:storedName/content` | `read_project_file`; a stored upload is the project file `.kanna/uploads/<name>` |
+| `/api/inbox/proposals/approve`, the Send button of an inbox push notification | The `inbox.approveProposal` command, through `kanna_command`; the route runs the same approval |
 | Path autocomplete, deleting an unsent upload, listing and reloading plugins | The `project.listPaths`, `upload.delete`, `plugins.list` and `plugins.reload` commands, through `kanna_command` |
 | `/auth/status`, `/auth/login`, `/auth/logout` | None: the MCP endpoint has its own bearer token or OAuth sign-in |
 | `/api/share/:token` | None: it is the public read-only page of a shared chat; read chats with `get_chat` or `kanna_read` |

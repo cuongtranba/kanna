@@ -249,6 +249,20 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
         Send a push notification for new messages
       </label>
 
+      <label className="flex cursor-pointer items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          checked={draft.pushPreview}
+          disabled={!draft.pushEnabled}
+          onChange={(event) => patchDraft({ pushPreview: event.target.checked })}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-foreground"
+        />
+        <span>
+          Show a preview of the message in the notification
+          <span className="block text-xs text-muted-foreground">Off by default. The preview passes through your push service and appears on your lock screen.</span>
+        </span>
+      </label>
+
       {!result.ok && draft.name.length > 0 ? <p className="text-xs text-destructive-text">{result.errors[0]}</p> : null}
       {error ? <p className="text-xs text-destructive-text">{error}</p> : null}
 

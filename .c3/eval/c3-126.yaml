@@ -24,3 +24,7 @@ code:
   - src/client/lib/inboxPresentation.ts
   - src/client/lib/inboxPresentation.test.ts
   - src/client/lib/inboxAutonomy.ts
+  - src/client/lib/inboxKeyboard.ts
+  - src/client/lib/inboxActions.ts
+  - src/client/app/useInboxKeyboard.ts
+  - src/client/app/InboxKeyboard.test.tsx

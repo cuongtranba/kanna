@@ -32,6 +32,7 @@ interface InboxState {
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
   retryConfirming: Readonly<Record<string, true>>
+  composerFocus: (() => void) | null
   applySnapshot(snapshot: InboxSnapshot): void
   appendPage(page: InboxPage): void
   setTab(tab: InboxTabId): void
@@ -48,6 +49,8 @@ interface InboxState {
   toggleRaw(messageId: string): void
   askRetryConfirm(outboundId: string): void
   dismissRetryConfirm(outboundId: string): void
+  registerComposerFocus(focus: () => void): () => void
+  focusComposer(): boolean
 }
 
 function nonEmpty<T>(list: readonly T[], empty: readonly T[]): readonly T[] {
@@ -84,7 +87,7 @@ export function displayedReplyDraft(stored: ReplyDraftState | undefined, drafts:
 const threadTs = (thread: InboxThread) => thread.lastMessageAt
 const itemTs = (item: InboxActivityItem) => item.ts
 
-export const useInboxStore = create<InboxState>()((set) => ({
+export const useInboxStore = create<InboxState>()((set, get) => ({
   threads: EMPTY_THREADS,
   items: EMPTY_ITEMS,
   unreadCount: 0,
@@ -97,6 +100,7 @@ export const useInboxStore = create<InboxState>()((set) => ({
   olderExhausted: false,
   rawOpen: NO_RAW_OPEN,
   retryConfirming: NO_RETRY_CONFIRMS,
+  composerFocus: null,
   applySnapshot: (snapshot) =>
     set((state) => ({
       threads: nonEmpty([...snapshot.threads, ...olderThan(state.threads, snapshot.threads, threadTs)], EMPTY_THREADS),
@@ -146,6 +150,15 @@ export const useInboxStore = create<InboxState>()((set) => ({
     set((state) => ({ retryConfirming: { ...state.retryConfirming, [outboundId]: true } })),
   dismissRetryConfirm: (outboundId) =>
     set((state) => ({ retryConfirming: omitKeyOrEmpty(state.retryConfirming, outboundId, NO_RETRY_CONFIRMS) })),
+  registerComposerFocus: (focus) => {
+    set({ composerFocus: focus })
+    return () => set((state) => (state.composerFocus === focus ? { composerFocus: null } : state))
+  },
+  focusComposer: () => {
+    const { composerFocus } = get()
+    composerFocus?.()
+    return composerFocus !== null
+  },
 }))
 
 export const selectInboxUnreadCount = (state: InboxState) => state.unreadCount

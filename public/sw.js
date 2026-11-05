@@ -1,22 +1,9 @@
 // Kanna service worker. Plain JS — no bundling.
 // Receives Web Push payloads, displays OS notifications grouped by project,
-// and routes notification taps to the right chat.
+// and routes notification taps to the right chat. The payload-to-notification
+// and click-to-action decisions live in sw-notifications.js so they stay testable.
 
-function bodyFor(payload) {
-  const title = payload.chatTitle || "(untitled)"
-  switch (payload.kind) {
-    case "waiting_for_user":
-      return `${title} — waiting for input`
-    case "failed":
-      return `${title} — failed`
-    case "completed":
-      return `${title} — done`
-    case "inbox":
-      return `${title} — ${payload.projectTitle || "Inbox"}`
-    default:
-      return title
-  }
-}
+importScripts("/sw-notifications.js")
 
 self.addEventListener("push", (event) => {
   let payload
@@ -28,27 +15,47 @@ self.addEventListener("push", (event) => {
   if (!payload || payload.v !== 1) return
 
   const title = `Kanna • ${payload.projectTitle || "Project"}`
-  event.waitUntil(self.registration.showNotification(title, {
-    body: bodyFor(payload),
-    tag: payload.threadId || payload.chatId,
-    renotify: true,
-    data: { chatUrl: payload.chatUrl, ts: payload.ts },
-  }))
+  event.waitUntil(self.registration.showNotification(title, kannaNotificationOptions(payload)))
 })
+
+async function openOrFocus(url) {
+  const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+  const hit = all.filter((c) => new URL(c.url).origin === self.location.origin)[0]
+  if (hit) {
+    await hit.focus()
+    hit.postMessage({ type: "kanna.navigate", url })
+  } else {
+    await self.clients.openWindow(url)
+  }
+}
+
+async function approveFromNotification(plan) {
+  try {
+    const response = await fetch(plan.endpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(plan.body),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
-  const url = (event.notification.data && event.notification.data.chatUrl) || "/"
+  const plan = kannaNotificationPlan(event.notification.data, event.action)
   event.waitUntil((async () => {
-    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
-    const sameOrigin = all.filter((c) => new URL(c.url).origin === self.location.origin)
-    const hit = sameOrigin[0]
-    if (hit) {
-      await hit.focus()
-      hit.postMessage({ type: "kanna.navigate", url })
-    } else {
-      await self.clients.openWindow(url)
+    if (plan.kind === "approve") {
+      if (await approveFromNotification(plan)) {
+        await self.registration.showNotification("Kanna", { body: "Sent", tag: event.notification.tag, silent: true })
+        return
+      }
+      await openOrFocus(plan.fallbackUrl)
+      return
     }
+    await openOrFocus(plan.url)
   })())
 })
 

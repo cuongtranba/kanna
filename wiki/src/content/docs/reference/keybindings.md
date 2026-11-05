@@ -66,6 +66,20 @@ Because every default is a modifier combination, these keep working while a
 terminal or the composer has focus. If you rebind one to a bare key, it is
 suppressed while you are typing so it cannot swallow your keystrokes.
 
+### Inbox
+
+| Action | Key |
+|---|---|
+| Inbox: Next Thread | `J` |
+| Inbox: Previous Thread | `K` |
+| Inbox: Reply To Thread | `R` |
+| Inbox: Archive Thread | `E` |
+| Inbox: Send Agent Proposal | `A` |
+
+These are bare keys, so they work only on the Inbox page and are suppressed while
+you type in the reply box or any other input. See
+[the Inbox guide](/guides/user/inbox/#keyboard-shortcuts).
+
 ## Customization
 
 Settings → **Keybindings** → click any row to remap. Each action accepts one or more bindings separated by commas.

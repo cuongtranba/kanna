@@ -95,8 +95,9 @@ import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
 import { createReferencedChatIds } from "./inbound/referenced-chat-ids"
-import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpAutopilotSourceResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox/inbox-boot"
 import { createInboxOutbox } from "./inbox/inbox-outbox"
+import type { InboxActions } from "./ws-router-inbox"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
 import { createStoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
@@ -154,6 +155,7 @@ interface ApplicationServices {
   webhooks: WebhookService
   scheduleManager: ScheduleManager
   cronScheduler: CronScheduler
+  inboxActions: InboxActions
   lifetime: Lifetime
 }
 
@@ -418,6 +420,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     rememberKey: mcpSources.rememberKey,
   })
   const inboxAutopilot = wireInboxAutopilot(inbox, inboxOutbox, mcpSources)
+  const { inboxActions } = createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources), inboxOutbox, inboxAutopilot)
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -545,7 +548,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     mcpSources,
     referencedChatIds: createReferencedChatIds({ mcpSources, webhooks: webhooks.registry, inbox }),
     serviceBus: bus,
-    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources), inboxOutbox, inboxAutopilot),
+    inboxActions,
   })
 
   lifetime.defer("teardown", () => router.dispose())
@@ -560,7 +563,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   webhooks.registry.subscribe(() => { router.pushWebhooks() })
   inbox.subscribe(() => { router.pushInbox() })
   bus.subscribeStatus(() => { router.pushServiceBus() })
-  wireInboxPush(inbox, pushManager, inboxHandlerResolver(webhooks.registry, mcpSources))
+  wireInboxPush(inbox, pushManager, inboxHandlerResolver(webhooks.registry, mcpSources), mcpAutopilotSourceResolver(mcpSources))
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }
@@ -592,6 +595,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     webhooks,
     scheduleManager,
     cronScheduler,
+    inboxActions,
     lifetime,
   }
 }
@@ -639,7 +643,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets, inboxApproveProposal: services.inboxActions.approveProposal })
 
   const port = options.port ?? 3210
   const hostname = options.host ?? "127.0.0.1"

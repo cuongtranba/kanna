@@ -166,6 +166,46 @@ Each message sent directly shows a status under it:
 
 The thread becomes **Replied** only after a message reaches **Sent**.
 
+## Notifications and the Send button
+
+A thread that needs you, and an agent proposal waiting for your approval, send a
+[push notification](/guides/user/push-notifications/#inbox-notifications) when the
+source's **Send a push notification** switch is on. Two more switches per source
+are off until you turn them on, because a notification travels through your
+browser vendor's push service and shows on your lock screen:
+
+- **Show a preview of the message in the notification** (the source's form) puts
+  the latest message, or the proposed reply, in the notification body, cut to 140
+  characters. Without it the notification names only the sender and the source,
+  and an approval card reads "Agent wants to reply".
+- **Add a Send button to the notification of an approval card** (the source's
+  Autonomy section) lets you send the proposed text from the notification without
+  opening Kanna.
+
+The Send button posts to Kanna with your signed-in browser session. If anything
+goes wrong, such as no connection, a session that has expired or a proposal that
+is no longer waiting, Kanna does not retry: tapping Send opens the thread so you
+can decide there. Only the thread and proposal ids are in the notification, never
+a token or a password.
+
+## Keyboard shortcuts
+
+These work while the Inbox is open and you are not typing in a box. They are
+single keys, so a shortcut never fires while the reply box or any other input has
+focus.
+
+| Key | Does |
+| --- | --- |
+| `J` | Open the next thread in the list |
+| `K` | Open the previous thread |
+| `R` | Put the cursor in the reply box of the open thread |
+| `E` | Archive the open thread |
+| `A` | Send the open thread's approval card; nothing happens when there is none |
+
+With no thread open, `J` opens the first one and `K` the last one. Rebind any of
+them under Settings → Keybindings, where they are listed as "Inbox: …".
+**⌘↵** in the reply box still asks the agent and never sends.
+
 ## Where things are stored
 
 The Inbox keeps the last 2,000 threads and activity records in

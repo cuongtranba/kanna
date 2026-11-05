@@ -5,6 +5,8 @@ import type { AuthManager } from "./auth"
 import type { SessionShareService } from "./session-share"
 import type { RemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
 import { handleShareApiRequest } from "./session-share/http-routes"
+import { handleProposalApproveRequest } from "./inbox/proposal-approve-http"
+import type { InboxActions } from "./ws-router-inbox"
 import { handleWebhookRequest } from "./webhooks/webhook-http-routes"
 import type { WebhookService } from "./webhooks/webhook-service"
 import type { SocketState } from "./ws-router-utils"
@@ -41,6 +43,7 @@ export interface HttpDispatcherDeps {
   remoteMcp: RemoteMcpRuntime
   webhooks: WebhookService
   beaconTransferTickets: BeaconTransferTickets
+  inboxApproveProposal: InboxActions["approveProposal"]
   distDir: string
 }
 
@@ -99,7 +102,7 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<SocketState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, distDir } = deps
+  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, inboxApproveProposal, distDir } = deps
 
   configurePluginService(createInstalledPluginStore(appSettings))
 
@@ -194,6 +197,9 @@ export function createHttpDispatcher(
       })
       if (pluginResponse) return pluginResponse
     }
+
+    const proposalApproveResponse = await handleProposalApproveRequest(req, url, inboxApproveProposal, auth)
+    if (proposalApproveResponse) return proposalApproveResponse
 
     const tusMatch = TUS_UPLOAD_ROUTE.exec(url.pathname)
     if (isTusRequest(tusMatch, req.method)) return tusUploads.handle(req, tusMatch[1])

@@ -114,9 +114,27 @@ export function createInboxReplyActions(
   }
 }
 
-export function wireInboxPush(inbox: InboxRegistry, pushManager: Pick<PushManager, "notifyInbox">, resolveHandler: InboundHandlerResolver): () => void {
-  return inbox.onNeedsYou((thread) => {
-    if (resolveHandler(thread)?.pushEnabled === false) return
-    void pushManager.notifyInbox(thread)
+export function wireInboxPush(
+  inbox: InboxRegistry,
+  pushManager: Pick<PushManager, "notifyInbox" | "notifyInboxProposal">,
+  resolveHandler: InboundHandlerResolver,
+  resolveSource: AutopilotSourceResolver,
+): () => void {
+  const stopNeedsYou = inbox.onNeedsYou((thread) => {
+    const handler = resolveHandler(thread)
+    if (handler?.pushEnabled === false) return
+    void pushManager.notifyInbox(thread, handler?.pushPreview === true)
   })
+  const stopProposals = inbox.onProposalOpened((thread, proposal) => {
+    const handler = resolveHandler(thread)
+    if (handler?.pushEnabled === false) return
+    void pushManager.notifyInboxProposal(thread, proposal, {
+      withPreview: handler?.pushPreview === true,
+      withSendAction: resolveSource(thread)?.autonomy.sendFromNotification === true,
+    })
+  })
+  return () => {
+    stopNeedsYou()
+    stopProposals()
+  }
 }

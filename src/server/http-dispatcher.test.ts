@@ -256,3 +256,57 @@ describe("WebSocket upgrade", () => {
     }
   })
 })
+
+describe("POST /api/inbox/proposals/approve", () => {
+  const approve = (port: number, headers: Record<string, string>) =>
+    fetch(`http://127.0.0.1:${port}/api/inbox/proposals/approve`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ threadId: "t1", proposalId: "p1" }),
+    })
+
+  async function signIn(port: number): Promise<string> {
+    const response = await fetch(`http://127.0.0.1:${port}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "secret" }),
+    })
+    return response.headers.getSetCookie().map((cookie) => cookie.split(";")[0]).join("; ")
+  }
+
+  test("without a session it answers 401 before looking at the body", async () => {
+    const { distDir, dataDir } = await makeDistDir()
+    const server = await startKannaServer({ dataDir, distDir, port: 0, password: "secret", discoverProjects: () => [] })
+    try {
+      const res = await approve(server.port, { origin: `http://127.0.0.1:${server.port}` })
+      expect(res.status).toBe(401)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("a signed-in session from another origin answers 403, from the same origin reaches the approval and answers 409 for an unknown proposal", async () => {
+    const { distDir, dataDir } = await makeDistDir()
+    const server = await startKannaServer({ dataDir, distDir, port: 0, password: "secret", discoverProjects: () => [] })
+    try {
+      const cookie = await signIn(server.port)
+      expect(cookie).not.toBe("")
+      expect((await approve(server.port, { cookie, origin: "http://evil.example.com" })).status).toBe(403)
+      expect((await approve(server.port, { cookie })).status).toBe(403)
+      expect((await approve(server.port, { cookie, origin: `http://127.0.0.1:${server.port}` })).status).toBe(409)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  test("with no password it still refuses a cross-origin request", async () => {
+    const { distDir, dataDir } = await makeDistDir()
+    const server = await startKannaServer({ dataDir, distDir, port: 0, discoverProjects: () => [] })
+    try {
+      expect((await approve(server.port, { origin: "http://evil.example.com" })).status).toBe(403)
+      expect((await approve(server.port, { origin: `http://127.0.0.1:${server.port}` })).status).toBe(409)
+    } finally {
+      await server.stop()
+    }
+  })
+})

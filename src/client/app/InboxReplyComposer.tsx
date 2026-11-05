@@ -1,10 +1,11 @@
-import { useCallback } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { Button } from "../components/ui/button"
 import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
 import type { InboxQuickPrompt } from "../../shared/inbox/quick-prompts"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
+import { archiveInboxThread } from "../lib/inboxActions"
 import { inboxAskBlockedReason, inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
 import { selectMcpSources, useAppSettingsStore } from "../stores/appSettingsStore"
 import { displayedReplyDraft, useInboxStore } from "../stores/inboxStore"
@@ -139,17 +140,19 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
     useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
   }, [latestDraftId, thread.id])
 
-  const handleArchive = useCallback(() => {
-    runPendingAction(archiveKey, async () => {
-      await sendCommandWithFeedback(socket, { type: "inbox.archive", threadId: thread.id })
-      onArchived()
-    })
-  }, [archiveKey, onArchived, socket, thread.id])
+  const handleArchive = useCallback(() => archiveInboxThread(socket, thread.id, onArchived), [onArchived, socket, thread.id])
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(
+    () => useInboxStore.getState().registerComposerFocus(() => textareaRef.current?.focus()),
+    [],
+  )
 
   return (
     <section aria-label="Reply" className="space-y-2">
       <DraftChips threadId={thread.id} drafts={thread.drafts} currentText={draft} />
       <Textarea
+        ref={textareaRef}
         aria-label="Reply to the sender"
         rows={5}
         maxLength={INBOX_REPLY_MAX_CHARS}
