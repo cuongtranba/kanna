@@ -1,13 +1,17 @@
 import { z } from "zod"
 import type { JsonValue } from "../json"
 import { assertParity } from "../type-parity"
+import { INBOX_AUTONOMY_LEVELS, type InboxAutonomyLevel } from "./autonomy"
 import {
   INBOX_OUTBOUND_SETTLED_STATUSES,
+  INBOX_PROPOSAL_RESOLUTIONS,
   type InboundMessage,
   type InboxActivityItem,
   type InboxDraft,
   type InboxOutboundMessage,
   type InboxOutboundSettledStatus,
+  type InboxProposal,
+  type InboxProposalResolution,
   type InboxReport,
   type InboxThread,
 } from "./types"
@@ -16,13 +20,14 @@ import {
   inboxActivityItemSchema,
   inboxDraftSchema,
   inboxOutboundMessageSchema,
+  inboxProposalSchema,
   inboxReportSchema,
   inboxThreadHeaderSchema,
 } from "./types.schema"
 
 export type InboxThreadHeader = Pick<InboxThread, "id" | "sourceKind" | "sourceId" | "sourceName" | "threadKey" | "sender">
 
-export type InboxQueuedOutbound = Pick<InboxOutboundMessage, "id" | "ts" | "text" | "by" | "retryOf">
+export type InboxQueuedOutbound = Pick<InboxOutboundMessage, "id" | "ts" | "text" | "by" | "retryOf" | "proposal">
 
 interface InboxEventBase {
   v: 1
@@ -41,6 +46,17 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_thread_replied"; threadId: string; chatId: string; scheduleId: string })
   | (InboxEventBase & { kind: "inbox_thread_archived"; threadId: string })
   | (InboxEventBase & { kind: "inbox_thread_outbound_queued"; threadId: string; outbound: InboxQueuedOutbound })
+  | (InboxEventBase & { kind: "inbox_thread_autonomy_set"; threadId: string; level: InboxAutonomyLevel | null })
+  | (InboxEventBase & { kind: "inbox_thread_agent_paused"; threadId: string; until: number | null })
+  | (InboxEventBase & { kind: "inbox_thread_proposal_added"; threadId: string; proposal: InboxProposal })
+  | (InboxEventBase & {
+      kind: "inbox_thread_proposal_resolved"
+      threadId: string
+      proposalId: string
+      resolution: InboxProposalResolution
+      outboundId?: string
+      at: number
+    })
   | (InboxEventBase & {
       kind: "inbox_thread_outbound_settled"
       threadId: string
@@ -87,7 +103,24 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     ...eventBase,
     kind: z.literal("inbox_thread_outbound_queued"),
     threadId: z.string(),
-    outbound: inboxOutboundMessageSchema.pick({ id: true, ts: true, text: true, by: true, retryOf: true }),
+    outbound: inboxOutboundMessageSchema.pick({ id: true, ts: true, text: true, by: true, retryOf: true, proposal: true }),
+  }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_autonomy_set"),
+    threadId: z.string(),
+    level: z.enum(INBOX_AUTONOMY_LEVELS).nullable(),
+  }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_agent_paused"), threadId: z.string(), until: z.number().nullable() }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_proposal_added"), threadId: z.string(), proposal: inboxProposalSchema }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_proposal_resolved"),
+    threadId: z.string(),
+    proposalId: z.string(),
+    resolution: z.enum(INBOX_PROPOSAL_RESOLUTIONS),
+    outboundId: z.string().optional(),
+    at: z.number(),
   }),
   z.object({
     ...eventBase,

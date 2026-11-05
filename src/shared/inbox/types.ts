@@ -1,6 +1,7 @@
 import type { JsonValue } from "../json"
 import type { BusSource } from "../service-bus/envelope"
 import { oneOf } from "../vocab"
+import type { InboxAutonomyLevel } from "./autonomy"
 
 export const INBOX_THREAD_STATES = ["new", "needs_you", "fyi", "handled", "replied", "archived"] as const
 export type InboxThreadState = (typeof INBOX_THREAD_STATES)[number]
@@ -17,14 +18,21 @@ export type InboxOutboundSettledStatus = (typeof INBOX_OUTBOUND_SETTLED_STATUSES
 export const INBOX_OUTBOUND_STATUSES = ["pending", ...INBOX_OUTBOUND_SETTLED_STATUSES] as const
 export type InboxOutboundStatus = (typeof INBOX_OUTBOUND_STATUSES)[number]
 
-export const INBOX_OUTBOUND_BYS = ["you"] as const
+export const INBOX_OUTBOUND_BYS = ["you", "approved", "agent"] as const
 export type InboxOutboundBy = (typeof INBOX_OUTBOUND_BYS)[number]
+
+export interface InboxOutboundProvenance {
+  id: string
+  confidence: number
+  reason: string
+}
 
 export interface InboxOutboundMessage {
   id: string
   ts: number
   text: string
   by: InboxOutboundBy
+  proposal?: InboxOutboundProvenance
   status: InboxOutboundStatus
   error?: string
   resultId?: string
@@ -50,7 +58,7 @@ export interface InboxReport {
   chatId: string
 }
 
-export const INBOX_DRAFT_ORIGINS = ["triage", "ask"] as const
+export const INBOX_DRAFT_ORIGINS = ["triage", "ask", "proposal"] as const
 export type InboxDraftOrigin = (typeof INBOX_DRAFT_ORIGINS)[number]
 
 export interface InboxDraft {
@@ -60,6 +68,31 @@ export interface InboxDraft {
   origin: InboxDraftOrigin
   instruction?: string
 }
+
+export const INBOX_PROPOSAL_STATUSES = ["open", "scheduled"] as const
+export type InboxProposalStatus = (typeof INBOX_PROPOSAL_STATUSES)[number]
+
+export const INBOX_PROPOSAL_RESOLUTIONS = ["sent", "rejected", "cancelled", "expired"] as const
+export type InboxProposalResolution = (typeof INBOX_PROPOSAL_RESOLUTIONS)[number]
+
+export interface InboxProposal {
+  id: string
+  text: string
+  confidence: number
+  reason: string
+  at: number
+  status: InboxProposalStatus
+  scheduledFor?: number
+  blockedBy?: string
+}
+
+export interface InboxProposeSend {
+  text: string
+  confidence: number
+  reason: string
+}
+
+export const INBOX_PROPOSAL_RESTART_BLOCKED_BY = "Kanna restarted before the auto-send"
 
 export interface InboxThread {
   id: string
@@ -78,6 +111,9 @@ export interface InboxThread {
   lastMessageAt: number
   replyCount: number
   pendingScheduleId?: string
+  autonomy?: InboxAutonomyLevel
+  agentPausedUntil?: number
+  proposal?: InboxProposal
 }
 
 export interface InboxActivityItem {
@@ -99,6 +135,7 @@ export interface InboxFilter {
   projectId?: string
   chatId?: string
   attentionOnly?: boolean
+  sentByAgent?: boolean
 }
 
 export interface InboxSnapshot {
@@ -117,15 +154,5 @@ export const INBOX_PREVIEW_MAX_CHARS = 160
 export const INBOX_THREAD_MAX_MESSAGES = 50
 export const INBOX_THREAD_MAX_DRAFTS = 5
 export const INBOX_DRAFT_INSTRUCTION_MAX_CHARS = 200
-
-const INBOX_INSTRUCT_SCHEDULE_PREFIX = "inbox-instruct-"
-
-export function inboxInstructScheduleId(threadId: string, at: number): string {
-  return `${INBOX_INSTRUCT_SCHEDULE_PREFIX}${threadId}-${at}`
-}
-
-export function isInboxInstructScheduleId(scheduleId: string | undefined): boolean {
-  return scheduleId?.startsWith(INBOX_INSTRUCT_SCHEDULE_PREFIX) === true
-}
 
 export const isInboxVerdict = oneOf(INBOX_VERDICTS)

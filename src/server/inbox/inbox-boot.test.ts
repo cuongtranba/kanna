@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { expect, test } from "vite-plus/test"
 import type { InboundHandler } from "../../shared/inbound/handler"
 import type { InboxThread } from "../../shared/inbox/types"
@@ -9,7 +10,8 @@ import { deliverInbound } from "../inbound/deliver-inbound"
 import { createInboxHarness } from "../test-helpers/inbox-harness"
 import { waitFor } from "../test-helpers/wait-for"
 import { createWebhookHarness } from "../test-helpers/webhook-harness"
-import { createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxPush } from "./inbox-boot"
+import { createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox-boot"
+import { createFakeAutopilotClock } from "../test-helpers/autopilot-clock"
 import { createInboxOutbox } from "./inbox-outbox"
 
 function inbound(): BusEnvelope {
@@ -52,6 +54,7 @@ const SOURCE: McpSource = {
   itemsPath: "messages",
   itemKeyPath: null,
   intervalMs: 15000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -132,7 +135,8 @@ async function routedThread(options: { reply: McpSourceReply | null; mode: "noti
     callTool: async (_sourceId, _name, args) => { calls.push(args); return {} },
     rememberKey: () => {},
   })
-  const { inboxActions } = createInboxReplyActions(harness.store, harness.agent, harness.inbox, () => handler, outbox)
+  const autopilot = wireInboxAutopilot(harness.inbox, outbox, { sources: () => [source] }, createFakeAutopilotClock(0))
+  const { inboxActions } = createInboxReplyActions(harness.store, harness.agent, harness.inbox, () => handler, outbox, autopilot)
   return { ...harness, inboxActions, calls, threadId: result.threadId }
 }
 

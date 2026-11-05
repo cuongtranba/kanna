@@ -1,19 +1,25 @@
 import type { InboxPage } from "../../shared/inbox/types.schema"
 import { toError } from "../../shared/errors"
+import { isInboxInstructScheduleId } from "../../shared/inbound/handler-turn"
+import { INBOX_PROPOSAL_REASON_MAX_CHARS, type InboxAutonomyLevel } from "../../shared/inbox/autonomy"
 import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
 import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
-import { isAttention } from "../../shared/inbox/policy"
+import { isAttention, threadSentByAgent } from "../../shared/inbox/policy"
 import {
   INBOX_DRAFT_INSTRUCTION_MAX_CHARS,
   INBOX_DRAFT_MAX_CHARS,
   INBOX_OUTBOUND_RESTART_ERROR,
+  INBOX_PROPOSAL_RESTART_BLOCKED_BY,
+  INBOX_REPLY_MAX_CHARS,
   INBOX_SUMMARY_MAX_CHARS,
-  isInboxInstructScheduleId,
   type InboundMessage,
   type InboxDraft,
   type InboxActivityItem,
   type InboxFilter,
   type InboxOutboundSettledStatus,
+  type InboxProposal,
+  type InboxProposalResolution,
+  type InboxProposeSend,
   type InboxReport,
   type InboxSnapshot,
   type InboxSourceKind,
@@ -21,6 +27,7 @@ import {
   type InboxVerdict,
 } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
+import { agentSendsSince } from "./inbox-autonomy"
 import { createSerialQueue } from "../serial-lane"
 import { createBusEnvelope, inboundSourceId, type BusEnvelope } from "../../shared/service-bus/envelope"
 import { ALL_BUS_SUBJECTS, inboxBusSubject, isInboxSubject, namedBusSubject } from "../../shared/service-bus/subjects"
@@ -68,7 +75,15 @@ function cloneThread(thread: InboxThread): InboxThread {
     messages: [...thread.messages],
     outbound: thread.outbound.map((outbound) => ({ ...outbound })),
     drafts: thread.drafts.map((draft) => ({ ...draft })),
+    ...(thread.proposal === undefined ? {} : { proposal: { ...thread.proposal } }),
   }
+}
+
+function cleanProposeSend(input: InboxProposeSend): InboxProposeSend | null {
+  const text = input.text.trim().slice(0, INBOX_REPLY_MAX_CHARS)
+  if (text.length === 0) return null
+  const confidence = Number.isFinite(input.confidence) ? Math.min(1, Math.max(0, input.confidence)) : 0
+  return { text, confidence, reason: input.reason.trim().slice(0, INBOX_PROPOSAL_REASON_MAX_CHARS) }
 }
 
 function sourceOf(envelope: BusEnvelope): { kind: InboxSourceKind; id: string } | null {
@@ -82,6 +97,7 @@ function threadMatches(thread: InboxThread, filter: InboxFilter): boolean {
   if (filter.projectId !== undefined) return false
   if (filter.chatId !== undefined && thread.chatId !== filter.chatId) return false
   if (filter.attentionOnly === true && thread.state !== "needs_you" && thread.state !== "new") return false
+  if (filter.sentByAgent === true && !threadSentByAgent(thread)) return false
   return true
 }
 
@@ -98,6 +114,7 @@ export class InboxRegistry {
   private readonly writes = createSerialQueue()
   private readonly listeners = new Set<() => void>()
   private readonly needsYouListeners = new Set<(thread: InboxThread) => void>()
+  private readonly proposalListeners = new Set<(threadId: string, proposal: InboxProposeSend) => Promise<void>>()
   private unsubscribe: (() => void) | null = null
 
   constructor(
@@ -115,6 +132,7 @@ export class InboxRegistry {
       await this.logPort.rewrite(compactInboxEvents(events, dropped))
     }
     await this.settleInterruptedOutbound()
+    this.reopenScheduledProposals()
     this.unsubscribe?.()
     this.unsubscribe = this.bus.subscribe(ALL_BUS_SUBJECTS, (envelope) => this.onEnvelope(envelope))
   }
@@ -134,6 +152,13 @@ export class InboxRegistry {
     this.needsYouListeners.add(listener)
     return () => {
       this.needsYouListeners.delete(listener)
+    }
+  }
+
+  onProposeSend(listener: (threadId: string, proposal: InboxProposeSend) => Promise<void>): () => void {
+    this.proposalListeners.add(listener)
+    return () => {
+      this.proposalListeners.delete(listener)
     }
   }
 
@@ -238,6 +263,7 @@ export class InboxRegistry {
     verdict: InboxVerdict,
     summary: string,
     draftReply?: string,
+    proposeSend?: InboxProposeSend,
   ): Promise<InboxReportResult> {
     const thread = this.state.threads.get(threadId)
     if (!thread) return { ok: false, error: `Unknown inbox thread ${threadId}` }
@@ -255,7 +281,65 @@ export class InboxRegistry {
     }
     if (report.draftReply !== undefined) this.recordDraft(thread, report.draftReply, report.at)
     await this.applyReport(threadId, report)
+    const proposal = proposeSend === undefined ? null : cleanProposeSend(proposeSend)
+    if (proposal !== null) for (const listener of this.proposalListeners) await listener(threadId, proposal)
     return { ok: true }
+  }
+
+  async setThreadAutonomy(threadId: string, level: InboxAutonomyLevel | null): Promise<void> {
+    if (!this.state.threads.has(threadId)) return
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_autonomy_set", threadId, level })
+    await this.flush()
+  }
+
+  async pauseAgent(threadId: string, until: number | null): Promise<void> {
+    if (!this.state.threads.has(threadId)) return
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_agent_paused", threadId, until })
+    await this.flush()
+  }
+
+  async addProposal(threadId: string, proposal: InboxProposal): Promise<void> {
+    const thread = this.state.threads.get(threadId)
+    if (!thread) return
+    if (thread.proposal !== undefined) {
+      this.record(this.proposalResolvedEvent(threadId, thread.proposal.id, "expired"))
+    }
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_proposal_added", threadId, proposal })
+    await this.flush()
+  }
+
+  async resolveProposal(
+    threadId: string,
+    proposalId: string,
+    resolution: InboxProposalResolution,
+    outboundId?: string,
+  ): Promise<boolean> {
+    if (this.state.threads.get(threadId)?.proposal?.id !== proposalId) return false
+    this.record(this.proposalResolvedEvent(threadId, proposalId, resolution, outboundId))
+    await this.flush()
+    return true
+  }
+
+  async recordProposalDraft(threadId: string, text: string): Promise<void> {
+    const thread = this.state.threads.get(threadId)
+    if (!thread) return
+    const at = this.now()
+    this.record({
+      v: 1,
+      ts: at,
+      kind: "inbox_thread_draft_added",
+      threadId,
+      draft: { id: crypto.randomUUID(), text, at, origin: "proposal" },
+    })
+    await this.flush()
+  }
+
+  agentSendCount(sourceId: string, since: number): number {
+    let count = 0
+    for (const thread of this.state.threads.values()) {
+      if (thread.sourceId === sourceId) count += agentSendsSince(thread.outbound, since)
+    }
+    return count
   }
 
   async escalate(threadId: string, chatId: string): Promise<void> {
@@ -337,6 +421,40 @@ export class InboxRegistry {
           await this.settleOutbound(thread.id, outbound.id, { status: "unknown", error: INBOX_OUTBOUND_RESTART_ERROR })
         }
       }
+    }
+  }
+
+  private proposalResolvedEvent(
+    threadId: string,
+    proposalId: string,
+    resolution: InboxProposalResolution,
+    outboundId?: string,
+  ): InboxEvent {
+    const at = this.now()
+    return {
+      v: 1,
+      ts: at,
+      kind: "inbox_thread_proposal_resolved",
+      threadId,
+      proposalId,
+      resolution,
+      at,
+      ...(outboundId === undefined ? {} : { outboundId }),
+    }
+  }
+
+  private reopenScheduledProposals(): void {
+    for (const thread of this.state.threads.values()) {
+      const { proposal } = thread
+      if (proposal?.status !== "scheduled") continue
+      const { id, text, confidence, reason, at } = proposal
+      this.record({
+        v: 1,
+        ts: this.now(),
+        kind: "inbox_thread_proposal_added",
+        threadId: thread.id,
+        proposal: { id, text, confidence, reason, at, status: "open", blockedBy: INBOX_PROPOSAL_RESTART_BLOCKED_BY },
+      })
     }
   }
 

@@ -1,4 +1,5 @@
 import type { InboundHandler } from "../inbound/handler"
+import type { McpSourceAutonomy } from "../inbox/autonomy"
 import type { JsonObject, JsonValue } from "../json"
 import { clampRounded } from "../numeric"
 import { oneOf } from "../vocab"
@@ -34,6 +35,7 @@ export interface McpSourceBase {
   textPath: string
   handler: InboundHandler
   reply: McpSourceReply | null
+  autonomy: McpSourceAutonomy
   createdAt: number
   updatedAt: number
 }
@@ -68,6 +70,7 @@ interface McpSourceInputBase {
   textPath?: string
   handler: InboundHandler
   reply?: McpSourceReply | null
+  autonomy?: Partial<McpSourceAutonomy>
 }
 
 export type McpSourceInput =
@@ -99,6 +102,7 @@ export type McpSourcePatch = Partial<{
   textPath: string
   handler: InboundHandler
   reply: McpSourceReply | null
+  autonomy: Partial<McpSourceAutonomy>
   resourceUris: string[]
   tool: string
   args: JsonObject

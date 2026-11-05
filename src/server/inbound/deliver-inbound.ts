@@ -7,6 +7,7 @@ import {
   renderInboundPrompt,
 } from "../../shared/inbound/template"
 import { createBusEnvelope, inboundIdempotencyKey, inboundSourceId, type BusEnvelope, type InboundBusSource } from "../../shared/service-bus/envelope"
+import { inboundScheduleId } from "../../shared/inbound/handler-turn"
 import { mcpMessageSubject, webhookDeliverySubject } from "../../shared/service-bus/subjects"
 import type { AgentCoordinator } from "../agent-coordinator"
 import { timestamped } from "../../shared/transcript-entry"
@@ -34,10 +35,6 @@ export interface InboundDelivery {
 export type InboundDeliveryResult = { ok: true; chatId?: string; threadId: string } | { ok: false; detail: string }
 
 type ChatTarget = { ok: true; chatId: string } | { ok: false; detail: string }
-
-export function inboundScheduleId(source: InboundSource, deliveryId: string): string {
-  return source.kind === "webhook" ? `webhook-${source.hookId}-${deliveryId}` : `mcp-${source.sourceId}-${deliveryId}`
-}
 
 function noticeFor(delivery: InboundDelivery): string {
   return inboundUntrustedNotice(delivery.source.kind === "webhook" ? "webhook" : `${delivery.sourceName} message`)

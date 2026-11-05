@@ -72,3 +72,7 @@ export function inboxReplyTextError(text: string): string | null {
   if (text.length > INBOX_REPLY_MAX_CHARS) return `Text must be at most ${INBOX_REPLY_MAX_CHARS} characters`
   return null
 }
+
+export function threadSentByAgent(thread: Pick<InboxThread, "outbound">): boolean {
+  return thread.outbound.some((outbound) => outbound.by === "agent")
+}

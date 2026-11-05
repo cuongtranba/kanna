@@ -3,6 +3,7 @@ import {
   INBOX_DRAFT_ORIGINS,
   INBOX_OUTBOUND_BYS,
   INBOX_OUTBOUND_STATUSES,
+  INBOX_PROPOSAL_STATUSES,
   INBOX_SOURCE_KINDS,
   INBOX_THREAD_STATES,
   INBOX_VERDICTS,
@@ -10,6 +11,7 @@ import {
   type InboxFilter,
   type InboxThread,
 } from "./types"
+import { INBOX_AUTONOMY_LEVELS } from "./autonomy"
 import { BUS_SOURCE_KINDS, type BusSource } from "../service-bus/envelope"
 import { jsonValueSchema } from "../genui/json-schema"
 import { assertParity } from "../type-parity"
@@ -19,6 +21,7 @@ export const inboxFilterSchema = z.object({
   projectId: z.string().optional(),
   chatId: z.string().optional(),
   attentionOnly: z.boolean().optional(),
+  sentByAgent: z.boolean().optional(),
 })
 
 export const busSourceSchema = z.discriminatedUnion("kind", [
@@ -53,11 +56,18 @@ export const inboxReportSchema = z.object({
   chatId: z.string(),
 })
 
+export const inboxOutboundProvenanceSchema = z.object({
+  id: z.string(),
+  confidence: z.number(),
+  reason: z.string(),
+})
+
 export const inboxOutboundMessageSchema = z.object({
   id: z.string(),
   ts: z.number(),
   text: z.string(),
   by: z.enum(INBOX_OUTBOUND_BYS),
+  proposal: inboxOutboundProvenanceSchema.optional(),
   status: z.enum(INBOX_OUTBOUND_STATUSES),
   error: z.string().optional(),
   resultId: z.string().optional(),
@@ -71,6 +81,17 @@ export const inboxDraftSchema = z.object({
   at: z.number(),
   origin: z.enum(INBOX_DRAFT_ORIGINS),
   instruction: z.string().optional(),
+})
+
+export const inboxProposalSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  confidence: z.number(),
+  reason: z.string(),
+  at: z.number(),
+  status: z.enum(INBOX_PROPOSAL_STATUSES),
+  scheduledFor: z.number().optional(),
+  blockedBy: z.string().optional(),
 })
 
 const inboxThreadSchema = z.object({
@@ -90,6 +111,9 @@ const inboxThreadSchema = z.object({
   lastMessageAt: z.number(),
   replyCount: z.number(),
   pendingScheduleId: z.string().optional(),
+  autonomy: z.enum(INBOX_AUTONOMY_LEVELS).optional(),
+  agentPausedUntil: z.number().optional(),
+  proposal: inboxProposalSchema.optional(),
 })
 
 export const inboxThreadHeaderSchema = inboxThreadSchema.pick({

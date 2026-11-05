@@ -3,6 +3,7 @@ import type { ClientCommand, ServerEnvelope } from "../shared/protocol"
 import { ackResult } from "./ws-router-ack"
 import type { InboxReplyResult } from "./inbound/inbox-reply"
 import type { InboxRegistry } from "./inbox/inbox-registry"
+import type { InboxProposalAck } from "./inbox/inbox-autopilot"
 import type { InboxSendResult } from "./inbox/inbox-outbox"
 
 export type InboxReplyOutcome =
@@ -18,6 +19,9 @@ export interface InboxActions {
   reply: InboxReplyAction
   instruct: InboxInstructAction
   retrySend: InboxRetrySendAction
+  approveProposal: (threadId: string, proposalId: string, text?: string) => Promise<InboxSendResult>
+  rejectProposal: (threadId: string, proposalId: string) => Promise<InboxProposalAck>
+  cancelProposal: (threadId: string, proposalId: string) => Promise<InboxProposalAck>
 }
 
 const PAGE_LIMIT_MAX = 200
@@ -55,6 +59,11 @@ function unwrapSend(result: InboxSendResult): { outboundId: string } {
   return { outboundId: result.outboundId }
 }
 
+function unwrapAck(result: InboxProposalAck): { ok: true } {
+  if (!result.ok) throw new Error(result.error)
+  return { ok: true }
+}
+
 async function run(
   registry: InboxRegistry,
   actions: InboxActions,
@@ -85,6 +94,28 @@ async function run(
         requireId(command.outboundId, "outboundId"),
         command.confirmDuplicate === true,
       )))
+    case "inbox.approveProposal":
+      return ackResult(id, command, unwrapSend(await actions.approveProposal(
+        requireId(command.threadId, "threadId"),
+        requireId(command.proposalId, "proposalId"),
+        command.text === undefined ? undefined : requireText(command.text),
+      )))
+    case "inbox.rejectProposal":
+      return ackResult(id, command, unwrapAck(await actions.rejectProposal(
+        requireId(command.threadId, "threadId"),
+        requireId(command.proposalId, "proposalId"),
+      )))
+    case "inbox.cancelProposal":
+      return ackResult(id, command, unwrapAck(await actions.cancelProposal(
+        requireId(command.threadId, "threadId"),
+        requireId(command.proposalId, "proposalId"),
+      )))
+    case "inbox.setThreadAutonomy":
+      await registry.setThreadAutonomy(requireId(command.threadId, "threadId"), command.level)
+      return ackResult(id, command, { ok: true })
+    case "inbox.resumeAgent":
+      await registry.pauseAgent(requireId(command.threadId, "threadId"), null)
+      return ackResult(id, command, { ok: true })
     case "inbox.instruct":
       return ackResult(id, command, unwrapChat(await actions.instruct(
         requireId(command.threadId, "threadId"),

@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -38,6 +39,7 @@ const SOURCE: McpPollSource = {
   itemsPath: "messages",
   itemKeyPath: "messageId",
   intervalMs: 15000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }

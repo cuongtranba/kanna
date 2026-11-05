@@ -2,7 +2,7 @@ import type { JsonObject, JsonValue } from "../../shared/json"
 import { toError } from "../../shared/errors"
 import { resolveReplyArgs } from "../../shared/inbound/reply-args"
 import { inboxReplyTextError, outboundRetryState } from "../../shared/inbox/policy"
-import type { InboxOutboundBy, InboxThread } from "../../shared/inbox/types"
+import type { InboxOutboundBy, InboxOutboundProvenance, InboxThread } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
 import type { McpSourceReply } from "../../shared/mcp-sources/types"
 import { textAt } from "../mcp-sources/mcp-source-fetch"
@@ -28,7 +28,7 @@ export interface InboxOutboxOptions {
 
 export interface InboxOutbox {
   hasReplyTarget(threadId: string): boolean
-  send(threadId: string, text: string, by: InboxOutboundBy): Promise<InboxSendResult>
+  send(threadId: string, text: string, by: InboxOutboundBy, proposal?: InboxOutboundProvenance): Promise<InboxSendResult>
   retry(threadId: string, outboundId: string, confirmDuplicate: boolean): Promise<InboxSendResult>
 }
 
@@ -67,7 +67,13 @@ export function createInboxOutbox(options: InboxOutboxOptions): InboxOutbox {
     })
   }
 
-  async function enqueue(threadId: string, text: string, by: InboxOutboundBy, retryOf: string | null): Promise<InboxSendResult> {
+  async function enqueue(
+    threadId: string,
+    text: string,
+    by: InboxOutboundBy,
+    proposal: InboxOutboundProvenance | undefined,
+    retryOf: string | null,
+  ): Promise<InboxSendResult> {
     const body = text.trim()
     const invalid = inboxReplyTextError(body)
     if (invalid !== null) return { ok: false, error: invalid }
@@ -76,14 +82,20 @@ export function createInboxOutbox(options: InboxOutboxOptions): InboxOutbox {
     const { thread, source } = target
     const outboundId = newId()
     const resolved = resolveReplyArgs(source.reply, thread.messages.at(-1)?.payload ?? null, body)
-    await registry.queueOutbound(threadId, { id: outboundId, text: body, by, ...(retryOf === null ? {} : { retryOf }) })
+    await registry.queueOutbound(threadId, {
+      id: outboundId,
+      text: body,
+      by,
+      ...(proposal === undefined ? {} : { proposal }),
+      ...(retryOf === null ? {} : { retryOf }),
+    })
     if (resolved.ok) fire(threadId, outboundId, source, resolved.args)
     else await registry.settleOutbound(threadId, outboundId, { status: "failed", error: resolved.error })
     return { ok: true, outboundId }
   }
 
-  function send(threadId: string, text: string, by: InboxOutboundBy): Promise<InboxSendResult> {
-    return enqueue(threadId, text, by, null)
+  function send(threadId: string, text: string, by: InboxOutboundBy, proposal?: InboxOutboundProvenance): Promise<InboxSendResult> {
+    return enqueue(threadId, text, by, proposal, null)
   }
 
   async function retry(threadId: string, outboundId: string, confirmDuplicate: boolean): Promise<InboxSendResult> {
@@ -96,7 +108,7 @@ export function createInboxOutbox(options: InboxOutboxOptions): InboxOutbox {
     }
     const outbound = thread.outbound.find((candidate) => candidate.id === outboundId)
     if (!outbound) return { ok: false, error: "Unknown outbound message" }
-    return enqueue(threadId, outbound.text, outbound.by, outboundId)
+    return enqueue(threadId, outbound.text, outbound.by, outbound.proposal, outboundId)
   }
 
   return {

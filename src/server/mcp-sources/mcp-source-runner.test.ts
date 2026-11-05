@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { describe, expect, test } from "vite-plus/test"
 import type { JsonObject, JsonValue } from "../../shared/json"
 import type { McpPollSource, McpSubscribeSource } from "../../shared/mcp-sources/types"
@@ -45,6 +46,7 @@ const POLL: McpPollSource = {
   itemsPath: "messages",
   itemKeyPath: "messageId",
   intervalMs: 10_000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -64,6 +66,7 @@ const SUBSCRIBE: McpSubscribeSource = {
   itemsPath: "",
   itemKeyPath: null,
   resyncIntervalMs: null,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }

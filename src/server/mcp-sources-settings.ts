@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { isInboundHandlerMode, type InboundHandler } from "../shared/inbound/handler"
+import { isInboxAutonomyLevel, isQuietTime, normalizeMcpSourceAutonomy, type McpSourceAutonomy } from "../shared/inbox/autonomy"
 import { isJsonArray, isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type { AppSettingsPatch } from "../shared/app-settings-types"
 import type { McpServerConfig } from "../shared/mcp-types"
@@ -26,7 +27,7 @@ export class McpSourceValidationException extends Error {
 }
 
 interface FlatSource
-  extends Pick<McpSource, "name" | "serverId" | "enabled" | "threadKeyPath" | "senderPath" | "textPath" | "handler" | "reply"> {
+  extends Pick<McpSource, "name" | "serverId" | "enabled" | "threadKeyPath" | "senderPath" | "textPath" | "handler" | "reply" | "autonomy"> {
   mode: McpSourceInput["mode"]
   resourceUris: string[]
   tool: string
@@ -51,6 +52,7 @@ function flatten(source: McpSourceInput | McpSource): FlatSource {
     textPath: source.textPath ?? "",
     handler: source.handler,
     reply: source.reply ?? null,
+    autonomy: normalizeMcpSourceAutonomy(source.autonomy),
   }
   if (source.mode === "subscribe") {
     const { resourceUris, itemsPath, itemKeyPath, resyncIntervalMs } = source
@@ -71,6 +73,7 @@ function assemble(flat: FlatSource, id: string, createdAt: number, updatedAt: nu
     textPath: flat.textPath.trim(),
     handler: flat.handler,
     reply: flat.reply === null ? null : { ...flat.reply, tool: flat.reply.tool.trim(), resultIdPath: flat.reply.resultIdPath.trim() },
+    autonomy: normalizeMcpSourceAutonomy(flat.autonomy),
     createdAt,
     updatedAt,
   }
@@ -109,9 +112,10 @@ export function createMcpSource(input: McpSourceInput): McpSource {
 }
 
 export function updateMcpSource(existing: McpSource, patch: McpSourcePatch): McpSource {
-  const { itemKeyPath, resyncIntervalMs, reply, ...rest } = patch
+  const { itemKeyPath, resyncIntervalMs, reply, autonomy, ...rest } = patch
   const merged: FlatSource = { ...flatten(existing), ...rest }
   if (reply !== undefined) merged.reply = reply
+  if (autonomy !== undefined) merged.autonomy = normalizeMcpSourceAutonomy({ ...existing.autonomy, ...autonomy })
   if (itemKeyPath !== undefined) merged.itemKeyPath = itemKeyPath
   if (resyncIntervalMs !== undefined) merged.resyncIntervalMs = resyncIntervalMs
   return checked(assemble(merged, existing.id, existing.createdAt, Date.now()))
@@ -183,6 +187,26 @@ function readReply(value: JsonValue | undefined): McpSourceReply | null {
   return validateMcpSourceReply(reply).length === 0 ? reply : null
 }
 
+function readAutonomy(value: JsonValue | undefined): McpSourceAutonomy {
+  if (value === undefined || !isJsonObject(value)) return normalizeMcpSourceAutonomy(undefined)
+  const level = readString(value, "level")
+  const quiet = value.quietHours
+  const start = quiet !== undefined && isJsonObject(quiet) ? readString(quiet, "start") : undefined
+  const end = quiet !== undefined && isJsonObject(quiet) ? readString(quiet, "end") : undefined
+  const quietHours = start !== undefined && end !== undefined && isQuietTime(start.trim()) && isQuietTime(end.trim()) ? { start, end } : null
+  return normalizeMcpSourceAutonomy({
+    ...(level !== undefined && isInboxAutonomyLevel(level) ? { level } : {}),
+    ...(typeof value.threshold === "number" ? { threshold: value.threshold } : {}),
+    ...(typeof value.perThreadPerHour === "number" ? { perThreadPerHour: value.perThreadPerHour } : {}),
+    ...(typeof value.perSourcePerDay === "number" ? { perSourcePerDay: value.perSourcePerDay } : {}),
+    ...(typeof value.maxChars === "number" ? { maxChars: value.maxChars } : {}),
+    ...(typeof value.sendDelaySeconds === "number" ? { sendDelaySeconds: value.sendDelaySeconds } : {}),
+    ...(typeof value.allowUrls === "boolean" ? { allowUrls: value.allowUrls } : {}),
+    quietHours,
+    allowlist: readStrings(value.allowlist),
+  })
+}
+
 function readStrings(value: JsonValue | undefined): string[] {
   if (value === undefined || !isJsonArray(value)) return []
   return value.filter((item): item is string => typeof item === "string")
@@ -206,6 +230,7 @@ function readSource(raw: JsonObject): McpSource | null {
     textPath: readString(raw, "textPath") ?? "",
     handler,
     reply: readReply(raw.reply),
+    autonomy: readAutonomy(raw.autonomy),
     resourceUris: readStrings(raw.resourceUris),
     tool: readString(raw, "tool") ?? "",
     args: args !== undefined && isJsonObject(args) ? args : {},

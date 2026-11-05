@@ -79,6 +79,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       thread.unread = true
       thread.lastMessageAt = event.message.ts
       delete thread.report
+      delete thread.proposal
       clearPending(state, thread)
       state.threads.set(thread.id, thread)
       return
@@ -176,6 +177,30 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       clearPending(state, thread)
       return
     }
+    case "inbox_thread_autonomy_set": {
+      const thread = state.threads.get(event.threadId)
+      if (!thread) return
+      if (event.level === null) delete thread.autonomy
+      else thread.autonomy = event.level
+      return
+    }
+    case "inbox_thread_agent_paused": {
+      const thread = state.threads.get(event.threadId)
+      if (!thread) return
+      if (event.until === null) delete thread.agentPausedUntil
+      else thread.agentPausedUntil = event.until
+      return
+    }
+    case "inbox_thread_proposal_added": {
+      const thread = state.threads.get(event.threadId)
+      if (thread) thread.proposal = { ...event.proposal }
+      return
+    }
+    case "inbox_thread_proposal_resolved": {
+      const thread = state.threads.get(event.threadId)
+      if (thread?.proposal?.id === event.proposalId) delete thread.proposal
+      return
+    }
     default: {
       const _never: never = event
       void _never
@@ -230,6 +255,10 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_archived":
     case "inbox_thread_outbound_queued":
     case "inbox_thread_outbound_settled":
+    case "inbox_thread_autonomy_set":
+    case "inbox_thread_agent_paused":
+    case "inbox_thread_proposal_added":
+    case "inbox_thread_proposal_resolved":
       return [event.threadId]
     case "inbox_thread_read":
       return event.ids

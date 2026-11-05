@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { defineCommand, defineCommands, REMOTE_ALLOWED, remoteExcluded } from "./define"
 import { idParams } from "./fragments"
+import { INBOX_AUTONOMY_LEVELS } from "../inbox/autonomy"
 import { inboxFilterSchema, inboxPageSchema } from "../inbox/types.schema"
 import {
   createdWebhookSchema,
@@ -11,13 +12,14 @@ import {
   webhookPatchSchema,
 } from "../webhooks/types.schema"
 import { chatIdResultSchema } from "./results/chat"
-import { inboxReplyResultSchema, inboxRetrySendResultSchema } from "./results/inbox"
+import { inboxOutboundIdResultSchema, inboxReplyResultSchema } from "./results/inbox"
 import { okResultSchema } from "./results/common"
 
 const WEBHOOK_SECRET_REASON =
   "A webhook secret is a credential: create and rotateSecret return it once and the hook accepts anything signed with it, so a remote client could mint or read a credential. Webhook management stays in the browser UI."
 
 const threadTextParams = z.object({ threadId: z.string(), text: z.string() })
+const proposalParams = z.object({ threadId: z.string(), proposalId: z.string() })
 
 export const inboxCommands = defineCommands(
   defineCommand("inbox.markRead", {
@@ -56,7 +58,7 @@ export const inboxCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("inbox.retrySend", {
-    result: inboxRetrySendResultSchema,
+    result: inboxOutboundIdResultSchema,
     params: z.object({ threadId: z.string(), outboundId: z.string(), confirmDuplicate: z.boolean().optional() }),
     summary: "Send an inbox reply that failed again as a new message; one that may already have been delivered needs confirmDuplicate.",
     risk: "write",
@@ -66,6 +68,41 @@ export const inboxCommands = defineCommands(
     result: chatIdResultSchema,
     params: threadTextParams.extend({ draft: z.string().optional() }),
     summary: "Ask an inbox thread's handler chat to write or rewrite a reply draft from an instruction and the current draft; nothing is sent to the sender.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.approveProposal", {
+    result: inboxOutboundIdResultSchema,
+    params: proposalParams.extend({ text: z.string().optional() }),
+    summary: "Send the agent's open reply proposal to the sender, optionally with edited text; this also pauses the agent on the thread.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.rejectProposal", {
+    result: okResultSchema,
+    params: proposalParams,
+    summary: "Reject the agent's open reply proposal without sending anything.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.cancelProposal", {
+    result: okResultSchema,
+    params: proposalParams,
+    summary: "Undo an auto-send that is waiting out its delay so nothing is sent.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.setThreadAutonomy", {
+    result: okResultSchema,
+    params: z.object({ threadId: z.string(), level: z.enum(INBOX_AUTONOMY_LEVELS).nullable() }),
+    summary: "Override the autonomy level of one inbox thread, or pass null to use the source default.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.resumeAgent", {
+    result: okResultSchema,
+    params: z.object({ threadId: z.string() }),
+    summary: "Let the agent act on an inbox thread again after a human reply paused it.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
