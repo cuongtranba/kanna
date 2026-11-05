@@ -37,6 +37,7 @@ interface InboxState {
   setTab(tab: InboxTabId): void
   setFilter(filter: InboxFilter): void
   toggleAttentionOnly(): void
+  toggleSentByAgent(): void
   toggleSourceKind(kind: NonNullable<InboxFilter["sourceKind"]>): void
   setProjectFilter(projectId: string | null): void
   setChatFilter(chatId: string | null): void
@@ -114,6 +115,8 @@ export const useInboxStore = create<InboxState>()((set) => ({
   setFilter: (filter) => set({ filter, olderExhausted: false }),
   toggleAttentionOnly: () =>
     set((state) => refined(state, { attentionOnly: state.filter.attentionOnly === true ? undefined : true })),
+  toggleSentByAgent: () =>
+    set((state) => refined(state, { sentByAgent: state.filter.sentByAgent === true ? undefined : true })),
   toggleSourceKind: (kind) =>
     set((state) => refined(state, { sourceKind: state.filter.sourceKind === kind ? undefined : kind })),
   setProjectFilter: (projectId) => set((state) => refined(state, { projectId: projectId ?? undefined })),

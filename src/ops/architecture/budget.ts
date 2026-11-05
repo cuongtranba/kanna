@@ -220,7 +220,7 @@ export const COUNT_BUDGETS: readonly CountBudget[] = [
   },
   {
     id: "code-clones",
-    max: 82,
+    max: 80,
     issue: 1379,
     rationale:
       "Maximal runs of duplicated 8-line windows (whitespace-normalized, structural lines skipped) across production modules. A copied block is a rule with several owners: a fix lands in one copy and the others drift. Give the rule one home and call it.",

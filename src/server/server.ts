@@ -95,7 +95,7 @@ import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
 import { createReferencedChatIds } from "./inbound/referenced-chat-ids"
-import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxPush } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox/inbox-boot"
 import { createInboxOutbox } from "./inbox/inbox-outbox"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
 import { createStoreBus } from "./service-bus/service-bus-boot"
@@ -417,6 +417,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     callTool: mcpSources.callTool,
     rememberKey: mcpSources.rememberKey,
   })
+  const inboxAutopilot = wireInboxAutopilot(inbox, inboxOutbox, mcpSources)
   const startWorkDeps: StartWorkDeps = {
     registry: boardRegistry,
     getProject: (projectId) => {
@@ -544,7 +545,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     mcpSources,
     referencedChatIds: createReferencedChatIds({ mcpSources, webhooks: webhooks.registry, inbox }),
     serviceBus: bus,
-    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources), inboxOutbox),
+    ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources), inboxOutbox, inboxAutopilot),
   })
 
   lifetime.defer("teardown", () => router.dispose())

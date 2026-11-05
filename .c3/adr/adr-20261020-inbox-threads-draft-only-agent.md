@@ -1,10 +1,10 @@
 ---
 id: adr-20261020-inbox-threads-draft-only-agent
-c3-seal: c6e98122022b0036feb45944bf347cddab695b9aa63470cc7a8597a435b5f9ed
+c3-seal: 39d56e2d21d264560773d2e97130d2c6ee06bb73d70858bde15f0460f3e086fb
 title: inbox-threads-draft-only-agent
 type: adr
 goal: Record the decision to turn every inbound message into an inbox thread handled by one chat per thread, where the agent only drafts and the user approves, and to route webhook delivery through the same deliverInbound path so the new inbox component (c3-247) owns delivery for every inbound source.
-status: done
+status: superseded
 date: "2026-10-20"
 ---
 

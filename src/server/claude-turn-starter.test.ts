@@ -347,6 +347,12 @@ describe("startTurnForChat", () => {
     expect(active?.provider).toBe("codex")
   })
 
+  test("the active turn keeps the schedule id of the queued message that started it", async () => {
+    const deps = makeDeps()
+    await startTurnForChat(deps, makeArgs({ autoContinue: { scheduleId: "mcp-src-1-d1" } }))
+    expect(deps.activeTurns.get("chat-1")?.scheduleId).toBe("mcp-src-1-d1")
+  })
+
   test("12. calls runTurn for Codex (non-SDK-session) provider", async () => {
     const deps = makeDeps()
     await startTurnForChat(deps, makeArgs({ provider: "codex" }))

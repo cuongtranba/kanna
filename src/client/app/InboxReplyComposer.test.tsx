@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
 import { INBOX_QUICK_PROMPTS } from "../../shared/inbox/quick-prompts"
@@ -32,6 +33,7 @@ function mcpSource(reply: McpSource["reply"]): McpSource {
     itemsPath: "messages",
     itemKeyPath: "id",
     resyncIntervalMs: null,
+    autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
     createdAt: 1,
     updatedAt: 1,
   }

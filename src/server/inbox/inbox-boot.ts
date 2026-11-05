@@ -7,6 +7,7 @@ import { webhookHandler } from "../webhooks/webhook-delivery"
 import type { WebhookRegistry } from "../webhooks/webhook-registry"
 import type { InboxActions } from "../ws-router-inbox"
 import { createFileInboxLog } from "./inbox-log.adapter"
+import { createInboxAutopilot, type AutopilotClock, type AutopilotSourceResolver, type InboxAutopilot } from "./inbox-autopilot"
 import type { InboxOutbox, OutboxSourceResolver } from "./inbox-outbox"
 import { InboxRegistry } from "./inbox-registry"
 
@@ -48,25 +49,67 @@ export function mcpOutboxSourceResolver(mcpSources: Pick<McpSourcesRuntime, "sou
   }
 }
 
+export const realAutopilotClock: AutopilotClock = {
+  now: () => Date.now(),
+  schedule: (run, delayMs) => {
+    const handle = setTimeout(run, delayMs)
+    handle.unref()
+    return () => { clearTimeout(handle) }
+  },
+}
+
+export function mcpAutopilotSourceResolver(
+  mcpSources: Pick<McpSourcesRuntime, "sources">,
+): AutopilotSourceResolver {
+  return (thread) => {
+    if (thread.sourceKind !== "mcp") return null
+    const source = mcpSources.sources().find((candidate) => candidate.id === thread.sourceId)
+    if (!source) return null
+    return {
+      id: source.id,
+      hasReply: source.reply !== null,
+      autonomy: source.autonomy,
+      ...(source.handler.provider === undefined ? {} : { provider: source.handler.provider }),
+    }
+  }
+}
+
+export function wireInboxAutopilot(
+  inbox: InboxRegistry,
+  outbox: InboxOutbox,
+  mcpSources: Pick<McpSourcesRuntime, "sources">,
+  clock: AutopilotClock = realAutopilotClock,
+): InboxAutopilot {
+  const autopilot = createInboxAutopilot({ registry: inbox, outbox, resolveSource: mcpAutopilotSourceResolver(mcpSources), clock })
+  inbox.onProposeSend((threadId, proposal) => autopilot.propose(threadId, proposal))
+  return autopilot
+}
+
 export function createInboxReplyActions(
   store: InboxReplyStore,
   agent: InboxReplyAgent,
   inbox: InboxRegistry,
   resolveHandler: InboundHandlerResolver,
   outbox: InboxOutbox,
+  autopilot: InboxAutopilot,
 ): { inboxActions: InboxActions } {
   return {
     inboxActions: {
       async reply(threadId, text) {
         if (outbox.hasReplyTarget(threadId)) {
           const sent = await outbox.send(threadId, text, "you")
-          return sent.ok ? { ok: true, mode: "direct", outboundId: sent.outboundId } : sent
+          if (!sent.ok) return sent
+          await autopilot.takeOver(threadId)
+          return { ok: true, mode: "direct", outboundId: sent.outboundId }
         }
         const replied = await replyToInboxThread(store, agent, inbox, resolveHandler, threadId, text)
         return replied.ok ? { ok: true, mode: "agent", chatId: replied.chatId } : replied
       },
       instruct: (threadId, text, draft) => instructInboxThread(store, agent, inbox, resolveHandler, threadId, text, draft),
       retrySend: (threadId, outboundId, confirmDuplicate) => outbox.retry(threadId, outboundId, confirmDuplicate),
+      approveProposal: (threadId, proposalId, text) => autopilot.approve(threadId, proposalId, text),
+      rejectProposal: (threadId, proposalId) => autopilot.reject(threadId, proposalId),
+      cancelProposal: (threadId, proposalId) => autopilot.cancel(threadId, proposalId),
     },
   }
 }

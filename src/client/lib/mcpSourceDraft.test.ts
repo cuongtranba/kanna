@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS, type McpSourceAutonomy } from "../../shared/inbox/autonomy"
 import { describe, expect, test } from "vite-plus/test"
 import { MCP_SOURCE_PRESETS } from "../../shared/mcp-sources/presets"
 import type { McpPollSource, McpSubscribeSource } from "../../shared/mcp-sources/types"
@@ -27,6 +28,7 @@ const POLL: McpPollSource = {
   itemsPath: "messages",
   itemKeyPath: null,
   intervalMs: 15000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -46,6 +48,7 @@ const SUBSCRIBE: McpSubscribeSource = {
   itemsPath: "messages",
   itemKeyPath: "id",
   resyncIntervalMs: 300_000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -71,6 +74,7 @@ describe("mcp source draft", () => {
         itemsPath: "messages",
         itemKeyPath: null,
         intervalMs: 15000,
+        autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
       },
     })
   })
@@ -169,6 +173,54 @@ describe("mcp source reply target", () => {
     expect(mcpSourceInputFromDraft({ ...base, replyArgsText: '{"threadType": 3}' })).toMatchObject({
       ok: false,
       errors: ['Reply argument "threadType" must be a string or an object with "from" and "map"'],
+    })
+  })
+})
+
+describe("mcp source autonomy", () => {
+  const REPLY = { tool: "send", args: { text: "{{reply.text}}" }, resultIdPath: "" }
+  const TUNED: McpSourceAutonomy = {
+    level: "auto",
+    threshold: 0.9,
+    perThreadPerHour: 2,
+    perSourcePerDay: 15,
+    quietHours: { start: "22:00", end: "07:30" },
+    allowlist: ["alice", "bob"],
+    allowUrls: true,
+    maxChars: 500,
+    sendDelaySeconds: 45,
+  }
+
+  test("a stored autonomy config round-trips through the form unchanged", () => {
+    const draft = draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY, autonomy: TUNED })
+    expect(mcpSourceInputFromDraft(draft)).toMatchObject({ ok: true, input: { autonomy: TUNED } })
+  })
+
+  test("the allowlist is one key per line and quiet hours left empty mean none", () => {
+    const draft = { ...draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY, autonomy: TUNED }), autonomyAllowlist: " alice \n\n bob\n", autonomyQuietStart: "", autonomyQuietEnd: "" }
+    expect(mcpSourceInputFromDraft(draft)).toMatchObject({ ok: true, input: { autonomy: { allowlist: ["alice", "bob"], quietHours: null } } })
+  })
+
+  test("a source edited to clear its quiet hours patches them to none", () => {
+    const draft = { ...draftFromMcpSource({ ...SUBSCRIBE, reply: REPLY, autonomy: TUNED }), autonomyQuietStart: "", autonomyQuietEnd: "" }
+    const result = mcpSourceInputFromDraft(draft)
+    if (!result.ok) throw new Error("draft should be valid")
+    expect(mcpSourcePatchFromInput(result.input).autonomy?.quietHours).toBeNull()
+  })
+
+  test("approve and auto without a reply tool, half a quiet window and a non-number are reported", () => {
+    const base = draftFromMcpSource(SUBSCRIBE)
+    expect(mcpSourceInputFromDraft({ ...base, autonomyLevel: "auto" })).toEqual({
+      ok: false,
+      errors: ["Approve and Auto autonomy need a reply target"],
+    })
+    expect(mcpSourceInputFromDraft({ ...base, autonomyQuietStart: "22:00" })).toEqual({
+      ok: false,
+      errors: ["Quiet hours need both a start and an end, or leave both empty"],
+    })
+    expect(mcpSourceInputFromDraft({ ...base, autonomyThreshold: "high" })).toEqual({
+      ok: false,
+      errors: ["Confidence threshold must be a number"],
     })
   })
 })

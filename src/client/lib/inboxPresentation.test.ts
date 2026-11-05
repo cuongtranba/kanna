@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxDraft, InboxThread } from "../../shared/inbox/types"
 import { ASK_NEEDS_CHAT_REASON, draftChipLabel, fencedJson, formatUnreadBadge, inboxAskBlockedReason, inboxReplyMode, itemStateDisplay, reportSummaryText, subjectLabel, threadPreview, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
@@ -124,6 +125,7 @@ describe("inboxReplyMode", () => {
     itemsPath: "",
     itemKeyPath: null,
     resyncIntervalMs: null,
+    autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
     createdAt: 1,
     updatedAt: 1,
   }

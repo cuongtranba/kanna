@@ -17,6 +17,7 @@ import { maskOauthKey } from "../shared/mask-oauth-key"
 import { log } from "../shared/log"
 import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
+import { inboxToolPolicyOf } from "./claude-inbox-guard"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
@@ -91,7 +92,7 @@ export interface SpawnClaudeTurnDeps {
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   listOpenRouterModelsFn: (() => Promise<OpenRouterModel[]>) | null
   getSubagents: () => Subagent[]
-  getAppSettingsSnapshot: () => Partial<Pick<AgentAppSettingsView, "globalPromptAppend">>
+  getAppSettingsSnapshot: () => Partial<Pick<AgentAppSettingsView, "globalPromptAppend" | "mcpSources" | "customMcpServers">>
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
@@ -196,6 +197,10 @@ export async function spawnClaudeTurn(
         onToolRequest: args.onToolRequest,
         systemPromptAppend,
         isLoopArmed: () => deps.isLoopArmed(chatIdForCtx) !== null,
+        inboxToolPolicy: () => {
+          const settings = deps.getAppSettingsSnapshot()
+          return inboxToolPolicyOf(deps.activeTurns.get(chatIdForCtx)?.scheduleId, settings.mcpSources ?? [], settings.customMcpServers ?? [])
+        },
         kannaMcp: {
           tunnelGateway: deps.tunnelGateway,
           subagentOrchestrator: deps.subagentOrchestrator,

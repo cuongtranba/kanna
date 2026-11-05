@@ -4,6 +4,7 @@ export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
+  mcpSources: AppSettingsSnapshot["mcpSources"]
   customModels: AppSettingsSnapshot["customModels"]
   customProviders: AppSettingsSnapshot["customProviders"]
   providerDefaults: AppSettingsSnapshot["providerDefaults"]
@@ -15,6 +16,7 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     claudeDriver: snapshot.claudeDriver,
     globalPromptAppend: snapshot.globalPromptAppend,
     customMcpServers: snapshot.customMcpServers,
+    mcpSources: snapshot.mcpSources,
     customModels: snapshot.customModels,
     customProviders: snapshot.customProviders,
     providerDefaults: snapshot.providerDefaults,

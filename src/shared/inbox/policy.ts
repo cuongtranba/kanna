@@ -1,7 +1,7 @@
 import type { BusEnvelope } from "../service-bus/envelope"
 import { namedBusSubject } from "../service-bus/subjects"
 import { isJsonObject, type JsonValue } from "../json"
-import { INBOX_REPLY_MAX_CHARS, type InboxActivityItem, type InboxThread } from "./types"
+import { INBOX_REPLY_MAX_CHARS, type InboxActivityItem, type InboxFilter, type InboxThread } from "./types"
 
 const TOOL_REQUEST_PUT = namedBusSubject("toolRequestPut")
 const TOOL_REQUEST_RESOLVED = namedBusSubject("toolRequestResolved")
@@ -71,4 +71,26 @@ export function inboxReplyTextError(text: string): string | null {
   if (text.length === 0) return "Text is required"
   if (text.length > INBOX_REPLY_MAX_CHARS) return `Text must be at most ${INBOX_REPLY_MAX_CHARS} characters`
   return null
+}
+
+export function threadSentByAgent(thread: Pick<InboxThread, "outbound">): boolean {
+  return thread.outbound.some((outbound) => outbound.by === "agent")
+}
+
+export function inboxThreadMatchesFilter(thread: InboxThread, filter: InboxFilter): boolean {
+  if (filter.sourceKind !== undefined && thread.sourceKind !== filter.sourceKind) return false
+  if (filter.projectId !== undefined) return false
+  if (filter.chatId !== undefined && thread.chatId !== filter.chatId) return false
+  if (filter.attentionOnly === true && thread.state !== "needs_you" && thread.state !== "new") return false
+  if (filter.sentByAgent === true && !threadSentByAgent(thread)) return false
+  return true
+}
+
+export function inboxItemMatchesFilter(item: InboxActivityItem, filter: InboxFilter): boolean {
+  if (filter.sentByAgent === true) return false
+  if (filter.sourceKind !== undefined && item.source.kind !== filter.sourceKind) return false
+  if (filter.projectId !== undefined && item.projectId !== filter.projectId) return false
+  if (filter.chatId !== undefined && item.chatId !== filter.chatId) return false
+  if (filter.attentionOnly === true && !item.attention) return false
+  return true
 }

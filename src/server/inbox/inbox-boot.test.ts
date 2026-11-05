@@ -1,3 +1,4 @@
+import { INBOX_TAKEOVER_PAUSE_MS, MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { expect, test } from "vite-plus/test"
 import type { InboundHandler } from "../../shared/inbound/handler"
 import type { InboxThread } from "../../shared/inbox/types"
@@ -9,7 +10,8 @@ import { deliverInbound } from "../inbound/deliver-inbound"
 import { createInboxHarness } from "../test-helpers/inbox-harness"
 import { waitFor } from "../test-helpers/wait-for"
 import { createWebhookHarness } from "../test-helpers/webhook-harness"
-import { createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxPush } from "./inbox-boot"
+import { createInboxReplyActions, inboxHandlerResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox-boot"
+import { createFakeAutopilotClock } from "../test-helpers/autopilot-clock"
 import { createInboxOutbox } from "./inbox-outbox"
 
 function inbound(): BusEnvelope {
@@ -52,6 +54,7 @@ const SOURCE: McpSource = {
   itemsPath: "messages",
   itemKeyPath: null,
   intervalMs: 15000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -132,7 +135,8 @@ async function routedThread(options: { reply: McpSourceReply | null; mode: "noti
     callTool: async (_sourceId, _name, args) => { calls.push(args); return {} },
     rememberKey: () => {},
   })
-  const { inboxActions } = createInboxReplyActions(harness.store, harness.agent, harness.inbox, () => handler, outbox)
+  const autopilot = wireInboxAutopilot(harness.inbox, outbox, { sources: () => [source] }, createFakeAutopilotClock(0))
+  const { inboxActions } = createInboxReplyActions(harness.store, harness.agent, harness.inbox, () => handler, outbox, autopilot)
   return { ...harness, inboxActions, calls, threadId: result.threadId }
 }
 
@@ -159,4 +163,28 @@ test("a webhook thread keeps the agent path and has no outbound message to retry
 
   const refused = await hook.inboxActions.retrySend(hook.threadId, "ghost", false)
   expect(refused.ok).toBe(false)
+})
+
+test("a direct send by you pauses the agent on that thread, and resuming clears it", async () => {
+  const { inboxActions, inbox, threadId } = await routedThread({ reply: ZALO_REPLY, mode: "notify", kind: "mcp" })
+  expect(inbox.getThread(threadId)?.agentPausedUntil).toBeUndefined()
+
+  await inboxActions.reply(threadId, "hello")
+
+  expect(inbox.getThread(threadId)?.agentPausedUntil).toBe(INBOX_TAKEOVER_PAUSE_MS)
+  await inbox.pauseAgent(threadId, null)
+  expect(inbox.getThread(threadId)?.agentPausedUntil).toBeUndefined()
+})
+
+test("approving a proposal through the actions sends it as approved with its provenance", async () => {
+  const { inboxActions, inbox, calls, threadId } = await routedThread({ reply: ZALO_REPLY, mode: "notify", kind: "mcp" })
+  await inbox.addProposal(threadId, { id: "p1", text: "Friday", confidence: 0.7, reason: "invoice", at: 1, status: "open" })
+
+  const result = await inboxActions.approveProposal(threadId, "p1", "Next Friday")
+
+  expect(result.ok).toBe(true)
+  await waitFor(() => inbox.getThread(threadId)?.outbound[0]?.status === "sent")
+  expect(calls).toEqual([{ threadId: "t-9", text: "Next Friday" }])
+  expect(inbox.getThread(threadId)?.outbound[0]).toMatchObject({ by: "approved", proposal: { id: "p1", confidence: 0.7, reason: "invoice" } })
+  expect(inbox.getThread(threadId)?.proposal).toBeUndefined()
 })

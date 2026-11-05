@@ -1,3 +1,4 @@
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../../shared/inbox/autonomy"
 import { expect, test } from "vite-plus/test"
 import type { McpPollSource } from "../../shared/mcp-sources/types"
 import type { BusEnvelope } from "../../shared/service-bus/envelope"
@@ -24,6 +25,7 @@ const SOURCE: McpPollSource = {
   itemsPath: "messages",
   itemKeyPath: "messageId",
   intervalMs: 10_000,
+  autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
   createdAt: 1,
   updatedAt: 1,
 }

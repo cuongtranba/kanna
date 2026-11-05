@@ -61,7 +61,7 @@ export function renderInboundPrompt(template: string, body: JsonValue, notice: s
 function triageInstruction(input: { threadId: string; sourceName: string }): string[] {
   return [
     `You are handling an inbound message thread from ${input.sourceName}. Read it, decide whether it needs_you (the user must act), is fyi (worth knowing, no action) or is handled (nothing left to do), write a summary of at most 600 characters and, only when the verdict is needs_you and a reply is appropriate, a draft reply. Do not draft a reply for fyi or handled.`,
-    `Call ${INBOX_REPORT_TOOL_NAME} with thread_id ${input.threadId}, your verdict, the summary and, for needs_you only, the optional draft_reply. NEVER send anything to the sender yourself; the user sends replies from the Inbox.`,
+    `Call ${INBOX_REPORT_TOOL_NAME} with thread_id ${input.threadId}, your verdict, the summary and, for needs_you only, the optional draft_reply. NEVER send anything to the sender yourself or through the source's own tools. To propose a reply, pass propose_send (text, confidence from 0 to 1, reason): Kanna decides whether it is sent, and the user can always review it in the Inbox.`,
   ]
 }
 

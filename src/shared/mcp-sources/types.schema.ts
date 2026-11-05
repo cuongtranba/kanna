@@ -2,6 +2,7 @@ import { z } from "zod"
 import { MCP_SOURCE_MODES, type McpSource, type McpSourceInput, type McpSourcePatch } from "./types"
 import { jsonObjectSchema, jsonValueSchema } from "../genui/json-schema"
 import { inboundHandlerSchema } from "../inbound/handler.schema"
+import { INBOX_AUTONOMY_LEVELS } from "../inbox/autonomy"
 import { assertParity } from "../type-parity"
 
 export const mcpSourceModeSchema = z.enum(MCP_SOURCE_MODES)
@@ -17,6 +18,20 @@ export const mcpSourceReplySchema = z.object({
   resultIdPath: z.string(),
 })
 
+export const mcpSourceAutonomySchema = z.object({
+  level: z.enum(INBOX_AUTONOMY_LEVELS),
+  threshold: z.number(),
+  perThreadPerHour: z.number(),
+  perSourcePerDay: z.number(),
+  quietHours: z.object({ start: z.string(), end: z.string() }).nullable(),
+  allowlist: z.array(z.string()),
+  allowUrls: z.boolean(),
+  maxChars: z.number(),
+  sendDelaySeconds: z.number(),
+})
+
+const mcpSourceAutonomyPartialSchema = mcpSourceAutonomySchema.partial()
+
 const mcpSourceInputBaseShape = {
   name: z.string(),
   serverId: z.string(),
@@ -26,6 +41,7 @@ const mcpSourceInputBaseShape = {
   textPath: z.string().optional(),
   handler: inboundHandlerSchema,
   reply: mcpSourceReplySchema.nullable().optional(),
+  autonomy: mcpSourceAutonomyPartialSchema.optional(),
 }
 
 const subscribeInputFieldsShape = {
@@ -70,6 +86,7 @@ const mcpSourceBaseShape = {
   textPath: z.string(),
   handler: inboundHandlerSchema,
   reply: mcpSourceReplySchema.nullable(),
+  autonomy: mcpSourceAutonomySchema,
   createdAt: z.number(),
   updatedAt: z.number(),
 }
@@ -89,6 +106,7 @@ export const mcpSourcePatchSchema = z.object({
   textPath: z.string().optional(),
   handler: inboundHandlerSchema.optional(),
   reply: mcpSourceReplySchema.nullable().optional(),
+  autonomy: mcpSourceAutonomyPartialSchema.optional(),
   resourceUris: z.array(z.string()).optional(),
   tool: z.string().optional(),
   args: jsonObjectSchema.optional(),

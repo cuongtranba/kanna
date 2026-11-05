@@ -18,9 +18,12 @@ code:
   - src/client/app/McpSourcesSection.tsx
   - src/client/app/McpSourcesSection.test.tsx
   - src/client/app/McpSourceForm.tsx
+  - src/client/app/McpSourceAutonomyFields.tsx
+  - src/client/app/McpSourceFormField.tsx
   - src/client/stores/mcpSourcesStore.ts
   - src/client/stores/mcpSourcesSectionStore.ts
   - src/client/lib/mcpSourceDraft.ts
   - src/client/lib/mcpSourceDraft.test.ts
+  - src/client/lib/mcpSourceAutonomyDraft.ts
   - src/client/lib/mcpSourcePresentation.ts
   - src/client/lib/mcpSourcePresentation.test.ts

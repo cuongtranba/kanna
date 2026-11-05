@@ -1,6 +1,7 @@
 import type { InboundHandler } from "../../shared/inbound/handler"
 import { renderInstructPrompt, renderReplyPrompt } from "../../shared/inbound/reply-prompt"
-import { inboxInstructScheduleId, type InboxThread } from "../../shared/inbox/types"
+import { inboxInstructScheduleId, inboxReplyScheduleId } from "../../shared/inbound/handler-turn"
+import type { InboxThread } from "../../shared/inbox/types"
 import type { InboxRegistry } from "../inbox/inbox-registry"
 import { queueHandlerTurn, type InboundDeliveryAgent, type InboundDeliveryStore } from "./deliver-inbound"
 
@@ -43,7 +44,7 @@ export async function replyToInboxThread(
 ): Promise<InboxReplyResult> {
   const target = resolveTarget(store, inbox, resolveHandler, threadId)
   if (typeof target === "string") return { ok: false, error: target }
-  const scheduleId = `inbox-reply-${threadId}-${target.thread.replyCount + 1}`
+  const scheduleId = inboxReplyScheduleId(threadId, target.thread.replyCount + 1)
   const prompt = renderReplyPrompt({
     sourceName: target.thread.sourceName,
     replyHint: target.handler?.replyHint ?? "",

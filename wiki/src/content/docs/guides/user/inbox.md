@@ -19,8 +19,10 @@ needs you.
    every later message in the thread, so the agent keeps the conversation
    context.
 3. The agent reports a verdict — **needs you**, **FYI** or **handled** — with a
-   short summary and, for a **needs you** thread where a reply makes sense, a **draft**. The agent never
-   sends anything to the sender on its own.
+   short summary and, for a **needs you** thread where a reply makes sense, a **draft**
+   or a **proposal** to send. The agent never sends anything to the sender on its
+   own: when it proposes a send, Kanna decides what happens (see
+   [Autonomy](#autonomy-what-the-agent-may-do)).
 4. Only a **needs you** thread interrupts you: a toast (unless you are already on
    the Inbox), the sidebar badge, the window title count, and a push
    notification if you have those enabled. **FYI** threads sit in the Inbox
@@ -83,6 +85,73 @@ Ask agent needs a handler chat (**Run in chat** or **New chat**), so it and the
 quick prompts are unavailable in **Notify** mode and on an archived thread. Send is
 unavailable only when the source has neither a reply tool nor a handler chat; the
 thread still shows what arrived.
+
+## Autonomy: what the agent may do
+
+The agent can ask to send a reply, but it never sends by itself. In the thread
+it calls `propose_send` with the text, a confidence between 0 and 1 and a reason,
+and **Kanna** decides, in the server, what to do with it. How far that goes is the
+**autonomy level**, set per [MCP source](/guides/user/mcp-sources/#autonomy) and
+overridable per thread:
+
+| Level | What a proposal becomes |
+| --- | --- |
+| **Off** | A draft in the reply box, like any other draft. |
+| **Suggest** (default) | A draft, labelled `proposal` in the draft chips. |
+| **Approve** | An **approval card** above the reply box: **Send**, **Edit** or **Reject**. Nothing goes out until you press Send. |
+| **Auto** | The reply is sent by the agent after a short delay (30 seconds by default), unless a guardrail stops it. Until then the card reads **Sending in 0:24** with **Undo**. |
+
+Pick the level for one thread with the **Autonomy** menu in its header: **Source
+default (…)**, Off, Suggest, Approve or Auto. Approve and Auto are greyed out,
+with the reason beside the menu, when the source has no **Reply tool**. Auto is
+also greyed out when the source's handler runs a Codex model: only Claude
+handler turns can be stopped from sending on their own, so Codex is capped at
+Approve.
+
+### Guardrails for Auto
+
+Auto sends only when every guardrail passes. Otherwise the proposal becomes an
+approval card that says why, naming the first rule that failed, checked in this
+order:
+
+1. the handler is a Claude model;
+2. the contact is on the source's **Auto allowlist** (the thread header offers
+   **Allow auto for this contact** when Auto applies and the contact is not on
+   it);
+3. the agent's confidence is at least the source's threshold;
+4. the thread has not reached its auto-sends per hour;
+5. the source has not reached its auto-sends per day;
+6. it is outside the source's quiet hours;
+7. the text has no link, markdown image or link, or HTML (unless the source
+   allows links) and is within the character limit.
+
+The hourly and daily caps count the agent's recent messages that Kanna still
+holds, so they can undercount after an old thread is trimmed. A new message from
+the sender expires a waiting proposal, because it answered an older message.
+
+### Taking over, Undo and restarts
+
+- **Undo** on a counting-down card cancels the send. If the send has already
+  started, Undo is refused.
+- When you send a reply yourself, or approve a card, the agent is **paused** on
+  that thread for 30 minutes: it can still read and report, but its proposals
+  become drafts. The header shows **Agent paused · Resume**; press **Resume** to
+  hand the thread back. Typing in the box does not pause anything.
+- **Edit** on a card puts its text in the reply box. Send it with Enter as your
+  own reply, which also rejects the card.
+- If Kanna restarts while an auto-send is counting down, it is **never** sent
+  afterwards: the card comes back as an approval card saying Kanna restarted
+  before the auto-send.
+- In a triage or ask turn the agent cannot run shell commands or call the reply
+  tool's server at all; it can only report and propose. That is enforced for
+  Claude turns. Codex has no such guard, which is why Auto is not offered for it.
+
+### Who sent what
+
+Each message you see in the thread is labelled by who sent it: **You**, **You ·
+approved** (an agent proposal you approved) or **Agent · auto**. Hover an agent
+or approved label to see the confidence and reason. In **Activity**, the **Sent
+by agent** filter lists the threads the agent has sent on.
 
 ### What happened to a message you sent
 

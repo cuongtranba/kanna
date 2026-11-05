@@ -1,4 +1,4 @@
-import { inboxTab } from "../../shared/inbox/policy"
+import { inboxItemMatchesFilter, inboxTab, inboxThreadMatchesFilter } from "../../shared/inbox/policy"
 import type { InboxActivityItem, InboxFilter, InboxThread } from "../../shared/inbox/types"
 
 export type InboxTabId = "inbox" | "activity"
@@ -23,26 +23,6 @@ export function itemRecord(item: InboxActivityItem): InboxRecord {
   return { kind: "item", id: item.id, ts: item.ts, unread: item.unread, item }
 }
 
-function threadsSurviveProjectFilter(filter: InboxFilter): boolean {
-  return filter.projectId === undefined
-}
-
-function threadMatches(thread: InboxThread, filter: InboxFilter): boolean {
-  if (!threadsSurviveProjectFilter(filter)) return false
-  if (filter.sourceKind !== undefined && thread.sourceKind !== filter.sourceKind) return false
-  if (filter.chatId !== undefined && thread.chatId !== filter.chatId) return false
-  if (filter.attentionOnly === true && thread.state !== "needs_you" && thread.state !== "new") return false
-  return true
-}
-
-function itemMatches(item: InboxActivityItem, filter: InboxFilter): boolean {
-  if (filter.sourceKind !== undefined && item.source.kind !== filter.sourceKind) return false
-  if (filter.projectId !== undefined && item.projectId !== filter.projectId) return false
-  if (filter.chatId !== undefined && item.chatId !== filter.chatId) return false
-  if (filter.attentionOnly === true && !item.attention) return false
-  return true
-}
-
 function byInboxOrder(a: InboxRecord, b: InboxRecord): number {
   if (a.unread !== b.unread) return a.unread ? -1 : 1
   return b.ts - a.ts
@@ -61,10 +41,10 @@ export function visibleRecords(
   const inInbox = tab === "inbox"
   const records = [
     ...threads
-      .filter((thread) => (!inInbox || inboxTab(thread)) && threadMatches(thread, filter))
+      .filter((thread) => (!inInbox || inboxTab(thread)) && inboxThreadMatchesFilter(thread, filter))
       .map(threadRecord),
     ...items
-      .filter((item) => (!inInbox || inboxTab(item)) && itemMatches(item, filter))
+      .filter((item) => (!inInbox || inboxTab(item)) && inboxItemMatchesFilter(item, filter))
       .map(itemRecord),
   ]
   return records.sort(inInbox ? byInboxOrder : byNewest)
@@ -76,6 +56,7 @@ export function hasActiveFilter(filter: InboxFilter): boolean {
     || filter.projectId !== undefined
     || filter.chatId !== undefined
     || filter.attentionOnly === true
+    || filter.sentByAgent === true
   )
 }
 
@@ -125,8 +106,8 @@ export function olderPageCursors(
   items: readonly InboxActivityItem[],
   filter: InboxFilter,
 ): OlderCursors {
-  const threadBefore = oldestTimestamp(threads.filter((thread) => threadMatches(thread, filter)).map(threadRecord))
-  const itemBefore = oldestTimestamp(items.filter((item) => itemMatches(item, filter)).map(itemRecord))
+  const threadBefore = oldestTimestamp(threads.filter((thread) => inboxThreadMatchesFilter(thread, filter)).map(threadRecord))
+  const itemBefore = oldestTimestamp(items.filter((item) => inboxItemMatchesFilter(item, filter)).map(itemRecord))
   return {
     threadBefore: threadBefore ?? Number.MAX_SAFE_INTEGER,
     itemBefore: itemBefore ?? Number.MAX_SAFE_INTEGER,

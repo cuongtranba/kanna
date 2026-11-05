@@ -5,6 +5,7 @@ import {
   inboundTemplateErrors,
   validateInboundTarget,
 } from "../inbound/handler"
+import { validateMcpSourceAutonomy } from "../inbox/autonomy"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../json"
 import { isMcpSourceMode, type McpReplyArg, type McpSource, type McpSourceInput, type McpSourceReply } from "./types"
 
@@ -63,6 +64,7 @@ export function validateMcpSource(shape: McpSourceShape): string[] {
   errors.push(...inboundPathErrors([shape.threadKeyPath, shape.senderPath, shape.textPath, shape.itemsPath, shape.itemKeyPath]))
   errors.push(...validateHandler(shape))
   errors.push(...validateMcpSourceReply(shape.reply))
+  errors.push(...validateMcpSourceAutonomy(shape.autonomy, shape.reply !== null && shape.reply !== undefined))
   return errors
 }
 
