@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:10bc5616c08ccd4cbff05ba4a6830a482afa8a584ea63296b816ea6b7bd72cc0 -->
+<!-- hash: sha256:cf0d3d7e6fcfa892eed35f3d20262212b4fa18804193317fe9057bbe124577ff -->
 
 ## c3-0 — Kanna (system)
 
@@ -348,7 +348,7 @@ files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-in
 ## c3-248 — mcp-sources (component)
 container: c3-2 | context: c3-0
 refs: ref-provider-adapter, ref-side-effect-adapter, ref-strong-typing
-files: src/client/app/McpSourceForm.tsx, src/client/app/McpSourcesSection.test.tsx, src/client/app/McpSourcesSection.tsx, src/client/lib/mcpSourceDraft.test.ts, src/client/lib/mcpSourceDraft.ts, src/client/lib/mcpSourcePresentation.test.ts, src/client/lib/mcpSourcePresentation.ts, src/client/stores/mcpSourcesSectionStore.ts, src/client/stores/mcpSourcesStore.ts, src/server/mcp-sources-settings.test.ts, src/server/mcp-sources-settings.ts, src/server/mcp-sources/mcp-source-client.adapter.test.ts, src/server/mcp-sources/mcp-source-client.adapter.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.ts, src/server/mcp-sources/mcp-source-runner.test.ts, src/server/mcp-sources/mcp-source-runner.ts, src/server/mcp-sources/mcp-sources-boot.ts, src/shared/mcp-sources/presets.ts, src/shared/mcp-sources/types.ts, src/shared/mcp-sources/validate.test.ts, src/shared/mcp-sources/validate.ts
+files: src/client/app/McpSourceForm.tsx, src/client/app/McpSourcesSection.test.tsx, src/client/app/McpSourcesSection.tsx, src/client/lib/mcpSourceDraft.test.ts, src/client/lib/mcpSourceDraft.ts, src/client/lib/mcpSourcePresentation.test.ts, src/client/lib/mcpSourcePresentation.ts, src/client/stores/mcpSourcesSectionStore.ts, src/client/stores/mcpSourcesStore.ts, src/server/mcp-sources-settings.test.ts, src/server/mcp-sources-settings.ts, src/server/mcp-sources/mcp-source-client.adapter.test.ts, src/server/mcp-sources/mcp-source-client.adapter.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.ts, src/server/mcp-sources/mcp-source-fetch.ts, src/server/mcp-sources/mcp-source-runner.test.ts, src/server/mcp-sources/mcp-source-runner.ts, src/server/mcp-sources/mcp-sources-boot.ts, src/shared/mcp-sources/presets.ts, src/shared/mcp-sources/types.ts, src/shared/mcp-sources/validate.test.ts, src/shared/mcp-sources/validate.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -1306,6 +1306,7 @@ src/server/mcp-sources/mcp-source-client.adapter.test.ts → c3-248
 src/server/mcp-sources/mcp-source-client.adapter.ts → c3-248
 src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts → c3-248
 src/server/mcp-sources/mcp-source-cursor-store.adapter.ts → c3-248
+src/server/mcp-sources/mcp-source-fetch.ts → c3-248
 src/server/mcp-sources/mcp-source-runner.test.ts → c3-248
 src/server/mcp-sources/mcp-source-runner.ts → c3-248
 src/server/mcp-sources/mcp-sources-boot.ts → c3-248

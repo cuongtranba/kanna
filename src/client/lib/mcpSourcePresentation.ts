@@ -1,4 +1,9 @@
-import type { McpSourceMode, McpSourceState } from "../../shared/mcp-sources/types"
+import {
+  MCP_SOURCE_INTERVAL_MAX_MS,
+  MCP_SOURCE_INTERVAL_MIN_MS,
+  type McpSourceMode,
+  type McpSourceState,
+} from "../../shared/mcp-sources/types"
 import type { StatusTone } from "./statusLabel"
 
 const STATE_LABEL: Readonly<Record<McpSourceState, string>> = {
@@ -25,7 +30,8 @@ const MODE_LABEL: Readonly<Record<McpSourceMode, string>> = {
 }
 
 const MODE_CONSEQUENCE: Readonly<Record<McpSourceMode, string>> = {
-  subscribe: "Kanna listens for change notifications on the resources you name and reads each one that changes.",
+  subscribe:
+    "Kanna listens for change notifications on the resources you name, reads each one that changes and catches up after a reconnect. A resync interval re-reads them on a timer. Needs a server that supports resource subscriptions.",
   poll: "Kanna calls a tool on an interval and remembers a cursor, so each message is delivered once.",
 }
 
@@ -43,4 +49,8 @@ export function mcpSourceModeLabel(mode: McpSourceMode): string {
 
 export function mcpSourceModeConsequence(mode: McpSourceMode): string {
   return MODE_CONSEQUENCE[mode]
+}
+
+export function mcpSourceIntervalHint(): string {
+  return `Between ${MCP_SOURCE_INTERVAL_MIN_MS / 1000} and ${MCP_SOURCE_INTERVAL_MAX_MS / 1000}.`
 }

@@ -119,15 +119,16 @@ describe("McpSourcesSection", () => {
     expect(calls).toEqual(["delete:s1"])
   })
 
-  test("the Zalo preset fills the poll form for a new source", async () => {
+  test("the Zalo preset fills the subscribe form for a new source", async () => {
     const { handlers } = createHandlers()
     const host = await mount([STATUS], handlers)
 
     await click(host, "Add source")
     await click(host, "Zalo preset")
 
-    expect(host.querySelector<HTMLInputElement>("#mcp-source-tool")?.value).toBe("zalo_get_messages")
-    expect(host.querySelector<HTMLInputElement>("#mcp-source-interval")?.value).toBe("15")
+    expect(host.querySelector<HTMLTextAreaElement>("#mcp-source-uris")?.value).toBe("zalo://inbox")
+    expect(host.querySelector<HTMLInputElement>("#mcp-source-sub-item-key")?.value).toBe("id")
+    expect(host.querySelector<HTMLInputElement>("#mcp-source-resync")?.value).toBe("300")
   })
 
   test("mounting the section does not loop", async () => {

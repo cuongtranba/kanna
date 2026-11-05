@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vite-plus/test"
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server"
 import { SdkError, SdkErrorCode, type McpSubscription } from "@modelcontextprotocol/client"
 import { z } from "zod"
-import type { JsonObject } from "../../shared/json"
+import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import {
   createMcpSourceConnector,
@@ -24,6 +24,20 @@ function subscription(honored: string[]): McpSubscription {
   return { honoredFilter: { resourceSubscriptions: honored }, closed: new Promise<McpSourceCloseReason>(() => {}), close: async () => {} }
 }
 
+function configFor(url: string): McpServerConfig {
+  return {
+    id: "srv",
+    name: "fixture",
+    enabled: true,
+    transport: "http",
+    url,
+    headers: {},
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    lastTest: { status: "untested" },
+  }
+}
+
 describe("openListening", () => {
   test("a 2026-era server's honored subset is reported as is", async () => {
     const client: McpListenClient = {
@@ -31,6 +45,7 @@ describe("openListening", () => {
       subscribeResource: async () => {
         throw new Error("must not subscribe")
       },
+      getServerCapabilities: () => undefined,
     }
     const listening = await openListening(client, ["feed://a", "feed://b"], new Promise<McpSourceCloseReason>(() => {}))
     expect(listening.honoredUris).toEqual(["feed://a"])
@@ -46,6 +61,7 @@ describe("openListening", () => {
         subscribed.push(uri)
         return {}
       },
+      getServerCapabilities: () => ({ resources: { subscribe: true } }),
     }
     const transportClosed = Promise.resolve<McpSourceCloseReason>("remote")
     const listening = await openListening(client, ["feed://a", "feed://b"], transportClosed)
@@ -61,6 +77,7 @@ describe("openListening", () => {
         throw new Error("connection refused")
       },
       subscribeResource: async () => ({}),
+      getServerCapabilities: () => ({ resources: { subscribe: true } }),
     }
     await expect(openListening(client, ["feed://a"], new Promise<McpSourceCloseReason>(() => {}))).rejects.toThrow("connection refused")
     expect(isLegacyProtocolError(new Error("x"))).toBe(false)
@@ -84,20 +101,6 @@ describe("result mapping", () => {
 })
 
 describe("against a real MCP server", () => {
-  function configFor(url: string): McpServerConfig {
-    return {
-      id: "srv",
-      name: "fixture",
-      enabled: true,
-      transport: "http",
-      url,
-      headers: {},
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-      lastTest: { status: "untested" },
-    }
-  }
-
   async function startServer(): Promise<McpServerConfig> {
     const handler = createMcpHandler(() => {
       const server = new McpServer({ name: "fixture", version: "1.0.0" })
@@ -133,5 +136,121 @@ describe("against a real MCP server", () => {
 
   test("a server the connector cannot reach rejects instead of hanging", async () => {
     await expect(createMcpSourceConnector().open(configFor("http://127.0.0.1:1/mcp"), undefined)).rejects.toBeInstanceOf(Error)
+  }, 30_000)
+})
+
+describe("against a 2025-era streamable HTTP server", () => {
+  const SESSION_ID = "session-1"
+
+  interface LegacyServer {
+    config: McpServerConfig
+    methods: string[]
+    deletes: (string | null)[]
+    stop: () => void
+  }
+
+  function jsonRpcResult(id: JsonValue | undefined, result: JsonObject): Response {
+    return Response.json({ jsonrpc: "2.0", id, result }, { headers: { "mcp-session-id": SESSION_ID } })
+  }
+
+  function startLegacyServer(options: { subscribe: boolean; streamGone: boolean }): LegacyServer {
+    const server: LegacyServer = { config: configFor(""), methods: [], deletes: [], stop: () => {} }
+    const http = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      async fetch(request) {
+        if (request.method === "DELETE") {
+          server.deletes.push(request.headers.get("mcp-session-id"))
+          return new Response(null, { status: 200 })
+        }
+        if (request.method === "GET") {
+          if (options.streamGone) return new Response("session not found", { status: 404 })
+          return new Response(new ReadableStream({ start() {} }), { headers: { "content-type": "text/event-stream" } })
+        }
+        const body = safeJsonParse(await request.text())
+        if (body === null || !isJsonObject(body)) return new Response(null, { status: 400 })
+        const method = typeof body.method === "string" ? body.method : ""
+        server.methods.push(method)
+        if (body.id === undefined) return new Response(null, { status: 202 })
+        switch (method) {
+          case "initialize":
+            return jsonRpcResult(body.id, {
+              protocolVersion: "2025-11-25",
+              capabilities: { resources: { subscribe: options.subscribe } },
+              serverInfo: { name: "legacy", version: "1.0.0" },
+            })
+          case "resources/read":
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32002, message: "Resource not found" } },
+              { headers: { "mcp-session-id": SESSION_ID } },
+            )
+          default:
+            return jsonRpcResult(body.id, {})
+        }
+      },
+    })
+    server.stop = () => { void http.stop(true) }
+    stoppers.push(server.stop)
+    server.config = configFor(`http://127.0.0.1:${http.port}/mcp`)
+    return server
+  }
+
+  test("a server that does not advertise resource subscriptions is never sent resources/subscribe", async () => {
+    const server = startLegacyServer({ subscribe: false, streamGone: false })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    try {
+      const listening = await connection.listen(["feed://inbox"], () => {})
+      expect(listening.honoredUris).toEqual([])
+      expect(server.methods).not.toContain("resources/subscribe")
+    } finally {
+      await connection.close()
+    }
+  }, 30_000)
+
+  test("a server that advertises resource subscriptions is subscribed to every URI", async () => {
+    const server = startLegacyServer({ subscribe: true, streamGone: false })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    try {
+      const listening = await connection.listen(["feed://inbox"], () => {})
+      expect(listening.honoredUris).toEqual(["feed://inbox"])
+      expect(server.methods).toContain("resources/subscribe")
+    } finally {
+      await connection.close()
+    }
+  }, 30_000)
+
+  test("a session whose notification stream the server no longer knows ends as a remote close", async () => {
+    const server = startLegacyServer({ subscribe: true, streamGone: true })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    try {
+      const listening = await connection.listen(["feed://inbox"], () => {})
+      expect(await listening.closed).toBe("remote")
+    } finally {
+      await connection.close()
+    }
+  }, 30_000)
+
+  test("closing the connection ends the server session with the session id", async () => {
+    const server = startLegacyServer({ subscribe: true, streamGone: false })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    await connection.close()
+
+    expect(server.deletes).toEqual([SESSION_ID])
+  }, 30_000)
+
+  test("an error the server answers a read with keeps the session, a dead server ends it", async () => {
+    const server = startLegacyServer({ subscribe: true, streamGone: false })
+    const connection = await createMcpSourceConnector().open(server.config, undefined)
+    try {
+      const listening = await connection.listen(["feed://inbox"], () => {})
+      await expect(connection.readResource("feed://missing")).rejects.toBeInstanceOf(Error)
+      expect(await Promise.race([listening.closed, Promise.resolve("open")])).toBe("open")
+
+      server.stop()
+      await expect(connection.readResource("feed://missing")).rejects.toBeInstanceOf(Error)
+      expect(await listening.closed).toBe("remote")
+    } finally {
+      await connection.close()
+    }
   }, 30_000)
 })

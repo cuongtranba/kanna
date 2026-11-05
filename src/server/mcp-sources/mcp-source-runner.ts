@@ -1,6 +1,5 @@
-import { createHash } from "node:crypto"
 import { toError } from "../../shared/errors"
-import { isJsonArray, jsonText, resolveJsonPath, type JsonObject, type JsonValue } from "../../shared/json"
+import type { JsonObject, JsonValue } from "../../shared/json"
 import { log } from "../../shared/log"
 import { createSerialQueue } from "../serial-lane"
 import {
@@ -13,6 +12,7 @@ import {
 import type { McpServerConfig } from "../../shared/mcp-types"
 import type { InboundDelivery, InboundDeliveryResult } from "../inbound/deliver-inbound"
 import { addCounter, MCP_SOURCE_ERRORS, MCP_SOURCE_ITEMS } from "../observability"
+import { fetcherFor, textAt, type McpSourceFetcher } from "./mcp-source-fetch"
 
 export type McpSourceCloseReason = "local" | "graceful" | "remote"
 
@@ -61,7 +61,6 @@ interface Entry {
   status: McpSourceStatus
   abort: AbortController
   done: Promise<void>
-  updates: Promise<void>
 }
 
 const BACKOFF_BASE_MS = 1000
@@ -69,19 +68,12 @@ const BACKOFF_MAX_MS = 60_000
 const BACKOFF_JITTER = 0.25
 const GRACEFUL_RECONNECT_MS = 30_000
 const POLL_BACKOFF_MULTIPLIER_MAX = 5
-const NO_SUBSCRIPTIONS_ERROR = "server honored no subscriptions"
+const STABLE_SESSION_MS = 60_000
+const NO_SUBSCRIPTIONS_ERROR = "server does not support resource subscriptions (no URI was honored)"
 const UNAUTHORIZED_PATTERN = /\b401\b|unauthori[sz]ed/i
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text).digest("hex")
-}
 
 function isUnauthorized(error: Error): boolean {
   return UNAUTHORIZED_PATTERN.test(error.message)
-}
-
-function textAt(item: JsonValue, path: string): string {
-  return path.length > 0 ? jsonText(resolveJsonPath(item, path)).trim() : ""
 }
 
 function initialStatus(source: McpSource, state: McpSourceStatus["state"], lastError: string | null): McpSourceStatus {
@@ -108,6 +100,34 @@ async function closeQuietly(target: { close(): Promise<void> } | null): Promise<
     await target.close()
   } catch (error) {
     log.warn("[kanna/mcp-source] close failed:", toError(error).message)
+  }
+}
+
+class DrainLane {
+  private inFlight: Promise<void> | null = null
+  private readonly pending = new Set<string>()
+
+  constructor(private readonly run: (uris: string[]) => Promise<void>) {}
+
+  push(uris: Iterable<string>): void {
+    for (const uri of uris) this.pending.add(uri)
+    if (this.inFlight === null && this.pending.size > 0) this.inFlight = this.pump()
+  }
+
+  idle(): Promise<void> {
+    return this.inFlight ?? Promise.resolve()
+  }
+
+  private async pump(): Promise<void> {
+    try {
+      while (this.pending.size > 0) {
+        const batch = [...this.pending]
+        this.pending.clear()
+        await this.run(batch)
+      }
+    } finally {
+      this.inFlight = null
+    }
   }
 }
 
@@ -211,7 +231,6 @@ export class McpSourceRunner {
       status: blocked ?? initialStatus(source, "connecting", null),
       abort,
       done: Promise.resolve(),
-      updates: Promise.resolve(),
     }
     if (blocked !== null || server === null) return entry
     const loop = source.mode === "subscribe"
@@ -278,47 +297,86 @@ export class McpSourceRunner {
     this.patch(entry, { lastItemAt: at, itemCount: entry.status.itemCount + 1, lastError: null })
   }
 
-  private async handleUpdated(
+  private async drain(
     entry: Entry,
     server: McpServerConfig,
     connection: McpSourceConnection,
-    uri: string,
+    fetcher: McpSourceFetcher,
+    uris: readonly string[],
   ): Promise<void> {
-    try {
-      const contents = await connection.readResource(uri)
-      await this.ingest(entry, server, { uri, contents }, sha256(uri + JSON.stringify(contents)), uri)
-    } catch (error) {
-      this.fail(entry, toError(error))
+    const { source } = entry
+    const result = await fetcher.fetch(connection, this.cursorState(source.id).cursor, uris)
+    for (const item of result.items) await this.ingest(entry, server, item.body, item.key, item.threadKey)
+    if (result.cursor === undefined) return
+    this.cursors = { ...this.cursors, [source.id]: { ...this.cursorState(source.id), cursor: result.cursor } }
+    this.persist()
+    this.patch(entry, { cursor: result.cursor })
+  }
+
+  private drainLane(entry: Entry, server: McpServerConfig, connection: McpSourceConnection, fetcher: McpSourceFetcher): DrainLane {
+    return new DrainLane(async (uris) => {
+      const failures: Error[] = []
+      for (const uri of uris) {
+        try {
+          await this.drain(entry, server, connection, fetcher, [uri])
+        } catch (error) {
+          failures.push(toError(error))
+        }
+      }
+      const first = failures[0]
+      if (first) this.fail(entry, first)
+    })
+  }
+
+  private async resync(lane: DrainLane, uris: readonly string[], intervalMs: number, signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      await this.clock.sleep(intervalMs, signal)
+      if (!signal.aborted) lane.push(uris)
     }
   }
 
   private async runSubscribe(entry: Entry, source: McpSubscribeSource, server: McpServerConfig): Promise<void> {
     const { signal } = entry.abort
+    const fetcher = fetcherFor(source)
     let attempt = 0
     let authRetried = false
     while (!signal.aborted) {
       this.patch(entry, { state: "connecting" })
+      const session = new AbortController()
+      const sessionSignal = AbortSignal.any([signal, session.signal])
       let connection: McpSourceConnection | null = null
       let listening: McpSourceListening | null = null
+      let lane: DrainLane | null = null
+      let resyncing: Promise<void> = Promise.resolve()
       let waitMs: number
       try {
         const opened = await this.open(server)
         connection = opened
-        listening = await opened.listen(source.resourceUris, (uri) => {
-          entry.updates = entry.updates.then(() => this.handleUpdated(entry, server, opened, uri))
-        })
+        const sessionLane = this.drainLane(entry, server, opened, fetcher)
+        lane = sessionLane
+        listening = await opened.listen(source.resourceUris, (uri) => { sessionLane.push([uri]) })
         if (signal.aborted) break
         if (listening.honoredUris.length === 0) throw new Error(NO_SUBSCRIPTIONS_ERROR)
-        attempt = 0
         authRetried = false
+        const startedAt = this.clock.now()
         this.patch(entry, { state: "listening", honoredUris: listening.honoredUris, lastError: null })
+        sessionLane.push(listening.honoredUris)
+        if (source.resyncIntervalMs !== null) {
+          resyncing = this.resync(sessionLane, listening.honoredUris, source.resyncIntervalMs, sessionSignal)
+        }
         const reason = await Promise.race([listening.closed, aborted(signal)])
         if (signal.aborted) break
         if (reason === "local") {
           this.patch(entry, { state: "error", lastError: "subscription was closed locally" })
           break
         }
-        waitMs = reason === "graceful" ? GRACEFUL_RECONNECT_MS : this.backoffMs(1)
+        if (this.clock.now() - startedAt >= STABLE_SESSION_MS) attempt = 0
+        if (reason === "graceful") {
+          waitMs = GRACEFUL_RECONNECT_MS
+        } else {
+          attempt += 1
+          waitMs = this.backoffMs(attempt)
+        }
         this.patch(entry, { state: "backoff", lastError: reason === "remote" ? "connection dropped" : null })
       } catch (error) {
         const failure = toError(error)
@@ -331,36 +389,19 @@ export class McpSourceRunner {
         this.fail(entry, failure)
         this.patch(entry, { state: failure.message === NO_SUBSCRIPTIONS_ERROR ? "error" : "backoff" })
       } finally {
+        session.abort()
         await closeQuietly(listening)
         await closeQuietly(connection)
+        await resyncing
+        await lane?.idle()
       }
-      await entry.updates
       await this.clock.sleep(waitMs, signal)
     }
-    await entry.updates
-  }
-
-  private async pollOnce(entry: Entry, source: McpPollSource, server: McpServerConfig, connection: McpSourceConnection): Promise<void> {
-    const { cursor } = this.cursorState(source.id)
-    const args = cursor === null ? source.args : { ...source.args, [source.cursorArg]: cursor }
-    const result = await connection.callTool(source.tool, args)
-    const items = resolveJsonPath(result, source.itemsPath)
-    if (items === undefined || !isJsonArray(items)) {
-      throw new Error(`"${source.itemsPath}" did not resolve to an array in the ${source.tool} result`)
-    }
-    for (const item of items) {
-      const key = (source.itemKeyPath ? textAt(item, source.itemKeyPath) : "") || sha256(JSON.stringify(item))
-      await this.ingest(entry, server, item, key, key)
-    }
-    const next = resolveJsonPath(result, source.cursorPath)
-    if (next === undefined) return
-    this.cursors = { ...this.cursors, [source.id]: { ...this.cursorState(source.id), cursor: next } }
-    this.persist()
-    this.patch(entry, { cursor: next })
   }
 
   private async runPoll(entry: Entry, source: McpPollSource, server: McpServerConfig): Promise<void> {
     const { signal } = entry.abort
+    const fetcher = fetcherFor(source)
     let connection: McpSourceConnection | null = null
     let failures = 0
     let authRetried = false
@@ -371,7 +412,7 @@ export class McpSourceRunner {
         try {
           connection ??= await this.open(server)
           if (signal.aborted) break
-          await this.pollOnce(entry, source, server, connection)
+          await this.drain(entry, server, connection, fetcher, [])
           failures = 0
           authRetried = false
           this.patch(entry, { state: "polling", lastError: null })

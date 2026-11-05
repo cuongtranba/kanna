@@ -25,6 +25,9 @@ export interface McpSourceBase {
 export interface McpSubscribeSource extends McpSourceBase {
   mode: "subscribe"
   resourceUris: string[]
+  itemsPath: string
+  itemKeyPath: string | null
+  resyncIntervalMs: number | null
 }
 
 export interface McpPollSource extends McpSourceBase {
@@ -50,7 +53,13 @@ interface McpSourceInputBase {
 }
 
 export type McpSourceInput =
-  | (McpSourceInputBase & { mode: "subscribe"; resourceUris: string[] })
+  | (McpSourceInputBase & {
+      mode: "subscribe"
+      resourceUris: string[]
+      itemsPath?: string
+      itemKeyPath?: string | null
+      resyncIntervalMs?: number | null
+    })
   | (McpSourceInputBase & {
       mode: "poll"
       tool: string
@@ -78,6 +87,7 @@ export type McpSourcePatch = Partial<{
   itemsPath: string
   itemKeyPath: string | null
   intervalMs: number
+  resyncIntervalMs: number | null
 }>
 
 export type McpSourceState = "disabled" | "connecting" | "listening" | "polling" | "backoff" | "error"

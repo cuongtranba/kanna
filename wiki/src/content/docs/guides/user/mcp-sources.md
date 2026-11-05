@@ -22,18 +22,31 @@ servers cannot be used as a source.
 
 | Mode | What Kanna does |
 | --- | --- |
-| **Subscribe** | Keeps a connection open and asks the server to tell it when the resources you name change. Each change is read once. |
+| **Subscribe** | Keeps a connection open and asks the server to tell it when the resources you name change. Kanna then reads the changed resource and delivers each message in it once. |
 | **Poll** | Calls a tool you name every few seconds. Kanna remembers a cursor, so each message is delivered once. |
 
 Subscribe needs a server that supports resource subscriptions. Servers that speak
 the 2026-07-28 revision are asked to listen; older servers are subscribed
-resource by resource. If the server accepts none of your URIs, the source shows
-an error saying so.
+resource by resource, and only if they advertise the `resources.subscribe`
+capability. If the server accepts none of your URIs, the source shows an error
+saying the server does not support resource subscriptions.
+
+A notification only says that a resource changed, so Kanna reads it every time.
+It also reads every resource right after it connects, which catches up on
+anything that arrived while it was disconnected. Pushes that arrive while a read
+is running are merged into one more read.
 
 ## Add a source
 
 1. Choose **Add source**, name it and pick the server.
-2. For **Subscribe**, list the resource URIs, one per line.
+2. For **Subscribe**, list the resource URIs, one per line, and optionally:
+   - **Items path**, where the array of messages sits in the resource, and an
+     **Item key path**, a field that is unique per message. Messages are then
+     delivered one by one and each is delivered once, even when a later read
+     repeats it. Without an items path, the whole resource is one message and is
+     delivered again whenever its content changes.
+   - **Resync every**, between 5 and 3600 seconds. Kanna re-reads the resources
+     on this timer to pick up anything a missed notification left behind.
 3. For **Poll**, fill in:
    - **List tool**, and its **Arguments** as a JSON object.
    - **Cursor argument**, the argument Kanna fills with the cursor from the last
@@ -56,10 +69,13 @@ for every conversation in it.
 
 ### The Zalo preset
 
-**Zalo preset** fills the form for a Zalo MCP server that offers
-`zalo_get_messages`: it polls every 15 seconds with a `since` cursor, groups
-messages by `threadId`, shows `senderName`, and starts a new chat per
-conversation. Pick the server and the project, then save.
+**Zalo preset** fills the form for a Zalo MCP server that exposes the
+`zalo://inbox` resource and pushes resource updates (a `zalo-mcp` build with
+resource subscriptions). It subscribes to `zalo://inbox`, splits it at
+`messages` with `id` as the item key, resyncs every 5 minutes, groups messages
+by `threadId`, shows `senderName`, and starts a new chat per conversation. The
+reply hint maps a `threadType` of `dm` to 0 and `group` to 1 for
+`zalo_send_message`. Pick the server and the project, then save.
 
 ## Reading the status
 
@@ -69,7 +85,7 @@ Each row shows one of these:
 | --- | --- |
 | **Listening** or **Polling** | The source is connected and working. |
 | **Connecting** | Kanna is opening the connection. |
-| **Retrying** | The last attempt failed. Kanna tries again with a growing delay, up to a minute for subscriptions and five times the interval for polls. The error is shown under the name. |
+| **Retrying** | The last attempt failed. Kanna tries again with a growing delay: for subscriptions it doubles from one second up to a minute, and starts over only after a connection has held for a minute; for polls it is up to five times the interval. The error is shown under the name. |
 | **Error** | The source cannot work as configured, for example the server is missing or disabled. |
 | **Disabled** | You turned it off. |
 
@@ -82,7 +98,8 @@ Kanna keeps the cursor and the keys of the 256 most recent messages per source
 in `mcp-source-cursors.json` in its data directory, so a restart does not deliver
 old messages again. Deleting a source forgets them. A message that fails to
 deliver, for example because the target project no longer exists, is retried on
-the next poll.
+the next poll, or for a subscription on the next notification, reconnect or
+resync.
 
 ## Reply from the Inbox
 

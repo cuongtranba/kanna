@@ -14,6 +14,9 @@ const subscribe: McpSourceInput = {
   senderPath: "",
   handler,
   resourceUris: ["feed://inbox"],
+  itemsPath: "",
+  itemKeyPath: null,
+  resyncIntervalMs: null,
 }
 
 const poll: McpSourceInput = {
@@ -60,24 +63,16 @@ describe("validateMcpSource", () => {
     expect(validateMcpSource({ ...subscribe, name: "x".repeat(INBOUND_LIMITS.nameMaxChars + 1) })[0]).toContain("at most")
   })
 
-  test("the Zalo preset fills a form that validates once a server and project are picked", () => {
-    const preset = MCP_SOURCE_PRESETS.zalo
-    const input: McpSourceInput = {
-      mode: "poll",
-      name: preset.label,
-      serverId: "s1",
-      threadKeyPath: preset.threadKeyPath,
-      senderPath: preset.senderPath,
-      handler: { ...preset.handler, projectId: "p1" },
-      tool: preset.tool,
-      args: preset.args,
-      cursorArg: preset.cursorArg,
-      cursorPath: preset.cursorPath,
-      itemsPath: preset.itemsPath,
-      itemKeyPath: preset.itemKeyPath,
-      intervalMs: preset.intervalMs,
+  test("every preset fills a form that validates once a server and project are picked", () => {
+    for (const preset of Object.values(MCP_SOURCE_PRESETS)) {
+      const { label, ...template } = preset
+      const input: McpSourceInput = { ...template, name: label, serverId: "s1", handler: { ...template.handler, projectId: "p1" } }
+      expect(validateMcpSource(input)).toEqual([])
     }
-    expect(validateMcpSource(input)).toEqual([])
+  })
+
+  test("over-long item paths on a subscribe source are refused", () => {
+    expect(validateMcpSource({ ...subscribe, itemsPath: "x".repeat(INBOUND_LIMITS.pathMaxChars + 1) })[0]).toContain("Paths must be at most")
   })
 })
 

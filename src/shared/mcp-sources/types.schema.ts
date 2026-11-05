@@ -15,7 +15,21 @@ const mcpSourceInputBaseShape = {
   handler: inboundHandlerSchema,
 }
 
-const subscribeFieldsShape = { mode: z.literal("subscribe"), resourceUris: z.array(z.string()) }
+const subscribeInputFieldsShape = {
+  mode: z.literal("subscribe"),
+  resourceUris: z.array(z.string()),
+  itemsPath: z.string().optional(),
+  itemKeyPath: z.string().nullable().optional(),
+  resyncIntervalMs: z.number().nullable().optional(),
+}
+
+const subscribeFieldsShape = {
+  mode: z.literal("subscribe"),
+  resourceUris: z.array(z.string()),
+  itemsPath: z.string(),
+  itemKeyPath: z.string().nullable(),
+  resyncIntervalMs: z.number().nullable(),
+}
 
 const pollFieldsShape = {
   mode: z.literal("poll"),
@@ -29,7 +43,7 @@ const pollFieldsShape = {
 }
 
 export const mcpSourceInputSchema = z.discriminatedUnion("mode", [
-  z.object({ ...mcpSourceInputBaseShape, ...subscribeFieldsShape }),
+  z.object({ ...mcpSourceInputBaseShape, ...subscribeInputFieldsShape }),
   z.object({ ...mcpSourceInputBaseShape, ...pollFieldsShape }),
 ])
 
@@ -66,6 +80,7 @@ export const mcpSourcePatchSchema = z.object({
   itemsPath: z.string().optional(),
   itemKeyPath: z.string().nullable().optional(),
   intervalMs: z.number().optional(),
+  resyncIntervalMs: z.number().nullable().optional(),
 })
 
 assertParity<z.output<typeof mcpSourceInputSchema>, McpSourceInput>()

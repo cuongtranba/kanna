@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
-import type { McpPollSource } from "../../shared/mcp-sources/types"
+import type { McpPollSource, McpSubscribeSource } from "../../shared/mcp-sources/types"
 import {
-  applyZaloPreset,
+  applyPreset,
   draftFromMcpSource,
   emptyMcpSourceDraft,
   mcpSourceInputFromDraft,
@@ -24,6 +24,23 @@ const POLL: McpPollSource = {
   itemsPath: "messages",
   itemKeyPath: null,
   intervalMs: 15000,
+  createdAt: 1,
+  updatedAt: 1,
+}
+
+const SUBSCRIBE: McpSubscribeSource = {
+  id: "s2",
+  name: "Inbox",
+  mode: "subscribe",
+  serverId: "srv",
+  enabled: true,
+  threadKeyPath: "threadId",
+  senderPath: "senderName",
+  handler: { mode: "notify", chatId: "c1", template: "t", replyHint: "", pushEnabled: true },
+  resourceUris: ["feed://inbox"],
+  itemsPath: "messages",
+  itemKeyPath: "id",
+  resyncIntervalMs: 300_000,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -51,15 +68,43 @@ describe("mcp source draft", () => {
     })
   })
 
-  test("the Zalo preset fills a poll form that needs only a server and project", () => {
-    const filled = applyZaloPreset({ ...emptyMcpSourceDraft(), serverId: "srv", projectId: "p1" })
-    expect(filled).toMatchObject({ name: "Zalo", mode: "poll", tool: "zalo_get_messages", intervalSeconds: "15", handlerMode: "spawn", projectId: "p1" })
-    const result = mcpSourceInputFromDraft(filled)
-    expect(result.ok).toBe(true)
+  test("the Zalo preset fills a subscribe form keyed by message id that needs only a server and project", () => {
+    const filled = applyPreset({ ...emptyMcpSourceDraft(), serverId: "srv", projectId: "p1" }, "zalo")
+    expect(filled).toMatchObject({
+      name: "Zalo",
+      mode: "subscribe",
+      resourceUris: "zalo://inbox",
+      subscribeItemsPath: "messages",
+      subscribeItemKeyPath: "id",
+      resyncSeconds: "300",
+      handlerMode: "spawn",
+      projectId: "p1",
+    })
+    expect(mcpSourceInputFromDraft(filled)).toMatchObject({
+      ok: true,
+      input: { mode: "subscribe", itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 300_000 },
+    })
+  })
+
+  test("a stored subscribe source round-trips its item fields and a blank resync means none", () => {
+    const draft = draftFromMcpSource(SUBSCRIBE)
+    expect(mcpSourceInputFromDraft(draft)).toMatchObject({
+      ok: true,
+      input: { mode: "subscribe", itemsPath: "messages", itemKeyPath: "id", resyncIntervalMs: 300_000 },
+    })
+    expect(mcpSourceInputFromDraft({ ...draft, subscribeItemKeyPath: "", resyncSeconds: "" })).toMatchObject({
+      ok: true,
+      input: { itemKeyPath: null, resyncIntervalMs: null },
+    })
+  })
+
+  test("a resync interval that is not a number is reported before anything is sent", () => {
+    const result = mcpSourceInputFromDraft({ ...draftFromMcpSource(SUBSCRIBE), resyncSeconds: "often" })
+    expect(result).toEqual({ ok: false, errors: ["Resync interval must be a number of seconds"] })
   })
 
   test("invalid arguments JSON and a missing interval are reported before anything is sent", () => {
-    const result = mcpSourceInputFromDraft({ ...applyZaloPreset({ ...emptyMcpSourceDraft(), serverId: "srv", projectId: "p1" }), argsText: "[1]", intervalSeconds: "soon" })
+    const result = mcpSourceInputFromDraft({ ...draftFromMcpSource(POLL), argsText: "[1]", intervalSeconds: "soon", serverId: "srv", projectId: "p1" })
     expect(result).toEqual({ ok: false, errors: ["Arguments must be a JSON object", "Interval must be a number of seconds"] })
   })
 

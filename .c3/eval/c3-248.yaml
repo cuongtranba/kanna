@@ -5,6 +5,7 @@ code:
   - src/shared/mcp-sources/validate.ts
   - src/shared/mcp-sources/validate.test.ts
   - src/shared/mcp-sources/presets.ts
+  - src/server/mcp-sources/mcp-source-fetch.ts
   - src/server/mcp-sources/mcp-source-runner.ts
   - src/server/mcp-sources/mcp-source-runner.test.ts
   - src/server/mcp-sources/mcp-source-client.adapter.ts

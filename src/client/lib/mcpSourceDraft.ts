@@ -5,7 +5,7 @@ import {
   type InboundHandler,
   type InboundHandlerMode,
 } from "../../shared/inbound/handler"
-import { MCP_SOURCE_PRESETS } from "../../shared/mcp-sources/presets"
+import { MCP_SOURCE_PRESETS, type McpSourcePresetId } from "../../shared/mcp-sources/presets"
 import {
   MCP_SOURCE_INTERVAL_MIN_MS,
   type McpSource,
@@ -20,6 +20,9 @@ export interface McpSourceDraft {
   serverId: string
   mode: McpSourceMode
   resourceUris: string
+  subscribeItemsPath: string
+  subscribeItemKeyPath: string
+  resyncSeconds: string
   tool: string
   argsText: string
   cursorArg: string
@@ -49,6 +52,9 @@ export function emptyMcpSourceDraft(): McpSourceDraft {
     serverId: "",
     mode: "subscribe",
     resourceUris: "",
+    subscribeItemsPath: "",
+    subscribeItemKeyPath: "",
+    resyncSeconds: "",
     tool: "",
     argsText: "{}",
     cursorArg: "",
@@ -90,7 +96,15 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
     senderPath: source.senderPath,
     ...handlerFields(source.handler),
   }
-  if (source.mode === "subscribe") return { ...base, resourceUris: source.resourceUris.join("\n") }
+  if (source.mode === "subscribe") {
+    return {
+      ...base,
+      resourceUris: source.resourceUris.join("\n"),
+      subscribeItemsPath: source.itemsPath,
+      subscribeItemKeyPath: source.itemKeyPath ?? "",
+      resyncSeconds: resyncSecondsText(source.resyncIntervalMs),
+    }
+  }
   return {
     ...base,
     tool: source.tool,
@@ -103,22 +117,38 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
   }
 }
 
-export function applyZaloPreset(draft: McpSourceDraft): McpSourceDraft {
-  const preset = MCP_SOURCE_PRESETS.zalo
-  return {
+function resyncSecondsText(resyncIntervalMs: number | null): string {
+  return resyncIntervalMs === null ? "" : String(Math.round(resyncIntervalMs / 1000))
+}
+
+export function applyPreset(draft: McpSourceDraft, presetId: McpSourcePresetId): McpSourceDraft {
+  const preset = MCP_SOURCE_PRESETS[presetId]
+  const common = {
     ...draft,
     name: draft.name.trim().length > 0 ? draft.name : preset.label,
     mode: preset.mode,
+    threadKeyPath: preset.threadKeyPath,
+    senderPath: preset.senderPath,
+    ...handlerFields({ ...preset.handler, projectId: draft.projectId || undefined }),
+  }
+  if (preset.mode === "subscribe") {
+    return {
+      ...common,
+      resourceUris: preset.resourceUris.join("\n"),
+      subscribeItemsPath: preset.itemsPath ?? "",
+      subscribeItemKeyPath: preset.itemKeyPath ?? "",
+      resyncSeconds: resyncSecondsText(preset.resyncIntervalMs ?? null),
+    }
+  }
+  return {
+    ...common,
     tool: preset.tool,
     argsText: JSON.stringify(preset.args, null, 2),
     cursorArg: preset.cursorArg,
     cursorPath: preset.cursorPath,
     itemsPath: preset.itemsPath,
-    itemKeyPath: preset.itemKeyPath,
+    itemKeyPath: preset.itemKeyPath ?? "",
     intervalSeconds: String(Math.round(preset.intervalMs / 1000)),
-    threadKeyPath: preset.threadKeyPath,
-    senderPath: preset.senderPath,
-    ...handlerFields({ ...preset.handler, projectId: draft.projectId || undefined }),
   }
 }
 
@@ -145,12 +175,18 @@ export function mcpSourceInputFromDraft(draft: McpSourceDraft): McpSourceDraftRe
     handler: handlerFromDraft(draft),
   }
   if (draft.mode === "subscribe") {
+    const resyncText = draft.resyncSeconds.trim()
+    const resyncSeconds = Number(resyncText)
+    const resyncValid = resyncText.length === 0 || (Number.isFinite(resyncSeconds) && resyncSeconds > 0)
     const input: McpSourceInput = {
       ...common,
       mode: "subscribe",
       resourceUris: draft.resourceUris.split("\n").map((uri) => uri.trim()).filter((uri) => uri.length > 0),
+      itemsPath: draft.subscribeItemsPath.trim(),
+      itemKeyPath: draft.subscribeItemKeyPath.trim() || null,
+      resyncIntervalMs: resyncText.length > 0 && resyncValid ? Math.round(resyncSeconds * 1000) : null,
     }
-    const errors = validateMcpSource(input)
+    const errors = [...(resyncValid ? [] : ["Resync interval must be a number of seconds"]), ...validateMcpSource(input)]
     return errors.length > 0 ? { ok: false, errors } : { ok: true, input }
   }
   const parsedArgs = parseMcpSourceArgs(draft.argsText)

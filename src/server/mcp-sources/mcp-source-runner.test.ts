@@ -56,8 +56,19 @@ const SUBSCRIBE: McpSubscribeSource = {
   senderPath: "",
   handler: HANDLER,
   resourceUris: ["feed://inbox"],
+  itemsPath: "",
+  itemKeyPath: null,
+  resyncIntervalMs: null,
   createdAt: 1,
   updatedAt: 1,
+}
+
+const SUBSCRIBE_ITEMS: McpSubscribeSource = {
+  ...SUBSCRIBE,
+  threadKeyPath: "threadId",
+  senderPath: "senderName",
+  itemsPath: "messages",
+  itemKeyPath: "id",
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -82,8 +93,9 @@ function settle(): Promise<void> {
 
 function createClock() {
   const sleeps: { ms: number; release: () => void }[] = []
+  const time = { now: 1_000_000 }
   const clock: McpSourceClock = {
-    now: () => 1_000_000,
+    now: () => time.now,
     random: () => 0,
     sleep: (ms, signal) =>
       new Promise<void>((done) => {
@@ -93,7 +105,7 @@ function createClock() {
         signal.addEventListener("abort", () => { done() }, { once: true })
       }),
   }
-  return { clock, sleeps }
+  return { clock, sleeps, time }
 }
 
 function createCursorStore(initial: McpSourceCursors = {}) {
@@ -103,7 +115,7 @@ function createCursorStore(initial: McpSourceCursors = {}) {
 
 function createHarness(options: { bearer?: string; deliverOk?: () => boolean } = {}) {
   const deliveries: InboundDelivery[] = []
-  const { clock, sleeps } = createClock()
+  const { clock, sleeps, time } = createClock()
   const cursors = createCursorStore()
   const opened: { bearer: string | undefined; connection: FakeConnection }[] = []
   const connections: (() => FakeConnection)[] = []
@@ -124,7 +136,7 @@ function createHarness(options: { bearer?: string; deliverOk?: () => boolean } =
     },
     clock,
   )
-  return { runner, deliveries, sleeps, cursors, opened, connections }
+  return { runner, deliveries, sleeps, time, cursors, opened, connections }
 }
 
 class FakeConnection implements McpSourceConnection {
@@ -136,6 +148,9 @@ class FakeConnection implements McpSourceConnection {
   notify: (uri: string) => void = () => {}
   endListening: (reason: McpSourceCloseReason) => void = () => {}
   resource: JsonValue = { text: "hello" }
+  readResults: (JsonValue | Error)[] = []
+  readGate: Promise<void> | null = null
+  lostOnReadError = false
   toolResults: (JsonValue | Error)[] = []
   inFlight = 0
   maxInFlight = 0
@@ -151,7 +166,13 @@ class FakeConnection implements McpSourceConnection {
 
   async readResource(): Promise<JsonValue> {
     this.reads += 1
-    return this.resource
+    if (this.readGate) await this.readGate
+    const next = this.readResults.shift()
+    if (next instanceof Error) {
+      if (this.lostOnReadError) this.endListening("remote")
+      throw next
+    }
+    return next ?? this.resource
   }
 
   async callTool(_name: string, args: JsonObject): Promise<JsonValue> {
@@ -172,6 +193,10 @@ class FakeConnection implements McpSourceConnection {
 
 function message(id: string, threadId = "t-1"): JsonObject {
   return { messageId: id, threadId, threadType: 0, senderName: "An", text: `text ${id}` }
+}
+
+function inbox(...ids: string[]): JsonObject {
+  return { messages: ids.map((id) => ({ id, threadId: "t-1", senderName: "An" })) }
 }
 
 describe("McpSourceRunner subscribe", () => {
@@ -202,6 +227,7 @@ describe("McpSourceRunner subscribe", () => {
     await h.runner.reconcile([SUBSCRIBE], [SERVER])
     await waitFor(() => h.runner.statuses()[0]?.state === "listening")
 
+    await waitFor(() => h.deliveries.length === 1)
     connection.notify("feed://inbox")
     connection.notify("feed://inbox")
     await waitFor(() => connection.reads === 2)
@@ -253,7 +279,7 @@ describe("McpSourceRunner subscribe", () => {
     await h.runner.reconcile([SUBSCRIBE], [SERVER])
     await waitFor(() => h.runner.statuses()[0]?.state === "error")
 
-    expect(h.runner.statuses()[0]?.lastError).toBe("server honored no subscriptions")
+    expect(h.runner.statuses()[0]?.lastError).toBe("server does not support resource subscriptions (no URI was honored)")
     await h.runner.stop()
   })
 
@@ -263,6 +289,127 @@ describe("McpSourceRunner subscribe", () => {
     await waitFor(() => h.opened.length === 1)
 
     expect(h.opened[0]?.bearer).toBe("tok")
+    await h.runner.stop()
+  })
+})
+
+describe("McpSourceRunner subscribe items", () => {
+  test("the catch-up read delivers each item once and a push that repeats old items delivers only the new one", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    connection.readResults = [inbox("a", "b"), inbox("a", "b", "c")]
+    h.connections.push(() => connection)
+    await h.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => h.deliveries.length === 2)
+
+    connection.notify("feed://inbox")
+    await waitFor(() => h.deliveries.length === 3)
+
+    expect(h.deliveries.map((d) => d.deliveryId)).toEqual(["a", "b", "c"])
+    expect(h.deliveries[0]).toMatchObject({ threadKey: "t-1", sender: "An", body: { id: "a" } })
+    await h.runner.stop()
+  })
+
+  test("pushes that arrive during an in-flight read are coalesced into one follow-up read", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    const gate = deferred<void>()
+    connection.readGate = gate.promise
+    connection.readResults = [inbox("a"), inbox("a", "b")]
+    h.connections.push(() => connection)
+    await h.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => connection.reads === 1)
+
+    connection.notify("feed://inbox")
+    connection.notify("feed://inbox")
+    connection.notify("feed://inbox")
+    await settle()
+    expect(connection.reads).toBe(1)
+
+    gate.resolve()
+    await waitFor(() => h.deliveries.length === 2)
+    await settle()
+
+    expect(connection.reads).toBe(2)
+    expect(h.deliveries.map((d) => d.deliveryId)).toEqual(["a", "b"])
+    await h.runner.stop()
+  })
+
+  test("a resync re-reads the resources and delivers what a missed notification left behind", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    connection.readResults = [inbox("a"), inbox("a", "b")]
+    h.connections.push(() => connection)
+    await h.runner.reconcile([{ ...SUBSCRIBE_ITEMS, resyncIntervalMs: 300_000 }], [SERVER])
+    await waitFor(() => h.sleeps.length === 1)
+
+    expect(h.sleeps[0]?.ms).toBe(300_000)
+    h.sleeps[0]!.release()
+    await waitFor(() => h.deliveries.length === 2)
+
+    expect(h.deliveries.map((d) => d.deliveryId)).toEqual(["a", "b"])
+    await h.runner.stop()
+  })
+
+  test("a connection lost while reading reconnects, re-subscribes and catches up", async () => {
+    const h = createHarness()
+    const first = new FakeConnection()
+    first.lostOnReadError = true
+    first.readResults = [new Error("fetch failed")]
+    const second = new FakeConnection()
+    second.readResults = [inbox("a")]
+    h.connections.push(() => first, () => second)
+    await h.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => h.sleeps.length === 1)
+
+    expect(h.runner.statuses()[0]).toMatchObject({ state: "backoff" })
+    h.sleeps[0]!.release()
+    await waitFor(() => h.deliveries.length === 1)
+
+    expect(second.listenCalls).toEqual([["feed://inbox"]])
+    expect(first.closed).toBe(true)
+    expect(h.runner.statuses()[0]).toMatchObject({ state: "listening", lastError: null })
+    await h.runner.stop()
+  })
+
+  test("a read the server answers with an error is reported but keeps the connection", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    connection.readResults = [new Error("resource not found"), inbox("a")]
+    h.connections.push(() => connection)
+    await h.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => h.runner.statuses()[0]?.lastError === "resource not found")
+
+    expect(h.runner.statuses()[0]?.state).toBe("listening")
+    connection.notify("feed://inbox")
+    await waitFor(() => h.deliveries.length === 1)
+
+    expect(h.opened).toHaveLength(1)
+    expect(h.sleeps).toHaveLength(0)
+    expect(h.runner.statuses()[0]?.lastError).toBeNull()
+    await h.runner.stop()
+  })
+
+  test("repeated remote drops back off exponentially and a stable session resets the delay", async () => {
+    const h = createHarness()
+    const sessions = [new FakeConnection(), new FakeConnection(), new FakeConnection(), new FakeConnection()]
+    h.connections.push(...sessions.map((session) => () => session))
+    await h.runner.reconcile([SUBSCRIBE], [SERVER])
+
+    for (const [index, expected] of [1000, 2000, 4000].entries()) {
+      await waitFor(() => sessions[index]!.listenCalls.length === 1)
+      sessions[index]!.endListening("remote")
+      await waitFor(() => h.sleeps.length === index + 1)
+      expect(h.sleeps[index]?.ms).toBe(expected)
+      h.sleeps[index]!.release()
+    }
+
+    await waitFor(() => sessions[3]!.listenCalls.length === 1)
+    h.time.now += 61_000
+    sessions[3]!.endListening("remote")
+    await waitFor(() => h.sleeps.length === 4)
+
+    expect(h.sleeps[3]?.ms).toBe(1000)
     await h.runner.stop()
   })
 })
