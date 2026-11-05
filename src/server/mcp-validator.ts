@@ -8,6 +8,26 @@ import { toError } from "../shared/errors"
 import { projectProcessEnv } from "./project-process-env"
 
 const DEFAULT_TIMEOUT_MS = 10_000
+const TERMINATE_TIMEOUT_MS = 3000
+
+export interface SessionTerminator {
+  terminateSession(): Promise<void>
+}
+
+export async function terminateQuietly(terminator: SessionTerminator | null): Promise<void> {
+  if (terminator === null) return
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, TERMINATE_TIMEOUT_MS)
+  })
+  try {
+    await Promise.race([terminator.terminateSession(), expired])
+  } catch {
+    return
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 export interface ValidateMcpOptions {
   timeoutMs?: number
@@ -33,12 +53,13 @@ export async function validateMcpServer(
 ): Promise<McpServerTestResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   let client: Client | null = null
+  let transport: ReturnType<typeof buildTransport> | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let timedOut = false
 
   try {
     client = new Client({ name: "kanna-validator", version: "0.0.0" }, { capabilities: {} })
-    const transport = buildTransport(config, opts.bearer)
+    transport = buildTransport(config, opts.bearer)
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
@@ -62,6 +83,7 @@ export async function validateMcpServer(
     }
   } finally {
     if (timer) clearTimeout(timer)
+    await terminateQuietly(transport instanceof StreamableHTTPClientTransport ? transport : null)
     if (client) {
       try {
         await client.close()

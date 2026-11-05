@@ -3,6 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { validateMcpServer, networkHeaders } from "./mcp-validator"
 import type { McpServerConfig } from "../shared/types"
+import { isJsonObject, safeJsonParse, type JsonObject } from "../shared/json"
 
 const STUB_OK_SCRIPT = `
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
@@ -89,3 +90,51 @@ test("http 401 surfaces unauthorized", async () => {
     server.stop()
   }
 }, 10_000)
+
+test("http connect test ends the server session so no session is left open", async () => {
+  const sessionId = "session-1"
+  const deletes: (string | null)[] = []
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    async fetch(request) {
+      if (request.method === "DELETE") {
+        deletes.push(request.headers.get("mcp-session-id"))
+        return new Response(null, { status: 200 })
+      }
+      if (request.method === "GET") return new Response(null, { status: 405 })
+      const body = safeJsonParse(await request.text())
+      if (body === null || !isJsonObject(body)) return new Response(null, { status: 400 })
+      if (body.id === undefined) return new Response(null, { status: 202 })
+      const reply = (result: JsonObject) =>
+        Response.json({ jsonrpc: "2.0", id: body.id, result }, { headers: { "mcp-session-id": sessionId } })
+      if (body.method === "initialize") {
+        return reply({
+          protocolVersion: "2025-11-25",
+          capabilities: { tools: {} },
+          serverInfo: { name: "session-stub", version: "1.0.0" },
+        })
+      }
+      if (body.method === "tools/list") return reply({ tools: [] })
+      return reply({})
+    },
+  })
+  try {
+    const cfg: McpServerConfig = {
+      id: "id",
+      name: "test",
+      enabled: true,
+      createdAt: "",
+      updatedAt: "",
+      lastTest: { status: "untested" },
+      transport: "http",
+      url: `http://127.0.0.1:${server.port}/mcp`,
+      headers: {},
+    }
+    const result = await validateMcpServer(cfg, { timeoutMs: 5_000 })
+    expect(result.status).toBe("ok")
+    expect(deletes).toEqual([sessionId])
+  } finally {
+    await server.stop(true)
+  }
+}, 15_000)
