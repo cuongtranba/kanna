@@ -61,6 +61,7 @@ export const inboxOutboundMessageSchema = z.object({
   error: z.string().optional(),
   resultId: z.string().optional(),
   settledAt: z.number().optional(),
+  retryOf: z.string().optional(),
 })
 
 const inboxThreadSchema = z.object({

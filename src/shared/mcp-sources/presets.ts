@@ -34,7 +34,7 @@ export const MCP_SOURCE_PRESETS: Readonly<Record<McpSourcePresetId, McpSourcePre
         threadType: { from: "message.threadType", map: { dm: 0, group: 1 } },
         text: "{{reply.text}}",
       },
-      resultIdPath: "",
+      resultIdPath: "messageId",
     },
   },
 }

@@ -20,7 +20,7 @@ import {
 
 export type InboxThreadHeader = Pick<InboxThread, "id" | "sourceKind" | "sourceId" | "sourceName" | "threadKey" | "sender">
 
-export type InboxQueuedOutbound = Pick<InboxOutboundMessage, "id" | "ts" | "text" | "by">
+export type InboxQueuedOutbound = Pick<InboxOutboundMessage, "id" | "ts" | "text" | "by" | "retryOf">
 
 interface InboxEventBase {
   v: 1
@@ -77,7 +77,7 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     ...eventBase,
     kind: z.literal("inbox_thread_outbound_queued"),
     threadId: z.string(),
-    outbound: inboxOutboundMessageSchema.pick({ id: true, ts: true, text: true, by: true }),
+    outbound: inboxOutboundMessageSchema.pick({ id: true, ts: true, text: true, by: true, retryOf: true }),
   }),
   z.object({
     ...eventBase,

@@ -144,14 +144,6 @@ export function outboundStatusDisplay(outbound: InboxOutboundMessage): InboxStat
   return { tone: "destructive", label: outbound.error ? `Failed: ${outbound.error}` : "Failed" }
 }
 
-export function outboundNeedsDuplicateConfirm(outbound: InboxOutboundMessage): boolean {
-  return outbound.status === "unknown"
-}
-
-export function outboundRetryable(outbound: InboxOutboundMessage): boolean {
-  return outbound.status === "failed" || outbound.status === "unknown"
-}
-
 export type InboxReplyMode = "direct" | "agent" | "none"
 
 export function inboxReplyMode(thread: InboxThread, sources: readonly McpSource[]): InboxReplyMode {

@@ -134,6 +134,18 @@ describe("InboxThreadDetail outbound messages", () => {
     }
   })
 
+  test("a failed message that was already retried has no Retry", async () => {
+    const original = outbound({ id: "o1", status: "failed", error: "recipient is blocked" })
+    const retry = outbound({ id: "o2", ts: 2500, status: "pending", retryOf: "o1" })
+    const { container, cleanup } = await mount(thread([original, retry]))
+    try {
+      expect(container.textContent).toContain("Failed: recipient is blocked")
+      expect([...container.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Retry")).toBe(false)
+    } finally {
+      await cleanup()
+    }
+  })
+
   test("a sent message has no Retry", async () => {
     const { container, cleanup } = await mount(thread([outbound({ status: "sent" })]))
     try {

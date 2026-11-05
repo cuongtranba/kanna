@@ -112,6 +112,22 @@ test("a call the tool rejects stays failed and a retry sends the same text as a 
   expect(read().state).toBe("replied")
 })
 
+test("a message that was already retried cannot be retried again, so it cannot be delivered twice", async () => {
+  const { tool, outbox, thread, read, settled } = await setup()
+  tool.behavior = async () => { throw new McpToolRejectedError("recipient is blocked") }
+  const first = sendOk(await outbox.send(thread.id, "hello", "you"))
+  await settled(1)
+
+  tool.behavior = async () => ({ msgId: "m-2" })
+  const second = sendOk(await outbox.retry(thread.id, first, false))
+  await settled(2)
+  const again = await outbox.retry(thread.id, first, true)
+
+  expect(again.ok).toBe(false)
+  expect(tool.calls).toHaveLength(2)
+  expect(read().outbound.map((outbound) => [outbound.id, outbound.retryOf])).toEqual([[first, undefined], [second, first]])
+})
+
 test("a transport error is not confirmed, so a retry needs confirmDuplicate", async () => {
   const { tool, outbox, thread, read, settled } = await setup()
   tool.behavior = async () => { throw new Error("socket hang up") }

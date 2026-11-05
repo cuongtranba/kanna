@@ -1,26 +1,29 @@
 import { useCallback } from "react"
-import type { InboxOutboundMessage } from "../../shared/inbox/types"
+import { outboundRetryState } from "../../shared/inbox/policy"
+import type { InboxOutboundMessage, InboxThread } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { StateMarkLabel } from "../components/ui/state-mark"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { formatStartedClock } from "../lib/formatters"
-import { outboundNeedsDuplicateConfirm, outboundRetryable, outboundStatusDisplay } from "../lib/inboxPresentation"
+import { outboundStatusDisplay } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
 interface Props {
-  threadId: string
+  thread: InboxThread
   outbound: InboxOutboundMessage
 }
 
-export function InboxOutboundEntry({ threadId, outbound }: Props) {
+export function InboxOutboundEntry({ thread, outbound }: Props) {
   const socket = useOptionalKannaSocket()
   const confirming = useInboxStore((state) => state.retryConfirming[outbound.id] === true)
   const retryKey = pendingActionKey("inbox.retrySend", outbound.id)
   const retrying = usePendingAction(retryKey)
   const display = outboundStatusDisplay(outbound)
-  const needsConfirm = outboundNeedsDuplicateConfirm(outbound)
+  const retryState = outboundRetryState(thread, outbound.id)
+  const needsConfirm = retryState.kind === "needs_confirm"
+  const threadId = thread.id
 
   const sendAgain = useCallback(
     (confirmDuplicate: boolean) => {
@@ -55,7 +58,7 @@ export function InboxOutboundEntry({ threadId, outbound }: Props) {
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         <StateMarkLabel tone={display.tone} label={display.label} className="min-w-0 break-words" />
-        {outboundRetryable(outbound) && !confirming ? (
+        {retryState.kind !== "refused" && !confirming ? (
           <Button variant="link" size="none" className="h-auto text-xs" pending={retrying} onClick={handleRetry}>
             Retry
           </Button>

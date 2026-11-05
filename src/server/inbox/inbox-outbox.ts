@@ -1,7 +1,7 @@
 import type { JsonObject, JsonValue } from "../../shared/json"
 import { toError } from "../../shared/errors"
 import { resolveReplyArgs } from "../../shared/inbound/reply-args"
-import { inboxReplyTextError } from "../../shared/inbox/policy"
+import { inboxReplyTextError, outboundRetryState } from "../../shared/inbox/policy"
 import type { InboxOutboundBy, InboxThread } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
 import type { McpSourceReply } from "../../shared/mcp-sources/types"
@@ -67,7 +67,7 @@ export function createInboxOutbox(options: InboxOutboxOptions): InboxOutbox {
     })
   }
 
-  async function send(threadId: string, text: string, by: InboxOutboundBy): Promise<InboxSendResult> {
+  async function enqueue(threadId: string, text: string, by: InboxOutboundBy, retryOf: string | null): Promise<InboxSendResult> {
     const body = text.trim()
     const invalid = inboxReplyTextError(body)
     if (invalid !== null) return { ok: false, error: invalid }
@@ -76,21 +76,27 @@ export function createInboxOutbox(options: InboxOutboxOptions): InboxOutbox {
     const { thread, source } = target
     const outboundId = newId()
     const resolved = resolveReplyArgs(source.reply, thread.messages.at(-1)?.payload ?? null, body)
-    await registry.queueOutbound(threadId, { id: outboundId, text: body, by })
+    await registry.queueOutbound(threadId, { id: outboundId, text: body, by, ...(retryOf === null ? {} : { retryOf }) })
     if (resolved.ok) fire(threadId, outboundId, source, resolved.args)
     else await registry.settleOutbound(threadId, outboundId, { status: "failed", error: resolved.error })
     return { ok: true, outboundId }
   }
 
+  function send(threadId: string, text: string, by: InboxOutboundBy): Promise<InboxSendResult> {
+    return enqueue(threadId, text, by, null)
+  }
+
   async function retry(threadId: string, outboundId: string, confirmDuplicate: boolean): Promise<InboxSendResult> {
-    const outbound = registry.getThread(threadId)?.outbound.find((candidate) => candidate.id === outboundId)
-    if (!outbound) return { ok: false, error: "Unknown outbound message" }
-    if (outbound.status === "pending") return { ok: false, error: "This message is still being sent" }
-    if (outbound.status === "sent") return { ok: false, error: "This message was already sent" }
-    if (outbound.status === "unknown" && !confirmDuplicate) {
+    const thread = registry.getThread(threadId)
+    if (!thread) return { ok: false, error: `Unknown inbox thread ${threadId}` }
+    const state = outboundRetryState(thread, outboundId)
+    if (state.kind === "refused") return { ok: false, error: state.reason }
+    if (state.kind === "needs_confirm" && !confirmDuplicate) {
       return { ok: false, error: "This message may already have been delivered; confirm to send it again" }
     }
-    return send(threadId, outbound.text, outbound.by)
+    const outbound = thread.outbound.find((candidate) => candidate.id === outboundId)
+    if (!outbound) return { ok: false, error: "Unknown outbound message" }
+    return enqueue(threadId, outbound.text, outbound.by, outboundId)
   }
 
   return {

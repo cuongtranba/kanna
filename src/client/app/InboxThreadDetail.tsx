@@ -98,7 +98,7 @@ export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
               entry.kind === "inbound" ? (
                 <MessageEntry key={entry.message.id} message={entry.message} />
               ) : (
-                <InboxOutboundEntry key={entry.outbound.id} threadId={thread.id} outbound={entry.outbound} />
+                <InboxOutboundEntry key={entry.outbound.id} thread={thread} outbound={entry.outbound} />
               ),
             )}
           </ul>

@@ -51,6 +51,22 @@ export function raisesNotification(thread: Pick<InboxThread, "state">): boolean 
   return thread.state === "needs_you"
 }
 
+export type OutboundRetryState =
+  | { kind: "retryable" }
+  | { kind: "needs_confirm" }
+  | { kind: "refused"; reason: string }
+
+export function outboundRetryState(thread: Pick<InboxThread, "outbound">, outboundId: string): OutboundRetryState {
+  const outbound = thread.outbound.find((candidate) => candidate.id === outboundId)
+  if (!outbound) return { kind: "refused", reason: "Unknown outbound message" }
+  if (thread.outbound.some((candidate) => candidate.retryOf === outboundId)) {
+    return { kind: "refused", reason: "This message was already retried" }
+  }
+  if (outbound.status === "pending") return { kind: "refused", reason: "This message is still being sent" }
+  if (outbound.status === "sent") return { kind: "refused", reason: "This message was already sent" }
+  return outbound.status === "unknown" ? { kind: "needs_confirm" } : { kind: "retryable" }
+}
+
 export function inboxReplyTextError(text: string): string | null {
   if (text.length === 0) return "Text is required"
   if (text.length > INBOX_REPLY_MAX_CHARS) return `Text must be at most ${INBOX_REPLY_MAX_CHARS} characters`

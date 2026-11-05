@@ -29,6 +29,7 @@ export interface InboxOutboundMessage {
   error?: string
   resultId?: string
   settledAt?: number
+  retryOf?: string
 }
 
 export const INBOX_OUTBOUND_RESTART_ERROR = "Kanna restarted before the send finished"
