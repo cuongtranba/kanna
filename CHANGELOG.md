@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.100.0](https://github.com/cuongtranba/kanna/compare/v1.99.0...v1.100.0) (2026-11-05)
+
+
+### Features
+
+* **inbox:** autonomy ladder with guardrails, approval cards and handler-turn tool guard (phase 3) ([#1421](https://github.com/cuongtranba/kanna/issues/1421)) ([9c2eddc](https://github.com/cuongtranba/kanna/commit/9c2eddc8429d800be1dfee49ea3d01895fc965ef))
+* **inbox:** push preview, Send from notification and Inbox shortcuts (phase 4) ([#1422](https://github.com/cuongtranba/kanna/issues/1422)) ([4798c14](https://github.com/cuongtranba/kanna/commit/4798c14b7d7804ec45fc2bed916a66720f656b0f))
+
 ## [1.99.0](https://github.com/cuongtranba/kanna/compare/v1.98.0...v1.99.0) (2026-11-05)
 
 
