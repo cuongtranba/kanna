@@ -1,6 +1,6 @@
 ---
 id: c3-248
-c3-seal: 9ffe3aad37718b3d688f6effec77320feb7c25d76052de193b867a7cb45f9cb6
+c3-seal: 1cf374cc4e8e4b5cdc3c33cd07993f74aa5243640d2bf0f44a5f39b35803900e
 title: mcp-sources
 type: component
 category: feature
@@ -46,6 +46,7 @@ Owns the MCP sources feature: the McpSource contract with its subscribe and poll
 | Poll loop | IN | call the tool with the persisted cursor (fetched by the tool fetcher in mcp-source-fetch.ts), read the items at itemsPath, dedupe on the item key or the item hash, deliver, persist the new cursor; polls never overlap and errors back off up to five intervals | The first poll of a cursorless source delivers everything the tool returns; a 401 refreshes the bearer and reconnects once | src/server/mcp-sources/mcp-source-runner.ts |
 | Delivery | OUT | Every item becomes an InboundDelivery with source kind mcp, the thread key and sender resolved from the item, and the source handler, through deliverInbound | The inbox thread, card and handler prompt follow the inbox contract unchanged | src/server/mcp-sources/mcp-sources-boot.ts |
 | Reply target | IN/OUT | An optional reply on the source names a tool, arguments that are templates over message and reply.text or value maps, and a result id path; McpSourceRunner.callTool uses the live connection when there is one and otherwise opens a one-shot connection and closes it, and wraps a tool rejection as McpToolRejectedError and an unusable source as McpSourceUnavailableError | Calling a reply tool never reconciles or restarts the source; the Zalo preset carries zalo_send_message with a dm and group map for threadType | src/server/mcp-sources/mcp-source-runner.ts |
+| Autonomy config | IN | An optional autonomy on the source holds the level (off, suggest, approve, auto; default suggest), confidence threshold, per-thread hourly and per-source daily caps, quiet hours, a thread-key allowlist, allowUrls, maxChars and sendDelaySeconds; readSource fills defaults and clamps, and a level above suggest without a reply target is refused by validation | Auto also needs a Claude handler: providerAllowsAuto is false for Codex, so the effective ceiling there is approve; a patch merges over the stored autonomy | src/shared/inbox/autonomy.ts, src/server/mcp-sources-settings.ts |
 | mcp-sources topic | OUT | McpSourcesSnapshot with one status per source: state, last error, last item time, item count, honored URIs and cursor | Item counts are runtime only and reset at boot; the cursor survives | src/server/mcp-sources/mcp-sources-boot.ts |
 
 ## Derived Materials
@@ -62,6 +63,7 @@ Owns the MCP sources feature: the McpSource contract with its subscribe and poll
 | Two polls overlap and deliver the same page twice | Replacing the timeout chain with an interval | The runner test advances the fake clock during a slow poll and expects one call | bun run test src/server/mcp-sources/mcp-source-runner.test.ts |
 | A restart replays the whole history | Dropping the cursor persistence | The runner test restarts over the same cursor port and expects polling to resume from the saved cursor | bun run test src/server/mcp-sources/mcp-source-runner.test.ts |
 | A 2025-era server is treated as broken | Removing the typed-error fallback in openListening | The adapter test rejects listen with the typed error and expects subscribeResource per URI | bun run test src/server/mcp-sources/mcp-source-client.adapter.test.ts |
+| A source is saved with Approve or Auto and nowhere to send | Dropping validateMcpSourceAutonomy from validateMcpSource | The settings test expects a level above suggest without a reply target to be refused | bun run test src/server/mcp-sources-settings.test.ts |
 | A source names a server that no longer exists | Removing the serverId check in the settings writer | The settings test expects the create to be refused | bun run test src/server/mcp-sources-settings.test.ts |
 | A dead 2025 session is never reopened | Dropping the typed stream failure signal or the lost-on-transport-error rule in the adapter | The adapter tests expect a 404 on the GET stream to end the session as remote and a dead server to end it after a failed read | bun run test src/server/mcp-sources/mcp-source-client.adapter.test.ts |
 | A reconnect leaves a server session behind or a read error forces reconnect loops | Removing terminateSession on close, or treating a JSON-RPC error as a lost connection | The adapter tests expect a DELETE with the session id and an open session after a not-found read | bun run test src/server/mcp-sources/mcp-source-client.adapter.test.ts |

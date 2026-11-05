@@ -18,6 +18,8 @@ code:
   - src/server/subagent-provider-run.test.ts
   - src/server/subagent-provider-run.ts
   - src/server/claude-context-commands.ts
+  - src/server/claude-inbox-guard.ts
+  - src/server/claude-inbox-guard.test.ts
   - src/server/claude-context-commands.test.ts
   - src/server/claude-session-lifecycle.ts
   - src/server/claude-session-lifecycle.test.ts

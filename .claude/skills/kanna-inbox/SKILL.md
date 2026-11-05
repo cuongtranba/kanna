@@ -1,6 +1,6 @@
 ---
 name: kanna-inbox
-description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you), MCP sources (subscribe and poll), inbound webhooks (/hooks/:id, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
+description: The inbound side of Kanna — the in-process service bus and EventStore tap, the embedded or external NATS JetStream mirror, the Inbox (threads, handler chats, inbox_report, needs_you, propose_send autonomy and its guard), MCP sources (subscribe and poll), inbound webhooks (/hooks/:id, secrets, delivery modes), and Slack command hooks (src/server/webhooks/slack/**, app_mention, thread replies). Use whenever a task touches src/server/service-bus/**, src/server/inbox/**, src/server/inbound/**, src/server/mcp-sources/**, src/server/webhooks/**, src/shared/webhooks/slack.ts, nats-server, a webhook that returns 404/401, or an inbox thread that never escalated.
 ---
 
 # Kanna service bus, Inbox, MCP sources, webhooks
@@ -116,7 +116,7 @@ Service bus (`settings.serviceBus`, `src/server/service-bus-settings.ts`,
   retried here (2 s doubling to 30 s) and the failure is visible as `error`.
   Later outages use the client's own reconnect (`maxReconnectAttempts: -1`).
 
-## Inbox — inbound threads, one handler chat per thread, draft-only agent
+## Inbox — inbound threads, one handler chat per thread, the agent proposes and Kanna decides
 
 `src/server/inbox/` + `src/server/inbound/` (component `c3-247`) turn every
 inbound message — a webhook delivery or an MCP source message — into an **inbox thread** the user reads and answers in one place, and
@@ -137,10 +137,12 @@ not an implementation detail.
   (`inbox_thread_chat_bound`); later messages in that thread reuse it, so the
   agent keeps the conversation context. `inline` binds the fixed chat;
   `notify` binds nothing and escalates straight to `needs_you`.
-- **The agent only drafts.** The queued prompt ends with
+- **The agent never sends; it reports and proposes.** The queued prompt ends with
   `renderHandlerInstruction`, which tells the model to call
-  `mcp__kanna__inbox_report({ thread_id, verdict, summary, draft_reply? })` and
-  NEVER to send anything to the sender. `InboxRegistry.report` accepts a report
+  `mcp__kanna__inbox_report({ thread_id, verdict, summary, draft_reply?,
+  propose_send? })` and NEVER to send anything to the sender itself. The only
+  way to ask for a send is `propose_send { text, confidence, reason }`; see
+  "Autonomy" below for what Kanna does with it. `InboxRegistry.report` accepts a report
   only from the thread's bound chat; `buildInboxToolList` registers the tool for
   main chats (`depth === 0`) only. Codex handler chats get no Kanna MCP tools
   and therefore always hit the fallback.
@@ -187,10 +189,16 @@ not an implementation detail.
   `inboxInstructScheduleId`). An archived thread is refused. A quick prompt
   (`INBOX_QUICK_PROMPTS`, one definition in `src/shared/inbox/quick-prompts.ts`)
   sends its canned instruction plus the composer text as `draft`.
+- **Autonomy is a proposal, then a deterministic decision.** `propose_send`
+  goes to `InboxAutopilot`, whose pure `decideProposal` picks draft, approval
+  card or a delayed auto-send with Undo; a restart never auto-sends, a human send
+  pauses the agent, and a per-turn PreToolUse guard keeps triage and ask turns
+  from sending or running Bash. Auto is Claude-only. Read
+  [references/autonomy.md](references/autonomy.md) before touching any of it.
 - **Draft versions are thread-owned and persisted.** A report with a non-empty
   `draft_reply` also records `inbox_thread_draft_added { threadId, draft }`;
   `InboxThread.drafts` holds at most `INBOX_THREAD_MAX_DRAFTS` (5), oldest first,
-  each `{ id, text, at, origin: "triage" | "ask", instruction? }`. The origin is
+  each `{ id, text, at, origin: "triage" | "ask" | "proposal", instruction? }`. The origin is
   `ask` when the thread's pending schedule id is an instruct id
   (`isInboxInstructScheduleId`), and the instruction rides
   `inbox_thread_pending.instruction` into the projection's `pendingInstruction`
@@ -439,8 +447,8 @@ validation), client `WebhookSlackFields.tsx` / `WebhookSlackSetup.tsx`; decision
 `adr-20261021-slack-command-webhooks`; user doc is the Slack section of the
 webhooks wiki page.
 
-**It is a deliberate exception to the draft-only Inbox agent
-(`adr-20261020-inbox-threads-draft-only-agent`).** `handleWebhookRequest` hands a
+**It is a deliberate exception to the Inbox rule that an agent never sends in a
+handler turn (`adr-20261105-inbox-autonomy-and-guardrails`).** `handleWebhookRequest` hands a
 Slack hook to `SlackService` right after the capped body read, so it bypasses
 `verifyWebhookRequest`, the payload filter, `deliverInbound` and the Inbox
 entirely: no inbox thread, no `webhook_delivery` card, no approval step. A

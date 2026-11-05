@@ -67,6 +67,8 @@ is running are merged into one more read.
    server's tools when you answer from the Inbox without a reply tool.
 6. Optionally fill in the **Reply tool** so Kanna can send replies itself; see
    [Reply from the Inbox](#reply-from-the-inbox).
+7. Optionally set the **Autonomy** section to let the agent propose, and even
+   send, replies; see [Autonomy](#autonomy).
 
 The first poll of a source with no cursor delivers whatever the tool returns. If
 the tool returns a long history and the action is **New chat**, you get a chat
@@ -134,3 +136,29 @@ Kanna never sends a message twice on its own; see
 **Without a reply tool**, the handler chat is told to use the server's tools,
 following your reply hint, and it sends the text. Kanna does not send anything
 itself, and a source in **Notify** mode has no chat to do it.
+
+## Autonomy
+
+The **Autonomy** section of the source decides what happens when the thread's
+agent proposes a reply. The agent never sends by itself; Kanna decides. See
+[Autonomy in the Inbox](/guides/user/inbox/#autonomy-what-the-agent-may-do) for
+how the cards, Undo and takeover behave.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| **Level** | Suggest | **Off** ignores proposals, **Suggest** saves them as a draft, **Approve** shows an approval card, **Auto** sends after the delay when every guardrail passes. A thread can override it from its header. |
+| **Confidence threshold** | 0.8 | Auto only when the agent's confidence, from 0 to 1, is at least this. |
+| **Send delay** | 30 s | How long an auto-send waits so you can press Undo, from 10 to 300 seconds. |
+| **Auto-sends per thread per hour** | 3 | Further proposals become approval cards. |
+| **Auto-sends per source per day** | 20 | Further proposals become approval cards. |
+| **Quiet hours** | none | A start and an end time in the server's local time; an overnight window such as 22:00 to 07:30 works. Leave both empty for none. |
+| **Auto allowlist** | empty | One thread key per line (the value the **Thread key path** reads, such as a Zalo `threadId`). Auto only applies to these contacts; the thread header can add one with **Allow auto for this contact**. |
+| **Allow links** | off | Whether an auto-sent reply may contain links. Markdown links and images and HTML are never auto-sent. |
+| **Max characters** | 1000 | A longer reply needs your approval. |
+
+Approve and Auto need a **Reply tool**, because Kanna sends the approved or
+auto-sent text itself, and saving a source that sets either without one is
+refused. Auto also needs a **Claude** handler model: Kanna can stop a Claude
+handler turn from sending through the server's own tools or a shell, but it
+cannot do that for Codex, so a Codex source is capped at Approve. A handler with
+no model chosen uses the Claude default.

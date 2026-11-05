@@ -8,7 +8,12 @@ code:
   - src/shared/inbox/describe.test.ts
   - src/shared/inbox/policy.ts
   - src/shared/inbox/policy.test.ts
+  - src/shared/inbox/autonomy.ts
+  - src/shared/inbox/outbound-text.ts
+  - src/shared/inbox/outbound-text.test.ts
   - src/shared/inbound/handler.ts
+  - src/shared/inbound/handler-turn.ts
+  - src/shared/inbound/handler-turn.test.ts
   - src/shared/inbound/template.ts
   - src/shared/inbound/template.test.ts
   - src/shared/inbound/reply-args.ts
@@ -23,6 +28,10 @@ code:
   - src/server/inbox/inbox-log.adapter.ts
   - src/server/inbox/inbox-log.adapter.test.ts
   - src/server/inbox/inbox-boot.ts
+  - src/server/inbox/inbox-autonomy.ts
+  - src/server/inbox/inbox-autonomy.test.ts
+  - src/server/inbox/inbox-autopilot.ts
+  - src/server/inbox/inbox-autopilot.test.ts
   - src/server/inbound/deliver-inbound.ts
   - src/server/inbound/deliver-inbound.test.ts
   - src/server/inbound/inbox-reply.ts
