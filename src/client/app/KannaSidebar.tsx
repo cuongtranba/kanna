@@ -19,6 +19,7 @@ import { cn } from "../lib/utils"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 import { ChatRow, type SelectionGesture } from "../components/chat-ui/sidebar/ChatRow"
 import { SidebarBulkActionBar } from "../components/chat-ui/sidebar/SidebarBulkActionBar"
+import { SidebarMobileActions } from "../components/chat-ui/sidebar/SidebarMobileActions"
 import { LocalProjectsSection } from "../components/chat-ui/sidebar/LocalProjectsSection"
 import { StacksSection } from "../components/chat-ui/sidebar/StacksSection"
 import { StackEditPanels } from "../components/chat-ui/sidebar/StackEditPanels"
@@ -672,7 +673,7 @@ function KannaSidebarImpl({
         style={cssVars({ "--sidebar-width": `${sidebarWidth}px` })}
       >
         <div className={cn(
-          "px-[5px] border-b grid grid-cols-[40px_minmax(0,1fr)_40px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between",
+          "px-[5px] border-b grid grid-cols-[80px_minmax(0,1fr)_80px] items-center md:px-[7px] md:pl-3 md:flex md:justify-between",
           SHELL_TOP_BAND_CLASS,
         )}>
           <div className="md:hidden">
@@ -703,19 +704,7 @@ function KannaSidebarImpl({
             <span className="font-logo text-base sm:text-md text-foreground">{APP_NAME}</span>
           </div>
           <div className="flex items-center justify-self-end md:justify-self-auto">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                navigate("/")
-                onClose()
-              }}
-              className="size-10 rounded-lg hover:!border-border/0 md:hidden"
-              title="New project"
-              aria-label="New project"
-            >
-              <Plus className="h-5 w-5" />
-            </Button>
+            <SidebarMobileActions onClose={onClose} />
             {showDevBadge ? (
               <HoverHint label="Development build">
                 <span className="mr-1 hidden md:inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-bold tracking-wider text-muted-foreground">

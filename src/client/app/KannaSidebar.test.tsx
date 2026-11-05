@@ -8,6 +8,7 @@ import { TooltipProvider } from "../components/ui/tooltip"
 import { EMPTY_CHAT_ACTIVITY, type SidebarChatRow, type SidebarData, type SidebarProjectGroup } from "../../shared/types"
 import { useKannaSidebarStore } from "../stores/kannaSidebarStore"
 import { useSidebarSelectionStore } from "../stores/sidebarSelectionStore"
+import { useQuickSwitcherStore } from "../stores/quickSwitcherStore"
 import { KannaSidebar } from "./KannaSidebar"
 import { SHELL_TOP_BAND_CLASS } from "../lib/shellChrome"
 
@@ -188,6 +189,7 @@ afterEach(() => {
   unmountSidebar?.()
   unmountSidebar = null
   useSidebarSelectionStore.getState().stopSelecting()
+  useQuickSwitcherStore.getState().closeSwitcher()
 })
 
 describe("KannaSidebar modifier multi-select", () => {
@@ -293,5 +295,39 @@ describe("KannaSidebar reveals the active chat", () => {
     show("old-chat")
 
     expect(hasRow(container, "old-chat")).toBe(true)
+  })
+})
+
+describe("KannaSidebar mobile project search", () => {
+  test("the mobile drawer's search button opens the project switcher and closes the drawer", () => {
+    let closeCount = 0
+    const data: SidebarData = { starredProjectGroups: [], projectGroups: [], stacks: [] }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    unmountSidebar = () => {
+      act(() => root.unmount())
+      container.remove()
+    }
+    act(() => {
+      root.render(createElement(
+        MemoryRouter,
+        null,
+        createElement(TooltipProvider, null, createElement(KannaSidebar, sidebarProps(data, {
+          onClose: () => {
+            closeCount += 1
+          },
+        }))),
+      ))
+    })
+
+    const search = container.querySelector('button[aria-label="Search projects"]')
+    if (!search) throw new Error("no Search projects button")
+    act(() => {
+      search.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(useQuickSwitcherStore.getState().open).toBe(true)
+    expect(closeCount).toBe(1)
   })
 })
