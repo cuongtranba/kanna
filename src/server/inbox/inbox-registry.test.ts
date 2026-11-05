@@ -291,3 +291,85 @@ test("draft versions survive a restart and a new inbound message", async () => {
   const second = await createInboxHarness({ now: tick, log: first.log })
   expect(second.inbox.getThread(thread.id)?.drafts).toEqual(first.inbox.getThread(thread.id)?.drafts)
 })
+
+async function boundThread() {
+  const harness = await createInboxHarness({ now: tick })
+  const thread = await harness.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await harness.inbox.bindChat(thread.id, "chat-1")
+  return { ...harness, thread }
+}
+
+const PROPOSE = { text: "On it.", confidence: 0.9, reason: "Clear request" }
+
+test("propose_send from a chat that is not the thread's handler is refused and never reaches the autonomy decision", async () => {
+  const { inbox, thread } = await boundThread()
+  const proposals: string[] = []
+  inbox.onProposeSend(async (_threadId, proposal) => { proposals.push(proposal.text) })
+
+  const refused = await inbox.report(thread.id, "chat-2", "needs_you", "x", undefined, PROPOSE)
+  const accepted = await inbox.report(thread.id, "chat-1", "needs_you", "x", undefined, PROPOSE)
+
+  expect(refused.ok).toBe(false)
+  expect(accepted.ok).toBe(true)
+  expect(proposals).toEqual(["On it."])
+})
+
+test("propose_send text is trimmed and its confidence is clamped before the decision sees it", async () => {
+  const { inbox, thread } = await boundThread()
+  const seen: { text: string; confidence: number }[] = []
+  inbox.onProposeSend(async (_threadId, proposal) => { seen.push(proposal) })
+
+  await inbox.report(thread.id, "chat-1", "needs_you", "x", undefined, { text: "  hi  ", confidence: 7, reason: "r" })
+  await inbox.report(thread.id, "chat-1", "needs_you", "x", undefined, { text: "   ", confidence: 0.5, reason: "r" })
+
+  expect(seen).toEqual([{ text: "hi", confidence: 1, reason: "r" }])
+})
+
+test("a new proposal expires the previous open one", async () => {
+  const { inbox, thread } = await boundThread()
+  const proposal = { text: "first", confidence: 0.5, reason: "r", at: 1, status: "open" as const }
+  await inbox.addProposal(thread.id, { id: "p1", ...proposal })
+  await inbox.addProposal(thread.id, { id: "p2", ...proposal, text: "second" })
+
+  expect(inbox.getThread(thread.id)?.proposal).toMatchObject({ id: "p2", text: "second" })
+  expect(await inbox.resolveProposal(thread.id, "p1", "rejected")).toBe(false)
+})
+
+test("a pause blocks until it is cleared, and the override, pause and proposal survive a restart", async () => {
+  const { inbox, thread, log, bus } = await boundThread()
+  await inbox.setThreadAutonomy(thread.id, "approve")
+  await inbox.pauseAgent(thread.id, 9_999)
+  await inbox.addProposal(thread.id, { id: "p1", text: "t", confidence: 0.5, reason: "r", at: 1, status: "open", blockedBy: "why" })
+  await inbox.flush()
+
+  const { inbox: replayed } = await createInboxHarness({ now: tick, log, bus })
+  expect(replayed.getThread(thread.id)).toMatchObject({ autonomy: "approve", agentPausedUntil: 9_999, proposal: { id: "p1", blockedBy: "why" } })
+
+  await replayed.pauseAgent(thread.id, null)
+  await replayed.setThreadAutonomy(thread.id, null)
+  const cleared = replayed.getThread(thread.id)
+  expect(cleared?.agentPausedUntil).toBeUndefined()
+  expect(cleared?.autonomy).toBeUndefined()
+})
+
+test("agent sends are counted per source within the window", async () => {
+  const { inbox, thread } = await boundThread()
+  await inbox.queueOutbound(thread.id, { id: "o1", text: "a", by: "agent" })
+  await inbox.queueOutbound(thread.id, { id: "o2", text: "b", by: "you" })
+  await inbox.queueOutbound(thread.id, { id: "o3", text: "c", by: "approved" })
+
+  expect(inbox.agentSendCount("hook1", 0)).toBe(1)
+  expect(inbox.agentSendCount("hook1", clock + 1_000_000)).toBe(0)
+  expect(inbox.agentSendCount("other", 0)).toBe(0)
+})
+
+test("the sent-by-agent page filter keeps only threads the agent replied on", async () => {
+  const { inbox, thread } = await boundThread()
+  const other = await inbox.ingestInbound({ ...inbound("d9"), id: "env-other" }, { ...meta("d9", "k2") })
+  await inbox.queueOutbound(thread.id, { id: "o1", text: "hi", by: "agent" })
+  await inbox.queueOutbound(other.id, { id: "o2", text: "hi", by: "you" })
+
+  const page = inbox.page(Number.MAX_SAFE_INTEGER, 10, { sentByAgent: true })
+
+  expect(page.threads.map((entry) => entry.id)).toEqual([thread.id])
+})

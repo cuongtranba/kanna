@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AppSettingsManager } from "./app-settings"
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../shared/inbox/autonomy"
 import type { McpSourceInput, McpSourceReply } from "../shared/mcp-sources/types"
 
 let dirs: string[] = []
@@ -168,5 +169,54 @@ describe("mcpSources settings", () => {
     const manager = await startManager({ mcpSources: [{ ...storedFeed, reply: { tool: 3, args: "nope" } }, { ...storedFeed, id: "s2", reply: { tool: "t", args: { a: { from: "x", map: {} } }, resultIdPath: "" } }] })
     const sources = manager.getSnapshot().mcpSources
     expect(sources.map((source) => [source.id, source.reply])).toEqual([["s1", null], ["s2", null]])
+  })
+
+  test("a stored source without autonomy loads with the defaults", async () => {
+    const manager = await startManager({ mcpSources: [storedFeed] })
+    expect(manager.getSnapshot().mcpSources[0]!.autonomy).toEqual(MCP_SOURCE_AUTONOMY_DEFAULTS)
+  })
+
+  test("autonomy is clamped, cleaned, patched without losing other keys and survives a reload", async () => {
+    const { manager, serverId } = await withServer()
+    await manager.writePatch({
+      mcpSources: {
+        create: {
+          ...pollInput(serverId),
+          reply: REPLY,
+          autonomy: { level: "auto", sendDelaySeconds: 1, threshold: 4, allowlist: [" t-9 ", "", "t-9"], quietHours: { start: "22:00", end: "07:00" } },
+        },
+      },
+    })
+    const id = manager.getSnapshot().mcpSources[0]!.id
+    expect(manager.getSnapshot().mcpSources[0]!.autonomy).toMatchObject({
+      level: "auto",
+      sendDelaySeconds: 10,
+      threshold: 1,
+      allowlist: ["t-9"],
+      quietHours: { start: "22:00", end: "07:00" },
+      perThreadPerHour: MCP_SOURCE_AUTONOMY_DEFAULTS.perThreadPerHour,
+    })
+
+    await manager.writePatch({ mcpSources: { update: { id, patch: { autonomy: { allowlist: ["t-9", "t-10"] } } } } })
+    const reloaded = new AppSettingsManager(manager.filePath)
+    managers.push(reloaded)
+    await reloaded.initialize()
+    expect(reloaded.getSnapshot().mcpSources[0]!.autonomy).toMatchObject({ level: "auto", allowlist: ["t-9", "t-10"], sendDelaySeconds: 10 })
+  })
+
+  test("a level above suggest without a reply target is refused", async () => {
+    const { manager, serverId } = await withServer()
+    await expect(manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), autonomy: { level: "approve" } } } }))
+      .rejects.toThrow("Approve and Auto autonomy need a reply target")
+    await manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), reply: REPLY, autonomy: { level: "approve" } } } })
+    const id = manager.getSnapshot().mcpSources[0]!.id
+    await expect(manager.writePatch({ mcpSources: { update: { id, patch: { reply: null } } } }))
+      .rejects.toThrow("need a reply target")
+  })
+
+  test("malformed quiet hours are refused", async () => {
+    const { manager, serverId } = await withServer()
+    await expect(manager.writePatch({ mcpSources: { create: { ...pollInput(serverId), autonomy: { quietHours: { start: "25:00", end: "07:00" } } } } }))
+      .rejects.toThrow("Quiet hours must be HH:MM times")
   })
 })

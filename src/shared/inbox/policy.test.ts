@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test"
 import type { JsonValue } from "../json"
-import { isAttention, inboxTab, raisesNotification } from "./policy"
+import { isAttention, inboxTab, raisesNotification, threadSentByAgent } from "./policy"
 import type { InboxActivityItem, InboxThread, InboxThreadState } from "./types"
 
 function thread(state: InboxThreadState): InboxThread {
@@ -72,4 +72,12 @@ test("the Inbox tab lists open threads and attention items only", () => {
 test("only a needs_you thread raises a notification", () => {
   expect(raisesNotification(thread("needs_you"))).toBe(true)
   expect(raisesNotification(thread("fyi"))).toBe(false)
+})
+
+test("a thread counts as sent by the agent when any outbound message was sent by it", () => {
+  const base = thread("replied")
+  const outbound = { id: "o", ts: 1, text: "hi", status: "sent" as const }
+  expect(threadSentByAgent(base)).toBe(false)
+  expect(threadSentByAgent({ outbound: [{ ...outbound, by: "you" }, { ...outbound, id: "o2", by: "approved" }] })).toBe(false)
+  expect(threadSentByAgent({ outbound: [{ ...outbound, by: "you" }, { ...outbound, id: "o3", by: "agent" }] })).toBe(true)
 })

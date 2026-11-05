@@ -24,6 +24,7 @@ import {
   SDK_RESTRICTED_FS_NATIVE_TOOLS,
 } from "./claude-session-config"
 import { toSdkEffort } from "./claude-prompt-helpers"
+import { buildInboxGuardMatcher, type InboxToolPolicy } from "./claude-inbox-guard"
 import { withAdditionalDirectoryMemory } from "./claude-spawn-helpers"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
 import { AsyncMessageQueue, toClaudeMessageStream } from "./claude-sdk-queue"
@@ -77,10 +78,7 @@ function buildCompactionHooks(
   }
 }
 
-function buildLoopGuardHooks(
-  isLoopArmed: () => boolean,
-  blockedTools: readonly string[],
-): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+function buildLoopGuardMatcher(isLoopArmed: () => boolean, blockedTools: readonly string[]): HookCallbackMatcher {
   const guard = async (input: HookInput): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {}
     if (!blockedTools.includes(input.tool_name) || !isLoopArmed()) return {}
@@ -92,16 +90,25 @@ function buildLoopGuardHooks(
       },
     }
   }
-  return { PreToolUse: [{ hooks: [guard] }] }
+  return { hooks: [guard] }
 }
 
 function buildSessionHooks(
-  args: { chatId?: string; onCompaction?: (event: CompactionEvent) => void; isLoopArmed?: () => boolean },
+  args: {
+    chatId?: string
+    onCompaction?: (event: CompactionEvent) => void
+    isLoopArmed?: () => boolean
+    inboxToolPolicy?: () => InboxToolPolicy | null
+  },
   blockedTools: readonly string[],
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+  const preToolUse: HookCallbackMatcher[] = [
+    ...(args.isLoopArmed ? [buildLoopGuardMatcher(args.isLoopArmed, blockedTools)] : []),
+    ...(args.inboxToolPolicy ? [buildInboxGuardMatcher(args.inboxToolPolicy)] : []),
+  ]
   const hooks = {
     ...(args.onCompaction && args.chatId ? buildCompactionHooks(args.chatId, args.onCompaction) : {}),
-    ...(args.isLoopArmed ? buildLoopGuardHooks(args.isLoopArmed, blockedTools) : {}),
+    ...(preToolUse.length > 0 ? { PreToolUse: preToolUse } : {}),
   }
   return Object.keys(hooks).length > 0 ? hooks : undefined
 }
@@ -163,6 +170,7 @@ export interface StartClaudeSessionArgs {
   restrictedAllowedPaths?: string[]
   kannaMcp?: KannaMcpCapabilities
   isLoopArmed?: () => boolean
+  inboxToolPolicy?: () => InboxToolPolicy | null
   maxTurns?: number
   keepAlive?: boolean
   turnPrice?: ModelPrice | null

@@ -10,6 +10,9 @@ import type { ClaudeSessionHandle } from "./harness-types"
 import type { LlmProviderSnapshot } from "../shared/types"
 import type { CustomProviderCredential } from "../shared/custom-providers"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
+import { MCP_SOURCE_AUTONOMY_DEFAULTS } from "../shared/inbox/autonomy"
+import type { McpPollSource } from "../shared/mcp-sources/types"
+import type { McpServerConfig } from "../shared/mcp-types"
 
 
 function makeFakeHandle(overrides: Partial<ClaudeSessionHandle> = {}): ClaudeSessionHandle {
@@ -585,6 +588,78 @@ describe("compaction observer wiring", () => {
     await spawnClaudeTurn(deps, makeArgs())
 
     expect(typeof forwarded).toBe("function")
+  })
+})
+
+describe("inbox handler tool policy", () => {
+  const REPLY = { tool: "zalo_send_message", args: {}, resultIdPath: "" }
+
+  function pollSource(serverId: string, reply: typeof REPLY | null): McpPollSource {
+    return {
+      id: `src-${serverId}`,
+      name: serverId,
+      serverId,
+      enabled: true,
+      threadKeyPath: "",
+      senderPath: "",
+      textPath: "",
+      handler: { mode: "notify", chatId: "c1", template: "t", replyHint: "", pushEnabled: true },
+      reply,
+      autonomy: MCP_SOURCE_AUTONOMY_DEFAULTS,
+      mode: "poll",
+      tool: "list",
+      args: {},
+      cursorArg: "since",
+      cursorPath: "cursor",
+      itemsPath: "items",
+      itemKeyPath: null,
+      intervalMs: 5000,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
+  function httpServer(id: string, name: string): McpServerConfig {
+    return { id, name, enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" }, transport: "http", url: "http://127.0.0.1/mcp", headers: {} }
+  }
+
+  function activeTurn(scheduleId: string | undefined): ActiveTurn {
+    return {
+      chatId: "chat-1",
+      provider: "claude",
+      turn: { provider: "claude", stream: (async function* () {})(), getAccountInfo: async () => null, interrupt: async () => {}, close: () => {} },
+      startedAt: 0,
+      model: "claude-opus-4",
+      planMode: false,
+      status: "running",
+      postToolFollowUp: null,
+      hasFinalResult: false,
+      cancelRequested: false,
+      cancelRecorded: false,
+      waitStartedAt: null,
+      userMessageId: null,
+      scheduleId,
+    }
+  }
+
+  test("the session policy reads the turn running on the chat right now, because sessions are reused", async () => {
+    let policyOf: (() => { replyServerNames: readonly string[] } | null) | undefined
+    const deps = makeDeps({
+      startClaudeSessionFn: async (a) => { policyOf = a.inboxToolPolicy; return makeFakeHandle() },
+      getAppSettingsSnapshot: () => ({
+        mcpSources: [pollSource("srv-zalo", REPLY), pollSource("srv-feed", null)],
+        customMcpServers: [httpServer("srv-zalo", "zalo-mcp"), httpServer("srv-feed", "feed")],
+      }),
+    })
+
+    await spawnClaudeTurn(deps, makeArgs())
+    expect(policyOf?.()).toBeNull()
+
+    deps.activeTurns.set("chat-1", activeTurn("mcp-src-1-d1"))
+    expect(policyOf?.()).toEqual({ replyServerNames: ["zalo-mcp"] })
+
+    deps.activeTurns.set("chat-1", activeTurn("inbox-reply-thread-1-1"))
+    expect(policyOf?.()).toBeNull()
   })
 })
 

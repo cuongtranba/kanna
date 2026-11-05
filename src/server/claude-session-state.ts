@@ -45,6 +45,7 @@ export interface ActiveTurn {
   cronRun?: import("../shared/cron/types").CronRunTag
   usage?: import("../shared/subagent-types").ProviderUsage
   userMessageId: string | null
+  scheduleId?: string
 }
 
 export interface ClaudeSessionStateInit {

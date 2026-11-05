@@ -431,6 +431,7 @@ async function startTurnAfterTurnStarted(
     cronRun: args.cronRun,
     compactionTurn: args.compactionTurn,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
+    scheduleId: args.autoContinue?.scheduleId,
   }
   deps.activeTurns.set(args.chatId, active)
   logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {
