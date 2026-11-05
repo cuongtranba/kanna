@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
 import { act } from "react"
-import type { InboxThread } from "../../shared/inbox/types"
+import { INBOX_QUICK_PROMPTS } from "../../shared/inbox/quick-prompts"
+import type { InboxDraft, InboxThread } from "../../shared/inbox/types"
 import type { McpSource } from "../../shared/mcp-sources/types"
 import { defaultAppSettingsSnapshot } from "../../server/app-settings"
 import { makeFakeDomPort, makeFakeTimerPort } from "../lib/testing/fakePorts"
@@ -78,12 +79,17 @@ function thread(overrides: Partial<InboxThread>): InboxThread {
     sender: "ada",
     messages: [],
     outbound: [],
+    drafts: [],
     state: "needs_you",
     unread: true,
     lastMessageAt: 1,
     replyCount: 0,
     ...overrides,
   }
+}
+
+function draftOf(id: string, text: string): InboxDraft {
+  return { id, text, at: 1, origin: "triage" }
 }
 
 function buttonLabelled(container: HTMLElement, label: string): HTMLButtonElement {
@@ -110,7 +116,7 @@ describe("InboxReplyComposer", () => {
     )
     try {
       expect(buttonLabelled(container, "Send").disabled).toBe(true)
-      expect(buttonLabelled(container, "Instruct").disabled).toBe(true)
+      expect(buttonLabelled(container, "Ask agent").disabled).toBe(true)
       expect(container.querySelector("textarea")?.disabled).toBe(true)
       expect(container.textContent).toContain("nobody to reply through")
       expect(container.querySelectorAll("[data-state='closed']").length).toBeGreaterThanOrEqual(2)
@@ -120,10 +126,7 @@ describe("InboxReplyComposer", () => {
   })
 
   test("seeds the textarea with the agent's draft and lets the agent send it once a chat handles the thread", async () => {
-    const withDraft = thread({
-      chatId: "c1",
-      report: { verdict: "needs_you", summary: "Pay it", draftReply: "On it, thanks", at: 1, chatId: "c1" },
-    })
+    const withDraft = thread({ chatId: "c1", drafts: [draftOf("d1", "On it, thanks")] })
     const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={withDraft} onArchived={() => {}} />)
     try {
       expect(container.querySelector("textarea")?.value).toBe("On it, thanks")
@@ -134,16 +137,54 @@ describe("InboxReplyComposer", () => {
     }
   })
 
-  test("discarding the draft leaves an empty box instead of re-seeding the agent's text", async () => {
-    const withDraft = thread({
-      chatId: "c1",
-      report: { verdict: "needs_you", summary: "Pay it", draftReply: "On it, thanks", at: 1, chatId: "c1" },
-    })
-    useInboxStore.getState().clearReplyDraft("t1")
-    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={withDraft} onArchived={() => {}} />)
+  test("discarding the draft leaves an empty box instead of re-seeding the same draft, and a newer draft seeds again", async () => {
+    const first = draftOf("d1", "On it, thanks")
+    useInboxStore.getState().settleReplyDraft("t1", first.id)
+    const dismissed = await renderClientMarkup(<InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first] })} onArchived={() => {}} />)
     try {
-      expect(container.querySelector("textarea")?.value).toBe("")
-      expect(buttonLabelled(container, "Agent will send").disabled).toBe(true)
+      expect(dismissed.container.querySelector("textarea")?.value).toBe("")
+      expect(buttonLabelled(dismissed.container, "Agent will send").disabled).toBe(true)
+    } finally {
+      await dismissed.cleanup()
+    }
+    const newer = await renderClientMarkup(
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first, draftOf("d2", "Paid, thanks")] })} onArchived={() => {}} />,
+    )
+    try {
+      expect(newer.container.querySelector("textarea")?.value).toBe("Paid, thanks")
+    } finally {
+      await newer.cleanup()
+    }
+  })
+
+  test("what the user typed wins over the agent's draft", async () => {
+    useInboxStore.getState().setReplyDraft("t1", "my own words")
+    const { container, cleanup } = await renderClientMarkup(
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [draftOf("d1", "agent words")] })} onArchived={() => {}} />,
+    )
+    try {
+      expect(container.querySelector("textarea")?.value).toBe("my own words")
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("draft versions show newest first and clicking one loads its text", async () => {
+    const versions = [
+      draftOf("d1", "first text"),
+      { ...draftOf("d2", "second text"), origin: "ask" as const, instruction: INBOX_QUICK_PROMPTS[0].instruction },
+    ]
+    const { container, cleanup } = await renderClientMarkup(
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: versions })} onArchived={() => {}} />,
+    )
+    try {
+      const chips = [...(container.querySelector("[aria-label='Draft versions']")?.querySelectorAll("button") ?? [])]
+      expect(chips.map((chip) => chip.textContent)).toEqual(["v2 · ask: Shorter", "v1 · triage"])
+      expect(container.querySelector("textarea")?.value).toBe("second text")
+      await act(async () => {
+        buttonLabelled(container, "v1 · triage").click()
+      })
+      expect(container.querySelector("textarea")?.value).toBe("first text")
     } finally {
       await cleanup()
     }
@@ -156,7 +197,7 @@ describe("InboxReplyComposer", () => {
     try {
       expect(container.querySelector("textarea")?.disabled).toBe(false)
       expect(buttonLabelled(container, "Send").disabled).toBe(false)
-      expect(buttonLabelled(container, "Instruct").disabled).toBe(true)
+      expect(buttonLabelled(container, "Ask agent").disabled).toBe(true)
       expect(container.textContent).not.toContain("nobody to reply through")
     } finally {
       await cleanup()
@@ -207,6 +248,99 @@ describe("InboxReplyComposer", () => {
       await pressEnter(textarea)
       await waitFor(() => sentCommands(sent).length === 1, 2000, "the reply command")
       expect(sentCommands(sent)).toEqual([{ type: "inbox.reply", threadId: "t1", text: "hello" }])
+    } finally {
+      await cleanup()
+      socket.dispose()
+    }
+  })
+
+  test("Cmd+Enter and Ctrl+Enter ask the agent with the text as the instruction and never send it to the sender", async () => {
+    setMcpSources([mcpSource(REPLY_TARGET)])
+    useInboxStore.getState().setReplyDraft("t1", "be brief")
+    const { socket, sent } = recordingSocket()
+    const { container, cleanup } = await renderClientMarkup(
+      <KannaSocketProvider socket={socket}>
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+      </KannaSocketProvider>,
+    )
+    try {
+      const textarea = container.querySelector("textarea")
+      if (!textarea) throw new Error("no textarea")
+      await pressEnter(textarea, { metaKey: true })
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the ask command")
+      expect(sentCommands(sent)).toEqual([{ type: "inbox.instruct", threadId: "t1", text: "be brief" }])
+    } finally {
+      await cleanup()
+      socket.dispose()
+    }
+  })
+
+  test("Enter on text starting with a slash asks the agent with the slash stripped", async () => {
+    setMcpSources([mcpSource(REPLY_TARGET)])
+    useInboxStore.getState().setReplyDraft("t1", "/shorter please")
+    const { socket, sent } = recordingSocket()
+    const { container, cleanup } = await renderClientMarkup(
+      <KannaSocketProvider socket={socket}>
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+      </KannaSocketProvider>,
+    )
+    try {
+      const textarea = container.querySelector("textarea")
+      if (!textarea) throw new Error("no textarea")
+      await pressEnter(textarea)
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the ask command")
+      expect(sentCommands(sent)).toEqual([{ type: "inbox.instruct", threadId: "t1", text: "shorter please" }])
+    } finally {
+      await cleanup()
+      socket.dispose()
+    }
+  })
+
+  test("a quick prompt sends its canned instruction together with the current draft", async () => {
+    setMcpSources([mcpSource(REPLY_TARGET)])
+    useInboxStore.getState().setReplyDraft("t1", "Dear Ada, thank you very much.")
+    const { socket, sent } = recordingSocket()
+    const { container, cleanup } = await renderClientMarkup(
+      <KannaSocketProvider socket={socket}>
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+      </KannaSocketProvider>,
+    )
+    try {
+      await act(async () => {
+        buttonLabelled(container, "Shorter").click()
+      })
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the quick prompt command")
+      expect(sentCommands(sent)).toEqual([
+        {
+          type: "inbox.instruct",
+          threadId: "t1",
+          text: INBOX_QUICK_PROMPTS[0].instruction,
+          draft: "Dear Ada, thank you very much.",
+        },
+      ])
+    } finally {
+      await cleanup()
+      socket.dispose()
+    }
+  })
+
+  test("without a handler chat Cmd+Enter and a slash do nothing and Enter still sends", async () => {
+    setMcpSources([mcpSource(REPLY_TARGET)])
+    useInboxStore.getState().setReplyDraft("t1", "/hello")
+    const { socket, sent } = recordingSocket()
+    const { container, cleanup } = await renderClientMarkup(
+      <KannaSocketProvider socket={socket}>
+        <InboxReplyComposer thread={mcpThread()} onArchived={() => {}} />
+      </KannaSocketProvider>,
+    )
+    try {
+      const textarea = container.querySelector("textarea")
+      if (!textarea) throw new Error("no textarea")
+      await pressEnter(textarea, { metaKey: true })
+      expect(sentCommands(sent)).toEqual([])
+      await pressEnter(textarea)
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the reply command")
+      expect(sentCommands(sent)).toEqual([{ type: "inbox.reply", threadId: "t1", text: "/hello" }])
     } finally {
       await cleanup()
       socket.dispose()

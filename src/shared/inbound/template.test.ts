@@ -24,6 +24,12 @@ test("the handler instruction names the thread and the report tool and forbids r
   expect(text).toContain("Use send_mail.")
 })
 
+test("the triage instruction asks for a draft reply only for needs_you", () => {
+  const text = renderHandlerInstruction({ threadId: "t-9", sourceName: "Mail", replyHint: "" })
+  expect(text).toContain("only when the verdict is needs_you")
+  expect(text).toContain("Do not draft a reply for fyi or handled")
+})
+
 test("untrusted text is fenced in the requested language and cut at the prompt cap", () => {
   const short = renderUntrustedText("hello", "NOTICE", "text")
   expect(short).toBe("NOTICE\n\n```text\nhello\n```")

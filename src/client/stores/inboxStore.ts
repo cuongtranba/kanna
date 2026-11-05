@@ -1,13 +1,18 @@
 import { create } from "zustand"
-import type { InboxActivityItem, InboxFilter, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
+import type { InboxActivityItem, InboxDraft, InboxFilter, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
 import { EMPTY_FILTER, type InboxTabId } from "../lib/inboxFilter"
 import { omitKeyOrEmpty } from "../lib/recordOps"
 
 const EMPTY_THREADS: readonly InboxThread[] = []
 const EMPTY_ITEMS: readonly InboxActivityItem[] = []
-const EMPTY_DRAFTS: Readonly<Record<string, string>> = {}
+const EMPTY_DRAFTS: Readonly<Record<string, ReplyDraftState>> = {}
 const NO_RAW_OPEN: Readonly<Record<string, true>> = {}
 const NO_RETRY_CONFIRMS: Readonly<Record<string, true>> = {}
+
+export interface ReplyDraftState {
+  text?: string
+  dismissedDraftId?: string
+}
 
 interface InboxPage {
   threads: readonly InboxThread[]
@@ -23,7 +28,7 @@ interface InboxState {
   tab: InboxTabId
   filter: InboxFilter
   selectedThreadId: string | null
-  replyDrafts: Readonly<Record<string, string>>
+  replyDrafts: Readonly<Record<string, ReplyDraftState>>
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
   retryConfirming: Readonly<Record<string, true>>
@@ -37,7 +42,8 @@ interface InboxState {
   setChatFilter(chatId: string | null): void
   select(threadId: string | null): void
   setReplyDraft(threadId: string, text: string): void
-  clearReplyDraft(threadId: string): void
+  loadDraftVersion(threadId: string, draft: InboxDraft): void
+  settleReplyDraft(threadId: string, latestDraftId: string | undefined): void
   toggleRaw(messageId: string): void
   askRetryConfirm(outboundId: string): void
   dismissRetryConfirm(outboundId: string): void
@@ -66,6 +72,12 @@ function mergeById<T extends { id: string }>(existing: readonly T[], page: reado
 
 function refined(state: InboxState, change: Partial<InboxFilter>): Pick<InboxState, "filter" | "olderExhausted"> {
   return { filter: { ...state.filter, ...change }, olderExhausted: false }
+}
+
+export function displayedReplyDraft(stored: ReplyDraftState | undefined, drafts: readonly InboxDraft[]): string {
+  if (stored?.text !== undefined) return stored.text
+  const latest = drafts.at(-1)
+  return latest !== undefined && latest.id !== stored?.dismissedDraftId ? latest.text : ""
 }
 
 const threadTs = (thread: InboxThread) => thread.lastMessageAt
@@ -108,9 +120,18 @@ export const useInboxStore = create<InboxState>()((set) => ({
   setChatFilter: (chatId) => set((state) => refined(state, { chatId: chatId ?? undefined })),
   select: (selectedThreadId) => set({ selectedThreadId }),
   setReplyDraft: (threadId, text) =>
-    set((state) => ({ replyDrafts: { ...state.replyDrafts, [threadId]: text } })),
-  clearReplyDraft: (threadId) =>
-    set((state) => ({ replyDrafts: { ...state.replyDrafts, [threadId]: "" } })),
+    set((state) => ({ replyDrafts: { ...state.replyDrafts, [threadId]: { ...state.replyDrafts[threadId], text } } })),
+  loadDraftVersion: (threadId, draft) =>
+    set((state) => ({
+      replyDrafts: { ...state.replyDrafts, [threadId]: { ...state.replyDrafts[threadId], text: draft.text } },
+    })),
+  settleReplyDraft: (threadId, latestDraftId) =>
+    set((state) => ({
+      replyDrafts: {
+        ...state.replyDrafts,
+        [threadId]: latestDraftId === undefined ? {} : { dismissedDraftId: latestDraftId },
+      },
+    })),
   toggleRaw: (messageId) =>
     set((state) => {
       if (state.rawOpen[messageId]) {

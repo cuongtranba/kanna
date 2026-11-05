@@ -2,12 +2,14 @@ import { useCallback } from "react"
 import { Button } from "../components/ui/button"
 import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
+import type { InboxQuickPrompt } from "../../shared/inbox/quick-prompts"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
+import { inboxAskBlockedReason, inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
 import { selectMcpSources, useAppSettingsStore } from "../stores/appSettingsStore"
-import { useInboxStore } from "../stores/inboxStore"
+import { displayedReplyDraft, useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
+import { DraftChips, QuickPrompts } from "./InboxAskControls"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
 interface Props {
@@ -27,11 +29,17 @@ const SEND_HINT: Readonly<Record<InboxReplyMode, string>> = {
   none: NO_CHAT_REPLY_REASON,
 }
 
-const INSTRUCT_NEEDS_CHAT_REASON = "Instruct needs a handler chat, and none is handling this source."
+const ASK_HINT = "Ask the agent to write a draft from this text; nothing is sent to the sender"
+const SLASH_PREFIX = "/"
+
+function instructionOf(draft: string): string {
+  const text = draft.startsWith(SLASH_PREFIX) ? draft.slice(SLASH_PREFIX.length) : draft
+  return text.trim()
+}
 
 const IME_COMPOSITION_KEY_CODE = 229
 
-function isPlainEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
+function isEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
   return (
     event.key === "Enter" &&
     !event.shiftKey &&
@@ -40,21 +48,31 @@ function isPlainEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean 
   )
 }
 
+function isModifiedEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return isEnter(event) && (event.metaKey || event.ctrlKey)
+}
+
+function isPlainEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return isEnter(event) && !event.metaKey && !event.ctrlKey
+}
+
 export function InboxReplyComposer({ thread, onArchived }: Props) {
   const socket = useOptionalKannaSocket()
   const storedDraft = useInboxStore((state) => state.replyDrafts[thread.id])
-  const draft = storedDraft ?? thread.report?.draftReply ?? ""
+  const draft = displayedReplyDraft(storedDraft, thread.drafts)
+  const latestDraftId = thread.drafts.at(-1)?.id
   const sources = useAppSettingsStore(selectMcpSources)
   const replyMode = inboxReplyMode(thread, sources)
+  const askBlockedReason = inboxAskBlockedReason(thread)
+  const canAsk = askBlockedReason === null
   const hasChat = thread.chatId !== undefined
   const hasText = draft.trim().length > 0
   const canReply = replyMode !== "none" && hasText
-  const canInstruct = hasChat && hasText
   const replyKey = pendingActionKey("inbox.reply", thread.id)
-  const instructKey = pendingActionKey("inbox.instruct", thread.id)
+  const askKey = pendingActionKey("inbox.instruct", thread.id)
   const archiveKey = pendingActionKey("inbox.archive", thread.id)
   const replyPending = usePendingAction(replyKey)
-  const instructPending = usePendingAction(instructKey)
+  const askPending = usePendingAction(askKey)
   const archivePending = usePendingAction(archiveKey)
 
   const handleChange = useCallback(
@@ -67,29 +85,59 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
   const handleReply = useCallback(() => {
     runPendingAction(replyKey, async () => {
       await sendCommandWithFeedback(socket, { type: "inbox.reply", threadId: thread.id, text: draft })
-      useInboxStore.getState().clearReplyDraft(thread.id)
+      useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
     })
-  }, [draft, replyKey, socket, thread.id])
+  }, [draft, latestDraftId, replyKey, socket, thread.id])
+
+  const ask = useCallback(
+    (instruction: string, currentDraft: string | undefined) => {
+      runPendingAction(askKey, async () => {
+        await sendCommandWithFeedback(socket, {
+          type: "inbox.instruct",
+          threadId: thread.id,
+          text: instruction,
+          ...(currentDraft === undefined ? {} : { draft: currentDraft }),
+        })
+        useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
+      })
+    },
+    [askKey, latestDraftId, socket, thread.id],
+  )
+
+  const handleAsk = useCallback(() => {
+    const instruction = instructionOf(draft)
+    if (canAsk && instruction.length > 0) ask(instruction, undefined)
+  }, [ask, canAsk, draft])
+
+  const handleQuickPrompt = useCallback(
+    (prompt: InboxQuickPrompt) => {
+      const current = draft.trim()
+      ask(prompt.instruction, current.length > 0 ? current : undefined)
+    },
+    [ask, draft],
+  )
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (isModifiedEnter(event)) {
+        event.preventDefault()
+        handleAsk()
+        return
+      }
       if (!isPlainEnter(event)) return
       event.preventDefault()
+      if (canAsk && draft.startsWith(SLASH_PREFIX)) {
+        handleAsk()
+        return
+      }
       if (canReply) handleReply()
     },
-    [canReply, handleReply],
+    [canAsk, canReply, draft, handleAsk, handleReply],
   )
 
-  const handleInstruct = useCallback(() => {
-    runPendingAction(instructKey, async () => {
-      await sendCommandWithFeedback(socket, { type: "inbox.instruct", threadId: thread.id, text: draft })
-      useInboxStore.getState().clearReplyDraft(thread.id)
-    })
-  }, [draft, instructKey, socket, thread.id])
-
   const handleDiscard = useCallback(() => {
-    useInboxStore.getState().clearReplyDraft(thread.id)
-  }, [thread.id])
+    useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
+  }, [latestDraftId, thread.id])
 
   const handleArchive = useCallback(() => {
     runPendingAction(archiveKey, async () => {
@@ -100,6 +148,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
 
   return (
     <section aria-label="Reply" className="space-y-2">
+      <DraftChips threadId={thread.id} drafts={thread.drafts} currentText={draft} />
       <Textarea
         aria-label="Reply to the sender"
         rows={5}
@@ -107,7 +156,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
         value={draft}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder={hasChat ? "Write a reply, or an instruction for the agent" : "Write a reply"}
+        placeholder={hasChat ? "Write a reply, or ask the agent (⌘↵, or start with /)" : "Write a reply"}
         disabled={replyMode === "none"}
       />
       <div className="flex flex-wrap items-center gap-2">
@@ -118,13 +167,10 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
             </Button>
           </span>
         </HoverHint>
-        <HoverHint
-          label={hasChat ? "Give the agent this text as an instruction instead of replying to the sender" : INSTRUCT_NEEDS_CHAT_REASON}
-          side="top"
-        >
+        <HoverHint label={askBlockedReason ?? ASK_HINT} side="top">
           <span className="inline-flex">
-            <Button variant="secondary" size="sm" disabled={!canInstruct} pending={instructPending} onClick={handleInstruct}>
-              Instruct
+            <Button variant="secondary" size="sm" disabled={!canAsk || !hasText} pending={askPending} onClick={handleAsk}>
+              Ask agent
             </Button>
           </span>
         </HoverHint>
@@ -142,6 +188,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
           Archive
         </Button>
       </div>
+      <QuickPrompts disabled={!canAsk || askPending} onAsk={handleQuickPrompt} />
       {replyMode === "none" ? <p className="text-xs text-muted-foreground">{NO_CHAT_REPLY_REASON}</p> : null}
     </section>
   )

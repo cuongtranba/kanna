@@ -66,6 +66,7 @@ function thread(sourceKind: InboxThread["sourceKind"], sourceId: string): InboxT
     sender: "s",
     messages: [],
     outbound: [],
+    drafts: [],
     state: "new",
     unread: true,
     lastMessageAt: 1,

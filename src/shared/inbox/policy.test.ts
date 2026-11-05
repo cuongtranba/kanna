@@ -13,6 +13,7 @@ function thread(state: InboxThreadState): InboxThread {
     sender: "s",
     messages: [],
     outbound: [],
+    drafts: [],
     state,
     unread: true,
     lastMessageAt: 1,

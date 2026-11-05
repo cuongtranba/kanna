@@ -64,8 +64,8 @@ export const inboxCommands = defineCommands(
   }),
   defineCommand("inbox.instruct", {
     result: chatIdResultSchema,
-    params: threadTextParams,
-    summary: "Tell an inbox thread's handler chat what to do and ask it to report a fresh draft.",
+    params: threadTextParams.extend({ draft: z.string().optional() }),
+    summary: "Ask an inbox thread's handler chat to write or rewrite a reply draft from an instruction and the current draft; nothing is sent to the sender.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),

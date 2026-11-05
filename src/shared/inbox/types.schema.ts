@@ -1,5 +1,6 @@
 import { z } from "zod"
 import {
+  INBOX_DRAFT_ORIGINS,
   INBOX_OUTBOUND_BYS,
   INBOX_OUTBOUND_STATUSES,
   INBOX_SOURCE_KINDS,
@@ -64,6 +65,14 @@ export const inboxOutboundMessageSchema = z.object({
   retryOf: z.string().optional(),
 })
 
+export const inboxDraftSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  at: z.number(),
+  origin: z.enum(INBOX_DRAFT_ORIGINS),
+  instruction: z.string().optional(),
+})
+
 const inboxThreadSchema = z.object({
   id: z.string(),
   sourceKind: z.enum(INBOX_SOURCE_KINDS),
@@ -73,6 +82,7 @@ const inboxThreadSchema = z.object({
   sender: z.string(),
   messages: z.array(inboundMessageSchema),
   outbound: z.array(inboxOutboundMessageSchema),
+  drafts: z.array(inboxDraftSchema).default([]),
   chatId: z.string().optional(),
   state: z.enum(INBOX_THREAD_STATES),
   report: inboxReportSchema.optional(),

@@ -19,7 +19,7 @@ needs you.
    every later message in the thread, so the agent keeps the conversation
    context.
 3. The agent reports a verdict — **needs you**, **FYI** or **handled** — with a
-   short summary and, when a reply makes sense, a **draft**. The agent never
+   short summary and, for a **needs you** thread where a reply makes sense, a **draft**. The agent never
    sends anything to the sender on its own.
 4. Only a **needs you** thread interrupts you: a toast (unless you are already on
    the Inbox), the sidebar badge, the window title count, and a push
@@ -56,15 +56,31 @@ the thread between the messages that arrived, ordered by time.
     will send**: Kanna asks the chat to send exactly that text through the
     source's own tools and to confirm what it sent, and the thread moves to
     **Replied** as soon as that request is queued.
-- **Instruct** sends the text as an instruction instead: the agent does what you
-  asked and reports a fresh draft. The thread stays in the Inbox.
-- **Discard draft** clears the box without sending anything.
+- **Ask agent** asks the thread's agent to write or rewrite a reply. The text in
+  the box is the instruction, and the answer always comes back as a new draft in
+  the box. The agent never sends it to the sender, and the thread stays in the
+  Inbox. Three ways to ask:
+  - press **⌘↵** (**Ctrl+↵** on Windows and Linux), which asks and never sends;
+  - press the **Ask agent** button;
+  - start the text with `/` and press **Enter**: `/shorter please` asks the agent
+    for "shorter please", with the `/` removed. Without a handler chat a leading
+    `/` is just text and Enter sends it.
+- **Quick prompts** under the box rewrite the draft already in it with one click:
+  **Shorter**, **More polite**, **Translate** and **Reply in sender's language**.
+  With an empty box they ask for a fresh draft in that style.
+- **Draft chips** above the box keep the last five drafts the agent wrote for the
+  thread, newest first, labelled by where they came from (`v3 · ask: Shorter`,
+  `v1 · triage`). Click one to load it into the box. They survive a reload, and a
+  new message in the conversation keeps them.
+- **Discard draft** clears the box without sending anything. It does not bring
+  the same draft back; a newer draft from the agent fills the box again.
 - **Archive** hides the thread from the Inbox tab. A new message in that
   conversation brings it back as unread.
 - **Open chat** jumps to the thread's chat to read the full transcript or talk
   to the agent directly.
 
-Instruct needs a handler chat, so it is unavailable in **Notify** mode. Send is
+Ask agent needs a handler chat (**Run in chat** or **New chat**), so it and the
+quick prompts are unavailable in **Notify** mode and on an archived thread. Send is
 unavailable only when the source has neither a reply tool nor a handler chat; the
 thread still shows what arrived.
 

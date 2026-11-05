@@ -11,7 +11,7 @@ export type InboxReplyOutcome =
   | { ok: false; error: string }
 
 export type InboxReplyAction = (threadId: string, text: string) => Promise<InboxReplyOutcome>
-export type InboxInstructAction = (threadId: string, text: string) => Promise<InboxReplyResult>
+export type InboxInstructAction = (threadId: string, text: string, draft?: string) => Promise<InboxReplyResult>
 export type InboxRetrySendAction = (threadId: string, outboundId: string, confirmDuplicate: boolean) => Promise<InboxSendResult>
 
 export interface InboxActions {
@@ -86,7 +86,11 @@ async function run(
         command.confirmDuplicate === true,
       )))
     case "inbox.instruct":
-      return ackResult(id, command, unwrapChat(await actions.instruct(requireId(command.threadId, "threadId"), requireText(command.text))))
+      return ackResult(id, command, unwrapChat(await actions.instruct(
+        requireId(command.threadId, "threadId"),
+        requireText(command.text),
+        command.draft,
+      )))
     default:
       return null
   }

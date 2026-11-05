@@ -50,6 +50,17 @@ export interface InboxReport {
   chatId: string
 }
 
+export const INBOX_DRAFT_ORIGINS = ["triage", "ask"] as const
+export type InboxDraftOrigin = (typeof INBOX_DRAFT_ORIGINS)[number]
+
+export interface InboxDraft {
+  id: string
+  text: string
+  at: number
+  origin: InboxDraftOrigin
+  instruction?: string
+}
+
 export interface InboxThread {
   id: string
   sourceKind: InboxSourceKind
@@ -59,6 +70,7 @@ export interface InboxThread {
   sender: string
   messages: InboundMessage[]
   outbound: InboxOutboundMessage[]
+  drafts: InboxDraft[]
   chatId?: string
   state: InboxThreadState
   report?: InboxReport
@@ -103,5 +115,17 @@ export const INBOX_REPLY_MAX_CHARS = 8000
 export const INBOX_UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 export const INBOX_PREVIEW_MAX_CHARS = 160
 export const INBOX_THREAD_MAX_MESSAGES = 50
+export const INBOX_THREAD_MAX_DRAFTS = 5
+export const INBOX_DRAFT_INSTRUCTION_MAX_CHARS = 200
+
+const INBOX_INSTRUCT_SCHEDULE_PREFIX = "inbox-instruct-"
+
+export function inboxInstructScheduleId(threadId: string, at: number): string {
+  return `${INBOX_INSTRUCT_SCHEDULE_PREFIX}${threadId}-${at}`
+}
+
+export function isInboxInstructScheduleId(scheduleId: string | undefined): boolean {
+  return scheduleId?.startsWith(INBOX_INSTRUCT_SCHEDULE_PREFIX) === true
+}
 
 export const isInboxVerdict = oneOf(INBOX_VERDICTS)
