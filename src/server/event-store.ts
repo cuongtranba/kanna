@@ -29,7 +29,8 @@ import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
 import {
   getSubagentRuns as getSubagentRunsFromMap,
-  getSubagentRunEntries as getSubagentRunEntriesFromMap,
+  getSubagentRunEntriesPage as getSubagentRunEntriesPageFromMap,
+  type SubagentEntriesPageQuery,
   runningSubagentRuns as runningSubagentRunsFromMap,
   appendSubagentEvent as appendSubagentEventFn,
   type AppendSubagentDeps,
@@ -439,7 +440,7 @@ export class EventStore implements PushEventStore {
 
   getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> { return getSubagentRunsFromMap(this.state.subagentRunsByChatId, chatId) }
 
-  getSubagentRunEntries(chatId: string, runId: string): TranscriptEntry[] | null { return getSubagentRunEntriesFromMap(this.state.subagentRunsByChatId, chatId, runId) }
+  getSubagentRunEntriesPage(chatId: string, runId: string, query: SubagentEntriesPageQuery): ChatHistoryPage { return getSubagentRunEntriesPageFromMap(this.state.subagentRunsByChatId, chatId, runId, query) }
 
   *runningSubagentRuns(): Iterable<SubagentRunSnapshot> { yield* runningSubagentRunsFromMap(this.state.subagentRunsByChatId) }
 

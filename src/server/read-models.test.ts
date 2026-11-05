@@ -740,6 +740,7 @@ describe("deriveChatSnapshot subagent run summaries", () => {
       parentUserMessageId: "u1", parentRunId: null, depth: 0,
       startedAt: 1000, finishedAt: status === "running" ? null : 2000, finalText: null, error: null, usage: null,
       entries: Array.from({ length: entryTotal }, (_, index) => entry(index)),
+      entriesDropped: 0,
       pendingTool: null,
     }])))
     return deriveChatSnapshot(state, "c1", { getMessages: () => ({ messages: [], history: { hasOlder: false, olderCursor: null, recentLimit: 200 } }), getTunnelEvents: () => [] })
@@ -1164,9 +1165,9 @@ describe("computeChatActivity", () => {
   test("agents counts only running subagent runs", () => {
     const state = baseState()
     const runMap = new Map<string, SubagentRunSnapshot>([
-      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
-      ["r2", { runId: "r2", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "completed", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: 2, finalText: "", error: null, usage: null, entries: [], pendingTool: null }],
-      ["r3", { runId: "r3", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], entriesDropped: 0, pendingTool: null }],
+      ["r2", { runId: "r2", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "completed", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: 2, finalText: "", error: null, usage: null, entries: [], entriesDropped: 0, pendingTool: null }],
+      ["r3", { runId: "r3", chatId: "c1", subagentId: "s1", subagentName: "a", label: null, provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], entriesDropped: 0, pendingTool: null }],
     ])
     state.subagentRunsByChatId.set("c1", runMap as never)
     const result = computeChatActivity("c1", baseDeps({ state }))
@@ -1225,7 +1226,7 @@ describe("computeChatActivity", () => {
       workdirAbs: "/p1", trackingFileRel: "PROGRESS.md",
     }] as never)
     const runMap = new Map([
-      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], pendingTool: null }],
+      ["r1", { runId: "r1", chatId: "c1", subagentId: "s1", subagentName: "a", provider: "claude", model: "m", status: "running", parentUserMessageId: "u1", parentRunId: null, depth: 0, startedAt: 1, finishedAt: null, finalText: null, error: null, usage: null, entries: [], entriesDropped: 0, pendingTool: null }],
     ])
     state.subagentRunsByChatId.set("c1", runMap as never)
     state.chatTasksByChatId.set("c1", [

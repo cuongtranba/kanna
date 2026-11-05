@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { act } from "react"
 import { createRoot } from "react-dom/client"
 import "../../lib/testing/setupHappyDom"
-import type { SubagentRunSummary, TranscriptEntry } from "../../../shared/types"
+import type { ChatHistoryPage, SubagentRunSummary, TranscriptEntry } from "../../../shared/types"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { SubagentMessage } from "./SubagentMessage"
 import { SubagentRunEntriesProvider } from "./subagent-run-entries-context"
@@ -675,9 +675,9 @@ describe("SubagentMessage", () => {
       { _id: "e2", createdAt: 2, kind: "assistant_text", text: "Second fetched step" } as TranscriptEntry,
     ]
     const requested: string[] = []
-    const fetchEntries = async (chatId: string, runId: string) => {
+    const fetchEntries = async (chatId: string, runId: string): Promise<ChatHistoryPage> => {
       requested.push(`${chatId}/${runId}`)
-      return fullLog
+      return { messages: fullLog, hasOlder: false, olderCursor: null }
     }
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -710,6 +710,51 @@ describe("SubagentMessage", () => {
 
       expect(container.textContent).not.toContain("First fetched step")
       expect(toggle?.textContent).toBe("Show full log (2 entries)")
+    } finally {
+      await act(async () => { root.unmount() })
+      container.remove()
+    }
+  })
+
+  test("a long log opens on its newest page and loads earlier entries on demand", async () => {
+    const entry = (id: string, text: string): TranscriptEntry => ({ _id: id, createdAt: 1, kind: "assistant_text", text })
+    const requests: Array<string | undefined> = []
+    const fetchEntries = async (_chatId: string, _runId: string, beforeCursor?: string): Promise<ChatHistoryPage> => {
+      requests.push(beforeCursor)
+      return beforeCursor === undefined
+        ? { messages: [entry("e3", "Newest step")], hasOlder: true, olderCursor: "idx:2" }
+        : { messages: [entry("e1", "Oldest step"), entry("e2", "Middle step")], hasOlder: false, olderCursor: null }
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    try {
+      await act(async () => {
+        root.render(
+          <SubagentRunEntriesProvider value={fetchEntries}>
+            <SubagentMessage
+              run={makeRunSnapshot({ status: "completed", finalText: "All done", entryCount: 3 })}
+              indentDepth={0}
+              localPath="/tmp"
+            />
+          </SubagentRunEntriesProvider>,
+        )
+      })
+      expect(container.querySelector('[data-testid="subagent-log-older:r1"]')).toBeNull()
+
+      await act(async () => { container.querySelector<HTMLButtonElement>('[data-testid="subagent-log-toggle:r1"]')?.click() })
+
+      expect(requests).toEqual([undefined])
+      expect(container.textContent).toContain("Newest step")
+      expect(container.textContent).not.toContain("Oldest step")
+
+      await act(async () => { container.querySelector<HTMLButtonElement>('[data-testid="subagent-log-older:r1"]')?.click() })
+
+      expect(requests).toEqual([undefined, "idx:2"])
+      const text = container.textContent ?? ""
+      expect(text.indexOf("Oldest step")).toBeLessThan(text.indexOf("Middle step"))
+      expect(text.indexOf("Middle step")).toBeLessThan(text.indexOf("Newest step"))
+      expect(container.querySelector('[data-testid="subagent-log-older:r1"]')).toBeNull()
     } finally {
       await act(async () => { root.unmount() })
       container.remove()

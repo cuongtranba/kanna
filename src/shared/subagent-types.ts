@@ -99,6 +99,8 @@ export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled"
 
 export const MAX_SUBAGENT_RUNS_PER_CHAT = 200
 export const MAX_SUBAGENT_ENTRIES_PER_RUN = 2000
+export const SUBAGENT_ENTRIES_PAGE_DEFAULT_LIMIT = 100
+export const SUBAGENT_ENTRIES_PAGE_MAX_LIMIT = 500
 
 export interface ProviderUsage {
   inputTokens?: number
@@ -132,12 +134,13 @@ export interface SubagentRunSnapshot {
   error: { code: SubagentErrorCode; message: string } | null
   usage: ProviderUsage | null
   entries: TranscriptEntry[]
+  entriesDropped: number
   pendingTool: SubagentPendingTool | null
 }
 
 export const SUBAGENT_RECENT_ENTRY_LIMIT = 8
 
-export type SubagentRunSummary = Omit<SubagentRunSnapshot, "entries"> & {
+export type SubagentRunSummary = Omit<SubagentRunSnapshot, "entries" | "entriesDropped"> & {
   entryCount: number
   recentEntries: TranscriptEntry[]
 }

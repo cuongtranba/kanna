@@ -5,11 +5,11 @@ import type {
   AskUserQuestionAnswerMap,
   AskUserQuestionItem,
   SubagentRunSummary,
-  TranscriptEntry,
 } from "../../../shared/types"
 import { CHAT_SELECTION_ZONE_ATTRIBUTE } from "../../app/chatFocusPolicy"
 import { toolActivity } from "../../lib/toolPresentation"
 import { processTranscriptMessages } from "../../lib/parseTranscript"
+import { mergeTranscriptEntries } from "../../lib/mergeTranscriptEntries"
 import { cn } from "../../lib/utils"
 import { SubagentEntryRow } from "./SubagentEntryRow"
 import { SubagentErrorCard } from "./SubagentErrorCard"
@@ -20,12 +20,6 @@ import { withScopedStore } from "../../lib/createScopedStore"
 import { SubagentMessageStore } from "./SubagentMessage.store"
 import { useSubagentRunEntries } from "./subagent-run-entries-context"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
-
-function mergeEntriesById(full: TranscriptEntry[], recent: TranscriptEntry[]): TranscriptEntry[] {
-  const known = new Set(full.map((entry) => entry._id))
-  const fresh = recent.filter((entry) => !known.has(entry._id))
-  return fresh.length === 0 ? full : [...full, ...fresh]
-}
 
 function deriveSubagentActivity(run: SubagentRunSummary, localPath: string): string {
   if (run.pendingTool) return "waiting for input..."
@@ -95,10 +89,15 @@ function SubagentLogToggle({ run }: { run: SubagentRunSummary }) {
   const error = SubagentMessageStore.useScopedStore((s) => s.error)
   const openLog = SubagentMessageStore.useScopedStore((s) => s.openLog)
   const closeLog = SubagentMessageStore.useScopedStore((s) => s.closeLog)
-  const receiveEntries = SubagentMessageStore.useScopedStore((s) => s.receiveEntries)
+  const hasOlder = SubagentMessageStore.useScopedStore((s) => s.hasOlder)
+  const olderCursor = SubagentMessageStore.useScopedStore((s) => s.olderCursor)
+  const receiveNewest = SubagentMessageStore.useScopedStore((s) => s.receiveNewest)
+  const receiveOlder = SubagentMessageStore.useScopedStore((s) => s.receiveOlder)
   const failLoad = SubagentMessageStore.useScopedStore((s) => s.failLoad)
   const pendingKey = pendingActionKey("subagentRun.getEntries", run.runId)
+  const olderPendingKey = pendingActionKey("subagentRun.getEntries", run.runId, "older")
   const pending = usePendingAction(pendingKey)
+  const olderPending = usePendingAction(olderPendingKey)
 
   const onToggle = useCallback(() => {
     if (!getEntries) return
@@ -108,9 +107,19 @@ function SubagentLogToggle({ run }: { run: SubagentRunSummary }) {
     }
     openLog()
     runPendingAction(pendingKey, () =>
-      getEntries(run.chatId, run.runId).then(receiveEntries, onRejected((cause) => failLoad(cause.message))),
+      getEntries(run.chatId, run.runId).then(receiveNewest, onRejected((cause) => failLoad(cause.message))),
     )
-  }, [getEntries, expanded, closeLog, openLog, pendingKey, run.chatId, run.runId, receiveEntries, failLoad])
+  }, [getEntries, expanded, closeLog, openLog, pendingKey, run.chatId, run.runId, receiveNewest, failLoad])
+
+  const onLoadOlder = useCallback(() => {
+    if (!getEntries || olderCursor === null) return
+    runPendingAction(olderPendingKey, () =>
+      getEntries(run.chatId, run.runId, olderCursor).then(
+        (page) => receiveOlder(olderCursor, page),
+        onRejected((cause) => failLoad(cause.message)),
+      ),
+    )
+  }, [getEntries, olderCursor, olderPendingKey, run.chatId, run.runId, receiveOlder, failLoad])
 
   if (!getEntries) return null
   if (!expanded && run.entryCount <= run.recentEntries.length) return null
@@ -128,6 +137,18 @@ function SubagentLogToggle({ run }: { run: SubagentRunSummary }) {
       >
         {expanded ? "Hide full log" : `Show full log (${run.entryCount} entries)`}
       </Button>
+      {expanded && hasOlder && (
+        <Button
+          variant="ghost"
+          size="none"
+          className="px-1.5 py-0.5 text-xs"
+          data-testid={`subagent-log-older:${run.runId}`}
+          pending={olderPending}
+          onClick={onLoadOlder}
+        >
+          Load earlier entries
+        </Button>
+      )}
       {error && (
         <div data-testid={`subagent-log-error:${run.runId}`} className="text-xs text-destructive-text">
           {error}
@@ -149,7 +170,7 @@ function SubagentMessageInner({
   suppressPendingTool = false,
 }: SubagentMessageProps) {
   const fullEntries = SubagentMessageStore.useScopedStore((s) => s.fullEntries)
-  const shownEntries = fullEntries ? mergeEntriesById(fullEntries, run.recentEntries) : run.recentEntries
+  const shownEntries = fullEntries ? mergeTranscriptEntries(fullEntries, run.recentEntries) : run.recentEntries
   const messages = processTranscriptMessages(shownEntries)
   const hasAnyText = messages.some((m) => m.kind === "assistant_text")
   const isStreaming = run.status === "running" && hasAnyText

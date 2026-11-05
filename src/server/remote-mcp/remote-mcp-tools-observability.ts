@@ -33,7 +33,7 @@ export const observabilityTools: readonly RemoteTool[] = [
   commandTool({
     name: "get_subagent_run_entries",
     title: "Read a subagent run log",
-    description: "Read the full entry log of one subagent run held by a chat.",
+    description: "Read one page of the entry log of a subagent run held by a chat, newest page first; pass the returned olderCursor as beforeCursor for earlier entries.",
     annotations: { readOnlyHint: true },
     command: "subagentRun.getEntries",
     input: (params) => params,

@@ -11,6 +11,7 @@ import type { ChatSnapshot, ProjectCommandsSnapshot, AskUserQuestionItem } from 
 import type { ChatOpsEvent } from "../../shared/chat-ops"
 import { processTranscriptMessages } from "../lib/parseTranscript"
 import { generateUUID } from "../lib/utils"
+import { mergeTranscriptEntries } from "../lib/mergeTranscriptEntries"
 import { clearCommandError, reportCommandFailure, surfaceCommandError, withCommandFeedback } from "../lib/commandFeedback"
 import { onRejected, toError } from "../../shared/errors"
 import { getLatestToolIds, isActiveChatStatus, isPrimaryChatInstance } from "./derived"
@@ -47,17 +48,6 @@ export function applyProjectCommandsSnapshot(
 ): void {
   if (!snapshot || snapshot.projectId !== subscribedProjectId) return
   useSlashCommandsStore.getState().setForProject(snapshot.projectId, snapshot.commands)
-}
-
-function mergeTranscriptEntries(olderHistoryEntries: TranscriptEntry[], recentEntries: TranscriptEntry[]) {
-  const deduped = new Map<string, TranscriptEntry>()
-  for (const entry of olderHistoryEntries) {
-    deduped.set(entry._id, entry)
-  }
-  for (const entry of recentEntries) {
-    deduped.set(entry._id, entry)
-  }
-  return [...deduped.values()]
 }
 
 export function getPreviousPrompt(messages: ReturnType<typeof processTranscriptMessages>) {

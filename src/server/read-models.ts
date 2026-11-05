@@ -43,7 +43,7 @@ const SIDEBAR_RECENT_WINDOW_MS = 24 * 60 * 60 * 1_000
 const SIDEBAR_FALLBACK_PREVIEW_LIMIT = 5
 
 function summarizeSubagentRun(run: SubagentRunSnapshot): SubagentRunSummary {
-  const { entries, ...rest } = run
+  const { entries, entriesDropped: _entriesDropped, ...rest } = run
   return {
     ...rest,
     entryCount: entries.length,

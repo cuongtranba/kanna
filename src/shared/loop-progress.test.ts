@@ -22,6 +22,7 @@ function run(overrides: Partial<SubagentRunSnapshot>): SubagentRunSnapshot {
     error: null,
     usage: null,
     entries: [],
+    entriesDropped: 0,
     pendingTool: null,
     ...overrides,
   }

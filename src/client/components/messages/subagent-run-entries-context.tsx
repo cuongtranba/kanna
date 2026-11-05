@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react"
-import type { TranscriptEntry } from "../../../shared/types"
+import type { ChatHistoryPage } from "../../../shared/types"
 
-export type GetSubagentRunEntries = (chatId: string, runId: string) => Promise<TranscriptEntry[]>
+export type GetSubagentRunEntries = (chatId: string, runId: string, beforeCursor?: string) => Promise<ChatHistoryPage>
 
 const SubagentRunEntriesContext = createContext<GetSubagentRunEntries | null>(null)
 

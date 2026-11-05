@@ -40,6 +40,7 @@ function baseRun(overrides: Partial<SubagentRunSnapshot> = {}): SubagentRunSnaps
     error: null,
     usage: null,
     entries: [],
+    entriesDropped: 0,
     pendingTool: null,
     ...overrides,
   }

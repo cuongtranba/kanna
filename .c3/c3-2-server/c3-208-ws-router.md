@@ -1,7 +1,7 @@
 ---
 id: c3-208
 c3-version: 4
-c3-seal: 8347e7bf7127925ee408326f7a588f1bb8e3908843ae312af1bdc438a32927ab
+c3-seal: 3547752798e443b8fcfe257b886c3ddd29ea348a7532cadde7d5df8880d950c1
 title: ws-router
 type: component
 category: foundation
@@ -97,7 +97,7 @@ Accepts upgraded WS sockets, decodes typed `ClientEnvelope` payloads, dispatches
 During live turns, chat-topic subscribers with a tracked per-subscription seq
 (`ClientState.chatOpSeqBySubId`) receive `{type:"event", event:{type:"chat.ops",
 fromSeq, toSeq, ops}}` envelopes instead of full snapshots (`pushSnapshots`
-in `ws-router-broadcast.ts`). Meta changes (runtime/sections/pending) are
+in `ws-router-broadcast.ts`). Meta changes (runtime/sections/pending and per-run subagent upserts, text deltas and removals) are
 diffed once per chat per pass by `recordMetaOps` → `diffChatMeta`
 (`src/server/chat-ops-diff.ts`, pure) and recorded into the op-log so the
 ring stays the single ordering authority. Ring gap ⇒ tracking + snapshot

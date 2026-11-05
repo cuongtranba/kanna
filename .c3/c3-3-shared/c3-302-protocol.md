@@ -1,7 +1,7 @@
 ---
 id: c3-302
 c3-version: 4
-c3-seal: e6bb6b3ab3bfadd97f01f3d2b99cce0f095174c5e43322b2f17b426b6436545c
+c3-seal: 4c8dcb2e4962671445d2ed645931e9ec94127833f177af2398fe4ff15a609ba0
 title: protocol
 type: component
 category: foundation
@@ -88,9 +88,13 @@ Holds the WS envelope discriminated unions: subscribe/unsubscribe/command kinds,
 ## Chat ops delta events
 
 `src/shared/chat-ops.ts` defines `ChatOp`
-(`entries.append` / `runtime.set` / `sections.set` / `pending.set`),
+(`entries.append` / `runtime.set` / `sections.set` / `pending.set` /
+`subagentRun.upsert` / `subagentRun.text` / `subagentRun.remove`),
 `ChatOpsEvent` (added to `WsEvent`), and the pure `applyChatOps` reducer the
-client folds deltas with. The chat topic gained `since?: number` and
+client folds deltas with (an exhaustive switch over the op kinds). Subagent
+runs are not a `sections.set` key: each run is an upsert of its metadata plus
+text ops (append of the new suffix while running, replace at completion) and a
+remove on eviction. The chat topic gained `since?: number` and
 `ChatSnapshot` gained optional `seq` (absent = producer has no op-log, e.g.
 share page). Contract: fail-safe is always a full snapshot — a seq gap on
 either side degrades to the snapshot path, never silent divergence.
