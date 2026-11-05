@@ -16,7 +16,7 @@ import { toError } from "../../shared/errors"
 import { safeJsonParse, type JsonValue } from "../../shared/json"
 import type { McpServerConfig } from "../../shared/mcp-types"
 import { toJsonValue } from "../json-boundary"
-import { networkHeaders, stdioEnv } from "../mcp-validator"
+import { networkHeaders, stdioEnv, terminateQuietly, type SessionTerminator } from "../mcp-validator"
 import type {
   McpSourceCloseReason,
   McpSourceConnection,
@@ -25,17 +25,12 @@ import type {
 } from "./mcp-source-runner"
 
 const CONNECT_TIMEOUT_MS = 20_000
-const TERMINATE_TIMEOUT_MS = 3000
 const JSON_LOOKING = /^\s*[{[]/
 
 export interface McpListenClient {
   listen(filter: SubscriptionFilter): Promise<McpSubscription>
   subscribeResource(params: { uri: string }): Promise<EmptyResult>
   getServerCapabilities(): { resources?: { subscribe?: boolean | undefined } | undefined } | undefined
-}
-
-interface SessionTerminator {
-  terminateSession(): Promise<void>
 }
 
 export function isLegacyProtocolError(error: Error): boolean {
@@ -127,21 +122,6 @@ export function buildSourceTransport(server: McpServerConfig, bearer: string | u
       return new SSEClientTransport(new URL(server.url), { fetch: withHeaders(networkHeaders(server, bearer)) })
     case "ws":
       throw new Error("The ws transport is not supported for MCP sources; use http or sse")
-  }
-}
-
-async function terminateQuietly(terminator: SessionTerminator | null): Promise<void> {
-  if (terminator === null) return
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const expired = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, TERMINATE_TIMEOUT_MS)
-  })
-  try {
-    await Promise.race([terminator.terminateSession(), expired])
-  } catch {
-    return
-  } finally {
-    clearTimeout(timer)
   }
 }
 
