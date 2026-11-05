@@ -1,7 +1,7 @@
 ---
 id: c3-207
 c3-version: 4
-c3-seal: a07864d5d463545fd70b600d6a1fa7fbe25df6fee75fe2383147219f7ab5a300
+c3-seal: cc5e49bde3d20a9043565d6cfc601de4a51a0c282c2661aa3f16f493815d3e8a
 title: read-models
 type: component
 category: foundation
@@ -67,7 +67,7 @@ Subscribes to event-store appends, derives per-feature views (sidebar list, chat
 | --- | --- | --- | --- | --- |
 | subscribe(topic) | OUT | Returns latest snapshot + push stream | c3-208 | src/server/read-models.ts |
 | Projection map | IN | Event-store appends drive projection update | c3-206 | src/server/read-models.ts |
-| deriveChatSnapshot(state, chatId, sources, runtime) | OUT | Builds one chat's ChatSnapshot: sources (ChatSnapshotSources) carry the reads that touch storage (getMessages, getTunnelEvents, optional catalogSources) and runtime is a Partial<ChatRuntimeView> completed with defaults, so the projection stays pure; null when the chat is gone; the snapshot carries subagent run SUMMARIES (entryCount plus a recent tail for running runs) and full logs are fetched on demand with subagentRun.getEntries | c3-208 | src/server/read-models.ts |
+| deriveChatSnapshot(state, chatId, sources, runtime) | OUT | Builds one chat's ChatSnapshot: sources (ChatSnapshotSources) carry the reads that touch storage (getMessages, getTunnelEvents, optional catalogSources) and runtime is a Partial<ChatRuntimeView> completed with defaults, so the projection stays pure; null when the chat is gone; the snapshot carries subagent run SUMMARIES (entryCount plus a recent tail for running runs) and full logs are paged on demand with subagentRun.getEntries (a ChatHistoryPage) | c3-208 | src/server/read-models.ts |
 | computeChatActivity(chatId, deps) | OUT | Pure function deriving ChatActivity from live state plus injected registries; consumed by deriveSidebarData | c3-208 | src/server/read-models.ts |
 | backgroundTasksByChatId | IN | Optional map of chatId to live background tasks injected into ComputeChatActivityDeps; absent callers receive zero background-task count | c3-208 | src/server/read-models.ts |
 | workflowRegistry | IN | Optional WorkflowRegistry snapshot accessor injected into ComputeChatActivityDeps; absent callers receive no workflow activity | c3-208 | src/server/read-models.ts |

@@ -81,10 +81,12 @@ string. The rules every change follows:
   defaulted parameter. Unmount every React root you mount. Subprocesses get
   `stdin: "ignore"` and `GIT_TERMINAL_PROMPT=0` (`kanna-test` has the runner facts).
 - **Snapshot size:** the chat snapshot never embeds per-run subagent logs. Measured: a 24 MB
-  snapshot, 97.6% subagent entries, ~5 s blank chat; the diff stream also re-sends the
-  `subagentRuns` map on every entry append. `deriveChatSnapshot` emits `SubagentRunSummary`
-  (`entryCount` and a recent tail for running runs) and the client fetches a full log with
-  `subagentRun.getEntries`. Transcript memory is bounded by bytes (`kanna-sessions`) for the
+  snapshot, 97.6% subagent entries, ~5 s blank chat; the diff stream also re-sent the
+  whole `subagentRuns` map on every entry append. `deriveChatSnapshot` emits `SubagentRunSummary`
+  (`entryCount` and a recent tail for running runs); `diffChatMeta` streams changes as per-run
+  `subagentRun.upsert`/`text`/`remove` ops, so a streaming run re-sends only its new text suffix;
+  the client pages a full log with `subagentRun.getEntries` (a `ChatHistoryPage`, newest first,
+  absolute `idx:` cursor). Transcript memory is bounded by bytes (`kanna-sessions`) for the
   same reason.
 - **Secrets:** a synthetic credential in a fixture gets one narrow `regexes` entry in
   `.gitleaks.toml`, never a `paths` glob. gitleaks is pinned at v8.30.1, which has no

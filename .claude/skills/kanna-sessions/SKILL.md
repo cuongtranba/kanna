@@ -584,7 +584,7 @@ this path silently restores the whole cost.
 event (`applySubagentEvent`, `event-store-subagent.ts`); running runs are never
 evicted. The `entries[]` array inside each retained snapshot is capped at
 `MAX_SUBAGENT_ENTRIES_PER_RUN` (2000) — oldest entries are spliced out when the
-cap is exceeded, keeping the most recent interactions in memory.
+cap is exceeded, keeping the most recent interactions in memory; the spliced count accumulates in `entriesDropped`, which turns the page cursors of `subagentRun.getEntries` into absolute indexes.
 `SeenMessageIds` (`seen-message-ids.ts`, the dedup gate `EventStore` consults) is capped at
 `MAX_SEEN_MESSAGE_IDS` (2000) per chat via FIFO eviction — oldest entries
 dropped first using Set insertion order. Safe because Claude API always generates
