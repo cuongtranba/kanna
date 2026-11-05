@@ -9,6 +9,7 @@ code:
   - src/shared/inbox/policy.ts
   - src/shared/inbox/policy.test.ts
   - src/shared/inbox/autonomy.ts
+  - src/shared/inbox/push.ts
   - src/shared/inbox/outbound-text.ts
   - src/shared/inbox/outbound-text.test.ts
   - src/shared/inbound/handler.ts
@@ -28,6 +29,9 @@ code:
   - src/server/inbox/inbox-log.adapter.ts
   - src/server/inbox/inbox-log.adapter.test.ts
   - src/server/inbox/inbox-boot.ts
+  - src/server/inbox/inbox-push.test.ts
+  - src/server/inbox/proposal-approve-http.ts
+  - src/server/inbox/proposal-approve-http.test.ts
   - src/server/inbox/inbox-autonomy.ts
   - src/server/inbox/inbox-autonomy.test.ts
   - src/server/inbox/inbox-autopilot.ts

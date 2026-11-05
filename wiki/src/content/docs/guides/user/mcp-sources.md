@@ -155,6 +155,7 @@ how the cards, Undo and takeover behave.
 | **Auto allowlist** | empty | One thread key per line (the value the **Thread key path** reads, such as a Zalo `threadId`). Auto only applies to these contacts; the thread header can add one with **Allow auto for this contact**. |
 | **Allow links** | off | Whether an auto-sent reply may contain links. Markdown links and images and HTML are never auto-sent. |
 | **Max characters** | 1000 | A longer reply needs your approval. |
+| **Add a Send button to the notification of an approval card** | off | An approval card's [push notification](/guides/user/push-notifications/#inbox-notifications) gets a **Send** action that sends the proposed text without opening Kanna. Needs **Send a push notification** on. |
 
 Approve and Auto need a **Reply tool**, because Kanna sends the approved or
 auto-sent text itself, and saving a source that sets either without one is

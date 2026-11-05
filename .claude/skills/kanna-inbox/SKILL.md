@@ -195,6 +195,12 @@ not an implementation detail.
   pauses the agent, and a per-turn PreToolUse guard keeps triage and ask turns
   from sending or running Bash. Auto is Claude-only. Read
   [references/autonomy.md](references/autonomy.md) before touching any of it.
+- **Push preview, Send-from-notification and the Inbox keys are opt-in or
+  single-key.** `pushPreview` (handler) and `sendFromNotification` (autonomy)
+  default off; the Send action posts to `POST /api/inbox/proposals/approve`,
+  which calls the same `approveProposal` as the WS command. Read
+  [references/push-and-keys.md](references/push-and-keys.md) before touching
+  `public/sw.js`, that route, `onProposalOpened` or `useInboxKeyboard`.
 - **Draft versions are thread-owned and persisted.** A report with a non-empty
   `draft_reply` also records `inbox_thread_draft_added { threadId, draft }`;
   `InboxThread.drafts` holds at most `INBOX_THREAD_MAX_DRAFTS` (5), oldest first,

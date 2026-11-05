@@ -26,6 +26,35 @@ see it. This is per device, so your phone still buzzes while your laptop has the
 chat open. Repeats of the same transition are suppressed too, so a flapping chat
 cannot spam you.
 
+## Inbox notifications
+
+The [Inbox](/guides/user/inbox/) sends two more notifications, one per source and
+only when that source's **Send a push notification** switch is on:
+
+| Notification | Sent when | Body |
+| --- | --- | --- |
+| New message that needs you | A thread enters **needs you** | The sender and the source |
+| Agent wants to reply | An approval card opens on a thread | "Agent wants to reply" |
+
+Both are never skipped because you are looking at a chat, and a thread whose agent
+is paused after you replied raises no approval card, so it raises no notification.
+
+Two opt-in switches change what they carry, both off by default:
+
+- **Show a preview of the message in the notification** adds the latest message,
+  or the proposed reply, cut to 140 characters. The text then passes through your
+  browser vendor's push service and appears on your lock screen.
+- **Add a Send button to the notification of an approval card** adds a **Send**
+  action to the "Agent wants to reply" notification. It sends the proposed text
+  with your signed-in browser session, with no password or token in the
+  notification. If you are signed out, offline or the proposal is no longer
+  waiting, it opens the thread instead and does not retry.
+
+The Send button posts to `/api/inbox/proposals/approve`, which needs the same
+session as the rest of the app and refuses a request that does not come from
+Kanna's own origin. With no password set, anyone who can reach the server can
+already use Kanna, and the endpoint follows that.
+
 ## Inside Kanna, without push
 
 A chat waiting for you is also marked in two places that need no setup:

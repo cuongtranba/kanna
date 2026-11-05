@@ -1,6 +1,6 @@
 ---
 id: c3-126
-c3-seal: a214536a220c8ba0a8b7622a339a246cd62968eb482e38079010078d3cf09d16
+c3-seal: c94215aa8da0db06994b4941d5fe736b7d1390de4bd3b7507ffab7d33c9913c4
 title: inbox-ui
 type: component
 category: feature
@@ -49,6 +49,7 @@ Owns the Inbox page with its Inbox and Activity tabs, the thread and activity ro
 | Outbound rows | IN/OUT | What you sent is shown in the thread between the messages that arrived, ordered by time, with Sending, Sent, Failed with its reason or Not confirmed; Retry sends inbox.retrySend, and a Not confirmed row first shows a warning that the message may be delivered twice and sends confirmDuplicate only after Send again | A newer outbound message replaces the summary in the thread row preview as You followed by its text until the sender writes again | src/client/app/InboxOutboundEntry.tsx |
 | Autonomy controls | IN/OUT | The thread header of an MCP thread offers a dropdown of Source default, Off, Suggest, Approve and Auto that sends inbox.setThreadAutonomy (null for the source default); Approve and Auto are disabled with a hint when the source has no reply target and Auto also when the handler provider is Codex; an Agent paused chip with Resume (inbox.resumeAgent) shows while agentPausedUntil is in the future; Allow auto for this contact appears when the effective level is auto and the thread key is not allowlisted and writes the source autonomy.allowlist through the mcpSources settings patch | Webhook threads have no controls; the pause chip and countdown read the shared one-second clock hook | src/client/app/InboxAutonomyControls.tsx |
 | Proposal card | IN/OUT | An open proposal shows its text, confidence, reason and blockedBy with Send (inbox.approveProposal), Edit (loads the text into the composer through setReplyDraft) and Reject (inbox.rejectProposal); a scheduled one shows Sending in m:ss counted from scheduledFor with Undo (inbox.cancelProposal) | Editing sends nothing; the proposal resolves rejected when the edited text is sent as a direct reply, which the server takes as a takeover | src/client/app/InboxProposalCard.tsx |
+| Keyboard | IN | useInboxKeyboard maps the keybinding actions inboxNextThread j, inboxPrevThread k, inboxFocusComposer r, inboxArchiveThread e and inboxApproveProposal a to the next or previous listed thread, the composer, inbox.archive and inbox.approveProposal; archive and approve go through lib/inboxActions.ts like the composer and the card | A bare key never fires while an input, textarea, select or contenteditable has focus; a: nothing happens unless the open thread has an open proposal | src/client/app/useInboxKeyboard.ts |
 | Outbound labels | OUT | Each outbound row reads You, You · approved or Agent · auto; a row with proposal provenance shows its confidence and reason in the project Tooltip | Never a native title | src/client/app/InboxOutboundEntry.tsx |
 | Sent by agent filter | OUT | A filter chip sets InboxFilter.sentByAgent; the shared inboxThreadMatchesFilter keeps threads with any agent outbound and drops activity items | The matcher is shared with the server registry so the two cannot drift | src/client/lib/inboxFilter.ts |
 | needs-you signals | OUT | A thread entering needs_you raises at most three toasts per snapshot plus one overflow toast when not on /inbox, counts in the sidebar badge and the window title, and sends a push of kind inbox unless the source handler disabled push | State is drawn with the four marks, never colour alone | src/client/app/useInboxToasts.ts |
@@ -57,7 +58,7 @@ Owns the Inbox page with its Inbox and Activity tabs, the thread and activity ro
 
 | Material | Must derive from | Allowed variance | Evidence |
 | --- | --- | --- | --- |
-| public/sw.js inbox case | c3-126 Contract | Wording is free; the tag must fall back from threadId to chatId | public/sw.js |
+| public/sw.js inbox case | c3-126 Contract | Wording is free; the tag must fall back from threadId to chatId | public/sw.js, public/sw-notifications.js |
 | CLAUDE.md Inbox section | c3-126 Contract | Wording is free; the needs_you-only signal rule must survive | CLAUDE.md |
 
 ## Change Safety
@@ -71,4 +72,5 @@ Owns the Inbox page with its Inbox and Activity tabs, the thread and activity ro
 | The Inbox page lands in the entry bundle | Replacing the lazy import in PageTabContent | check:bundle reports the entry over budget | bun test --conditions production src/ops/architecture/budget.test.ts |
 | Auto is offered where the server would refuse it | Letting the dropdown enable Auto for a Codex handler or a source without a reply target | The autonomy test expects Auto disabled with the reason for both | bun run test src/client/app/InboxAutonomy.test.tsx |
 | A scheduled auto-send cannot be undone from the card | Hiding Undo once the countdown reaches zero or dropping the cancelProposal command | The autonomy test expects Undo to send inbox.cancelProposal | bun run test src/client/app/InboxAutonomy.test.tsx |
+| A shortcut fires while the reply box has focus | Dropping the typing guard in resolveBoundCommand | The keyboard test presses every inbox key inside the composer and expects no selection change and no command | bun run test src/client/app/InboxKeyboard.test.tsx |
 | A selector returns a fresh array each render | Inline fallbacks in inboxStore selectors | The store test asserts EMPTY identity | bun test --conditions production src/client/stores/inboxStore.test.ts |
