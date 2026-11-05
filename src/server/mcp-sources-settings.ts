@@ -55,7 +55,7 @@ function flatten(source: McpSourceInput | McpSource): FlatSource {
   }
   if (source.mode === "subscribe") {
     const { resourceUris, itemsPath, itemKeyPath, resyncIntervalMs } = source
-    return { ...common, mode: "subscribe", resourceUris, tool: "", args: {}, cursorArg: "", cursorPath: "", itemsPath, itemKeyPath, intervalMs: MCP_SOURCE_INTERVAL_MIN_MS, resyncIntervalMs }
+    return { ...common, mode: "subscribe", resourceUris, tool: "", args: {}, cursorArg: "", cursorPath: "", itemsPath: itemsPath ?? "", itemKeyPath: itemKeyPath ?? null, intervalMs: MCP_SOURCE_INTERVAL_MIN_MS, resyncIntervalMs: resyncIntervalMs ?? null }
   }
   const { tool, args, cursorArg, cursorPath, itemsPath, itemKeyPath, intervalMs } = source
   return { ...common, mode: "poll", resourceUris: [], tool, args, cursorArg, cursorPath, itemsPath, itemKeyPath, intervalMs, resyncIntervalMs: null }

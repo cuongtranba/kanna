@@ -102,7 +102,7 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
       resourceUris: source.resourceUris.join("\n"),
       subscribeItemsPath: source.itemsPath,
       subscribeItemKeyPath: source.itemKeyPath ?? "",
-      resyncSeconds: source.resyncIntervalMs === null ? "" : String(Math.round(source.resyncIntervalMs / 1000)),
+      resyncSeconds: resyncSecondsText(source.resyncIntervalMs),
     }
   }
   return {
@@ -115,6 +115,10 @@ export function draftFromMcpSource(source: McpSource): McpSourceDraft {
     itemKeyPath: source.itemKeyPath ?? "",
     intervalSeconds: String(Math.round(source.intervalMs / 1000)),
   }
+}
+
+function resyncSecondsText(resyncIntervalMs: number | null): string {
+  return resyncIntervalMs === null ? "" : String(Math.round(resyncIntervalMs / 1000))
 }
 
 export function applyPreset(draft: McpSourceDraft, presetId: McpSourcePresetId): McpSourceDraft {
@@ -131,9 +135,9 @@ export function applyPreset(draft: McpSourceDraft, presetId: McpSourcePresetId):
     return {
       ...common,
       resourceUris: preset.resourceUris.join("\n"),
-      subscribeItemsPath: preset.itemsPath,
+      subscribeItemsPath: preset.itemsPath ?? "",
       subscribeItemKeyPath: preset.itemKeyPath ?? "",
-      resyncSeconds: preset.resyncIntervalMs === null ? "" : String(Math.round(preset.resyncIntervalMs / 1000)),
+      resyncSeconds: resyncSecondsText(preset.resyncIntervalMs ?? null),
     }
   }
   return {

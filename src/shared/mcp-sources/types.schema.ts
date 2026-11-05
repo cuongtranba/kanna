@@ -15,6 +15,14 @@ const mcpSourceInputBaseShape = {
   handler: inboundHandlerSchema,
 }
 
+const subscribeInputFieldsShape = {
+  mode: z.literal("subscribe"),
+  resourceUris: z.array(z.string()),
+  itemsPath: z.string().optional(),
+  itemKeyPath: z.string().nullable().optional(),
+  resyncIntervalMs: z.number().nullable().optional(),
+}
+
 const subscribeFieldsShape = {
   mode: z.literal("subscribe"),
   resourceUris: z.array(z.string()),
@@ -35,7 +43,7 @@ const pollFieldsShape = {
 }
 
 export const mcpSourceInputSchema = z.discriminatedUnion("mode", [
-  z.object({ ...mcpSourceInputBaseShape, ...subscribeFieldsShape }),
+  z.object({ ...mcpSourceInputBaseShape, ...subscribeInputFieldsShape }),
   z.object({ ...mcpSourceInputBaseShape, ...pollFieldsShape }),
 ])
 

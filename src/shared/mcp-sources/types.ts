@@ -56,9 +56,9 @@ export type McpSourceInput =
   | (McpSourceInputBase & {
       mode: "subscribe"
       resourceUris: string[]
-      itemsPath: string
-      itemKeyPath: string | null
-      resyncIntervalMs: number | null
+      itemsPath?: string
+      itemKeyPath?: string | null
+      resyncIntervalMs?: number | null
     })
   | (McpSourceInputBase & {
       mode: "poll"
