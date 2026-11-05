@@ -1,6 +1,11 @@
-import { MAX_SUBAGENT_ENTRIES_PER_RUN, MAX_SUBAGENT_RUNS_PER_CHAT } from "../shared/subagent-types"
-import type { SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
+import {
+  MAX_SUBAGENT_ENTRIES_PER_RUN,
+  MAX_SUBAGENT_RUNS_PER_CHAT,
+  SUBAGENT_ENTRIES_PAGE_DEFAULT_LIMIT,
+} from "../shared/subagent-types"
+import type { ChatHistoryPage, SubagentRunSnapshot, TranscriptEntry } from "../shared/types"
 import type { ChatRecord, SubagentRunEvent } from "./events"
+import { decodeHistoryCursor, fitLimitToByteBudget, getMessagesPageFromEntries } from "./history-paging"
 import { capTranscriptEntry } from "./subagent-entry-cap.adapter"
 
 
@@ -45,6 +50,7 @@ export function applySubagentEvent(
         error: null,
         usage: null,
         entries: [],
+        entriesDropped: 0,
         pendingTool: null,
       })
       break
@@ -59,7 +65,7 @@ export function applySubagentEvent(
       const run = subagentRunsByChatId.get(event.chatId)?.get(event.runId)
       if (!run) break
       run.entries.push(event.entry)
-      trimEntries(run.entries)
+      trimEntries(run)
       if (event.entry.kind === "result") {
         const usage = event.entry.usage
         const prior = run.usage
@@ -127,15 +133,17 @@ export function applySubagentEvent(
         content: event.result,
       }
       run.entries.push(syntheticEntry)
-      trimEntries(run.entries)
+      trimEntries(run)
       break
     }
   }
 }
 
-function trimEntries(entries: TranscriptEntry[]): void {
-  const excess = entries.length - MAX_SUBAGENT_ENTRIES_PER_RUN
-  if (excess > 0) entries.splice(0, excess)
+function trimEntries(run: SubagentRunSnapshot): void {
+  const excess = run.entries.length - MAX_SUBAGENT_ENTRIES_PER_RUN
+  if (excess <= 0) return
+  run.entries.splice(0, excess)
+  run.entriesDropped += excess
 }
 
 function evictSettledRuns(map: SubagentRunMap): void {
@@ -161,13 +169,28 @@ export function getSubagentRuns(
   return Object.fromEntries(map.entries())
 }
 
-export function getSubagentRunEntries(
+export interface SubagentEntriesPageQuery {
+  beforeCursor?: string
+  limit?: number
+}
+
+export function getSubagentRunEntriesPage(
   subagentRunsByChatId: Map<string, SubagentRunMap>,
   chatId: string,
   runId: string,
-): TranscriptEntry[] | null {
+  query: SubagentEntriesPageQuery,
+): ChatHistoryPage {
   const run = subagentRunsByChatId.get(chatId)?.get(runId)
-  return run ? [...run.entries] : null
+  if (!run) return { messages: [], hasOlder: false, olderCursor: null }
+  const cursor = query.beforeCursor === undefined ? undefined : decodeHistoryCursor(query.beforeCursor)
+  if (cursor?.kind === "byte") throw new Error("Invalid history cursor")
+  const beforeIndex = cursor === undefined ? undefined : cursor.index - run.entriesDropped
+  const windowEnd = beforeIndex === undefined ? run.entries.length : Math.max(0, Math.min(beforeIndex, run.entries.length))
+  const limit = fitLimitToByteBudget(
+    run.entries.slice(0, windowEnd),
+    query.limit ?? SUBAGENT_ENTRIES_PAGE_DEFAULT_LIMIT,
+  )
+  return getMessagesPageFromEntries(run.entries, limit, beforeIndex, run.entriesDropped)
 }
 
 export function* runningSubagentRuns(

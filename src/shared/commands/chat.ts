@@ -10,6 +10,7 @@ import { modelOptionsSchema } from "../provider-model-types.schema"
 import { chatAttachmentSchema } from "../types.schema"
 import { datasetQueryOutcomeSchema } from "../genui/protocol"
 import { transcriptEntriesSchema, chatHistoryPageSchema } from "../transcript-types.schema"
+import { SUBAGENT_ENTRIES_PAGE_DEFAULT_LIMIT, SUBAGENT_ENTRIES_PAGE_MAX_LIMIT } from "../subagent-types"
 import { workflowRunSchema } from "../workflow-types.schema"
 import { backgroundTaskOutputReplySchema, chatIdResultSchema, chatSendResultSchema, queuedMessageResultSchema } from "./results/chat"
 import { okResultSchema } from "./results/common"
@@ -275,9 +276,15 @@ export const chatCommands = defineCommands(
     remote: REMOTE_ALLOWED,
   }),
   defineCommand("subagentRun.getEntries", {
-    result: transcriptEntriesSchema,
-    params: z.object({ ...chatIdShape, runId: z.string().describe("Id of the subagent run") }),
-    summary: "Read the full entry log of a subagent run held by the chat.",
+    result: chatHistoryPageSchema,
+    params: z.object({
+      ...chatIdShape,
+      runId: z.string().describe("Id of the subagent run"),
+      beforeCursor: z.string().optional().describe("The olderCursor of the previous page; omit for the newest page"),
+      limit: z.number().int().min(1).max(SUBAGENT_ENTRIES_PAGE_MAX_LIMIT).optional()
+        .describe(`Entries per page, default ${SUBAGENT_ENTRIES_PAGE_DEFAULT_LIMIT}, at most ${SUBAGENT_ENTRIES_PAGE_MAX_LIMIT}`),
+    }),
+    summary: "Read one newest-first page of a subagent run's entry log.",
     risk: "read",
     remote: REMOTE_ALLOWED,
   }),

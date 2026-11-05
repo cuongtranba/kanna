@@ -87,6 +87,7 @@ export function getMessagesPageFromEntries(
   entries: TranscriptEntry[],
   limit: number,
   beforeIndex?: number,
+  indexBase: number = 0,
 ): ChatHistoryPage {
   if (entries.length === 0) {
     return { messages: [], hasOlder: false, olderCursor: null }
@@ -99,6 +100,6 @@ export function getMessagesPageFromEntries(
   return {
     messages: cloneTranscriptEntries(entries.slice(startIndex, endIndex)),
     hasOlder: startIndex > 0,
-    olderCursor: startIndex > 0 ? encodeHistoryCursor({ kind: "index", index: startIndex }) : null,
+    olderCursor: startIndex > 0 ? encodeHistoryCursor({ kind: "index", index: indexBase + startIndex }) : null,
   }
 }

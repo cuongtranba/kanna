@@ -33,6 +33,7 @@ import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
 import { useShallow } from "zustand/react/shallow"
 import type { WorkflowRun } from "../../../shared/workflow-types"
 import type { SubagentRunSummary, TranscriptEntry } from "../../../shared/types"
+import type { GetSubagentRunEntries } from "../../components/messages/subagent-run-entries-context"
 import { useChatPageStore } from "../../stores/chatPageStore"
 import { ChatTabScopedStore } from "../../stores/chatTabScopedStore"
 import { useKannaStateStore } from "../../stores/kannaStateStore"
@@ -348,9 +349,10 @@ export function ChatTabContent({
     return socket.command({ type: "subagents.getRun", chatId: activeChatId, agentId })
   }, [activeChatId, socket])
 
-  const handleGetSubagentRunEntries = useCallback(async (chatId: string, runId: string): Promise<TranscriptEntry[]> => {
-    return socket.command({ type: "subagentRun.getEntries", chatId, runId })
-  }, [socket])
+  const handleGetSubagentRunEntries = useCallback<GetSubagentRunEntries>(
+    (chatId, runId, beforeCursor) => socket.command({ type: "subagentRun.getEntries", chatId, runId, beforeCursor }),
+    [socket],
+  )
 
   const transcriptActionsValue = useMemo<TranscriptActionsContextValue>(() => ({
     onAskUserQuestionSubmit: state.handleAskUserQuestion,

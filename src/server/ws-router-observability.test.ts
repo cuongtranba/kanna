@@ -4,6 +4,8 @@ import { handleObservabilityCommand } from "./ws-router-observability"
 import type { ClientCommand } from "../shared/protocol"
 import type { ChatRecord, ProjectRecord } from "./events"
 import { encodeCwd } from "./claude-projects-path.adapter"
+import { MAX_SUBAGENT_ENTRIES_PER_RUN } from "../shared/subagent-types"
+import type { ChatHistoryPage } from "../shared/types"
 import { createTestEventStore } from "./storage/test-helpers"
 
 const REAL_CWD = process.cwd()
@@ -18,7 +20,7 @@ function makeDeps(
   return {
     workflowRegistry: wfOverride,
     subagentTranscriptRegistry: saOverride,
-    store: storeOverride ?? { getChat: () => null, getProject: () => null, getSubagentRunEntries: () => null },
+    store: storeOverride ?? { getChat: () => null, getProject: () => null, getSubagentRunEntriesPage: () => ({ messages: [], hasOlder: false, olderCursor: null }) },
     send: (envelope) => { sent.push(envelope) },
     sent,
   }
@@ -144,7 +146,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => chat),
       getProject: vi.fn(() => project),
-      getSubagentRunEntries: () => null,
+      getSubagentRunEntriesPage: () => ({ messages: [], hasOlder: false, olderCursor: null }),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -171,7 +173,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => { throw new Error("should not be reached") }),
       getProject: vi.fn(() => { throw new Error("should not be reached") }),
-      getSubagentRunEntries: () => null,
+      getSubagentRunEntriesPage: () => ({ messages: [], hasOlder: false, olderCursor: null }),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -194,7 +196,7 @@ describe("handleObservabilityCommand", () => {
     const store: ObservabilityCommandDeps["store"] = {
       getChat: vi.fn(() => chat),
       getProject: vi.fn(() => { throw new Error("should not be reached") }),
-      getSubagentRunEntries: () => null,
+      getSubagentRunEntriesPage: () => ({ messages: [], hasOlder: false, olderCursor: null }),
     }
     const deps = makeDeps(undefined, sa, store)
     const handled = await handleObservabilityCommand(
@@ -206,7 +208,7 @@ describe("handleObservabilityCommand", () => {
     expect(sa.register).not.toHaveBeenCalled()
   })
 
-  test("subagentRun.getEntries — returns the full log of the run held by the store, [] for an unknown run", async () => {
+  async function storeWithRunEntries(count: number): Promise<{ store: ReturnType<typeof createTestEventStore>; chatId: string }> {
     const store = createTestEventStore("/virtual-observability-run-entries")
     await store.initialize()
     const project = await store.openProject("/tmp/p-run-entries")
@@ -216,19 +218,57 @@ describe("handleObservabilityCommand", () => {
       subagentId: "s1", subagentName: "alpha", provider: "claude", model: "claude-opus-4-7",
       parentUserMessageId: "u1", parentRunId: null, depth: 0,
     })
-    for (const index of [1, 2, 3]) {
+    await appendRunEntries(store, chat.id, 0, count)
+    return { store, chatId: chat.id }
+  }
+
+  async function appendRunEntries(store: ReturnType<typeof createTestEventStore>, chatId: string, from: number, count: number): Promise<void> {
+    for (let index = from; index < from + count; index++) {
       await store.appendSubagentEvent({
-        v: 3, type: "subagent_entry_appended", timestamp: index, chatId: chat.id, runId: "run-1",
+        v: 3, type: "subagent_entry_appended", timestamp: index, chatId, runId: "run-1",
         entry: { _id: `e${index}`, createdAt: index, kind: "assistant_text", text: `step ${index}` },
       })
     }
+  }
+
+  async function readPage(store: ReturnType<typeof createTestEventStore>, chatId: string, extra: { runId?: string; beforeCursor?: string; limit?: number }): Promise<ChatHistoryPage> {
     const deps = makeDeps(undefined, undefined, store)
+    await handleObservabilityCommand(deps, { type: "subagentRun.getEntries", chatId, runId: "run-1", ...extra }, "r-page")
+    const [ack] = deps.sent as Array<{ result: ChatHistoryPage }>
+    if (!ack) throw new Error("no ack")
+    return ack.result
+  }
 
-    await handleObservabilityCommand(deps, { type: "subagentRun.getEntries", chatId: chat.id, runId: "run-1" }, "r-full")
-    await handleObservabilityCommand(deps, { type: "subagentRun.getEntries", chatId: chat.id, runId: "missing" }, "r-none")
+  test("subagentRun.getEntries pages a run newest-first and returns an empty page for an unknown run", async () => {
+    const { store, chatId } = await storeWithRunEntries(3)
 
-    const [full, none] = deps.sent as Array<{ result: Array<{ _id: string }> }>
-    expect(full?.result.map((entry) => entry._id)).toEqual(["e1", "e2", "e3"])
-    expect(none?.result).toEqual([])
+    const newest = await readPage(store, chatId, { limit: 2 })
+    expect(newest.messages.map((entry) => entry._id)).toEqual(["e1", "e2"])
+    expect(newest.hasOlder).toBe(true)
+
+    const older = await readPage(store, chatId, { limit: 2, beforeCursor: newest.olderCursor ?? "" })
+    expect(older.messages.map((entry) => entry._id)).toEqual(["e0"])
+    expect(older.hasOlder).toBe(false)
+    expect(older.olderCursor).toBeNull()
+
+    const all = await readPage(store, chatId, {})
+    expect(all.messages.map((entry) => entry._id)).toEqual(["e0", "e1", "e2"])
+
+    const none = await readPage(store, chatId, { runId: "missing" })
+    expect(none).toEqual({ messages: [], hasOlder: false, olderCursor: null })
   })
+
+  test("subagentRun.getEntries cursors stay correct after the run log is trimmed past its cap", async () => {
+    const { store, chatId } = await storeWithRunEntries(MAX_SUBAGENT_ENTRIES_PER_RUN + 10)
+
+    const newest = await readPage(store, chatId, { limit: 3 })
+    expect(newest.messages.map((entry) => entry._id)).toEqual(["e2007", "e2008", "e2009"])
+
+    await appendRunEntries(store, chatId, MAX_SUBAGENT_ENTRIES_PER_RUN + 10, 5)
+    const older = await readPage(store, chatId, { limit: 3, beforeCursor: newest.olderCursor ?? "" })
+    expect(older.messages.map((entry) => entry._id)).toEqual(["e2004", "e2005", "e2006"])
+
+    const trimmedAway = await readPage(store, chatId, { limit: 3, beforeCursor: "idx:5" })
+    expect(trimmedAway).toEqual({ messages: [], hasOlder: false, olderCursor: null })
+  }, 30_000)
 })
