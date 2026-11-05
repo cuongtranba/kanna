@@ -56,7 +56,10 @@ is running are merged into one more read.
      one, Kanna hashes the whole message.
    - **Interval**, between 5 and 3600 seconds.
 4. Set the **Thread key path** so messages from one conversation share one Inbox
-   thread, and the **Sender path** for the name shown on it. Paths use the same
+   thread, and the **Sender path** for the name shown on it. Optionally set the
+   **Text path**, the field that holds the message text: the Inbox shows it as
+   the preview instead of the raw JSON of the message. The handler template, the
+   prompt and **Show raw** still see the whole message. Paths use the same
    `a.b.0.c` notation as webhook templates.
 5. Choose what happens to each message, the same three actions as a webhook:
    **Notify**, **Run in chat** or **New chat**. Write the instruction template,
@@ -73,7 +76,7 @@ for every conversation in it.
 `zalo://inbox` resource and pushes resource updates (a `zalo-mcp` build with
 resource subscriptions). It subscribes to `zalo://inbox`, splits it at
 `messages` with `id` as the item key, resyncs every 5 minutes, groups messages
-by `threadId`, shows `senderName`, and starts a new chat per conversation. The
+by `threadId`, shows `senderName`, previews `text`, and starts a new chat per conversation. The
 reply hint maps a `threadType` of `dm` to 0 and `group` to 1 for
 `zalo_send_message`. Pick the server and the project, then save.
 

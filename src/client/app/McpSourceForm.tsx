@@ -178,6 +178,9 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
         <Field id="mcp-source-sender" label="Sender path" hint="Shown as the sender of the thread.">
           <Input id="mcp-source-sender" className="font-mono" value={draft.senderPath} onChange={(event) => patchDraft({ senderPath: event.target.value })} />
         </Field>
+        <Field id="mcp-source-text" label="Text path" hint="Optional. The field holding the message text, shown as the Inbox preview. Leave empty to show the raw item.">
+          <Input id="mcp-source-text" className="font-mono" value={draft.textPath} onChange={(event) => patchDraft({ textPath: event.target.value })} />
+        </Field>
       </div>
 
       <InboundHandlerFields

@@ -111,6 +111,12 @@ describe("mcpSources settings", () => {
     expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ id: "s1", mode: "subscribe", itemsPath: "", itemKeyPath: null, resyncIntervalMs: null })
   })
 
+  test("a stored source without a text path loads with an empty one", async () => {
+    const stored = { id: "s1", name: "Feed", mode: "subscribe", serverId: "x", enabled: true, threadKeyPath: "", senderPath: "", handler: { mode: "notify", chatId: "c1", template: "hi", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"], createdAt: 1, updatedAt: 1 }
+    const manager = await startManager({ mcpSources: [stored] })
+    expect(manager.getSnapshot().mcpSources[0]).toMatchObject({ textPath: "" })
+  })
+
   test("a subscribe source created without the item fields gets the whole-payload defaults", async () => {
     const { manager, serverId } = await withServer()
     await manager.writePatch({ mcpSources: { create: { mode: "subscribe", name: "Feed", serverId, threadKeyPath: "", senderPath: "", handler: { mode: "spawn", projectId: "p1", template: "New message", replyHint: "", pushEnabled: true }, resourceUris: ["feed://a"] } } })

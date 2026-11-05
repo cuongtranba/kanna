@@ -12,6 +12,7 @@ const mcpSourceInputBaseShape = {
   enabled: z.boolean().optional(),
   threadKeyPath: z.string(),
   senderPath: z.string(),
+  textPath: z.string().optional(),
   handler: inboundHandlerSchema,
 }
 
@@ -54,6 +55,7 @@ const mcpSourceBaseShape = {
   enabled: z.boolean(),
   threadKeyPath: z.string(),
   senderPath: z.string(),
+  textPath: z.string(),
   handler: inboundHandlerSchema,
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -71,6 +73,7 @@ export const mcpSourcePatchSchema = z.object({
   mode: mcpSourceModeSchema.optional(),
   threadKeyPath: z.string().optional(),
   senderPath: z.string().optional(),
+  textPath: z.string().optional(),
   handler: inboundHandlerSchema.optional(),
   resourceUris: z.array(z.string()).optional(),
   tool: z.string().optional(),

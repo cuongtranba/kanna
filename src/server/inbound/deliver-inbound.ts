@@ -27,6 +27,7 @@ export interface InboundDelivery {
   body: JsonValue
   threadKey: string
   sender: string
+  text?: string
   at: number
 }
 
@@ -162,6 +163,7 @@ export async function deliverInbound(
     sender: delivery.sender,
     sourceName: delivery.sourceName,
     deliveryId: delivery.deliveryId,
+    ...(delivery.text !== undefined ? { text: delivery.text } : {}),
   })
   const target = await resolveChat(store, inbox, delivery, thread.id, thread.chatId)
   if (!target.ok) return target

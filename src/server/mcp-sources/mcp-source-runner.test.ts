@@ -34,6 +34,7 @@ const POLL: McpPollSource = {
   enabled: true,
   threadKeyPath: "threadId",
   senderPath: "senderName",
+  textPath: "",
   handler: HANDLER,
   tool: "zalo_get_messages",
   args: { limit: 50 },
@@ -54,6 +55,7 @@ const SUBSCRIBE: McpSubscribeSource = {
   enabled: true,
   threadKeyPath: "",
   senderPath: "",
+  textPath: "",
   handler: HANDLER,
   resourceUris: ["feed://inbox"],
   itemsPath: "",
@@ -308,6 +310,26 @@ describe("McpSourceRunner subscribe items", () => {
     expect(h.deliveries.map((d) => d.deliveryId)).toEqual(["a", "b", "c"])
     expect(h.deliveries[0]).toMatchObject({ threadKey: "t-1", sender: "An", body: { id: "a" } })
     await h.runner.stop()
+  })
+
+  test("a text path delivers the item text beside the untouched body and no text without one", async () => {
+    const h = createHarness()
+    const connection = new FakeConnection()
+    connection.readResults = [{ messages: [{ id: "a", threadId: "t-1", text: "Hello there" }] }]
+    h.connections.push(() => connection)
+    await h.runner.reconcile([{ ...SUBSCRIBE_ITEMS, textPath: "text" }], [SERVER])
+    await waitFor(() => h.deliveries.length === 1)
+    expect(h.deliveries[0]).toMatchObject({ text: "Hello there", body: { id: "a", threadId: "t-1", text: "Hello there" } })
+    await h.runner.stop()
+
+    const plain = createHarness()
+    const plainConnection = new FakeConnection()
+    plainConnection.readResults = [inbox("a")]
+    plain.connections.push(() => plainConnection)
+    await plain.runner.reconcile([SUBSCRIBE_ITEMS], [SERVER])
+    await waitFor(() => plain.deliveries.length === 1)
+    expect(plain.deliveries[0]).not.toHaveProperty("text")
+    await plain.runner.stop()
   })
 
   test("pushes that arrive during an in-flight read are coalesced into one follow-up read", async () => {

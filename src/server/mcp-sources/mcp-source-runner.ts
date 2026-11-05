@@ -277,6 +277,7 @@ export class McpSourceRunner {
     const state = this.cursorState(source.id)
     if (state.recentKeys.includes(key)) return
     const at = this.clock.now()
+    const text = textAt(item, source.textPath)
     const result = await this.deliver({
       source: { kind: "mcp", sourceId: source.id, sourceName: source.name, serverId: server.id, serverName: server.name },
       sourceName: source.name,
@@ -285,6 +286,7 @@ export class McpSourceRunner {
       body: item,
       threadKey: textAt(item, source.threadKeyPath) || fallbackThreadKey,
       sender: textAt(item, source.senderPath) || source.name,
+      ...(text.length > 0 ? { text } : {}),
       at,
     })
     if (!result.ok) throw new Error(result.detail)

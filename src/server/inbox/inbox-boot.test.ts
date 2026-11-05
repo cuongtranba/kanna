@@ -36,6 +36,7 @@ const SOURCE: McpSource = {
   enabled: true,
   threadKeyPath: "threadId",
   senderPath: "senderName",
+  textPath: "",
   handler: SOURCE_HANDLER,
   tool: "zalo_get_messages",
   args: {},

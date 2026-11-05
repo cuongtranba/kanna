@@ -233,6 +233,10 @@ and `inbox.instruct` need nothing new.
   `intervalMs` (5 s to 1 h) with the persisted cursor under `cursorArg`, takes
   the array at `itemsPath`, and stores the value at `cursorPath`. Polls never
   overlap: the loop is `call → sleep → call`.
+- **`textPath` feeds only the Inbox preview.** The runner resolves it per item with
+  `textAt` and passes `text` on the `InboundDelivery`; `ingestInbound` previews
+  `meta.text ?? payload`. The bus payload, template `{{path}}` rendering and the
+  prompt keep the raw body. Empty means no text path; stored sources load with `""`.
 - **Subscribe follows the spec flow.** A notification names a URI, never carries
   content, so every `resources/updated` triggers a read of the notified URI (it
   may be a sub-resource, so it is not matched against the subscribed URIs). The
