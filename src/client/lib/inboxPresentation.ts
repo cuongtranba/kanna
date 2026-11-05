@@ -1,5 +1,14 @@
 import type { JsonValue } from "../../shared/json"
-import type { InboxActivityItem, InboxSourceKind, InboxThread, InboxThreadState, InboxVerdict } from "../../shared/inbox/types"
+import type {
+  InboundMessage,
+  InboxActivityItem,
+  InboxOutboundMessage,
+  InboxSourceKind,
+  InboxThread,
+  InboxThreadState,
+  InboxVerdict,
+} from "../../shared/inbox/types"
+import type { McpSource } from "../../shared/mcp-sources/types"
 import type { BusSource } from "../../shared/service-bus/envelope"
 import type { StatusTone } from "./statusLabel"
 import { namedBusSubject, subjectFamily } from "../../shared/service-bus/subjects"
@@ -101,10 +110,55 @@ export function reportSummaryText(summary: string): string {
   return summary.trim().length > 0 ? summary : EMPTY_SUMMARY_TEXT
 }
 
+export function newestOutbound(thread: InboxThread): InboxOutboundMessage | undefined {
+  return thread.outbound[thread.outbound.length - 1]
+}
+
 export function threadPreview(thread: InboxThread): string {
+  const lastInbound = thread.messages[thread.messages.length - 1]
+  const lastOutbound = newestOutbound(thread)
+  if (lastOutbound !== undefined && lastOutbound.ts > (lastInbound?.ts ?? 0)) return `You: ${lastOutbound.text}`
   const summary = thread.report?.summary.trim() ?? ""
   if (summary.length > 0) return summary
-  return thread.messages[thread.messages.length - 1]?.preview ?? ""
+  return lastInbound?.preview ?? ""
+}
+
+export type InboxThreadEntry =
+  | { kind: "inbound"; ts: number; message: InboundMessage }
+  | { kind: "outbound"; ts: number; outbound: InboxOutboundMessage }
+
+export function threadEntries(thread: InboxThread): InboxThreadEntry[] {
+  const inbound = thread.messages.map((message): InboxThreadEntry => ({ kind: "inbound", ts: message.ts, message }))
+  const outbound = thread.outbound.map((entry): InboxThreadEntry => ({ kind: "outbound", ts: entry.ts, outbound: entry }))
+  return [...inbound, ...outbound].sort((a, b) => a.ts - b.ts)
+}
+
+const OUTBOUND_STATUS_DISPLAY: Readonly<Record<Exclude<InboxOutboundMessage["status"], "failed">, InboxStateDisplay>> = {
+  pending: { tone: "active", label: "Sending…" },
+  sent: { tone: "muted", label: "Sent" },
+  unknown: { tone: "attention", label: "Not confirmed" },
+}
+
+export function outboundStatusDisplay(outbound: InboxOutboundMessage): InboxStateDisplay {
+  if (outbound.status !== "failed") return OUTBOUND_STATUS_DISPLAY[outbound.status]
+  return { tone: "destructive", label: outbound.error ? `Failed: ${outbound.error}` : "Failed" }
+}
+
+export function outboundNeedsDuplicateConfirm(outbound: InboxOutboundMessage): boolean {
+  return outbound.status === "unknown"
+}
+
+export function outboundRetryable(outbound: InboxOutboundMessage): boolean {
+  return outbound.status === "failed" || outbound.status === "unknown"
+}
+
+export type InboxReplyMode = "direct" | "agent" | "none"
+
+export function inboxReplyMode(thread: InboxThread, sources: readonly McpSource[]): InboxReplyMode {
+  if (thread.sourceKind === "mcp" && sources.some((source) => source.id === thread.sourceId && source.reply !== null)) {
+    return "direct"
+  }
+  return thread.chatId === undefined ? "none" : "agent"
 }
 
 export function fencedJson(payload: JsonValue): string {
@@ -114,4 +168,4 @@ export function fencedJson(payload: JsonValue): string {
   return `${fence}json\n${body}\n${fence}`
 }
 
-export const NO_CHAT_REPLY_REASON = "No chat is handling this source, so there is nobody to reply through."
+export const NO_CHAT_REPLY_REASON = "This source has no reply tool and no chat is handling it, so there is nobody to reply through."

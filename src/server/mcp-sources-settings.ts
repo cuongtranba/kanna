@@ -13,7 +13,7 @@ import {
   type McpSourcePatch,
   type McpSourceReply,
 } from "../shared/mcp-sources/types"
-import { validateMcpSource, validateMcpSourceReply } from "../shared/mcp-sources/validate"
+import { readMcpReplyArg, validateMcpSource, validateMcpSourceReply } from "../shared/mcp-sources/validate"
 import { isAgentProvider } from "../shared/types"
 
 type McpSourcesPatch = NonNullable<AppSettingsPatch["mcpSources"]>
@@ -168,14 +168,6 @@ function readHandler(value: JsonValue | undefined): InboundHandler | null {
   }
 }
 
-function readReplyArg(value: JsonValue): McpReplyArg | null {
-  if (typeof value === "string") return value
-  if (!isJsonObject(value)) return null
-  const { from, map } = value
-  if (typeof from !== "string" || map === undefined || !isJsonObject(map)) return null
-  return value.default === undefined ? { from, map } : { from, map, default: value.default }
-}
-
 function readReply(value: JsonValue | undefined): McpSourceReply | null {
   if (value === undefined || !isJsonObject(value)) return null
   const tool = readString(value, "tool")
@@ -183,7 +175,7 @@ function readReply(value: JsonValue | undefined): McpSourceReply | null {
   if (tool === undefined || rawArgs === undefined || !isJsonObject(rawArgs)) return null
   const args: Record<string, McpReplyArg> = {}
   for (const [key, rawArg] of Object.entries(rawArgs)) {
-    const arg = readReplyArg(rawArg)
+    const arg = readMcpReplyArg(rawArg)
     if (arg === null) return null
     args[key] = arg
   }

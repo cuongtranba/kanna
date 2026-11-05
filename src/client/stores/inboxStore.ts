@@ -7,6 +7,7 @@ const EMPTY_THREADS: readonly InboxThread[] = []
 const EMPTY_ITEMS: readonly InboxActivityItem[] = []
 const EMPTY_DRAFTS: Readonly<Record<string, string>> = {}
 const NO_RAW_OPEN: Readonly<Record<string, true>> = {}
+const NO_RETRY_CONFIRMS: Readonly<Record<string, true>> = {}
 
 interface InboxPage {
   threads: readonly InboxThread[]
@@ -25,6 +26,7 @@ interface InboxState {
   replyDrafts: Readonly<Record<string, string>>
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
+  retryConfirming: Readonly<Record<string, true>>
   applySnapshot(snapshot: InboxSnapshot): void
   appendPage(page: InboxPage): void
   setTab(tab: InboxTabId): void
@@ -37,6 +39,8 @@ interface InboxState {
   setReplyDraft(threadId: string, text: string): void
   clearReplyDraft(threadId: string): void
   toggleRaw(messageId: string): void
+  askRetryConfirm(outboundId: string): void
+  dismissRetryConfirm(outboundId: string): void
 }
 
 function nonEmpty<T>(list: readonly T[], empty: readonly T[]): readonly T[] {
@@ -79,6 +83,7 @@ export const useInboxStore = create<InboxState>()((set) => ({
   replyDrafts: EMPTY_DRAFTS,
   olderExhausted: false,
   rawOpen: NO_RAW_OPEN,
+  retryConfirming: NO_RETRY_CONFIRMS,
   applySnapshot: (snapshot) =>
     set((state) => ({
       threads: nonEmpty([...snapshot.threads, ...olderThan(state.threads, snapshot.threads, threadTs)], EMPTY_THREADS),
@@ -113,6 +118,10 @@ export const useInboxStore = create<InboxState>()((set) => ({
       }
       return { rawOpen: { ...state.rawOpen, [messageId]: true } }
     }),
+  askRetryConfirm: (outboundId) =>
+    set((state) => ({ retryConfirming: { ...state.retryConfirming, [outboundId]: true } })),
+  dismissRetryConfirm: (outboundId) =>
+    set((state) => ({ retryConfirming: omitKeyOrEmpty(state.retryConfirming, outboundId, NO_RETRY_CONFIRMS) })),
 }))
 
 export const selectInboxUnreadCount = (state: InboxState) => state.unreadCount

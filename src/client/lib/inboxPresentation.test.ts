@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
-import { fencedJson, formatUnreadBadge, itemStateDisplay, reportSummaryText, subjectLabel, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
+import { fencedJson, formatUnreadBadge, inboxReplyMode, itemStateDisplay, reportSummaryText, subjectLabel, threadPreview, threadStateDisplay, verdictDisplay } from "./inboxPresentation"
 
 function thread(overrides: Partial<InboxThread>): InboxThread {
   return {
@@ -78,5 +78,54 @@ describe("agent read wording", () => {
     expect(verdictDisplay("handled")).toEqual({ tone: "muted", label: "Handled" })
     expect(reportSummaryText("  ")).toBe("The agent ended its turn without a summary.")
     expect(reportSummaryText("Pay it")).toBe("Pay it")
+  })
+})
+
+describe("threadPreview", () => {
+  const inbound = { id: "m", deliveryId: "d", ts: 100, payload: {}, preview: "are you there" }
+
+  test("shows your reply when it is newer than the last message that arrived", () => {
+    const replied = thread({ messages: [inbound], outbound: [{ id: "o", ts: 200, text: "yes", by: "you", status: "sent" }] })
+    expect(threadPreview(replied)).toBe("You: yes")
+  })
+
+  test("goes back to the message that arrived once the sender writes again", () => {
+    const answered = thread({
+      messages: [inbound, { ...inbound, id: "m2", ts: 300, preview: "great" }],
+      outbound: [{ id: "o", ts: 200, text: "yes", by: "you", status: "sent" }],
+    })
+    expect(threadPreview(answered)).toBe("great")
+  })
+})
+
+describe("inboxReplyMode", () => {
+  const source = {
+    id: "src1",
+    name: "Zalo",
+    mode: "subscribe" as const,
+    serverId: "srv",
+    enabled: true,
+    threadKeyPath: "t",
+    senderPath: "s",
+    textPath: "",
+    handler: { mode: "notify" as const, template: "t", replyHint: "", pushEnabled: true },
+    reply: { tool: "send", args: {}, resultIdPath: "" },
+    resourceUris: [],
+    itemsPath: "",
+    itemKeyPath: null,
+    resyncIntervalMs: null,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  test("a source with a reply target sends directly, even with no handler chat", () => {
+    expect(inboxReplyMode(thread({ sourceKind: "mcp", sourceId: "src1" }), [source])).toBe("direct")
+  })
+
+  test("without a reply target the handler chat sends, and with neither there is no way to reply", () => {
+    const noReply = { ...source, reply: null }
+    expect(inboxReplyMode(thread({ sourceKind: "mcp", sourceId: "src1", chatId: "c1" }), [noReply])).toBe("agent")
+    expect(inboxReplyMode(thread({ sourceKind: "mcp", sourceId: "src1" }), [noReply])).toBe("none")
+    expect(inboxReplyMode(thread({ sourceKind: "webhook", sourceId: "src1" }), [source])).toBe("none")
   })
 })

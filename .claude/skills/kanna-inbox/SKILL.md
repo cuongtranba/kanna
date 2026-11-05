@@ -163,14 +163,30 @@ not an implementation detail.
   enters that state — by report, by notify-mode escalation or by the fallback —
   and is the only signal the toast/badge/push layer consumes. `fyi` is visible
   but quiet; `handled` lives in Activity only.
-- **Reply and instruct go through the thread chat.** `inbox.reply` enqueues
-  "send exactly this text through your source tool, then confirm" (the source's
-  `replyHint` with `{{path}}` substituted from the latest payload, the reply
-  fenced, the original re-fenced under the untrusted notice) under
-  `inbox-reply-<threadId>-<replyCount+1>` and marks the thread `replied`;
-  `inbox.instruct` enqueues the instruction plus the handler instruction so the
-  agent reports a fresh draft, under `inbox-instruct-<threadId>-<ts>`. Kanna
-  never calls a source tool itself in v1.
+- **`inbox.reply` has two paths.** An MCP source with `reply` (a tool, `args`
+  templates or value maps, `resultIdPath`) is sent directly: `inbox-outbox.ts`
+  (the one owner of outbound sends) resolves `args` with `resolveReplyArgs`
+  against `{ message: <latest inbound payload>, reply: { text } }`, appends
+  `inbox_thread_outbound_queued`, calls `McpSourceRunner.callTool` without
+  blocking the command, and appends `inbox_thread_outbound_settled` (`sent`,
+  `failed`, `unknown`). Only `sent` sets `replied`. `failed` means nothing went
+  out or the tool answered `isError` or a JSON-RPC error
+  (`McpToolRejectedError`); any other error after the request left is
+  `unknown`. A restart settles every `pending` outbound as `unknown` and never
+  resends; `inbox.retrySend` makes a new outbound and needs `confirmDuplicate`
+  for `unknown`. It works in Notify mode, which has no chat. Without a `reply`
+  target the old path stays: `inbox.reply` enqueues "send exactly this text
+  through your source tool, then confirm" (the source's `replyHint` with
+  `{{path}}` substituted from the latest payload, the reply fenced, the original
+  re-fenced under the untrusted notice) under
+  `inbox-reply-<threadId>-<replyCount+1>` and marks the thread `replied`.
+  `inbox.instruct` always goes through the thread chat: it enqueues the
+  instruction plus the handler instruction so the agent reports a fresh draft,
+  under `inbox-instruct-<threadId>-<ts>`.
+- **Outbound is never mixed with inbound.** `InboxThread.outbound` holds what
+  the user sent; `messages` stays inbound only, because `latestPayload`,
+  `threadPreview` and the message count read it. The Inbox UI interleaves the
+  two by `ts`.
 - **`inbox.jsonl` is a peripheral log, not a StoreEvent log.** The registry
   projects it at boot (`inbox-projection.ts` is pure), caps live records at
   `INBOX_MAX_ITEMS` (2000) while never dropping an unread thread younger than
@@ -198,7 +214,12 @@ not an implementation detail.
   (`adr-20261013-pages-as-workspace-tabs`): the thread id rides the tab path
   and reaches `InboxPage` as a prop, never through `useParams`. Opening a
   thread sends `inbox.markRead`; Send / Instruct / Archive / Mark all read /
-  Load older go through `runPendingAction` and render pending. The Inbox tab
+  Load older go through `runPendingAction` and render pending. The composer's
+  reply mode comes from `inboxReplyMode` (`direct` when the thread's MCP source
+  has a `reply` target, `agent` when only a handler chat exists, else `none`);
+  Enter sends unless Shift is held or an IME is composing (`isComposing`,
+  keyCode 229), and the thread detail interleaves `messages` and `outbound` by
+  `ts` with Retry (an `unknown` row asks for `confirmDuplicate` first). The Inbox tab
   shows threads in `new | needs_you | fyi` plus attention items; filters apply
   to the Activity tab only. `useInboxToasts` diffs the needs-you thread ids per
   snapshot (not per render) and shows at most three sonner toasts plus one
@@ -219,8 +240,11 @@ MCP server into an inbound source. The user chose "Kanna connects itself", so a
 source is a *client* the server holds open, not a tool the model calls. Every
 item it ingests goes through `deliverInbound` exactly like a webhook delivery
 (`source.kind: "mcp"`), and `inbox-boot.ts` resolves the reply handler for
-`thread.sourceKind === "mcp"` through `inboxHandlerResolver`, so `inbox.reply`
-and `inbox.instruct` need nothing new.
+`thread.sourceKind === "mcp"` through `inboxHandlerResolver`, so the agent-path
+`inbox.reply` and `inbox.instruct` need nothing new. A source's optional `reply`
+target is called by Kanna itself through `McpSourceRunner.callTool` (the live
+connection, else a one-shot one) and `rememberKey` pre-seeds the dedupe ring with
+the sent message's id.
 
 - **Two modes, one runner, two seams.** Subscribe and poll share `drain`:
   `fetcherFor(source)` (`mcp-source-fetch.ts`) returns the fetch strategy for the

@@ -10,10 +10,12 @@ import {
   fencedJson,
   isAgentReading,
   reportSummaryText,
+  threadEntries,
   threadStateDisplay,
   verdictDisplay,
 } from "../lib/inboxPresentation"
 import { useInboxStore } from "../stores/inboxStore"
+import { InboxOutboundEntry } from "./InboxOutboundEntry"
 import { InboxReplyComposer } from "./InboxReplyComposer"
 import { chatPath } from "../lib/paneTree"
 
@@ -58,6 +60,7 @@ function MessageEntry({ message }: { message: InboundMessage }) {
 
 export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
   const display = threadStateDisplay(thread)
+  const entries = threadEntries(thread)
   return (
     <article aria-label={`Thread from ${thread.sender}`} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-[720px] space-y-6 px-4 py-6">
@@ -91,9 +94,13 @@ export function InboxThreadDetail({ thread, onBack, onArchived }: Props) {
             Messages <span className="font-normal tabular-nums text-muted-foreground">{thread.messages.length}</span>
           </h3>
           <ul className="divide-y divide-border">
-            {thread.messages.map((message) => (
-              <MessageEntry key={message.id} message={message} />
-            ))}
+            {entries.map((entry) =>
+              entry.kind === "inbound" ? (
+                <MessageEntry key={entry.message.id} message={entry.message} />
+              ) : (
+                <InboxOutboundEntry key={entry.outbound.id} threadId={thread.id} outbound={entry.outbound} />
+              ),
+            )}
           </ul>
         </section>
         <InboxReplyComposer thread={thread} onArchived={onArchived} />

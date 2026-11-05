@@ -4,7 +4,8 @@ import { Textarea } from "../components/ui/textarea"
 import { HoverHint } from "../components/ui/truncated-text"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { NO_CHAT_REPLY_REASON } from "../lib/inboxPresentation"
+import { inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
+import { selectMcpSources, useAppSettingsStore } from "../stores/appSettingsStore"
 import { useInboxStore } from "../stores/inboxStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
@@ -14,12 +15,41 @@ interface Props {
   onArchived: () => void
 }
 
+const SEND_LABEL: Readonly<Record<InboxReplyMode, string>> = {
+  direct: "Send",
+  agent: "Agent will send",
+  none: "Send",
+}
+
+const SEND_HINT: Readonly<Record<InboxReplyMode, string>> = {
+  direct: "Send this text to the sender through the source's reply tool",
+  agent: "Hand this text to the handler chat, which sends it to the sender",
+  none: NO_CHAT_REPLY_REASON,
+}
+
+const INSTRUCT_NEEDS_CHAT_REASON = "Instruct needs a handler chat, and none is handling this source."
+
+const IME_COMPOSITION_KEY_CODE = 229
+
+function isPlainEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return (
+    event.key === "Enter" &&
+    !event.shiftKey &&
+    !event.nativeEvent.isComposing &&
+    event.nativeEvent.keyCode !== IME_COMPOSITION_KEY_CODE
+  )
+}
+
 export function InboxReplyComposer({ thread, onArchived }: Props) {
   const socket = useOptionalKannaSocket()
   const storedDraft = useInboxStore((state) => state.replyDrafts[thread.id])
   const draft = storedDraft ?? thread.report?.draftReply ?? ""
+  const sources = useAppSettingsStore(selectMcpSources)
+  const replyMode = inboxReplyMode(thread, sources)
   const hasChat = thread.chatId !== undefined
-  const canSubmit = hasChat && draft.trim().length > 0
+  const hasText = draft.trim().length > 0
+  const canReply = replyMode !== "none" && hasText
+  const canInstruct = hasChat && hasText
   const replyKey = pendingActionKey("inbox.reply", thread.id)
   const instructKey = pendingActionKey("inbox.instruct", thread.id)
   const archiveKey = pendingActionKey("inbox.archive", thread.id)
@@ -40,6 +70,15 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
       useInboxStore.getState().clearReplyDraft(thread.id)
     })
   }, [draft, replyKey, socket, thread.id])
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!isPlainEnter(event)) return
+      event.preventDefault()
+      if (canReply) handleReply()
+    },
+    [canReply, handleReply],
+  )
 
   const handleInstruct = useCallback(() => {
     runPendingAction(instructKey, async () => {
@@ -67,23 +106,24 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
         maxLength={INBOX_REPLY_MAX_CHARS}
         value={draft}
         onChange={handleChange}
-        placeholder="Write a reply, or an instruction for the agent"
-        disabled={!hasChat}
+        onKeyDown={handleKeyDown}
+        placeholder={hasChat ? "Write a reply, or an instruction for the agent" : "Write a reply"}
+        disabled={replyMode === "none"}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <HoverHint label={hasChat ? "Send this text to the sender" : NO_CHAT_REPLY_REASON} side="top">
+        <HoverHint label={SEND_HINT[replyMode]} side="top">
           <span className="inline-flex">
-            <Button size="sm" disabled={!canSubmit} pending={replyPending} onClick={handleReply}>
-              Send
+            <Button size="sm" disabled={!canReply} pending={replyPending} onClick={handleReply}>
+              {SEND_LABEL[replyMode]}
             </Button>
           </span>
         </HoverHint>
         <HoverHint
-          label={hasChat ? "Give the agent this text as an instruction instead of replying to the sender" : NO_CHAT_REPLY_REASON}
+          label={hasChat ? "Give the agent this text as an instruction instead of replying to the sender" : INSTRUCT_NEEDS_CHAT_REASON}
           side="top"
         >
           <span className="inline-flex">
-            <Button variant="secondary" size="sm" disabled={!canSubmit} pending={instructPending} onClick={handleInstruct}>
+            <Button variant="secondary" size="sm" disabled={!canInstruct} pending={instructPending} onClick={handleInstruct}>
               Instruct
             </Button>
           </span>
@@ -102,7 +142,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
           Archive
         </Button>
       </div>
-      {hasChat ? null : <p className="text-xs text-muted-foreground">{NO_CHAT_REPLY_REASON}</p>}
+      {replyMode === "none" ? <p className="text-xs text-muted-foreground">{NO_CHAT_REPLY_REASON}</p> : null}
     </section>
   )
 }

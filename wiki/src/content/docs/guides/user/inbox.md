@@ -42,11 +42,20 @@ Opening a thread marks it read. **Mark all read** clears the whole Inbox tab.
 ## Answering a thread
 
 Open a thread to see its messages (**Show raw** reveals the exact payload), the
-agent's read, and a reply box seeded with the draft.
+agent's read, and a reply box seeded with the draft. What you sent appears in
+the thread between the messages that arrived, ordered by time.
 
-- **Send** sends the text in the box to the sender. Kanna asks the thread's chat
-  to send exactly that text through the source's own tools and to confirm what
-  it sent. The thread moves to **Replied** and leaves the Inbox tab.
+- **Send** sends the text in the box to the sender. Press **Enter** to send and
+  **Shift+Enter** for a new line; Enter does nothing while an input method is
+  still composing text.
+  - When the thread's [MCP source](/guides/user/mcp-sources/) has a **Reply
+    tool**, Kanna calls that tool itself, with no agent turn. This works in every
+    action, **Notify** included, and the button reads **Send**. The thread moves
+    to **Replied** and leaves the Inbox tab once the tool reports success.
+  - Otherwise, when the thread has a handler chat, the button reads **Agent
+    will send**: Kanna asks the chat to send exactly that text through the
+    source's own tools and to confirm what it sent, and the thread moves to
+    **Replied** as soon as that request is queued.
 - **Instruct** sends the text as an instruction instead: the agent does what you
   asked and reports a fresh draft. The thread stays in the Inbox.
 - **Discard draft** clears the box without sending anything.
@@ -55,8 +64,22 @@ agent's read, and a reply box seeded with the draft.
 - **Open chat** jumps to the thread's chat to read the full transcript or talk
   to the agent directly.
 
-Send and Instruct are unavailable on a thread whose source has no handler chat
-(the **Notify** mode) or no reply hint; the thread still shows what arrived.
+Instruct needs a handler chat, so it is unavailable in **Notify** mode. Send is
+unavailable only when the source has neither a reply tool nor a handler chat; the
+thread still shows what arrived.
+
+### What happened to a message you sent
+
+Each message sent directly shows a status under it:
+
+| Status | Meaning |
+| --- | --- |
+| **Sending…** | The tool call is in progress. |
+| **Sent** | The tool reported success. |
+| **Failed: reason** | Nothing was delivered: the source, server or arguments were unusable, or the tool rejected the call. **Retry** sends the same text again as a new message. |
+| **Not confirmed** | The request may have reached the sender, for example the connection dropped or Kanna restarted before it finished. Kanna never resends on its own. **Retry** first warns that the message may be delivered twice and sends only after you press **Send again**. |
+
+The thread becomes **Replied** only after a message reaches **Sent**.
 
 ## Where things are stored
 
