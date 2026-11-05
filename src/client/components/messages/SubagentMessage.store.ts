@@ -19,7 +19,7 @@ export const SubagentMessageStore = createScopedStore<void, SubagentMessageState
     error: null,
     openLog: () => set({ expanded: true, error: null }),
     closeLog: () => set({ expanded: false, fullEntries: null, error: null }),
-    receiveEntries: (entries) => set({ fullEntries: entries }),
-    failLoad: (message) => set({ error: message }),
+    receiveEntries: (entries) => set((state) => (state.expanded ? { fullEntries: entries } : state)),
+    failLoad: (message) => set((state) => (state.expanded ? { error: message } : state)),
   }),
 )
