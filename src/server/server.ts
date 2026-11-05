@@ -94,6 +94,7 @@ import { buildBeaconAwareWebsocket, createBeaconServices, type BeaconServices } 
 import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
+import { createReferencedChatIds } from "./inbound/referenced-chat-ids"
 import { createInbox, createInboxReplyActions, inboxHandlerResolver, wireInboxPush } from "./inbox/inbox-boot"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
 import { createStoreBus } from "./service-bus/service-bus-boot"
@@ -534,6 +535,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     webhooks: webhooks.registry,
     inbox,
     mcpSources,
+    referencedChatIds: createReferencedChatIds({ mcpSources, webhooks: webhooks.registry, inbox }),
     serviceBus: bus,
     ...createInboxReplyActions(store, agent, inbox, inboxHandlerResolver(webhooks.registry, mcpSources)),
   })

@@ -125,6 +125,15 @@ export class InboxRegistry {
     return thread ? cloneThread(thread) : null
   }
 
+  referencedChatIds(): string[] {
+    const chatIds: string[] = []
+    for (const thread of this.state.threads.values()) {
+      if (thread.chatId !== undefined) chatIds.push(thread.chatId)
+      if (thread.report !== undefined) chatIds.push(thread.report.chatId)
+    }
+    return chatIds
+  }
+
   unreadCount(): number {
     let count = 0
     for (const thread of this.state.threads.values()) if (thread.unread) count += 1
