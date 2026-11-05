@@ -1,6 +1,6 @@
 ---
 id: c3-247
-c3-seal: e8f50343c7078a10774c578ea88a9f1aa7eee5b4ca7dabb3c9e644aa97e9c77f
+c3-seal: d5d91a42bab5fe955d945a6873439c759ed1a3563b3459a2346ea377f41e68e3
 title: inbox
 type: component
 category: feature
@@ -46,6 +46,7 @@ Owns the inbox feature: the InboxRegistry projection over an append-only inbox.j
 | inbox topic and commands | OUT | InboxSnapshot with threads, items, unreadCount and total; commands markRead, markAllRead, archive, page, reply and instruct | reply and instruct enqueue a prompt into the thread chat under inbox-reply-threadId-n and inbox-instruct-threadId-ts; text is capped at 8000 characters | src/server/ws-router-inbox.ts |
 | inbox.jsonl | IN/OUT | Append-only InboxEvent log under the data dir, replayed at boot, capped at 2000 live records with unread threads younger than seven days always kept | Compaction rewrites the file only at boot and keeps the last inbox_all_read | src/server/inbox/inbox-log.adapter.ts |
 | onNeedsYou | OUT | Fires once when a thread enters needs_you, by report, by notify-mode escalation or by the turn-end fallback | The only signal the notification layer consumes | src/server/inbox/inbox-registry.ts |
+| referencedChatIds | OUT | Every chat id named by an MCP source handler, a webhook, an inbox thread binding or an inbox report, read on each prune | The empty-chat pruner never deletes a chat in this set, so a handler chat created ahead of its first delivery survives | src/server/inbound/referenced-chat-ids.ts |
 
 ## Derived Materials
 
