@@ -1,7 +1,7 @@
 ---
 id: c3-203
 c3-version: 4
-c3-seal: 4034e08c3c2dca65b3b1853ed09cea0ebbb038f15fcdafd457a75ea4502b0d46
+c3-seal: a802a2eb6fa867e4b41cecbcdc94777ac5f3fcc58d23eabf195fdcb46fdf406f
 title: auth
 type: component
 category: foundation
@@ -46,7 +46,7 @@ Issues and validates a launch-password session cookie, blocks unauthenticated HT
 | --- | --- | --- |
 | Outcome | Public/shared servers stay safe behind a password | c3-218 |
 | Primary path | POST /auth/login → rate-limited Better Auth sign-in for the owner → kanna_session cookie attached to subsequent reqs | c3-202 |
-| Alternate — local-only | No password set: middleware passthrough | c3-203 |
+| Alternate — local-only | No password set: no login, but the request origin guard still refuses cross-origin sockets and writes and any non-loopback Host | c3-202 |
 | Failure — 401 | Closes WS upgrade with auth-required signal | c3-101 |
 
 ## Governance
@@ -62,6 +62,7 @@ Issues and validates a launch-password session cookie, blocks unauthenticated HT
 | attachAuth(server) | OUT | Wraps HTTP server, gates routes | c3-202 | src/server/auth.ts |
 | Login endpoint | IN | Accepts password form, sets session cookie | c3-202 | src/server/auth.ts |
 | WS auth check | OUT | Rejects upgrade without valid cookie | c3-208 | src/server/auth.ts |
+| originMatchesRequest, hasSessionCookie | OUT | Exported pure checks the request origin guard (c3-202) shares with validateOrigin, so one rule says what same-origin means, including the forwarded origin when trust proxy is set | c3-202 | src/server/auth.ts, src/server/request-origin-guard.ts |
 | isPublicSharePath(url) | OUT | Exempts /share/* and /assets/share-view/* from owner auth; called at the top of the middleware before any cookie check | c3-228 | src/server/auth.ts |
 | AuthBackend port | OUT | signIn, getSession, signOut over Better Auth; the only importer of better-auth and the auth database; changing --password rotates the owner credential and deletes every session | c3-203 | src/server/better-auth.adapter.ts |
 | handleOAuth allowlist | OUT | AuthBackend.handleOAuth forwards a request to Better Auth only when isRemoteMcpOAuthPath accepts the path (authorize, token, register, revoke, jwks, the well-known documents); everything else returns null, and the bare discovery paths are rewritten to the path-aware form the provider serves | c3-242 | src/server/better-auth-oauth.adapter.ts |

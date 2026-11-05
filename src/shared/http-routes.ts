@@ -18,6 +18,8 @@ function defineRoute<const Path extends string>(route: HttpRoute<Path>): HttpRou
   return route
 }
 
+export const API_PATH_PREFIX = "/api/"
+
 const MCP_OWNS_ITS_AUTH =
   "The remote MCP server authenticates with its own bearer token or OAuth, so a session login or logout has no MCP counterpart."
 

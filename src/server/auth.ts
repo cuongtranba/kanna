@@ -67,6 +67,15 @@ function effectiveOrigin(req: Request, trustProxy: boolean): string {
   return `${scheme}://${url.host}`
 }
 
+export function originMatchesRequest(origin: string, req: Request, trustProxy: boolean): boolean {
+  if (origin === new URL(req.url).origin) return true
+  return trustProxy && origin === effectiveOrigin(req, trustProxy)
+}
+
+export function hasSessionCookie(req: Request): boolean {
+  return parseCookies(req.headers.get("cookie")).has(SESSION_COOKIE_NAME)
+}
+
 function shouldUseSecureCookie(req: Request, trustProxy: boolean) {
   if (trustProxy) {
     const proto = forwardedProto(req)
@@ -164,10 +173,6 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
     return headers
   }
 
-  function hasSessionCookie(req: Request) {
-    return parseCookies(req.headers.get("cookie")).has(SESSION_COOKIE_NAME)
-  }
-
   function withSecureAttribute(req: Request, setCookie: string) {
     return shouldUseSecureCookie(req, trustProxy) ? `${setCookie}; Secure` : setCookie
   }
@@ -191,9 +196,7 @@ export function createAuthManager(backend: AuthBackend, options: AuthManagerOpti
   function validateOrigin(req: Request) {
     const origin = req.headers.get("origin")
     if (!origin) return true
-    if (origin === new URL(req.url).origin) return true
-    if (!trustProxy) return false
-    return origin === effectiveOrigin(req, trustProxy)
+    return originMatchesRequest(origin, req, trustProxy)
   }
 
   function resolveClientIp(req: Request, socketIp: string | null) {

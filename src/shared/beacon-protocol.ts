@@ -3,6 +3,7 @@ import type { BeaconScope } from "./beacon-scope"
 import { SHA256_HEX, TRANSFER_PROTOCOL } from "./beacon-transfer"
 import { oneOf } from "./vocab"
 
+export const BEACON_SOCKET_ROUTE = "/beacon"
 export const UPDATE_PROTOCOL = TRANSFER_PROTOCOL + 1
 export const BEACON_PROTOCOL_VERSION = UPDATE_PROTOCOL
 export const MIN_BEACON_PROTOCOL = 1

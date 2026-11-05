@@ -174,6 +174,8 @@ c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
   - src/server/http-dispatcher.ts
+  - src/server/request-origin-guard.ts
+  - src/server/request-origin-guard.test.ts
   - src/server/http-api-routes.ts
   - src/server/http-static.ts
   - src/server/beacon-registry.ts

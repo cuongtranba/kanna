@@ -62,7 +62,7 @@ async function setup() {
   })
   const server = Bun.serve({
     port: 0,
-    fetch: async (req) => (await handleProposalApproveRequest(req, new URL(req.url), autopilot.approve, null)) ?? new Response("nope", { status: 404 }),
+    fetch: async (req) => (await handleProposalApproveRequest(req, new URL(req.url), autopilot.approve)) ?? new Response("nope", { status: 404 }),
   })
   stops.push(async () => { await server.stop(true) })
   const read = (): InboxThread => {
@@ -70,10 +70,10 @@ async function setup() {
     if (!found) throw new Error("thread vanished")
     return found
   }
-  const post = (body: JsonValue, headers: Record<string, string> = { origin: `http://127.0.0.1:${String(server.port)}` }) =>
+  const post = (body: JsonValue) =>
     fetch(`http://127.0.0.1:${String(server.port)}${PATH}`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...headers },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     })
   return { sent, thread, read, post }
@@ -100,18 +100,6 @@ test("a proposal that is no longer open answers 409 and sends nothing more", asy
 
   expect(again.status).toBe(409)
   expect(sent).toHaveLength(1)
-})
-
-test("a cross-origin or origin-less request answers 403 and sends nothing", async () => {
-  const { sent, thread, read, post } = await setup()
-
-  const crossOrigin = await post({ threadId: thread.id, proposalId: "proposal-1" }, { origin: "https://evil.example" })
-  const noOrigin = await post({ threadId: thread.id, proposalId: "proposal-1" }, {})
-
-  expect(crossOrigin.status).toBe(403)
-  expect(noOrigin.status).toBe(403)
-  expect(sent).toEqual([])
-  expect(read().proposal).toMatchObject({ status: "open" })
 })
 
 test("a body without thread and proposal ids answers 400", async () => {
