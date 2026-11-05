@@ -1,6 +1,6 @@
 ---
 id: c3-247
-c3-seal: ec7c78bf96aad13f2fe7327f28b0e3ef3de4b87c6ae644c6ca13583e14b4ac3f
+c3-seal: 169ec05d6a5b562bbfdfff917d0493e382eb1272b490b9bca90c79bb3ae4f08c
 title: inbox
 type: component
 category: feature
@@ -48,6 +48,7 @@ Owns the inbox feature: the InboxRegistry projection over an append-only inbox.j
 | InboxOutbox | IN/OUT | send(threadId, text) validates the text, resolves the source reply arguments against the latest inbound payload, appends inbox_thread_outbound_queued, calls the tool without blocking the command and appends inbox_thread_outbound_settled; retry(threadId, outboundId, confirmDuplicate) re-sends the same text as a new outbound | failed means nothing was sent or the tool rejected the call, unknown means the request may have gone out; only sent sets the thread to replied; a pending outbound at boot settles unknown and is never resent; a retry of unknown needs confirmDuplicate | src/server/inbox/inbox-outbox.ts |
 | Draft versions | IN/OUT | InboxThread.drafts keeps at most five drafts, oldest first, each with id, text, at, origin triage or ask and the instruction that asked; inbox\_thread\_draft\_added appends one when a report carries a draft, and inbox\_thread\_pending carries the instruction of an ask | A new inbound message keeps the drafts and deletes the report; the origin is ask only when the pending schedule id is an instruct id | src/server/inbox/inbox-projection.ts |
 | onNeedsYou | OUT | Fires once when a thread enters needs_you, by report, by notify-mode escalation or by the turn-end fallback | The only signal the notification layer consumes | src/server/inbox/inbox-registry.ts |
+| referencedChatIds | OUT | Every chat id named by an MCP source handler, a webhook, an inbox thread binding or an inbox report, read on each prune | The empty-chat pruner never deletes a chat in this set, so a handler chat created ahead of its first delivery survives | src/server/inbound/referenced-chat-ids.ts |
 
 ## Derived Materials
 

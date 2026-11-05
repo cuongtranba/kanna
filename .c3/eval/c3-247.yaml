@@ -27,6 +27,8 @@ code:
   - src/server/inbound/deliver-inbound.test.ts
   - src/server/inbound/inbox-reply.ts
   - src/server/inbound/inbox-reply.test.ts
+  - src/server/inbound/referenced-chat-ids.ts
+  - src/server/inbound/referenced-chat-ids.test.ts
   - src/server/kanna-mcp-inbox.ts
   - src/server/kanna-mcp-inbox.test.ts
   - src/server/ws-router-inbox.ts

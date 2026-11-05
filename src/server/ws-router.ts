@@ -138,6 +138,7 @@ interface CreateWsRouterArgs {
   authEnabled?: boolean
   plugins?: PluginsHostDep
   scheduleChatCheck?: BroadcastManagerDeps["scheduleChatCheck"]
+  referencedChatIds?: BroadcastManagerDeps["referencedChatIds"]
 }
 
 export function createWsRouter({
@@ -180,6 +181,7 @@ export function createWsRouter({
   authEnabled,
   plugins,
   scheduleChatCheck,
+  referencedChatIds,
 }: CreateWsRouterArgs) {
   const resolvedDiffStore = diffStore ?? buildFallbackDiffStore()
   const resolvedLlmProvider = llmProvider ?? buildFallbackLlmProvider()
@@ -225,6 +227,7 @@ export function createWsRouter({
     liveBlocks,
     envelopeBuilder,
     scheduleChatCheck,
+    referencedChatIds,
   })
   const unsubscribeMcpSources = mcpSources?.onStatus(() => { broadcast.pushMcpSources() })
 
