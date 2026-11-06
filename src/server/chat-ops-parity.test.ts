@@ -51,8 +51,8 @@ interface ParityHarness {
 
 async function withParityHarness(run: (harness: ParityHarness) => Promise<void>): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "kanna-parity-"))
+  const store = new EventStore(dir)
   try {
-    const store = new EventStore(dir)
     await store.initialize()
     const project = await store.openProject("/tmp/parity-project")
     const chat = await store.createChat(project.id)
@@ -85,6 +85,7 @@ async function withParityHarness(run: (harness: ParityHarness) => Promise<void>)
 
     await run({ store, chatId: chat.id, activeStatuses, assertParityAfterBatch, currentSeq: () => lastSeq })
   } finally {
+    await store.flush()
     await rm(dir, { recursive: true, force: true })
   }
 }
