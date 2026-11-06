@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.100.4](https://github.com/cuongtranba/kanna/compare/v1.100.3...v1.100.4) (2026-11-06)
+
+
+### Performance Improvements
+
+* **server:** stream subagent runs as per-run ops and page their logs ([#1433](https://github.com/cuongtranba/kanna/issues/1433)) ([cad168a](https://github.com/cuongtranba/kanna/commit/cad168ae1c8c807bb832bfbc788efb6b493da576))
+
 ## [1.100.3](https://github.com/cuongtranba/kanna/compare/v1.100.2...v1.100.3) (2026-11-05)
 
 
