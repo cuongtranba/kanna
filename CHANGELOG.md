@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.105.0](https://github.com/cuongtranba/kanna/compare/v1.104.0...v1.105.0) (2026-11-07)
+
+
+### Features
+
+* **inbox:** snooze a thread until a time or new activity ([#1447](https://github.com/cuongtranba/kanna/issues/1447)) ([a4834bc](https://github.com/cuongtranba/kanna/commit/a4834bc686fce3ff4b091ee4c648f0ea17cb04f8))
+
 ## [1.104.0](https://github.com/cuongtranba/kanna/compare/v1.103.0...v1.104.0) (2026-11-07)
 
 
