@@ -78,7 +78,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = "```mermaid\ngraph LR\nA-->B\n```"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBeGreaterThanOrEqual(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe("graph LR\nA-->B")
@@ -90,7 +90,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = `\`\`\`mermaid\n${  source  }\n\`\`\``
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBeGreaterThanOrEqual(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe(source)
@@ -102,7 +102,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = `\`\`\`\`mermaid\n${source}\n\`\`\`\`\n\nafter`
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBe(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe(source)
@@ -113,7 +113,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = "```typescript\nconsole.log('hello')\n```"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBe(0)
     })
@@ -123,7 +123,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = "# Title\n\n```mermaid\ngraph TD\nX-->Y\n```\n\nSome text"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBeGreaterThanOrEqual(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe("graph TD\nX-->Y")
@@ -134,7 +134,7 @@ describe("MERMAID_FENCE transformer", () => {
     const markdown = "```Mermaid\npie\n title Test\n ```"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBeGreaterThanOrEqual(1)
     })
@@ -147,7 +147,7 @@ describe("LOCAL_FILE_LINK transformer", () => {
     const markdown = "[open file](/Users/alice/project/src/main.ts)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const localFileNodes = allNodes.filter($isLocalFileLinkNode)
       expect(localFileNodes.length).toBeGreaterThanOrEqual(1)
       expect(localFileNodes[0]!.getTextContent()).toBe("/Users/alice/project/src/main.ts")
@@ -158,7 +158,7 @@ describe("LOCAL_FILE_LINK transformer", () => {
     const markdown = "[src](/home/user/workspace/src/index.ts)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const localFileNodes = allNodes.filter($isLocalFileLinkNode)
       expect(localFileNodes.length).toBeGreaterThanOrEqual(1)
     })
@@ -168,7 +168,7 @@ describe("LOCAL_FILE_LINK transformer", () => {
     const markdown = "[visit](https://example.com)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const localFileNodes = allNodes.filter($isLocalFileLinkNode)
       expect(localFileNodes.length).toBe(0)
     })
@@ -178,7 +178,7 @@ describe("LOCAL_FILE_LINK transformer", () => {
     const markdown = "[relative](./some/relative/path.ts)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const localFileNodes = allNodes.filter($isLocalFileLinkNode)
       expect(localFileNodes.length).toBe(0)
     })
@@ -189,7 +189,7 @@ describe("LOCAL_FILE_LINK transformer", () => {
     const markdown = `[readme](${path})`
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const localFileNodes = allNodes.filter($isLocalFileLinkNode)
       expect(localFileNodes.length).toBeGreaterThanOrEqual(1)
       expect(localFileNodes[0]!.getTextContent()).toBe(path)
@@ -213,7 +213,7 @@ describe("KANNA_MESSAGE_TRANSFORMERS combined", () => {
 
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const allNodes = flattenNodes($getRoot().getChildren<LexicalNode>())
+      const allNodes = flattenNodes($getRoot().getChildren())
       const mermaidNodes = allNodes.filter($isMermaidNode)
       expect(mermaidNodes.length).toBe(1)
       expect(mermaidNodes[0]!.getTextContent()).toBe("graph LR\nA-->B")
@@ -223,7 +223,7 @@ describe("KANNA_MESSAGE_TRANSFORMERS combined", () => {
     const markdown = "[main](/Users/alice/project/src/main.ts:12:3)"
     const editor = parseMarkdown(markdown)
     editor.getEditorState().read(() => {
-      const node = flattenNodes($getRoot().getChildren<LexicalNode>()).find($isLocalFileLinkNode)
+      const node = flattenNodes($getRoot().getChildren()).find($isLocalFileLinkNode)
       expect(node?.toHref()).toBe("/Users/alice/project/src/main.ts:12:3")
       expect(node ? LOCAL_FILE_LINK.export?.(node, () => "", () => "") : null)
         .toBe("[/Users/alice/project/src/main.ts:12:3](/Users/alice/project/src/main.ts:12:3)")

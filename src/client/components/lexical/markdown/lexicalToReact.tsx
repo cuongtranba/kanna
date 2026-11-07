@@ -49,6 +49,7 @@ import {
   IS_CODE,
   type DecoratorNode,
   type EditorConfig,
+  type ElementNode,
   type Klass,
   type LexicalEditor,
   type LexicalNode,
@@ -120,7 +121,7 @@ function headingElement(tag: string, key: string, children: ReactNode[]): ReactN
 
 function codeNodeSource(node: CodeNode): string {
   return node
-    .getChildren<LexicalNode>()
+    .getChildren()
     .map((child) => {
       if ($isTextNode(child) || $isCodeHighlightNode(child)) {
         return child.getTextContent()
@@ -135,7 +136,7 @@ function isHeaderRow(row: LexicalNode | undefined): row is TableRowNode {
   return (
     row !== undefined &&
     $isTableRowNode(row) &&
-    row.getChildren<TableCellNode>().every(
+    row.getChildren().every(
       (cell) =>
         $isTableCellNode(cell) &&
         (cell.getHeaderStyles() & TableCellHeaderStates.ROW) !== 0,
@@ -144,7 +145,7 @@ function isHeaderRow(row: LexicalNode | undefined): row is TableRowNode {
 }
 
 function renderTable(node: TableNode, ctx: RenderContext): ReactNode {
-  const rows = node.getChildren<TableRowNode>()
+  const rows = node.getChildren()
   const firstRow = rows[0]
   const headerRow = isHeaderRow(firstRow) ? firstRow : undefined
   const bodyRows = headerRow === undefined ? rows : rows.slice(1)
@@ -155,14 +156,17 @@ function renderTable(node: TableNode, ctx: RenderContext): ReactNode {
         {headerRow !== undefined && (
           <thead>
             <tr>
-              {headerRow.getChildren<TableCellNode>().map((cell) => (
-                <th
-                  key={ctx.nextKey()}
-                  className="text-left text-xs text-muted-foreground tracking-wider p-2 pl-0 first:pl-3 bg-muted dark:bg-card [&_*]:font-semibold"
-                >
-                  {walkChildren(cell, ctx)}
-                </th>
-              ))}
+              {headerRow.getChildren().map((cell) => {
+                if (!$isTableCellNode(cell)) return null
+                return (
+                  <th
+                    key={ctx.nextKey()}
+                    className="text-left text-xs text-muted-foreground tracking-wider p-2 pl-0 first:pl-3 bg-muted dark:bg-card [&_*]:font-semibold"
+                  >
+                    {walkChildren(cell, ctx)}
+                  </th>
+                )
+              })}
             </tr>
           </thead>
         )}
@@ -171,7 +175,7 @@ function renderTable(node: TableNode, ctx: RenderContext): ReactNode {
             if (!$isTableRowNode(row)) return null
             return (
               <tr key={ctx.nextKey()}>
-                {row.getChildren<TableCellNode>().map((cell) => {
+                {row.getChildren().map((cell) => {
                   if (!$isTableCellNode(cell)) return null
                   return (
                     <td
@@ -321,8 +325,8 @@ function renderTextNode(node: TextNode, ctx: RenderContext): ReactNode {
   return content
 }
 
-function walkChildren(node: { getChildren<T extends LexicalNode>(): T[] }, ctx: RenderContext): ReactNode[] {
-  return node.getChildren<LexicalNode>().map((child) => walkNode(child, ctx))
+function walkChildren(node: ElementNode, ctx: RenderContext): ReactNode[] {
+  return node.getChildren().map((child) => walkNode(child, ctx))
 }
 
 function resolveCaretTarget(caret: CaretOptions | undefined): CaretTarget | null {
