@@ -8,6 +8,20 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.106.0](https://github.com/cuongtranba/kanna/compare/v1.105.0...v1.106.0) (2026-11-07)
+
+
+### Features
+
+* **agent:** publish pending interactive tool requests as chat events ([#1449](https://github.com/cuongtranba/kanna/issues/1449)) ([2847327](https://github.com/cuongtranba/kanna/commit/2847327397ec1b3fc37182dac830fa4065bd4e87))
+* **remote-mcp:** push event and chat updates over subscriptions/listen ([#1451](https://github.com/cuongtranba/kanna/issues/1451)) ([515a4df](https://github.com/cuongtranba/kanna/commit/515a4df3c176457419c5df0008534fb272f359a9))
+* **webhooks:** remove the built-in Slack hook kind ([#1453](https://github.com/cuongtranba/kanna/issues/1453)) ([05d3afd](https://github.com/cuongtranba/kanna/commit/05d3afddad8f476c23cf67d236da63996f384918))
+
+
+### Bug Fixes
+
+* **remote-mcp:** treat a cursor with a non-numeric sequence as foreign ([#1452](https://github.com/cuongtranba/kanna/issues/1452)) ([77cff56](https://github.com/cuongtranba/kanna/commit/77cff562e4d66adee41d9a6afbff3f2e00f93660))
+
 ## [1.105.0](https://github.com/cuongtranba/kanna/compare/v1.104.0...v1.105.0) (2026-11-07)
 
 
