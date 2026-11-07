@@ -173,6 +173,7 @@ c3-201:
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/router-housekeeping.ts
   - src/server/http-dispatcher.ts
   - src/server/request-origin-guard.ts
   - src/server/request-origin-guard.test.ts

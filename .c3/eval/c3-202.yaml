@@ -3,6 +3,7 @@ claim: "HTTP+WS server is composed in src/server/server.ts with HTTP dispatch in
 code:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/router-housekeeping.ts
   - src/server/http-dispatcher.ts
   - src/server/request-origin-guard.ts
   - src/server/request-origin-guard.test.ts

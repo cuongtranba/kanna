@@ -1,6 +1,6 @@
 ---
 id: c3-246
-c3-seal: d0094e76fc90114662ef2214054f113f3073c20e7edc4da79d40edfbc6c0ba4a
+c3-seal: 21037a115a38aa74ddd2209a2e01801f58a990c99981a886b81f80696614c724
 title: service-bus
 type: component
 category: feature
@@ -48,6 +48,7 @@ Owns the BusEnvelope contract in src/shared/service-bus, the NATS-style subject 
 | JetStream reconcile | OUT | On every connect the stream named in settings is created or updated from the configured limits, subjects, discard and duplicate window, and the configured durable consumers are created or updated; consumers Kanna created earlier and no longer lists are deleted by their kanna-managed metadata tag, consumers it did not create are never touched | A change to retention, storage or replicas, or to an existing consumer's ack or deliver policy, is reported as an error naming the field rather than applied, because the server refuses it; a stream is never deleted | src/server/service-bus/jetstream-reconcile.ts |
 | Embedded nats-server | IN/OUT | In embedded mode Kanna downloads the pinned nats-server release for darwin and linux into the data dir, verifies it against SHA256SUMS, writes a 0600 config with a loopback listener, the JetStream store limits and a generated token, starts it, restarts it with backoff after an unexpected exit and stops it at shutdown; Windows reports that external mode is required | The token lives only in settings.json and the 0600 config file, never in argv; the child inherits PATH only | src/server/service-bus/nats-server-process.adapter.ts |
 | NATS mirror | OUT | When settings.serviceBus is enabled, every envelope is also published to a JetStream stream with Nats-Msg-Id set to its idempotencyKey; the first subject token is swapped for the configured prefix and the JSON body keeps the original subject; publishes queue in a bounded ring of 2000 and drop oldest with a counter when the broker is away | publish only pushes to the ring; connect, reconcile and drain never throw into the caller, so a broker outage never fails an EventStore append | src/server/service-bus/nats-mirror.ts |
+| Remote MCP event feed | OUT | createApplicationServices exposes the bus so the remote MCP runtime can subscribe to ten named subjects (turn.started, turn.finished, turn.failed, turn.cancelled, chat.created, chat.toolPending, chat.toolResolved, cron.runStarted, cron.runOutcome, cron.runSkipped) and republish them as resource updates to listening MCP clients; it subscribes per subject, never to a wildcard, so transcript and inbound traffic never reaches it | c3-242 | src/server/remote-mcp/remote-mcp-event-feed.ts, src/server/remote-mcp/remote-mcp-boot.ts |
 | Subject vocabulary | OUT | BUS_SUBJECT_SUFFIX is the single table of bus subjects; namedBusSubject, transcriptBusSubject, webhookDeliverySubject, mcpMessageSubject and inboxBusSubject build every subject from it, and isInboxSubject and subjectFamily classify one | c3-247 | src/shared/service-bus/subjects.ts |
 
 ## Derived Materials

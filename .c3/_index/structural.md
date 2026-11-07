@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:8799db3a1f80e2255d3dca6c88f8b09a8fd745d36da978f5192a055a3c51ea25 -->
+<!-- hash: sha256:f3408631240341b4a6cd521c479565fd7abd6547f6fb8207ac089d6a6784eafd -->
 
 ## c3-0 — Kanna (system)
 
@@ -122,7 +122,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/env-int.test.ts, src/server/env-int.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-route-inventory.test.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/json-settings-file.adapter.ts, src/server/lifetime.test.ts, src/server/lifetime.ts, src/server/request-origin-guard.test.ts, src/server/request-origin-guard.ts, src/server/server-data-dir.test.ts, src/server/server-io.adapter.ts, src/server/server.ts
+files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/env-int.test.ts, src/server/env-int.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-route-inventory.test.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/json-settings-file.adapter.ts, src/server/lifetime.test.ts, src/server/lifetime.ts, src/server/request-origin-guard.test.ts, src/server/request-origin-guard.ts, src/server/router-housekeeping.ts, src/server/server-data-dir.test.ts, src/server/server-io.adapter.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -776,6 +776,7 @@ src/server/lifetime.test.ts → c3-202
 src/server/lifetime.ts → c3-202
 src/server/request-origin-guard.test.ts → c3-202
 src/server/request-origin-guard.ts → c3-202
+src/server/router-housekeeping.ts → c3-202
 src/server/server-data-dir.test.ts → c3-202
 src/server/server-io.adapter.ts → c3-202
 src/server/server.ts → c3-202

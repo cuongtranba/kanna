@@ -100,6 +100,7 @@ import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpAutopilo
 import { createInboxOutbox } from "./inbox/inbox-outbox"
 import type { InboxActions } from "./ws-router-inbox"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
+import { startRouterHousekeeping } from "./router-housekeeping"
 import { createStoreBus } from "./service-bus/service-bus-boot"
 import type { WebhookService } from "./webhooks/webhook-service"
 
@@ -110,7 +111,6 @@ function resolveCloudflaredPath(settingsPath: string): string {
   return cloudflaredBin
 }
 
-const STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS = 60 * 1000
 const IMPORT_FOLLOW_POLL_MS = 2000
 const IMPORT_FOLLOW_ACTIVE_WINDOW_MS = 600_000
 const IMPORT_FOLLOW_IDLE_MS = 600_000
@@ -157,6 +157,7 @@ interface ApplicationServices {
   scheduleManager: ScheduleManager
   cronScheduler: CronScheduler
   inboxActions: InboxActions
+  bus: ReturnType<typeof createStoreBus>
   lifetime: Lifetime
 }
 
@@ -572,15 +573,12 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   agent.onCronJobsChange = () => { router.pushCronJobs() }
   packageUpdateManager.start()
 
-  const staleEmptyChatPruneInterval = setInterval(() => {
-    void router.pruneStaleEmptyChats().then(() => router.broadcastSnapshots())
-  }, STALE_EMPTY_CHAT_PRUNE_INTERVAL_MS)
-  lifetime.defer("quiesce", () => clearInterval(staleEmptyChatPruneInterval))
-  const followedSessionTickInterval = setInterval(
-    () => { void followedSessionRegistry.tick() },
-    readIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
-  )
-  lifetime.defer("quiesce", () => clearInterval(followedSessionTickInterval))
+  startRouterHousekeeping({
+    router,
+    followedSessions: followedSessionRegistry,
+    followedSessionPollMs: readIntEnv(process.env.KANNA_IMPORT_FOLLOW_POLL_MS, IMPORT_FOLLOW_POLL_MS),
+    lifetime,
+  })
 
   return {
     store,
@@ -599,6 +597,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     scheduleManager,
     cronScheduler,
     inboxActions,
+    bus,
     lifetime,
   }
 }
@@ -644,7 +643,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const services = await createApplicationServices(options)
   const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, refreshDiscovery, beacon, analytics } = services
 
-  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery })
+  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery, bus: services.bus })
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
   const hostname = options.host ?? "127.0.0.1"
   const trustProxy = options.trustProxy ?? false

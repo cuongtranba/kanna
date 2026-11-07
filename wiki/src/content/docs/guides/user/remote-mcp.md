@@ -138,12 +138,13 @@ their MCP counterpart is:
 | Settings | `read_app_settings`, `patch_app_settings`, `list_subagents`, `list_installed_packages`, `check_package_updates` |
 | Observability | `list_workflows`, `get_workflow_run`, `get_subagent_run`, `get_background_task_output` |
 | Files | `upload_attachment`, `read_project_file` |
-| System | `get_update_status`, `server_info` |
+| System | `get_update_status`, `server_info`, `wait_for_events` |
 
 `send_message` starts a turn and waits for it. If the chat stops at
 `waiting_for_user`, the reply lists the pending tool requests; answer them with
 `answer_tool_request` or `respond_tool`. The server also publishes the resources
-`kanna://projects`, `kanna://chats/{chatId}` and `kanna://boards/{boardId}`, and
+`kanna://projects`, `kanna://chats/{chatId}`, `kanna://boards/{boardId}` and
+`kanna://events` (see [Following events](#following-events)), and
 sends the client written instructions on how to use the chat tools.
 
 Secrets never leave Kanna through the MCP endpoint, whichever tool you use:
@@ -176,6 +177,82 @@ below the idle limits of Bun (10 seconds by default, raised to 130 seconds for
 `/mcp`) and of a Cloudflare tunnel (125 seconds); a shorter wait is reported in
 `timeoutClamp`. Clients on the 2025 protocol revisions keep the connection open
 with SSE pings and may wait up to 600 seconds.
+
+## Following events
+
+A client does not have to poll to learn that something happened. Kanna keeps a
+feed of the last 2000 events and tells a listening client when it changes.
+
+**Push (protocol 2026-07-28).** Open a `subscriptions/listen` stream whose
+filter names the resources you care about:
+
+```json
+{ "resourceSubscriptions": ["kanna://events", "kanna://chats/<chatId>"] }
+```
+
+Kanna sends `notifications/resources/updated` for `kanna://events` whenever a
+new event arrives, and for `kanna://chats/<chatId>` when the event belongs to
+that chat. The notification carries no data; read the resource to see what
+changed. Nothing is sent while the remote MCP server is turned off in Settings.
+
+**Read the feed.** `kanna://events` returns the latest page. To continue from a
+position, read `kanna://events?after=<cursor>` with the cursor exactly as you
+received it. Both return:
+
+```json
+{
+  "cursor": "<bootId>:<seq>",
+  "reset": false,
+  "dropped": 0,
+  "events": [
+    {
+      "seq": 3,
+      "envelope": {
+        "v": 1,
+        "id": "…",
+        "subject": "kanna.chat.toolPending",
+        "ts": 1794034865053,
+        "source": { "kind": "store", "log": "turns" },
+        "direction": "internal",
+        "idempotencyKey": "store:chat_tool_pending:question-1:1794034865053",
+        "chatId": "…",
+        "projectId": "…",
+        "payload": { "type": "chat_tool_pending", "toolUseId": "question-1", "toolKind": "ask_user_question" }
+      }
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `cursor` | Where you are. Read again with `?after=<cursor>` to receive only newer events; right after a read it returns nothing new |
+| `reset` | `true` when the cursor belongs to another run of Kanna (it restarted) or is not a cursor at all. The events are then the latest page, not a continuation, so re-read state with `get_chat` or `list_chats` |
+| `dropped` | How many events were pushed out of the 2000-event window before you read them. Anything above `0` means you missed events; re-read state |
+| `events` | `{ seq, envelope }` entries, oldest first, at most 100 per read. `envelope.chatId` and `envelope.projectId` say where it happened |
+
+`payload` is the Kanna event that produced the envelope; for example
+`turn_started` carries the run configuration and `chat_tool_pending` carries the
+questions. The feed holds only these subjects, and nothing else ever enters it:
+
+| Subject | When |
+| --- | --- |
+| `kanna.turn.started`, `kanna.turn.finished`, `kanna.turn.failed`, `kanna.turn.cancelled` | A chat turn changes state |
+| `kanna.chat.created` | A chat was created |
+| `kanna.chat.toolPending`, `kanna.chat.toolResolved` | An `AskUserQuestion` or plan approval is waiting for an answer, or was answered, interrupted or superseded; answer it with `answer_tool_request` or `respond_tool` |
+| `kanna.cron.runStarted`, `kanna.cron.runOutcome`, `kanna.cron.runSkipped` | A scheduled run fired, finished or was skipped |
+
+Transcript text, tool output, inbox, webhook and MCP source messages are never in
+the feed, and secret-looking values in a payload (keys, tokens, passwords) are
+replaced with `[redacted]`. The feed lives in memory: a restart empties it and
+changes the cursor, which is what `reset` reports.
+
+**No push? Long-poll.** Clients on the 2025 protocol revisions, or any client
+that cannot hold a listen stream, call `wait_for_events` with `after` set to the
+last cursor and `timeoutSeconds` (default 45, at most 100). It returns the same
+`{ cursor, reset, dropped, events }` as soon as an event arrives, or an empty
+`events` list when the time runs out. Without `after` it waits for the next
+event from now. Call it again with the returned `cursor` to keep following.
 
 ## Duplicate protection
 

@@ -5,7 +5,7 @@ import { log } from "../../shared/log"
 import type { ToolResult } from "../kanna-mcp-tool"
 import { currentRemoteMcpOrigin } from "./remote-mcp-call-scope"
 import type { DedupeRecord } from "./remote-mcp-dedupe"
-import { followReport, resolveWaitLimit, type DuplicateVia } from "./remote-mcp-follow-view"
+import { followReport, MS_PER_SECOND, resolveWaitLimit, type DuplicateVia } from "./remote-mcp-follow-view"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 import { guardedDispatch, type GuardedOutcome } from "./remote-mcp-send-guard"
 import { jsonResult, runCommand, stringFieldOf } from "./remote-mcp-views"
@@ -13,7 +13,6 @@ import { dispatchSend, followChat, type SendCommand } from "./send-and-wait"
 
 export type EnqueueCommand = Extract<ClientCommand, { type: "message.enqueue" }>
 
-const MS_PER_SECOND = 1000
 const UNKNOWN_CLIENT_ID = "unknown"
 
 export function callerClientId(): string {
