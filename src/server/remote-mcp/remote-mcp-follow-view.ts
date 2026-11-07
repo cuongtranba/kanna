@@ -2,6 +2,7 @@ import type { JsonObject, JsonValue } from "../../shared/json"
 import type { FollowResult } from "./send-and-wait"
 import { toJsonValue } from "../json-boundary"
 
+export const MS_PER_SECOND = 1000
 export const DEFAULT_WAIT_SECONDS = 45
 export const MAX_WAIT_SECONDS = 600
 export const SILENT_WAIT_CAP_SECONDS = 100
