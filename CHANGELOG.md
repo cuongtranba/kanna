@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.104.0](https://github.com/cuongtranba/kanna/compare/v1.103.0...v1.104.0) (2026-11-07)
+
+
+### Features
+
+* **server:** accept Anthropic API keys in the Claude token pool ([#1445](https://github.com/cuongtranba/kanna/issues/1445)) ([5e09866](https://github.com/cuongtranba/kanna/commit/5e0986674114426fcb5660724e3893343bdb907c))
+
 ## [1.103.0](https://github.com/cuongtranba/kanna/compare/v1.102.0...v1.103.0) (2026-11-07)
 
 
