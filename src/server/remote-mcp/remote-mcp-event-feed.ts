@@ -64,7 +64,8 @@ export function createEventFeed(options: EventFeedOptions = {}): EventFeed {
     const split = after.lastIndexOf(CURSOR_SEPARATOR)
     if (split < 0 || after.slice(0, split) !== bootId) return { kind: "foreign" }
     const digits = after.slice(split + 1)
-    const seq = /^\d+$/.test(digits) ? Number(digits) : -1
+    if (!/^\d+$/.test(digits)) return { kind: "foreign" }
+    const seq = Number(digits)
     return Number.isSafeInteger(seq) && seq <= lastSeq ? { kind: "own", seq } : { kind: "foreign" }
   }
 
