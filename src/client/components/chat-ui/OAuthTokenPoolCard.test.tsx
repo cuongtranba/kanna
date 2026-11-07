@@ -33,7 +33,7 @@ describe("OAuthTokenPoolCard", () => {
     )
     expect(html).toContain("Add token")
     expect(html).toContain('placeholder="e.g. personal"')
-    expect(html).toContain('placeholder="sk-ant-..."')
+    expect(html).toContain('placeholder="sk-ant-oat01-… or sk-ant-api03-…"')
   })
 
   test("renders one row per token with masked value and label", () => {

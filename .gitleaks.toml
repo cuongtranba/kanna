@@ -17,6 +17,10 @@ title = "Kanna"
     # exercise the masking function; pattern is recognisable as a fake.
     '''sk-ant-oat01-[a-zA-Z0-9]+''',
 
+    # claude-spawn-helpers.test.ts, claude-oauth-probe.adapter.test.ts —
+    # synthetic Anthropic personal API key stub (sequential alphabet).
+    '''sk-ant-usr-abcdefghijklmnopqrstuvwxyz1234''',
+
     # agent.oauth-account-info.test.ts, agent.openrouter-*.test.ts —
     # synthetic OpenRouter API-key stub (abcdef1234567890 is sequential).
     '''sk-or-v1-[a-z0-9]{16}''',

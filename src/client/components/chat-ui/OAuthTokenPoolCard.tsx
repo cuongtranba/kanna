@@ -7,6 +7,7 @@ import {
   clampTokenConcurrency,
 } from "../../../shared/types"
 import { BASE_URL_SCHEME_MESSAGE, parseBaseUrlDraft } from "../../../shared/anthropic-base-url"
+import { claudeCredentialKind } from "../../../shared/claude-credential"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
@@ -183,6 +184,9 @@ function TokenRow({
         <div className="flex items-center gap-3">
           <span className={`text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}>{entry.label}</span>
           <code className="text-xs font-mono text-muted-foreground">{maskToken(entry.token)}</code>
+          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-border px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
+            {claudeCredentialKind(entry.token) === "api-key" ? "API key" : "OAuth"}
+          </span>
           {isCurrent && (
             <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-xs font-medium tracking-wide text-primary">
               In use
@@ -195,7 +199,7 @@ function TokenRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <HoverHint label="Maximum concurrent chats sharing this OAuth token. Higher = risks Anthropic rate limits.">
+        <HoverHint label="Maximum concurrent chats sharing this token. Higher = risks Anthropic rate limits.">
         <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           <span>Concurrent</span>
           {concurrencySaving ? <Spinner className="size-3" /> : null}
@@ -346,10 +350,10 @@ function AddTokenForm({
             value={addToken}
             onChange={(e) => setAddToken(e.target.value)}
             type="password"
-            placeholder="sk-ant-..."
+            placeholder="sk-ant-oat01-… or sk-ant-api03-…"
             maxLength={1024}
             className="text-sm font-mono"
-            aria-label="OAuth token"
+            aria-label="Token or API key"
           />
         </div>
         <button
@@ -438,7 +442,7 @@ export function OAuthTokenPoolCard({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 pb-3">
-        <HoverHint label="Default concurrent-chat cap applied to any OAuth token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
+        <HoverHint label="Default concurrent-chat cap applied to any token whose row does not override it. Sharing across N chats burns Anthropic quota and risks 429s.">
         <label className="flex flex-col gap-0.5 text-sm">
           <span className="font-medium text-foreground">Default concurrency per token</span>
           <span className="text-xs text-muted-foreground">Cap for tokens without an explicit per-row override. Minimum {OAUTH_TOKEN_MAX_CONCURRENT_MIN}, no upper limit.</span>

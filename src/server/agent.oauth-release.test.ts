@@ -121,7 +121,7 @@ function makeToken(id: string, overrides: Partial<OAuthTokenEntry> = {}): OAuthT
   return {
     id,
     label: id,
-    token: `sk-ant-${id}`,
+    token: `sk-ant-oat01-${id}`,
     status: "active",
     limitedUntil: null,
     lastUsedAt: null,
@@ -259,7 +259,7 @@ describe("OAuth pool reservation lifetime", () => {
       "token_rotation auto_continue emitted",
     )
 
-    if (capturedOauthTokens[0] !== "sk-ant-a") {
+    if (capturedOauthTokens[0] !== "sk-ant-oat01-a") {
       throw new Error(`expected first spawn on token a, got ${capturedOauthTokens[0]}`)
     }
 

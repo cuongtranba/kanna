@@ -11,6 +11,7 @@ import { ClaudeLimitDetector } from "./auto-continue/limit-detector"
 import { CodexAppServerManager } from "./codex-app-server"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
+import { withPoolCredential } from "./claude-spawn-helpers"
 import { isRecord, toError } from "../shared/errors"
 import { safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
 import { toJsonValue } from "./json-boundary"
@@ -144,8 +145,8 @@ export async function runClaudeStructured(
     return null
   }
   if (picked && pool) pool.markUsed(picked.id)
-  const env = envWithoutParentClaudeCode(process.env)
-  if (picked) env.CLAUDE_CODE_OAUTH_TOKEN = picked.token
+  const parentEnv = envWithoutParentClaudeCode(process.env)
+  const env = picked ? withPoolCredential(parentEnv, picked.token) : parentEnv
   if (picked?.baseUrl) env.ANTHROPIC_BASE_URL = picked.baseUrl
 
   const detector = new ClaudeLimitDetector()

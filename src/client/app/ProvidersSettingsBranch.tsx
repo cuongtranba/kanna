@@ -228,8 +228,8 @@ export function ProvidersSettingsBranch({ state }: { state: KannaState }) {
   return (
     <div className="border-b border-border">
       <SettingsRow
-        title="Claude OAuth tokens"
-        description="Manage multiple Claude OAuth tokens. Kanna switches automatically when one hits its rate limit."
+        title="Claude tokens"
+        description="Manage Claude OAuth tokens and Anthropic API keys. Kanna switches automatically when one hits its rate limit."
         bordered={false}
         alignStart
       >

@@ -1,6 +1,6 @@
 ---
 id: c3-224
-c3-seal: d8d0850638824daf600e09713206ea971a24b9a156d289ae22cb8713ef99629a
+c3-seal: 26afeaeb51dd551ee09f878cab30549d556bed56cf6fd104fa174fcac30255a3
 title: oauth-token-pool
 type: component
 category: feature
@@ -47,7 +47,7 @@ Maintains an in-memory refcounted reservation index (Map<tokenId, Set<chatId>>) 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | Claude turns run on the right subscription account; rate-limit on one token rotates to the next without user intervention | c3-210 |
-| Primary path | pickActive(chatId) → markUsed → spawn subprocess with CLAUDE_CODE_OAUTH_TOKEN, plus ANTHROPIC_BASE_URL when the picked entry declares one | c3-210 |
+| Primary path | pickActive(chatId) → markUsed → withPoolCredential strips CLAUDE\_CODE\_OAUTH\_TOKEN, ANTHROPIC\_API\_KEY and ANTHROPIC\_AUTH\_TOKEN, then spawns with CLAUDE\_CODE\_OAUTH\_TOKEN for an OAuth token (sk-ant-oat or no sk-ant- prefix) or ANTHROPIC\_API\_KEY for an Anthropic API key (any other sk-ant- prefix), plus ANTHROPIC\_BASE\_URL when the picked entry declares one | c3-210 |
 | Alternate — rotation | Rate-limit/auth-error detected → markLimited/markError drops reservation → pickActive picks next → token_rotation auto_continue event | c3-210 |
 | Failure — refusal | No usable token + pool non-empty → OAuthPoolUnavailableError is caught in startTurnForChat and persisted to the chat transcript as a kind:"result", subtype:"error" entry whose result body is the describeUnavailability output (chat references rendered as /chat/<id> markdown links). Replaces the prior throw → commandError banner path, which flickered when the next snapshot tick wiped commandError. | c3-114 |
 
