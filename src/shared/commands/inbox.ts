@@ -43,6 +43,13 @@ export const inboxCommands = defineCommands(
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("inbox.muteSender", {
+    result: okResultSchema,
+    params: z.object({ threadId: z.string(), muted: z.boolean() }),
+    summary: "Mute or unmute an inbox thread's sender on its source so their messages are recorded without being handled.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("inbox.page", {
     result: inboxPageSchema,
     params: z.object({ beforeTs: z.number(), limit: z.number(), filter: inboxFilterSchema.optional() }),

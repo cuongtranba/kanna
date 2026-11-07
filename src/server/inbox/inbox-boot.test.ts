@@ -74,6 +74,7 @@ function thread(sourceKind: InboxThread["sourceKind"], sourceId: string): InboxT
     unread: true,
     lastMessageAt: 1,
     replyCount: 0,
+    muted: false,
   }
 }
 

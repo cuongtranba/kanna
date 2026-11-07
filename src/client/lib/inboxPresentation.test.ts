@@ -18,6 +18,7 @@ function thread(overrides: Partial<InboxThread>): InboxThread {
     unread: true,
     lastMessageAt: 1,
     replyCount: 0,
+    muted: false,
     ...overrides,
   }
 }
@@ -56,6 +57,10 @@ describe("threadStateDisplay", () => {
     expect(threadStateDisplay(thread({ state: "new" }))).toEqual({ tone: "active", label: "Agent triaging" })
     expect(threadStateDisplay(thread({ state: "fyi" }))).toEqual({ tone: "muted", label: "FYI" })
     expect(threadStateDisplay(thread({ state: "replied" }))).toEqual({ tone: "muted", label: "Replied" })
+  })
+
+  test("a muted sender's thread reads Muted, not Needs you", () => {
+    expect(threadStateDisplay(thread({ state: "new", muted: true }))).toEqual({ tone: "muted", label: "Muted" })
   })
 })
 

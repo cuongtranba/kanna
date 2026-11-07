@@ -33,6 +33,7 @@ function thread(outboundMessages: InboxOutboundMessage[]): InboxThread {
     unread: false,
     lastMessageAt: 3000,
     replyCount: 0,
+    muted: false,
   }
 }
 

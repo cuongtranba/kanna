@@ -31,12 +31,14 @@ const THREAD_STATE_DISPLAY: Readonly<Record<InboxThreadState, InboxStateDisplay>
 }
 
 const AGENT_READING: InboxStateDisplay = { tone: "active", label: "Agent reading" }
+const MUTED: InboxStateDisplay = { tone: "muted", label: "Muted" }
 
 export function isAgentReading(thread: Pick<InboxThread, "pendingScheduleId">): boolean {
   return thread.pendingScheduleId !== undefined
 }
 
 export function threadStateDisplay(thread: InboxThread): InboxStateDisplay {
+  if (thread.muted) return MUTED
   if (isAgentReading(thread)) return AGENT_READING
   return THREAD_STATE_DISPLAY[thread.state]
 }

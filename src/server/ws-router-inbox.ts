@@ -80,6 +80,9 @@ async function run(
     case "inbox.archive":
       await registry.archive(requireId(command.threadId, "threadId"))
       return ackResult(id, command, { ok: true })
+    case "inbox.muteSender":
+      await registry.setSenderMuted(requireId(command.threadId, "threadId"), command.muted)
+      return ackResult(id, command, { ok: true })
     case "inbox.page":
       return ackResult(id, command, registry.page(
         command.beforeTs,

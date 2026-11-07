@@ -86,6 +86,24 @@ quick prompts are unavailable in **Notify** mode and on an archived thread. Send
 unavailable only when the source has neither a reply tool nor a handler chat; the
 thread still shows what arrived.
 
+## Mute a sender
+
+**Mute sender** in a thread stops Kanna from handling that sender's messages on
+that source. The messages are still saved in their thread, so you can read them
+later, but no handler turn runs, no card is added to a chat, nothing escalates to
+Needs you or sends a push, and the thread leaves the Inbox tab and the unread
+count. It shows as **Muted** in the thread list. Other senders on the same source
+are not affected. If the agent had already proposed a reply on a muted thread, it
+is not sent automatically.
+
+A sender is matched by the display name the source reports, together with the
+source. Two different people who share a display name on the same source are muted
+together, and one person who appears under two names must be muted under each.
+
+**Unmute sender** resumes normal handling for messages that arrive afterwards.
+Messages received while the sender was muted are not replayed, so the agent never
+sees them unless you ask it about the thread yourself.
+
 ## Autonomy: what the agent may do
 
 The agent can ask to send a reply, but it never sends by itself. In the thread

@@ -29,6 +29,7 @@ function thread(id: string, lastMessageAt: number, overrides: Partial<InboxThrea
     unread: false,
     lastMessageAt,
     replyCount: 0,
+    muted: false,
     ...overrides,
   }
 }

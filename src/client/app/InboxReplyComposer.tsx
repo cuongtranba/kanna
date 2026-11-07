@@ -5,6 +5,7 @@ import { HoverHint } from "../components/ui/truncated-text"
 import type { InboxQuickPrompt } from "../../shared/inbox/quick-prompts"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
+import { muteInboxSender } from "../lib/inboxActions"
 import { inboxAskBlockedReason, inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
 import { selectMcpSources, useAppSettingsStore } from "../stores/appSettingsStore"
 import { displayedReplyDraft, useInboxStore } from "../stores/inboxStore"
@@ -30,6 +31,11 @@ const SEND_HINT: Readonly<Record<InboxReplyMode, string>> = {
 
 const ASK_HINT = "Ask the agent to write a draft from this text; nothing is sent to the sender"
 const SLASH_PREFIX = "/"
+
+function muteHint(thread: Pick<InboxThread, "muted" | "sender" | "sourceName">): string {
+  const where = `${thread.sender} on ${thread.sourceName}`
+  return thread.muted ? `Handle new messages from ${where}` : `Stop handling messages from ${where}`
+}
 
 function instructionOf(draft: string): string {
   const text = draft.startsWith(SLASH_PREFIX) ? draft.slice(SLASH_PREFIX.length) : draft
@@ -71,6 +77,7 @@ export function InboxReplyComposer({ thread }: Props) {
   const askKey = pendingActionKey("inbox.instruct", thread.id)
   const replyPending = usePendingAction(replyKey)
   const askPending = usePendingAction(askKey)
+  const mutePending = usePendingAction(pendingActionKey("inbox.muteSender", thread.id))
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -136,6 +143,8 @@ export function InboxReplyComposer({ thread }: Props) {
     useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
   }, [latestDraftId, thread.id])
 
+  const handleToggleMute = useCallback(() => muteInboxSender(socket, thread.id, !thread.muted), [socket, thread.id, thread.muted])
+
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(
     () => useInboxStore.getState().registerComposerFocus(() => textareaRef.current?.focus()),
@@ -174,6 +183,13 @@ export function InboxReplyComposer({ thread }: Props) {
         <Button variant="ghost" size="sm" disabled={draft.length === 0} onClick={handleDiscard}>
           Discard draft
         </Button>
+        <HoverHint label={muteHint(thread)} side="top">
+          <span className="ml-auto inline-flex">
+            <Button variant="ghost" size="sm" pending={mutePending} onClick={handleToggleMute}>
+              {thread.muted ? "Unmute sender" : "Mute sender"}
+            </Button>
+          </span>
+        </HoverHint>
       </div>
       <QuickPrompts disabled={!canAsk || askPending} onAsk={handleQuickPrompt} />
       {replyMode === "none" ? <p className="text-xs text-muted-foreground">{NO_CHAT_REPLY_REASON}</p> : null}

@@ -21,6 +21,7 @@ function thread(id: string, overrides: Partial<InboxThread> = {}): InboxThread {
     unread: true,
     lastMessageAt: 1_000,
     replyCount: 0,
+    muted: false,
     ...overrides,
   }
 }

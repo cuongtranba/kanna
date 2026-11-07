@@ -17,6 +17,7 @@ function thread(id: string, lastMessageAt: number): InboxThread {
     unread: true,
     lastMessageAt,
     replyCount: 0,
+    muted: false,
   }
 }
 

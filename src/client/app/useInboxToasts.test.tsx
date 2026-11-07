@@ -21,6 +21,7 @@ function thread(id: string, state: InboxThreadState = "needs_you"): InboxThread 
     unread: true,
     lastMessageAt: 100,
     replyCount: 0,
+    muted: false,
   }
 }
 

@@ -114,6 +114,7 @@ const inboxThreadSchema = z.object({
   autonomy: z.enum(INBOX_AUTONOMY_LEVELS).optional(),
   agentPausedUntil: z.number().optional(),
   proposal: inboxProposalSchema.optional(),
+  muted: z.boolean().default(false),
 })
 
 export const inboxThreadHeaderSchema = inboxThreadSchema.pick({
