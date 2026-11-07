@@ -4,6 +4,7 @@ import { assertParity } from "../type-parity"
 import { INBOX_AUTONOMY_LEVELS, type InboxAutonomyLevel } from "./autonomy"
 import {
   INBOX_OUTBOUND_SETTLED_STATUSES,
+  INBOX_SOURCE_KINDS,
   INBOX_PROPOSAL_RESOLUTIONS,
   type InboundMessage,
   type InboxActivityItem,
@@ -13,6 +14,7 @@ import {
   type InboxProposal,
   type InboxProposalResolution,
   type InboxReport,
+  type InboxSourceKind,
   type InboxThread,
 } from "./types"
 import {
@@ -48,6 +50,7 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_thread_outbound_queued"; threadId: string; outbound: InboxQueuedOutbound })
   | (InboxEventBase & { kind: "inbox_thread_autonomy_set"; threadId: string; level: InboxAutonomyLevel | null })
   | (InboxEventBase & { kind: "inbox_thread_agent_paused"; threadId: string; until: number | null })
+  | (InboxEventBase & { kind: "inbox_sender_muted"; sourceKind: InboxSourceKind; sourceId: string; sender: string; muted: boolean })
   | (InboxEventBase & { kind: "inbox_thread_proposal_added"; threadId: string; proposal: InboxProposal })
   | (InboxEventBase & {
       kind: "inbox_thread_proposal_resolved"
@@ -112,6 +115,14 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     level: z.enum(INBOX_AUTONOMY_LEVELS).nullable(),
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_agent_paused"), threadId: z.string(), until: z.number().nullable() }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_sender_muted"),
+    sourceKind: z.enum(INBOX_SOURCE_KINDS),
+    sourceId: z.string(),
+    sender: z.string(),
+    muted: z.boolean(),
+  }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_proposal_added"), threadId: z.string(), proposal: inboxProposalSchema }),
   z.object({
     ...eventBase,

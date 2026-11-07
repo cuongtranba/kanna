@@ -373,3 +373,57 @@ test("the sent-by-agent page filter keeps only threads the agent replied on", as
 
   expect(page.threads.map((entry) => entry.id)).toEqual([thread.id])
 })
+
+test("a muted sender's messages are recorded without counting as unread, and unmuting does not mark them unread", async () => {
+  const { inbox } = await createInboxHarness({ now: tick })
+  const thread = await inbox.ingestInbound(inbound("d1"), meta("d1"))
+  expect(inbox.unreadCount()).toBe(1)
+  await inbox.setSenderMuted(thread.id, true)
+  await inbox.ingestInbound(inbound("d2"), meta("d2"))
+  expect(inbox.getThread(thread.id)).toMatchObject({ muted: true, unread: false })
+  expect(inbox.getThread(thread.id)?.messages).toHaveLength(2)
+  expect(inbox.unreadCount()).toBe(0)
+  await inbox.setSenderMuted(thread.id, false)
+  expect(inbox.getThread(thread.id)).toMatchObject({ muted: false, unread: false })
+})
+
+test("muting applies to every thread of that sender on that source and to no other sender", async () => {
+  const { inbox } = await createInboxHarness({ now: tick })
+  const ada = await inbox.ingestInbound(inbound("d1"), meta("d1", "k1"))
+  const adaAgain = await inbox.ingestInbound(inbound("d2"), meta("d2", "k2"))
+  const bob = await inbox.ingestInbound(inbound("d3"), { ...meta("d3", "k3"), sender: "bob" })
+  await inbox.setSenderMuted(ada.id, true)
+  expect(inbox.getThread(adaAgain.id)?.muted).toBe(true)
+  expect(inbox.getThread(bob.id)?.muted).toBe(false)
+})
+
+test("a mute survives a restart over the same log and applies to threads created afterwards", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await first.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await first.inbox.setSenderMuted(thread.id, true)
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)?.muted).toBe(true)
+  const later = await second.inbox.ingestInbound(inbound("d2"), meta("d2", "k2"))
+  expect(later).toMatchObject({ muted: true, unread: false })
+})
+
+test("a message received while muted stays read after unmute, compaction and restart", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await first.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await first.inbox.setSenderMuted(thread.id, true)
+  await first.inbox.ingestInbound(inbound("d2"), meta("d2"))
+  await first.inbox.setSenderMuted(thread.id, false)
+  for (let index = 0; index < 40; index += 1) await first.inbox.markAllRead(0)
+  await first.inbox.flush()
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.log.rewrites).toBe(1)
+  const third = await createInboxHarness({ now: tick, log: second.log })
+  expect(third.inbox.getThread(thread.id)).toMatchObject({ muted: false, unread: false })
+  expect(third.inbox.unreadCount()).toBe(0)
+})
+
+test("muting an unknown thread does nothing", async () => {
+  const { inbox, log } = await createInboxHarness({ now: tick })
+  await inbox.setSenderMuted("missing", true)
+  expect(log.events).toEqual([])
+})

@@ -9,6 +9,12 @@ export function archiveInboxThread(socket: CommandPort | null, threadId: string,
   })
 }
 
+export function muteInboxSender(socket: CommandPort | null, threadId: string, muted: boolean): void {
+  runPendingAction(pendingActionKey("inbox.muteSender", threadId), async () => {
+    await sendCommandWithFeedback(socket, { type: "inbox.muteSender", threadId, muted })
+  })
+}
+
 export function approveInboxProposal(socket: CommandPort | null, threadId: string, proposalId: string): void {
   runPendingAction(pendingActionKey("inbox.approveProposal", proposalId), async () => {
     await sendCommandWithFeedback(socket, { type: "inbox.approveProposal", threadId, proposalId })

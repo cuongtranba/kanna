@@ -107,3 +107,56 @@ test("a missing target fails before anything is stored", async () => {
   expect(result.ok).toBe(false)
   expect(inbox.snapshot().threads).toEqual([])
 })
+
+test("a muted sender's delivery is recorded on its thread without a handler turn or a card", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const first = await deliverInbound(store, agent, bus, inbox, delivery({}, { projectId: project.id }))
+  if (!first.ok) throw new Error("delivery failed")
+  const chatId = first.chatId ?? ""
+  await inbox.setSenderMuted(first.threadId, true)
+  const muted = await deliverInbound(store, agent, bus, inbox, delivery({ deliveryId: "d2" }, { projectId: project.id }))
+  expect(muted).toEqual({ ok: true, threadId: first.threadId })
+  expect(inbox.getThread(first.threadId)?.messages).toHaveLength(2)
+  expect(store.getQueuedMessages(chatId)).toHaveLength(1)
+  expect(store.getMessages(chatId)).toHaveLength(1)
+})
+
+test("a muted sender does not silence another sender on the same source", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const first = await deliverInbound(store, agent, bus, inbox, delivery({}, { projectId: project.id }))
+  if (!first.ok) throw new Error("delivery failed")
+  await inbox.setSenderMuted(first.threadId, true)
+  const other = await deliverInbound(
+    store,
+    agent,
+    bus,
+    inbox,
+    delivery({ deliveryId: "d2", threadKey: "thread-b", sender: "bob@example.com" }, { projectId: project.id }),
+  )
+  if (!other.ok) throw new Error("delivery failed")
+  expect(store.getQueuedMessages(other.chatId ?? "")).toHaveLength(1)
+  expect(inbox.getThread(other.threadId)?.muted).toBe(false)
+})
+
+test("a muted sender's new thread on the same source is recorded quietly too", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const first = await deliverInbound(store, agent, bus, inbox, delivery({}, { projectId: project.id }))
+  if (!first.ok) throw new Error("delivery failed")
+  await inbox.setSenderMuted(first.threadId, true)
+  const second = await deliverInbound(store, agent, bus, inbox, delivery({ deliveryId: "d2", threadKey: "thread-b" }, { projectId: project.id }))
+  if (!second.ok) throw new Error("delivery failed")
+  expect(second.chatId).toBeUndefined()
+  expect(inbox.getThread(second.threadId)).toMatchObject({ muted: true, unread: false })
+})
+
+test("after unmuting, the next delivery is handled again and earlier muted ones are not replayed", async () => {
+  const { store, agent, project, bus, inbox } = await createWebhookHarness()
+  const first = await deliverInbound(store, agent, bus, inbox, delivery({}, { projectId: project.id }))
+  if (!first.ok) throw new Error("delivery failed")
+  const chatId = first.chatId ?? ""
+  await inbox.setSenderMuted(first.threadId, true)
+  await deliverInbound(store, agent, bus, inbox, delivery({ deliveryId: "d2" }, { projectId: project.id }))
+  await inbox.setSenderMuted(first.threadId, false)
+  await deliverInbound(store, agent, bus, inbox, delivery({ deliveryId: "d3" }, { projectId: project.id }))
+  expect(store.getQueuedMessages(chatId).map((queued) => queued.autoContinue?.scheduleId)).toEqual(["mcp-mail1-d1", "mcp-mail1-d3"])
+})

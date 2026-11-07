@@ -162,6 +162,7 @@ export async function deliverInbound(
     deliveryId: delivery.deliveryId,
     ...(delivery.text !== undefined ? { text: delivery.text } : {}),
   })
+  if (thread.muted) return { ok: true, threadId: thread.id }
   const target = await resolveChat(store, inbox, delivery, thread.id, thread.chatId)
   if (!target.ok) return target
   if (delivery.handler.mode === "inline") await inbox.bindChat(thread.id, target.chatId)
