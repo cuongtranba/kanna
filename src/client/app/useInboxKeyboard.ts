@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react"
+import { isSnoozable } from "../../shared/inbox/policy"
 import type { InboxThread } from "../../shared/inbox/types"
 import { domAdapter } from "../adapters/dom.adapter"
 import { approveInboxProposal, archiveInboxThreads, toggleInboxThreadUnread } from "../lib/inboxActions"
@@ -55,6 +56,11 @@ export function useInboxKeyboard(
           if (selected === null) return
           event.preventDefault()
           useInboxStore.getState().toggleChecked(selected.id)
+          return
+        case "snoozeThread":
+          if (selected === null || !isSnoozable(selected)) return
+          event.preventDefault()
+          useInboxStore.getState().setSnoozeMenu("detail")
           return
         case "approveProposal":
           if (selected?.proposal?.status !== "open") return

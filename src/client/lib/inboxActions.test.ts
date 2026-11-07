@@ -2,7 +2,7 @@ import { describe, expect, test } from "vite-plus/test"
 import { makeFakeCommandPort } from "../adapters/testing/makeFakePorts"
 import type { CommandPort } from "../ports/commandPort"
 import { isPendingAction } from "../stores/pendingActionsStore"
-import { archiveActionKey, archiveInboxThreads } from "./inboxActions"
+import { archiveActionKey, archiveInboxThreads, snoozeInboxThreads } from "./inboxActions"
 import type { InboxToastPort, InboxToastRequest } from "./inboxToast"
 import { waitFor } from "./testing/waitFor"
 
@@ -50,5 +50,29 @@ describe("archiveInboxThreads", () => {
     archiveInboxThreads(failing, ["b"], () => {}, failedToasts.toast)
     await waitFor(() => !isPendingAction(archiveActionKey(["b"])), 2000, "the failed archive to settle")
     expect(failedToasts.shown).toEqual([])
+  })
+})
+
+describe("snoozeInboxThreads", () => {
+  test("snoozes the threads until the chosen time, then offers Undo that unsnoozes each of them", async () => {
+    const { port, sent } = recordingCommandPort()
+    const { toast, shown } = recordingToasts()
+    let snoozed = 0
+    const until = new Date(2026, 10, 8, 9, 0).getTime()
+
+    snoozeInboxThreads(port, ["a", "b"], until, () => { snoozed += 1 }, toast, new Date(2026, 10, 7, 10, 0).getTime())
+    await waitFor(() => shown.length === 1, 2000, "the Snoozed toast")
+
+    expect(sent).toEqual([{ type: "inbox.snooze", threadIds: ["a", "b"], until }])
+    expect(snoozed).toBe(1)
+    expect(shown[0]).toMatchObject({ actionLabel: "Undo" })
+    expect(shown[0]?.title).toContain("Snoozed 2 threads until tomorrow")
+
+    shown[0]?.onAction()
+    await waitFor(() => sent.length === 3, 2000, "the unsnooze commands")
+    expect(sent.slice(1)).toEqual([
+      { type: "inbox.unsnooze", threadId: "a" },
+      { type: "inbox.unsnooze", threadId: "b" },
+    ])
   })
 })

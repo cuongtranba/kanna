@@ -414,6 +414,8 @@ describe("command results", () => {
       { type: "inbox.archive", threadId: "thread-1" },
       { type: "inbox.archive", threadIds: ["thread-1", "thread-2"] },
       { type: "inbox.unarchive", threadId: "thread-1" },
+      { type: "inbox.snooze", threadIds: ["thread-1"], until: Date.now() + 3_600_000 },
+      { type: "inbox.unsnooze", threadId: "thread-1" },
       { type: "inbox.reply", threadId: "thread-1", text: "thanks" },
       { type: "inbox.retrySend", threadId: "thread-1", outboundId: "out-1" },
       { type: "inbox.instruct", threadId: "thread-1", text: "look into it" },

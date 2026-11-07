@@ -6,6 +6,9 @@ import type { InboxAutonomyLevel } from "./autonomy"
 export const INBOX_THREAD_STATES = ["new", "needs_you", "fyi", "handled", "replied", "archived"] as const
 export type InboxThreadState = (typeof INBOX_THREAD_STATES)[number]
 
+export const INBOX_UNSNOOZE_REASONS = ["time", "message", "user"] as const
+export type InboxUnsnoozeReason = (typeof INBOX_UNSNOOZE_REASONS)[number]
+
 export const INBOX_VERDICTS = ["needs_you", "fyi", "handled"] as const
 export type InboxVerdict = (typeof INBOX_VERDICTS)[number]
 
@@ -114,6 +117,7 @@ export interface InboxThread {
   pendingScheduleId?: string
   autonomy?: InboxAutonomyLevel
   agentPausedUntil?: number
+  snoozedUntil?: number
   proposal?: InboxProposal
   muted: boolean
 }

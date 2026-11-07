@@ -1,0 +1,6 @@
+---
+target: c3-247
+scope: block
+base: c3-247#n14529@v1:sha256:eec7863c1dce90f7e62e7894302645faef4063322b434c83e20a094aac64f32b
+---
+| inbox topic and commands | OUT | InboxSnapshot with threads, items, unreadCount and total; commands markRead, markAllRead, markUnread, archive, unarchive, muteSender, page, reply, instruct, retrySend, approveProposal, rejectProposal, cancelProposal, setThreadAutonomy, resumeAgent, snooze and unsnooze | reply answers direct with an outboundId when the source has a reply target and agent with a chatId otherwise; reply and instruct enqueue a prompt into the thread chat under inbox-reply-threadId-n and inbox-instruct-threadId-ts; instruct takes the instruction text and an optional current draft and asks the agent for a draft, never a send, and refuses an archived thread; markUnread marks threads or activity items unread again; archive takes threadId or threadIds so older callers keep working; unarchive restores a thread to the state and unread flag it had before it was archived; muteSender mutes or unmutes the thread sender on its source; snooze takes threadIds and an until time in epoch milliseconds and is refused when that time is not in the future; unsnooze ends a snooze at once; text is capped at 8000 characters | src/server/ws-router-inbox.ts |

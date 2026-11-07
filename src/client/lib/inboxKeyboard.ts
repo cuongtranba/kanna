@@ -10,6 +10,7 @@ export type InboxKeyCommand =
   | "archiveThread"
   | "toggleUnread"
   | "toggleSelect"
+  | "snoozeThread"
   | "approveProposal"
   | "closeThread"
   | "focusSearch"
@@ -22,6 +23,7 @@ export const INBOX_KEY_COMMANDS: ReadonlyArray<readonly [KeybindingAction, Inbox
   ["inboxArchiveThread", "archiveThread"],
   ["inboxToggleUnread", "toggleUnread"],
   ["inboxToggleSelect", "toggleSelect"],
+  ["inboxSnoozeThread", "snoozeThread"],
   ["inboxApproveProposal", "approveProposal"],
   ["inboxCloseThread", "closeThread"],
   ["inboxFocusSearch", "focusSearch"],

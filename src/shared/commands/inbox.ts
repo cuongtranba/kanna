@@ -57,6 +57,20 @@ export const inboxCommands = defineCommands(
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("inbox.snooze", {
+    result: okResultSchema,
+    params: z.object({ threadIds: z.array(z.string()), until: z.number() }),
+    summary: "Snooze inbox threads until a future time (epoch ms). They leave the Inbox tab and return unread at that time, or at once when a new message arrives.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.unsnooze", {
+    result: okResultSchema,
+    params: z.object({ threadId: z.string() }),
+    summary: "End a snooze early so the thread returns to the Inbox tab.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("inbox.muteSender", {
     result: okResultSchema,
     params: z.object({ threadId: z.string(), muted: z.boolean() }),

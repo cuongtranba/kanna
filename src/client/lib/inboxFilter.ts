@@ -1,4 +1,4 @@
-import { inboxItemMatchesFilter, inboxTab, inboxThreadMatchesFilter } from "../../shared/inbox/policy"
+import { inboxItemMatchesFilter, inboxTab, inboxThreadMatchesFilter, isSnoozed } from "../../shared/inbox/policy"
 import type { InboxActivityItem, InboxFilter, InboxThread } from "../../shared/inbox/types"
 
 export type InboxTabId = "inbox" | "activity"
@@ -7,13 +7,14 @@ export type InboxRecord =
   | { kind: "thread"; id: string; ts: number; unread: boolean; thread: InboxThread }
   | { kind: "item"; id: string; ts: number; unread: boolean; item: InboxActivityItem }
 
-export type InboxQuickFilter = "all" | "needs_you" | "fyi" | "unread"
+export type InboxQuickFilter = "all" | "needs_you" | "fyi" | "unread" | "snoozed"
 
 export const INBOX_QUICK_FILTERS: readonly { id: InboxQuickFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "needs_you", label: "Needs you" },
   { id: "fyi", label: "FYI" },
   { id: "unread", label: "Unread" },
+  { id: "snoozed", label: "Snoozed" },
 ]
 
 export type InboxQuickCounts = Readonly<Record<InboxQuickFilter, number>>
@@ -51,6 +52,7 @@ function matchesQuickFilter(record: InboxRecord, quick: InboxQuickFilter): boole
     case "unread": return record.unread
     case "needs_you": return record.kind === "item" || record.thread.state === "needs_you"
     case "fyi": return record.kind === "thread" && record.thread.state === "fyi"
+    case "snoozed": return record.kind === "thread" && isSnoozed(record.thread)
   }
 }
 
@@ -75,11 +77,12 @@ export function visibleRecords(
   query = "",
 ): InboxRecord[] {
   const inInbox = tab === "inbox"
+  const snoozedOnly = inInbox && quick === "snoozed"
   const records = [
     ...threads
-      .filter((thread) => (!inInbox || inboxTab(thread)) && inboxThreadMatchesFilter(thread, filter))
+      .filter((thread) => (snoozedOnly ? isSnoozed(thread) : !inInbox || inboxTab(thread)) && inboxThreadMatchesFilter(thread, filter))
       .map(threadRecord),
-    ...items
+    ...(snoozedOnly ? [] : items)
       .filter((item) => (!inInbox || inboxTab(item)) && inboxItemMatchesFilter(item, filter))
       .map(itemRecord),
   ].filter((record) => matchesSearch(record, query) && (!inInbox || matchesQuickFilter(record, quick)))
@@ -93,7 +96,13 @@ export function inboxQuickCounts(
 ): InboxQuickCounts {
   const records = visibleRecords("inbox", threads, items, EMPTY_FILTER, "all", query)
   const count = (quick: InboxQuickFilter) => records.filter((record) => matchesQuickFilter(record, quick)).length
-  return { all: count("all"), needs_you: count("needs_you"), fyi: count("fyi"), unread: count("unread") }
+  return {
+    all: count("all"),
+    needs_you: count("needs_you"),
+    fyi: count("fyi"),
+    unread: count("unread"),
+    snoozed: visibleRecords("inbox", threads, items, EMPTY_FILTER, "snoozed", query).length,
+  }
 }
 
 export function hasActiveFilter(filter: InboxFilter): boolean {
@@ -106,7 +115,7 @@ export function hasActiveFilter(filter: InboxFilter): boolean {
   )
 }
 
-function startOfDay(ts: number): number {
+export function startOfDay(ts: number): number {
   const date = new Date(ts)
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 }

@@ -76,6 +76,7 @@ suppressed while you are typing so it cannot swallow your keystrokes.
 | Inbox: Archive Thread | `E` |
 | Inbox: Mark Read Or Unread | `U` |
 | Inbox: Select Thread | `X` |
+| Inbox: Snooze Thread | `H` |
 | Inbox: Send Agent Proposal | `A` |
 | Inbox: Close Thread | `Esc` (clears the selection first) |
 | Inbox: Search | `/` |

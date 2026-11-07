@@ -36,6 +36,8 @@ code:
   - src/server/inbox/inbox-autonomy.test.ts
   - src/server/inbox/inbox-autopilot.ts
   - src/server/inbox/inbox-autopilot.test.ts
+  - src/server/inbox/inbox-snooze-waker.ts
+  - src/server/inbox/inbox-snooze-waker.test.ts
   - src/server/inbound/deliver-inbound.ts
   - src/server/inbound/deliver-inbound.test.ts
   - src/server/inbound/inbox-reply.ts

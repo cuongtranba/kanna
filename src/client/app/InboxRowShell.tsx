@@ -36,6 +36,7 @@ export function InboxRowShell({ unread, selected, avatarName, title, subtitle, a
           selected && "bg-muted",
           !selected && selection?.checked === true && "bg-accent",
           !selected && selection?.checked !== true && "hover:bg-muted/50",
+          selection !== undefined && "[@media(hover:none)]:pl-14",
         )}
       >
         <span aria-hidden="true" className={cn("mt-[14px] h-2 w-2 shrink-0 rounded-full", unread ? "bg-info" : "bg-transparent")} />
@@ -66,6 +67,7 @@ function InboxRowCheckbox({ selection }: { selection: InboxRowSelection }) {
     <span
       className={cn(
         "absolute left-[34px] top-3 flex h-8 w-8 items-center justify-center rounded-full bg-background",
+        "[@media(hover:none)]:left-1 [@media(hover:none)]:top-[6px] [@media(hover:none)]:h-11 [@media(hover:none)]:w-11",
         "pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
         (selection.checked || selection.anyChecked) && "pointer-events-auto opacity-100",
       )}

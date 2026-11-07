@@ -970,6 +970,9 @@ c3-126:
   - src/client/lib/inboxActions.ts
   - src/client/lib/inboxToast.ts
   - src/client/app/InboxBulkBar.tsx
+  - src/client/app/InboxSnoozeMenu.tsx
+  - src/client/app/InboxSnoozedNotice.tsx
+  - src/client/lib/inboxSnooze.ts
   - src/client/app/useInboxKeyboard.ts
 c3-248:
   - src/shared/mcp-sources/*.ts

@@ -271,6 +271,11 @@ not an implementation detail.
   projection, `describeMessageText`). Read
   [references/read-archive-text.md](references/read-archive-text.md) before
   touching mark unread, `inbox.archive` params, Undo or the bulk selection.
+- **Snooze has one owner per decision** (`snoozedUntil` in the projection,
+  `isSnoozable`/`isSnoozed` in `shared/inbox/policy.ts`, one wake timer in
+  `inbox-snooze-waker.ts`). Read
+  [references/snooze.md](references/snooze.md) before touching `inbox.snooze`,
+  the wake timer, the Snoozed filter or the notification rules.
 
 ## MCP sources — Kanna as a long-lived MCP client that feeds the Inbox
 

@@ -1,4 +1,5 @@
 import { expect, test } from "vite-plus/test"
+import { inboxTab } from "../../shared/inbox/policy"
 import { INBOX_MAX_ITEMS } from "../../shared/inbox/types"
 import type { BusEnvelope } from "../../shared/service-bus/envelope"
 import { createInboxHarness } from "../test-helpers/inbox-harness"
@@ -284,6 +285,58 @@ test("a message keeps its full text when the preview loses line breaks or length
   expect(short.messages[0]?.text).toBeUndefined()
   const second = await createInboxHarness({ now: tick, log: first.log })
   expect(second.inbox.getThread(thread.id)?.messages[0]?.text).toBe(long.trim())
+})
+
+test("a snoozed thread leaves the Inbox tab and the unread count, and unsnooze restores it at once", async () => {
+  const { inbox, published } = await createInboxHarness({ now: tick })
+  const thread = await inbox.ingestInbound(inbound("d1"), meta("d1"))
+  const until = clock + 60_000
+  expect(await inbox.snooze([thread.id], until)).toEqual({ ok: true })
+  const snoozed = inbox.getThread(thread.id)
+  expect(snoozed).toMatchObject({ state: "new", unread: true, snoozedUntil: until })
+  expect(snoozed !== null && inboxTab(snoozed)).toBe(false)
+  expect(inbox.unreadCount()).toBe(0)
+  await inbox.unsnooze(thread.id)
+  const restored = inbox.getThread(thread.id)
+  expect(restored?.snoozedUntil).toBeUndefined()
+  expect(restored !== null && inboxTab(restored)).toBe(true)
+  expect(inbox.unreadCount()).toBe(1)
+  expect(published.map((envelope) => envelope.subject)).toEqual(["kanna.inbox.snoozed", "kanna.inbox.unsnoozed"])
+})
+
+test("snooze refuses a time that is not in the future and skips archived threads", async () => {
+  const { inbox, log } = await createInboxHarness({ now: tick })
+  const thread = await inbox.ingestInbound(inbound("d1"), meta("d1"))
+  expect(await inbox.snooze([thread.id], clock - 1)).toEqual({ ok: false, error: "Snooze time must be in the future" })
+  await inbox.archive(thread.id)
+  expect(await inbox.snooze([thread.id], clock + 60_000)).toEqual({ ok: true })
+  expect(inbox.getThread(thread.id)?.snoozedUntil).toBeUndefined()
+  expect(log.events.some((event) => event.kind === "inbox_thread_snoozed")).toBe(false)
+})
+
+test("a new message cancels a snooze and the thread comes back unread, also after a restart", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await first.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await first.inbox.markRead([thread.id])
+  await first.inbox.snooze([thread.id], clock + 3_600_000)
+  await first.inbox.ingestInbound(inbound("d2"), meta("d2"))
+  expect(first.inbox.getThread(thread.id)).toMatchObject({ state: "new", unread: true })
+  expect(first.inbox.getThread(thread.id)?.snoozedUntil).toBeUndefined()
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)?.snoozedUntil).toBeUndefined()
+  expect(second.inbox.nextSnoozeWake()).toBeNull()
+})
+
+test("archiving or replying to a snoozed thread ends the snooze", async () => {
+  const { inbox } = await createInboxHarness({ now: tick })
+  const archived = await inbox.ingestInbound(inbound("d1"), meta("d1", "k1"))
+  const replied = await inbox.ingestInbound(inbound("d2"), meta("d2", "k2"))
+  await inbox.snooze([archived.id, replied.id], clock + 3_600_000)
+  await inbox.archive(archived.id)
+  await inbox.markReplied(replied.id, "chat-1", "reply-1")
+  expect(inbox.getThread(archived.id)?.snoozedUntil).toBeUndefined()
+  expect(inbox.getThread(replied.id)?.snoozedUntil).toBeUndefined()
+  expect(inbox.nextSnoozeWake()).toBeNull()
 })
 
 test("page filters by source kind and attention and pages by timestamp", async () => {

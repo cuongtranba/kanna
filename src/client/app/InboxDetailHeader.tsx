@@ -1,9 +1,10 @@
-import { useCallback } from "react"
+import { useCallback, useMemo } from "react"
 import { Archive, ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Mail, MailOpen } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { InboxThread } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { StateMarkLabel } from "../components/ui/state-mark"
+import { isSnoozable } from "../../shared/inbox/policy"
 import { archiveActionKey, archiveInboxThreads, readActionKey, toggleInboxThreadUnread } from "../lib/inboxActions"
 import { threadStateDisplay } from "../lib/inboxPresentation"
 import { chatPath } from "../lib/paneTree"
@@ -11,21 +12,25 @@ import { usePendingAction } from "../stores/pendingActionsStore"
 import { InboxAutonomyControls } from "./InboxAutonomyControls"
 import { InboxAvatar } from "./InboxAvatar"
 import { InboxShortcutHint } from "./InboxShortcutHint"
+import { InboxSnoozedNotice } from "./InboxSnoozedNotice"
+import { InboxSnoozeMenu } from "./InboxSnoozeMenu"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
-interface Props {
+export interface InboxDetailHeaderProps {
   thread: InboxThread
   prevId: string | null
   nextId: string | null
   onOpenThread: (threadId: string) => void
   onBack: () => void
   onArchived: () => void
+  onSnoozed: () => void
 }
 
-export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack, onArchived }: Props) {
+export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack, onArchived, onSnoozed }: InboxDetailHeaderProps) {
   const socket = useOptionalKannaSocket()
   const display = threadStateDisplay(thread)
   const threadId = thread.id
+  const snoozeIds = useMemo(() => [thread.id], [thread.id])
   const archiving = usePendingAction(archiveActionKey([threadId]))
   const togglingRead = usePendingAction(readActionKey([threadId], thread.unread))
   const { unread } = thread
@@ -41,13 +46,13 @@ export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack
 
   return (
     <header className="shrink-0 space-y-2 border-b border-border bg-background px-4 py-3">
-      <div className="mx-auto flex w-full max-w-[720px] items-center gap-2">
+      <div className="mx-auto flex w-full max-w-[720px] items-center gap-2 max-md:flex-wrap">
         <Button variant="ghost" size="sm" className="-ml-2 md:hidden" onClick={onBack}>
           <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
           Inbox
         </Button>
         <InboxAvatar name={thread.sender} className="max-md:hidden" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 max-md:basis-32">
           <h2 className="truncate text-sm font-semibold text-foreground">{thread.sender}</h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
             <span className="truncate">{thread.sourceName}</span>
@@ -79,6 +84,7 @@ export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack
             <span className="max-md:sr-only">{unread ? "Mark read" : "Mark unread"}</span>
           </Button>
         </InboxShortcutHint>
+        {isSnoozable(thread) ? <InboxSnoozeMenu menu="detail" threadIds={snoozeIds} onSnoozed={onSnoozed} /> : null}
         <InboxShortcutHint label="Archive" action="inboxArchiveThread">
           <Button
             variant="secondary"
@@ -92,6 +98,7 @@ export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack
           </Button>
         </InboxShortcutHint>
       </div>
+      {thread.snoozedUntil === undefined ? null : <InboxSnoozedNotice threadId={threadId} until={thread.snoozedUntil} />}
       <div className="mx-auto w-full max-w-[720px] empty:hidden">
         <InboxAutonomyControls thread={thread} />
       </div>

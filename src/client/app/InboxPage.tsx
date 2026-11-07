@@ -143,10 +143,10 @@ export function InboxPage({ threadId }: Props) {
     [navigate, socket],
   )
 
-  const handleBulkArchived = useCallback(
-    (archivedIds: readonly string[]) => {
+  const handleBulkRemoved = useCallback(
+    (removedIds: readonly string[]) => {
       useInboxStore.getState().clearChecked()
-      if (selectedId !== null && archivedIds.includes(selectedId)) navigate("/inbox")
+      if (selectedId !== null && removedIds.includes(selectedId)) navigate("/inbox")
     },
     [navigate, selectedId],
   )
@@ -213,7 +213,7 @@ export function InboxPage({ threadId }: Props) {
           targets={targets}
           quick={quick}
           counts={counts}
-          onBulkArchived={handleBulkArchived}
+          onBulkRemoved={handleBulkRemoved}
         />
       </div>
       <div className="relative flex min-h-0 flex-1">
@@ -260,6 +260,7 @@ export function InboxPage({ threadId }: Props) {
               onOpenThread={handleOpenThread}
               onBack={handleCloseDetail}
               onArchived={handleCloseDetail}
+              onSnoozed={handleCloseDetail}
             />
           </div>
         )}
@@ -302,11 +303,11 @@ interface ControlsProps {
   targets: ReturnType<typeof listInboundTargets>
   quick: InboxQuickFilter
   counts: InboxQuickCounts
-  onBulkArchived: (threadIds: readonly string[]) => void
+  onBulkRemoved: (threadIds: readonly string[]) => void
 }
 
-function InboxControlsRow({ checkedIds, tab, filter, targets, quick, counts, onBulkArchived }: ControlsProps) {
-  if (checkedIds.length > 0) return <InboxBulkBar threadIds={checkedIds} onArchived={onBulkArchived} />
+function InboxControlsRow({ checkedIds, tab, filter, targets, quick, counts, onBulkRemoved }: ControlsProps) {
+  if (checkedIds.length > 0) return <InboxBulkBar threadIds={checkedIds} onArchived={onBulkRemoved} onSnoozed={onBulkRemoved} />
   if (tab === "activity") return <InboxFilterBar filter={filter} targets={targets} />
   return <InboxQuickFilters value={quick} counts={counts} />
 }

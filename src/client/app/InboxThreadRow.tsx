@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo } from "react"
 import type { InboxThread } from "../../shared/inbox/types"
 import { formatSidebarAgeLabel } from "../lib/formatters"
 import { threadPreview, threadStateDisplay } from "../lib/inboxPresentation"
+import { snoozedDisplay } from "../lib/inboxSnooze"
 import { useInboxStore } from "../stores/inboxStore"
 import { InboxRowShell, type InboxRowSelection } from "./InboxRowShell"
 
@@ -31,7 +32,7 @@ function InboxThreadRowImpl({ thread, selected, checked, anyChecked, now, onOpen
       subtitle={thread.sourceName}
       age={formatSidebarAgeLabel(thread.lastMessageAt, now)}
       preview={threadPreview(thread)}
-      display={threadStateDisplay(thread)}
+      display={thread.snoozedUntil === undefined ? threadStateDisplay(thread) : snoozedDisplay(thread.snoozedUntil, now)}
       meta={thread.messages.length > 1 ? `${String(thread.messages.length)} messages` : undefined}
       selection={selection}
       onClick={handleClick}

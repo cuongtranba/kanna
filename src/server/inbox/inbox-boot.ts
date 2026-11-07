@@ -10,6 +10,7 @@ import { createFileInboxLog } from "./inbox-log.adapter"
 import { createInboxAutopilot, type AutopilotClock, type AutopilotSourceResolver, type InboxAutopilot } from "./inbox-autopilot"
 import type { InboxOutbox, OutboxSourceResolver } from "./inbox-outbox"
 import { InboxRegistry } from "./inbox-registry"
+import { startInboxSnoozeWaker } from "./inbox-snooze-waker"
 
 export async function createInbox(dataDir: string, bus: ServiceBus): Promise<InboxRegistry> {
   const inbox = new InboxRegistry(createFileInboxLog(dataDir), bus)
@@ -83,6 +84,10 @@ export function wireInboxAutopilot(
   const autopilot = createInboxAutopilot({ registry: inbox, outbox, resolveSource: mcpAutopilotSourceResolver(mcpSources), clock })
   inbox.onProposeSend((threadId, proposal) => autopilot.propose(threadId, proposal))
   return autopilot
+}
+
+export function startInboxSnooze(inbox: InboxRegistry, clock: AutopilotClock = realAutopilotClock): Promise<() => void> {
+  return startInboxSnoozeWaker({ registry: inbox, clock })
 }
 
 export function createInboxReplyActions(

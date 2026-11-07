@@ -1,5 +1,5 @@
 import type { InboxEvent } from "../../shared/inbox/events"
-import { isAttention, isToolRequestPutFor, settledToolRequestId } from "../../shared/inbox/policy"
+import { isAttention, isSnoozable, isSnoozed, isToolRequestPutFor, settledToolRequestId } from "../../shared/inbox/policy"
 import {
   INBOX_MAX_ITEMS,
   INBOX_THREAD_MAX_DRAFTS,
@@ -54,6 +54,10 @@ function clearPending(state: InboxState, thread: InboxThread): void {
   state.pendingInstruction.delete(thread.id)
 }
 
+function endSnoozeUnlessSnoozable(thread: InboxThread): void {
+  if (!isSnoozable(thread)) delete thread.snoozedUntil
+}
+
 function addActivityItem(state: InboxState, incoming: InboxActivityItem): void {
   if (state.items.some((item) => item.id === incoming.id)) return
   const attention = incoming.attention && isAttention(incoming)
@@ -93,6 +97,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
         thread.messages.splice(0, thread.messages.length - INBOX_THREAD_MAX_MESSAGES)
       }
       state.archivedFrom.delete(thread.id)
+      delete thread.snoozedUntil
       thread.state = "new"
       thread.unread = !thread.muted
       thread.lastMessageAt = event.message.ts
@@ -113,6 +118,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       thread.report = event.report
       thread.state = event.report.verdict
       thread.unread = event.report.verdict === "needs_you" && !thread.muted
+      endSnoozeUnlessSnoozable(thread)
       clearPending(state, thread)
       return
     }
@@ -161,6 +167,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       thread.unread = false
       thread.replyCount += 1
       thread.chatId ??= event.chatId
+      endSnoozeUnlessSnoozable(thread)
       clearPending(state, thread)
       return
     }
@@ -170,7 +177,20 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       state.archivedFrom.set(thread.id, { state: thread.state, unread: thread.unread })
       thread.state = "archived"
       thread.unread = false
+      endSnoozeUnlessSnoozable(thread)
       clearPending(state, thread)
+      return
+    }
+    case "inbox_thread_snoozed": {
+      const thread = state.threads.get(event.threadId)
+      if (thread && isSnoozable(thread)) thread.snoozedUntil = event.until
+      return
+    }
+    case "inbox_thread_unsnoozed": {
+      const thread = state.threads.get(event.threadId)
+      if (!thread || !isSnoozed(thread)) return
+      delete thread.snoozedUntil
+      if (event.reason === "time") thread.unread = !thread.muted
       return
     }
     case "inbox_thread_unarchived": {
@@ -203,6 +223,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       thread.state = "replied"
       thread.unread = false
       thread.replyCount += 1
+      endSnoozeUnlessSnoozable(thread)
       clearPending(state, thread)
       return
     }
@@ -297,6 +318,8 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_replied":
     case "inbox_thread_archived":
     case "inbox_thread_unarchived":
+    case "inbox_thread_snoozed":
+    case "inbox_thread_unsnoozed":
     case "inbox_thread_outbound_queued":
     case "inbox_thread_outbound_settled":
     case "inbox_thread_autonomy_set":
