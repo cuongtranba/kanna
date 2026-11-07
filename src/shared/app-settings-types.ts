@@ -214,6 +214,9 @@ export const KEYBINDING_ACTIONS = [
   "inboxFocusComposer",
   "inboxArchiveThread",
   "inboxApproveProposal",
+  "inboxCloseThread",
+  "inboxFocusSearch",
+  "inboxShowShortcuts",
 ] as const
 
 export type KeybindingAction = (typeof KEYBINDING_ACTIONS)[number]
@@ -251,6 +254,9 @@ export const DEFAULT_KEYBINDINGS: Record<KeybindingAction, string[]> = {
   inboxFocusComposer: ["r"],
   inboxArchiveThread: ["e"],
   inboxApproveProposal: ["a"],
+  inboxCloseThread: ["escape"],
+  inboxFocusSearch: ["/"],
+  inboxShowShortcuts: ["shift+?"],
 }
 
 

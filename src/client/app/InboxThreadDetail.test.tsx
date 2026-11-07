@@ -59,7 +59,7 @@ async function mount(target: InboxThread) {
   const rendered = await renderClientMarkup(
     <MemoryRouter>
       <KannaSocketProvider socket={socket}>
-        <InboxThreadDetail thread={target} onBack={() => {}} onArchived={() => {}} />
+        <InboxThreadDetail thread={target} prevId={null} nextId={null} onOpenThread={() => {}} onBack={() => {}} onArchived={() => {}} />
       </KannaSocketProvider>
     </MemoryRouter>,
   )

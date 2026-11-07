@@ -33,6 +33,9 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   inboxFocusComposer: "Inbox: Reply To Thread",
   inboxArchiveThread: "Inbox: Archive Thread",
   inboxApproveProposal: "Inbox: Send Agent Proposal",
+  inboxCloseThread: "Inbox: Close Thread",
+  inboxFocusSearch: "Inbox: Search",
+  inboxShowShortcuts: "Inbox: Show Shortcuts",
 }
 
 export function formatKeybindingInput(bindings: string[] | undefined) {

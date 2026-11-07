@@ -5,7 +5,6 @@ import { HoverHint } from "../components/ui/truncated-text"
 import type { InboxQuickPrompt } from "../../shared/inbox/quick-prompts"
 import { INBOX_REPLY_MAX_CHARS, type InboxThread } from "../../shared/inbox/types"
 import { sendCommandWithFeedback } from "../lib/commandFeedback"
-import { archiveInboxThread } from "../lib/inboxActions"
 import { inboxAskBlockedReason, inboxReplyMode, NO_CHAT_REPLY_REASON, type InboxReplyMode } from "../lib/inboxPresentation"
 import { selectMcpSources, useAppSettingsStore } from "../stores/appSettingsStore"
 import { displayedReplyDraft, useInboxStore } from "../stores/inboxStore"
@@ -15,7 +14,6 @@ import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
 interface Props {
   thread: InboxThread
-  onArchived: () => void
 }
 
 const SEND_LABEL: Readonly<Record<InboxReplyMode, string>> = {
@@ -57,7 +55,7 @@ function isPlainEnter(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean 
   return isEnter(event) && !event.metaKey && !event.ctrlKey
 }
 
-export function InboxReplyComposer({ thread, onArchived }: Props) {
+export function InboxReplyComposer({ thread }: Props) {
   const socket = useOptionalKannaSocket()
   const storedDraft = useInboxStore((state) => state.replyDrafts[thread.id])
   const draft = displayedReplyDraft(storedDraft, thread.drafts)
@@ -71,10 +69,8 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
   const canReply = replyMode !== "none" && hasText
   const replyKey = pendingActionKey("inbox.reply", thread.id)
   const askKey = pendingActionKey("inbox.instruct", thread.id)
-  const archiveKey = pendingActionKey("inbox.archive", thread.id)
   const replyPending = usePendingAction(replyKey)
   const askPending = usePendingAction(askKey)
-  const archivePending = usePendingAction(archiveKey)
 
   const handleChange = useCallback(
     (event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -140,8 +136,6 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
     useInboxStore.getState().settleReplyDraft(thread.id, latestDraftId)
   }, [latestDraftId, thread.id])
 
-  const handleArchive = useCallback(() => archiveInboxThread(socket, thread.id, onArchived), [onArchived, socket, thread.id])
-
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(
     () => useInboxStore.getState().registerComposerFocus(() => textareaRef.current?.focus()),
@@ -154,7 +148,7 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
       <Textarea
         ref={textareaRef}
         aria-label="Reply to the sender"
-        rows={5}
+        rows={3}
         maxLength={INBOX_REPLY_MAX_CHARS}
         value={draft}
         onChange={handleChange}
@@ -179,16 +173,6 @@ export function InboxReplyComposer({ thread, onArchived }: Props) {
         </HoverHint>
         <Button variant="ghost" size="sm" disabled={draft.length === 0} onClick={handleDiscard}>
           Discard draft
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          disabled={thread.state === "archived"}
-          pending={archivePending}
-          onClick={handleArchive}
-        >
-          Archive
         </Button>
       </div>
       <QuickPrompts disabled={!canAsk || askPending} onAsk={handleQuickPrompt} />

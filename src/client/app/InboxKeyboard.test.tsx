@@ -139,6 +139,22 @@ describe("inbox keyboard", () => {
     }
   })
 
+  test("Escape closes the open thread unless a box has focus", async () => {
+    const { container, cleanup } = await mount([thread("t1", 3000)])
+    try {
+      await press("j")
+      await waitFor(() => selected() === "t1" && container.querySelector("textarea") !== null, 2000, "the composer")
+      const box = container.querySelector("textarea")
+      if (box === null) throw new Error("no composer")
+      await press("Escape", box)
+      expect(selected()).toBe("t1")
+      await press("Escape")
+      await waitFor(() => selected() === null, 2000, "the thread closed")
+    } finally {
+      await cleanup()
+    }
+  })
+
   test("a sends the open proposal and does nothing when there is none", async () => {
     const { commands, cleanup } = await mount([thread("t1", 3000), thread("t2", 2000, { proposal: OPEN_PROPOSAL })])
     try {

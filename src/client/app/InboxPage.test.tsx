@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
+import { act } from "react"
 import { MemoryRouter } from "react-router-dom"
 import type { InboxActivityItem, InboxThread } from "../../shared/inbox/types"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
@@ -47,12 +48,29 @@ function mount(threadId: string | null) {
   )
 }
 
+function typeInto(input: HTMLInputElement, value: string) {
+  return act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+    setter?.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+}
+
+function clickButton(container: HTMLElement, label: string) {
+  const match = [...container.querySelectorAll("button")].find((button) => button.textContent?.trim().startsWith(label))
+  if (!match) throw new Error(`No button labelled ${label}`)
+  return act(async () => {
+    match.click()
+  })
+}
+
 afterEach(() => {
   useInboxStore.setState(useInboxStore.getInitialState())
 })
 
 describe("InboxPage", () => {
   test("an empty inbox says nothing needs you and links to the places that feed it", async () => {
+    useInboxStore.getState().applySnapshot({ threads: [], items: [], unreadCount: 0, total: 0 })
     const { container, cleanup } = await mount(null)
     try {
       expect(container.textContent).toContain("Nothing needs you. Webhooks and MCP sources land here.")
@@ -85,6 +103,45 @@ describe("InboxPage", () => {
       expect(text).toContain("Agent's read")
       expect(text).toContain("Pay the invoice")
       expect(container.querySelector("a[href='/chat/c1']")?.textContent).toContain("Open chat")
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("before the first snapshot arrives the list shows a skeleton, never the empty state", async () => {
+    const { container, cleanup } = await mount(null)
+    try {
+      expect(container.querySelector("[aria-label='Loading inbox']")).not.toBeNull()
+      expect(container.textContent).not.toContain("Nothing needs you")
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("a quick filter and the search box narrow the list and an empty result offers a way back", async () => {
+    useInboxStore.getState().applySnapshot({
+      threads: [
+        thread("a", { sender: "Ada", state: "needs_you" }),
+        thread("b", { sender: "Newsletter", state: "fyi", unread: false }),
+      ],
+      items: [],
+      unreadCount: 1,
+      total: 2,
+    })
+    const { container, cleanup } = await mount(null)
+    try {
+      expect(container.textContent).toContain("Ada")
+      expect(container.textContent).toContain("Newsletter")
+      await clickButton(container, "FYI")
+      expect(container.textContent).not.toContain("Ada")
+      expect(container.textContent).toContain("Newsletter")
+      await clickButton(container, "All")
+      const search = container.querySelector("input[aria-label='Search inbox']")
+      if (!(search instanceof HTMLInputElement)) throw new Error("no search box")
+      await typeInto(search, "nobody")
+      expect(container.textContent).toContain("Clear search")
+      await clickButton(container, "Clear search")
+      expect(container.textContent).toContain("Ada")
     } finally {
       await cleanup()
     }

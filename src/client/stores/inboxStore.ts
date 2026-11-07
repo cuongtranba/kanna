@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import type { InboxActivityItem, InboxDraft, InboxFilter, InboxSnapshot, InboxThread } from "../../shared/inbox/types"
-import { EMPTY_FILTER, type InboxTabId } from "../lib/inboxFilter"
+import { EMPTY_FILTER, type InboxQuickFilter, type InboxTabId } from "../lib/inboxFilter"
 import { omitKeyOrEmpty } from "../lib/recordOps"
 
 const EMPTY_THREADS: readonly InboxThread[] = []
@@ -27,15 +27,23 @@ interface InboxState {
   snapshotAt: number
   tab: InboxTabId
   filter: InboxFilter
+  quickFilter: InboxQuickFilter
+  searchQuery: string
+  shortcutsOpen: boolean
   selectedThreadId: string | null
   replyDrafts: Readonly<Record<string, ReplyDraftState>>
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
   retryConfirming: Readonly<Record<string, true>>
   composerFocus: (() => void) | null
+  searchFocus: (() => void) | null
   applySnapshot(snapshot: InboxSnapshot): void
   appendPage(page: InboxPage): void
   setTab(tab: InboxTabId): void
+  setQuickFilter(quick: InboxQuickFilter): void
+  setSearchQuery(query: string): void
+  clearSearch(): void
+  setShortcutsOpen(open: boolean): void
   setFilter(filter: InboxFilter): void
   toggleAttentionOnly(): void
   toggleSentByAgent(): void
@@ -51,6 +59,8 @@ interface InboxState {
   dismissRetryConfirm(outboundId: string): void
   registerComposerFocus(focus: () => void): () => void
   focusComposer(): boolean
+  registerSearchFocus(focus: () => void): () => void
+  focusSearch(): boolean
 }
 
 function nonEmpty<T>(list: readonly T[], empty: readonly T[]): readonly T[] {
@@ -95,12 +105,16 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
   snapshotAt: 0,
   tab: "inbox",
   filter: EMPTY_FILTER,
+  quickFilter: "all",
+  searchQuery: "",
+  shortcutsOpen: false,
   selectedThreadId: null,
   replyDrafts: EMPTY_DRAFTS,
   olderExhausted: false,
   rawOpen: NO_RAW_OPEN,
   retryConfirming: NO_RETRY_CONFIRMS,
   composerFocus: null,
+  searchFocus: null,
   applySnapshot: (snapshot) =>
     set((state) => ({
       threads: nonEmpty([...snapshot.threads, ...olderThan(state.threads, snapshot.threads, threadTs)], EMPTY_THREADS),
@@ -116,6 +130,10 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
       olderExhausted: page.threads.length === 0 && page.items.length === 0,
     })),
   setTab: (tab) => set({ tab }),
+  setQuickFilter: (quickFilter) => set({ quickFilter }),
+  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  clearSearch: () => set({ searchQuery: "" }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
   setFilter: (filter) => set({ filter, olderExhausted: false }),
   toggleAttentionOnly: () =>
     set((state) => refined(state, { attentionOnly: state.filter.attentionOnly === true ? undefined : true })),
@@ -159,6 +177,15 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
     composerFocus?.()
     return composerFocus !== null
   },
+  registerSearchFocus: (focus) => {
+    set({ searchFocus: focus })
+    return () => set((state) => (state.searchFocus === focus ? { searchFocus: null } : state))
+  },
+  focusSearch: () => {
+    const { searchFocus } = get()
+    searchFocus?.()
+    return searchFocus !== null
+  },
 }))
 
 export const selectInboxUnreadCount = (state: InboxState) => state.unreadCount
@@ -168,6 +195,9 @@ export const selectInboxTotal = (state: InboxState) => state.total
 export const selectSnapshotAt = (state: InboxState) => state.snapshotAt
 export const selectInboxTab = (state: InboxState) => state.tab
 export const selectInboxFilter = (state: InboxState) => state.filter
+export const selectQuickFilter = (state: InboxState) => state.quickFilter
+export const selectSearchQuery = (state: InboxState) => state.searchQuery
+export const selectShortcutsOpen = (state: InboxState) => state.shortcutsOpen
 export const selectSelectedThreadId = (state: InboxState) => state.selectedThreadId
 export const selectOlderExhausted = (state: InboxState) => state.olderExhausted
 

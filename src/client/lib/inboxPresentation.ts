@@ -14,6 +14,7 @@ import type { McpSource } from "../../shared/mcp-sources/types"
 import type { BusSource } from "../../shared/service-bus/envelope"
 import type { StatusTone } from "./statusLabel"
 import { namedBusSubject, subjectFamily } from "../../shared/service-bus/subjects"
+import { dayLabelFor } from "./inboxFilter"
 
 export interface InboxStateDisplay {
   tone: StatusTone
@@ -21,7 +22,7 @@ export interface InboxStateDisplay {
 }
 
 const THREAD_STATE_DISPLAY: Readonly<Record<InboxThreadState, InboxStateDisplay>> = {
-  new: { tone: "attention", label: "Needs you" },
+  new: { tone: "active", label: "Agent triaging" },
   needs_you: { tone: "attention", label: "Needs you" },
   fyi: { tone: "muted", label: "FYI" },
   handled: { tone: "muted", label: "Handled" },
@@ -92,6 +93,11 @@ export const INBOX_SOURCE_FILTERS: readonly { kind: BusSource["kind"]; label: st
   { kind: "transcript", label: "Transcript" },
 ]
 
+export function senderInitial(sender: string): string {
+  const first = Array.from(sender.trim())[0]
+  return first === undefined ? "?" : first.toUpperCase()
+}
+
 export function formatUnreadBadge(count: number): string {
   return count > 99 ? "99+" : String(count)
 }
@@ -135,6 +141,23 @@ export function threadEntries(thread: InboxThread): InboxThreadEntry[] {
   const inbound = thread.messages.map((message): InboxThreadEntry => ({ kind: "inbound", ts: message.ts, message }))
   const outbound = thread.outbound.map((entry): InboxThreadEntry => ({ kind: "outbound", ts: entry.ts, outbound: entry }))
   return [...inbound, ...outbound].sort((a, b) => a.ts - b.ts)
+}
+
+export interface InboxEntryDay {
+  key: string
+  label: string
+  entries: readonly InboxThreadEntry[]
+}
+
+export function groupEntriesByDay(entries: readonly InboxThreadEntry[], now: number): InboxEntryDay[] {
+  const days: { label: string; entries: InboxThreadEntry[] }[] = []
+  for (const entry of entries) {
+    const label = dayLabelFor(entry.ts, now)
+    const last = days.at(-1)
+    if (last?.label === label) last.entries.push(entry)
+    else days.push({ label, entries: [entry] })
+  }
+  return days.map((day, index) => ({ key: `${String(index)}-${day.label}`, ...day }))
 }
 
 const OUTBOUND_STATUS_DISPLAY: Readonly<Record<Exclude<InboxOutboundMessage["status"], "failed">, InboxStateDisplay>> = {
