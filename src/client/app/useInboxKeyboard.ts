@@ -54,7 +54,7 @@ export function useInboxKeyboard(
           approveInboxProposal(socket, selected.id, selected.proposal.id)
           return
         case "closeThread":
-          if (selected === null || useInboxStore.getState().shortcutsOpen) return
+          if (selected === null || event.defaultPrevented || useInboxStore.getState().shortcutsOpen) return
           event.preventDefault()
           onCloseDetail()
           return
