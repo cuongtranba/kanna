@@ -6,6 +6,7 @@ import {
   INBOX_OUTBOUND_SETTLED_STATUSES,
   INBOX_SOURCE_KINDS,
   INBOX_PROPOSAL_RESOLUTIONS,
+  INBOX_UNSNOOZE_REASONS,
   type InboundMessage,
   type InboxActivityItem,
   type InboxDraft,
@@ -16,6 +17,7 @@ import {
   type InboxReport,
   type InboxSourceKind,
   type InboxThread,
+  type InboxUnsnoozeReason,
 } from "./types"
 import {
   inboundMessageSchema,
@@ -48,6 +50,8 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_thread_replied"; threadId: string; chatId: string; scheduleId: string })
   | (InboxEventBase & { kind: "inbox_thread_archived"; threadId: string })
   | (InboxEventBase & { kind: "inbox_thread_unarchived"; threadId: string })
+  | (InboxEventBase & { kind: "inbox_thread_snoozed"; threadId: string; until: number })
+  | (InboxEventBase & { kind: "inbox_thread_unsnoozed"; threadId: string; reason: InboxUnsnoozeReason })
   | (InboxEventBase & { kind: "inbox_thread_outbound_queued"; threadId: string; outbound: InboxQueuedOutbound })
   | (InboxEventBase & { kind: "inbox_thread_autonomy_set"; threadId: string; level: InboxAutonomyLevel | null })
   | (InboxEventBase & { kind: "inbox_thread_agent_paused"; threadId: string; until: number | null })
@@ -104,6 +108,13 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_archived"), threadId: z.string() }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_unarchived"), threadId: z.string() }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_snoozed"), threadId: z.string(), until: z.number() }),
+  z.object({
+    ...eventBase,
+    kind: z.literal("inbox_thread_unsnoozed"),
+    threadId: z.string(),
+    reason: z.enum(INBOX_UNSNOOZE_REASONS),
+  }),
   z.object({
     ...eventBase,
     kind: z.literal("inbox_thread_outbound_queued"),

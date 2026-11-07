@@ -10,6 +10,8 @@ const NO_RAW_OPEN: Readonly<Record<string, true>> = {}
 const NO_RETRY_CONFIRMS: Readonly<Record<string, true>> = {}
 const NO_CHECKED: Readonly<Record<string, true>> = {}
 
+export type SnoozeMenuId = "detail" | "bulk"
+
 export interface ReplyDraftState {
   text?: string
   dismissedDraftId?: string
@@ -34,6 +36,9 @@ interface InboxState {
   selectedThreadId: string | null
   checked: Readonly<Record<string, true>>
   keepUnreadId: string | null
+  snoozeMenu: SnoozeMenuId | null
+  snoozeOpenedAt: number
+  snoozeCustom: string
   replyDrafts: Readonly<Record<string, ReplyDraftState>>
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
@@ -55,6 +60,8 @@ interface InboxState {
   setChatFilter(chatId: string | null): void
   select(threadId: string | null): void
   holdUnread(threadId: string): void
+  setSnoozeMenu(menu: SnoozeMenuId | null): void
+  setSnoozeCustom(value: string): void
   toggleChecked(threadId: string): void
   pruneChecked(visibleThreadIds: ReadonlySet<string>): void
   clearChecked(): boolean
@@ -118,6 +125,9 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
   selectedThreadId: null,
   checked: NO_CHECKED,
   keepUnreadId: null,
+  snoozeMenu: null,
+  snoozeOpenedAt: 0,
+  snoozeCustom: "",
   replyDrafts: EMPTY_DRAFTS,
   olderExhausted: false,
   rawOpen: NO_RAW_OPEN,
@@ -155,6 +165,8 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
   select: (selectedThreadId) =>
     set((state) => (state.selectedThreadId === selectedThreadId ? state : { selectedThreadId, keepUnreadId: null })),
   holdUnread: (keepUnreadId) => set({ keepUnreadId }),
+  setSnoozeMenu: (snoozeMenu) => set({ snoozeMenu, snoozeOpenedAt: snoozeMenu === null ? 0 : Date.now() }),
+  setSnoozeCustom: (snoozeCustom) => set({ snoozeCustom }),
   toggleChecked: (threadId) =>
     set((state) => {
       if (state.checked[threadId]) return { checked: omitKeyOrEmpty(state.checked, threadId, NO_CHECKED) }
@@ -229,6 +241,9 @@ export const selectShortcutsOpen = (state: InboxState) => state.shortcutsOpen
 export const selectSelectedThreadId = (state: InboxState) => state.selectedThreadId
 export const selectCheckedThreads = (state: InboxState) => state.checked
 export const selectKeepUnreadId = (state: InboxState) => state.keepUnreadId
+export const selectSnoozeMenu = (state: InboxState) => state.snoozeMenu
+export const selectSnoozeOpenedAt = (state: InboxState) => state.snoozeOpenedAt
+export const selectSnoozeCustom = (state: InboxState) => state.snoozeCustom
 export const selectOlderExhausted = (state: InboxState) => state.olderExhausted
 
 export function selectSelectedThread(state: InboxState): InboxThread | null {

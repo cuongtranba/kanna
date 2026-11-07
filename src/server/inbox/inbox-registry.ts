@@ -4,7 +4,14 @@ import { isInboxInstructScheduleId } from "../../shared/inbound/handler-turn"
 import { INBOX_PROPOSAL_REASON_MAX_CHARS, type InboxAutonomyLevel } from "../../shared/inbox/autonomy"
 import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
 import { describeEnvelope, describeMessageText } from "../../shared/inbox/describe"
-import { inboxItemMatchesFilter, inboxThreadMatchesFilter, isAttention } from "../../shared/inbox/policy"
+import {
+  inboxItemMatchesFilter,
+  inboxThreadMatchesFilter,
+  isAttention,
+  isSnoozable,
+  isSnoozed,
+  raisesNotification,
+} from "../../shared/inbox/policy"
 import {
   INBOX_DRAFT_INSTRUCTION_MAX_CHARS,
   INBOX_DRAFT_MAX_CHARS,
@@ -24,6 +31,7 @@ import {
   type InboxSnapshot,
   type InboxSourceKind,
   type InboxThread,
+  type InboxUnsnoozeReason,
   type InboxVerdict,
 } from "../../shared/inbox/types"
 import { log } from "../../shared/log"
@@ -57,6 +65,7 @@ export interface InboundIngestMeta {
 }
 
 export type InboxReportResult = { ok: true } | { ok: false; error: string }
+export type InboxSnoozeResult = InboxReportResult
 
 export interface InboxOutboundOutcome {
   status: InboxOutboundSettledStatus
@@ -169,7 +178,7 @@ export class InboxRegistry {
 
   unreadCount(): number {
     let count = 0
-    for (const thread of this.state.threads.values()) if (thread.unread) count += 1
+    for (const thread of this.state.threads.values()) if (thread.unread && !isSnoozed(thread)) count += 1
     for (const item of this.state.items) if (item.unread && item.attention) count += 1
     return count
   }
@@ -209,6 +218,7 @@ export class InboxRegistry {
       ...describeMessageText(meta.text ?? envelope.payload),
     }
     const thread = existing ?? null
+    if (thread !== null && isSnoozed(thread)) this.recordUnsnoozed(thread.id, "message")
     this.record({
       v: 1,
       ts: this.now(),
@@ -419,6 +429,49 @@ export class InboxRegistry {
     await this.flush()
   }
 
+  async snooze(threadIds: readonly string[], until: number): Promise<InboxSnoozeResult> {
+    if (!Number.isFinite(until) || until <= this.now()) return { ok: false, error: "Snooze time must be in the future" }
+    for (const threadId of threadIds) {
+      const thread = this.state.threads.get(threadId)
+      if (!thread || !isSnoozable(thread)) continue
+      this.record({ v: 1, ts: this.now(), kind: "inbox_thread_snoozed", threadId, until })
+      this.publishInbox("snoozed", { threadId, until })
+    }
+    await this.flush()
+    return { ok: true }
+  }
+
+  async unsnooze(threadId: string): Promise<void> {
+    const thread = this.state.threads.get(threadId)
+    if (!thread || !isSnoozed(thread)) return
+    this.recordUnsnoozed(threadId, "user")
+    await this.flush()
+  }
+
+  nextSnoozeWake(): number | null {
+    let earliest: number | null = null
+    for (const thread of this.state.threads.values()) {
+      if (thread.snoozedUntil !== undefined && (earliest === null || thread.snoozedUntil < earliest)) earliest = thread.snoozedUntil
+    }
+    return earliest
+  }
+
+  async wakeDueSnoozes(): Promise<void> {
+    const now = this.now()
+    const due = [...this.state.threads.values()].filter((thread) => thread.snoozedUntil !== undefined && thread.snoozedUntil <= now)
+    for (const { id } of due) {
+      this.recordUnsnoozed(id, "time")
+      const woken = this.state.threads.get(id)
+      if (woken && !woken.muted && raisesNotification(woken)) this.fireNeedsYou(cloneThread(woken))
+    }
+    await this.flush()
+  }
+
+  private recordUnsnoozed(threadId: string, reason: InboxUnsnoozeReason): void {
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_unsnoozed", threadId, reason })
+    this.publishInbox("unsnoozed", { threadId, reason })
+  }
+
   private recordDraft(thread: InboxThread, text: string, at: number): void {
     const asked = isInboxInstructScheduleId(thread.pendingScheduleId)
     const instruction = asked ? this.state.pendingInstruction.get(thread.id) : undefined
@@ -482,7 +535,7 @@ export class InboxRegistry {
     this.publishInbox("reported", { threadId, verdict: report.verdict, chatId: report.chatId })
     await this.flush()
     const thread = this.state.threads.get(threadId)
-    if (thread && !thread.muted && report.verdict === "needs_you" && !wasNeedsYou) this.fireNeedsYou(cloneThread(thread))
+    if (thread && !thread.muted && raisesNotification(thread) && !wasNeedsYou) this.fireNeedsYou(cloneThread(thread))
   }
 
   private onEnvelope(envelope: BusEnvelope): void {

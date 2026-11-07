@@ -96,7 +96,7 @@ import { createGenUIDatasetService } from "./genui/dataset-service-boot"
 import { buildAgentAppSettingsView } from "./agent-app-settings-view"
 import { createWebhookService } from "./webhooks/webhook-boot"
 import { createReferencedChatIds } from "./inbound/referenced-chat-ids"
-import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpAutopilotSourceResolver, mcpOutboxSourceResolver, wireInboxAutopilot, wireInboxPush } from "./inbox/inbox-boot"
+import { createInbox, createInboxReplyActions, inboxHandlerResolver, mcpAutopilotSourceResolver, mcpOutboxSourceResolver, startInboxSnooze, wireInboxAutopilot, wireInboxPush } from "./inbox/inbox-boot"
 import { createInboxOutbox } from "./inbox/inbox-outbox"
 import type { InboxActions } from "./ws-router-inbox"
 import { startMcpSources } from "./mcp-sources/mcp-sources-boot"
@@ -565,6 +565,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   inbox.subscribe(() => { router.pushInbox() })
   bus.subscribeStatus(() => { router.pushServiceBus() })
   wireInboxPush(inbox, pushManager, inboxHandlerResolver(webhooks.registry, mcpSources), mcpAutopilotSourceResolver(mcpSources))
+  lifetime.defer("quiesce", await startInboxSnooze(inbox))
   broadcastChatState = (chatId: string) => { router.scheduleChatStateBroadcast(chatId) }
   pushFollowedSessions = () => { router.pushFollowedSessions() }
   agent.onCronJobsChange = () => { router.pushCronJobs() }

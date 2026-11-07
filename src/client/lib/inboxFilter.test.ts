@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxThread, InboxThreadState } from "../../shared/inbox/types"
-import { groupRecords, hasActiveFilter, oldestTimestamp, olderPageCursors, visibleRecords } from "./inboxFilter"
+import { groupRecords, hasActiveFilter, inboxQuickCounts, oldestTimestamp, olderPageCursors, visibleRecords } from "./inboxFilter"
 
 function thread(id: string, state: InboxThreadState, lastMessageAt: number, overrides: Partial<InboxThread> = {}): InboxThread {
   return {
@@ -51,6 +51,19 @@ describe("visibleRecords", () => {
     ]
     const items = [item("quiet", 600), item("alarm", 200, { attention: true })]
     expect(ids(visibleRecords("inbox", threads, items, {}))).toEqual(["old-unread", "new-read", "alarm"])
+  })
+
+  test("snoozed threads leave every Inbox view except Snoozed, which shows only them", () => {
+    const threads = [
+      thread("awake", "needs_you", 100, { unread: true }),
+      thread("asleep", "needs_you", 200, { unread: true, snoozedUntil: 9_000 }),
+    ]
+    const items = [item("alarm", 300, { attention: true })]
+    for (const quick of ["all", "needs_you", "unread"] as const) {
+      expect(ids(visibleRecords("inbox", threads, items, {}, quick))).not.toContain("asleep")
+    }
+    expect(ids(visibleRecords("inbox", threads, items, {}, "snoozed"))).toEqual(["asleep"])
+    expect(inboxQuickCounts(threads, items, "")).toMatchObject({ all: 2, snoozed: 1 })
   })
 
   test("the activity tab holds every record newest first", () => {

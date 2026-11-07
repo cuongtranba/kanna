@@ -114,6 +114,7 @@ const inboxThreadSchema = z.object({
   pendingScheduleId: z.string().optional(),
   autonomy: z.enum(INBOX_AUTONOMY_LEVELS).optional(),
   agentPausedUntil: z.number().optional(),
+  snoozedUntil: z.number().optional(),
   proposal: inboxProposalSchema.optional(),
   muted: z.boolean().default(false),
 })

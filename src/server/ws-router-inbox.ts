@@ -4,6 +4,7 @@ import { ackResult } from "./ws-router-ack"
 import type { InboxReplyResult } from "./inbound/inbox-reply"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import type { InboxProposalAck } from "./inbox/inbox-autopilot"
+import type { InboxSnoozeResult } from "./inbox/inbox-registry"
 import type { InboxSendResult } from "./inbox/inbox-outbox"
 
 export type InboxReplyOutcome =
@@ -59,7 +60,7 @@ function unwrapSend(result: InboxSendResult): { outboundId: string } {
   return { outboundId: result.outboundId }
 }
 
-function unwrapAck(result: InboxProposalAck): { ok: true } {
+function unwrapAck(result: InboxProposalAck | InboxSnoozeResult): { ok: true } {
   if (!result.ok) throw new Error(result.error)
   return { ok: true }
 }
@@ -88,6 +89,14 @@ async function run(
     }
     case "inbox.unarchive":
       await registry.unarchive(requireId(command.threadId, "threadId"))
+      return ackResult(id, command, { ok: true })
+    case "inbox.snooze": {
+      const threadIds = [...new Set(command.threadIds.map((threadId) => requireId(threadId, "threadId")))]
+      if (threadIds.length === 0) throw new Error("threadIds is required")
+      return ackResult(id, command, unwrapAck(await registry.snooze(threadIds, command.until)))
+    }
+    case "inbox.unsnooze":
+      await registry.unsnooze(requireId(command.threadId, "threadId"))
       return ackResult(id, command, { ok: true })
     case "inbox.muteSender":
       await registry.setSenderMuted(requireId(command.threadId, "threadId"), command.muted)

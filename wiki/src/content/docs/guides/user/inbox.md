@@ -48,12 +48,41 @@ same control reads **Mark read** while the thread is unread.
 ### Select several threads
 
 Hover a thread (or tab to it) and tick the checkbox that replaces its avatar, or
-press `X` on the open thread. Once any thread is ticked, the quick filters give
+press `X` on the open thread. On a touch screen every row shows its checkbox
+beside the avatar instead. Once any thread is ticked, the quick filters give
 way to a bar showing **N selected** with **Mark read**, **Mark unread**,
-**Archive** and **Clear**; `Esc` clears the selection before it closes the open
+**Snooze**, **Archive** and **Clear**; `Esc` clears the selection before it closes the open
 thread. Only threads can be selected, not Activity items, and a thread that
 leaves the list (a search or filter hides it, or it gets archived) drops out of
 the selection.
+
+## Snooze a thread
+
+**Snooze** (or `H` on the open thread) takes a thread out of the Inbox until a
+time you pick: **Later today** (three hours from now), **Tomorrow** (9:00 the
+next morning), **Next week** (9:00 next Monday) or **Pick a time**, which takes
+any date and time in the future. The thread closes, and a toast says **Snoozed
+until …** with **Undo**. The same menu is in the bulk bar, so you can snooze
+several selected threads at once.
+
+A snoozed thread is hidden from **All**, **Needs you**, **FYI** and **Unread**
+and does not count toward the unread badge. The **Snoozed** quick filter lists
+only snoozed threads, each marked **Until** its wake time. Open one to see
+**Snoozed until …** with **Unsnooze**, which brings it back at once.
+
+A snoozed thread returns when:
+
+- the time passes: it comes back **unread**, and a thread that needs you raises
+  the same toast and push notification as any other thread that needs you. This
+  also holds after Kanna restarts: a snooze that came due while Kanna was off
+  wakes when it starts, and the others keep waiting;
+- a new message arrives in that conversation: it comes back at once, unread;
+- you **Unsnooze** it or press **Undo** on the toast.
+
+Archiving or replying to a snoozed thread ends its snooze. Only threads that
+are new, need you or are FYI can be snoozed; an archived thread cannot. If the
+agent reports on a thread while it is snoozed, the thread keeps sleeping and no
+notification is sent until it wakes.
 
 ## Answering a thread
 
@@ -236,6 +265,7 @@ focus.
 | `E` | Archive the open thread |
 | `U` | Mark the open thread unread, or read again |
 | `X` | Add the open thread to the selection, or remove it |
+| `H` | Open the Snooze menu for the open thread |
 | `A` | Send the open thread's approval card; nothing happens when there is none |
 | `Esc` | Clear the selection, or close the open thread when nothing is selected |
 | `/` | Put the cursor in the search box |

@@ -1,20 +1,10 @@
-import type { InboxThread } from "../../shared/inbox/types"
 import { InboxAgentReadCard } from "./InboxAgentReadCard"
 import { InboxConversation } from "./InboxConversation"
-import { InboxDetailHeader } from "./InboxDetailHeader"
+import { InboxDetailHeader, type InboxDetailHeaderProps } from "./InboxDetailHeader"
 import { InboxProposalCard } from "./InboxProposalCard"
 import { InboxReplyComposer } from "./InboxReplyComposer"
 
-interface Props {
-  thread: InboxThread
-  prevId: string | null
-  nextId: string | null
-  onOpenThread: (threadId: string) => void
-  onBack: () => void
-  onArchived: () => void
-}
-
-export function InboxThreadDetail({ thread, prevId, nextId, onOpenThread, onBack, onArchived }: Props) {
+export function InboxThreadDetail({ thread, prevId, nextId, onOpenThread, onBack, onArchived, onSnoozed }: InboxDetailHeaderProps) {
   return (
     <article aria-label={`Thread from ${thread.sender}`} className="flex min-h-0 flex-1 flex-col bg-background">
       <InboxDetailHeader
@@ -24,6 +14,7 @@ export function InboxThreadDetail({ thread, prevId, nextId, onOpenThread, onBack
         onOpenThread={onOpenThread}
         onBack={onBack}
         onArchived={onArchived}
+        onSnoozed={onSnoozed}
       />
       <InboxConversation thread={thread} />
       <div className="max-h-[60%] shrink-0 overflow-y-auto border-t border-border bg-background">

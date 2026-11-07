@@ -60,7 +60,7 @@ async function mount(target: InboxThread) {
   const rendered = await renderClientMarkup(
     <MemoryRouter>
       <KannaSocketProvider socket={socket}>
-        <InboxThreadDetail thread={target} prevId={null} nextId={null} onOpenThread={() => {}} onBack={() => {}} onArchived={() => {}} />
+        <InboxThreadDetail thread={target} prevId={null} nextId={null} onOpenThread={() => {}} onBack={() => {}} onArchived={() => {}} onSnoozed={() => {}} />
       </KannaSocketProvider>
     </MemoryRouter>,
   )
@@ -167,6 +167,47 @@ describe("InboxThreadDetail outbound messages", () => {
     try {
       expect(container.textContent).toContain("Sent")
       expect([...container.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Retry")).toBe(false)
+    } finally {
+      await cleanup()
+    }
+  })
+})
+
+describe("InboxThreadDetail snooze", () => {
+  test("Snooze in the header offers the presets and snoozes the thread until the pick", async () => {
+    const { socket, sent } = recordingSocket()
+    const rendered = await renderClientMarkup(
+      <MemoryRouter>
+        <KannaSocketProvider socket={socket}>
+          <InboxThreadDetail thread={thread([])} prevId={null} nextId={null} onOpenThread={() => {}} onBack={() => {}} onArchived={() => {}} onSnoozed={() => {}} />
+        </KannaSocketProvider>
+      </MemoryRouter>,
+    )
+    try {
+      await click(buttonLabelled(rendered.container, "Snooze"))
+      const menu = document.body.textContent ?? ""
+      for (const label of ["Later today", "Tomorrow", "Next week", "Pick a time"]) expect(menu).toContain(label)
+      const tomorrow = [...document.body.querySelectorAll("button")].find((button) => button.textContent?.startsWith("Tomorrow"))
+      if (!tomorrow) throw new Error("No Tomorrow preset")
+      await click(tomorrow)
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the snooze command")
+      const [command] = sentCommands(sent)
+      expect(command).toMatchObject({ type: "inbox.snooze", threadIds: ["t1"] })
+      expect(command.until).toBeGreaterThan(Date.now())
+    } finally {
+      await rendered.cleanup()
+      socket.dispose()
+    }
+  })
+
+  test("a snoozed thread says when it wakes and Unsnooze brings it back at once", async () => {
+    const snoozedThread = { ...thread([]), snoozedUntil: Date.now() + 3_600_000 }
+    const { container, sent, cleanup } = await mount(snoozedThread)
+    try {
+      expect(container.textContent).toContain("Snoozed until")
+      await click(buttonLabelled(container, "Unsnooze"))
+      await waitFor(() => sentCommands(sent).length === 1, 2000, "the unsnooze command")
+      expect(sentCommands(sent)).toEqual([{ type: "inbox.unsnooze", threadId: "t1" }])
     } finally {
       await cleanup()
     }

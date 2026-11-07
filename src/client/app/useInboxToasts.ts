@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
+import { raisesNotification } from "../../shared/inbox/policy"
 import type { InboxThread } from "../../shared/inbox/types"
 import { sonnerInboxToastPort, type InboxToastPort } from "../lib/inboxToast"
 import { selectInboxThreads, selectSnapshotAt, useInboxStore } from "../stores/inboxStore"
@@ -7,14 +8,14 @@ import { selectInboxThreads, selectSnapshotAt, useInboxStore } from "../stores/i
 export const MAX_INBOX_TOASTS = 3
 
 function needsYouIds(threads: readonly InboxThread[]): Set<string> {
-  return new Set(threads.filter((thread) => thread.state === "needs_you").map((thread) => thread.id))
+  return new Set(threads.filter(raisesNotification).map((thread) => thread.id))
 }
 
 export function newlyNeedingYou(
   previous: ReadonlySet<string>,
   threads: readonly InboxThread[],
 ): InboxThread[] {
-  return threads.filter((thread) => thread.state === "needs_you" && !previous.has(thread.id))
+  return threads.filter((thread) => raisesNotification(thread) && !previous.has(thread.id))
 }
 
 export function useInboxToasts(port: InboxToastPort = sonnerInboxToastPort): void {

@@ -4,14 +4,16 @@ import { Button } from "../components/ui/button"
 import { archiveActionKey, archiveInboxThreads, readActionKey, setInboxThreadsRead } from "../lib/inboxActions"
 import { useInboxStore } from "../stores/inboxStore"
 import { usePendingAction } from "../stores/pendingActionsStore"
+import { InboxSnoozeMenu } from "./InboxSnoozeMenu"
 import { useOptionalKannaSocket } from "./KannaSocketProvider"
 
 interface Props {
   threadIds: readonly string[]
   onArchived: (threadIds: readonly string[]) => void
+  onSnoozed: (threadIds: readonly string[]) => void
 }
 
-export function InboxBulkBar({ threadIds, onArchived }: Props) {
+export function InboxBulkBar({ threadIds, onArchived, onSnoozed }: Props) {
   const socket = useOptionalKannaSocket()
   const archiving = usePendingAction(archiveActionKey(threadIds))
   const markingRead = usePendingAction(readActionKey(threadIds, true))
@@ -30,6 +32,8 @@ export function InboxBulkBar({ threadIds, onArchived }: Props) {
     archiveInboxThreads(socket, threadIds, () => onArchived(threadIds))
   }, [onArchived, socket, threadIds])
 
+  const handleSnoozed = useCallback(() => onSnoozed(threadIds), [onSnoozed, threadIds])
+
   return (
     <div role="toolbar" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2">
       <span role="status" className="mr-1 text-sm font-medium tabular-nums text-foreground">
@@ -43,6 +47,7 @@ export function InboxBulkBar({ threadIds, onArchived }: Props) {
         <Mail className="mr-1.5 h-4 w-4" aria-hidden="true" />
         Mark unread
       </Button>
+      <InboxSnoozeMenu menu="bulk" threadIds={threadIds} onSnoozed={handleSnoozed} />
       <Button size="sm" variant="secondary" pending={archiving} onClick={handleArchive}>
         <Archive className="mr-1.5 h-4 w-4" aria-hidden="true" />
         Archive

@@ -34,6 +34,7 @@ export const KEYBINDING_ACTION_LABELS: Record<KeybindingAction, string> = {
   inboxArchiveThread: "Inbox: Archive Thread",
   inboxToggleUnread: "Inbox: Mark Read Or Unread",
   inboxToggleSelect: "Inbox: Select Thread",
+  inboxSnoozeThread: "Inbox: Snooze Thread",
   inboxApproveProposal: "Inbox: Send Agent Proposal",
   inboxCloseThread: "Inbox: Close Thread",
   inboxFocusSearch: "Inbox: Search",

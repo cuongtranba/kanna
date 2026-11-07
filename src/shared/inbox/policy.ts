@@ -1,7 +1,13 @@
 import type { BusEnvelope } from "../service-bus/envelope"
 import { namedBusSubject } from "../service-bus/subjects"
 import { isJsonObject, type JsonValue } from "../json"
-import { INBOX_REPLY_MAX_CHARS, type InboxActivityItem, type InboxFilter, type InboxThread } from "./types"
+import {
+  INBOX_REPLY_MAX_CHARS,
+  type InboxActivityItem,
+  type InboxFilter,
+  type InboxThread,
+  type InboxThreadState,
+} from "./types"
 
 const TOOL_REQUEST_PUT = namedBusSubject("toolRequestPut")
 const TOOL_REQUEST_RESOLVED = namedBusSubject("toolRequestResolved")
@@ -42,13 +48,23 @@ export function isToolRequestPutFor(envelope: SubjectPayload, requestId: string)
   return isJsonObject(request) && request.id === requestId
 }
 
+const INBOX_TAB_STATES: readonly InboxThreadState[] = ["new", "needs_you", "fyi"]
+
+export function isSnoozed(thread: Pick<InboxThread, "snoozedUntil">): boolean {
+  return thread.snoozedUntil !== undefined
+}
+
+export function isSnoozable(thread: Pick<InboxThread, "state">): boolean {
+  return INBOX_TAB_STATES.includes(thread.state)
+}
+
 export function inboxTab(entry: InboxThread | InboxActivityItem): boolean {
-  if ("messages" in entry) return !entry.muted && (entry.state === "new" || entry.state === "needs_you" || entry.state === "fyi")
+  if ("messages" in entry) return !entry.muted && !isSnoozed(entry) && isSnoozable(entry)
   return entry.attention
 }
 
-export function raisesNotification(thread: Pick<InboxThread, "state">): boolean {
-  return thread.state === "needs_you"
+export function raisesNotification(thread: Pick<InboxThread, "state" | "snoozedUntil">): boolean {
+  return thread.state === "needs_you" && !isSnoozed(thread)
 }
 
 export type OutboundRetryState =
