@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.103.0](https://github.com/cuongtranba/kanna/compare/v1.102.0...v1.103.0) (2026-11-07)
+
+
+### Features
+
+* **inbox:** bulk select, mark unread and archive with Undo ([#1442](https://github.com/cuongtranba/kanna/issues/1442)) ([41fddd9](https://github.com/cuongtranba/kanna/commit/41fddd9f90e228be5cc21c332ee5a1b0f1436e68))
+
 ## [1.102.0](https://github.com/cuongtranba/kanna/compare/v1.101.0...v1.102.0) (2026-11-07)
 
 
