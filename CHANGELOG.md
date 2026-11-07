@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.101.0](https://github.com/cuongtranba/kanna/compare/v1.100.4...v1.101.0) (2026-11-07)
+
+
+### Features
+
+* **inbox:** mute a sender within a source ([#1438](https://github.com/cuongtranba/kanna/issues/1438)) ([1e5fbdb](https://github.com/cuongtranba/kanna/commit/1e5fbdb589295450476bb70fb089aa169981d974))
+
 ## [1.100.4](https://github.com/cuongtranba/kanna/compare/v1.100.3...v1.100.4) (2026-11-06)
 
 
