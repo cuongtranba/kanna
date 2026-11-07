@@ -9,6 +9,7 @@ import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { projectProcessEnv } from "./project-process-env"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
+import { claudeCredentialKind } from "../shared/claude-credential"
 
 export const LOOP_BLOCKED_NATIVE_TOOLS: readonly string[] = [
   "Edit",
@@ -155,6 +156,18 @@ function endpointModelEnv({ aliasModel, contextWindow }: SdkEndpointEnv): NodeJS
   return { ...aliases, ...window }
 }
 
+export function withPoolCredential(env: NodeJS.ProcessEnv, token: string): NodeJS.ProcessEnv {
+  const {
+    CLAUDE_CODE_OAUTH_TOKEN: _oauth,
+    ANTHROPIC_API_KEY: _apiKey,
+    ANTHROPIC_AUTH_TOKEN: _authToken,
+    ...rest
+  } = env
+  return claudeCredentialKind(token) === "api-key"
+    ? { ...rest, ANTHROPIC_API_KEY: token }
+    : { ...rest, CLAUDE_CODE_OAUTH_TOKEN: token }
+}
+
 export function buildClaudeEnv(
   baseEnv: NodeJS.ProcessEnv,
   oauthToken: string | null,
@@ -179,5 +192,5 @@ export function buildClaudeEnv(
       ? { ...scoped, CLAUDE_CODE_OAUTH_TOKEN: baseEnv.CLAUDE_CODE_OAUTH_TOKEN }
       : scoped
   }
-  return { ...scoped, CLAUDE_CODE_OAUTH_TOKEN: oauthToken }
+  return withPoolCredential(scoped, oauthToken)
 }

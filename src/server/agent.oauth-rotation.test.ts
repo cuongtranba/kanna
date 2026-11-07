@@ -172,7 +172,7 @@ function makeToken(id: string, overrides: Partial<OAuthTokenEntry> = {}): OAuthT
   return {
     id,
     label: id,
-    token: `sk-ant-${id}`,
+    token: `sk-ant-oat01-${id}`,
     status: "active",
     limitedUntil: null,
     lastUsedAt: null,
@@ -256,7 +256,7 @@ describe("AgentCoordinator OAuth rotation", () => {
         "token marked limited + auto_continue_accepted event written",
       )
 
-      expect(capturedOauthTokens[0]).toBe("sk-ant-a")
+      expect(capturedOauthTokens[0]).toBe("sk-ant-oat01-a")
 
       const limitedCall = writeStatusCalls.find(
         (c) => (c.patch as { status?: string }).status === "limited",
@@ -429,8 +429,8 @@ describe("AgentCoordinator OAuth rotation", () => {
         "second session started after rotation",
       )
 
-      expect(capturedOauthTokens[0]).toBe("sk-ant-a")
-      expect(capturedOauthTokens[1]).toBe("sk-ant-b")
+      expect(capturedOauthTokens[0]).toBe("sk-ant-oat01-a")
+      expect(capturedOauthTokens[1]).toBe("sk-ant-oat01-b")
       expect(closeCalls).toContain(0)
     },
     10_000,

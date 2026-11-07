@@ -198,6 +198,26 @@ describe("buildClaudeEnv", () => {
     expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("my-oauth-token")
   })
 
+  test("a pool Console API key reaches the CLI as ANTHROPIC_API_KEY and displaces every other credential", () => {
+    const base: NodeJS.ProcessEnv = {
+      PATH: "/bin",
+      CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-abcdefghijklmnopqrstuvwxyz1234",
+      ANTHROPIC_AUTH_TOKEN: "inherited",
+    }
+    const result = buildClaudeEnv(base, "sk-ant-usr-abcdefghijklmnopqrstuvwxyz1234")
+    expect(result.ANTHROPIC_API_KEY).toBe("sk-ant-usr-abcdefghijklmnopqrstuvwxyz1234")
+    expect(result).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN")
+    expect(result).not.toHaveProperty("ANTHROPIC_AUTH_TOKEN")
+    expect(result.PATH).toBe("/bin")
+  })
+
+  test("a pool OAuth token is not overridden by an inherited ANTHROPIC_API_KEY", () => {
+    const base: NodeJS.ProcessEnv = { PATH: "/bin", ANTHROPIC_API_KEY: "inherited" }
+    const result = buildClaudeEnv(base, "sk-ant-oat01-abcdefghijklmnopqrstuvwxyz1234")
+    expect(result.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz1234")
+    expect(result).not.toHaveProperty("ANTHROPIC_API_KEY")
+  })
+
   test("sets ANTHROPIC_BASE_URL for OpenRouter and clears ANTHROPIC_API_KEY", () => {
     const base: NodeJS.ProcessEnv = {
       PATH: "/usr/bin",

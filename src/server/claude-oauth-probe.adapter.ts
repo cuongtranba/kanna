@@ -1,5 +1,6 @@
 import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
 import { OAUTH_TOKEN_BASE_URL_MAX } from "../shared/app-settings-types"
+import { claudeCredentialKind } from "../shared/claude-credential"
 import { QUICK_RESPONSE_CLAUDE_MODEL } from "../shared/provider-model-types"
 
 const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
@@ -20,7 +21,9 @@ export async function testOAuthToken(
       headers: {
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
-        "authorization": `Bearer ${trimmed}`,
+        ...(claudeCredentialKind(trimmed) === "api-key"
+          ? { "x-api-key": trimmed }
+          : { "authorization": `Bearer ${trimmed}` }),
       },
       body: JSON.stringify({
         model: QUICK_RESPONSE_CLAUDE_MODEL,

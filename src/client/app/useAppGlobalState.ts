@@ -269,7 +269,7 @@ export interface AppGlobalState extends StackCommands {
   handleSetChatPolicyOverride: (chatId: string, policyOverride: ChatPermissionPolicyOverride | null) => Promise<void>
   handleWriteCloudflareTunnel: (patch: Partial<CloudflareTunnelSettings>) => Promise<void>
   handleWriteClaudeAuth: (patch: Partial<ClaudeAuthSettings>) => Promise<void>
-  handleTestOAuthToken: (token: string) => Promise<{ ok: boolean; error: string | null }>
+  handleTestOAuthToken: (token: string, baseUrl?: string) => Promise<{ ok: boolean; error: string | null }>
   handleReadLlmProvider: () => Promise<void>
   handleWriteLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<void>
   handleValidateLlmProvider: (value: Pick<LlmProviderSnapshot, "provider" | "apiKey" | "model" | "baseUrl">) => Promise<LlmProviderValidationResult>

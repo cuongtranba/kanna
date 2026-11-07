@@ -115,7 +115,7 @@ function makeToken(id: string, overrides: Partial<OAuthTokenEntry> = {}): OAuthT
   return {
     id,
     label: id,
-    token: `sk-ant-${id}`,
+    token: `sk-ant-oat01-${id}`,
     status: "active",
     limitedUntil: null,
     lastUsedAt: null,

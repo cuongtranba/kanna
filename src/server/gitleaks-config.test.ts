@@ -21,6 +21,7 @@ type GitleaksConfig = {
 const KNOWN_SYNTHETIC_TOKENS = [
   "sk-ant-oat01-abcdefghijklmnopqrstuvwxyz1234",
   "sk-ant-oat01-SECRETMIDDLESEGMENT1234",
+  "sk-ant-usr-abcdefghijklmnopqrstuvwxyz1234",
   "sk-or-v1-abcdef1234567890",
   "BPg4MhSNQjK4FjoUf4f9Ye_K2gM4ahK_5BWj9rYjZ8sHbqJj9oKkrFHBwZJh1XJF8AaXh",
 ]
