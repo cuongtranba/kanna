@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { InboxActivityItem, InboxThread, InboxThreadState } from "../../shared/inbox/types"
-import { groupByDay, hasActiveFilter, oldestTimestamp, olderPageCursors, visibleRecords } from "./inboxFilter"
+import { groupRecords, hasActiveFilter, oldestTimestamp, olderPageCursors, visibleRecords } from "./inboxFilter"
 
 function thread(id: string, state: InboxThreadState, lastMessageAt: number, overrides: Partial<InboxThread> = {}): InboxThread {
   return {
@@ -81,7 +81,7 @@ describe("hasActiveFilter", () => {
   })
 })
 
-describe("groupByDay", () => {
+describe("groupRecords", () => {
   const now = new Date(2026, 9, 20, 15, 0).getTime()
 
   test("names today and yesterday and starts a new group per local day", () => {
@@ -91,9 +91,40 @@ describe("groupByDay", () => {
       item("c", new Date(2026, 9, 19, 23, 0).getTime()),
       item("d", new Date(2026, 9, 10, 12, 0).getTime()),
     ], {})
-    const groups = groupByDay(records, now)
+    const groups = groupRecords("activity", records, now)
     expect(groups.map((group) => group.label).slice(0, 2)).toEqual(["Today", "Yesterday"])
     expect(groups.map((group) => group.records.map((record) => record.id))).toEqual([["a", "b"], ["c"], ["d"]])
+  })
+})
+
+describe("inbox grouping", () => {
+  const now = new Date(2026, 9, 20, 15, 0).getTime()
+
+  test("unread-first ordering never repeats a day heading (Today, Yesterday, Today)", () => {
+    const threads = [
+      thread("unread-yesterday", "needs_you", new Date(2026, 9, 19, 9, 0).getTime(), { unread: true }),
+      thread("read-today", "fyi", new Date(2026, 9, 20, 9, 0).getTime()),
+      thread("read-yesterday", "fyi", new Date(2026, 9, 19, 8, 0).getTime()),
+      thread("read-today-early", "fyi", new Date(2026, 9, 20, 7, 0).getTime()),
+    ]
+    const groups = groupRecords("inbox", visibleRecords("inbox", threads, [], {}), now)
+    expect(groups.map((group) => group.label)).toEqual(["Unread", "Today", "Yesterday"])
+    expect(groups.map((group) => group.records.map((record) => record.id))).toEqual([
+      ["unread-yesterday"],
+      ["read-today", "read-today-early"],
+      ["read-yesterday"],
+    ])
+  })
+
+  test("a quick filter and a search narrow the inbox records", () => {
+    const threads = [
+      thread("pay", "needs_you", 300, { sender: "Ada", report: { verdict: "needs_you", summary: "Pay the invoice", at: 1, chatId: "c" } }),
+      thread("news", "fyi", 200, { sender: "Newsletter" }),
+      thread("fresh", "new", 100, { unread: true, sender: "Bob" }),
+    ]
+    expect(ids(visibleRecords("inbox", threads, [], {}, "fyi"))).toEqual(["news"])
+    expect(ids(visibleRecords("inbox", threads, [], {}, "unread"))).toEqual(["fresh"])
+    expect(ids(visibleRecords("inbox", threads, [], {}, "all", "INVOICE"))).toEqual(["pay"])
   })
 })
 

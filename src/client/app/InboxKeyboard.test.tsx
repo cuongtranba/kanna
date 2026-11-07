@@ -140,6 +140,42 @@ describe("inbox keyboard", () => {
     }
   })
 
+  test("Escape closes the open thread unless a box has focus", async () => {
+    const { container, cleanup } = await mount([thread("t1", 3000)])
+    try {
+      await press("j")
+      await waitFor(() => selected() === "t1" && container.querySelector("textarea") !== null, 2000, "the composer")
+      const box = container.querySelector("textarea")
+      if (box === null) throw new Error("no composer")
+      await press("Escape", box)
+      expect(selected()).toBe("t1")
+      await press("Escape")
+      await waitFor(() => selected() === null, 2000, "the thread closed")
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("Escape closes an open popover before the thread under it", async () => {
+    const { cleanup } = await mount([thread("t1", 3000)])
+    const dismissLayer = (event: KeyboardEvent) => {
+      if (event.key === "Escape") event.preventDefault()
+    }
+    try {
+      await press("j")
+      await waitFor(() => selected() === "t1", 2000, "the thread")
+      document.addEventListener("keydown", dismissLayer, { capture: true })
+      await press("Escape", document.body)
+      expect(selected()).toBe("t1")
+      document.removeEventListener("keydown", dismissLayer, { capture: true })
+      await press("Escape", document.body)
+      await waitFor(() => selected() === null, 2000, "the thread closed")
+    } finally {
+      document.removeEventListener("keydown", dismissLayer, { capture: true })
+      await cleanup()
+    }
+  })
+
   test("a sends the open proposal and does nothing when there is none", async () => {
     const { commands, cleanup } = await mount([thread("t1", 3000), thread("t2", 2000, { proposal: OPEN_PROPOSAL })])
     try {

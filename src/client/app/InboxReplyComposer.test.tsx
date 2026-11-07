@@ -115,7 +115,7 @@ function sentCommands(sent: string[]) {
 describe("InboxReplyComposer", () => {
   test("a thread with no chat cannot be replied to and says why", async () => {
     const { container, cleanup } = await renderClientMarkup(
-      <InboxReplyComposer thread={thread({})} onArchived={() => {}} />,
+      <InboxReplyComposer thread={thread({})} />,
     )
     try {
       expect(buttonLabelled(container, "Send").disabled).toBe(true)
@@ -130,7 +130,7 @@ describe("InboxReplyComposer", () => {
 
   test("seeds the textarea with the agent's draft and lets the agent send it once a chat handles the thread", async () => {
     const withDraft = thread({ chatId: "c1", drafts: [draftOf("d1", "On it, thanks")] })
-    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={withDraft} onArchived={() => {}} />)
+    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={withDraft} />)
     try {
       expect(container.querySelector("textarea")?.value).toBe("On it, thanks")
       expect(buttonLabelled(container, "Agent will send").disabled).toBe(false)
@@ -143,7 +143,7 @@ describe("InboxReplyComposer", () => {
   test("discarding the draft leaves an empty box instead of re-seeding the same draft, and a newer draft seeds again", async () => {
     const first = draftOf("d1", "On it, thanks")
     useInboxStore.getState().settleReplyDraft("t1", first.id)
-    const dismissed = await renderClientMarkup(<InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first] })} onArchived={() => {}} />)
+    const dismissed = await renderClientMarkup(<InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first] })} />)
     try {
       expect(dismissed.container.querySelector("textarea")?.value).toBe("")
       expect(buttonLabelled(dismissed.container, "Agent will send").disabled).toBe(true)
@@ -151,7 +151,7 @@ describe("InboxReplyComposer", () => {
       await dismissed.cleanup()
     }
     const newer = await renderClientMarkup(
-      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first, draftOf("d2", "Paid, thanks")] })} onArchived={() => {}} />,
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [first, draftOf("d2", "Paid, thanks")] })} />,
     )
     try {
       expect(newer.container.querySelector("textarea")?.value).toBe("Paid, thanks")
@@ -163,7 +163,7 @@ describe("InboxReplyComposer", () => {
   test("what the user typed wins over the agent's draft", async () => {
     useInboxStore.getState().setReplyDraft("t1", "my own words")
     const { container, cleanup } = await renderClientMarkup(
-      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [draftOf("d1", "agent words")] })} onArchived={() => {}} />,
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: [draftOf("d1", "agent words")] })} />,
     )
     try {
       expect(container.querySelector("textarea")?.value).toBe("my own words")
@@ -178,7 +178,7 @@ describe("InboxReplyComposer", () => {
       { ...draftOf("d2", "second text"), origin: "ask" as const, instruction: INBOX_QUICK_PROMPTS[0].instruction },
     ]
     const { container, cleanup } = await renderClientMarkup(
-      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: versions })} onArchived={() => {}} />,
+      <InboxReplyComposer thread={thread({ chatId: "c1", drafts: versions })} />,
     )
     try {
       const chips = [...(container.querySelector("[aria-label='Draft versions']")?.querySelectorAll("button") ?? [])]
@@ -196,7 +196,7 @@ describe("InboxReplyComposer", () => {
   test("a notify thread whose source has a reply target can be sent to directly", async () => {
     setMcpSources([mcpSource(REPLY_TARGET)])
     useInboxStore.getState().setReplyDraft("t1", "hello")
-    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={mcpThread()} onArchived={() => {}} />)
+    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={mcpThread()} />)
     try {
       expect(container.querySelector("textarea")?.disabled).toBe(false)
       expect(buttonLabelled(container, "Send").disabled).toBe(false)
@@ -211,7 +211,7 @@ describe("InboxReplyComposer", () => {
     setMcpSources([mcpSource(null)])
     useInboxStore.getState().setReplyDraft("t1", "hello")
     const { container, cleanup } = await renderClientMarkup(
-      <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />,
+      <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} />,
     )
     try {
       expect(buttonLabelled(container, "Agent will send").disabled).toBe(false)
@@ -223,7 +223,7 @@ describe("InboxReplyComposer", () => {
   test("a source without a reply target and without a chat stays disabled", async () => {
     setMcpSources([mcpSource(null)])
     useInboxStore.getState().setReplyDraft("t1", "hello")
-    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={mcpThread()} onArchived={() => {}} />)
+    const { container, cleanup } = await renderClientMarkup(<InboxReplyComposer thread={mcpThread()} />)
     try {
       expect(container.querySelector("textarea")?.disabled).toBe(true)
       expect(buttonLabelled(container, "Send").disabled).toBe(true)
@@ -238,7 +238,7 @@ describe("InboxReplyComposer", () => {
     const { socket, sent } = recordingSocket()
     const { container, cleanup } = await renderClientMarkup(
       <KannaSocketProvider socket={socket}>
-        <InboxReplyComposer thread={mcpThread()} onArchived={() => {}} />
+        <InboxReplyComposer thread={mcpThread()} />
       </KannaSocketProvider>,
     )
     try {
@@ -263,7 +263,7 @@ describe("InboxReplyComposer", () => {
     const { socket, sent } = recordingSocket()
     const { container, cleanup } = await renderClientMarkup(
       <KannaSocketProvider socket={socket}>
-        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} />
       </KannaSocketProvider>,
     )
     try {
@@ -284,7 +284,7 @@ describe("InboxReplyComposer", () => {
     const { socket, sent } = recordingSocket()
     const { container, cleanup } = await renderClientMarkup(
       <KannaSocketProvider socket={socket}>
-        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} />
       </KannaSocketProvider>,
     )
     try {
@@ -305,7 +305,7 @@ describe("InboxReplyComposer", () => {
     const { socket, sent } = recordingSocket()
     const { container, cleanup } = await renderClientMarkup(
       <KannaSocketProvider socket={socket}>
-        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} onArchived={() => {}} />
+        <InboxReplyComposer thread={mcpThread({ chatId: "c1" })} />
       </KannaSocketProvider>,
     )
     try {
@@ -333,7 +333,7 @@ describe("InboxReplyComposer", () => {
     const { socket, sent } = recordingSocket()
     const { container, cleanup } = await renderClientMarkup(
       <KannaSocketProvider socket={socket}>
-        <InboxReplyComposer thread={mcpThread()} onArchived={() => {}} />
+        <InboxReplyComposer thread={mcpThread()} />
       </KannaSocketProvider>,
     )
     try {

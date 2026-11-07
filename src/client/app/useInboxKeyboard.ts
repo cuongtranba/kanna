@@ -25,7 +25,8 @@ export function useInboxKeyboard(
   useEffect(() => {
     function handleKeydown(event: KeyboardEvent) {
       const target = event.target
-      const command = resolveBoundCommand(INBOX_KEY_COMMANDS, resolved, event, isTypingTarget(target instanceof HTMLElement ? target : null))
+      const typing = isTypingTarget(target instanceof HTMLElement ? target : null)
+      const command = resolveBoundCommand(INBOX_KEY_COMMANDS, resolved, event, typing)
       if (command === null) return
       const selectedId = selected?.id ?? null
       switch (command) {
@@ -51,6 +52,20 @@ export function useInboxKeyboard(
           if (selected?.proposal?.status !== "open") return
           event.preventDefault()
           approveInboxProposal(socket, selected.id, selected.proposal.id)
+          return
+        case "closeThread":
+          if (selected === null || event.defaultPrevented || useInboxStore.getState().shortcutsOpen) return
+          event.preventDefault()
+          onCloseDetail()
+          return
+        case "focusSearch":
+          if (!useInboxStore.getState().focusSearch()) return
+          event.preventDefault()
+          return
+        case "showShortcuts":
+          if (typing) return
+          event.preventDefault()
+          useInboxStore.getState().setShortcutsOpen(true)
       }
     }
     return dom.addWindowListener("keydown", handleKeydown)

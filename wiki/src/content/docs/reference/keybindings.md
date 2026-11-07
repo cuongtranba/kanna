@@ -75,6 +75,9 @@ suppressed while you are typing so it cannot swallow your keystrokes.
 | Inbox: Reply To Thread | `R` |
 | Inbox: Archive Thread | `E` |
 | Inbox: Send Agent Proposal | `A` |
+| Inbox: Close Thread | `Esc` |
+| Inbox: Search | `/` |
+| Inbox: Show Shortcuts | `?` |
 
 These are bare keys, so they work only on the Inbox page and are suppressed while
 you type in the reply box or any other input. See

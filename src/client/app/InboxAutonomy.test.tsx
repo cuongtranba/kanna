@@ -98,7 +98,7 @@ async function mount(target: InboxThread) {
   const rendered = await renderClientMarkup(
     <MemoryRouter>
       <KannaSocketProvider socket={socket}>
-        <InboxThreadDetail thread={target} onBack={() => {}} onArchived={() => {}} />
+        <InboxThreadDetail thread={target} prevId={null} nextId={null} onOpenThread={() => {}} onBack={() => {}} onArchived={() => {}} />
       </KannaSocketProvider>
     </MemoryRouter>,
   )
@@ -373,9 +373,9 @@ describe("outbound labels", () => {
     )
     try {
       const rows = [...container.querySelectorAll("section[aria-label='Messages'] li")].map((row) => row.textContent ?? "")
-      expect(rows[1]).toMatch(/^You · typed by hand/)
-      expect(rows[2]).toMatch(/^You · approved · approved text/)
-      expect(rows[3]).toMatch(/^Agent · auto · agent text/)
+      expect(rows[1]).toMatch(/^You\d{2}:\d{2}typed by hand/)
+      expect(rows[2]).toMatch(/^You · approved\d{2}:\d{2}approved text/)
+      expect(rows[3]).toMatch(/^Agent · auto\d{2}:\d{2}agent text/)
     } finally {
       await cleanup()
     }

@@ -52,9 +52,9 @@ describe("threadStateDisplay", () => {
     expect(threadStateDisplay(reported)).toEqual({ tone: "active", label: "Agent reading" })
   })
 
-  test("needs you and new threads are attention, everything settled is muted", () => {
+  test("a needs-you thread is attention, a new one is the agent triaging, everything settled is muted", () => {
     expect(threadStateDisplay(thread({ state: "needs_you" }))).toEqual({ tone: "attention", label: "Needs you" })
-    expect(threadStateDisplay(thread({ state: "new" }))).toEqual({ tone: "attention", label: "Needs you" })
+    expect(threadStateDisplay(thread({ state: "new" }))).toEqual({ tone: "active", label: "Agent triaging" })
     expect(threadStateDisplay(thread({ state: "fyi" }))).toEqual({ tone: "muted", label: "FYI" })
     expect(threadStateDisplay(thread({ state: "replied" }))).toEqual({ tone: "muted", label: "Replied" })
   })

@@ -219,6 +219,9 @@ focus.
 | `R` | Put the cursor in the reply box of the open thread |
 | `E` | Archive the open thread |
 | `A` | Send the open thread's approval card; nothing happens when there is none |
+| `Esc` | Close the open thread |
+| `/` | Put the cursor in the search box |
+| `?` | Show the list of Inbox shortcuts |
 
 With no thread open, `J` opens the first one and `K` the last one. Rebind any of
 them under Settings → Keybindings, where they are listed as "Inbox: …".
