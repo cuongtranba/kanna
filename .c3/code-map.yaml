@@ -380,6 +380,8 @@ c3-210:
   - src/server/serial-lane.ts
   - src/server/serial-lane.test.ts
   - src/server/test-helpers/failing-claude-session.ts
+  - src/server/test-helpers/parking-claude-session.ts
+  - src/server/chat-tool-events.test.ts
   - src/server/test-helpers/sdk-tool.ts
 c3-211:
   - src/server/codex-app-server-protocol.ts

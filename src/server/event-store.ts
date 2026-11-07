@@ -10,6 +10,8 @@ import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import type { ChatTaskScheduleContext } from "../shared/chat-tasks/schedule"
 import {
+  type ChatToolEvent,
+  type PendingChatTool,
   type StackRecord,
   type StoreEvent,
   type StoreState,
@@ -35,6 +37,10 @@ import {
   appendSubagentEvent as appendSubagentEventFn,
   type AppendSubagentDeps,
 } from "./event-store-subagent"
+import {
+  danglingChatToolResolutions,
+  listPendingChatTools as listPendingChatToolsFromMap,
+} from "./event-store-chat-tools"
 import {
   getToolRequest as getToolRequestFromMap,
   listPendingToolRequests as listPendingToolRequestsFromMap,
@@ -437,6 +443,17 @@ export class EventStore implements PushEventStore {
   }
 
   async appendSubagentEvent(event: SubagentRunEvent) { return appendSubagentEventFn(this.appendSubagentDeps, event) }
+
+  appendChatToolEvent(event: ChatToolEvent): void {
+    this.applyEvent(event)
+    this.writer.appendDetached(this.layout.logPath(logOfEvent(event)), event)
+  }
+
+  listPendingChatTools(chatId: string): PendingChatTool[] { return listPendingChatToolsFromMap(this.state.pendingChatToolsByChatId, chatId) }
+
+  recoverDanglingChatTools(now: number): void {
+    for (const event of danglingChatToolResolutions(this.state.pendingChatToolsByChatId, now)) this.appendChatToolEvent(event)
+  }
 
   getSubagentRuns(chatId: string): Record<string, SubagentRunSnapshot> { return getSubagentRunsFromMap(this.state.subagentRunsByChatId, chatId) }
 

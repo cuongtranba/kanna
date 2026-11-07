@@ -8,6 +8,7 @@ import {
   applyProjectEvent,
   applyStackEvent,
 } from "./event-store-chat-lifecycle"
+import { applyChatToolEvent } from "./event-store-chat-tools"
 import { applySubagentEvent } from "./event-store-subagent"
 import { applyChatTaskEvent } from "./event-store-tasks"
 import { applyToolRequestEvent } from "./event-store-tool-requests"
@@ -33,6 +34,8 @@ export function applyStoreEvent(
     applyStackEvent(state.stacksById, event)
   } else if (isEventOf("subagent", event)) {
     applySubagentEvent(state.subagentRunsByChatId, event)
+  } else if (isEventOf("chatTool", event)) {
+    applyChatToolEvent(state.pendingChatToolsByChatId, event)
   } else if (isEventOf("toolRequest", event)) {
     applyToolRequestEvent(state.toolRequestsById, event)
   } else if (isEventOf("chatTask", event)) {

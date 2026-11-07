@@ -9,6 +9,7 @@ export type EventFamily =
   | "chat"
   | "message"
   | "subagent"
+  | "chatTool"
   | "toolRequest"
   | "chatTask"
   | "autoContinue"
@@ -63,6 +64,8 @@ export const EVENT_ROUTES = {
   subagent_run_cancelled: { log: "turns", family: "subagent", replayPriority: 5 },
   subagent_tool_pending: { log: "turns", family: "subagent", replayPriority: 5 },
   subagent_tool_resolved: { log: "turns", family: "subagent", replayPriority: 5 },
+  chat_tool_pending: { log: "turns", family: "chatTool", replayPriority: 5 },
+  chat_tool_resolved: { log: "turns", family: "chatTool", replayPriority: 5 },
   tool_request_put: { log: "tool-requests", family: "toolRequest", replayPriority: 5 },
   tool_request_resolved: { log: "tool-requests", family: "toolRequest", replayPriority: 6 },
   auto_continue_proposed: { log: "schedules", family: "autoContinue", replayPriority: 11 },

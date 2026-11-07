@@ -450,9 +450,13 @@ export interface KannaSnapshot {
   chat?: ChatSnapshot | null
 }
 
+export type InteractiveToolKind = "ask_user_question" | "exit_plan_mode"
+
+export type PendingToolResolution = "user" | "interrupted" | "superseded"
+
 export interface PendingToolSnapshot {
   toolUseId: string
-  toolKind: "ask_user_question" | "exit_plan_mode"
+  toolKind: InteractiveToolKind
 }
 
 export type AutoContinueScheduleState = "proposed" | "scheduled" | "fired" | "cancelled"

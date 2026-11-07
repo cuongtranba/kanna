@@ -1,6 +1,6 @@
 ---
 id: c3-242
-c3-seal: bca1629db927e2f8b4edce5bf5605cd6116038529149f705ce166f6153329564
+c3-seal: b6e2f2c76b960f7c6a83a023b3bcef53ae47b8c06d66fb9575da78cbb8f487ab
 title: remote-mcp
 type: component
 category: feature
@@ -46,7 +46,7 @@ Owns the remote MCP surface: the /mcp endpoint, a stateless createMcpHandler tha
 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
-| Outcome | An external agent lists projects, runs chats, answers tool requests, moves board cards and reads snapshots without a browser | c3-208 |
+| Outcome | An external agent lists projects, runs chats, answers tool requests (interactive_tool entries of list_pending_tool_requests come from the chat_tool_pending events the parked slot publishes, so a discarded slot disappears; respond_tool documents the AskUserQuestion and ExitPlanMode result payloads), moves board cards and reads snapshots without a browser | c3-208 |
 | Primary path | Client without a token gets 401 plus a WWW-Authenticate resource_metadata URL, discovers the authorization server, registers dynamically, sends the owner through /oauth/login and /oauth/consent, and calls /mcp with a JWT | c3-203 |
 | Alternate — password bearer | A client holding the launch password sends it as the bearer; one cached Better Auth sign-in proves it and later calls reuse the session cookie | c3-203 |
 | Failure — disabled or no password | 404 JSON on every owned path, never 403, so the surface is indistinguishable from absent | c3-202 |

@@ -2,7 +2,7 @@ import { type ChatTaskStorePort, type SetupLoopHandlerResult } from "./kanna-mcp
 import { buildSeedTaskEvents } from "../shared/chat-tasks/seed"
 import type { ChatTaskProjection } from "../shared/chat-tasks/read-model"
 import { readDoc } from "./structured-doc-io.adapter"
-import { PendingToolSlots } from "./pending-tool-slot"
+import { chatToolEventObserver, PendingToolSlots } from "./pending-tool-slot"
 import type { LoopSetupInput } from "./loop-template"
 import type {
   ChatAttachment,
@@ -216,7 +216,7 @@ export class AgentCoordinator {
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   reportBackgroundError: ((message: string) => void) | null = null
   private readonly activeTurns = new Map<string, ActiveTurn>()
-  private readonly pendingTools = new PendingToolSlots()
+  private readonly pendingTools = new PendingToolSlots(chatToolEventObserver(() => this.store))
   private readonly startingTurns = new Map<string, StartingTurn>()
   private readonly drainingStreams = new Map<string, { turn: HarnessTurn }>()
   private readonly claudeSessions = new Map<string, ClaudeSessionState>()

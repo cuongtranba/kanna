@@ -1,6 +1,8 @@
 import type {
   AgentProvider,
+  InteractiveToolKind,
   KannaStatus,
+  PendingToolResolution,
   ModelOptions,
   ProjectSummary,
   ProviderUsage,
@@ -63,6 +65,13 @@ export interface ChatTimingState {
   }
 }
 
+export interface PendingChatTool {
+  toolUseId: string
+  toolKind: InteractiveToolKind
+  input: JsonObject
+  requestedAt: number
+}
+
 export interface StoreState {
   projectsById: Map<string, ProjectRecord>
   projectIdsByPath: Map<string, string>
@@ -75,6 +84,7 @@ export interface StoreState {
   subagentRunsByChatId: Map<string, Map<string, SubagentRunSnapshot>>
   chatTasksByChatId: Map<string, ChatTaskEvent[]>
   toolRequestsById: Map<string, ToolRequest>
+  pendingChatToolsByChatId: Map<string, Map<string, PendingChatTool>>
 }
 
 export interface SnapshotFile {
@@ -443,7 +453,26 @@ export type ToolRequestEvent =
       mismatchReason?: string
     }
 
-export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | ChatAutomationEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent
+export type ChatToolEvent =
+  | {
+      v: StoreVersion
+      type: "chat_tool_pending"
+      timestamp: number
+      chatId: string
+      toolUseId: string
+      toolKind: InteractiveToolKind
+      input: JsonObject
+    }
+  | {
+      v: StoreVersion
+      type: "chat_tool_resolved"
+      timestamp: number
+      chatId: string
+      toolUseId: string
+      resolution: PendingToolResolution
+    }
+
+export type StoreEvent = ProjectEvent | ChatEvent | MessageEvent | QueuedMessageEvent | TurnEvent | StackEvent | ChatAutomationEvent | SubagentRunEvent | ToolRequestEvent | ChatTaskEvent | ChatToolEvent
 
 export type StoreEventKind =
   | Exclude<StoreEvent, ChatAutomationEvent>["type"]
@@ -480,6 +509,7 @@ export function createEmptyState(): StoreState {
     subagentRunsByChatId: new Map(),
     chatTasksByChatId: new Map<string, ChatTaskEvent[]>(),
     toolRequestsById: new Map<string, ToolRequest>(),
+    pendingChatToolsByChatId: new Map<string, Map<string, PendingChatTool>>(),
   }
 }
 

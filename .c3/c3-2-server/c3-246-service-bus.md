@@ -1,6 +1,6 @@
 ---
 id: c3-246
-c3-seal: 424782af5873e0b61f738ada8b0dfc384a8fb045bc237ac05bbff4acef080b48
+c3-seal: d0094e76fc90114662ef2214054f113f3073c20e7edc4da79d40edfbc6c0ba4a
 title: service-bus
 type: component
 category: feature
@@ -43,7 +43,7 @@ Owns the BusEnvelope contract in src/shared/service-bus, the NATS-style subject 
 | --- | --- | --- | --- | --- |
 | BusEnvelope | OUT | v 1, id, subject kanna.domain.event, ts, source, direction inbound or internal, idempotencyKey, optional chatId and projectId, payload as JsonValue | idempotencyKey is deterministic per event (store:kind:entity:timestamp, transcript:chat:entryId) so a mirror can dedupe | src/shared/service-bus/envelope.ts |
 | ServiceBus port | IN/OUT | publish is synchronous and never throws; subscribe takes a NATS-style pattern with star and greater-than wildcards; addMirror registers a sink called after subscribers | A failing subscriber or mirror is logged and counted, never propagated to the publisher | src/server/service-bus/service-bus.ts |
-| STORE_EVENT_SUBJECT | OUT | Every StoreEventKind maps to a subject suffix or null; null kinds (session tokens, subagent deltas, read state, source hash, compact failures, sidebar order) are never published | The satisfies record makes a missing decision a type error | src/server/service-bus/store-event-subjects.ts |
+| STORE_EVENT_SUBJECT | OUT | Every StoreEventKind maps to a subject suffix or null; chat_tool_pending and chat_tool_resolved publish kanna.chat.toolPending and kanna.chat.toolResolved keyed by toolUseId so an external client learns an interactive tool needs an answer; null kinds (session tokens, subagent deltas, read state, source hash, compact failures, sidebar order) are never published | The satisfies record makes a missing decision a type error | src/server/service-bus/store-event-subjects.ts |
 | EventStore tap | IN | onEventApplied after applyStoreEvent, onEntryAppended after the transcript write, for the kinds in TRANSCRIPT_BUS_KINDS only | Assistant text, tool calls and results stay off the bus | src/server/service-bus/event-store-tap.ts |
 | JetStream reconcile | OUT | On every connect the stream named in settings is created or updated from the configured limits, subjects, discard and duplicate window, and the configured durable consumers are created or updated; consumers Kanna created earlier and no longer lists are deleted by their kanna-managed metadata tag, consumers it did not create are never touched | A change to retention, storage or replicas, or to an existing consumer's ack or deliver policy, is reported as an error naming the field rather than applied, because the server refuses it; a stream is never deleted | src/server/service-bus/jetstream-reconcile.ts |
 | Embedded nats-server | IN/OUT | In embedded mode Kanna downloads the pinned nats-server release for darwin and linux into the data dir, verifies it against SHA256SUMS, writes a 0600 config with a loopback listener, the JetStream store limits and a generated token, starts it, restarts it with backoff after an unexpected exit and stops it at shutdown; Windows reports that external mode is required | The token lives only in settings.json and the 0600 config file, never in argv; the child inherits PATH only | src/server/service-bus/nats-server-process.adapter.ts |
