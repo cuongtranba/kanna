@@ -1,13 +1,13 @@
 import { useCallback } from "react"
-import { Archive, ArrowLeft, ChevronDown, ChevronUp, ExternalLink } from "lucide-react"
+import { Archive, ArrowLeft, ChevronDown, ChevronUp, ExternalLink, Mail, MailOpen } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { InboxThread } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { StateMarkLabel } from "../components/ui/state-mark"
-import { archiveInboxThread } from "../lib/inboxActions"
+import { archiveActionKey, archiveInboxThreads, readActionKey, toggleInboxThreadUnread } from "../lib/inboxActions"
 import { threadStateDisplay } from "../lib/inboxPresentation"
 import { chatPath } from "../lib/paneTree"
-import { pendingActionKey, usePendingAction } from "../stores/pendingActionsStore"
+import { usePendingAction } from "../stores/pendingActionsStore"
 import { InboxAutonomyControls } from "./InboxAutonomyControls"
 import { InboxAvatar } from "./InboxAvatar"
 import { InboxShortcutHint } from "./InboxShortcutHint"
@@ -25,10 +25,13 @@ interface Props {
 export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack, onArchived }: Props) {
   const socket = useOptionalKannaSocket()
   const display = threadStateDisplay(thread)
-  const archiving = usePendingAction(pendingActionKey("inbox.archive", thread.id))
   const threadId = thread.id
+  const archiving = usePendingAction(archiveActionKey([threadId]))
+  const togglingRead = usePendingAction(readActionKey([threadId], thread.unread))
+  const { unread } = thread
 
-  const handleArchive = useCallback(() => archiveInboxThread(socket, threadId, onArchived), [onArchived, socket, threadId])
+  const handleArchive = useCallback(() => archiveInboxThreads(socket, [threadId], onArchived), [onArchived, socket, threadId])
+  const handleToggleUnread = useCallback(() => toggleInboxThreadUnread(socket, { id: threadId, unread }), [socket, threadId, unread])
   const handlePrev = useCallback(() => {
     if (prevId !== null) onOpenThread(prevId)
   }, [onOpenThread, prevId])
@@ -68,6 +71,12 @@ export function InboxDetailHeader({ thread, prevId, nextId, onOpenThread, onBack
         <InboxShortcutHint label="Next thread" action="inboxNextThread">
           <Button variant="ghost" size="icon-sm" aria-label="Next thread" disabled={nextId === null} onClick={handleNext}>
             <ChevronDown className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        </InboxShortcutHint>
+        <InboxShortcutHint label={unread ? "Mark read" : "Mark unread"} action="inboxToggleUnread">
+          <Button variant="ghost" size="sm" pending={togglingRead} onClick={handleToggleUnread}>
+            {unread ? <MailOpen className="h-4 w-4 md:mr-1.5" aria-hidden="true" /> : <Mail className="h-4 w-4 md:mr-1.5" aria-hidden="true" />}
+            <span className="max-md:sr-only">{unread ? "Mark read" : "Mark unread"}</span>
           </Button>
         </InboxShortcutHint>
         <InboxShortcutHint label="Archive" action="inboxArchiveThread">

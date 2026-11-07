@@ -26,5 +26,8 @@ code:
   - src/client/lib/inboxAutonomy.ts
   - src/client/lib/inboxKeyboard.ts
   - src/client/lib/inboxActions.ts
+  - src/client/lib/inboxActions.test.ts
+  - src/client/lib/inboxToast.ts
+  - src/client/app/InboxBulkBar.tsx
   - src/client/app/useInboxKeyboard.ts
   - src/client/app/InboxKeyboard.test.tsx

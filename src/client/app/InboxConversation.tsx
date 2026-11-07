@@ -17,7 +17,7 @@ function InboundBubble({ message, sender }: { message: InboundMessage; sender: s
       <InboxAvatar name={sender} className="h-7 w-7" />
       <div className="min-w-0 max-w-[85%]">
         <div className="rounded-2xl rounded-bl-sm border border-border bg-muted px-3.5 py-2">
-          <p className="whitespace-pre-wrap break-words text-sm text-foreground">{message.preview}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-foreground">{message.text ?? message.preview}</p>
         </div>
         <div className="mt-1 flex items-center gap-3 px-1 text-xs text-muted-foreground">
           <span className="font-mono tabular-nums">{formatStartedClock(message.ts)}</span>

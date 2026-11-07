@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react"
 import { Inbox, Keyboard } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import type { InboxActivityItem } from "../../shared/inbox/types"
+import type { InboxActivityItem, InboxFilter } from "../../shared/inbox/types"
 import { Button } from "../components/ui/button"
 import { SegmentedControl, type SegmentedOption } from "../components/ui/segmented-control"
 import {
@@ -11,6 +11,8 @@ import {
   inboxQuickCounts,
   olderPageCursors,
   visibleRecords,
+  type InboxQuickCounts,
+  type InboxQuickFilter,
   type InboxRecord,
   type InboxTabId,
 } from "../lib/inboxFilter"
@@ -19,12 +21,14 @@ import { sendCommandWithFeedback } from "../lib/commandFeedback"
 import { listInboundTargets } from "../lib/webhookTargets"
 import { cn } from "../lib/utils"
 import {
+  selectCheckedThreads,
   selectInboxFilter,
   selectInboxItems,
   selectInboxTab,
   selectInboxThreads,
   selectInboxTotal,
   selectInboxUnreadCount,
+  selectKeepUnreadId,
   selectOlderExhausted,
   selectQuickFilter,
   selectSearchQuery,
@@ -35,6 +39,7 @@ import {
 import { useKannaStateStore } from "../stores/kannaStateStore"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { InboxActivityRow } from "./InboxActivityRow"
+import { InboxBulkBar } from "./InboxBulkBar"
 import { InboxFilterBar } from "./InboxFilterBar"
 import { InboxEmptyList } from "./InboxListStates"
 import { InboxQuickFilters } from "./InboxQuickFilters"
@@ -73,6 +78,8 @@ export function InboxPage({ threadId }: Props) {
   const exhausted = useInboxStore(selectOlderExhausted)
   const snapshotAt = useInboxStore(selectSnapshotAt)
   const selected = useInboxStore(selectSelectedThread)
+  const checked = useInboxStore(selectCheckedThreads)
+  const keepUnreadId = useInboxStore(selectKeepUnreadId)
   const sidebarData = useKannaStateStore((state) => state.sidebarData)
   const targets = useMemo(() => listInboundTargets(sidebarData), [sidebarData])
   const markAllPending = usePendingAction(MARK_ALL_KEY)
@@ -85,6 +92,19 @@ export function InboxPage({ threadId }: Props) {
   )
   const groups = useMemo(() => groupRecords(tab, records, snapshotAt), [tab, records, snapshotAt])
   const counts = useMemo(() => inboxQuickCounts(threads, items, query), [threads, items, query])
+  const visibleThreadIds = useMemo(
+    () => new Set(records.flatMap((record) => (record.kind === "thread" ? [record.id] : []))),
+    [records],
+  )
+  const checkedIds = useMemo(
+    () => records.flatMap((record) => (record.kind === "thread" && checked[record.id] === true ? [record.id] : [])),
+    [records, checked],
+  )
+  const anyChecked = checkedIds.length > 0
+
+  useEffect(() => {
+    useInboxStore.getState().pruneChecked(visibleThreadIds)
+  }, [visibleThreadIds])
 
   useEffect(() => {
     useInboxStore.getState().select(threadId)
@@ -93,11 +113,11 @@ export function InboxPage({ threadId }: Props) {
   const selectedId = selected?.id ?? null
   const selectedUnread = selected?.unread === true
   useEffect(() => {
-    if (selectedId === null || !selectedUnread) return
+    if (selectedId === null || !selectedUnread || keepUnreadId === selectedId) return
     runPendingAction(pendingActionKey("inbox.markRead", selectedId), async () => {
       await sendCommandWithFeedback(socket, { type: "inbox.markRead", ids: [selectedId] })
     })
-  }, [selectedId, selectedUnread, socket])
+  }, [keepUnreadId, selectedId, selectedUnread, socket])
 
   const handleTab = useCallback((next: InboxTabId) => useInboxStore.getState().setTab(next), [])
 
@@ -121,6 +141,14 @@ export function InboxPage({ threadId }: Props) {
       if (item.chatId !== undefined) navigate(chatPath(item.chatId))
     },
     [navigate, socket],
+  )
+
+  const handleBulkArchived = useCallback(
+    (archivedIds: readonly string[]) => {
+      useInboxStore.getState().clearChecked()
+      if (selectedId !== null && archivedIds.includes(selectedId)) navigate("/inbox")
+    },
+    [navigate, selectedId],
   )
 
   const handleMarkAll = useCallback(() => {
@@ -178,7 +206,15 @@ export function InboxPage({ threadId }: Props) {
           <SegmentedControl value={tab} onValueChange={handleTab} options={TAB_OPTIONS} size="sm" />
           <InboxSearchBox />
         </div>
-        {tab === "activity" ? <InboxFilterBar filter={filter} targets={targets} /> : <InboxQuickFilters value={quick} counts={counts} />}
+        <InboxControlsRow
+          checkedIds={checkedIds}
+          tab={tab}
+          filter={filter}
+          targets={targets}
+          quick={quick}
+          counts={counts}
+          onBulkArchived={handleBulkArchived}
+        />
       </div>
       <div className="relative flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto md:max-w-[440px] md:flex-none md:basis-[420px] md:border-r md:border-border">
@@ -193,6 +229,8 @@ export function InboxPage({ threadId }: Props) {
                     key={record.id}
                     record={record}
                     selectedId={selectedId}
+                    checked={checked}
+                    anyChecked={anyChecked}
                     now={snapshotAt}
                     onOpenThread={handleOpenThread}
                     onOpenItem={handleOpenItem}
@@ -234,14 +272,41 @@ export function InboxPage({ threadId }: Props) {
 interface RowProps {
   record: InboxRecord
   selectedId: string | null
+  checked: Readonly<Record<string, true>>
+  anyChecked: boolean
   now: number
   onOpenThread: (threadId: string) => void
   onOpenItem: (item: InboxActivityItem) => void
 }
 
-function InboxRecordRow({ record, selectedId, now, onOpenThread, onOpenItem }: RowProps) {
+function InboxRecordRow({ record, selectedId, checked, anyChecked, now, onOpenThread, onOpenItem }: RowProps) {
   if (record.kind === "thread") {
-    return <InboxThreadRow thread={record.thread} selected={record.id === selectedId} now={now} onOpen={onOpenThread} />
+    return (
+      <InboxThreadRow
+        thread={record.thread}
+        selected={record.id === selectedId}
+        checked={checked[record.id] === true}
+        anyChecked={anyChecked}
+        now={now}
+        onOpen={onOpenThread}
+      />
+    )
   }
   return <InboxActivityRow item={record.item} now={now} onOpen={onOpenItem} />
+}
+
+interface ControlsProps {
+  checkedIds: readonly string[]
+  tab: InboxTabId
+  filter: InboxFilter
+  targets: ReturnType<typeof listInboundTargets>
+  quick: InboxQuickFilter
+  counts: InboxQuickCounts
+  onBulkArchived: (threadIds: readonly string[]) => void
+}
+
+function InboxControlsRow({ checkedIds, tab, filter, targets, quick, counts, onBulkArchived }: ControlsProps) {
+  if (checkedIds.length > 0) return <InboxBulkBar threadIds={checkedIds} onArchived={onBulkArchived} />
+  if (tab === "activity") return <InboxFilterBar filter={filter} targets={targets} />
+  return <InboxQuickFilters value={quick} counts={counts} />
 }

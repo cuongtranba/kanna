@@ -74,8 +74,10 @@ suppressed while you are typing so it cannot swallow your keystrokes.
 | Inbox: Previous Thread | `K` |
 | Inbox: Reply To Thread | `R` |
 | Inbox: Archive Thread | `E` |
+| Inbox: Mark Read Or Unread | `U` |
+| Inbox: Select Thread | `X` |
 | Inbox: Send Agent Proposal | `A` |
-| Inbox: Close Thread | `Esc` |
+| Inbox: Close Thread | `Esc` (clears the selection first) |
 | Inbox: Search | `/` |
 | Inbox: Show Shortcuts | `?` |
 

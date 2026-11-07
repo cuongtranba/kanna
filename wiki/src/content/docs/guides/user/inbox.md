@@ -41,6 +41,20 @@ handler mode skips the agent and goes straight to **needs you**.
 
 Opening a thread marks it read. **Mark all read** clears the whole Inbox tab.
 
+**Mark unread** in a thread's header (or `U`) turns it unread again, and it
+stays unread while you keep it open; opening it again later marks it read. The
+same control reads **Mark read** while the thread is unread.
+
+### Select several threads
+
+Hover a thread (or tab to it) and tick the checkbox that replaces its avatar, or
+press `X` on the open thread. Once any thread is ticked, the quick filters give
+way to a bar showing **N selected** with **Mark read**, **Mark unread**,
+**Archive** and **Clear**; `Esc` clears the selection before it closes the open
+thread. Only threads can be selected, not Activity items, and a thread that
+leaves the list (a search or filter hides it, or it gets archived) drops out of
+the selection.
+
 ## Answering a thread
 
 Open a thread to see its messages (**Show raw** reveals the exact payload), the
@@ -77,7 +91,9 @@ the thread between the messages that arrived, ordered by time.
 - **Discard draft** clears the box without sending anything. It does not bring
   the same draft back; a newer draft from the agent fills the box again.
 - **Archive** hides the thread from the Inbox tab. A new message in that
-  conversation brings it back as unread.
+  conversation brings it back as unread. A toast says **Archived** (or
+  **Archived N threads**) with **Undo**, which puts each thread back in the
+  state and read status it had before: needs you, FYI, handled, replied or new.
 - **Open chat** jumps to the thread's chat to read the full transcript or talk
   to the agent directly.
 
@@ -218,8 +234,10 @@ focus.
 | `K` | Open the previous thread |
 | `R` | Put the cursor in the reply box of the open thread |
 | `E` | Archive the open thread |
+| `U` | Mark the open thread unread, or read again |
+| `X` | Add the open thread to the selection, or remove it |
 | `A` | Send the open thread's approval card; nothing happens when there is none |
-| `Esc` | Close the open thread |
+| `Esc` | Clear the selection, or close the open thread when nothing is selected |
 | `/` | Put the cursor in the search box |
 | `?` | Show the list of Inbox shortcuts |
 

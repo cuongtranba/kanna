@@ -220,6 +220,72 @@ test("archive moves a thread out of the open states", async () => {
   expect(published.map((envelope) => envelope.subject)).toEqual(["kanna.inbox.archived"])
 })
 
+test("markUnread makes a read thread and an attention item unread again and the count follows", async () => {
+  const { inbox, bus, published } = await createInboxHarness({ now: tick })
+  const thread = await inbox.ingestInbound(inbound("d1"), meta("d1"))
+  bus.publish(internal("kanna.turn.failed", {}, "c1"))
+  await inbox.flush()
+  const itemId = inbox.snapshot().items[0]?.id ?? ""
+  await inbox.markRead([thread.id, itemId])
+  expect(inbox.unreadCount()).toBe(0)
+  await inbox.markUnread([thread.id, itemId])
+  expect(inbox.getThread(thread.id)?.unread).toBe(true)
+  expect(inbox.unreadCount()).toBe(2)
+  expect(published.at(-1)?.subject).toBe("kanna.inbox.unread")
+})
+
+test("an unread mark survives a restart and a later mark-all-read still clears it", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await first.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await first.inbox.markRead([thread.id])
+  await first.inbox.markUnread([thread.id])
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)?.unread).toBe(true)
+  await second.inbox.markAllRead()
+  expect(second.inbox.unreadCount()).toBe(0)
+})
+
+test("unarchive restores the state and unread flag the thread had before it was archived", async () => {
+  const { inbox } = await createInboxHarness({ now: tick })
+  const needsYou = await inbox.ingestInbound(inbound("d1"), meta("d1", "k1"))
+  await inbox.bindChat(needsYou.id, "chat-1")
+  await inbox.report(needsYou.id, "chat-1", "needs_you", "Pay it")
+  const fresh = await inbox.ingestInbound(inbound("d2"), meta("d2", "k2"))
+  const replied = await inbox.ingestInbound(inbound("d3"), meta("d3", "k3"))
+  await inbox.markReplied(replied.id, "chat-2", "inbox-reply-1")
+  for (const id of [needsYou.id, fresh.id, replied.id]) await inbox.archive(id)
+  expect(inbox.unreadCount()).toBe(0)
+  for (const id of [needsYou.id, fresh.id, replied.id]) await inbox.unarchive(id)
+  expect(inbox.getThread(needsYou.id)).toMatchObject({ state: "needs_you", unread: true, report: { summary: "Pay it" } })
+  expect(inbox.getThread(fresh.id)).toMatchObject({ state: "new", unread: true })
+  expect(inbox.getThread(replied.id)).toMatchObject({ state: "replied", unread: false })
+  expect(inbox.unreadCount()).toBe(2)
+})
+
+test("unarchive survives a restart and does nothing to a thread that is not archived", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const thread = await first.inbox.ingestInbound(inbound("d1"), meta("d1"))
+  await first.inbox.unarchive(thread.id)
+  expect(first.log.events.some((event) => event.kind === "inbox_thread_unarchived")).toBe(false)
+  await first.inbox.archive(thread.id)
+  await first.inbox.unarchive(thread.id)
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)).toMatchObject({ state: "new", unread: true })
+})
+
+test("a message keeps its full text when the preview loses line breaks or length, and survives a restart", async () => {
+  const first = await createInboxHarness({ now: tick })
+  const long = `first line\n${"word ".repeat(80)}`
+  const thread = await first.inbox.ingestInbound(inbound("d1"), { ...meta("d1"), text: long })
+  const short = await first.inbox.ingestInbound(inbound("d2"), { ...meta("d2", "k2"), text: "hello" })
+  expect(thread.messages[0]).toMatchObject({ text: long.trim() })
+  expect(thread.messages[0]?.preview.length).toBe(160)
+  expect(short.messages[0]).toMatchObject({ preview: "hello" })
+  expect(short.messages[0]?.text).toBeUndefined()
+  const second = await createInboxHarness({ now: tick, log: first.log })
+  expect(second.inbox.getThread(thread.id)?.messages[0]?.text).toBe(long.trim())
+})
+
 test("page filters by source kind and attention and pages by timestamp", async () => {
   const { inbox, bus } = await createInboxHarness({ now: tick })
   await inbox.ingestInbound(inbound("d1"), meta("d1"))

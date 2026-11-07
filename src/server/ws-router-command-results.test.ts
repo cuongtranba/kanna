@@ -409,8 +409,11 @@ describe("command results", () => {
       { type: "webhooks.delete", id: hookId },
       { type: "inbox.page", beforeTs: Date.now() + 1000, limit: 20 },
       { type: "inbox.markRead", ids: ["thread-1"] },
+      { type: "inbox.markUnread", ids: ["thread-1"] },
       { type: "inbox.markAllRead" },
       { type: "inbox.archive", threadId: "thread-1" },
+      { type: "inbox.archive", threadIds: ["thread-1", "thread-2"] },
+      { type: "inbox.unarchive", threadId: "thread-1" },
       { type: "inbox.reply", threadId: "thread-1", text: "thanks" },
       { type: "inbox.retrySend", threadId: "thread-1", outboundId: "out-1" },
       { type: "inbox.instruct", threadId: "thread-1", text: "look into it" },
@@ -431,4 +434,31 @@ describe("command results", () => {
       { type: "push.unsubscribe", pushDeviceId: "device-1" },
     ])
   }, 30_000)
+
+  test("inbox.archive takes one threadId or many threadIds and inbox.unarchive restores what was archived", async () => {
+    const { store, inbox } = await createWebhookHarness()
+    const router = createRouterOver(store, { inbox, inboxActions: {} as never })
+    const ingest = async (key: string) => {
+      const envelope = {
+        v: 1 as const,
+        id: `env-${key}`,
+        subject: "kanna.webhook.hook1.delivery",
+        ts: Date.now(),
+        source: { kind: "webhook" as const, hookId: "hook1", hookName: "CI" },
+        direction: "inbound" as const,
+        idempotencyKey: `webhook:hook1:${key}`,
+        payload: { text: key },
+      }
+      return inbox.ingestInbound(envelope, { threadKey: key, sender: "ada", sourceName: "CI", deliveryId: key })
+    }
+    const [a, b, c] = [await ingest("a"), await ingest("b"), await ingest("c")]
+
+    await router.dispatchCommand({ type: "inbox.archive", threadId: a.id })
+    await router.dispatchCommand({ type: "inbox.archive", threadIds: [b.id, c.id] })
+    expect([a, b, c].map((thread) => inbox.getThread(thread.id)?.state)).toEqual(["archived", "archived", "archived"])
+
+    await router.dispatchCommand({ type: "inbox.unarchive", threadId: b.id })
+    expect(inbox.getThread(b.id)).toMatchObject({ state: "new", unread: true })
+    expect(inbox.getThread(a.id)?.state).toBe("archived")
+  })
 })

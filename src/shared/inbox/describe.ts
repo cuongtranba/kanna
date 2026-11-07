@@ -1,7 +1,7 @@
 import { isJsonObject, type JsonValue } from "../json"
 import type { BusEnvelope } from "../service-bus/envelope"
 import { namedBusSubject } from "../service-bus/subjects"
-import { INBOX_PREVIEW_MAX_CHARS } from "./types"
+import { INBOX_MESSAGE_TEXT_MAX_CHARS, INBOX_PREVIEW_MAX_CHARS } from "./types"
 
 const CRON_RUN_OUTCOME = namedBusSubject("cronRunOutcome")
 const LOOP_RUN_OUTCOME = namedBusSubject("loopRunOutcome")
@@ -54,20 +54,28 @@ function truncate(text: string): string {
   return flat.length > INBOX_PREVIEW_MAX_CHARS ? `${flat.slice(0, INBOX_PREVIEW_MAX_CHARS - 1)}…` : flat
 }
 
-function previewOf(payload: JsonValue): string | null {
+function keyedText(payload: JsonValue): string | null {
   if (!isJsonObject(payload)) return null
   for (const key of PREVIEW_KEYS) {
     const value = payload[key]
-    if (typeof value === "string" && value.trim().length > 0) return truncate(value)
+    if (typeof value === "string" && value.trim().length > 0) return value
   }
   return null
 }
 
-export function describeEnvelope(envelope: BusEnvelope): { title: string; preview: string } {
-  return { title: titleFor(envelope), preview: previewOf(envelope.payload) ?? envelope.subject }
+function fullTextOf(payload: JsonValue): string {
+  if (typeof payload === "string") return payload
+  return keyedText(payload) ?? JSON.stringify(payload)
 }
 
-export function previewOfPayload(payload: JsonValue): string {
-  if (typeof payload === "string") return truncate(payload)
-  return previewOf(payload) ?? truncate(JSON.stringify(payload))
+export function describeEnvelope(envelope: BusEnvelope): { title: string; preview: string } {
+  const keyed = keyedText(envelope.payload)
+  return { title: titleFor(envelope), preview: keyed === null ? envelope.subject : truncate(keyed) }
+}
+
+export function describeMessageText(payload: JsonValue): { preview: string; text?: string } {
+  const full = fullTextOf(payload).trim()
+  const preview = truncate(full)
+  const text = full.slice(0, INBOX_MESSAGE_TEXT_MAX_CHARS)
+  return text === preview ? { preview } : { preview, text }
 }

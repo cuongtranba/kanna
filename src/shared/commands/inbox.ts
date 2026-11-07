@@ -29,6 +29,13 @@ export const inboxCommands = defineCommands(
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("inbox.markUnread", {
+    result: okResultSchema,
+    params: z.object({ ids: z.array(z.string()) }),
+    summary: "Mark inbox threads or activity items as unread again.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("inbox.markAllRead", {
     result: okResultSchema,
     params: z.object({ beforeTs: z.number().optional() }),
@@ -38,8 +45,15 @@ export const inboxCommands = defineCommands(
   }),
   defineCommand("inbox.archive", {
     result: okResultSchema,
+    params: z.object({ threadId: z.string().optional(), threadIds: z.array(z.string()).optional() }),
+    summary: "Archive one inbox thread (threadId) or several at once (threadIds) so they leave the Inbox tab.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("inbox.unarchive", {
+    result: okResultSchema,
     params: z.object({ threadId: z.string() }),
-    summary: "Archive an inbox thread so it leaves the Inbox tab.",
+    summary: "Restore an archived inbox thread to the state and read status it had before it was archived.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),

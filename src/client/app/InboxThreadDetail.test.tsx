@@ -106,6 +106,20 @@ describe("InboxThreadDetail outbound messages", () => {
     }
   })
 
+  test("a bubble shows the full message text with its line breaks and falls back to the preview for older messages", async () => {
+    const target = thread([])
+    const [first, second] = target.messages
+    if (first === undefined || second === undefined) throw new Error("fixture needs two messages")
+    target.messages = [{ ...first, preview: "first line second line", text: "first line\nsecond line" }, second]
+    const { container, cleanup } = await mount(target)
+    try {
+      const bubbles = [...container.querySelectorAll("section[aria-label='Messages'] li p")].map((bubble) => bubble.textContent)
+      expect(bubbles).toEqual(["first line\nsecond line", "hello?"])
+    } finally {
+      await cleanup()
+    }
+  })
+
   test("a failed send shows its reason and Retry sends it again at once", async () => {
     const { container, sent, cleanup } = await mount(thread([outbound({ status: "failed", error: "Tool rejected the call" })]))
     try {

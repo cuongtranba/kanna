@@ -1,18 +1,27 @@
-import { memo, useCallback } from "react"
+import { memo, useCallback, useMemo } from "react"
 import type { InboxThread } from "../../shared/inbox/types"
 import { formatSidebarAgeLabel } from "../lib/formatters"
 import { threadPreview, threadStateDisplay } from "../lib/inboxPresentation"
-import { InboxRowShell } from "./InboxRowShell"
+import { useInboxStore } from "../stores/inboxStore"
+import { InboxRowShell, type InboxRowSelection } from "./InboxRowShell"
 
 interface Props {
   thread: InboxThread
   selected: boolean
+  checked: boolean
+  anyChecked: boolean
   now: number
   onOpen: (threadId: string) => void
 }
 
-function InboxThreadRowImpl({ thread, selected, now, onOpen }: Props) {
+function InboxThreadRowImpl({ thread, selected, checked, anyChecked, now, onOpen }: Props) {
   const handleClick = useCallback(() => onOpen(thread.id), [onOpen, thread.id])
+  const threadId = thread.id
+  const handleToggle = useCallback(() => useInboxStore.getState().toggleChecked(threadId), [threadId])
+  const selection = useMemo<InboxRowSelection>(
+    () => ({ checked, anyChecked, label: `Select thread from ${thread.sender}`, onToggle: handleToggle }),
+    [anyChecked, checked, handleToggle, thread.sender],
+  )
   return (
     <InboxRowShell
       unread={thread.unread}
@@ -24,6 +33,7 @@ function InboxThreadRowImpl({ thread, selected, now, onOpen }: Props) {
       preview={threadPreview(thread)}
       display={threadStateDisplay(thread)}
       meta={thread.messages.length > 1 ? `${String(thread.messages.length)} messages` : undefined}
+      selection={selection}
       onClick={handleClick}
     />
   )

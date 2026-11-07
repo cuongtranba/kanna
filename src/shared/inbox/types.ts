@@ -48,6 +48,7 @@ export interface InboundMessage {
   ts: number
   payload: JsonValue
   preview: string
+  text?: string
 }
 
 export interface InboxReport {
@@ -152,6 +153,7 @@ export const INBOX_DRAFT_MAX_CHARS = 4000
 export const INBOX_REPLY_MAX_CHARS = 8000
 export const INBOX_UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 export const INBOX_PREVIEW_MAX_CHARS = 160
+export const INBOX_MESSAGE_TEXT_MAX_CHARS = 4000
 export const INBOX_THREAD_MAX_MESSAGES = 50
 export const INBOX_THREAD_MAX_DRAFTS = 5
 export const INBOX_DRAFT_INSTRUCTION_MAX_CHARS = 200

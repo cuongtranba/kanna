@@ -44,6 +44,7 @@ export const inboundMessageSchema = z.object({
   ts: z.number(),
   payload: jsonValueSchema,
   preview: z.string(),
+  text: z.string().optional(),
 })
 
 const tolerantOptionalString = z.string().optional().catch(undefined)
