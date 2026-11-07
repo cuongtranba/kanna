@@ -8,32 +8,17 @@ import {
   validateInboundTarget,
 } from "../inbound/handler"
 import { WEBHOOK_FILTER_MAX_CHARS, WEBHOOK_MODEL_MAX_CHARS, type WebhookInput } from "./types"
-import { validateSlackHookFields } from "./slack"
 
 export interface WebhookModelFields {
   provider?: AgentProvider | null
   model?: string | null
 }
 
-export interface WebhookValidationOptions {
-  requireSlackSecrets?: boolean
-}
-
-function validateSlackKind(input: WebhookInput, requireSecrets: boolean): string[] {
+export function validateWebhookInput(input: WebhookInput): string[] {
   const errors: string[] = []
-  if (input.mode !== "spawn") errors.push("Slack hooks must use spawn mode")
-  if (input.filter?.trim()) errors.push("Slack hooks do not support a filter")
-  errors.push(...validateSlackHookFields(input.slack ?? {}, { requireSecrets }))
-  return errors
-}
-
-export function validateWebhookInput(input: WebhookInput, options: WebhookValidationOptions = {}): string[] {
-  const errors: string[] = []
-  const isSlack = input.kind === "slack"
   errors.push(...inboundNameErrors(input.name))
   errors.push(...validateInboundTarget(input))
-  if (isSlack) errors.push(...validateSlackKind(input, options.requireSlackSecrets ?? true))
-  errors.push(...inboundTemplateErrors(input.template, { required: !isSlack }))
+  errors.push(...inboundTemplateErrors(input.template))
   errors.push(...inboundPathErrors([input.threadKeyPath, input.senderPath]))
   errors.push(...inboundReplyHintErrors(input.replyHint))
   if ((input.filter?.length ?? 0) > WEBHOOK_FILTER_MAX_CHARS) {

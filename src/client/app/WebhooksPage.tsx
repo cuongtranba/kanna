@@ -27,8 +27,7 @@ export function WebhooksPage() {
   const handleCreate = useCallback(
     async (input: WebhookInput) => {
       const created = await sendCommandWithFeedback(socket, { type: "webhooks.create", input })
-      const reveal = revealCreatedWebhookSecret(created)
-      if (reveal) useWebhooksStore.getState().revealSecret(reveal)
+      useWebhooksStore.getState().revealSecret(revealCreatedWebhookSecret(created))
     },
     [socket],
   )
@@ -49,7 +48,7 @@ export function WebhooksPage() {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           An outside system POSTs to a webhook url with its secret. Kanna leaves a card in a chat, queues a prompt in a
-          chat, or starts a new chat. A Slack hook answers @Kanna mentions in a thread. Webhook urls are reachable wherever
+          chat, or starts a new chat. Webhook urls are reachable wherever
           Kanna is reachable.
         </p>
         {hooks.length === 0 ? (
@@ -62,7 +61,7 @@ export function WebhooksPage() {
           </div>
         )}
       </div>
-      <WebhookCreateDialog sidebarData={sidebarData} origin={origin} onCreate={handleCreate} />
+      <WebhookCreateDialog sidebarData={sidebarData} onCreate={handleCreate} />
       <WebhookSecretDialog origin={origin} />
     </div>
   )

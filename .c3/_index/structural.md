@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:f3408631240341b4a6cd521c479565fd7abd6547f6fb8207ac089d6a6784eafd -->
+<!-- hash: sha256:6d5205cc879f2ea2962a735b302b8dbbd55b0c1ddfd471fd6192fe7287ee6a0b -->
 
 ## c3-0 — Kanna (system)
 
@@ -104,7 +104,7 @@ files: src/client/components/settings/RemoteMcpSection.test.tsx, src/client/comp
 ## c3-125 — webhooks-ui (component)
 container: c3-1 | context: c3-0
 refs: ref-ws-subscription, ref-zustand-store, rule-zustand-store
-files: src/client/app/InboundHandlerFields.tsx, src/client/app/WebhookCopyButton.tsx, src/client/app/WebhookCreateDialog.store.ts, src/client/app/WebhookCreateDialog.tsx, src/client/app/WebhookGenericFields.tsx, src/client/app/WebhookRow.tsx, src/client/app/WebhookSecretDialog.tsx, src/client/app/WebhookSlackFields.tsx, src/client/app/WebhookSlackSetup.tsx, src/client/app/WebhooksPage.tsx, src/client/app/webhookCommands.test.ts, src/client/app/webhookCommands.ts, src/client/components/messages/DeliveryMessage.tsx, src/client/lib/webhookDraft.test.ts, src/client/lib/webhookDraft.ts, src/client/lib/webhookPresentation.test.ts, src/client/lib/webhookPresentation.ts, src/client/lib/webhookTargets.test.ts, src/client/lib/webhookTargets.ts, src/client/stores/webhooksStore.ts
+files: src/client/app/InboundHandlerFields.tsx, src/client/app/WebhookCopyButton.tsx, src/client/app/WebhookCreateDialog.store.ts, src/client/app/WebhookCreateDialog.tsx, src/client/app/WebhookGenericFields.tsx, src/client/app/WebhookRow.tsx, src/client/app/WebhookSecretDialog.tsx, src/client/app/WebhooksPage.tsx, src/client/app/webhookCommands.test.ts, src/client/app/webhookCommands.ts, src/client/components/messages/DeliveryMessage.tsx, src/client/lib/webhookDraft.test.ts, src/client/lib/webhookDraft.ts, src/client/lib/webhookPresentation.test.ts, src/client/lib/webhookPresentation.ts, src/client/lib/webhookTargets.test.ts, src/client/lib/webhookTargets.ts, src/client/stores/webhooksStore.ts
 
 ## c3-126 — inbox-ui (component)
 container: c3-1 | context: c3-0
@@ -324,7 +324,7 @@ files: src/ops/parity/remote-mcp-docs.test.ts, src/server/better-auth-oauth.adap
 ## c3-243 — webhooks (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-side-effect-adapter, ref-strong-typing
-files: src/server/secret-json-store.adapter.ts, src/server/test-helpers/slack-harness.ts, src/server/test-helpers/slack-hook-harness.ts, src/server/test-helpers/webhook-harness.ts, src/server/webhooks/slack/slack-api.adapter.test.ts, src/server/webhooks/slack/slack-api.adapter.ts, src/server/webhooks/slack/slack-api.ts, src/server/webhooks/slack/slack-events.test.ts, src/server/webhooks/slack/slack-events.ts, src/server/webhooks/slack/slack-http.test.ts, src/server/webhooks/slack/slack-prompt.test.ts, src/server/webhooks/slack/slack-prompt.ts, src/server/webhooks/slack/slack-service.test.ts, src/server/webhooks/slack/slack-service.ts, src/server/webhooks/slack/slack-signature.test.ts, src/server/webhooks/slack/slack-signature.ts, src/server/webhooks/slack/slack-task-tracker.ts, src/server/webhooks/slack/slack-thread-store.adapter.test.ts, src/server/webhooks/slack/slack-thread-store.adapter.ts, src/server/webhooks/slack/slack-threads.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-filter.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.test.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-response.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/slack.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
+files: src/server/secret-json-store.adapter.ts, src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-filter.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.test.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-response.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
 
 ## c3-244 — push-notifications (component)
 container: c3-2 | context: c3-0
@@ -687,8 +687,6 @@ src/client/app/WebhookCreateDialog.tsx → c3-125
 src/client/app/WebhookGenericFields.tsx → c3-125
 src/client/app/WebhookRow.tsx → c3-125
 src/client/app/WebhookSecretDialog.tsx → c3-125
-src/client/app/WebhookSlackFields.tsx → c3-125
-src/client/app/WebhookSlackSetup.tsx → c3-125
 src/client/app/WebhooksPage.tsx → c3-125
 src/client/app/webhookCommands.test.ts → c3-125
 src/client/app/webhookCommands.ts → c3-125
@@ -1206,25 +1204,7 @@ src/shared/remote-mcp/topics.ts → c3-242
 src/shared/settings/remote-mcp.test.ts → c3-242
 src/shared/settings/remote-mcp.ts → c3-242
 src/server/secret-json-store.adapter.ts → c3-243
-src/server/test-helpers/slack-harness.ts → c3-243
-src/server/test-helpers/slack-hook-harness.ts → c3-243
 src/server/test-helpers/webhook-harness.ts → c3-243
-src/server/webhooks/slack/slack-api.adapter.test.ts → c3-243
-src/server/webhooks/slack/slack-api.adapter.ts → c3-243
-src/server/webhooks/slack/slack-api.ts → c3-243
-src/server/webhooks/slack/slack-events.test.ts → c3-243
-src/server/webhooks/slack/slack-events.ts → c3-243
-src/server/webhooks/slack/slack-http.test.ts → c3-243
-src/server/webhooks/slack/slack-prompt.test.ts → c3-243
-src/server/webhooks/slack/slack-prompt.ts → c3-243
-src/server/webhooks/slack/slack-service.test.ts → c3-243
-src/server/webhooks/slack/slack-service.ts → c3-243
-src/server/webhooks/slack/slack-signature.test.ts → c3-243
-src/server/webhooks/slack/slack-signature.ts → c3-243
-src/server/webhooks/slack/slack-task-tracker.ts → c3-243
-src/server/webhooks/slack/slack-thread-store.adapter.test.ts → c3-243
-src/server/webhooks/slack/slack-thread-store.adapter.ts → c3-243
-src/server/webhooks/slack/slack-threads.ts → c3-243
 src/server/webhooks/webhook-auth.ts → c3-243
 src/server/webhooks/webhook-boot.ts → c3-243
 src/server/webhooks/webhook-delivery.test.ts → c3-243
@@ -1240,7 +1220,6 @@ src/server/webhooks/webhook-service.ts → c3-243
 src/server/webhooks/webhook-store.adapter.test.ts → c3-243
 src/server/webhooks/webhook-store.adapter.ts → c3-243
 src/server/ws-router-webhooks.ts → c3-243
-src/shared/webhooks/slack.ts → c3-243
 src/shared/webhooks/types.ts → c3-243
 src/shared/webhooks/validate.test.ts → c3-243
 src/shared/webhooks/validate.ts → c3-243

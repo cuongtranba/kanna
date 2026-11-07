@@ -8,9 +8,7 @@ import {
   type WebhookConfig,
   type WebhookDeliveryOutcome,
   type WebhookInput,
-  type WebhookKind,
   type WebhookPatch,
-  type WebhookSlackPatch,
   type WebhooksSnapshot,
   type WebhookSummary,
 } from "../../shared/webhooks/types"
@@ -26,13 +24,6 @@ import { WebhookRateLimiter, type RateDecision } from "./webhook-rate-limit"
 
 export interface StoredWebhook extends WebhookConfig {
   secret: string
-  slackBotToken?: string
-}
-
-export interface SlackCredentials {
-  signingSecret: string
-  botToken: string
-  allowedUserIds: string[]
 }
 
 export interface WebhookStorePort {
@@ -63,15 +54,6 @@ export function generateWebhookId(): string {
   return randomBytes(12).toString("base64url")
 }
 
-export function slackCredentialsOf(hook: StoredWebhook): SlackCredentials | null {
-  if (hook.kind !== "slack" || !hook.slackBotToken) return null
-  return {
-    signingSecret: hook.secret,
-    botToken: hook.slackBotToken,
-    allowedUserIds: [...(hook.slack?.allowedUserIds ?? [])],
-  }
-}
-
 const OPTIONAL_HOOK_TEXT_FIELDS = ["chatId", "projectId", "threadKeyPath", "senderPath", "replyHint", "filter"] as const
 
 type OptionalHookTextField = (typeof OPTIONAL_HOOK_TEXT_FIELDS)[number]
@@ -79,7 +61,6 @@ type OptionalHookTextField = (typeof OPTIONAL_HOOK_TEXT_FIELDS)[number]
 type OptionalHookFields = Pick<WebhookConfig, OptionalHookTextField | "handling" | "provider" | "model">
 
 interface OptionalHookSource extends Partial<Record<OptionalHookTextField, string>> {
-  kind?: WebhookKind
   handling?: InboundHandling
   provider?: AgentProvider
   model?: string
@@ -91,7 +72,7 @@ export function optionalHookFields(source: OptionalHookSource): OptionalHookFiel
     const text = source[key]?.trim()
     if (text) fields[key] = text
   }
-  if (source.kind !== "slack" && source.handling === "task") fields.handling = source.handling
+  if (source.handling === "task") fields.handling = source.handling
   const model = source.model?.trim()
   if (source.provider && model) {
     fields.provider = source.provider
@@ -100,30 +81,17 @@ export function optionalHookFields(source: OptionalHookSource): OptionalHookFiel
   return fields
 }
 
-function dedupeIds(ids: readonly string[]): string[] {
-  return [...new Set(ids.map((id) => id.trim()))]
-}
-
 function inputOf(hook: StoredWebhook): WebhookInput {
   return {
     name: hook.name,
     mode: hook.mode,
     template: hook.template,
     kind: hook.kind,
-    ...(hook.kind === "slack"
-      ? {
-          slack: {
-            allowedUserIds: hook.slack?.allowedUserIds ?? [],
-            signingSecret: hook.secret,
-            botToken: hook.slackBotToken ?? "",
-          },
-        }
-      : {}),
     ...optionalHookFields(hook),
   }
 }
 
-function configOf(hook: StoredWebhook): Omit<WebhookConfig, "slack"> {
+function configOf(hook: StoredWebhook): WebhookConfig {
   return {
     id: hook.id,
     name: hook.name,
@@ -195,34 +163,27 @@ export class WebhookRegistry {
     const filter = this.compileFilter(input.filter)
     if (!filter.ok) return { ok: false, errors: filter.errors }
     const at = this.now()
-    const slack = input.kind === "slack" ? input.slack : undefined
     const stored: StoredWebhook = {
       id: generateWebhookId(),
       name: input.name.trim(),
       enabled: true,
-      kind: slack ? "slack" : "generic",
+      kind: "generic",
       mode: input.mode,
       template: input.template.trim(),
       createdAt: at,
       updatedAt: at,
-      secret: slack ? slack.signingSecret.trim() : generateWebhookSecret(),
-      ...(slack
-        ? { slack: { allowedUserIds: dedupeIds(slack.allowedUserIds) }, slackBotToken: slack.botToken.trim() }
-        : {}),
-      ...optionalHookFields({ ...input, kind: slack ? "slack" : "generic" }),
+      secret: generateWebhookSecret(),
+      ...optionalHookFields(input),
     }
     this.hooks.set(stored.id, stored)
     this.setFilter(stored.id, filter.compiled)
     await this.persist()
-    return { ok: true, value: { hook: this.summarize(stored), secret: slack ? null : stored.secret } }
+    return { ok: true, value: { hook: this.summarize(stored), secret: stored.secret } }
   }
 
   async update(hookId: string, patch: WebhookPatch): Promise<WebhookMutation<WebhookSummary>> {
     const existing = this.hooks.get(hookId)
     if (!existing) return { ok: false, errors: ["Webhook not found"] }
-    if (patch.slack !== undefined && existing.kind !== "slack") {
-      return { ok: false, errors: ["Slack settings only apply to Slack hooks"] }
-    }
     const merged = this.applyPatch(existing, patch)
     const errors = validateWebhookInput(inputOf(merged))
     if (errors.length > 0) return { ok: false, errors }
@@ -237,9 +198,6 @@ export class WebhookRegistry {
   async rotateSecret(hookId: string): Promise<WebhookMutation<{ secret: string }>> {
     const existing = this.hooks.get(hookId)
     if (!existing) return { ok: false, errors: ["Webhook not found"] }
-    if (existing.kind === "slack") {
-      return { ok: false, errors: ["Slack hooks use the Slack signing secret; edit the hook to change it"] }
-    }
     const rotated = { ...existing, secret: generateWebhookSecret(), updatedAt: this.now() }
     this.hooks.set(hookId, rotated)
     await this.persist()
@@ -295,7 +253,7 @@ export class WebhookRegistry {
     if (patch.enabled !== undefined) next.enabled = patch.enabled
     if (patch.mode !== undefined) next.mode = patch.mode
     if (patch.template !== undefined) next.template = patch.template.trim()
-    if (patch.handling !== undefined && existing.kind !== "slack") {
+    if (patch.handling !== undefined) {
       if (patch.handling === "task") next.handling = patch.handling
       else delete next.handling
     }
@@ -305,7 +263,6 @@ export class WebhookRegistry {
     if (patch.senderPath !== undefined) setOrClear(next, "senderPath", patch.senderPath)
     if (patch.replyHint !== undefined) setOrClear(next, "replyHint", patch.replyHint)
     if (patch.filter !== undefined) setOrClear(next, "filter", patch.filter)
-    if (patch.slack !== undefined) applySlackPatch(next, patch.slack)
     if (patch.provider !== undefined || patch.model !== undefined) {
       const { provider, model } = mergeWebhookModel(existing, patch)
       delete next.provider
@@ -335,14 +292,6 @@ export class WebhookRegistry {
     const lastDelivery = this.lastDeliveries.get(hook.id)
     return {
       ...configOf(hook),
-      ...(hook.kind === "slack"
-        ? {
-            slack: {
-              allowedUserIds: [...(hook.slack?.allowedUserIds ?? [])],
-              botTokenHint: (hook.slackBotToken ?? "").slice(-SECRET_HINT_CHARS),
-            },
-          }
-        : {}),
       secretHint: hook.secret.slice(-SECRET_HINT_CHARS),
       ...(lastDelivery ? { lastDelivery } : {}),
     }
@@ -356,14 +305,6 @@ export class WebhookRegistry {
   private notify(): void {
     for (const listener of this.listeners) listener()
   }
-}
-
-function applySlackPatch(target: StoredWebhook, patch: WebhookSlackPatch): void {
-  if (patch.allowedUserIds !== undefined) target.slack = { allowedUserIds: dedupeIds(patch.allowedUserIds) }
-  const signingSecret = patch.signingSecret?.trim()
-  if (signingSecret) target.secret = signingSecret
-  const botToken = patch.botToken?.trim()
-  if (botToken) target.slackBotToken = botToken
 }
 
 function setOrClear(target: StoredWebhook, key: OptionalHookTextField, value: string | null): void {

@@ -7,9 +7,6 @@ import { WebhookRegistry, type StoredWebhook, type WebhookStorePort } from "../w
 import { WebhookService } from "../webhooks/webhook-service"
 import type { WebhookDeliveryAgent } from "../webhooks/webhook-delivery"
 import { createBusTap } from "../service-bus/event-store-tap"
-import { SlackService } from "../webhooks/slack/slack-service"
-import { SlackThreadRegistry } from "../webhooks/slack/slack-threads"
-import { createFakeSlackApi, createMemorySlackThreadStore } from "./slack-harness"
 
 export function createMemoryWebhookStore(): WebhookStorePort & { saved: StoredWebhook[] } {
   const port = {
@@ -50,10 +47,6 @@ export async function createWebhookHarness(options: { enabled?: boolean; now?: (
   const inbox = new InboxRegistry(createMemoryInboxLog(), bus, options.now)
   await inbox.initialize()
   const registry = new WebhookRegistry(createMemoryWebhookStore(), options.now)
-  const slackApi = createFakeSlackApi()
-  const threadStore = createMemorySlackThreadStore()
-  const slack = new SlackService(registry, store, agent, bus, new SlackThreadRegistry(threadStore, options.now), slackApi, options.now)
-  await slack.start()
-  const service = new WebhookService(registry, store, agent, bus, inbox, slack, options.enabled ?? true, options.now)
-  return { store, project, chat, agent, registry, service, startedChats, bus, inbox, slack, slackApi, threadStore }
+  const service = new WebhookService(registry, store, agent, bus, inbox, options.enabled ?? true, options.now)
+  return { store, project, chat, agent, registry, service, startedChats, bus, inbox }
 }

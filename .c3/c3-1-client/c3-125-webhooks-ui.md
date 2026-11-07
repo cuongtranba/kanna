@@ -1,6 +1,6 @@
 ---
 id: c3-125
-c3-seal: c53f585176989b18c9205cc4f21d17983ab701a69ce8ef0b03e3116bfd60fa01
+c3-seal: 272e4b36e8f2d044401772e03133f9f07bb78b78a6bfa102499e8514b5f66979
 title: webhooks-ui
 type: component
 category: feature
@@ -27,7 +27,7 @@ Render the inbound webhook feature in the client: a Webhooks page opened as a wo
 
 ## Purpose
 
-Lets the user create and edit hooks of two kinds chosen with a Kind control when creating (the kind cannot be changed later). A generic hook is configured in notify, inline or spawn mode; a Slack hook shows the Slack fields instead of the mode, handling, filter and mapping fields. For generic hooks the user can create and edit hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data through a searchable picker that also matches the project path, choose an optional model and a triage or run-as-task handling for inline and spawn hooks, write an optional payload filter and set the thread key path, sender path and reply hint, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. The hook row shows the last delivery, including a filtered one with its reason. It also renders the webhook_delivery card with the hook name, mode and delivery id. For a Slack hook the form takes the Signing Secret and Bot Token as password fields, the allowed Slack member IDs, an optional model and the standing instructions, and shows a collapsible Set up the Slack app guide with a copyable app manifest, the install and copy steps, the hook Request URL and the invite step, plus a warning when the page origin is not a public HTTPS URL. On edit a saved secret shows only its last four characters and a blank field keeps it. A Slack create is acked with a null secret, so no one-time secret dialog opens, and the row shows the Request URL, the allowed count and a signing secret hint, with no Rotate button because the signing secret comes from Slack. Non-goals: it never stores a secret after the dialog closes, does not compute signatures, and does not compile the filter, which only the server can check.
+Lets the user create and edit hooks in notify, inline or spawn mode, pick a target chat or project from the sidebar data through a searchable picker that also matches the project path, choose an optional model and a triage or run-as-task handling for inline and spawn hooks, write an optional payload filter and set the thread key path, sender path and reply hint, copy the hook url, enable or disable, rotate or delete a hook, and see a new or rotated secret exactly once together with ready-to-run bearer and HMAC curl commands. The hook row shows the last delivery, including a filtered one with its reason. It also renders the webhook_delivery card with the hook name, mode and delivery id. Non-goals: it never stores a secret after the dialog closes, does not compute signatures, and does not compile the filter, which only the server can check.
 
 ## Governance
 
@@ -44,8 +44,8 @@ Lets the user create and edit hooks of two kinds chosen with a Kind control when
 | --- | --- | --- | --- | --- |
 | webhooks topic | IN | WebhooksSnapshot of summaries with secretHint and last delivery | Replaced wholesale on every push | src/client/stores/webhooksStore.ts |
 | webhooks commands | OUT | create, update, delete and rotateSecret sent through runPendingAction with a key per hook | Failures surface through setCommandError; the trigger renders pending | src/client/app/WebhookRow.tsx |
-| Slack hook form | OUT | The Kind control, WebhookSlackFields, WebhookSlackSetup and WebhookGenericFields draft a WebhookInput of kind slack or generic; the draft helper buildWebhookInput turns the scoped store into the create payload and buildWebhookPatch builds the update patch, which includes a signing secret or bot token only when the user typed one | Secrets are password inputs and live in the scoped dialog store only; the saved hints come from the snapshot | src/client/lib/webhookDraft.ts |
-| One-time secret | IN | create and rotateSecret acks carry the secret; the dialog shows it and dismissing clears it from the store. A null secret, as for a Slack create, opens no dialog | The secret is never written to localStorage or a persisted layout | src/client/app/WebhookSecretDialog.tsx |
+| Hook form | OUT | WebhookGenericFields and InboundHandlerFields draft a WebhookInput; the draft helper buildWebhookInput turns the scoped store into the create payload and buildWebhookPatch builds the update patch | The draft holds no secret; the saved hint comes from the snapshot | src/client/lib/webhookDraft.ts |
+| One-time secret | IN | create and rotateSecret acks carry the secret; the dialog shows it and dismissing clears it from the store. A reply without a secret is an error, never a silent skip | The secret is never written to localStorage or a persisted layout | src/client/app/WebhookSecretDialog.tsx |
 | Delivery card | IN | webhook_delivery and inbound_delivery entries render through one DeliveryMessage as an icon, title, name, mode label, clock time and delivery id | No tinted pill pairs; mode is plain text | src/client/components/messages/DeliveryMessage.tsx |
 
 ## Derived Materials

@@ -1,12 +1,16 @@
 ---
 id: adr-20261021-slack-command-webhooks
-c3-seal: 4b4c060ad902086276fdc08c1483b6d449e6ffdbbcb62b422954c20070067134
+c3-seal: b7991558f4cc2d0f1015815441a2ec44cc7f07e10ac38ffd3b6440f82b58b508
 title: slack-command-webhooks
 type: adr
 goal: 'Record the decision to add a Slack kind of inbound webhook that lets an allowlisted Slack member drive a Kanna chat by mentioning the app in a thread, and to post the agent''s final reply back into that thread. This is a deliberate, narrow exception to adr-20261020-inbox-threads-draft-only-agent: for a Slack hook the mention is a trusted instruction and the reply is sent without a separate approval step.'
-status: accepted
+status: superseded
 date: "2026-10-21"
 ---
+
+## Superseded
+
+The built-in Slack hook kind was removed from Kanna core. Slack is now served by an external gateway, tini-works/slack-gateway, that talks to Kanna only through the remote MCP push event feed recorded in adr-20261107-remote-mcp-push-event-feed. This record stays as history of what was true on 2026-10-21; a stored hook of the removed kind is dropped when webhooks.json is parsed.
 
 ## Goal
 

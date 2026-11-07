@@ -126,7 +126,7 @@ are generated from it, so never edit the GitHub Wiki. A new MDX construct needs 
 | `/cron` | `kanna-cron` |
 | Models, providers, custom endpoints, Codex failures | `kanna-providers` |
 | Custom MCP servers, OAuth, the remote `/mcp` server | `kanna-mcp` |
-| Service bus, NATS, Inbox, webhooks, Slack | `kanna-inbox` |
+| Service bus, NATS, Inbox, webhooks | `kanna-inbox` |
 | Mermaid, Generative UI, share links | `kanna-genui` |
 | Beacon transfer, self-update, the Go port | `kanna-beacon` |
 | Boards, uploads, package auto-update, plugins | `kanna-features` |
