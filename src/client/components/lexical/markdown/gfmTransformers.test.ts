@@ -98,7 +98,7 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
   test("h1 heading", () => {
     const editor = parseMarkdown("# Hello World")
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       expect(children.length).toBeGreaterThan(0)
       const heading = children[0]
       expect($isHeadingNode(heading)).toBe(true)
@@ -111,7 +111,7 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
   test("h2 heading", () => {
     const editor = parseMarkdown("## Section")
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const heading = children[0]
       expect($isHeadingNode(heading)).toBe(true)
       if ($isHeadingNode(heading)) {
@@ -123,7 +123,7 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
   test("h3 heading", () => {
     const editor = parseMarkdown("### Sub-section")
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const heading = children[0]
       expect($isHeadingNode(heading)).toBe(true)
       if ($isHeadingNode(heading)) {
@@ -232,12 +232,12 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     const md = "- alpha\n- beta\n- gamma"
     const editor = parseMarkdown(md)
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const list = children.find($isListNode)
       expect(list).toBeDefined()
       if (list && $isListNode(list)) {
         expect(list.getListType()).toBe("bullet")
-        const items = list.getChildren<LexicalNode>().filter($isListItemNode)
+        const items = list.getChildren().filter($isListItemNode)
         expect(items.length).toBe(3)
       }
     })
@@ -248,12 +248,12 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     const md = "1. first\n2. second\n3. third"
     const editor = parseMarkdown(md)
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const list = children.find($isListNode)
       expect(list).toBeDefined()
       if (list && $isListNode(list)) {
         expect(list.getListType()).toBe("number")
-        const items = list.getChildren<LexicalNode>().filter($isListItemNode)
+        const items = list.getChildren().filter($isListItemNode)
         expect(items.length).toBe(3)
       }
     })
@@ -264,12 +264,12 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
     const md = "- [x] Done\n- [ ] Pending"
     const editor = parseMarkdown(md)
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const list = children.find($isListNode)
       expect(list).toBeDefined()
       if (list && $isListNode(list)) {
         expect(list.getListType()).toBe("check")
-        const items = list.getChildren<ListItemNode>().filter($isListItemNode)
+        const items = list.getChildren().filter($isListItemNode)
         expect(items.length).toBe(2)
         expect(items[0]?.getChecked()).toBe(true)
         expect(items[1]?.getChecked()).toBe(false)
@@ -288,17 +288,17 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
 
     const editor = parseMarkdown(md)
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       const table = children.find($isTableNode)
       expect(table).toBeDefined()
 
       if (table && $isTableNode(table)) {
-        const rows = table.getChildren<LexicalNode>().filter($isTableRowNode)
+        const rows = table.getChildren().filter($isTableRowNode)
         expect(rows.length).toBe(3)
 
         const headerRow = rows[0]
         if (headerRow && $isTableRowNode(headerRow)) {
-          const headerCells = headerRow.getChildren<LexicalNode>().filter($isTableCellNode)
+          const headerCells = headerRow.getChildren().filter($isTableCellNode)
           expect(headerCells.length).toBe(2)
           for (const cell of headerCells) {
             if ($isTableCellNode(cell)) {
@@ -309,7 +309,7 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
 
         const bodyRow1 = rows[1]
         if (bodyRow1 && $isTableRowNode(bodyRow1)) {
-          const cells = bodyRow1.getChildren<LexicalNode>().filter($isTableCellNode)
+          const cells = bodyRow1.getChildren().filter($isTableCellNode)
           expect(cells.length).toBe(2)
         }
       }
@@ -328,7 +328,7 @@ describe("KANNA_BUILTIN_TRANSFORMERS", () => {
   test("plain paragraph produces ParagraphNode", () => {
     const editor = parseMarkdown("Just a plain paragraph.")
     editor.getEditorState().read(() => {
-      const children = $getRoot().getChildren<LexicalNode>()
+      const children = $getRoot().getChildren()
       expect(children.some($isParagraphNode)).toBe(true)
     })
   })

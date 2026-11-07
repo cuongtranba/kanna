@@ -104,13 +104,13 @@ export const GFM_TABLE: MultilineElementTransformer = {
   export(node: LexicalNode, traverseChildren: (n: ElementNode) => string) {
     if (!$isTableNode(node)) return null
 
-    const rows = node.getChildren<TableRowNode>()
+    const rows = node.getChildren()
     if (rows.length === 0) return null
 
     const lines: string[] = []
     rows.forEach((row, rowIndex) => {
       if (!$isTableRowNode(row)) return
-      const cells = row.getChildren<TableCellNode>()
+      const cells = row.getChildren()
       const cellTexts = cells.map((cell) => {
         if (!$isTableCellNode(cell)) return ""
         return traverseChildren(cell).trim()
