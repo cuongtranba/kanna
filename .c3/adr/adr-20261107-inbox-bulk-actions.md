@@ -1,8 +1,9 @@
 ---
 id: adr-20261107-inbox-bulk-actions
+c3-seal: 10c815e7a6ab2e6c8f2e6b4fcc622ce007ea244edceae020f87dd8f803bdfd06
 title: inbox-bulk-actions
 type: adr
-goal: Let the user triage many Inbox threads quickly: mark a thread unread again, select several threads and act on them at once, archive with an Undo that restores the thread exactly, and read a message in full instead of its 160-character preview.
+goal: 'Let the user triage many Inbox threads quickly: mark a thread unread again, select several threads and act on them at once, archive with an Undo that restores the thread exactly, and read a message in full instead of its 160-character preview.'
 status: done
 date: "2026-11-07"
 ---
@@ -23,7 +24,7 @@ Mark unread extends inbox\_thread\_read with an optional read flag that defaults
 
 | Entity | Type | Why affected | Evidence | Governance review |
 | --- | --- | --- | --- | --- |
-| c3-247 | component | Gains the markUnread and unarchive commands, the optional read flag, the remembered archive state, multi-thread archive and the full message text | src/server/inbox/inbox-projection.ts | ref-event-sourcing: the new state is an appended event replayed at boot; ref-strong-typing: the event and the text are parsed with zod |
+| c3-247 | component | Gains the markUnread and unarchive commands, the optional read flag, the remembered archive state, multi-thread archive and the full message text | c3-247#n15615@v1:sha256:708fedcbacaa5b24fb66951f2e9b3c6209e3bb0b19f1bf0395692b4025e55279 | ref-event-sourcing: the new state is an appended event replayed at boot; ref-strong-typing: the event and the text are parsed with zod |
 
 ## Verification
 
