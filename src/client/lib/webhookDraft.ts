@@ -1,11 +1,10 @@
 import { decodeInboundModelChoice, inboundHandlerTarget, type InboundHandling } from "../../shared/inbound/handler"
 import type { ProviderCatalogEntry } from "../../shared/provider-model-types"
-import type { WebhookInput, WebhookKind, WebhookMode, WebhookPatch, WebhookSlackInput } from "../../shared/webhooks/types"
+import type { WebhookInput, WebhookMode, WebhookPatch } from "../../shared/webhooks/types"
 import { validateWebhookInput, validateWebhookModel } from "../../shared/webhooks/validate"
 
 export interface WebhookDraftFields {
   name: string
-  kind: WebhookKind
   mode: WebhookMode
   handling: InboundHandling
   chatId: string
@@ -16,48 +15,20 @@ export interface WebhookDraftFields {
   threadKeyPath: string
   senderPath: string
   replyHint: string
-  signingSecret: string
-  botToken: string
-  allowedUserIds: string
 }
 
-export function parseSlackMemberIds(text: string): string[] {
-  const ids = text
-    .split(/[\s,;]+/)
-    .map((id) => id.trim().toUpperCase())
-    .filter((id) => id.length > 0)
-  return [...new Set(ids)]
-}
-
-export function effectiveWebhookMode(draft: Pick<WebhookDraftFields, "kind" | "mode">): WebhookMode {
-  return draft.kind === "slack" ? "spawn" : draft.mode
-}
-
-export function webhookDraftStartsTurn(draft: Pick<WebhookDraftFields, "kind" | "mode">): boolean {
-  return effectiveWebhookMode(draft) !== "notify"
-}
-
-function slackInputOf(draft: WebhookDraftFields): WebhookSlackInput {
-  return {
-    allowedUserIds: parseSlackMemberIds(draft.allowedUserIds),
-    signingSecret: draft.signingSecret.trim(),
-    botToken: draft.botToken.trim(),
-  }
+export function webhookDraftStartsTurn(draft: Pick<WebhookDraftFields, "mode">): boolean {
+  return draft.mode !== "notify"
 }
 
 export function buildWebhookInput(draft: WebhookDraftFields): WebhookInput {
-  const mode = effectiveWebhookMode(draft)
   const choice = webhookDraftStartsTurn(draft) ? decodeInboundModelChoice(draft.modelValue) : null
-  const base: WebhookInput = {
-    name: draft.name,
-    mode,
-    template: draft.template,
-    ...inboundHandlerTarget(mode, draft.chatId, draft.projectId),
-    ...(choice ? { provider: choice.provider, model: choice.model } : {}),
-  }
-  if (draft.kind === "slack") return { ...base, kind: "slack", slack: slackInputOf(draft) }
   return {
-    ...base,
+    name: draft.name,
+    mode: draft.mode,
+    template: draft.template,
+    ...inboundHandlerTarget(draft.mode, draft.chatId, draft.projectId),
+    ...(choice ? { provider: choice.provider, model: choice.model } : {}),
     ...(webhookDraftStartsTurn(draft) && draft.handling === "task" ? { handling: draft.handling } : {}),
     ...(draft.filter.trim() ? { filter: draft.filter } : {}),
     ...(draft.threadKeyPath.trim() ? { threadKeyPath: draft.threadKeyPath.trim() } : {}),
@@ -67,7 +38,7 @@ export function buildWebhookInput(draft: WebhookDraftFields): WebhookInput {
 }
 
 export function buildWebhookPatch(input: WebhookInput): WebhookPatch {
-  const patch: WebhookPatch = {
+  return {
     name: input.name,
     mode: input.mode,
     template: input.template,
@@ -79,23 +50,13 @@ export function buildWebhookPatch(input: WebhookInput): WebhookPatch {
     threadKeyPath: input.threadKeyPath ?? null,
     senderPath: input.senderPath ?? null,
     replyHint: input.replyHint ?? null,
-  }
-  if (input.kind !== "slack" || !input.slack) return { ...patch, handling: input.handling ?? null }
-  const { allowedUserIds, signingSecret, botToken } = input.slack
-  return {
-    ...patch,
-    slack: {
-      allowedUserIds,
-      ...(signingSecret ? { signingSecret } : {}),
-      ...(botToken ? { botToken } : {}),
-    },
+    handling: input.handling ?? null,
   }
 }
 
 export function validateWebhookDraft(
   input: WebhookInput,
   catalog: readonly ProviderCatalogEntry[],
-  editing: boolean,
 ): string[] {
-  return [...validateWebhookInput(input, { requireSlackSecrets: !editing }), ...validateWebhookModel(input, catalog)]
+  return [...validateWebhookInput(input), ...validateWebhookModel(input, catalog)]
 }

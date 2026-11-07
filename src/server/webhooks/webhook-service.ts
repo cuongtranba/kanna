@@ -9,7 +9,6 @@ import {
 } from "./webhook-delivery"
 import type { StoredWebhook, WebhookRegistry } from "./webhook-registry"
 import { admissionResponse, jsonReject } from "./webhook-response"
-import type { SlackService } from "./slack/slack-service"
 
 const MAX_DELIVERY_ID_CHARS = 128
 const DELIVERY_ID_HEADERS = ["x-github-delivery", "idempotency-key", "x-request-id"]
@@ -37,13 +36,11 @@ export class WebhookService {
     private readonly agent: WebhookDeliveryAgent,
     private readonly bus: BusSink,
     private readonly inbox: InboxRegistry,
-    private readonly slack: SlackService,
     readonly enabled: boolean,
     private readonly now: () => number = Date.now,
   ) {}
 
   async handle(hook: StoredWebhook, headers: Headers, raw: Uint8Array): Promise<Response> {
-    if (hook.kind === "slack") return this.slack.handleRequest(hook, headers, raw)
     if (verifyWebhookRequest(hook.secret, headers, raw) !== "ok") return jsonReject(401, "unauthorized")
 
     const body = parseBody(new TextDecoder().decode(raw))

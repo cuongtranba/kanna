@@ -19,9 +19,7 @@ interface Props {
   targets: InboundTargets
   modelOptions: readonly SearchableOption[]
   modelHint: string
-  showModeControl: boolean
   startsTurn: boolean
-  targetNote?: ReactNode
   beforeModel?: ReactNode
   onModeChange: (mode: InboundHandlerMode) => void
   onChatChange: (chatId: string) => void
@@ -34,13 +32,11 @@ export function InboundHandlerFields(props: Props) {
   const modelId = `${props.idPrefix}-model`
   return (
     <>
-      {props.showModeControl ? (
-        <div className="space-y-1.5">
-          <span className="block text-sm font-medium text-foreground">Action</span>
-          <SegmentedControl value={props.mode} onValueChange={props.onModeChange} options={MODE_OPTIONS} size="sm" />
-          <p className="text-xs text-muted-foreground">{inboundModeConsequence(props.mode)}</p>
-        </div>
-      ) : null}
+      <div className="space-y-1.5">
+        <span className="block text-sm font-medium text-foreground">Action</span>
+        <SegmentedControl value={props.mode} onValueChange={props.onModeChange} options={MODE_OPTIONS} size="sm" />
+        <p className="text-xs text-muted-foreground">{inboundModeConsequence(props.mode)}</p>
+      </div>
 
       <div className="space-y-1.5">
         <label htmlFor={targetId} className="block text-sm font-medium text-foreground">
@@ -67,7 +63,6 @@ export function InboundHandlerFields(props: Props) {
             onValueChange={props.onChatChange}
           />
         )}
-        {props.targetNote}
       </div>
 
       {props.beforeModel}

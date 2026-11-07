@@ -219,7 +219,6 @@ export function McpSourceForm({ editing, servers, sidebarData, handlers }: FormP
         targets={targets}
         modelOptions={modelOptions}
         modelHint="The model the turn started by each message runs with."
-        showModeControl
         startsTurn={startsTurn}
         onModeChange={(handlerMode) => patchDraft({ handlerMode })}
         onChatChange={(chatId) => patchDraft({ chatId })}

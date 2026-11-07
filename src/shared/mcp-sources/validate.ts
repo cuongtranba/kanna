@@ -18,7 +18,7 @@ function nonEmpty(value: string): boolean {
 function validateHandler(shape: McpSourceShape): string[] {
   return [
     ...validateInboundTarget(shape.handler),
-    ...inboundTemplateErrors(shape.handler.template, { required: true }),
+    ...inboundTemplateErrors(shape.handler.template),
     ...inboundReplyHintErrors(shape.handler.replyHint),
   ]
 }

@@ -55,9 +55,9 @@ export function inboundNameErrors(name: string): string[] {
   return []
 }
 
-export function inboundTemplateErrors(template: string, options: { required: boolean }): string[] {
+export function inboundTemplateErrors(template: string): string[] {
   const trimmed = template.trim()
-  if (trimmed.length === 0) return options.required ? ["Template is required"] : []
+  if (trimmed.length === 0) return ["Template is required"]
   if (trimmed.length > INBOUND_LIMITS.templateMaxChars) {
     return [`Template must be at most ${INBOUND_LIMITS.templateMaxChars} characters`]
   }

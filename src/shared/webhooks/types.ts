@@ -3,34 +3,14 @@ import type { InboundHandlerMode, InboundHandling } from "../inbound/handler"
 
 export type WebhookMode = InboundHandlerMode
 
-export const WEBHOOK_KINDS = ["generic", "slack"] as const
+export const WEBHOOK_KINDS = ["generic"] as const
 export type WebhookKind = (typeof WEBHOOK_KINDS)[number]
-
-export interface WebhookSlackConfig {
-  allowedUserIds: string[]
-}
-
-export interface WebhookSlackSummary extends WebhookSlackConfig {
-  botTokenHint: string
-}
-
-export interface WebhookSlackInput extends WebhookSlackConfig {
-  signingSecret: string
-  botToken: string
-}
-
-export interface WebhookSlackPatch {
-  allowedUserIds?: string[]
-  signingSecret?: string
-  botToken?: string
-}
 
 export interface WebhookConfig {
   id: string
   name: string
   enabled: boolean
   kind: WebhookKind
-  slack?: WebhookSlackConfig
   mode: WebhookMode
   handling?: InboundHandling
   chatId?: string
@@ -54,8 +34,7 @@ export interface WebhookDeliveryOutcome {
   filtered?: boolean
 }
 
-export interface WebhookSummary extends Omit<WebhookConfig, "slack"> {
-  slack?: WebhookSlackSummary
+export interface WebhookSummary extends WebhookConfig {
   secretHint: string
   lastDelivery?: WebhookDeliveryOutcome
 }
@@ -67,7 +46,6 @@ export interface WebhooksSnapshot {
 export interface WebhookInput {
   name: string
   kind?: WebhookKind
-  slack?: WebhookSlackInput
   mode: WebhookMode
   handling?: InboundHandling
   chatId?: string
@@ -83,7 +61,6 @@ export interface WebhookInput {
 
 export interface WebhookPatch {
   name?: string
-  slack?: WebhookSlackPatch
   enabled?: boolean
   mode?: WebhookMode
   handling?: InboundHandling | null
