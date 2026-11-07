@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test"
 import type { BusEnvelope } from "../service-bus/envelope"
-import { describeEnvelope, previewOfPayload } from "./describe"
+import { describeEnvelope, describeMessageText } from "./describe"
 
 function envelope(subject: string, payload: BusEnvelope["payload"]): BusEnvelope {
   return {
@@ -35,7 +35,13 @@ test("a long preview is flattened and cut at 160 characters", () => {
 })
 
 test("an inbound payload previews as its text or its first readable field", () => {
-  expect(previewOfPayload("hello   world")).toBe("hello world")
-  expect(previewOfPayload({ name: "Ada", n: 1 })).toBe("Ada")
-  expect(previewOfPayload({ n: 1 })).toBe('{"n":1}')
+  expect(describeMessageText("hello   world").preview).toBe("hello world")
+  expect(describeMessageText({ name: "Ada", n: 1 }).preview).toBe("Ada")
+  expect(describeMessageText({ n: 1 }).preview).toBe('{"n":1}')
+})
+
+test("full message text keeps its line breaks and is kept only when the preview loses something", () => {
+  expect(describeMessageText("hello").text).toBeUndefined()
+  expect(describeMessageText("line one\nline two").text).toBe("line one\nline two")
+  expect(describeMessageText("x".repeat(5000)).text).toHaveLength(4000)
 })

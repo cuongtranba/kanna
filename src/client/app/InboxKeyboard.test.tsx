@@ -43,7 +43,24 @@ function PageUnderTest() {
 
 async function mount(threads: InboxThread[]) {
   const sent: string[] = []
-  const ws: WebSocketLike = { readyState: 1, send: (data) => { sent.push(data) }, close: () => {}, addEventListener: () => {} }
+  const messageHandlers: Array<(event?: Event | MessageEvent) => void> = []
+  const ackCommand = (data: string) => {
+    const envelope = JSON.parse(data)
+    if (envelope.type !== "command") return
+    const ack = new MessageEvent("message", { data: JSON.stringify({ v: 1, type: "ack", id: envelope.id, result: { ok: true } }) })
+    void Promise.resolve().then(() => messageHandlers.forEach((handler) => handler(ack)))
+  }
+  const ws: WebSocketLike = {
+    readyState: 1,
+    send: (data) => {
+      sent.push(data)
+      ackCommand(data)
+    },
+    close: () => {},
+    addEventListener: (type, handler) => {
+      if (type === "message") messageHandlers.push(handler)
+    },
+  }
   const webSocket: WebSocketPort = { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, create: () => ws }
   const socket = new KannaSocket("ws://localhost/ws", { dom: makeFakeDomPort(), timer: makeFakeTimerPort(), webSocket })
   socket.start()
@@ -85,14 +102,16 @@ afterEach(() => {
 })
 
 describe("inbox keyboard", () => {
-  test("the defaults are j k r e a", () => {
+  test("the defaults are j k r e a u x", () => {
     expect([
       DEFAULT_KEYBINDINGS.inboxNextThread,
       DEFAULT_KEYBINDINGS.inboxPrevThread,
       DEFAULT_KEYBINDINGS.inboxFocusComposer,
       DEFAULT_KEYBINDINGS.inboxArchiveThread,
       DEFAULT_KEYBINDINGS.inboxApproveProposal,
-    ]).toEqual([["j"], ["k"], ["r"], ["e"], ["a"]])
+      DEFAULT_KEYBINDINGS.inboxToggleUnread,
+      DEFAULT_KEYBINDINGS.inboxToggleSelect,
+    ]).toEqual([["j"], ["k"], ["r"], ["e"], ["a"], ["u"], ["x"]])
   })
 
   test("j and k walk the threads in the order they are listed", async () => {
@@ -134,7 +153,7 @@ describe("inbox keyboard", () => {
       await waitFor(() => selected() === "t1", 2000, "the first thread")
       await press("e")
       await waitFor(() => commands().length === 1, 2000, "the archive command")
-      expect(commands()).toEqual([{ type: "inbox.archive", threadId: "t1" }])
+      expect(commands()).toEqual([{ type: "inbox.archive", threadIds: ["t1"] }])
     } finally {
       await cleanup()
     }
@@ -188,6 +207,69 @@ describe("inbox keyboard", () => {
       await press("a")
       await waitFor(() => commands().length === 1, 2000, "the approve command")
       expect(commands()).toEqual([{ type: "inbox.approveProposal", threadId: "t2", proposalId: "p1" }])
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("u marks the open thread unread and it stays unread while open until u reads it again", async () => {
+    const { commands, cleanup } = await mount([thread("t1", 3000, { unread: true })])
+    const republish = (unread: boolean) =>
+      act(async () => {
+        useInboxStore.getState().applySnapshot({
+          threads: [thread("t1", 3000, { unread })],
+          items: [],
+          unreadCount: unread ? 1 : 0,
+          total: 1,
+        })
+      })
+    try {
+      await press("j")
+      await waitFor(() => commands().length === 1, 2000, "opening marks it read")
+      expect(commands()).toEqual([{ type: "inbox.markRead", ids: ["t1"] }])
+      await republish(false)
+      await press("u")
+      await waitFor(() => commands().length === 2, 2000, "the unread command")
+      expect(commands()[1]).toEqual({ type: "inbox.markUnread", ids: ["t1"] })
+      await republish(true)
+      await act(async () => {})
+      expect(commands()).toHaveLength(2)
+      await press("u")
+      await waitFor(() => commands().length === 3, 2000, "the read command")
+      expect(commands().map((command) => command.type)).toEqual(["inbox.markRead", "inbox.markUnread", "inbox.markRead"])
+    } finally {
+      await cleanup()
+    }
+  })
+
+  test("x selects the open thread, the bulk bar archives the selection in one command and Escape clears it before closing the thread", async () => {
+    const { container, commands, cleanup } = await mount([thread("t1", 3000), thread("t2", 2000), thread("t3", 1000)])
+    const checkbox = (sender: string) => container.querySelector<HTMLInputElement>(`input[aria-label='Select thread from ${sender}']`)
+    try {
+      await press("j")
+      await waitFor(() => selected() === "t1", 2000, "the first thread")
+      await press("x")
+      await waitFor(() => checkbox("sender-t1")?.checked === true, 2000, "the first thread checked")
+      const second = checkbox("sender-t2")
+      if (second === null) throw new Error("no checkbox on the second row")
+      await act(async () => {
+        second.click()
+      })
+      expect(container.textContent).toContain("2 selected")
+      await press("Escape", second)
+      await waitFor(() => !(container.textContent ?? "").includes("selected"), 2000, "the selection cleared")
+      expect(selected()).toBe("t1")
+      await press("x")
+      await act(async () => {
+        checkbox("sender-t3")?.click()
+      })
+      const archive = [...container.querySelectorAll("[role='toolbar'] button")].find((button) => button.textContent?.trim() === "Archive")
+      if (archive === undefined) throw new Error("no bulk archive button")
+      await act(async () => {
+        archive.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      })
+      await waitFor(() => commands().length === 1, 2000, "the bulk archive command")
+      expect(commands()).toEqual([{ type: "inbox.archive", threadIds: ["t1", "t3"] }])
     } finally {
       await cleanup()
     }

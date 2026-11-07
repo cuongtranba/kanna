@@ -266,6 +266,11 @@ not an implementation detail.
   source handler's `pushEnabled`. Day labels come from the store's
   `snapshotAt`, because `Date.now()` in render fails the purity lint — a
   "Today" label can go stale across midnight until the next snapshot.
+- **Read state, archive/unarchive and the full message text each have one
+  owner** (optional `read` flag on `inbox_thread_read`, `archivedFrom` in the
+  projection, `describeMessageText`). Read
+  [references/read-archive-text.md](references/read-archive-text.md) before
+  touching mark unread, `inbox.archive` params, Undo or the bulk selection.
 
 ## MCP sources — Kanna as a long-lived MCP client that feeds the Inbox
 

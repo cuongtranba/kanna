@@ -74,11 +74,20 @@ async function run(
     case "inbox.markRead":
       await registry.markRead(command.ids)
       return ackResult(id, command, { ok: true })
+    case "inbox.markUnread":
+      await registry.markUnread(command.ids)
+      return ackResult(id, command, { ok: true })
     case "inbox.markAllRead":
       await registry.markAllRead(command.beforeTs)
       return ackResult(id, command, { ok: true })
-    case "inbox.archive":
-      await registry.archive(requireId(command.threadId, "threadId"))
+    case "inbox.archive": {
+      const threadIds = [...(command.threadId === undefined ? [] : [command.threadId]), ...(command.threadIds ?? [])]
+      if (threadIds.length === 0) throw new Error("threadId or threadIds is required")
+      for (const threadId of new Set(threadIds)) await registry.archive(requireId(threadId, "threadId"))
+      return ackResult(id, command, { ok: true })
+    }
+    case "inbox.unarchive":
+      await registry.unarchive(requireId(command.threadId, "threadId"))
       return ackResult(id, command, { ok: true })
     case "inbox.muteSender":
       await registry.setSenderMuted(requireId(command.threadId, "threadId"), command.muted)

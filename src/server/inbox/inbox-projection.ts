@@ -7,6 +7,7 @@ import {
   INBOX_UNREAD_KEEP_MS,
   type InboxActivityItem,
   type InboxThread,
+  type InboxThreadState,
 } from "../../shared/inbox/types"
 
 export interface InboxState {
@@ -15,10 +16,16 @@ export interface InboxState {
   pendingSince: Map<string, number>
   pendingInstruction: Map<string, string>
   mutedSenders: Set<string>
+  archivedFrom: Map<string, ArchivedFrom>
+}
+
+interface ArchivedFrom {
+  state: Exclude<InboxThreadState, "archived">
+  unread: boolean
 }
 
 export function createInboxState(): InboxState {
-  return { threads: new Map(), items: [], pendingSince: new Map(), pendingInstruction: new Map(), mutedSenders: new Set() }
+  return { threads: new Map(), items: [], pendingSince: new Map(), pendingInstruction: new Map(), mutedSenders: new Set(), archivedFrom: new Map() }
 }
 
 export function threadLookupKey(sourceKind: string, sourceId: string, threadKey: string): string {
@@ -85,6 +92,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       if (thread.messages.length > INBOX_THREAD_MAX_MESSAGES) {
         thread.messages.splice(0, thread.messages.length - INBOX_THREAD_MAX_MESSAGES)
       }
+      state.archivedFrom.delete(thread.id)
       thread.state = "new"
       thread.unread = !thread.muted
       thread.lastMessageAt = event.message.ts
@@ -127,12 +135,13 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       return
     }
     case "inbox_thread_read": {
+      const read = event.read ?? true
       for (const id of event.ids) {
         const thread = state.threads.get(id)
-        if (thread) thread.unread = false
+        if (thread) thread.unread = !read && thread.state !== "archived" && !thread.muted
       }
       for (const item of state.items) {
-        if (event.ids.includes(item.id)) item.unread = false
+        if (event.ids.includes(item.id)) item.unread = !read && item.attention
       }
       return
     }
@@ -157,10 +166,20 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
     }
     case "inbox_thread_archived": {
       const thread = state.threads.get(event.threadId)
-      if (!thread) return
+      if (!thread || thread.state === "archived") return
+      state.archivedFrom.set(thread.id, { state: thread.state, unread: thread.unread })
       thread.state = "archived"
       thread.unread = false
       clearPending(state, thread)
+      return
+    }
+    case "inbox_thread_unarchived": {
+      const thread = state.threads.get(event.threadId)
+      const restored = state.archivedFrom.get(event.threadId)
+      if (!thread || thread.state !== "archived" || restored === undefined) return
+      state.archivedFrom.delete(thread.id)
+      thread.state = restored.state
+      thread.unread = restored.unread && !thread.muted
       return
     }
     case "inbox_thread_outbound_queued": {
@@ -256,6 +275,7 @@ export function trimInboxState(state: InboxState, now: number): Set<string> {
       state.threads.delete(oldestThread.id)
       state.pendingSince.delete(oldestThread.id)
       state.pendingInstruction.delete(oldestThread.id)
+      state.archivedFrom.delete(oldestThread.id)
       dropped.add(oldestThread.id)
     } else {
       break
@@ -276,6 +296,7 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_draft_added":
     case "inbox_thread_replied":
     case "inbox_thread_archived":
+    case "inbox_thread_unarchived":
     case "inbox_thread_outbound_queued":
     case "inbox_thread_outbound_settled":
     case "inbox_thread_autonomy_set":

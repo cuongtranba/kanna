@@ -968,6 +968,8 @@ c3-126:
   - src/client/lib/inboxAutonomy.ts
   - src/client/lib/inboxKeyboard.ts
   - src/client/lib/inboxActions.ts
+  - src/client/lib/inboxToast.ts
+  - src/client/app/InboxBulkBar.tsx
   - src/client/app/useInboxKeyboard.ts
 c3-248:
   - src/shared/mcp-sources/*.ts

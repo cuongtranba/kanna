@@ -3,7 +3,7 @@ import { toError } from "../../shared/errors"
 import { isInboxInstructScheduleId } from "../../shared/inbound/handler-turn"
 import { INBOX_PROPOSAL_REASON_MAX_CHARS, type InboxAutonomyLevel } from "../../shared/inbox/autonomy"
 import type { InboxEvent, InboxQueuedOutbound } from "../../shared/inbox/events"
-import { describeEnvelope, previewOfPayload } from "../../shared/inbox/describe"
+import { describeEnvelope, describeMessageText } from "../../shared/inbox/describe"
 import { inboxItemMatchesFilter, inboxThreadMatchesFilter, isAttention } from "../../shared/inbox/policy"
 import {
   INBOX_DRAFT_INSTRUCTION_MAX_CHARS,
@@ -206,7 +206,7 @@ export class InboxRegistry {
       deliveryId: meta.deliveryId,
       ts: envelope.ts,
       payload: envelope.payload,
-      preview: previewOfPayload(meta.text ?? envelope.payload),
+      ...describeMessageText(meta.text ?? envelope.payload),
     }
     const thread = existing ?? null
     this.record({
@@ -359,6 +359,13 @@ export class InboxRegistry {
     await this.flush()
   }
 
+  async markUnread(ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) return
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_read", ids: [...ids], read: false })
+    this.publishInbox("unread", { ids: [...ids] })
+    await this.flush()
+  }
+
   async markAllRead(beforeTs: number = this.now()): Promise<void> {
     this.record({ v: 1, ts: this.now(), kind: "inbox_all_read", beforeTs })
     this.publishInbox("read", { beforeTs })
@@ -402,6 +409,13 @@ export class InboxRegistry {
     if (!this.state.threads.has(threadId)) return
     this.record({ v: 1, ts: this.now(), kind: "inbox_thread_archived", threadId })
     this.publishInbox("archived", { threadId })
+    await this.flush()
+  }
+
+  async unarchive(threadId: string): Promise<void> {
+    if (this.state.threads.get(threadId)?.state !== "archived") return
+    this.record({ v: 1, ts: this.now(), kind: "inbox_thread_unarchived", threadId })
+    this.publishInbox("unarchived", { threadId })
     await this.flush()
   }
 

@@ -1,35 +1,10 @@
 import { useEffect, useRef } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import type { InboxThread } from "../../shared/inbox/types"
-import { runDetached } from "../lib/runDetached"
+import { sonnerInboxToastPort, type InboxToastPort } from "../lib/inboxToast"
 import { selectInboxThreads, selectSnapshotAt, useInboxStore } from "../stores/inboxStore"
 
-export interface InboxToastRequest {
-  title: string
-  description: string
-  actionLabel: string
-  onAction: () => void
-}
-
-export interface InboxToastPort {
-  show(request: InboxToastRequest): void
-}
-
 export const MAX_INBOX_TOASTS = 3
-
-export const sonnerInboxToastPort: InboxToastPort = {
-  show(request) {
-    runDetached(
-      "inbox toast",
-      import("sonner").then(({ toast }) => {
-        toast(request.title, {
-          description: request.description,
-          action: { label: request.actionLabel, onClick: request.onAction },
-        })
-      }),
-    )
-  },
-}
 
 function needsYouIds(threads: readonly InboxThread[]): Set<string> {
   return new Set(threads.filter((thread) => thread.state === "needs_you").map((thread) => thread.id))

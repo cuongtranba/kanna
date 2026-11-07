@@ -8,6 +8,7 @@ const EMPTY_ITEMS: readonly InboxActivityItem[] = []
 const EMPTY_DRAFTS: Readonly<Record<string, ReplyDraftState>> = {}
 const NO_RAW_OPEN: Readonly<Record<string, true>> = {}
 const NO_RETRY_CONFIRMS: Readonly<Record<string, true>> = {}
+const NO_CHECKED: Readonly<Record<string, true>> = {}
 
 export interface ReplyDraftState {
   text?: string
@@ -31,6 +32,8 @@ interface InboxState {
   searchQuery: string
   shortcutsOpen: boolean
   selectedThreadId: string | null
+  checked: Readonly<Record<string, true>>
+  keepUnreadId: string | null
   replyDrafts: Readonly<Record<string, ReplyDraftState>>
   olderExhausted: boolean
   rawOpen: Readonly<Record<string, true>>
@@ -51,6 +54,10 @@ interface InboxState {
   setProjectFilter(projectId: string | null): void
   setChatFilter(chatId: string | null): void
   select(threadId: string | null): void
+  holdUnread(threadId: string): void
+  toggleChecked(threadId: string): void
+  pruneChecked(visibleThreadIds: ReadonlySet<string>): void
+  clearChecked(): boolean
   setReplyDraft(threadId: string, text: string): void
   loadDraftVersion(threadId: string, draft: InboxDraft): void
   settleReplyDraft(threadId: string, latestDraftId: string | undefined): void
@@ -109,6 +116,8 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
   searchQuery: "",
   shortcutsOpen: false,
   selectedThreadId: null,
+  checked: NO_CHECKED,
+  keepUnreadId: null,
   replyDrafts: EMPTY_DRAFTS,
   olderExhausted: false,
   rawOpen: NO_RAW_OPEN,
@@ -143,7 +152,26 @@ export const useInboxStore = create<InboxState>()((set, get) => ({
     set((state) => refined(state, { sourceKind: state.filter.sourceKind === kind ? undefined : kind })),
   setProjectFilter: (projectId) => set((state) => refined(state, { projectId: projectId ?? undefined })),
   setChatFilter: (chatId) => set((state) => refined(state, { chatId: chatId ?? undefined })),
-  select: (selectedThreadId) => set({ selectedThreadId }),
+  select: (selectedThreadId) =>
+    set((state) => (state.selectedThreadId === selectedThreadId ? state : { selectedThreadId, keepUnreadId: null })),
+  holdUnread: (keepUnreadId) => set({ keepUnreadId }),
+  toggleChecked: (threadId) =>
+    set((state) => {
+      if (state.checked[threadId]) return { checked: omitKeyOrEmpty(state.checked, threadId, NO_CHECKED) }
+      return { checked: { ...state.checked, [threadId]: true } }
+    }),
+  pruneChecked: (visibleThreadIds) =>
+    set((state) => {
+      const ids = Object.keys(state.checked)
+      const kept = ids.filter((id) => visibleThreadIds.has(id))
+      if (kept.length === ids.length) return state
+      return { checked: kept.length === 0 ? NO_CHECKED : Object.fromEntries(kept.map((id) => [id, true as const])) }
+    }),
+  clearChecked: () => {
+    const hadChecked = Object.keys(get().checked).length > 0
+    if (hadChecked) set({ checked: NO_CHECKED })
+    return hadChecked
+  },
   setReplyDraft: (threadId, text) =>
     set((state) => ({ replyDrafts: { ...state.replyDrafts, [threadId]: { ...state.replyDrafts[threadId], text } } })),
   loadDraftVersion: (threadId, draft) =>
@@ -199,6 +227,8 @@ export const selectQuickFilter = (state: InboxState) => state.quickFilter
 export const selectSearchQuery = (state: InboxState) => state.searchQuery
 export const selectShortcutsOpen = (state: InboxState) => state.shortcutsOpen
 export const selectSelectedThreadId = (state: InboxState) => state.selectedThreadId
+export const selectCheckedThreads = (state: InboxState) => state.checked
+export const selectKeepUnreadId = (state: InboxState) => state.keepUnreadId
 export const selectOlderExhausted = (state: InboxState) => state.olderExhausted
 
 export function selectSelectedThread(state: InboxState): InboxThread | null {

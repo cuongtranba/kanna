@@ -4,7 +4,8 @@ import { MemoryRouter } from "react-router-dom"
 import type { InboxSnapshot, InboxThread, InboxThreadState } from "../../shared/inbox/types"
 import { renderClientMarkup } from "../lib/testing/renderClientMarkup"
 import { useInboxStore } from "../stores/inboxStore"
-import { MAX_INBOX_TOASTS, useInboxToasts, type InboxToastPort, type InboxToastRequest } from "./useInboxToasts"
+import type { InboxToastPort, InboxToastRequest } from "../lib/inboxToast"
+import { MAX_INBOX_TOASTS, useInboxToasts } from "./useInboxToasts"
 
 function thread(id: string, state: InboxThreadState = "needs_you"): InboxThread {
   return {

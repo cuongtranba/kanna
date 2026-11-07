@@ -43,10 +43,11 @@ export type InboxEvent =
   | (InboxEventBase & { kind: "inbox_thread_reported"; threadId: string; report: InboxReport })
   | (InboxEventBase & { kind: "inbox_thread_pending"; threadId: string; scheduleId: string; instruction?: string })
   | (InboxEventBase & { kind: "inbox_thread_draft_added"; threadId: string; draft: InboxDraft })
-  | (InboxEventBase & { kind: "inbox_thread_read"; ids: string[] })
+  | (InboxEventBase & { kind: "inbox_thread_read"; ids: string[]; read?: boolean })
   | (InboxEventBase & { kind: "inbox_all_read"; beforeTs: number })
   | (InboxEventBase & { kind: "inbox_thread_replied"; threadId: string; chatId: string; scheduleId: string })
   | (InboxEventBase & { kind: "inbox_thread_archived"; threadId: string })
+  | (InboxEventBase & { kind: "inbox_thread_unarchived"; threadId: string })
   | (InboxEventBase & { kind: "inbox_thread_outbound_queued"; threadId: string; outbound: InboxQueuedOutbound })
   | (InboxEventBase & { kind: "inbox_thread_autonomy_set"; threadId: string; level: InboxAutonomyLevel | null })
   | (InboxEventBase & { kind: "inbox_thread_agent_paused"; threadId: string; until: number | null })
@@ -92,7 +93,7 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     instruction: z.string().optional(),
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_draft_added"), threadId: z.string(), draft: inboxDraftSchema }),
-  z.object({ ...eventBase, kind: z.literal("inbox_thread_read"), ids: z.array(z.string()) }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_read"), ids: z.array(z.string()), read: z.boolean().optional() }),
   z.object({ ...eventBase, kind: z.literal("inbox_all_read"), beforeTs: z.number() }),
   z.object({
     ...eventBase,
@@ -102,6 +103,7 @@ const inboxEventSchema = z.discriminatedUnion("kind", [
     scheduleId: z.string(),
   }),
   z.object({ ...eventBase, kind: z.literal("inbox_thread_archived"), threadId: z.string() }),
+  z.object({ ...eventBase, kind: z.literal("inbox_thread_unarchived"), threadId: z.string() }),
   z.object({
     ...eventBase,
     kind: z.literal("inbox_thread_outbound_queued"),

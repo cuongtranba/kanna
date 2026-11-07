@@ -1,5 +1,6 @@
 import type { KeybindingAction } from "../../shared/app-settings-types"
 import type { InboxRecord } from "./inboxFilter"
+import { isTypingTarget } from "../components/panes/paneKeyboard"
 import { KEYBINDING_ACTION_LABELS } from "./keybindings"
 
 export type InboxKeyCommand =
@@ -7,6 +8,8 @@ export type InboxKeyCommand =
   | "prevThread"
   | "focusComposer"
   | "archiveThread"
+  | "toggleUnread"
+  | "toggleSelect"
   | "approveProposal"
   | "closeThread"
   | "focusSearch"
@@ -17,6 +20,8 @@ export const INBOX_KEY_COMMANDS: ReadonlyArray<readonly [KeybindingAction, Inbox
   ["inboxPrevThread", "prevThread"],
   ["inboxFocusComposer", "focusComposer"],
   ["inboxArchiveThread", "archiveThread"],
+  ["inboxToggleUnread", "toggleUnread"],
+  ["inboxToggleSelect", "toggleSelect"],
   ["inboxApproveProposal", "approveProposal"],
   ["inboxCloseThread", "closeThread"],
   ["inboxFocusSearch", "focusSearch"],
@@ -35,4 +40,10 @@ export function adjacentThreadId(records: readonly InboxRecord[], selectedId: st
 
 export function inboxShortcutLabel(action: KeybindingAction): string {
   return KEYBINDING_ACTION_LABELS[action].replace(/^Inbox: /, "")
+}
+
+export function isInboxTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  if (target instanceof HTMLInputElement && target.type === "checkbox") return false
+  return isTypingTarget(target)
 }
