@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.102.0](https://github.com/cuongtranba/kanna/compare/v1.101.0...v1.102.0) (2026-11-07)
+
+
+### Features
+
+* **inbox:** redesign the Inbox list and thread view like a chat app ([#1439](https://github.com/cuongtranba/kanna/issues/1439)) ([ff4c26b](https://github.com/cuongtranba/kanna/commit/ff4c26b86e278ba05bc445f24d0612ea2446ccbb))
+
 ## [1.101.0](https://github.com/cuongtranba/kanna/compare/v1.100.4...v1.101.0) (2026-11-07)
 
 
