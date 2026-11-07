@@ -92,6 +92,7 @@ export function scriptedHost(snapshots: ServerEnvelope[], ack: ServerEnvelope = 
     reads: () => reads,
     host: {
       pollIntervalMs: 5,
+      store: { listPendingChatTools: () => [] },
       dispatchCommand: async (command: ClientCommand): Promise<ServerEnvelope> => {
         sent.push(command)
         return ack

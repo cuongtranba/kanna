@@ -1,12 +1,19 @@
 import { isJsonObject, type JsonPrimitive, type JsonValue } from "../../shared/json"
 import type { ClientCommand, ServerEnvelope, ServerSnapshot, SubscriptionTopic } from "../../shared/protocol"
-import type { ChatSnapshot, SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../shared/types"
+import type { ChatSnapshot, InteractiveToolKind, SidebarChatRow, SidebarData, SidebarProjectGroup } from "../../shared/types"
 import type { TranscriptEntry } from "../../shared/transcript-types"
+import type { EventStore } from "../event-store"
+import type { PendingChatTool } from "../events"
 import { toJsonValue } from "../json-boundary"
 import { fail, ok, type ToolResult } from "../kanna-mcp-tool"
 import type { RemoteMcpHost } from "./remote-mcp-server"
 
 const MAX_SUMMARY_CHARS = 160
+
+const INTERACTIVE_TOOL_NAMES: Record<InteractiveToolKind, string> = {
+  ask_user_question: "AskUserQuestion",
+  exit_plan_mode: "ExitPlanMode",
+}
 
 export type CommandRunner = Pick<RemoteMcpHost, "dispatchCommand">
 export type SnapshotReader = Pick<RemoteMcpHost, "readSnapshot">
@@ -199,24 +206,26 @@ export function flattenEntries(entries: readonly TranscriptEntry[]): EntryView[]
   return views
 }
 
-export function pendingToolRequests(entries: readonly TranscriptEntry[]): PendingRequestView[] {
+export interface InteractiveToolSource {
+  store: Pick<EventStore, "listPendingChatTools">
+}
+
+export function pendingToolRequests(
+  entries: readonly TranscriptEntry[],
+  interactive: readonly PendingChatTool[],
+): PendingRequestView[] {
   const resolved = new Set<string>()
-  const answeredToolUses = new Set<string>()
   for (const entry of entries) {
     if (entry.kind === "tool_request_resolved") resolved.add(entry.toolRequestId)
-    if (entry.kind === "tool_result") answeredToolUses.add(entry.toolId)
   }
   const pending: PendingRequestView[] = []
   for (const entry of entries) {
     if (entry.kind === "pending_tool_request" && !resolved.has(entry.toolRequestId)) {
       pending.push({ kind: "tool_request", toolRequestId: entry.toolRequestId, tool: entry.toolName, input: entry.arguments })
     }
-    if (entry.kind !== "tool_call") continue
-    const { tool } = entry
-    const interactive = tool.toolKind === "ask_user_question" || tool.toolKind === "exit_plan_mode"
-    if (interactive && !answeredToolUses.has(tool.toolId)) {
-      pending.push({ kind: "interactive_tool", toolUseId: tool.toolId, tool: tool.toolName, input: toJsonValue(tool.input) })
-    }
+  }
+  for (const tool of interactive) {
+    pending.push({ kind: "interactive_tool", toolUseId: tool.toolUseId, tool: INTERACTIVE_TOOL_NAMES[tool.toolKind], input: tool.input })
   }
   return pending
 }

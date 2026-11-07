@@ -46,6 +46,8 @@ export const STORE_EVENT_SUBJECT = {
   subagent_tool_resolved: BUS_SUBJECT_SUFFIX.subagentToolResolved,
   subagent_message_delta: null,
   subagent_entry_appended: null,
+  chat_tool_pending: BUS_SUBJECT_SUFFIX.chatToolPending,
+  chat_tool_resolved: BUS_SUBJECT_SUFFIX.chatToolResolved,
   tool_request_put: BUS_SUBJECT_SUFFIX.toolRequestPut,
   tool_request_resolved: BUS_SUBJECT_SUFFIX.toolRequestResolved,
   auto_continue_proposed: BUS_SUBJECT_SUFFIX.autocontinueProposed,
@@ -129,6 +131,9 @@ export function storeEventEntityId(event: StoreEvent): string {
     case "subagent_tool_pending":
     case "subagent_tool_resolved":
       return event.runId
+    case "chat_tool_pending":
+    case "chat_tool_resolved":
+      return event.toolUseId
     case "chat_task_created":
     case "chat_task_updated":
     case "chat_task_deleted":

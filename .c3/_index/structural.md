@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:8b9e3114056c4024fc55b930bf0a05df619949070b4d4a7effac28a3cc976ad0 -->
+<!-- hash: sha256:8799db3a1f80e2255d3dca6c88f8b09a8fd745d36da978f5192a055a3c51ea25 -->
 
 ## c3-0 — Kanna (system)
 
@@ -109,7 +109,7 @@ files: src/client/app/InboundHandlerFields.tsx, src/client/app/WebhookCopyButton
 ## c3-126 — inbox-ui (component)
 container: c3-1 | context: c3-0
 refs: ref-strong-typing, ref-ws-subscription, ref-zustand-store, rule-zustand-store
-files: src/client/app/InboxActivityRow.tsx, src/client/app/InboxAskControls.tsx, src/client/app/InboxAutonomy.test.tsx, src/client/app/InboxAutonomyControls.tsx, src/client/app/InboxFilterBar.tsx, src/client/app/InboxKeyboard.test.tsx, src/client/app/InboxOutboundEntry.tsx, src/client/app/InboxPage.test.tsx, src/client/app/InboxPage.tsx, src/client/app/InboxProposalCard.tsx, src/client/app/InboxReplyComposer.test.tsx, src/client/app/InboxReplyComposer.tsx, src/client/app/InboxThreadDetail.test.tsx, src/client/app/InboxThreadDetail.tsx, src/client/app/InboxThreadRow.tsx, src/client/app/useInboxKeyboard.ts, src/client/app/useInboxToasts.test.tsx, src/client/app/useInboxToasts.ts, src/client/lib/inboxActions.ts, src/client/lib/inboxAutonomy.ts, src/client/lib/inboxFilter.test.ts, src/client/lib/inboxFilter.ts, src/client/lib/inboxKeyboard.ts, src/client/lib/inboxPresentation.test.ts, src/client/lib/inboxPresentation.ts, src/client/stores/inboxStore.test.ts, src/client/stores/inboxStore.ts
+files: src/client/app/InboxActivityRow.tsx, src/client/app/InboxAskControls.tsx, src/client/app/InboxAutonomy.test.tsx, src/client/app/InboxAutonomyControls.tsx, src/client/app/InboxBulkBar.tsx, src/client/app/InboxFilterBar.tsx, src/client/app/InboxKeyboard.test.tsx, src/client/app/InboxOutboundEntry.tsx, src/client/app/InboxPage.test.tsx, src/client/app/InboxPage.tsx, src/client/app/InboxProposalCard.tsx, src/client/app/InboxReplyComposer.test.tsx, src/client/app/InboxReplyComposer.tsx, src/client/app/InboxSnoozeMenu.tsx, src/client/app/InboxSnoozedNotice.tsx, src/client/app/InboxThreadDetail.test.tsx, src/client/app/InboxThreadDetail.tsx, src/client/app/InboxThreadRow.tsx, src/client/app/useInboxKeyboard.ts, src/client/app/useInboxToasts.test.tsx, src/client/app/useInboxToasts.ts, src/client/lib/inboxActions.test.ts, src/client/lib/inboxActions.ts, src/client/lib/inboxAutonomy.ts, src/client/lib/inboxFilter.test.ts, src/client/lib/inboxFilter.ts, src/client/lib/inboxKeyboard.ts, src/client/lib/inboxPresentation.test.ts, src/client/lib/inboxPresentation.ts, src/client/lib/inboxSnooze.test.ts, src/client/lib/inboxSnooze.ts, src/client/lib/inboxToast.ts, src/client/stores/inboxStore.test.ts, src/client/stores/inboxStore.ts
 
 ## c3-2 — Server (container)
 context: c3-0
@@ -163,7 +163,7 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/sdk-tool.ts
+files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/chat-tool-events.test.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/parking-claude-session.ts, src/server/test-helpers/sdk-tool.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -343,7 +343,7 @@ files: src/client/app/ServiceBusConsumersGroup.tsx, src/client/app/ServiceBusEmb
 ## c3-247 — inbox (component)
 container: c3-2 | context: c3-0
 refs: ref-event-sourcing, ref-side-effect-adapter, ref-strong-typing
-files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbound/referenced-chat-ids.test.ts, src/server/inbound/referenced-chat-ids.ts, src/server/inbox/inbox-autonomy.test.ts, src/server/inbox/inbox-autonomy.ts, src/server/inbox/inbox-autopilot.test.ts, src/server/inbox/inbox-autopilot.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-push.test.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/inbox/proposal-approve-http.test.ts, src/server/inbox/proposal-approve-http.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler-turn.test.ts, src/shared/inbound/handler-turn.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/autonomy.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/outbound-text.test.ts, src/shared/inbox/outbound-text.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/push.ts, src/shared/inbox/quick-prompts.ts, src/shared/inbox/types.ts
+files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-inbound.ts, src/server/inbound/inbox-reply.test.ts, src/server/inbound/inbox-reply.ts, src/server/inbound/referenced-chat-ids.test.ts, src/server/inbound/referenced-chat-ids.ts, src/server/inbox/inbox-autonomy.test.ts, src/server/inbox/inbox-autonomy.ts, src/server/inbox/inbox-autopilot.test.ts, src/server/inbox/inbox-autopilot.ts, src/server/inbox/inbox-boot.ts, src/server/inbox/inbox-log.adapter.test.ts, src/server/inbox/inbox-log.adapter.ts, src/server/inbox/inbox-outbox.test.ts, src/server/inbox/inbox-outbox.ts, src/server/inbox/inbox-projection.ts, src/server/inbox/inbox-push.test.ts, src/server/inbox/inbox-registry.test.ts, src/server/inbox/inbox-registry.ts, src/server/inbox/inbox-snooze-waker.test.ts, src/server/inbox/inbox-snooze-waker.ts, src/server/inbox/proposal-approve-http.test.ts, src/server/inbox/proposal-approve-http.ts, src/server/kanna-mcp-inbox.test.ts, src/server/kanna-mcp-inbox.ts, src/server/ws-router-inbox.ts, src/shared/inbound/handler-turn.test.ts, src/shared/inbound/handler-turn.ts, src/shared/inbound/handler.ts, src/shared/inbound/reply-args.test.ts, src/shared/inbound/reply-args.ts, src/shared/inbound/reply-prompt.test.ts, src/shared/inbound/reply-prompt.ts, src/shared/inbound/template.test.ts, src/shared/inbound/template.ts, src/shared/inbox/autonomy.ts, src/shared/inbox/describe.test.ts, src/shared/inbox/describe.ts, src/shared/inbox/events.ts, src/shared/inbox/outbound-text.test.ts, src/shared/inbox/outbound-text.ts, src/shared/inbox/policy.test.ts, src/shared/inbox/policy.ts, src/shared/inbox/push.ts, src/shared/inbox/quick-prompts.ts, src/shared/inbox/types.ts
 
 ## c3-248 — mcp-sources (component)
 container: c3-2 | context: c3-0
@@ -704,6 +704,7 @@ src/client/app/InboxActivityRow.tsx → c3-126
 src/client/app/InboxAskControls.tsx → c3-126
 src/client/app/InboxAutonomy.test.tsx → c3-126
 src/client/app/InboxAutonomyControls.tsx → c3-126
+src/client/app/InboxBulkBar.tsx → c3-126
 src/client/app/InboxFilterBar.tsx → c3-126
 src/client/app/InboxKeyboard.test.tsx → c3-126
 src/client/app/InboxOutboundEntry.tsx → c3-126
@@ -712,12 +713,15 @@ src/client/app/InboxPage.tsx → c3-126
 src/client/app/InboxProposalCard.tsx → c3-126
 src/client/app/InboxReplyComposer.test.tsx → c3-126
 src/client/app/InboxReplyComposer.tsx → c3-126
+src/client/app/InboxSnoozeMenu.tsx → c3-126
+src/client/app/InboxSnoozedNotice.tsx → c3-126
 src/client/app/InboxThreadDetail.test.tsx → c3-126
 src/client/app/InboxThreadDetail.tsx → c3-126
 src/client/app/InboxThreadRow.tsx → c3-126
 src/client/app/useInboxKeyboard.ts → c3-126
 src/client/app/useInboxToasts.test.tsx → c3-126
 src/client/app/useInboxToasts.ts → c3-126
+src/client/lib/inboxActions.test.ts → c3-126
 src/client/lib/inboxActions.ts → c3-126
 src/client/lib/inboxAutonomy.ts → c3-126
 src/client/lib/inboxFilter.test.ts → c3-126
@@ -725,6 +729,9 @@ src/client/lib/inboxFilter.ts → c3-126
 src/client/lib/inboxKeyboard.ts → c3-126
 src/client/lib/inboxPresentation.test.ts → c3-126
 src/client/lib/inboxPresentation.ts → c3-126
+src/client/lib/inboxSnooze.test.ts → c3-126
+src/client/lib/inboxSnooze.ts → c3-126
+src/client/lib/inboxToast.ts → c3-126
 src/client/stores/inboxStore.test.ts → c3-126
 src/client/stores/inboxStore.ts → c3-126
 src/server/cli-bootstrap.adapter.ts → c3-201
@@ -859,6 +866,7 @@ src/server/beacon-mention-prompt.test.ts → c3-210
 src/server/beacon-mention-prompt.ts → c3-210
 src/server/chat-teardown.test.ts → c3-210
 src/server/chat-teardown.ts → c3-210
+src/server/chat-tool-events.test.ts → c3-210
 src/server/claude-autocontinue-commands.ts → c3-210
 src/server/claude-cancel-handler.ts → c3-210
 src/server/claude-chat-management.ts → c3-210
@@ -935,6 +943,7 @@ src/server/subagent-provider-run.ts → c3-210
 src/server/subagent-transcript-io.adapter.ts → c3-210
 src/server/subagent-transcript-registry.ts → c3-210
 src/server/test-helpers/failing-claude-session.ts → c3-210
+src/server/test-helpers/parking-claude-session.ts → c3-210
 src/server/test-helpers/sdk-tool.ts → c3-210
 src/server/codex-app-server-decode.ts → c3-211
 src/server/codex-app-server-protocol.ts → c3-211
@@ -1301,6 +1310,8 @@ src/server/inbox/inbox-projection.ts → c3-247
 src/server/inbox/inbox-push.test.ts → c3-247
 src/server/inbox/inbox-registry.test.ts → c3-247
 src/server/inbox/inbox-registry.ts → c3-247
+src/server/inbox/inbox-snooze-waker.test.ts → c3-247
+src/server/inbox/inbox-snooze-waker.ts → c3-247
 src/server/inbox/proposal-approve-http.test.ts → c3-247
 src/server/inbox/proposal-approve-http.ts → c3-247
 src/server/kanna-mcp-inbox.test.ts → c3-247

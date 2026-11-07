@@ -35,6 +35,8 @@ export const BUS_SUBJECT_SUFFIX = {
   subagentCancelled: "subagent.cancelled",
   subagentToolPending: "subagent.toolPending",
   subagentToolResolved: "subagent.toolResolved",
+  chatToolPending: "chat.toolPending",
+  chatToolResolved: "chat.toolResolved",
   toolRequestPut: "toolRequest.put",
   toolRequestResolved: "toolRequest.resolved",
   autocontinueProposed: "autocontinue.proposed",

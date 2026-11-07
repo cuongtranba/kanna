@@ -183,6 +183,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     getBeacons: () => appSettings.getSnapshot().customBeacons,
   })
 
+  store.recoverDanglingChatTools(Date.now())
   const vapid = await loadOrGenerateVapidKeys(store.dataDir)
   await store.migrateLegacyTranscripts(options.onMigrationProgress)
 

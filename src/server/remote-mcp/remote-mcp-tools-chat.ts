@@ -226,7 +226,7 @@ export const chatTools: readonly RemoteTool[] = [
     handle: ({ chatId }, { host }) => {
       const snapshot = readChat(host, chatId, MAX_ENTRY_LIMIT)
       if (!snapshot) return fail(`Chat ${chatId} was not found.`)
-      return jsonResult({ chatId, status: snapshot.runtime.status, pending: pendingToolRequests(snapshot.messages) })
+      return jsonResult({ chatId, status: snapshot.runtime.status, pending: pendingToolRequests(snapshot.messages, host.store.listPendingChatTools(chatId)) })
     },
   }),
   commandTool({
@@ -240,7 +240,9 @@ export const chatTools: readonly RemoteTool[] = [
   commandTool({
     name: "respond_tool",
     title: "Respond to an interactive tool",
-    description: "Answer an interactive tool call such as a question or plan approval (kind interactive_tool in list_pending_tool_requests).",
+    description: "Answer an interactive tool call such as a question or plan approval (kind interactive_tool in list_pending_tool_requests). "
+      + "The result payload depends on the tool. AskUserQuestion: {questions, answers} where questions is the input.questions array returned by list_pending_tool_requests and answers maps each question's id (or its question text when it has no id) to an array of chosen option labels, e.g. {\"questions\": [...], \"answers\": {\"q1\": [\"Yes\"]}}. "
+      + "ExitPlanMode: {confirmed: boolean, clearContext?: true, message?: string}; confirmed true approves the plan, false rejects it, and message carries feedback.",
     command: "chat.respondTool",
     input: (params) => params,
     handle: (args, { run }) => run({ type: "chat.respondTool", ...args }),

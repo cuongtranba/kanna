@@ -14,6 +14,7 @@ import {
   type CommandRunner,
   type EntryView,
   type PendingRequestView,
+  type InteractiveToolSource,
   type SnapshotReader,
 } from "./remote-mcp-views"
 
@@ -27,7 +28,7 @@ const ACTIVITY_TEXT_CHARS = 300
 
 export type SendCommand = Extract<ClientCommand, { type: "chat.send" }>
 
-export interface ChatFollowHost extends SnapshotReader {
+export interface ChatFollowHost extends SnapshotReader, InteractiveToolSource {
   pollIntervalMs?: number
 }
 
@@ -184,7 +185,7 @@ export async function followChat(host: ChatFollowHost, request: FollowRequest): 
     activity: flattenEntries(recent)
       .slice(-ACTIVITY_LIMIT)
       .map((view) => (view.text === undefined ? view : { ...view, text: clipText(view.text, ACTIVITY_TEXT_CHARS) })),
-    pendingToolRequests: pendingToolRequests(entries),
+    pendingToolRequests: pendingToolRequests(entries, host.store.listPendingChatTools(chatId)),
     cursor: Math.max(baseline, newestEntryTime(entries)),
     timedOut: deadlineHit && !done,
     waitedMs: Date.now() - startedAt,

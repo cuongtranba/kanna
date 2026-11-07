@@ -3715,6 +3715,10 @@ function createFakeStore() {
     async removeQueuedMessage(_chatId: string, queuedMessageId: string) {
       this.queuedMessages = this.queuedMessages.filter((entry) => entry.id !== queuedMessageId)
     },
+    chatToolEvents: [] as any[],
+    appendChatToolEvent(event: any) {
+      this.chatToolEvents.push(event)
+    },
     subagentEvents: [] as any[],
     subagentRuns: new Map<string, any>(),
     async appendSubagentEvent(event: any) {
