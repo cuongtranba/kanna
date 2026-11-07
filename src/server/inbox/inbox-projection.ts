@@ -14,14 +14,23 @@ export interface InboxState {
   items: InboxActivityItem[]
   pendingSince: Map<string, number>
   pendingInstruction: Map<string, string>
+  mutedSenders: Set<string>
 }
 
 export function createInboxState(): InboxState {
-  return { threads: new Map(), items: [], pendingSince: new Map(), pendingInstruction: new Map() }
+  return { threads: new Map(), items: [], pendingSince: new Map(), pendingInstruction: new Map(), mutedSenders: new Set() }
 }
 
 export function threadLookupKey(sourceKind: string, sourceId: string, threadKey: string): string {
   return `${sourceKind}\u0000${sourceId}\u0000${threadKey}`
+}
+
+export function senderMuteKey(sourceKind: string, sourceId: string, sender: string): string {
+  return `${sourceKind}\u0000${sourceId}\u0000${sender}`
+}
+
+function isSenderMuted(state: InboxState, thread: Pick<InboxThread, "sourceKind" | "sourceId" | "sender">): boolean {
+  return state.mutedSenders.has(senderMuteKey(thread.sourceKind, thread.sourceId, thread.sender))
 }
 
 export function findThreadByKey(state: InboxState, sourceKind: string, sourceId: string, threadKey: string): InboxThread | null {
@@ -69,6 +78,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
         unread: true,
         lastMessageAt: event.message.ts,
         replyCount: 0,
+        muted: isSenderMuted(state, event.thread),
       }
       if (thread.messages.some((message) => message.id === event.message.id)) return
       thread.messages.push(event.message)
@@ -76,7 +86,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
         thread.messages.splice(0, thread.messages.length - INBOX_THREAD_MAX_MESSAGES)
       }
       thread.state = "new"
-      thread.unread = true
+      thread.unread = !thread.muted
       thread.lastMessageAt = event.message.ts
       delete thread.report
       delete thread.proposal
@@ -94,7 +104,7 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       if (!thread) return
       thread.report = event.report
       thread.state = event.report.verdict
-      thread.unread = event.report.verdict === "needs_you"
+      thread.unread = event.report.verdict === "needs_you" && !thread.muted
       clearPending(state, thread)
       return
     }
@@ -191,6 +201,19 @@ export function applyInboxEvent(state: InboxState, event: InboxEvent): void {
       else thread.agentPausedUntil = event.until
       return
     }
+    case "inbox_sender_muted": {
+      const key = senderMuteKey(event.sourceKind, event.sourceId, event.sender)
+      if (event.muted) state.mutedSenders.add(key)
+      else state.mutedSenders.delete(key)
+      for (const thread of state.threads.values()) {
+        if (senderMuteKey(thread.sourceKind, thread.sourceId, thread.sender) !== key) continue
+        thread.muted = event.muted
+        if (!event.muted) continue
+        thread.unread = false
+        clearPending(state, thread)
+      }
+      return
+    }
     case "inbox_thread_proposal_added": {
       const thread = state.threads.get(event.threadId)
       if (thread) thread.proposal = { ...event.proposal }
@@ -263,6 +286,7 @@ function eventTargets(event: InboxEvent): string[] {
     case "inbox_thread_read":
       return event.ids
     case "inbox_all_read":
+    case "inbox_sender_muted":
       return []
   }
 }

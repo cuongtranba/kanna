@@ -623,6 +623,7 @@ describe("PushManager.notifyInbox", () => {
     unread: true,
     lastMessageAt: 500,
     replyCount: 0,
+    muted: false,
   }
 
   beforeEach(async () => {

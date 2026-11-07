@@ -289,6 +289,15 @@ export class InboxRegistry {
     await this.flush()
   }
 
+  async setSenderMuted(threadId: string, muted: boolean): Promise<void> {
+    const thread = this.state.threads.get(threadId)
+    if (!thread || thread.muted === muted) return
+    const { sourceKind, sourceId, sender } = thread
+    this.record({ v: 1, ts: this.now(), kind: "inbox_sender_muted", sourceKind, sourceId, sender, muted })
+    this.publishInbox("muted", { threadId, muted: String(muted) })
+    await this.flush()
+  }
+
   async addProposal(threadId: string, proposal: InboxProposal): Promise<void> {
     const thread = this.state.threads.get(threadId)
     if (!thread) return
@@ -459,7 +468,7 @@ export class InboxRegistry {
     this.publishInbox("reported", { threadId, verdict: report.verdict, chatId: report.chatId })
     await this.flush()
     const thread = this.state.threads.get(threadId)
-    if (thread && report.verdict === "needs_you" && !wasNeedsYou) this.fireNeedsYou(cloneThread(thread))
+    if (thread && !thread.muted && report.verdict === "needs_you" && !wasNeedsYou) this.fireNeedsYou(cloneThread(thread))
   }
 
   private onEnvelope(envelope: BusEnvelope): void {

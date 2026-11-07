@@ -75,6 +75,7 @@ function thread(overrides: Partial<InboxThread> = {}): InboxThread {
     unread: false,
     lastMessageAt: 1000,
     replyCount: 0,
+    muted: false,
     ...overrides,
   }
 }

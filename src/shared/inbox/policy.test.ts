@@ -18,6 +18,7 @@ function thread(state: InboxThreadState): InboxThread {
     unread: true,
     lastMessageAt: 1,
     replyCount: 0,
+    muted: false,
   }
 }
 
@@ -80,4 +81,9 @@ test("a thread counts as sent by the agent when any outbound message was sent by
   expect(threadSentByAgent(base)).toBe(false)
   expect(threadSentByAgent({ outbound: [{ ...outbound, by: "you" }, { ...outbound, id: "o2", by: "approved" }] })).toBe(false)
   expect(threadSentByAgent({ outbound: [{ ...outbound, by: "you" }, { ...outbound, id: "o3", by: "agent" }] })).toBe(true)
+})
+
+test("a muted thread stays out of the Inbox tab whatever its state", () => {
+  expect(inboxTab({ ...thread("new"), muted: true })).toBe(false)
+  expect(inboxTab({ ...thread("needs_you"), muted: true })).toBe(false)
 })

@@ -43,7 +43,7 @@ export function isToolRequestPutFor(envelope: SubjectPayload, requestId: string)
 }
 
 export function inboxTab(entry: InboxThread | InboxActivityItem): boolean {
-  if ("messages" in entry) return entry.state === "new" || entry.state === "needs_you" || entry.state === "fyi"
+  if ("messages" in entry) return !entry.muted && (entry.state === "new" || entry.state === "needs_you" || entry.state === "fyi")
   return entry.attention
 }
 

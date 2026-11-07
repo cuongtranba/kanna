@@ -114,6 +114,7 @@ export interface InboxThread {
   autonomy?: InboxAutonomyLevel
   agentPausedUntil?: number
   proposal?: InboxProposal
+  muted: boolean
 }
 
 export interface InboxActivityItem {

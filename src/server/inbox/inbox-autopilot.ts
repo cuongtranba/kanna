@@ -78,7 +78,7 @@ export function createInboxAutopilot(options: InboxAutopilotOptions): InboxAutop
   }
 
   function isPaused(thread: InboxThread): boolean {
-    return thread.agentPausedUntil !== undefined && thread.agentPausedUntil > clock.now()
+    return thread.muted || (thread.agentPausedUntil !== undefined && thread.agentPausedUntil > clock.now())
   }
 
   function decide(thread: InboxThread, source: AutopilotSource, proposal: InboxProposeSend): ProposalDecision {
