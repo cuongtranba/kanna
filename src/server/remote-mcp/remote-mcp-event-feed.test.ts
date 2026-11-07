@@ -24,6 +24,16 @@ describe("remote MCP event feed", () => {
     expect(page.events.map((event) => event.seq)).toEqual([4, 5, 6])
   })
 
+  test("a cursor carrying this boot id with a non-numeric sequence resets the reader instead of resuming it", () => {
+    const feed = createEventFeed({ newBootId: () => "boot" })
+    feed.append(envelopeOf(namedBusSubject("turnStarted")))
+
+    const page = feed.read("boot:abc")
+
+    expect(page.reset).toBe(true)
+    expect(page.events.map((event) => event.seq)).toEqual([1])
+  })
+
   test("only the allowlisted subjects are kept, and their secrets are masked", () => {
     const feed = createEventFeed({ newBootId: () => "boot" })
 
