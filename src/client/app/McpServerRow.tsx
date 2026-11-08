@@ -2,7 +2,7 @@ import { useCallback, type ChangeEvent } from "react"
 import { CircleAlert, RefreshCw } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Spinner } from "../components/ui/spinner"
-import { HoverHint } from "../components/ui/truncated-text"
+import { HoverHint, TruncatedText } from "../components/ui/truncated-text"
 import { SettingsRowActions } from "../components/settings/SettingsList"
 import { cn } from "../lib/utils"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
@@ -49,18 +49,20 @@ export function McpRow({
     runPendingAction(testKey, () => handlers.onTest(server.id))
   }, [handlers, server.id, testKey])
 
+  const target = server.transport === "stdio" ? server.command : server.url
+
   return (
     <li className="flex items-center gap-3 px-4 py-3" aria-busy={deletePending || undefined}>
-      <div className="flex flex-col">
-        <span className="font-medium">{server.name}</span>
-        <span className="text-xs text-muted-foreground">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium">{server.name}</span>
+        <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <TransportBadge transport={server.transport} />
-          <span className="ml-2">
-            {server.transport === "stdio" ? server.command : server.url}
-          </span>
+          <TruncatedText inline tooltip={target} className="min-w-0">
+            {target}
+          </TruncatedText>
         </span>
       </div>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
         <TestPill result={server.lastTest} pending={testing} />
         {server.transport !== "stdio" && <OAuthPill oauth={server.oauth} />}
         <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
@@ -93,7 +95,7 @@ export function McpRow({
 
 function TransportBadge({ transport }: { transport: McpServerTransport }) {
   return (
-    <span className="rounded bg-muted px-1.5 py-0.5 text-xs">{transport}</span>
+    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs">{transport}</span>
   )
 }
 
