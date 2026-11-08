@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.106.1](https://github.com/cuongtranba/kanna/compare/v1.106.0...v1.106.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **client:** keep MCP server row actions inside the card for long URLs ([#1454](https://github.com/cuongtranba/kanna/issues/1454)) ([9700352](https://github.com/cuongtranba/kanna/commit/9700352f49b2a0ea4dcfadcf8ed345d1881ccd85))
+
 ## [1.106.0](https://github.com/cuongtranba/kanna/compare/v1.105.0...v1.106.0) (2026-11-07)
 
 
