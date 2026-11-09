@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.3](https://github.com/cuongtranba/kanna/compare/v1.107.2...v1.107.3) (2026-11-09)
+
+
+### Bug Fixes
+
+* **client:** animate the mobile drawer and sheets as DESIGN.md specifies ([#1469](https://github.com/cuongtranba/kanna/issues/1469)) ([075f0e0](https://github.com/cuongtranba/kanna/commit/075f0e0bfd811e84acdcf4d1e18642c45fe82ecd))
+* **transcript:** keep the reader's place during mobile touch scrolling ([#1468](https://github.com/cuongtranba/kanna/issues/1468)) ([869bdb3](https://github.com/cuongtranba/kanna/commit/869bdb36e3bf497e71cfa71440b23a1d57313d18))
+
 ## [1.107.2](https://github.com/cuongtranba/kanna/compare/v1.107.1...v1.107.2) (2026-11-09)
 
 
