@@ -33,6 +33,7 @@ CI runs these in order, and each covers something the others do not:
 | `bun run lint` | Oxlint through `vp lint --deny-warnings`: the side-effect seal and the design gate, plus TypeScript diagnostics |
 | `bun run lint:usestate` | ast-grep: the React #185 rules and inline tint pairings |
 | `bun run lint:comments` | The no-code-comments rule across `src/`, `scripts/`, `e2e/` |
+| `bun run lint:flex-overflow` | A non-wrapping flex row in `src/client` whose data text neither truncates, breaks nor holds beside a `shrink-0` sibling, so it overlaps when narrow |
 | `bun run check:arch` | The architecture budget ratchet |
 | `bun run lint:limits` | Proves the complexity ceilings are still *tight* |
 | `bun run typecheck` | tsgolint through `vp check --no-lint`, over the whole `tsconfig.json` program |
@@ -41,7 +42,7 @@ CI runs these in order, and each covers something the others do not:
 | `bun run test` | The suite |
 
 `bun run check` chains `vp check` (lint and type diagnostics) → lint:comments →
-build:client → check:bundle, which is the fastest single command that catches most of it.
+lint:flex-overflow → build:client → check:bundle, which is the fastest single command that catches most of it.
 `bunx ast-grep test` runs the fixtures for the rules in `rules/`, and
 `bun run scan:secrets` runs gitleaks over the working tree — wire the pre-commit
 hook once with `bun run setup:hooks`.

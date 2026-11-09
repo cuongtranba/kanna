@@ -203,7 +203,7 @@ function renderListItem(node: ListItemNode, ctx: RenderContext): ReactNode {
     return (
       <li key={key} className="my-0.5 list-none flex items-start gap-1.5">
         <input type="checkbox" readOnly checked={checked} className="mt-[3px] shrink-0" />
-        <span>{children}</span>
+        <span className="min-w-0 break-words">{children}</span>
       </li>
     )
   }

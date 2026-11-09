@@ -57,7 +57,7 @@ bun run test src/server/<file>.test.ts
 ## Before you push
 
 ```bash
-bun run check   # vp check (lint + types) → lint:comments → build:client → check:bundle
+bun run check   # vp check (lint + types) → lint:comments → lint:flex-overflow → build:client → check:bundle
 bun run test
 ```
 

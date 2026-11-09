@@ -18,7 +18,7 @@ export function CronListMessage({ message, cronJobs }: Props) {
       <div className="flex items-center gap-2">
         <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="text-sm font-medium text-foreground">Cron jobs</span>
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">{jobs.length} armed</span>
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">{jobs.length} armed</span>
       </div>
       {jobs.length === 0 ? (
         <p className="mt-1.5 text-sm text-muted-foreground">No cron jobs armed in this chat.</p>

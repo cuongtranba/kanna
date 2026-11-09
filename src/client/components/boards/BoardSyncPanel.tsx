@@ -63,7 +63,7 @@ function RoutingRow({ label, column, absent }: { label: string; column: { title:
   return (
     <div className="flex gap-3">
       <dt className="w-28 shrink-0 text-muted-foreground">{label}</dt>
-      <dd className={column ? "text-foreground" : "text-muted-foreground"}>{column?.title ?? absent}</dd>
+      <dd className={column ? "min-w-0 break-words text-foreground" : "min-w-0 break-words text-muted-foreground"}>{column?.title ?? absent}</dd>
     </div>
   )
 }

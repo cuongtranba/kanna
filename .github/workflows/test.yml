@@ -39,6 +39,9 @@ jobs:
       - name: No code comments
         run: bun run lint:comments
 
+      - name: Flex rows never overlap
+        run: bun run lint:flex-overflow
+
       - name: Architecture budget (ratchet)
         run: bun run check:arch
 

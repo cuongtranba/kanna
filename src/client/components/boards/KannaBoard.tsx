@@ -252,7 +252,7 @@ function BoardColumnView({
         </span>
         <span
           className={cn(
-            "ml-auto font-mono text-xs tabular-nums",
+            "ml-auto shrink-0 font-mono text-xs tabular-nums",
             overLimit ? "text-warning-text" : "text-muted-foreground",
           )}
         >
@@ -416,7 +416,7 @@ function BoardCard({
                 ) : (
                   <MessageSquare aria-hidden className="size-3 shrink-0" />
                 )}
-                <span>{signal.label}</span>
+                <span className="truncate">{signal.label}</span>
                 {signal.clock === null ? null : <LiveStamp clock={signal.clock} />}
               </span>
             ) : null}

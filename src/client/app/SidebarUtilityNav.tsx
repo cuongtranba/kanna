@@ -122,7 +122,7 @@ export function SidebarUtilityNav({
           className={cn("h-1.5 w-1.5 rounded-full shrink-0", indicator.dotClass)}
           aria-hidden
         />
-        <span className="text-xs text-muted-foreground tabular-nums">{indicator.label}</span>
+        <span className="truncate text-xs text-muted-foreground tabular-nums">{indicator.label}</span>
       </div>
     </div>
   )
