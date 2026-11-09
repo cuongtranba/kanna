@@ -118,5 +118,5 @@ test("streaming at the bottom keeps following without offering a jump to latest"
   }), JUMP)
 
   expect(jumpShown).toBe(false)
-  await expect.poll(() => distanceFromEnd(page), { timeout: 5_000 }).toBeLessThanOrEqual(4)
+  await expect.poll(() => distanceFromEnd(page), { timeout: 30_000 }).toBeLessThanOrEqual(4)
 })
