@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.106.2](https://github.com/cuongtranba/kanna/compare/v1.106.1...v1.106.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **client:** stop flex rows overlapping and gate the pattern ([#1456](https://github.com/cuongtranba/kanna/issues/1456)) ([cda0384](https://github.com/cuongtranba/kanna/commit/cda03841292e92f48fbb4bc2b51185f9c26b5d4a))
+
 ## [1.106.1](https://github.com/cuongtranba/kanna/compare/v1.106.0...v1.106.1) (2026-11-08)
 
 
