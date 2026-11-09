@@ -1,6 +1,6 @@
 ---
 name: kanna-react-style
-description: React + TypeScript coding style for Kanna's client (src/client/**). Apply when creating or editing any .tsx/.ts file under src/client, src/shared, or src/server that ships UI behavior. Covers component shape, props typing, state-aware label and tone helpers, pure format helpers, snapshot-stable rendering, mobile/desktop CSS variants, tabular numerics, project-Tooltip-over-native-title, reusing existing primitives before writing new markup, co-located tests, and commit cadence. Trigger on phrases like "add a component", "render X in the navbar", "put this in the sidebar", "format a duration", "show the status", "fix this UI bug", "the number jitters on every tick", "extract a shared component", "make it work on mobile", or whenever editing anything under src/client/components, src/client/app, or src/client/lib. Read it before writing the component, not after.
+description: React + TypeScript coding style for Kanna's client (src/client/**). Apply when creating or editing any .tsx/.ts file under src/client, src/shared, or src/server that ships UI behavior. Covers component shape, props typing, state-aware label and tone helpers, pure format helpers, snapshot-stable rendering, mobile/desktop CSS variants, flex rows that never overlap (truncate, break or hold, enforced by lint:flex-overflow), tabular numerics, project-Tooltip-over-native-title, reusing existing primitives before writing new markup, co-located tests, and commit cadence. Trigger on phrases like "add a component", "render X in the navbar", "put this in the sidebar", "format a duration", "show the status", "fix this UI bug", "the number jitters on every tick", "extract a shared component", "make it work on mobile", "the row overlaps", "the badge covers the input", or whenever editing anything under src/client/components, src/client/app, or src/client/lib. Read it before writing the component, not after.
 user-invocable: false
 ---
 
@@ -180,6 +180,57 @@ Any element where digits change in place (timers, counters, durations, ages, pid
 
 ```tsx
 <span className="text-xs text-muted-foreground tabular-nums">{formatLiveDuration(elapsed)}</span>
+```
+
+## Flex rows never overlap
+
+A row of label, value, badges and controls gets narrow: the settings column is a fixed 420px,
+the sidebar is resizable, phones are 360px. In a non-wrapping flex row every item keeps its
+`min-content` width, so a `shrink-0` badge or control cluster beside an unbreakable value
+(`api_key_cuong`, a tool name, a job id) pushes the row past its box and the items paint
+over each other. The token pool row overlapped its Concurrent control exactly this way once
+an API key badge joined the label line.
+
+Decide, for every piece of data text in a row, whether it **yields** or **holds**:
+
+| The text is | Give it | Example |
+| --- | --- | --- |
+| a name or id that may be long, one line | `truncate`, or `TruncatedText` when the full value matters | label, job id, branch |
+| an identifier the reader must see whole | `min-w-0 break-all` | tool name, path |
+| prose | `min-w-0 break-words` | notice, description |
+| short bounded metadata | `shrink-0` (or `whitespace-nowrap`) | count, clock, badge |
+
+At least one item must yield. When several items must stay whole (badges, a masked token, a
+status), don't squeeze them onto the label line: move them to a second `flex flex-wrap` line,
+as `OAuthTokenPoolCard` does. The column wrapping a yielding item needs `min-w-0` too, or it
+refuses to shrink.
+
+`bun run lint:flex-overflow` (`scripts/flex-overflow-scan.ts`, in `bun run check` and CI) fails
+on a non-wrapping `flex`/`inline-flex` row that has a `shrink-0`, `flex-none` or
+`whitespace-nowrap` child and either (a) a child element rendering `{data}` without a yield or
+hold utility (`undeclared-text`), or (b) only holding children (`nothing-yields`). It reads
+static class text only, so it cannot see width from a component's own props; still check the
+narrowest width the row lives at before you ship.
+
+```tsx
+// Yes — the label yields, the badges hold on a wrapping second line
+<div className="min-w-0 flex-1">
+  <div className="flex min-w-0 items-center gap-2">
+    <TruncatedText inline tooltip={entry.label} className="min-w-0 text-sm">{entry.label}</TruncatedText>
+    {isCurrent && <span className="shrink-0 whitespace-nowrap ...">In use</span>}
+  </div>
+  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+    <StatusPill entry={entry} now={now} />
+    <code className="whitespace-nowrap ...">{maskToken(entry.token)}</code>
+  </div>
+</div>
+
+// No — nothing can shrink, so the line overflows onto the controls beside it
+<div className="flex items-center gap-3">
+  <span>{entry.label}</span>
+  <code>{maskToken(entry.token)}</code>
+  <span className="shrink-0 whitespace-nowrap ...">API key</span>
+</div>
 ```
 
 ## Design rules no linter checks

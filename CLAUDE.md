@@ -11,7 +11,7 @@ the end of this file auto-trigger on their own.
 bun install
 bun run dev            # Vite+ client (`vp dev`) :5174 + server :5175; needs Node 22.18+ on PATH
 bun run start          # single-process server, production shape
-bun run check          # vp check (lint + types) → lint:comments → build:client → check:bundle
+bun run check          # vp check (lint + types) → lint:comments → lint:flex-overflow → build:client → check:bundle
 bun run test [file]    # bun --bun vp test run (Vitest under Bun); never bare `bun test`
 bun run lint           # vp lint --deny-warnings (Oxlint, rules in lint.config.ts)
 bun run typecheck      # vp check --no-lint (tsgolint); never bare tsc
@@ -73,6 +73,8 @@ string. The rules every change follows:
   (`bun run lint:comments`). Facts go in names, `.c3/`, an ADR or the wiki.
 - **UI:** read `DESIGN.md` first. Tokens from `src/index.css` only: no hex, no
   `backdrop-blur`, no native `title`. Semantic colour is a fill; text uses `-text` tokens.
+  Data text in a flex row truncates, breaks or holds (`shrink-0`) so the row never
+  overlaps when narrow (`bun run lint:flex-overflow`).
 - **React:** selectors and hook arguments are reference-stable; state transitions are
   named store actions, not JSX logic; every client side effect runs through
   `runPendingAction` and renders its pending state (`kanna-react-style`).

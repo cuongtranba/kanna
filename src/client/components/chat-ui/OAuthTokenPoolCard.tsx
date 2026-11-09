@@ -11,7 +11,7 @@ import { claudeCredentialKind } from "../../../shared/claude-credential"
 import { maskToken } from "../../lib/oauthTokenMask"
 import { Input } from "../ui/input"
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip"
-import { HoverHint } from "../ui/truncated-text"
+import { HoverHint, TruncatedText } from "../ui/truncated-text"
 import { Spinner } from "../ui/spinner"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { useOAuthTokenPoolCardStore } from "../../stores/oauthTokenPoolCardStore"
@@ -179,22 +179,28 @@ function TokenRow({
 
   return (
     <div className="border-t border-border py-3">
-    <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-3">
-          <span className={`text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}>{entry.label}</span>
-          <code className="text-xs font-mono text-muted-foreground">{maskToken(entry.token)}</code>
-          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-border px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
-            {claudeCredentialKind(entry.token) === "api-key" ? "API key" : "OAuth"}
-          </span>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="min-w-0 flex-1 basis-36">
+        <div className="flex min-w-0 items-center gap-2">
+          <TruncatedText
+            inline
+            tooltip={entry.label}
+            className={`min-w-0 text-sm font-medium ${isDisabled ? "text-muted-foreground/60" : "text-foreground"}`}
+          >
+            {entry.label}
+          </TruncatedText>
           {isCurrent && (
             <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-xs font-medium tracking-wide text-primary">
               In use
             </span>
           )}
         </div>
-        <div className="mt-0.5">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <StatusPill entry={entry} now={now} />
+          <code className="whitespace-nowrap text-xs font-mono text-muted-foreground">{maskToken(entry.token)}</code>
+          <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-border px-1.5 py-0.5 text-xs font-medium tracking-wide text-muted-foreground">
+            {claudeCredentialKind(entry.token) === "api-key" ? "API key" : "OAuth"}
+          </span>
         </div>
       </div>
 
@@ -211,7 +217,7 @@ function TokenRow({
             onChange={(e) => runPendingAction(concurrencyKey, () => onChangeMaxConcurrent(entry.id, clampTokenConcurrency(Number(e.target.value))))}
             min={OAUTH_TOKEN_MAX_CONCURRENT_MIN}
             aria-label="Max concurrent chats"
-            className="h-7 w-14 text-xs"
+            className="h-7 w-16 text-xs tabular-nums"
             disabled={isDisabled}
           />
         </label>

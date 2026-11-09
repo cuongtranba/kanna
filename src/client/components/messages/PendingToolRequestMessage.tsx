@@ -100,7 +100,7 @@ function GenericPending({
     <div className="rounded-2xl border border-border bg-background px-4 py-3 text-sm">
       <div className="flex items-baseline gap-2">
         <span className="text-muted-foreground shrink-0">Pending tool:</span>
-        <span className="font-mono text-foreground">{toolName}</span>
+        <span className="min-w-0 break-all font-mono text-foreground">{toolName}</span>
       </div>
       {preview ? (
         <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
@@ -174,7 +174,7 @@ function BeaconPending({
       </div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="text-muted-foreground shrink-0">Action:</span>
-        <span className="font-mono text-foreground">{action}</span>
+        <span className="min-w-0 break-all font-mono text-foreground">{action}</span>
       </div>
       {payload ? (
         <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs text-foreground">

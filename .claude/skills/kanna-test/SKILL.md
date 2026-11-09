@@ -25,6 +25,7 @@ bun run test                                     # bun --bun vp test run; never 
 bun run test <file>.test.ts                      # one suite while iterating
 bun run typecheck                                # vp check --no-lint (tsgolint); never bare tsc
 bun run lint && bun run lint:comments            # vp lint --deny-warnings (Oxlint) + the no-comments rule
+bun run lint:flex-overflow                       # flex rows whose data text would overlap when narrow (CI runs this)
 bun run lint:usestate                            # every ast-grep rule in rules/ (CI runs this)
 bunx ast-grep test                               # rule fixtures in rule-tests/ (local only; CI does not run it)
 bun run check:arch                               # architecture and test-style ratchets
@@ -61,7 +62,7 @@ Copy this checklist and tick it off:
 ```
 - [ ] Targeted suites for every touched file pass
 - [ ] bun run typecheck passes
-- [ ] bun run lint, lint:comments, lint:usestate pass
+- [ ] bun run lint, lint:comments, lint:flex-overflow, lint:usestate pass
 - [ ] bun run check:arch passes (pins lowered for every population that shrank)
 - [ ] bun run test (full suite) passes once, from the main agent
 - [ ] .c3/ facts and docs updated if a contract or rule changed; c3x check passes

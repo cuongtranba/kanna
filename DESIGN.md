@@ -290,6 +290,7 @@ Shadows appear only as a response to *state*: focus rings, dialog overlays, and 
 - **Hover:** background tints to Surface Secondary, no transform, no scale.
 - **Selected:** subtle Surface Secondary fill plus 1px-left visual is **prohibited** (anti-pattern). Use a full-row tonal fill instead — and the fill spans the **whole column**, with content registering to the rail. A fill that starts a few pixels left of the text is what breaks the one-rail reading.
 - **A `1fr` track needs `minmax(0, 1fr)`.** It defaults to `min-width: auto` and refuses to shrink under its content, so `text-overflow: ellipsis` never fires and the row overruns its column instead of truncating.
+- **A flex row never overlaps.** Every piece of data text in a non-wrapping flex row either yields (`truncate`, `break-all`, `min-w-0 break-words`) or holds (`shrink-0`), and at least one item yields; values that must all stay whole go on a second `flex-wrap` line. `bun run lint:flex-overflow` blocks the build otherwise.
 
 ### Plates (the transcript)
 

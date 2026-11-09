@@ -89,7 +89,7 @@ function WorkflowsPageViewInner({ runs, getRunDetail, getAgentTranscript, onBack
         <h1 className="text-lg font-semibold text-foreground">Workflows</h1>
         {runs.length > 0 ? (
           <span
-            className="text-xs font-medium tracking-wide text-muted-foreground tabular-nums"
+            className="shrink-0 text-xs font-medium tracking-wide text-muted-foreground tabular-nums"
             style={{ fontVariantNumeric: "tabular-nums" }}
           >
             {runs.length} {runs.length === 1 ? "run" : "runs"}

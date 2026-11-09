@@ -53,7 +53,7 @@ export function InboxRowShell({ unread, selected, avatarName, title, subtitle, a
           <span className="line-clamp-2 break-words text-xs text-muted-foreground">{preview}</span>
           <span className="flex items-center gap-3">
             <StateMarkLabel tone={display.tone} label={display.label} className="shrink-0" />
-            {meta === undefined ? null : <span className="font-mono text-xs tabular-nums text-muted-foreground">{meta}</span>}
+            {meta === undefined ? null : <span className="min-w-0 truncate font-mono text-xs tabular-nums text-muted-foreground">{meta}</span>}
           </span>
         </span>
       </button>

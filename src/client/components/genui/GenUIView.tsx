@@ -78,7 +78,7 @@ function ViewNotice() {
   return (
     <p className="flex items-center gap-1.5 text-xs text-destructive-text" role="alert">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span className="min-w-0 flex-1">{notice}</span>
+      <span className="min-w-0 flex-1 break-words">{notice}</span>
       <button type="button" className="rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Dismiss" onClick={() => dismiss(null)}>
         <X className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

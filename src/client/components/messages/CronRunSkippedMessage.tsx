@@ -10,7 +10,7 @@ export function CronRunSkippedMessage({ message }: Props) {
   return (
     <div className="flex items-center gap-2 text-muted-foreground">
       <SkipForward className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-      <span className="text-xs tabular-nums">
+      <span className="min-w-0 break-words text-xs tabular-nums">
         {count === 1 ? "Cron run skipped" : `Cron runs skipped ${count}×`}
         <span className="font-mono"> {message.jobId}</span>
         {" — "}

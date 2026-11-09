@@ -304,10 +304,10 @@ export function WorkflowRunDetail({ run, onSelectAgent, title }: WorkflowRunDeta
                     {group.phaseIndex}
                   </span>
                 ) : null}
-                <h4 className="text-xs font-semibold tracking-wide text-foreground">
+                <h4 className="min-w-0 truncate text-xs font-semibold tracking-wide text-foreground">
                   {group.title}
                 </h4>
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                   {group.agents.length} {group.agents.length === 1 ? "agent" : "agents"}
                 </span>
               </div>

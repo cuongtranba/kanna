@@ -185,7 +185,7 @@ describe("BoardCard chat signal", () => {
     )
 
     expect(html).toContain("bg-destructive")
-    expect(html).toContain("<span>Agent failed — TIMEOUT</span></span>")
+    expect(html).toContain(">Agent failed — TIMEOUT</span>")
   })
 })
 

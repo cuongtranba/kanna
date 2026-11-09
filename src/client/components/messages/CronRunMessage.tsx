@@ -22,7 +22,7 @@ export function CronRunMessage({ message, cronJobs }: Props) {
       <div className="flex items-center gap-2">
         <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="text-sm font-medium text-foreground">Cron run</span>
-        <span className="font-mono text-xs text-muted-foreground">{message.jobId}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{message.jobId}</span>
         <span className="ml-auto flex items-center gap-3">
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatStartedClock(message.firedAt)}

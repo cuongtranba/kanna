@@ -244,7 +244,7 @@ function DefaultEditorRows({ state }: { state: Pick<KannaState, "handleWriteAppS
                 <SelectItem key={option.value} value={option.value}>
                   <span className="flex items-center gap-2">
                     <EditorIcon preset={option.value} className="h-4 w-4 shrink-0" />
-                    <span>{option.label}</span>
+                    <span className="truncate">{option.label}</span>
                   </span>
                 </SelectItem>
               ))}
