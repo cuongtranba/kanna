@@ -5,6 +5,7 @@ import {
   type HookInput,
   type HookJSONOutput,
   type SDKUserMessage,
+  type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 import type { CompactionTrigger } from "../shared/transcript-types"
 import { createKannaMcpServer, type KannaMcpArgs } from "./kanna-mcp"
@@ -31,6 +32,7 @@ import { AsyncMessageQueue, toClaudeMessageStream } from "./claude-sdk-queue"
 import { createClaudeHarnessStream } from "./claude-harness-stream"
 import { parseConfiguredContextWindowFromModelId } from "./claude-usage-math"
 import { log } from "../shared/log"
+import { toError } from "../shared/errors"
 import type { ClaudeSessionHandle, HarnessToolRequest } from "./harness-types"
 import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
@@ -178,6 +180,7 @@ export interface StartClaudeSessionArgs {
   contextWindowOverride?: number
   onCompaction?: (event: CompactionEvent) => void
   streamLiveBlocks?: boolean
+  onCliCommands?: (commands: SlashCommand[]) => void
 }
 
 export async function startClaudeSession(
@@ -251,6 +254,13 @@ export async function startClaudeSession(
     },
   })
 
+  const { onCliCommands } = args
+  if (onCliCommands) {
+    q.supportedCommands().then(onCliCommands).catch((error) => {
+      log.warn("[kanna/claude] supportedCommands failed", toError(error).message)
+    })
+  }
+
   const enqueueUserPrompt = (content: string) => {
     promptQueue.push({
       type: "user",
@@ -279,7 +289,7 @@ export async function startClaudeSession(
 
   return {
     provider: "claude",
-    stream: _deps.createClaudeHarnessStream(_deps.toClaudeMessageStream(q), {
+    stream: _deps.createClaudeHarnessStream(_deps.toClaudeMessageStream(q, onCliCommands), {
       contextWindow: args.contextWindowOverride ?? _deps.parseConfiguredContextWindowFromModelId(args.model),
       turnPrice: args.turnPrice,
       costBaselineUsd: args.costBaselineUsd,

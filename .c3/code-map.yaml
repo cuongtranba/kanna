@@ -541,6 +541,10 @@ c3-231:
   - src/server/local-catalog-io.adapter.test.ts
   - src/server/claude-slash-commands.ts
   - src/server/claude-slash-commands.test.ts
+  - src/server/claude-cli-commands.ts
+  - src/server/claude-cli-commands.test.ts
+  - src/server/claude-cli-commands-file.adapter.ts
+  - src/server/slash-command-sources.adapter.ts
   - src/server/skill-invocation.ts
   - src/server/skill-invocation.test.ts
   - src/shared/slash-expansion.ts

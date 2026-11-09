@@ -72,8 +72,7 @@ import { SessionShareService } from "./session-share"
 import { recoverQueuedMessages } from "./queued-message-recovery"
 import { initObservability } from "./otel.adapter"
 import { createWorkflowRegistry } from "./workflow-registry"
-import { LocalCatalogService } from "./local-catalog"
-import { defaultHomeDir, scanLocalCatalog, statMtimes } from "./local-catalog-io.adapter"
+import { createSlashCommandSources } from "./slash-command-sources.adapter"
 import { createSubagentTranscriptRegistry } from "./subagent-transcript-registry"
 import { createFollowedSessionRegistry } from "./followed-session-registry"
 import { statSessionFile } from "./followed-session-io.adapter"
@@ -352,11 +351,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
   const diffStore = new DiffStore(undefined, oauthPool)
-  const localCatalog = new LocalCatalogService({
-    scan: scanLocalCatalog,
-    statMtimes,
-    homeDir: defaultHomeDir(),
-  })
+  const { localCatalog, cliCommands } = await createSlashCommandSources(store.dataDir, () => router.scheduleBroadcast())
 
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -392,6 +387,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     liveBlocks,
     subagentTranscriptRegistry,
     localCatalog,
+    cliCommands,
     genuiDatasets,
     onTurnOutcome: (chatId, outcome) => pushManager.noteTurnOutcome(chatId, outcome),
     chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },

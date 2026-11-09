@@ -2,6 +2,7 @@
 import { describe, test, expect } from "vite-plus/test"
 import { localCommandsForCwd, type SlashCommandsDeps } from "./claude-slash-commands"
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
+import { openClaudeCliCommands } from "./claude-cli-commands"
 import type { SlashCommand, SlashCommandScope } from "../shared/types"
 
 
@@ -67,5 +68,22 @@ describe("localCommandsForCwd", () => {
     })
     const result = localCommandsForCwd(deps, "/cwd")
     expect(result.slice(0, BUILTIN_NAMES.length).map((c) => c.name)).toEqual(BUILTIN_NAMES)
+  })
+
+  test("lists only Claude Code's own commands recorded from SDK rows, after Kanna's builtins and ahead of disk skills", async () => {
+    const cliCommands = await openClaudeCliCommands({ load: async () => [], save: async () => {} })
+    cliCommands.record([
+      { name: "doctor", description: "Diagnose", argumentHint: "", builtin: true },
+      { name: "clear", description: "SDK clear", argumentHint: "", builtin: true },
+      { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
+      { name: "my-skill", description: "user skill", argumentHint: "" },
+    ])
+    const deps = makeDeps({
+      cliCommands,
+      localCatalog: { list: () => [makeSlashCommand("doctor", "project"), makeSlashCommand("my-skill", "personal")] },
+    })
+    const result = localCommandsForCwd(deps, "/cwd")
+    expect(result.map((c) => c.name)).toEqual([...BUILTIN_NAMES, "doctor", "doctor", "my-skill"])
+    expect(result.find((c) => c.name === "doctor")?.scope).toBe("cli")
   })
 })
