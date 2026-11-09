@@ -1,10 +1,11 @@
 import { APP_NAME } from "../../shared/branding"
+import { allProjectGroups } from "../../shared/sidebar-data"
 import type { SidebarData } from "../../shared/types"
 
 const WAITING_TITLE_MAX_LENGTH = 40
 
 export function getNotificationTitleCount(sidebarData: SidebarData, inboxUnread = 0) {
-  return inboxUnread + sidebarData.projectGroups.reduce((count, group) => (
+  return inboxUnread + allProjectGroups(sidebarData).reduce((count, group) => (
     count + group.chats.reduce((chatCount, chat) => (
       chatCount + (chat.unread ? 1 : 0) + (chat.status === "waiting_for_user" ? 1 : 0)
     ), 0)
@@ -20,7 +21,7 @@ export function getChatNotificationSnapshot(sidebarData: SidebarData): ChatNotif
   let unreadCount = 0
   const waitingChatIds = new Set<string>()
 
-  for (const group of sidebarData.projectGroups) {
+  for (const group of allProjectGroups(sidebarData)) {
     for (const chat of group.chats) {
       if (chat.unread) unreadCount += 1
       if (chat.status === "waiting_for_user") {
@@ -57,7 +58,7 @@ export function getNotificationTitle(sidebarData: SidebarData, inboxUnread = 0):
   const count = getNotificationTitleCount(sidebarData, inboxUnread)
   if (count === 0) return APP_NAME
 
-  const waitingTitles = sidebarData.projectGroups.flatMap((group) =>
+  const waitingTitles = allProjectGroups(sidebarData).flatMap((group) =>
     group.chats.filter((chat) => chat.status === "waiting_for_user").map((chat) => chat.title))
 
   if (waitingTitles.length === 1) {

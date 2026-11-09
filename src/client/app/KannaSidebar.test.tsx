@@ -296,6 +296,19 @@ describe("KannaSidebar reveals the active chat", () => {
 
     expect(hasRow(container, "old-chat")).toBe(true)
   })
+
+  test("opening a stack chat whose project is starred shows it under its stack", () => {
+    const stackChat: SidebarChatRow = { ...chatRow("stack-chat"), stackId: "stack-1" }
+    const { container, show } = mountSidebar({
+      starredProjectGroups: [{ ...createGroup("alpha", 42), chats: [stackChat], previewChats: [stackChat] }],
+      projectGroups: [createGroup("beta")],
+      stacks: [{ id: "stack-1", title: "Alpha + beta", projectIds: ["alpha", "beta"], memberCount: 2, createdAt: 0, updatedAt: 0 }],
+    })
+
+    show("stack-chat")
+
+    expect(hasRow(container, "stack-chat")).toBe(true)
+  })
 })
 
 describe("KannaSidebar mobile project search", () => {

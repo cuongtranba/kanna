@@ -29,6 +29,8 @@ import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
 import { getProjectIdForChat, type AppGlobalState } from "./useAppGlobalState"
+import { allProjectGroups } from "../../shared/sidebar-data"
+import { closeUnlistedChat } from "./chatLifecycle"
 import { fromSendOptions } from "../lib/composerSendOptions"
 import { sendToStartingProfiler } from "./sendToStartingProfiler"
 import { useProviderCatalog, withOpenRouterModels } from "./useProviderCatalog"
@@ -294,7 +296,10 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
   const runtime = activeChatSnapshot?.runtime ?? null
 
   const { connectionStatus } = appGlobal
-  const sidebarProjectGroups = appGlobal.sidebarData.projectGroups
+  const sidebarProjectGroups = useMemo(
+    () => allProjectGroups(appGlobal.sidebarData),
+    [appGlobal.sidebarData]
+  )
 
 
   const activeProjectId = useMemo(
@@ -416,18 +421,8 @@ export function useKannaState(activeChatId: string | null, ports: KannaStatePort
     if (!activeChatId) return
     if (!isPrimaryChatInstance(activeChatId, appGlobal.routeChatId)) return
     if (!appGlobal.sidebarReady || !chatReady) return
-    const exists = sidebarProjectGroups.some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
-    if (exists) {
-      if (pendingChatId === activeChatId) {
-        useKannaStateStore.getState().setPendingChatId(null)
-      }
-      return
-    }
-    if (pendingChatId === activeChatId) {
-      return
-    }
-    appGlobal.chatNavigator.closeChat()
-  }, [activeChatId, appGlobal.chatNavigator, appGlobal.routeChatId, appGlobal.sidebarReady, chatReady, pendingChatId, sidebarProjectGroups])
+    closeUnlistedChat(appGlobal.sidebarData, activeChatId, appGlobal.chatNavigator)
+  }, [activeChatId, appGlobal.chatNavigator, appGlobal.routeChatId, appGlobal.sidebarData, appGlobal.sidebarReady, chatReady, pendingChatId])
 
   useEffect(() => {
     if (!chatSnapshot) return

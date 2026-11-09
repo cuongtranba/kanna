@@ -121,6 +121,15 @@ describe("getNotificationTitle", () => {
     expect(getNotificationTitle(data)).toBe("[1] Needs input: Ship the release · Kanna")
   })
 
+  test("names a waiting chat in a starred project", () => {
+    const data: SidebarData = {
+      starredProjectGroups: [createProjectGroup([createChatRow("a", { title: "Starred work", status: "waiting_for_user" })])],
+      projectGroups: [],
+      stacks: [],
+    }
+    expect(getNotificationTitle(data)).toBe("[1] Needs input: Starred work · Kanna")
+  })
+
   test("truncates a long waiting chat title", () => {
     const data = createSidebarData([createChatRow("a", { title: "x".repeat(60), status: "waiting_for_user" })])
     expect(getNotificationTitle(data)).toBe(`[1] Needs input: ${"x".repeat(40)}… · Kanna`)

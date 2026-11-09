@@ -230,15 +230,20 @@ function KannaSidebarImpl({
 
   const resolvedKeybindings = useMemo(() => getResolvedKeybindings(keybindings), [keybindings])
 
+  const allGroups = useMemo(
+    () => allProjectGroups({ starredProjectGroups: data.starredProjectGroups, projectGroups: data.projectGroups }),
+    [data.starredProjectGroups, data.projectGroups],
+  )
+
   const stackChats = useMemo(() => {
     const out: SidebarChatRow[] = []
-    for (const group of data.projectGroups) {
+    for (const group of allGroups) {
       for (const chat of group.chats) {
         if (chat.stackId) out.push(chat)
       }
     }
     return out
-  }, [data.projectGroups])
+  }, [allGroups])
 
   const stripStackChats = useCallback((groups: SidebarProjectGroup[]) => {
     return groups.map((group) => {
@@ -275,8 +280,8 @@ function KannaSidebarImpl({
   )
 
   const stackProjects = useMemo(
-    () => data.projectGroups.map((group) => ({ id: group.groupKey, title: fileNameOfPath(group.localPath) })),
-    [data.projectGroups]
+    () => allGroups.map((group) => ({ id: group.groupKey, title: fileNameOfPath(group.localPath) })),
+    [allGroups]
   )
 
   const handleStartStackChat = useCallback(async (stackId: string) => {
@@ -343,11 +348,6 @@ function KannaSidebarImpl({
     else return
     event.preventDefault()
   }, [nudgeSidebarWidth, setSidebarWidthAndPersist])
-
-  const allGroups = useMemo(
-    () => allProjectGroups({ starredProjectGroups: data.starredProjectGroups, projectGroups: data.projectGroups }),
-    [data.starredProjectGroups, data.projectGroups],
-  )
 
   const projectIdByPath = useMemo(
     () => new Map(allGroups.map((group) => [group.localPath, group.groupKey])),
@@ -782,7 +782,7 @@ function KannaSidebarImpl({
           }}
         >
           <div className="p-[7px]">
-            {!hasVisibleChats && data.projectGroups.length === 0 ? (
+            {!hasVisibleChats && allGroups.length === 0 ? (
               <p className="text-sm text-muted-foreground p-2 mt-6 text-center">No conversations yet</p>
             ) : null}
 
