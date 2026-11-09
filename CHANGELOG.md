@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.2](https://github.com/cuongtranba/kanna/compare/v1.107.1...v1.107.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **client:** keep queued messages with long code inside the transcript column ([#1462](https://github.com/cuongtranba/kanna/issues/1462)) ([310ba6c](https://github.com/cuongtranba/kanna/commit/310ba6c3a2bd6b85c61853516c2de96a7178b373))
+
 ## [1.107.1](https://github.com/cuongtranba/kanna/compare/v1.107.0...v1.107.1) (2026-11-09)
 
 
