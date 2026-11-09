@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { SidebarData } from "../../shared/types"
 import type { ChatNavigatorPort } from "./chatNavigator"
-import { getNewestRemainingChatId, leaveRemovedChats } from "./chatLifecycle"
+import { useKannaStateStore } from "../stores/kannaStateStore"
+import { closeUnlistedChat, getNewestRemainingChatId, leaveRemovedChats } from "./chatLifecycle"
 
 type SidebarGroup = SidebarData["projectGroups"][number]
 type SidebarChat = SidebarGroup["chats"][number]
@@ -83,6 +84,22 @@ describe("leaveRemovedChats", () => {
   test("closes the chat view when nothing remains", () => {
     const { calls, navigator } = recordingNavigator()
     leaveRemovedChats(["x"], "x", groups, navigator)
+    expect(calls).toEqual(["close"])
+  })
+})
+
+describe("closeUnlistedChat", () => {
+  test("keeps a new chat open when its project is starred", () => {
+    useKannaStateStore.getState().setPendingChatId(null)
+    const { calls, navigator } = recordingNavigator()
+    closeUnlistedChat({ starredProjectGroups: [makeProjectGroup("starred", ["a"])], projectGroups: [] }, "a", navigator)
+    expect(calls).toEqual([])
+  })
+
+  test("closes a chat that no project lists once it is no longer pending", () => {
+    useKannaStateStore.getState().setPendingChatId(null)
+    const { calls, navigator } = recordingNavigator()
+    closeUnlistedChat({ starredProjectGroups: [], projectGroups: [makeProjectGroup("p", ["a"])] }, "gone", navigator)
     expect(calls).toEqual(["close"])
   })
 })

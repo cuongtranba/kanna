@@ -1,4 +1,5 @@
 import { useCallback } from "react"
+import { allProjectGroups, type SidebarGroupLists } from "../../shared/sidebar-data"
 import type { AgentProvider, SidebarData } from "../../shared/types"
 import { clearCommandError, surfaceCommandError } from "../lib/commandFeedback"
 import { useChatPreferencesStore, type ComposerState } from "../stores/chatPreferencesStore"
@@ -30,6 +31,21 @@ export function leaveRemovedChats(
   } else {
     chatNavigator.closeChat()
   }
+}
+
+export function closeUnlistedChat(
+  sidebar: SidebarGroupLists,
+  activeChatId: string,
+  chatNavigator: ChatNavigatorPort,
+): void {
+  const store = useKannaStateStore.getState()
+  const listed = allProjectGroups(sidebar).some((group) => group.chats.some((chat) => chat.chatId === activeChatId))
+  if (listed) {
+    if (store.pendingChatId === activeChatId) store.setPendingChatId(null)
+    return
+  }
+  if (store.pendingChatId === activeChatId) return
+  chatNavigator.closeChat()
 }
 
 export interface AdoptedChat {

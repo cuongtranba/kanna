@@ -11,6 +11,7 @@ import {
   type AppSettingsPatch,
   type AppSettingsSnapshot, type ClaudeAuthSettings, type KeybindingsSnapshot, type LlmProviderSnapshot, type LlmProviderValidationResult, type PushConfigSnapshot, type UpdateInstallResult, type UpdateSnapshot } from "../../shared/types"
 import type { AgentProvider, ChatDiffSnapshot, ChatSnapshot, CloudflareTunnelSettings, GitWorktree, LocalProjectsSnapshot, ProjectCommandsSnapshot, SidebarChatRow, SidebarData, StackSummary } from "../../shared/types"
+import { allProjectGroups } from "../../shared/sidebar-data"
 import { NEW_CHAT_COMPOSER_ID, useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useNewSessionStore } from "../stores/newSessionStore"
 import { flyChatTitleToTab } from "../lib/motion/titleFlip.adapter"
@@ -406,22 +407,17 @@ export function useAppGlobalState(
     if (result.action === "reload") dom.reload()
   }, [dialog, dom])
 
-  const sidebarProjectGroups = useMemo(
+  const orderedProjectGroups = useMemo(
     () => applySidebarProjectOrder(sidebarData.projectGroups, optimisticSidebarProjectOrder),
     [optimisticSidebarProjectOrder, sidebarData.projectGroups]
   )
 
   const resolvedSidebarData = useMemo(
-    () => (
-      sidebarProjectGroups === sidebarData.projectGroups
-        ? sidebarData
-        : {
-            ...sidebarData,
-            projectGroups: sidebarProjectGroups,
-          }
-    ),
-    [sidebarData, sidebarProjectGroups]
+    () => (orderedProjectGroups === sidebarData.projectGroups ? sidebarData : { ...sidebarData, projectGroups: orderedProjectGroups }),
+    [sidebarData, orderedProjectGroups]
   )
+
+  const sidebarProjectGroups = useMemo(() => allProjectGroups(resolvedSidebarData), [resolvedSidebarData])
 
   const fallbackLocalProjectPath = localProjects?.projects[0]?.localPath ?? null
 
