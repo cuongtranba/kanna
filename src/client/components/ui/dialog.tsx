@@ -17,7 +17,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-overlay/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none",
+      "kanna-dialog-overlay fixed inset-0 z-50 bg-overlay/50",
       className,
     )}
     {...props}
@@ -44,8 +44,7 @@ const DialogContent = React.forwardRef<
       ref={ref}
       {...{ [FOCUS_FALLBACK_IGNORE_ATTRIBUTE]: "" }}
       className={cn(
-        "fixed left-1/2 bottom-0 z-50 w-full -translate-x-1/2 rounded-t-lg bg-card duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 motion-reduce:animate-none max-md:max-h-[calc(100dvh-1rem)] max-md:pb-[env(safe-area-inset-bottom)] md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:border-border",
-        "max-md:data-[state=open]:slide-in-from-bottom-full max-md:data-[state=closed]:slide-out-to-bottom-full",
+        "kanna-dialog-content fixed left-1/2 bottom-0 z-50 w-full -translate-x-1/2 rounded-t-lg bg-card max-md:max-h-[calc(100dvh-1rem)] max-md:pb-[env(safe-area-inset-bottom)] md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:rounded-lg md:border md:border-border",
         "max-h-[85vh] flex flex-col",
         sizeClasses[size],
         className,

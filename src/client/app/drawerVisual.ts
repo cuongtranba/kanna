@@ -1,9 +1,11 @@
 import { animate, spring } from "animejs"
+import { useLayoutEffect, useRef } from "react"
 import { MOTION_SPRING, prefersReducedMotion } from "../lib/motion"
 import type { DomPort } from "../ports/domPort"
 import type { TimerPort } from "../ports/timerPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { timerAdapter } from "../adapters/timer.adapter"
+import { runDetached } from "../lib/runDetached"
 
 
 const PROGRESS_VAR = "--kanna-drawer-progress"
@@ -14,6 +16,7 @@ const SETTLE_MAX_MS = 420
 export interface DrawerVisual {
   track(progress: number): void
   settle(target: 0 | 1): Promise<void>
+  present(target: 0 | 1): Promise<void>
   release(): void
 }
 
@@ -23,6 +26,7 @@ export function createDrawerVisual(
 ): DrawerVisual {
   let current = 0
   let armed = false
+  let settledAt: 0 | 1 | null = null
 
   const write = (progress: number) => {
     current = progress
@@ -36,7 +40,7 @@ export function createDrawerVisual(
     dom.setDocumentElementStyleProperty(PROGRESS_VAR, "")
   }
 
-  return {
+  const visual: DrawerVisual = {
     track(progress) {
       if (!armed) {
         armed = true
@@ -47,6 +51,7 @@ export function createDrawerVisual(
 
     async settle(target) {
       if (!armed) return
+      settledAt = target
       if (prefersReducedMotion(dom) || current === target) {
         write(target)
         release()
@@ -74,6 +79,23 @@ export function createDrawerVisual(
       release()
     },
 
+    async present(target) {
+      if (armed || settledAt === target) return
+      visual.track(target === 1 ? 0 : 1)
+      await visual.settle(target)
+    },
+
     release,
   }
+  return visual
+}
+
+export function usePresentDrawerOnToggle(open: boolean, enabled: boolean, visual: DrawerVisual): void {
+  const previous = useRef(open)
+  useLayoutEffect(() => {
+    if (previous.current === open) return
+    previous.current = open
+    if (!enabled) return
+    runDetached("sidebar drawer present", visual.present(open ? 1 : 0))
+  }, [open, enabled, visual])
 }

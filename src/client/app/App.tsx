@@ -33,7 +33,7 @@ import { useKannaState } from "./useKannaState"
 import { KannaSocketProvider } from "./KannaSocketProvider"
 import { AppGlobalProvider } from "./AppGlobalProvider"
 import { useSidebarSwipeGesture } from "./sidebarSwipeGesture"
-import { createDrawerVisual } from "./drawerVisual"
+import { createDrawerVisual, usePresentDrawerOnToggle } from "./drawerVisual"
 import { selectInboxUnreadCount, useInboxStore } from "../stores/inboxStore"
 import { useViewportStore, useViewportSubscription } from "../stores/viewportStore"
 import { isMobileViewport } from "../lib/viewport"
@@ -286,6 +286,7 @@ function KannaLayoutInner({ ports = {} }: { ports?: AppPorts } = {}) {
     onClose: state.closeSidebar,
     visual: drawerVisual,
   })
+  usePresentDrawerOnToggle(state.sidebarOpen, isMobileViewport(viewportWidth), drawerVisual)
   const previousSidebarDataRef = useRef<ReturnType<typeof useKannaState>["sidebarData"] | null>(null)
   const { handleCreateChat, importClaudeSessions, importClaudeSession } = state
   const handleImportClaudeSessions = useCallback(async () => {
