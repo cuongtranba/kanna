@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.1](https://github.com/cuongtranba/kanna/compare/v1.107.0...v1.107.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **client:** keep chats in starred projects open ([#1460](https://github.com/cuongtranba/kanna/issues/1460)) ([de76be0](https://github.com/cuongtranba/kanna/commit/de76be0f25ab36d1d848f74adf78870d9fea732d))
+
 ## [1.107.0](https://github.com/cuongtranba/kanna/compare/v1.106.2...v1.107.0) (2026-11-09)
 
 
