@@ -33,10 +33,10 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
           </div>
         ) : null}
         {message.content ? (
-          <div className="relative group">
+          <div className="relative group min-w-0 max-w-full">
 
-              <div className="grid grid-cols-[1fr_auto] items-end gap-2.5 rounded-[20px] border border-dashed border-border bg-transparent pl-3.5 pr-1.5 py-1.5 prose prose-sm prose-invert text-left text-primary [&_p]:whitespace-pre-line">
-                <div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5 rounded-[20px] border border-dashed border-border bg-transparent pl-3.5 pr-1.5 py-1.5 prose prose-sm prose-invert text-left text-primary [&_p]:whitespace-pre-line">
+                <div className="min-w-0">
                 {renderMarkdownToReact(message.content)}
                 </div>
                   <Button
