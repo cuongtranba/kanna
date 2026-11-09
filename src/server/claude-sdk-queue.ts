@@ -1,4 +1,4 @@
-import { type Query } from "@anthropic-ai/claude-agent-sdk"
+import { type Query, type SlashCommand } from "@anthropic-ai/claude-agent-sdk"
 import { type ClaudeRawSdkMessage, isSdkToClaudeMessage } from "./claude-message-normalizer"
 
 export class AsyncMessageQueue<T> implements AsyncIterable<T> {
@@ -48,8 +48,12 @@ export class AsyncMessageQueue<T> implements AsyncIterable<T> {
   }
 }
 
-export async function* toClaudeMessageStream(q: Query): AsyncGenerator<ClaudeRawSdkMessage> {
+export async function* toClaudeMessageStream(
+  q: Query,
+  onCommandsChanged?: (commands: SlashCommand[]) => void,
+): AsyncGenerator<ClaudeRawSdkMessage> {
   for await (const m of q) {
+    if (m.type === "system" && m.subtype === "commands_changed") onCommandsChanged?.(m.commands)
     if (isSdkToClaudeMessage(m)) yield m
   }
 }

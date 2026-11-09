@@ -261,6 +261,7 @@ export class AgentCoordinator {
   readonly liveBlocks: import("./live-block-throttle").LiveBlockHub | null
   readonly subagentTranscriptRegistry: import("./subagent-transcript-registry").SubagentTranscriptRegistry | null
   readonly localCatalog: import("./local-catalog").LocalCatalogService | null
+  readonly cliCommands: import("./claude-cli-commands").ClaudeCliCommands | null
   private readonly skillAccess: LocalSkillAccess
   private readonly sessionConfig: ClaudeSessionConfigHelpersDeps
   private readonly sessionLifecycle: SessionLifecycleDeps
@@ -391,6 +392,7 @@ export class AgentCoordinator {
     this.liveBlocks = args.liveBlocks ?? null
     this.subagentTranscriptRegistry = args.subagentTranscriptRegistry ?? null
     this.localCatalog = args.localCatalog ?? null
+    this.cliCommands = args.cliCommands ?? null
     this.skillAccess = createLocalSkillAccess(this.localCatalog, (id) => resolveChatCwd(this.store, id), readCatalogFileBody)
     this.sessionConfig = {
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
@@ -518,11 +520,9 @@ export class AgentCoordinator {
     this.onStateChange(chatId, options)
   }
 
-
   resolveChatPolicy(chatId: string): ChatPermissionPolicy {
     return resolveChatPolicyFn(this.sessionConfig, chatId)
   }
-
 
   private sessionErrorHandlerDeps(): SessionErrorHandlerDeps {
     return {
@@ -537,7 +537,6 @@ export class AgentCoordinator {
         this.closeClaudeSession(chatId, session, opts),
     }
   }
-
 
   private autoContinueDeps(): AutoContinueCommandDeps {
     return {
@@ -968,6 +967,7 @@ export class AgentCoordinator {
       runClaudeSession: (session) => { void this.runClaudeSession(session) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       onCompaction: (event) => { this.handleCompaction(event) },
+      onCliCommands: (commands) => { this.cliCommands?.record(commands) },
     }
   }
 

@@ -1,5 +1,5 @@
 fact: c3-231
-claim: "the local skill/command catalog — disk scan, dedupe, cache, and the three projections it serves (picker list, `/name` resolution, skill roster) — is at src/server/local-catalog*.ts and src/server/skill-invocation.ts"
+claim: "the local skill/command catalog — disk scan, dedupe, cache, and the three projections it serves (picker list, `/name` resolution, skill roster) — plus the Claude Code built-in command catalog merged into the picker — is at src/server/local-catalog*.ts, src/server/claude-cli-commands*.ts and src/server/skill-invocation.ts"
 code:
   - src/server/local-catalog.ts
   - src/server/local-catalog.test.ts
@@ -7,6 +7,10 @@ code:
   - src/server/local-catalog-io.adapter.test.ts
   - src/server/claude-slash-commands.ts
   - src/server/claude-slash-commands.test.ts
+  - src/server/claude-cli-commands.ts
+  - src/server/claude-cli-commands.test.ts
+  - src/server/claude-cli-commands-file.adapter.ts
+  - src/server/slash-command-sources.adapter.ts
   - src/server/skill-invocation.ts
   - src/server/skill-invocation.test.ts
   - src/shared/slash-expansion.ts

@@ -12,7 +12,8 @@ import {
   selectPluginCommandCenterItems,
   usePluginContributionsStore,
 } from "../../../stores/pluginContributionsStore"
-import type { SlashCommand } from "../../../../shared/types"
+import type { AgentProvider, SlashCommand } from "../../../../shared/types"
+import { providerExpandsSlashCommands } from "../../../../shared/provider-model-types"
 import { $createSlashCommandNode } from "../nodes/SlashCommandNode"
 import { clampCommandDescription } from "../../../lib/formatters"
 import { ChatTabScopedStore } from "../../../stores/chatTabScopedStore"
@@ -41,6 +42,11 @@ export function dedupeCommandsByName(commands: SlashCommand[]): SlashCommand[] {
     result.push(cmd)
   }
   return result
+}
+
+export function commandsForProvider(commands: SlashCommand[], provider: AgentProvider): SlashCommand[] {
+  if (providerExpandsSlashCommands(provider)) return commands
+  return commands.filter((cmd) => cmd.scope !== "cli")
 }
 
 
@@ -111,16 +117,22 @@ function SlashCommandRowContent({ cmd }: { cmd: SlashCommand }) {
 
 export interface SlashCommandTypeaheadPluginProps {
   projectId: string | null
+  provider: AgentProvider
 }
 
 
 export function SlashCommandTypeaheadPlugin({
   projectId,
+  provider,
 }: SlashCommandTypeaheadPluginProps): ReactNode {
   const query = ChatTabScopedStore.useScopedStore((state) => state.slashQuery)
   const setQuery = ChatTabScopedStore.useScopedStore((state) => state.setSlashQuery)
 
-  const slashCommands = useSlashCommands(projectId)
+  const projectCommands = useSlashCommands(projectId)
+  const slashCommands = useMemo(
+    () => commandsForProvider(projectCommands, provider),
+    [projectCommands, provider],
+  )
   const pluginCommandItems = usePluginContributionsStore(selectPluginCommandCenterItems)
 
   const triggerFn = useRegexTypeaheadTrigger(SLASH_TRIGGER_RE)

@@ -1,4 +1,5 @@
 import type { AgentAppSettingsView } from "./agent-app-settings-view"
+import type { SlashCommand } from "@anthropic-ai/claude-agent-sdk"
 import type { ChatTaskStorePort } from "./kanna-mcp"
 
 import type { JsonValue } from "../shared/json"
@@ -105,6 +106,7 @@ export interface SpawnClaudeTurnDeps {
   runClaudeSession: (session: ClaudeSessionState) => void
   emitStateChange: (chatId: string) => void
   onCompaction: (event: CompactionEvent) => void
+  onCliCommands?: (commands: SlashCommand[]) => void
 }
 
 
@@ -228,6 +230,7 @@ export async function spawnClaudeTurn(
         costBaselineUsd: args.sessionToken ? deps.getCostBaselineUsd(args.chatId) : undefined,
         contextWindowOverride: endpoint?.contextWindow ?? openrouterContextWindow,
         onCompaction: deps.onCompaction,
+        onCliCommands: deps.onCliCommands,
       })
     } catch (err) {
       if (picked) deps.oauthPool?.release(args.chatId)

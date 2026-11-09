@@ -75,6 +75,26 @@ not, the agent is asked to repair it.
 
 See [Cron Jobs](/features/cron-jobs/) for the grammar and schedules.
 
+## Claude Code's built-in commands
+
+In Claude and OpenRouter chats, and chats on a custom Anthropic-compatible
+endpoint, the picker also lists Claude Code's own built-in commands, such as
+`/doctor`, `/context`, `/init` and `/security-review`. Picking one sends it to
+the Claude Code CLI as you typed it. Commands that open an interactive terminal
+panel are not offered, because the CLI cannot show them inside Kanna.
+
+Kanna learns the list from the CLI each time a Claude session starts and keeps
+it in its data folder, so after a restart the commands are already in the
+picker. Before the very first Claude session the list is empty. Codex chats do
+not show these commands, because Codex cannot run them.
+
+When a skill on disk shares a name with a built-in command, Claude runs the
+built-in. The picker shows the built-in first.
+
+A built-in command such as `/doctor` only runs when it is the **first thing in
+your message**. Written mid-sentence ("run /doctor …"), it is plain text, and
+the model is not allowed to start it for you.
+
 ## Skills and commands from disk
 
 The picker also lists Claude Code skills and slash commands found on disk,

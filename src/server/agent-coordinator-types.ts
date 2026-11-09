@@ -57,6 +57,7 @@ export interface AgentCoordinatorArgs {
   getCustomProviderCredential?: (id: string) => import("../shared/custom-providers").CustomProviderCredential | null
   listOpenRouterModels?: () => Promise<import("../shared/types").OpenRouterModel[]>
   localCatalog?: import("./local-catalog").LocalCatalogService
+  cliCommands?: import("./claude-cli-commands").ClaudeCliCommands
   persistOAuthState?: (id: string, oauth: McpOAuthState) => void
   backgroundTaskOutputRegistry?: import("./background-task-output-registry").BackgroundTaskOutputRegistry
   liveBlocks?: import("./live-block-throttle").LiveBlockHub

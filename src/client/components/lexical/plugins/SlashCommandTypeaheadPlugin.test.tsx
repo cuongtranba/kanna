@@ -5,6 +5,7 @@ import { $createSlashCommandNode, SlashCommandNode } from "../nodes/SlashCommand
 import {
   $applySlashCommandSelection,
   SlashCommandMenuOption,
+  commandsForProvider,
   dedupeCommandsByName,
 } from "./SlashCommandTypeaheadPlugin"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
@@ -62,6 +63,19 @@ describe("dedupeCommandsByName", () => {
   it("leaves an already-unique list unchanged", () => {
     const input = [makeCmd("a"), makeCmd("b"), makeCmd("c")]
     expect(dedupeCommandsByName(input).map((c) => c.name)).toEqual(["a", "b", "c"])
+  })
+})
+
+
+describe("commandsForProvider", () => {
+  const commands = [makeCmd("doctor", { scope: "cli" }), makeCmd("my-skill", { scope: "personal" })]
+
+  it("offers Claude Code's own commands to Claude chats", () => {
+    expect(commandsForProvider(commands, "claude").map((c) => c.name)).toEqual(["doctor", "my-skill"])
+  })
+
+  it("hides them from Codex chats, which cannot run them", () => {
+    expect(commandsForProvider(commands, "codex").map((c) => c.name)).toEqual(["my-skill"])
   })
 })
 

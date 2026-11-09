@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:6d5205cc879f2ea2962a735b302b8dbbd55b0c1ddfd471fd6192fe7287ee6a0b -->
+<!-- hash: sha256:2d9b3da242f8fda19fdabb1740f9ccacb56ac6d5cabfd2707e2abb7c7187863d -->
 
 ## c3-0 — Kanna (system)
 
@@ -264,7 +264,7 @@ files: src/server/openrouter-models-io.adapter.ts, src/server/openrouter-models.
 ## c3-231 — local-catalog (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-local-first-data, ref-side-effect-adapter
-files: src/server/claude-slash-commands.test.ts, src/server/claude-slash-commands.ts, src/server/local-catalog-io.adapter.test.ts, src/server/local-catalog-io.adapter.ts, src/server/local-catalog.test.ts, src/server/local-catalog.ts, src/server/skill-invocation.test.ts, src/server/skill-invocation.ts, src/shared/slash-expansion.test.ts, src/shared/slash-expansion.ts
+files: src/server/claude-cli-commands-file.adapter.ts, src/server/claude-cli-commands.test.ts, src/server/claude-cli-commands.ts, src/server/claude-slash-commands.test.ts, src/server/claude-slash-commands.ts, src/server/local-catalog-io.adapter.test.ts, src/server/local-catalog-io.adapter.ts, src/server/local-catalog.test.ts, src/server/local-catalog.ts, src/server/skill-invocation.test.ts, src/server/skill-invocation.ts, src/server/slash-command-sources.adapter.ts, src/shared/slash-expansion.test.ts, src/shared/slash-expansion.ts
 
 ## c3-232 — boards (component)
 container: c3-2 | context: c3-0
@@ -1074,6 +1074,9 @@ src/shared/workflow-types.test.ts → c3-229
 src/shared/workflow-types.ts → c3-229
 src/server/openrouter-models-io.adapter.ts → c3-230
 src/server/openrouter-models.ts → c3-230
+src/server/claude-cli-commands-file.adapter.ts → c3-231
+src/server/claude-cli-commands.test.ts → c3-231
+src/server/claude-cli-commands.ts → c3-231
 src/server/claude-slash-commands.test.ts → c3-231
 src/server/claude-slash-commands.ts → c3-231
 src/server/local-catalog-io.adapter.test.ts → c3-231
@@ -1082,6 +1085,7 @@ src/server/local-catalog.test.ts → c3-231
 src/server/local-catalog.ts → c3-231
 src/server/skill-invocation.test.ts → c3-231
 src/server/skill-invocation.ts → c3-231
+src/server/slash-command-sources.adapter.ts → c3-231
 src/shared/slash-expansion.test.ts → c3-231
 src/shared/slash-expansion.ts → c3-231
 src/server/board-*.ts → c3-232

@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 8e7255799e1a8cf31c1f6bdb0a58227e484b98eb0416319c9535b45773629cfa
+c3-seal: 18b907df4ff3a5d6771f5fa7ccf2137d8eb6a62a98ecfdab05eb80055919f75b
 title: local-catalog
 type: component
 category: feature
@@ -30,7 +30,7 @@ Scan local Claude Code skills and slash commands (project, personal, plugin) on 
 
 ## Purpose
 
-Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command files into typed projections: the `SlashCommand[]` the `/` picker offers, the winning entry a typed `/name` resolves to (including its file path), and the skill roster a provider with no skill machinery of its own is told about. One scan backs all three. Non-goals: drive the picker UI, expand or run a command, watch filesystem changes mid-session, route claude CLI commands.
+Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command files into typed projections: the `SlashCommand[]` the `/` picker offers, the winning entry a typed `/name` resolves to (including its file path), and the skill roster a provider with no skill machinery of its own is told about. One scan backs all three. It also owns the merge that puts Claude Code's own built-in commands (recorded from live sessions by the CLI command catalog, scope `cli`) into the picker list between Kanna's builtins and the disk entries. Non-goals: drive the picker UI, expand or run a command, watch filesystem changes mid-session, route claude CLI commands (a typed `/name` still goes to the CLI untouched).
 
 ## Foundational Flow
 
@@ -47,7 +47,7 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | Aspect | Detail | Reference |
 | --- | --- | --- |
 | Outcome | User sees all local skills + commands when typing / | c3-115 |
-| Primary path | The project-commands envelope reads the list synchronously per project; every scope is surfaced, no CLI merge, no async load. Its consumer localCommandsForCwd prepends Kanna's static BUILTIN_SLASH_COMMANDS (/clear, /compact) and drops any disk entry sharing a builtin name, since dispatch intercepts that name before the CLI sees it. LocalCatalogService.list(cwd) is unchanged — it still returns disk entries only | c3-208 |
+| Primary path | The project-commands envelope reads the list synchronously per project; every scope is surfaced, no async load. Its consumer localCommandsForCwd returns Kanna's static BUILTIN\_SLASH\_COMMANDS (/clear, /compact, /cron), then the Claude Code built-ins held by the CLI command catalog (scope cli), then disk entries, dropping CLI and disk entries that share a Kanna builtin name, since dispatch intercepts that name before the CLI sees it. Disk entries sharing a CLI name stay, because the client hides scope cli for providers whose harness does not resolve /name itself. LocalCatalogService.list(cwd) is unchanged — it still returns disk entries only | c3-208 |
 | Alternate — cache hit | Same cwd with every mtime stamp unchanged returns the cached list without rescanning | c3-231 |
 | Alternate — invalidate | invalidate(cwd?) drops cache row(s) | c3-231 |
 | Failure — scan throws | Error logged; the picker falls back to the builtins alone rather than an empty list, so /clear and /compact stay reachable when the disk scan fails | c3-208 |
@@ -70,6 +70,7 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | readCatalogFileBody | OUT | Pure IO; full text of one catalog file, or null when missing, unreadable, or past CATALOG_FILE_MAX_BYTES (256 KiB). The scan reads only the frontmatter prefix; an expansion needs the body, and the body goes straight into a turn's context. Null rather than throw — it runs on the send path, where the fallback is to send the line as typed | c3-210 | src/server/local-catalog-io.adapter.ts |
 | LocalCatalogService.skills | OUT | cwd → SkillRosterEntry[] (name, description, absolute SKILL.md path) for the roster a provider with no skill machinery is told at session start. Skills only — a command template is user-invoked, not model-invoked — and deliberately INCLUDING user-invocable: false entries, which are hidden from the picker but still auto-triggerable | c3-210 | src/server/local-catalog.ts |
 | LocalCatalogService.resolve | OUT | (cwd, name) → the winning RawCatalogEntry incl. the filePath list drops, case-insensitive; restricted to user-invocable entries so a typed /name and the picker cannot disagree about which names exist. Reads the cached row — no rescan | c3-210 | src/server/local-catalog.ts |
+| ClaudeCliCommands | OUT | record(SDK rows) keeps builtin rows only, drops names starting with an underscore, ignores empty or identical lists, saves and notifies; list() returns the server-wide SlashCommand[] with scope cli. Fed by supportedCommands() at Claude session start and by commands\_changed pushes; loaded from claude-cli-commands.json in the data dir at boot so the picker is complete before any session runs | c3-210 | src/server/claude-cli-commands.ts |
 
 ## Change Safety
 
@@ -87,3 +88,5 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | src/server/local-catalog-io.adapter.ts | c3-231 Contract | Scan glob detail | src/server/local-catalog-io.adapter.ts |
 | src/server/local-catalog.test.ts | c3-231 Contract | Test cases per surface | src/server/local-catalog.test.ts |
 | src/server/local-catalog-io.adapter.test.ts | c3-231 Contract | Fixture coverage | src/server/local-catalog-io.adapter.test.ts |
+| src/server/claude-cli-commands-file.adapter.ts | c3-231 Contract | JSON normalization detail | src/server/claude-cli-commands-file.adapter.ts |
+| src/server/claude-cli-commands.ts | c3-231 Contract | Filter detail | src/server/claude-cli-commands.ts |
