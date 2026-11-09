@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.0](https://github.com/cuongtranba/kanna/compare/v1.106.2...v1.107.0) (2026-11-09)
+
+
+### Features
+
+* list Claude Code built-in commands in the slash picker ([#1458](https://github.com/cuongtranba/kanna/issues/1458)) ([793c325](https://github.com/cuongtranba/kanna/commit/793c3259e62dbcd892e287ba1833e139f79242f5))
+
 ## [1.106.2](https://github.com/cuongtranba/kanna/compare/v1.106.1...v1.106.2) (2026-11-09)
 
 
