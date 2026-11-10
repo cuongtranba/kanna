@@ -55,7 +55,7 @@ export function renderGenUIPromptSection(options: GenUIPromptOptions): string {
   const components = Object.entries(GENUI_COMPONENTS).map(([name, def]) => `- ${name}(${def.signature})${def.children ? " [children]" : ""} — ${def.description}`)
   const actions = Object.entries(GENUI_ACTIONS).map(([name, def]) => `- ${name} ${def.signature} [${def.class}] — ${def.description}`)
   const validation = options.canValidate
-    ? `Before you send a view, call \`${VALIDATE_UI_TOOL_NAME}\` with the JSON and fix whatever it rejects; it also checks that file and MCP datasets resolve.`
+    ? `Before you send a view, call \`${VALIDATE_UI_TOOL_NAME}\` with the JSON and fix whatever it rejects; it also checks that file datasets resolve.`
     : "Kanna validates the view when your turn ends and asks you once to fix it if it is invalid, so check it against the rules below."
   return [
     "## Generative UI",

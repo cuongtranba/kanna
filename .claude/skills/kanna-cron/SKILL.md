@@ -64,7 +64,7 @@ exactly — same four bounds:
 | Stands aside for queued user message | Identical |
 | Never throws into the send path | Identical |
 
-**Only on the typed path.** `createCronConfirm` is wired into `buildCronCommandDeps`
+**Only on the typed path.** `createCronConfirm` is wired into `cronCommandDeps()`
 but `armCron` (the `arm_cron` MCP tool) overrides `cronConfirm: undefined` — the
 model path already instructs the model to call `AskUserQuestion` after arming
 (see `arm_cron` post-arm review below), so double-confirming is worse than not
@@ -93,13 +93,11 @@ After a successful `arm_cron` call the tool result carries:
 **This is a prompt contract, not an env-var gate.** The arming happens before
 the review instruction is returned, so a timed-out or unanswered question
 leaves the job armed — the correct direction to fail. The instruction covers
-the change path: arm a corrected line, then `/cron remove <old-jobId>`.
+the change path: `update_cron` with the jobId and the field to change; a disarm
+removes the job with `/cron remove <jobId>`.
 
-`armCron` now returns `Promise<{ jobId: string }>` instead of `void`. Every
-call site that forwards it (`claude-session-spawner.ts`, `claude-session-start.ts`,
-`agent-coordinator-types.ts`) and every interface that
-owns a `runCronCommand` slot (`claude-send-command.ts`, `ws-router-agent-ctrl.ts`)
-carry the updated return type. See `adr-20260818-cron-arm-confirm-tool-result`.
+`armCron` returns `Promise<{ jobId: string }>` so the tool result can name the
+job. See `adr-20260818-cron-arm-confirm-tool-result`.
 
 **A multiline `/cron` message is its own `part` (`"multiline"`), not
 `"subcommand"`.** Chat `061b8856` reproduced 39b0d210's dead end even with
@@ -202,16 +200,3 @@ point — `buildSnapshotFile` serializes already-compacted memory.
 gone from `schedules.jsonl`; reverting the module does not bring them back. The
 user-visible record lives in the transcript log (`cron_run` cards), a different
 log that is never compacted.
-
-**The corpus has since outgrown the numbers above.** Re-measured 2026-08-19:
-1.0 GB across 262 chats, largest single transcript **96 MB / 36k entries**
-costing **524 MB peak RSS** to parse (5.4x, not 4.7x). `evict()` previously
-kept a `size > 1` guard that prevented the sole cached entry from being dropped
-even once it grew past `maxBytes` via `appendTo()` — pinning 524 MB RSS
-permanently. The guard is removed: a solo entry that exceeds the budget IS
-evicted, and subsequent reads use `getRecentMessagesPageTail` (a small tail
-chunk, not a full load) because the hot paths — history primer,
-proactive-compact trigger, subagent scope primer — already took the tail path
-when the transcript is not in cache. **pm2 7.0.3 silently clamps
-`max_memory_restart` at 2^31** (both `"3G"` and `"4G"` resolve to
-`2147483648`), so raising the ceiling is not available — only lowering RSS is.

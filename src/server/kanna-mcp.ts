@@ -32,7 +32,6 @@ import { createBashTool } from "./kanna-mcp-tools/bash.adapter"
 import { createEditTool } from "./kanna-mcp-tools/edit.adapter"
 import { createWriteTool } from "./kanna-mcp-tools/write.adapter"
 import { createWebFetchTool } from "./kanna-mcp-tools/webfetch"
-import { createWebSearchTool } from "./kanna-mcp-tools/websearch"
 import type { BuiltinShim, ToolHandlerContext } from "./kanna-mcp-tools/tool-callback-shim"
 import {
   createDelegateSubagentTool,
@@ -226,14 +225,14 @@ Returns one of:
 - invalid_port: the port is outside the valid range
 `
 
-const PREVIEW_FILE_DESCRIPTION = `Show a file from the workspace to the user as a rich in-chat preview card in the Kanna UI. Tapping the card opens a full-screen mobile-friendly reader: markdown is typeset (mermaid/flowchart blocks render as diagrams, code blocks are syntax-highlighted), source files are syntax-highlighted, CSV becomes a table, images display inline. This is how the user READS a file on their phone without an IDE.
+const PREVIEW_FILE_DESCRIPTION = `Show a file from the workspace to the user as a rich in-chat preview card in the Kanna UI. Tapping the card opens a full-screen mobile-friendly reader: markdown is typeset (mermaid/flowchart blocks render as diagrams, code blocks are syntax-highlighted), source files are syntax-highlighted, CSV becomes a table, images display inline. This is how the user reads a file on their phone without an IDE.
 
 Call this proactively whenever the user should read a file:
 - right after you create or substantially edit a spec, plan, report, or document you want the user to review
 - when the user asks to see, read, show, or open a file
 - when your reply refers to a file the user should read to follow along
 
-Do NOT paste the file's content into your reply as well — call this tool and give a 1–2 sentence summary instead. Use offer_download only when the user needs the bytes (archives, binaries, exports).
+The card shows the content, so don't paste the file into your reply as well; give a 1–2 sentence summary instead. Only text, image, audio, video, JSON and PDF files can be previewed — anything else is refused; use offer_download for those and whenever the user needs the bytes (archives, binaries, exports).
 
 Args:
 - path: workspace-relative path to the file (must stay inside the project root)
@@ -336,27 +335,29 @@ function buildDelegateSubagentToolList(args: {
 
 export const SETUP_LOOP_DESCRIPTION =
   "Set up an autonomous loop bound to a measurable goal. Kanna renders a "
-  + "deterministic recurring prompt from your input, VALIDATES it (rejects "
+  + "deterministic recurring prompt from your input, validates it (rejects "
   + "vague goals / unparseable verify commands / paths outside cwd), seeds the "
   + "chat's task list, then wipes this chat's main-agent context and enqueues "
   + "the templated prompt so the loop starts on the next turn. Every iteration "
-  + "the main agent will: (1) read the task list, (2) run the verify command, "
-  + "(3) if verify exits 0 print 'GOAL MET' and END the turn (loop terminates "
-  + "by absence of delegation), otherwise (4) delegate the next chunk to a "
-  + "background subagent that records progress in the task list. Use this "
+  + "the main agent reads the task list (the loop's only durable plan), runs the "
+  + "verify command, and either delegates the next task to a background subagent "
+  + "that records progress in the task list or, once the oracle passes and no task "
+  + "is pending or in progress, prints 'GOAL MET' and calls stop_loop. Use this "
   + "instead of writing loop prompts by hand — free-form prompts drift and lose "
   + "the invariants."
 
 const STOP_LOOP_DESCRIPTION =
-  "Disarm the autonomous loop armed by setup_loop on this chat. Call this "
-  + "when the goal is met (verify command exits 0) right before ending your "
-  + "turn. Restores normal editing tools (Edit/Write/Task are blocked while a "
+  "Disarm the autonomous loop armed by setup_loop on this chat. Call it right "
+  + "before ending your turn when the loop is over: the goal is met (the oracle "
+  + "passes and no task is pending or in progress), the oracle is too weak to "
+  + "define done, or the plan is blocked. Restores normal editing tools "
+  + "(Edit/Write/Task are blocked while a "
   + "loop is armed) and stops the loop prompt from being re-injected on future "
   + "turns. No-op if no loop is armed."
 
 const RESUME_LOOP_DESCRIPTION =
   "Re-arm the loop this chat most recently ran, from the spec it was armed "
-  + "with (same subagent, oracle, workdir and tracking file). Use when a loop "
+  + "with (same subagent, oracle and workdir; the plan stays in the task list). Use when a loop "
   + "was disarmed and the user wants it going again — above all after a user "
   + "message disarmed it as a takeover, which is what happens whenever they "
   + "type something like \"resume\". Prefer this over re-running setup_loop: "
@@ -477,10 +478,7 @@ function buildSetupLoopToolList(args: {
         async () => {
           const result = await resumeLoop()
           if (result.resumed) {
-            const where = result.trackingFileRel
-              ? ` Tracking ${result.trackingFileRel}${result.workdirAbs ? ` in ${result.workdirAbs}` : ""}.`
-              : ""
-            return ok(`Loop re-armed from its previous spec.${where} The next wake replays the loop prompt.`)
+            return ok("Loop re-armed from its previous spec. The next wake replays the loop prompt.")
           }
           if (result.reason === "already_armed") return ok("A loop is already armed on this chat; nothing to resume.")
           return fail("This chat has no previous loop to resume. Use setup_loop to arm one.")
@@ -492,35 +490,32 @@ function buildSetupLoopToolList(args: {
 }
 
 const QUERY_TRACKING_FILE_DESCRIPTION =
-  "Read a structured markdown tracking file (e.g. the loop's PROGRESS.md) by "
-  + "SECTION instead of loading the whole file. Returns only the requested "
+  "Read a structured markdown tracking file (PROGRESS.md by default) by "
+  + "section instead of loading the whole file. Returns only the requested "
   + "sections, so context stays bounded no matter how large the file grows on "
-  + "disk. In a loop turn, query just the sections you need (e.g. 'Next chunk' "
-  + "plus the latest few 'Progress' rows via list_limit) rather than reading "
-  + "the entire file."
+  + "disk; use list_limit to keep just the latest rows of a long log."
 
 const APPEND_TRACKING_ROW_DESCRIPTION =
   "Append one entry under a section of a structured markdown tracking file "
-  + "(e.g. add a Progress row to PROGRESS.md) WITHOUT reading the whole file "
-  + "first. Prefer this over Edit/Write for the loop tracking file — it keeps "
-  + "the append off your context. Use position 'top' for newest-first logs "
-  + "like Progress. Outside a loop this is also how you keep durable task "
+  + "(PROGRESS.md by default) without reading the whole file first, so the "
+  + "append stays off your context. Use position 'top' for newest-first logs "
+  + "like Progress. Outside an autonomous loop this is how you keep durable task "
   + "state: if the file does not exist yet it is created from a task-state "
   + "skeleton (Objective, Acceptance criteria, Status, Completed, Remaining, "
   + "Decisions, Failed approaches, Unresolved errors), so state survives a "
-  + "context compaction. Inside an armed loop a missing file is an error "
-  + "instead, so a mistyped name cannot silently become a second document."
+  + "context compaction. Inside an armed loop the plan lives in the task list "
+  + "(task_list, task_note), and a missing file is an error, so a mistyped name "
+  + "cannot silently become a second document."
 
 const REPLACE_TRACKING_SECTION_DESCRIPTION =
-  "Replace a section's ENTIRE body in a structured markdown tracking file, "
+  "Replace a section's entire body in a structured markdown tracking file, "
   + "without reading the whole file. Use this for sections that hold the "
-  + "CURRENT state rather than a log — above all the loop's 'Next chunk', "
-  + "which must describe exactly one next step. Appending there instead makes "
-  + "completed chunks pile up, and a later iteration re-reads a finished chunk "
-  + "and redoes the work. Use append_tracking_row for true logs (Progress, "
-  + "Failed approaches); use this for Next chunk, and for a task document's "
-  + "Status / Remaining. Outside a loop a missing file is created from the "
-  + "task-state skeleton, as with append_tracking_row."
+  + "current state rather than a log, such as a task document's Status or "
+  + "Remaining: appending there makes finished steps pile up, and a later read "
+  + "mistakes them for open work. Use append_tracking_row for true logs "
+  + "(Progress, Decisions, Failed approaches). A missing file is created from "
+  + "the task-state skeleton outside an armed loop and is an error inside one, "
+  + "as with append_tracking_row."
 
 const RUN_VERIFY_DESCRIPTION =
   "Run the armed loop's verify command (the oracle) and return its exit code "
@@ -616,7 +611,7 @@ function buildTrackingDocToolList(args: {
         return trackingFileLanes.run(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
-            return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+            return fail(`file not found: ${confined.rel} — inside an armed loop the file must already exist; check the name, or record the plan in the task list`)
           }
           const result = doc.append(loaded.content, {
             section: input.section,
@@ -669,7 +664,7 @@ function buildReplaceTrackingSectionTool(
         return trackingFileLanes.run(confined.abs, async () => {
           const loaded = await loadOrSeed(confined.abs)
           if (loaded === null) {
-            return fail(`file not found: ${confined.rel} (run setup_loop to create it first)`)
+            return fail(`file not found: ${confined.rel} — inside an armed loop the file must already exist; check the name, or record the plan in the task list`)
           }
           const result = doc.replace(loaded.content, { section: input.section, body: input.body })
           await writeDoc(confined.abs, result.content)
@@ -781,8 +776,8 @@ const ARM_CRON_DESCRIPTION =
   + "Post-arm: after a successful arm, present the full configuration to the user "
   + "and confirm it with AskUserQuestion — options: Confirm / Change schedule / "
   + "Change mode / Change instruction / Disarm. If they choose a change, call "
-  + "arm_cron again with the corrected line and remove the old job with "
-  + "`/cron remove <jobId>`."
+  + "update_cron with the job id and the field to change; if they disarm, "
+  + "remove the job with `/cron remove <jobId>`."
 
 function buildCronToolList(args: {
   chatId: string | null
@@ -891,7 +886,6 @@ const BUILTIN_SHIM_FACTORIES: readonly ((deps: { toolCallback: ToolCallbackServi
   createEditTool,
   createWriteTool,
   createWebFetchTool,
-  createWebSearchTool,
 ]
 
 function toolUseIdOf(extra: SdkToolExtra): string {

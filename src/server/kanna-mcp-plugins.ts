@@ -23,7 +23,9 @@ const PLUGIN_LOGS_DESCRIPTION = "Read the recent log lines for one installed plu
 
 const PLUGIN_SCAFFOLD_DESCRIPTION = "Scaffold a new Kanna plugin project at a directory."
 
-const PLUGIN_INSTALL_DESCRIPTION = "Compile a plugin source directory and install it."
+const PLUGIN_INSTALL_DESCRIPTION =
+  "Compile a plugin source directory and install it. A newly installed plugin starts disabled and does not run until "
+  + "the user enables it; reinstalling an installed id rebuilds its bundles and keeps its enabled state."
 
 const PLUGIN_RELOAD_DESCRIPTION = "Stop and restart a running plugin, picking up a rebuilt bundle."
 
@@ -155,7 +157,7 @@ export function buildPluginToolList<TTool>(
       PLUGIN_SCAFFOLD_DESCRIPTION,
       {
         dir: z.string().describe("Directory to create the plugin in. Must not already hold a plugin manifest."),
-        id: z.string().describe("Plugin id: lowercase letters, digits and hyphens, starting with a letter."),
+        id: z.string().describe("Plugin id: lowercase letters, digits and hyphens, starting with a letter, 2-64 characters, not \"kanna\"."),
         name: z.string().optional().describe("Human-readable plugin name. Defaults to the id."),
       },
       async (input) => {

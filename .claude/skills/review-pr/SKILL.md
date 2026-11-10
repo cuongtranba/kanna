@@ -21,9 +21,9 @@ Analyze a pull request for malicious content, summarize all changes, and produce
 
 The user will provide either:
 - A full GitHub PR URL (e.g. `https://github.com/owner/repo/pull/123`)
-- A PR number (e.g. `123`, assumes the current repo)
+- A PR number (e.g. `123`, assumes `cuongtranba/kanna`)
 
-Extract the owner, repo, and PR number. If only a number is given, use the current repo context.
+Extract the owner, repo, and PR number. If only a number is given, the repo is `cuongtranba/kanna`; `gh` has no default repo here, so every command below passes it explicitly.
 
 ### Step 1: Gather PR metadata
 
@@ -31,17 +31,17 @@ Run these commands to collect information (all read-only API calls):
 
 ```bash
 # PR summary info
-gh pr view <number> --json title,body,author,baseRefName,headRefName,state,additions,deletions,changedFiles,createdAt,labels,reviews
+gh pr view <number> --repo <owner>/<repo> --json title,body,author,baseRefName,headRefName,state,additions,deletions,changedFiles,createdAt,labels,reviews
 
 # Full diff (this is the raw diff, NOT checked out locally)
-gh pr diff <number>
+gh pr diff <number> --repo <owner>/<repo>
 
 # List of changed files
-gh pr view <number> --json files
+gh pr view <number> --repo <owner>/<repo> --json files
 
 # PR comments and review comments
-gh api repos/{owner}/{repo}/pulls/<number>/comments
-gh api repos/{owner}/{repo}/issues/<number>/comments
+gh api repos/<owner>/<repo>/pulls/<number>/comments
+gh api repos/<owner>/<repo>/issues/<number>/comments
 ```
 
 ### Step 2: Analyze for malicious content

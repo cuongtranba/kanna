@@ -20,8 +20,8 @@ The model's native `AskUserQuestion` / `ExitPlanMode` reach the durable protocol
 through `buildCanUseTool` (`claude-spawn-helpers.ts`), so Kanna registers no
 `ask_user_question` / `exit_plan_mode` MCP stand-ins and there is no
 `forceInteractiveToolCallbacks` argument. The flag **exclusively** gates that
-`canUseTool` routing and the 8 built-in shims
-(`read/glob/grep/bash/edit/write/webfetch/websearch`).
+`canUseTool` routing and the 7 built-in shims
+(`read/glob/grep/bash/edit/write/webfetch`).
 
 ### Pending-tool lifecycle (legacy `canUseTool` path — PendingToolSlots)
 
@@ -160,7 +160,8 @@ prime" was always right; the bug was *what* got primed.
 
 The picker merges the builtins in `localCommandsForCwd`, not in
 `LocalCatalogService.list` (whose contract stays the disk catalog). The catalog
-is no longer narrowed by provider — see **Local skills on every provider** below.
+is not narrowed by provider on disk; the picker's `commandsForProvider`
+(`SlashCommandTypeaheadPlugin.tsx`) drops only `cli`-scope commands for providers that do not expand slash commands.
 A project-authored `.claude/commands/clear.md` is dropped from the listing
 because dispatch intercepts that name first; rename it.
 
@@ -226,8 +227,8 @@ compaction; both return `{}`. Three bounds are load-bearing:
   summary, so a re-fire dedupes.
 
 **Telemetry is recorded at `EventStore.appendMessage`, not in the runner**, and
-both reasons matter. `runClaudeSession` measures 122 against the `complexity`
-ceiling pinned in `budget.ts` (127), so it has almost no headroom. And it is
+both reasons matter. `runClaudeSession` is the function that sets the
+`complexity` pin in `budget.ts`, so it has no headroom. And it is
 Claude-only: Codex's synthesized boundary (`claude-turn-runner.ts`) and its
 native one (`codex-app-server.ts`) never reach it, while every producer funnels
 through `appendMessage`. Attributes are `{provider, trigger}` only — at that
@@ -259,15 +260,15 @@ No new store and no new IO — `writeDoc` already `mkdir -p`s, and the same
 `StructuredDoc` engine reads it back by section.
 
 **This is a DIFFERENT surface from the loop's task list.** A loop's plan lives in
-the chat-scoped, event-sourced task store (`mcp__kanna__task_*`, above), which is
+the chat-scoped, event-sourced task store (`mcp__kanna__task_*`, see kanna-loop), which is
 not in git and holds structured rows; this tracking document is on disk and holds
 prose. Use `mcp__kanna__task_*` for a structured checklist for THIS chat that
 survives `/clear` and compaction and shows in the footer; use the tracking
 document for a durable repo-resident record the user will read, commit and diff.
-The loop no longer uses these tools at all.
+The loop does not use these tools.
 
 **The skeleton says `## Objective`, never `## Goal`.** The default filename is
-`PROGRESS.md`. Because the loop no longer reads or writes any tracking file, a
+`PROGRESS.md`. Because the loop reads and writes no tracking file, a
 document created this way can never collide with a loop's plan or reach the
 Progress panel.
 
@@ -341,10 +342,10 @@ directory costs a skill, while failing the send costs the turn.
 
 ## Kanna-MCP Built-in Shims
 
-When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
+When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 7 additional tools
 that mirror Claude's built-ins: `mcp__kanna__{read, glob, grep, bash, edit,
-write, webfetch, websearch}`. They route through the durable approval
-protocol with the same path-deny rules as the bash tool from P1 (readPathDeny
+write, webfetch}`. They route through the durable approval
+protocol with the same path-deny rules as the bash tool (readPathDeny
 for `read`/`glob`/`grep`, writePathDeny for `edit`/`write`).
 
 An ordinary SDK session keeps the model's native built-ins, so the model has no
@@ -356,9 +357,6 @@ with those paths — become its only file tools, each call checked by
 all; PR 4 of #1382 replaces this with a PreToolUse hook
 that keeps the native tools. The removed PTY driver also routed through the
 shims, via `--tools "mcp__kanna__*"`.
-
-`websearch` is a stub that always returns `isError: true` — real web search
-needs an external API integration which is out of scope for P3a.
 
 ## The `LSP` tool — one tool, every language
 
@@ -563,12 +561,14 @@ consequences, both fixed — and both easy to reintroduce.
 **`TranscriptCache` budgets bytes, not chats.** `maxChats = 4` was never a
 memory bound: MEASURED, the four largest transcripts on that install cost
 **220 MB RSS** (~4.7x their 47 MB of source text, parsed to JS objects). The
-cache now enforces `maxBytes` (default 24 MiB of SOURCE bytes ≈ 110 MB RSS)
-alongside the chat cap, and always retains the most recent entry so a single
-oversized transcript degrades to a re-read instead of thrashing. `set()` takes
+cache enforces `maxBytes` (default 24 MiB of SOURCE bytes ≈ 110 MB RSS)
+alongside the chat cap. A transcript over the budget is never held: `set()`
+refuses it and `evict()` drops even a sole entry that `appendTo()` grows past it,
+so reads of that chat take `getRecentMessagesPageTail`. `set()` takes
 the source size — `loadTranscriptWithBytes` hands it over for free — and falls
 back to `estimateTranscriptBytes` when a caller has no cheap size. **A count
-cap over unbounded-size items is not a bound**; do not swap back.
+cap over unbounded-size items is not a bound**; do not swap back. Larger-corpus
+measurements and the pm2 clamp: [references/transcript-cache-measurements.md](references/transcript-cache-measurements.md).
 
 **`startTurnForChat` no longer loads the transcript per turn.**
 `store.getMessages` loads the whole file AND deep-clones it — tens of MB of
@@ -591,7 +591,7 @@ dropped first using Set insertion order. Safe because Claude API always generate
 fresh `messageId`s per response; historical ids that age out will never repeat.
 Without the cap, a long-running server accumulates one entry per message forever.
 `state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
-dominant contributors are now bounded — see **Cron run-event retention** below.
+dominant contributors are bounded — see **Cron run-event retention** (`kanna-cron`).
 `compactLoopWakeEvents` (`auto-continue/compact-loop-wakes.ts`) also trims
 superseded `loop_armed` events: once a later `loop_armed` or `loop_disarmed`
 arrives, all prior loop-state events (`loop_armed`, `loop_disarmed`,

@@ -160,7 +160,6 @@ function renderLoopPrompt(args: {
     `  ${TASK_NOTE_TOOL_NAME}. A task's status cannot pile up the way a hand-`,
     "  written log could, which is why completed work never gets redone here.",
     "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
-    "- All progress lives in the task list, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,

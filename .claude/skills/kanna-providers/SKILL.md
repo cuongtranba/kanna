@@ -14,8 +14,7 @@ effective catalog at read time.
 
 - **Single source of truth.** `PROVIDERS` in `src/shared/types.ts` is the only
   built-in catalog. `src/server/provider-catalog.ts` `SERVER_PROVIDERS` is
-  `[...PROVIDERS]` — the former duplicate `HARD_CODED_CODEX_MODELS` was
-  removed (it drifted).
+  `[...PROVIDERS]`; a second hardcoded list drifts from it.
 - **Merge.** `mergeCustomModels(base, customModels)` (pure, in `types.ts`)
   makes the Settings list **the** catalog for a provider that has entries: the
   chat offers exactly the listed models, in list order, and a built-in the list
@@ -24,18 +23,13 @@ effective catalog at read time.
   the catalog is never empty, and `defaultModel` moves to the first listed model
   when the built-in default is not listed. `normalizeProviderModelId` resolves a
   selection of a removed model to a listed one rather than the built-in default.
-  It used to append the list over every built-in, so a model deleted in
-  Settings kept appearing in the chat picker.
-  **An override MERGES per field, it does not replace the object.** It used to
-  replace, and since the Settings form collects only id/label/efforts, a
-  hand-added entry for an id that already ships silently stripped every
-  capability it had no way to declare. A user's hand-added `claude-opus-5`
-  (createdAt 2026-07-25) shadowed the built-in's
-  `contextWindowOptions: ["200k","1m"]`; `getClaudeContextWindowOptions` then
-  returned `[]`, `ChatPreferenceControls` hid the 1M toggle (`length > 1`), and
-  `normalizeClaudeContextWindow` pinned every turn to 200k — visible only as a
-  `runConfig.model` with no `[1m]` suffix, and as auto-compaction at ~168k on a
-  chat the user believed was running on 1M. There is no "explicitly none" to
+  A model deleted in Settings therefore disappears from the chat picker.
+  **An override MERGES per field, it does not replace the object.** The Settings
+  form collects only id/label/efforts, so a replacing override of an id that
+  ships as a built-in would strip every capability it cannot declare: a
+  hand-added `claude-opus-5` would lose `contextWindowOptions`, hide the 1M
+  toggle and pin every turn to 200k, visible only as a `runConfig.model` with no
+  `[1m]` suffix and auto-compaction at ~168k. There is no "explicitly none" to
   preserve: `applyCustomModelPatch` collapses a cleared field to `undefined`,
   indistinguishable from never-set.
 - **A downgraded context window is logged, never silent.**
@@ -126,7 +120,7 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   endpoint answers `not_found_error: model 'claude-haiku-4-5-20251001' not
   found` (Ollama). `SdkEndpoint.aliasModel` is the vendor model for `custom` and
   `null` for `openrouter`, which serves real Claude ids and must not change;
-  `buildClaudeEnv` sets all six variables the bundled CLI (2.1.291) reads —
+  `buildClaudeEnv` sets all six variables the bundled CLI reads —
   `ANTHROPIC_DEFAULT_FABLE_MODEL`, `_OPUS_`, `_SONNET_`, `_HAIKU_MODEL`,
   `ANTHROPIC_SMALL_FAST_MODEL` (checked first for the background model) and
   `CLAUDE_CODE_SUBAGENT_MODEL` (`CLAUDE_MODEL_ALIAS_ENV_VARS`). Both spawn
@@ -135,7 +129,7 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   custom endpoint respawns rather than calling `setModel` (see the fingerprint).
 - **`contextWindow` (per endpoint, 4096..2,000,000 tokens, optional) becomes
   `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.** For an id not starting with `claude-` the
-  CLI assumes a 200000 window (`u6e`) unless that variable is set, and only then
+  CLI assumes a 200000 window unless that variable is set, and only then
   does auto-compaction keep the session inside the real window. Do NOT use
   `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: it clamps to a 100k minimum, so a 64k Ollama
   model would never compact in time. The same number is Kanna's own meter
@@ -152,8 +146,8 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   `unknown` (`modelUsageHasUnpricedModel`) and falls back to the turn price
   resolver, else reports no cost. This also makes OpenRouter turns use
   OpenRouter's real per-token price instead of the CLI's guess.
-- `normalizeSubagentEntry` and `normalizeDefaultProvider` now accept every
-  `AgentProvider`. Both used to drop `openrouter` silently.
+- `normalizeSubagentEntry` and `normalizeDefaultProvider` accept every
+  `AgentProvider`.
 
 ## Codex Failure Classification (`codexErrorInfo` + `willRetry`)
 

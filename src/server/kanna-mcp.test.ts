@@ -126,7 +126,7 @@ test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
       tunnelGateway: null,
     })
     const names = tools.map((t) => t.name)
-    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch", "websearch"]) {
+    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch"]) {
       expect(names).toContain(n)
     }
     expect(names).not.toContain("probe_unavailable")
@@ -676,7 +676,7 @@ describe("query_tracking_file + append_tracking_row tools", () => {
     })
 
     expect(res.isError).toBe(true)
-    expect(res.content[0].text).toContain("run setup_loop")
+    expect(res.content[0].text).toContain("must already exist")
     await expect(readFile(path.join(dir, "PROGESS.md"), "utf8")).rejects.toThrow()
   })
 

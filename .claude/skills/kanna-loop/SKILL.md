@@ -28,8 +28,8 @@ described in kanna-sessions; the loop simply does not use them.
   entry). The next main turn is a FRESH Claude spawn that re-reads the plan with
   `mcp__kanna__task_list`. An un-armed delivery does not clear anything.
 - **Subagent = worker per iteration.** Fresh Claude spawn per delegation
-  (`sessionToken: null, forkSession: false` — enforced at
-  `subagent-provider-run.ts:170-171`). Subagent does one task and records its
+  (`sessionToken: null, forkSession: false` — enforced in `runClaudeSubagent`,
+  `subagent-provider-run.ts`). Subagent does one task and records its
   outcome by SETTING the task's status (`mcp__kanna__task_update` /
   `task_settle`), not by appending to a log.
 - **The task list** is the ONLY durability contract. Main context is
@@ -49,7 +49,7 @@ loop template PLUS a freshly-rendered `<loop-state>` block
 (`loop-wake-prompt.ts`, `composeLoopWakePrompt`) that lists the current tasks,
 their counts and recent failure notes — a free deterministic prime that
 survives the model skipping step 1. `fireAutoContinue` → `enqueueMessage`
-delivers on both drivers.
+delivers it through the normal queue.
 
 **Loop termination:** absence of delegation. When the model calls `task_list`,
 runs the TERMINAL CHECK, and sees every task completed with the oracle green,
@@ -129,19 +129,12 @@ The server owns the template so the prompt is deterministic.
   `subagent_background`). Codex untouched.
 - **Registration guard**: only registered on MAIN chats (`delegationContext.depth === 0`)
   — subagent spawns lose the no-op tool.
-- **Rendered prompt invariants** (asserted structurally in `validateLoopSetup`
-  against `LOOP_STEP_INVARIANTS` / `LOOP_PARALLEL_STEP_INVARIANTS` in
-  `src/shared/loop-progress.ts`): the recurring prompt MUST contain the verify
-  command, `mcp__kanna__task_list`, `mcp__kanna__task_update`,
-  `mcp__kanna__task_create`, `mcp__kanna__task_note`, `delegate_subagent`,
-  `run_in_background: true`, `GOAL MET`, `ORACLE TOO WEAK`, `TERMINAL CHECK`,
-  `EVERY task`, `with NO status filter`,
-  `Before you mark the last task completed`, `END THIS TURN`, `/clear`, `BOTH`,
-  `AUTH_REQUIRED`, `do NOT call stop_loop`, and `failed_approach` (the parallel
-  list adds `mcp__kanna__task_claim`, `mcp__kanna__task_settle`,
-  `mcp__kanna__task_integrate`, `WAIT`, `QUEUE BLOCKED`, `its OWN git worktree`,
-  `git -C`). Future edits that drop any of these fail validation. The invariant
-  list and the rendered template must be edited together.
+- **Rendered prompt invariants:** `validateLoopSetup` asserts that the rendered
+  prompt contains every phrase in `LOOP_STEP_INVARIANTS` (serial) or
+  `LOOP_PARALLEL_STEP_INVARIANTS` (parallel), both in
+  `src/shared/loop-progress.ts` — read them there before editing the template.
+  Dropping any phrase fails validation, so the invariant lists and the rendered
+  template are edited together.
 
 ## Loop oracle + arm-time gates (adr-20260805-loop-oracle-hardening)
 
@@ -331,7 +324,7 @@ live beside `auditOracle`; extend them with a unit fixture in the same PR.
 and the task tools' integration workdir + `requireWorktree` gate. It once shipped
 declared-but-never-passed, which silently hid `run_verify` entirely. It is wired
 from `toArmedLoopInfo(isLoopArmed(chatId))` (the single `LoopState` →
-`ArmedLoopInfo` adapter, `claude-loop-commands.ts`) through BOTH drivers, on BOTH
+`ArmedLoopInfo` adapter, `claude-loop-commands.ts`) on BOTH
 the main-turn path (`claude-session-spawner.ts`) and the subagent path
 (`claude-subagent-wiring.ts` → `subagent-provider-run.ts`). The same sites also
 thread `chatTaskStore`, so a WORKER's `task_*` calls land on the PARENT chat.
@@ -405,13 +398,6 @@ tracking-document tools remain for the durable-document use kanna-sessions docum
   `append_tracking_row`, `replace_tracking_section`, registered whenever a
   `chatId` is present. Outside a loop a missing file is seeded from
   `renderTaskDocSkeleton`.
-
-The loop-only file tooling that USED to live here — `claim_tracking_task` /
-`complete_tracking_task` / `integrate_tracking_tasks`, `loop-task-queue.ts`,
-`loop-tracking-registry.ts`, `loop-tracking-sync.ts`,
-`loop-tracking-io.adapter.ts`, and the file-based reconcile/skeleton
-(`reconcileTrackingFile`, `assertTrackingFileSafe`, `ensureTrackingFile`) — was
-deleted when the loop moved to the task store.
 
 ## Loop-armed state + hard tool-block (adr-20260712-loop-orchestration-hardening)
 
@@ -561,14 +547,11 @@ after a disarm already behaves that way. With the plan now in
 the task store rather than a file, the honest pointer is `mcp__kanna__task_list`
 — the chat's tasks survive a disarm, so a post-loop review can read exactly what
 was completed and what was left. `describeLastPlan(deriveLastLoopSpec(...))`
-still exists and `trackingFileRel` stays optional on the `loop_armed` /
-`loop_disarmed` tombstone for loops armed before this change; a legacy tombstone
-that carries a tracking file still names it, and the run's `<result>` rides the
+points at `mcp__kanna__task_list` for every disarmed loop and no longer names a
+file; `trackingFileRel` stays optional on the `loop_armed` / `loop_disarmed`
+tombstone for loops armed before this change, but even a legacy tombstone that
+carries a tracking file is not named. The run's `<result>` rides the
 notification regardless.
-
-The historical bug this section recorded — a bare `PROGRESS.md` resolving
-against the wrong checkout across 26 sibling worktrees — is deleted by
-construction: the task store is keyed on `chatId` and has no path.
 
 See `adr-20260830-unarmed-delivery-names-plan`, superseded by the move to the
 task store.

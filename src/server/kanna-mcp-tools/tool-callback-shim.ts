@@ -56,7 +56,7 @@ export function defineGatedTool<TShape extends z.ZodRawShape>(
     register: (factory, contextOf) =>
       factory(
         spec.name,
-        `Kanna built-in replacement for ${spec.name}.`,
+        `Kanna-gated version of the built-in ${spec.name} tool: same operation, but every call is checked against this chat's permission policy first, and a denial returns "Denied: <reason>". Paths resolve against the chat's working directory.`,
         spec.shape,
         (input, extra) => handler(input, contextOf(extra)),
       ),
