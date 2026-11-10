@@ -35,6 +35,15 @@ export function foldCronJobs(events: readonly ChatAutomationEvent[], chatId: str
           runs: [],
         })
         break
+      case "cron_updated": {
+        const accum = jobs.get(event.scheduleId)
+        if (!accum) break
+        accum.job.instruction = event.instruction
+        accum.job.mode = event.mode
+        accum.job.scheduleText = event.scheduleText
+        accum.job.schedule = event.schedule
+        break
+      }
       case "cron_disarmed":
         jobs.delete(event.scheduleId)
         break

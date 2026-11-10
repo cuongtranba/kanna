@@ -120,6 +120,31 @@ describe("deriveCronJobs", () => {
     expect(hasActiveRun(failed[0]!)).toBe(false)
   })
 
+  test("updating a job mid-run changes its definition and still settles the run", () => {
+    const updated: ChatAutomationEvent = {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "cron_updated",
+      chatId: CHAT,
+      scheduleId: "j1",
+      timestamp: 2500,
+      instruction: "check nightly",
+      mode: "spawn",
+      scheduleText: "every 10m",
+      schedule: scheduleOf("every 10m"),
+    }
+    const events = [armed("j1", 1000), runStarted("j1", "r1", 2000), updated]
+    expect(findRunningCronRuns(events, CHAT)).toEqual([{ jobId: "j1", runId: "r1" }])
+
+    const settled = deriveCronJobs([...events, runOutcome("j1", "r1", 3000, true)], CHAT, 4000)
+    expect(settled[0]).toMatchObject({
+      instruction: "check nightly",
+      mode: "spawn",
+      scheduleText: "every 10m",
+      armedAt: 1000,
+      lastRun: { runId: "r1", status: "completed" },
+    })
+  })
+
   test("spawn runs carry their spawned chat id", () => {
     const jobs = deriveCronJobs([armed("j1", 1000), runStarted("j1", "r1", 2000, "spawned-chat")], CHAT, 3000)
     expect(jobs[0]!.lastRun?.spawnedChatId).toBe("spawned-chat")

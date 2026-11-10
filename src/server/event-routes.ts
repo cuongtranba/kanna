@@ -77,6 +77,7 @@ export const EVENT_ROUTES = {
   loop_run_outcome: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   loop_disarmed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_armed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
+  cron_updated: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_disarmed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_paused: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_resumed: { log: "schedules", family: "autoContinue", replayPriority: 11 },

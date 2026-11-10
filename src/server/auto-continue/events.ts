@@ -74,6 +74,13 @@ export type CronEvent =
       paused?: boolean
     })
   | (ChatAutomationEventBase & {
+      kind: "cron_updated"
+      instruction: string
+      mode: CronMode
+      scheduleText: string
+      schedule: CronSchedule
+    })
+  | (ChatAutomationEventBase & {
       kind: "cron_disarmed"
       reason: "user" | "chat_deleted"
     })

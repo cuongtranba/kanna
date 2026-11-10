@@ -25,8 +25,8 @@ type CronJobActionType = "cron.pause" | "cron.resume" | "cron.remove"
 
 const ICON_BUTTON_CLASS = "rounded-md p-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
 
-const EDIT_BLOCKED_REASON = "cannot edit while a run is in flight"
-
+const EDIT_HINT = "Edit cron job"
+const EDIT_HINT_RUN_IN_FLIGHT = "Edit cron job — changes apply from the next run"
 
 function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   const now = useNow(1_000)
@@ -62,9 +62,8 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
   }, [chatId, job.jobId, send])
 
   const handleEdit = useCallback(() => {
-    if (hasActiveRun(job)) return
     openEditor()
-  }, [job, openEditor])
+  }, [openEditor])
 
   const handleSave = useCallback(
     async (patch: CronJobPatch) => {
@@ -108,15 +107,11 @@ function CronJobRowContent({ job, chatId, trailing, divider }: Props) {
         </div>
       </div>
       <span className="flex shrink-0 items-center gap-1">
-        <HoverHint label={runInFlight ? EDIT_BLOCKED_REASON : "Edit cron job"} side="top">
+        <HoverHint label={runInFlight ? EDIT_HINT_RUN_IN_FLIGHT : EDIT_HINT} side="top">
           <button
             type="button"
-            aria-label={`Edit cron job ${job.jobId}${runInFlight ? ` — ${EDIT_BLOCKED_REASON}` : ""}`}
-            aria-disabled={runInFlight}
-            className={cn(
-              ICON_BUTTON_CLASS,
-              runInFlight && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
-            )}
+            aria-label={`Edit cron job ${job.jobId}`}
+            className={ICON_BUTTON_CLASS}
             onClick={handleEdit}
           >
             <Pencil className="h-3.5 w-3.5" aria-hidden="true" />

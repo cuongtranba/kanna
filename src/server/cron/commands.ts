@@ -1,6 +1,6 @@
 
 import type { TranscriptEntry } from "../../shared/types"
-import { hasActiveRun, type CronParseError, type CronParseResult } from "../../shared/cron/types"
+import type { CronParseError, CronParseResult } from "../../shared/cron/types"
 import type { CronRepair } from "./repair"
 import type { CronConfirm } from "./confirm"
 import { formatCronCommand } from "../../shared/cron/parse-command"
@@ -158,13 +158,6 @@ export async function runCronCommand(
         })
         return null
       }
-      if (hasActiveRun(job)) {
-        await appendCronEntry(deps, chatId, {
-          kind: "cron_command_error",
-          message: `cannot update cron job "${command.jobId}" while a run is in flight — wait for it to finish`,
-        })
-        return null
-      }
       const patch = command.patch
       const instruction = patch.instruction ?? job.instruction
       const mode = patch.mode ?? job.mode
@@ -172,13 +165,11 @@ export async function runCronCommand(
       const scheduleText = patch.scheduleText ?? job.scheduleText
       await emitCronEvent(deps, {
         ...chatAutomationEnvelope(chatId, command.jobId, now),
-        kind: "cron_armed",
+        kind: "cron_updated",
         instruction,
         mode,
         schedule,
         scheduleText,
-        ...(job.model !== undefined ? { model: job.model } : {}),
-        ...(job.paused ? { paused: true } : {}),
       })
       await appendCronEntry(deps, chatId, {
         kind: "cron_job_change",

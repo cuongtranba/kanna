@@ -40,6 +40,7 @@ spawned chat, and a status pill that goes **Running → Completed / Failed** liv
 /cron remove <id>                               disarm one job
 /cron pause <id>                                stop firing, keep the job
 /cron resume <id>                               start firing again
+/cron update <id> <schedule|mode|instruction> <value>   change one field in place
 /cron                                           usage help
 ```
 
@@ -53,6 +54,16 @@ the word "inline" or "spawn", wrap it in double quotes:
 ```
 
 A chat can hold **any number of jobs**, each with its own id, schedule, and mode.
+
+## Editing a job
+
+Change a job's instruction, mode or schedule with `/cron update`, the pencil
+button on a job row, or the model's `update_cron` tool. The job keeps its id,
+its run history and its pause state.
+
+You can edit a job **while a run is in flight**. The run in progress finishes
+with the instruction and mode it started with; the change applies from the
+next fire, and a new schedule re-times that next fire straight away.
 
 ## Schedules
 

@@ -128,6 +128,31 @@ describe("CronScheduler", () => {
     scheduler.shutdown()
   })
 
+  test("an update to the schedule moves the next fire to the new cadence", async () => {
+    const clock = new FakeClock()
+    const { scheduler, fires } = makeScheduler(clock)
+    scheduler.onEvent(armedEvent())
+    scheduler.onEvent({
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "cron_updated",
+      chatId: "c1",
+      scheduleId: "j1",
+      timestamp: 10_000,
+      instruction: "check ci",
+      mode: "inline",
+      scheduleText: "every 1m",
+      schedule: scheduleOf("every 1m"),
+    })
+
+    expect(clock.pending()).toBe(1)
+    expect(scheduler.nextFireFor("c1", "j1")).toBe(60_000)
+    clock.advance(60_000)
+    await settle()
+    expect(fires).toEqual([{ chatId: "c1", jobId: "j1", at: 60_000 }])
+    expect(scheduler.nextFireFor("c1", "j1")).toBe(120_000)
+    scheduler.shutdown()
+  })
+
   test("disarm and clearChat cancel timers", () => {
     const clock = new FakeClock()
     const { scheduler } = makeScheduler(clock)

@@ -104,6 +104,13 @@ export class CronScheduler {
         this.clearTimer(job)
         return
       }
+      case "cron_updated": {
+        const job = this.jobs.get(cronJobKey(event.chatId, event.scheduleId))
+        if (!job) return
+        job.schedule = event.schedule
+        if (!job.paused) this.arm(job)
+        return
+      }
       case "cron_resumed": {
         const job = this.jobs.get(cronJobKey(event.chatId, event.scheduleId))
         if (!job) return
