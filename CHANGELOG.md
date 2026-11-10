@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.4](https://github.com/cuongtranba/kanna/compare/v1.107.3...v1.107.4) (2026-11-10)
+
+
+### Bug Fixes
+
+* **cron:** let a job be edited while a run is in flight ([#1471](https://github.com/cuongtranba/kanna/issues/1471)) ([053bd17](https://github.com/cuongtranba/kanna/commit/053bd17330e3a5b6d24ff35ca0b3a7b8e35fe2f0))
+
 ## [1.107.3](https://github.com/cuongtranba/kanna/compare/v1.107.2...v1.107.3) (2026-11-09)
 
 
