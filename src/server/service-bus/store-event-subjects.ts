@@ -62,6 +62,7 @@ export const STORE_EVENT_SUBJECT = {
   cron_disarmed: BUS_SUBJECT_SUFFIX.cronDisarmed,
   cron_paused: BUS_SUBJECT_SUFFIX.cronPaused,
   cron_resumed: BUS_SUBJECT_SUFFIX.cronResumed,
+  cron_updated: BUS_SUBJECT_SUFFIX.cronUpdated,
   cron_run_started: BUS_SUBJECT_SUFFIX.cronRunStarted,
   cron_run_outcome: BUS_SUBJECT_SUFFIX.cronRunOutcome,
   cron_run_skipped: BUS_SUBJECT_SUFFIX.cronRunSkipped,

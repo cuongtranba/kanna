@@ -3,6 +3,7 @@ import type { TranscriptEntry } from "../../shared/types"
 import { AUTO_CONTINUE_EVENT_VERSION, type ChatAutomationEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"
 import type { CronJobPatch, CronParseError, CronParseResult } from "../../shared/cron/types"
+import { deriveCronJobs } from "./read-model"
 import { disarmCronJobsForChat, runCronCommand, type CronCommandDeps } from "./commands"
 
 const CHAT = "chat-1"
@@ -233,8 +234,8 @@ describe("update command", () => {
     expect(entries[0]).toMatchObject({ kind: "cron_command_error", suggestion: "/cron list" })
   })
 
-  test("active run is refused and emits no cron_armed event", async () => {
-    const { deps, entries, events } = makeDeps({ jobIds: ["cron-a1"] })
+  test("update during an active run keeps the run and applies the new definition", async () => {
+    const { deps, events } = makeDeps({ jobIds: ["cron-a1"] })
     await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
     events.push({
       v: AUTO_CONTINUE_EVENT_VERSION,
@@ -244,16 +245,20 @@ describe("update command", () => {
       runId: "run-1",
       timestamp: 2_000_000,
     })
-    const prevEventCount = events.length
+    const before = events.length
     await runCronCommand(deps, CHAT, {
       ok: true,
-      command: { sub: "update", jobId: "cron-a1", patch: { mode: "spawn" } },
+      command: { sub: "update", jobId: "cron-a1", patch: { instruction: "check nightly builds" } },
     })
-    expect(events.length).toBe(prevEventCount)
-    expect(entries.at(-1)).toMatchObject({ kind: "cron_command_error" })
+    const newEvents = events.slice(before)
+    expect(newEvents).toHaveLength(1)
+    expect(newEvents[0]).toMatchObject({ kind: "cron_updated", scheduleId: "cron-a1" })
+    const [job] = deriveCronJobs(events, CHAT, 2_000_000)
+    expect(job).toMatchObject({ instruction: "check nightly builds" })
+    expect(job?.lastRun).toMatchObject({ runId: "run-1", status: "running" })
   })
 
-  test("schedule update emits exactly one cron_armed event with the same jobId", async () => {
+  test("schedule update emits exactly one cron_updated event with the same jobId", async () => {
     const { deps, events } = makeDeps({ jobIds: ["cron-a1"] })
     await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
     const armResult = parseCronCommand("/cron x inline 0 10 * * *")
@@ -263,7 +268,7 @@ describe("update command", () => {
     await runCronCommand(deps, CHAT, { ok: true, command: { sub: "update", jobId: "cron-a1", patch } })
     const newEvents = events.slice(before)
     expect(newEvents).toHaveLength(1)
-    expect(newEvents[0]).toMatchObject({ kind: "cron_armed", scheduleId: "cron-a1" })
+    expect(newEvents[0]).toMatchObject({ kind: "cron_updated", scheduleId: "cron-a1" })
   })
 
   test("update preserves the paused state of the job", async () => {
@@ -274,32 +279,21 @@ describe("update command", () => {
       ok: true,
       command: { sub: "update", jobId: "cron-a1", patch: { mode: "spawn" } },
     })
-    const armed = events.filter((e) => e.kind === "cron_armed" && e.scheduleId === "cron-a1")
-    const lastArmed = armed[armed.length - 1]
-    expect((lastArmed as Extract<ChatAutomationEvent, { kind: "cron_armed" }>).paused).toBe(true)
-  })
-
-  test("update on an unpaused job emits cron_armed without paused flag", async () => {
-    const { deps, events } = makeDeps({ jobIds: ["cron-a1"] })
-    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
-    await runCronCommand(deps, CHAT, {
-      ok: true,
-      command: { sub: "update", jobId: "cron-a1", patch: { mode: "spawn" } },
-    })
-    const armed = events.filter((e) => e.kind === "cron_armed" && e.scheduleId === "cron-a1")
-    const lastArmed = armed[armed.length - 1] as Extract<ChatAutomationEvent, { kind: "cron_armed" }>
-    expect(lastArmed.paused).toBeUndefined()
+    const [job] = deriveCronJobs(events, CHAT, 2_000_000)
+    expect(job).toMatchObject({ jobId: "cron-a1", mode: "spawn", paused: true })
   })
 
   test("instruction update keeps existing schedule and mode", async () => {
     const { deps, events, entries } = makeDeps({ jobIds: ["cron-a1"] })
     await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
-    const firstArmed = events[0] as Extract<ChatAutomationEvent, { kind: "cron_armed" }>
+    const firstArmed = events[0]
+    if (firstArmed?.kind !== "cron_armed") throw new Error("fixture failed")
     await runCronCommand(deps, CHAT, {
       ok: true,
       command: { sub: "update", jobId: "cron-a1", patch: { instruction: "check nightly builds" } },
     })
-    const updateEvent = events[1] as Extract<ChatAutomationEvent, { kind: "cron_armed" }>
+    const updateEvent = events[1]
+    if (updateEvent?.kind !== "cron_updated") throw new Error("expected cron_updated")
     expect(updateEvent.instruction).toBe("check nightly builds")
     expect(updateEvent.schedule).toEqual(firstArmed.schedule)
     expect(updateEvent.mode).toBe(firstArmed.mode)

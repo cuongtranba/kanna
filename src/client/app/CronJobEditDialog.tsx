@@ -74,8 +74,8 @@ function CronJobEditForm({ job, open, onOpenChange, onSave }: Props) {
         <DialogBody className="space-y-4">
           <DialogTitle>Edit cron job</DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{job.jobId}</span> — saving re-arms the job, which clears its run history and
-            resets its created age.
+            <span className="font-mono">{job.jobId}</span> — changes apply from the next run; a run already in progress
+            finishes as it started.
           </DialogDescription>
 
           <div className="space-y-1.5">

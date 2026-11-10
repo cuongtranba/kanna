@@ -91,16 +91,10 @@ describe("CronJobsSection — edit affordance", () => {
     expect(render([job()])).toContain('aria-label="Edit cron job cron-abc"')
   })
 
-  test("edit is marked unavailable while a run is in flight, and says why", () => {
+  test("edit stays available while a run is in flight", () => {
     const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "running" })])
-    expect(html).toContain('aria-disabled="true"')
-    expect(html).toContain("cannot edit while a run is in flight")
-  })
-
-  test("a settled run leaves edit available", () => {
-    const html = render([withRun({ runId: "r1", firedAt: 2_000, status: "completed" })])
-    expect(html).toContain('aria-disabled="false"')
-    expect(html).not.toContain("cannot edit while a run is in flight")
+    expect(html).toContain('aria-label="Edit cron job cron-abc"')
+    expect(html).not.toContain("aria-disabled")
   })
 
   test("a skipped run is looked past — the job is not actually running", () => {
@@ -118,6 +112,6 @@ describe("CronJobsSection — edit affordance", () => {
         chatId="chat-1"
       />,
     )
-    expect(html).toContain('aria-disabled="false"')
+    expect(html).not.toContain("aria-disabled")
   })
 })
