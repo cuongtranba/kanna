@@ -1,6 +1,6 @@
 ---
 id: c3-226
-c3-seal: 63aef6a18d21b2dc7ae3f8ef27230fd1cc9596578ae91e0c329e52396e636620
+c3-seal: 80ad0bec7cf825fff2e7f629553561df9ba6b9cbf3caf44b922b4fb962db72ea
 title: kanna-mcp-host
 type: component
 category: feature
@@ -44,8 +44,8 @@ Owns the Kanna MCP host runtime: builds the in-process SDK MCP server
 tools, registers the durable approval protocol used by `delegate_subagent`
 (the model's native `AskUserQuestion` and `ExitPlanMode` reach the same
 protocol through `canUseTool`, not through MCP stand-ins), and enforces
-read/write path-deny on the eight built-in shims (`read`, `glob`, `grep`,
-`bash`, `edit`, `write`, `webfetch`, `websearch`) gated by
+read/write path-deny on the seven built-in shims (`read`, `glob`, `grep`,
+`bash`, `edit`, `write`, `webfetch`) gated by
 `KANNA_MCP_TOOL_CALLBACKS`. Non-goals: turn orchestration (c3-210), Codex
 App Server (c3-211), provider/model normalization (c3-212). The host never
 performs the actual filesystem or network side-effect itself; each shim
@@ -69,8 +69,7 @@ the approval protocol clears.
 | --- | --- | --- |
 | Outcome | Kanna-owned tool implementations run with the same approval UX whether the model used SDK canUseTool or the native built-in shims | c3-210 |
 | Primary path | Tool call → shim → path-deny check → durable approval (if interactive) → execute → return MCP result | c3-205 |
-| Alternate — feature flag off | Default KANNA_MCP_TOOL_CALLBACKS=0: native built-ins handle reads/writes, AskUserQuestion and ExitPlanMode take the legacy canUseTool → onToolRequest path, and the eight built-in shims are not registered; delegate_subagent stays active | N.A - documented in CLAUDE.md "Tool Callback Feature Flag" |
-| Alternate — websearch | Stub: always returns isError: true — external web search integration out of scope | N.A - documented stub in CLAUDE.md |
+| Alternate — feature flag off | Default KANNA_MCP_TOOL_CALLBACKS=0: native built-ins handle reads/writes, AskUserQuestion and ExitPlanMode take the legacy canUseTool → onToolRequest path, and the seven built-in shims are not registered; delegate_subagent stays active | N.A - documented in CLAUDE.md "Tool Callback Feature Flag" |
 | Failure — chat cancelled / chat deleted | ws-router's chat.cancel and chat.delete handlers call cancelAllForChat(chatId, reason), resolving every open ask-style record as {kind:"deny", canceled:<reason>}. Replaces the prior session-close cascade which mis-fired on transparent rotation/sweep respawns. | c3-208 |
 | Failure — server restart | recoverOnStartup() fail-closes every still-pending record as session_closed so no MCP turn hangs forever across reboots; no wall-clock timeout fires while the server is running | c3-206 |
 

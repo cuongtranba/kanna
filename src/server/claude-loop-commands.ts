@@ -24,6 +24,7 @@ import type { ClaudeSessionState } from "./claude-session-state"
 import type { ArmedLoopInfo, SetupLoopHandlerResult } from "./kanna-mcp"
 import type { ChatRecord } from "./events"
 import { log } from "../shared/log"
+import { TASK_LIST_TOOL_NAME } from "../shared/tools"
 import { withSpan } from "./observability"
 
 
@@ -214,12 +215,9 @@ export async function deliverSubagentToMain(
 }
 
 function describeLastPlan(spec: LoopSpec | null): string {
-  const file = spec?.trackingFileRel
-  if (!file) return ""
-  if (!spec.workdirAbs) return ` This chat's most recent loop tracked its plan in ${file}.`
-  return ` This chat's most recent loop tracked its plan at`
-    + ` ${spec.workdirAbs.replace(/\/+$/, "")}/${file} — read that exact path,`
-    + ` which may be a different checkout from this chat's working directory.`
+  if (spec === null) return ""
+  return ` This chat's most recent loop recorded its plan in the task list;`
+    + ` read what it completed and left with \`${TASK_LIST_TOOL_NAME}\`.`
 }
 
 async function deliverSubagentToMainInner(

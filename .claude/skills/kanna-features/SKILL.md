@@ -114,13 +114,13 @@ a whole board (a 5k-issue import would otherwise blow up one turn), and every
 id is resolved against the chat's project before any write, so an agent cannot
 reach another project's board by guessing an id.
 
-**C3 has the decisions but not the map.** Five ADRs record why boards are
+**Read C3 first.** Five ADRs record why boards are
 shaped as they are — `adr-20260810-boards-sqlite-store` (SQLite, not the event
 log), `adr-20260811-board-column-semantics-single-source`,
 `adr-20260811-board-in-the-workspace`, `adr-20260811-board-owns-its-rendering`,
 `adr-20260811-card-start-work` — and they are the first thing to read before
-changing this feature. Boards also shipped without a **component** fact; three
-now carry it — `c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
+changing this feature. Three **component** facts carry the map —
+`c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
 (boards, `src/server/board-*.ts` plus the MCP and WS surfaces), and `c3-119`
 (boards-ui, `src/client/**/boards/**`) — each with a `code-map.yaml` block.
 
@@ -304,15 +304,10 @@ well-formed id that is not installed is `404`, and a **disabled** surface is
 **The id is validated before any path join.** It becomes a directory name
 downstream, so a traversal-shaped id is rejected at the routing layer.
 
-**Mounting cost three extractions, not three raised allowances.** Three modules
-sat EXACTLY on their architecture-budget ceilings, so each got the remedy the
-budget message prescribes: `SettingsPage.tsx` 2787 → 2449 (`SkillsSection.tsx`,
-which the plugin-system plan itself prescribed), `KannaSidebar.tsx` 1007 → 964
-(`SidebarUtilityNav.tsx` — also the natural home for plugin nav entries, which
-are navigation destinations exactly like Workflows/Cron/Settings), and
-`ChatTranscriptViewport.tsx`, which was two lines under the 700 threshold and so
-mounts the footer panel through `PluginsFooterSlot` to keep the call site to one
-import and one element.
+**Where plugin UI mounts.** Plugin nav entries live in `SidebarUtilityNav.tsx`,
+beside the other navigation destinations (Workflows/Cron/Settings), and the chat
+footer panel mounts through `PluginsFooterSlot`, so `ChatTranscriptViewport.tsx`
+carries one import and one element for it.
 
 **`usePluginContributions` is the whole wiring.** It turns the global switch into
 loaded contributions in `pluginContributionsStore`. Without it every mounted
@@ -370,11 +365,8 @@ prompt map is returned FROM `mergePluginCommands` rather than derived from the
 item list at the call site, so a dropped item can never still answer a lookup and
 hijack the catalog entry that beat it.
 
-**Provider-independent, and always was.** A plugin entry is prompt text Kanna
-inserts locally, so it works on every provider exactly as a builtin does. It
-predates the catalog itself becoming provider-independent (see **Local skills on
-every provider**), which is why `commandsForProvider` — the filter this merge
-used to sit after — no longer exists.
+**Provider-independent.** A plugin entry is prompt text Kanna inserts locally,
+so it works on every provider exactly as a builtin does.
 
 **Every client `add*` needs a no-op twin in
 `src/server/plugins/plugin-child-entry.adapter.ts`.** Both bundles compile from

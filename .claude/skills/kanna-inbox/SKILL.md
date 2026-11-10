@@ -359,13 +359,12 @@ the sent message's id.
   session starts, with its own state. Prefer `http` or `sse`; the form says so.
   `ws` is not offered, because `@modelcontextprotocol/client` 2.x ships no
   WebSocket transport.
-- **`@modelcontextprotocol/client` is a production dependency now** (it was a dev
-  dependency used only by tests). It is imported only by
-  `mcp-source-client.adapter.ts`. The existing validator and OAuth code stay on
+- **`@modelcontextprotocol/client` (2.x) is imported only by**
+  `mcp-source-client.adapter.ts`; the validator and OAuth code stay on
   `@modelcontextprotocol/sdk` 1.x.
-- **`resolveMcpBearer` moved to `src/server/mcp-bearer.ts`** so the runner does
-  not import `ws-router-settings.ts`; `resolveMcpTestBearer` is still exported
-  from the old place for the dataset service and the router.
+- **`resolveMcpBearer` lives in `src/server/mcp-bearer.ts`** so the runner does
+  not import `ws-router-settings.ts`, which re-exports it as
+  `resolveMcpTestBearer` for the dataset service and the router.
 - **Presets are data** (`MCP_SOURCE_PRESETS`, a registry of input templates of
   either mode; the form renders one button per entry and `applyPreset(draft, id)`
   is the only client entry point). The Zalo preset is a subscribe source on

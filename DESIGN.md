@@ -18,6 +18,7 @@ colors:
   muted-icon-dark: "oklch(55% 0.01 13)"
   kanna-coral: "oklch(71.2% 0.194 13.428)"
   destructive-text: "oklch(56% 0.18 13)"
+  destructive-filled: "oklch(48% 0.16 13)"
   verified-sage: "oklch(68% 0.15 155)"
   editor-amber: "oklch(76% 0.14 78)"
   reference-blue: "oklch(66% 0.13 235)"
@@ -86,7 +87,7 @@ components:
     rounded: "{rounded.md}"
     padding: "8px 14px"
   button-destructive:
-    backgroundColor: "{colors.kanna-coral}"
+    backgroundColor: "{colors.destructive-filled}"
     textColor: "{colors.pale-foreground}"
     rounded: "{rounded.md}"
     padding: "8px 14px"
@@ -133,7 +134,7 @@ The palette is one rose-tinted neutral family with a single saturated coral acce
 
 - **Kanna Coral** (`oklch(71.2% 0.194 13.428)`): the brand mark and the destructive surface. Used as logo color, as the primary CTA in landing/auth contexts, and as `--destructive` for stop/delete affordances. Never used as a background fill or a decorative gradient stop.
 
-- **Destructive Text** (`oklch(56% 0.18 13)` light / `oklch(78% 0.18 13)` dark): AA-compliant coral for text and icon-only destructive contexts on tinted surfaces (e.g. "Confirm stop?", "Force kill" labels, the failed-pill in CronRunMessage). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper in light mode and 3.94:1 on a `bg-destructive/10` over Warm Card Dark — both below WCAG AA. The light variant hits 5.04:1 on Warm Paper. The dark variant at L=78% achieves 4.76:1 on `bg-destructive/10` over Warm Card Dark and 7.56:1 on Inkstone. Filled destructive buttons continue to use the bright coral as background with Pale Foreground text — this token is only for text or icon-only use on tinted or light surfaces.
+- **Destructive Text** (`oklch(56% 0.18 13)` light / `oklch(78% 0.18 13)` dark): AA-compliant coral for text and icon-only destructive contexts on tinted surfaces (e.g. "Confirm stop?", "Force kill" labels, the failed-pill in CronRunMessage). The bright Kanna Coral (`oklch(71.2% 0.194 13.428)`) achieves only 2.81:1 on Warm Paper in light mode and 3.94:1 on a `bg-destructive/10` over Warm Card Dark — both below WCAG AA. The light variant hits 5.04:1 on Warm Paper. The dark variant at L=78% achieves 4.76:1 on `bg-destructive/10` over Warm Card Dark and 7.56:1 on Inkstone. Filled destructive buttons use Destructive Filled (below) — this token is only for text or icon-only use on tinted or light surfaces.
 
 - **Destructive Filled** (`oklch(48% 0.16 13)` light / `oklch(68% 0.16 13)` dark): the dedicated filled-action surface, paired with Pale Foreground in light mode and Espresso Ink in dark mode. The `action/destructive-filled` catalog entry machine-checks the complete pair at WCAG AA in both themes; filled destructive controls never reuse the brighter logo coral.
 
@@ -252,7 +253,7 @@ Shadows appear only as a response to *state*: focus rings, dialog overlays, and 
 - **Primary:** Espresso Ink fill, Pale Foreground text, 8×14 padding. Hover steps to slightly lighter ink.
 - **Secondary:** Surface Secondary fill, Espresso Ink text. Used for non-destructive secondary actions.
 - **Ghost:** transparent fill, Espresso Ink text. Used inside dense lists where another fill would be noise.
-- **Destructive:** Kanna Coral fill, Pale Foreground text. Reserved for stop, delete, force-kill. Pairs with confirm-step inline; never opens a modal-on-modal.
+- **Destructive:** Destructive Filled fill (`bg-destructive-filled`) with its paired foreground — Pale Foreground in light mode, Espresso Ink in dark. Reserved for stop, delete, force-kill. Pairs with confirm-step inline; never opens a modal-on-modal.
 - **Hover / Focus:** color transitions in 150ms ease-out. Focus ring (2px solid Ring) on `:focus-visible`. Active state slightly compresses background luminance, no transform.
 
 ### Inputs / Fields
@@ -403,7 +404,7 @@ Easings: `--motion-ease-arriving` for anything entering the screen (~90% of all 
 - **Don't** use `border-left` greater than 1px as a colored stripe to indicate state. Use a leading dot, full-row tint, or weight change instead.
 - **Don't** clip text inside a gradient (`background-clip: text` with a gradient). Use a solid color; emphasis via weight or size.
 - **Don't** open a modal on top of a modal. Inline confirm or step the existing dialog.
-- **Don't** animate layout properties (`width`, `height`, `top`, `left`, `padding`). Animate `transform` and `opacity` only.
+- **Don't** animate layout properties (`width`, `height`, `top`, `left`, `padding`). Animate `opacity`, `transform` and `filter` only.
 - **Don't** pulse status dots. A pulsing dot reads as anxiety; the warm coral is alarming enough on its own when it appears. This holds in the sidebar too, where a "halo behind the live dot" is a recurring proposal — a chat's liveness is already carried by its label, its stamp and the transcript beside it.
 - **Don't** type a duration or an easing curve at a call site. Read the `--motion-*` token, or add one; see **Motion** above.
 - **Don't** use `outline: none` on focusable elements without a clear replacement focus indicator.

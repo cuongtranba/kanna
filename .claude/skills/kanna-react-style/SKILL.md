@@ -106,7 +106,7 @@ Signs you should extract:
 
 Before writing a fresh component, scan the relevant `shared.tsx` (or `ui/`) for primitives that already cover the pattern. Two primitive registries to check:
 
-- **Generic UI**: `src/client/components/ui/` — `card.tsx`, `button.tsx`, `tooltip.tsx`, `dialog.tsx`, `popover.tsx`, `kbd.tsx`, `select.tsx`, `scroll-area.tsx`, `segmented-control.tsx`, `input.tsx`, `textarea.tsx`, `context-menu.tsx`, `app-dialog.tsx`, `animated-shiny-text.tsx`, `resizable.tsx`, `settings-header-button.tsx`.
+- **Generic UI**: every file in `src/client/components/ui/` (list the directory; it holds buttons, dialogs, tooltips, `truncated-text`, `status-pill`, `spinner`, selects and more).
 - **Message rendering**: `src/client/components/messages/shared.tsx` — `MetaRow`, `MetaContent`, `MetaSeparator`, `MetaLabel`, `MetaText`, `RuledLabel`, `ExpandableRow`, `MetaCodeBlock`, `MetaPill`, `VerticalLineContainer`.
 
 Two-tier rule:
@@ -170,7 +170,7 @@ Use Tailwind's `hidden md:flex` / `flex md:hidden` to render two markups one of 
   <span className="flex md:hidden ...">{compact}</span>
 </>
 
-// No — JS reads window, causes hydration mismatches and SSR drift
+// No — re-renders on every resize and reads window, which no-clientside-effects routes through the dom adapter
 {useIsMobile() ? <CompactPill /> : <FullPill />}
 ```
 
@@ -266,19 +266,11 @@ Bug fixes and small additions can ship as a single commit. New behavior is two c
 1. `test(scope): add <thing> tests (failing)` — the failing test file alone
 2. `feat(scope): implement <thing>` — minimal code to pass
 
-Why split: the first commit alone proves the test is meaningful (it can fail). A green test added alongside the implementation can be a tautology. The repo's history under `feature/chat-session-timings` follows this pattern.
+Why split: the first commit alone proves the test is meaningful (it can fail). A green test added alongside the implementation can be a tautology.
 
 ## Conventional commit prefixes
 
-Match the repo's existing convention:
-- `feat(scope): ...` — new behavior
-- `fix(scope): ...` — bug fix
-- `test(scope): ...` — test-only changes
-- `chore(scope): ...` — refactor, dependency, infra
-- `docs(scope): ...` — markdown only
-- `ux(scope): ...` — visual / interaction polish that isn't a bug
-
-Scope is the most specific subdir or component name (`chat-navbar`, `read-models`, `event-store`, `result-message`). Subject ≤ 50 chars, present tense, no period.
+Conventional Commits, as `git log` on `main` shows (`feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `chore`, `ci`); the type decides the release bump, so `.claude/skills/release/SKILL.md` and `bun run check:commits` own the rules. Scope is the most specific subdir or component name (`chat-navbar`, `read-models`, `event-store`).
 
 ## Every side effect shows it is in flight
 
@@ -365,4 +357,4 @@ bun run typecheck
 
 ## When in doubt
 
-Look at recent commits on `main` (or a feature branch shipped recently — e.g. `feature/chat-session-timings`) for the most current example of a pattern. The code on disk is the spec; this skill is a quick reference for the shapes that recur.
+Look at recent commits on `main` for the most current example of a pattern. The code on disk is the spec; this skill is a quick reference for the shapes that recur.

@@ -15,7 +15,7 @@ User docs: the Notifications and Keyboard sections of the Inbox wiki page, the I
   the write lands; `reopenScheduledProposals` at boot goes around it, so a restart
   never pushes, and a scheduled auto-send never pushes. A paused thread gets a
   draft from `decideProposal`, so it never reaches the hook. `wireInboxPush`
-  (`inbox-boot.ts`, now also taking an `AutopilotSourceResolver`) honours
+  (`inbox-boot.ts`, which takes an `AutopilotSourceResolver`) honours
   `pushEnabled`, then calls `PushManager.notifyInboxProposal` with
   `withPreview` and `withSendAction`. Kind `inbox_proposal`, dedupe
   `inbox-proposal:<proposalId>`, same tag as the thread so it replaces the

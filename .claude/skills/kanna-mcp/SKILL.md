@@ -34,8 +34,8 @@ explicit `settings.testMcpServer` RPC.
 
 **Boundary rule:** user MCP server names MUST NOT equal
 `KANNA_MCP_SERVER_NAME`. Enforced by both `validateMcpShape`
-(`app-settings.ts`) and `buildUserMcpServers` / `buildMcpConfigJson`
-filters (belt-and-suspenders).
+(`app-settings.ts`) and the `buildUserMcpServers` filter
+(`claude-session-config.ts`).
 
 ### Custom MCP Servers → OAuth
 
@@ -92,14 +92,12 @@ expired and no refresh token` a quarter hour after every connect. The MCP SDK
 (1.29) does not add the scope itself. An entry authenticated before this fix
 holds no refresh token and must reconnect once.
 
-**A dead token is not "authenticated", in either direction.** An expired access
-token with no refresh token used to stay `status: "authenticated"`:
-`ensureFreshMcpToken` threw without persisting anything, and `startMcpOAuth`
-answered `alreadyAuthenticated` for any authenticated entry holding tokens — so
-the Authenticate button silently did nothing and the only way out was deleting
-the server. Now the refresh path persists `status: "error"` before throwing, and
-`startMcpOAuth` short-circuits only while `canStillAuthorize` holds (a refresh
-token, or an access token still inside `bearerUsableUntil`).
+**A dead token is not "authenticated", in either direction.** On an expired
+access token with no refresh token, the refresh path persists `status: "error"`
+before throwing, and `startMcpOAuth` answers `alreadyAuthenticated` only while
+`canStillAuthorize` holds (a refresh token, or an access token still inside
+`bearerUsableUntil`); otherwise the Authenticate button would silently do
+nothing.
 
 **Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
 stored inside the server entry in `settings.json` (written with the default
@@ -175,7 +173,7 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   schema-typed result `chat.loadHistory` returns).
 - **The command registry is the only command catalog.** `src/shared/commands`
   derives `ClientCommand`, validates `kanna_command` params and publishes the
-  JSON Schemas; `COMMAND_CATALOG` is gone. Every command declares a `result`
+  JSON Schemas. Every command declares a `result`
   schema (`defineCommand` requires it), so `kanna_commands` always lists a
   `resultSchema`. A command that acks with nothing declares `noResult`, which
   renders as `{ "not": {} }` with a description that the ack carries no result

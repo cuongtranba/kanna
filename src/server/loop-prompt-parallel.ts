@@ -128,7 +128,6 @@ export function renderParallelLoopPrompt(args: ParallelPromptArgs): string {
     "  workers end up in one worktree.",
     "- Two workers must NEVER share a worktree. If a task has no worktree, give it",
     "  one before claiming it.",
-    "- All progress lives in the task list, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,

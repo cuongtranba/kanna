@@ -13,7 +13,7 @@ Kanna persists every chat to a per-chat JSONL transcript on disk. When the user 
 Kanna stores transcripts under its data dir:
 
 - Production runtime: `~/.kanna/data/transcripts/<chatId>.jsonl`
-- Dev runtime (`KANNA_BRANDING_OVERRIDE=dev` or running `bun dev`): `~/.kanna-dev/data/transcripts/<chatId>.jsonl`
+- Dev runtime (`KANNA_RUNTIME_PROFILE=dev`, as `bun run dev` sets it): `~/.kanna-dev/data/transcripts/<chatId>.jsonl`
 
 The `<chatId>` is the UUID the user pastes. Try the prod path first; fall back to dev. If both miss, list the directory and grep — chat ids can collide with old / archived sessions and the user may have copied a partial id.
 

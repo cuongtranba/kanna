@@ -117,7 +117,7 @@ export function composeInitialPrompt(
   const instruction = userInstruction?.trim() ?? ""
   const primerText = primer?.trim() ?? ""
   if (instruction && primerText) {
-    return `User asked: ${instruction}\n\n${primerText}`
+    return `${primerText}\n\nUser asked: ${instruction}`
   }
   if (instruction) return `User asked: ${instruction}`
   if (primerText) return primerText

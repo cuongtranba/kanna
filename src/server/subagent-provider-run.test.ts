@@ -132,7 +132,7 @@ describe("composeInitialPrompt", () => {
 
   test("instruction + primer → instruction rendered above primer", () => {
     const prompt = composeInitialPrompt(subagent, "Previous reply text", "review my code")
-    expect(prompt).toBe("User asked: review my code\n\nPrevious reply text")
+    expect(prompt).toBe("Previous reply text\n\nUser asked: review my code")
   })
 
   test("instruction only → no primer block", () => {

@@ -161,7 +161,7 @@ export const boardCommands = defineCommands(
       columnId: z.string().describe("Id of the column that receives the card"),
       title: z.string().describe("Card title"),
       projectId: z.string().nullable().optional().describe("Project the card belongs to, when it differs from the board's"),
-      afterCardId: z.string().nullable().optional().describe("Place the card directly after this card instead of at the end"),
+      afterCardId: z.string().nullable().optional().describe("Place the card directly after this card; omitted or null puts it at the top of the column"),
     }),
     summary: "Create a card in a column.",
     risk: "write",

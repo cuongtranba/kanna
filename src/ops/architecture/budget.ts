@@ -167,7 +167,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-sleeps",
     include: TEST_SCOPE,
     pattern: "\\bBun\\.sleep\\(|new Promise.*\\bsetTimeout\\b",
-    max: 104,
+    max: 103,
     issue: 1375,
     rationale:
       "A fixed delay is either too short on a slow CI runner, which makes the test flaky, or too long everywhere else, which makes the suite slow. Wait for the public state the test actually expects, by awaiting the promise that produces it or polling for it.",
