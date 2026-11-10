@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.107.5](https://github.com/cuongtranba/kanna/compare/v1.107.4...v1.107.5) (2026-11-10)
+
+
+### Bug Fixes
+
+* **prompts:** correct stale instructions found by a prompt audit ([#1473](https://github.com/cuongtranba/kanna/issues/1473)) ([2ed3b09](https://github.com/cuongtranba/kanna/commit/2ed3b0965c47902d88ee4eb2140aba40916dfd47))
+
 ## [1.107.4](https://github.com/cuongtranba/kanna/compare/v1.107.3...v1.107.4) (2026-11-10)
 
 
