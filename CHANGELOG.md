@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.108.0](https://github.com/cuongtranba/kanna/compare/v1.107.5...v1.108.0) (2026-11-11)
+
+
+### Features
+
+* let agents in different chats message each other ([#1478](https://github.com/cuongtranba/kanna/issues/1478)) ([21046f3](https://github.com/cuongtranba/kanna/commit/21046f3288bbaddf83c286d401d48032cc290a7c))
+
 ## [1.107.5](https://github.com/cuongtranba/kanna/compare/v1.107.4...v1.107.5) (2026-11-10)
 
 
