@@ -22,7 +22,7 @@ import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./ge
 import { QuickResponseAdapter } from "./quick-response"
 import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
-import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
+import { DEFAULT_AGENT_RUNTIME_CONFIG, resolveClaudeSessionLifecycle } from "./agent-runtime-config"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { ChatAutomationEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetector } from "./auto-continue/limit-detector"
@@ -256,6 +256,7 @@ export class AgentCoordinator {
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly inboxRegistry: import("./inbox/inbox-registry").InboxRegistry | null
   readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
+  readonly peerMessenger: import("./peer-messaging/peer-messenger").PeerMessenger | null
   readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly liveBlocks: import("./live-block-throttle").LiveBlockHub | null
@@ -368,17 +369,7 @@ export class AgentCoordinator {
     this.oauthPool = args.oauthPool ?? null
     this.toolCallback = args.toolCallback ?? null
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
-    this.claudeSessionLifecycle = {
-      idleMs: args.claudeSessionLifecycle?.idleMs ?? config.claudeSessionLifecycle.idleMs,
-      maxResidentSessions: args.claudeSessionLifecycle?.maxResidentSessions
-        ?? config.claudeSessionLifecycle.maxResidentSessions,
-      sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
-        ?? config.claudeSessionLifecycle.sweepIntervalMs,
-      backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
-        ?? config.claudeSessionLifecycle.backgroundTaskMaxMs,
-      backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
-        ?? config.claudeSessionLifecycle.backgroundTaskMaxWakes,
-    }
+    this.claudeSessionLifecycle = resolveClaudeSessionLifecycle(args.claudeSessionLifecycle, config.claudeSessionLifecycle)
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
       : null
@@ -387,6 +378,7 @@ export class AgentCoordinator {
     this.boardRegistry = args.boardRegistry ?? null
     this.inboxRegistry = args.inboxRegistry ?? null
     this.beaconRegistry = args.beaconRegistry ?? null
+    this.peerMessenger = args.peerMessenger ?? null
     this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.liveBlocks = args.liveBlocks ?? null
@@ -945,6 +937,7 @@ export class AgentCoordinator {
       boardRegistry: this.boardRegistry ?? undefined,
       inboxRegistry: this.inboxRegistry ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
+      peerMessenger: this.peerMessenger ?? undefined,
       getBeacons: this.getBeacons,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       enforceClaudeSessionBudget: (protectedChatId?) => this.enforceClaudeSessionBudget(protectedChatId),
@@ -1042,6 +1035,7 @@ export class AgentCoordinator {
       handleAuthFailure: (session, detection) => handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection),
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      onChatSettled: (chatId) => this.peerMessenger?.onChatSettled(chatId) ?? Promise.resolve(),
       turnEndGuard: this._turnEndGuard,
       onLiveBlock: this.liveBlocks
         ? (chatId, block) => { this.liveBlocks!.publish(chatId, block) }
@@ -1076,6 +1070,7 @@ export class AgentCoordinator {
       clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
       startTurnForChat: (args) => this.startTurnForChat(args),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      onChatSettled: (chatId) => this.peerMessenger?.onChatSettled(chatId) ?? Promise.resolve(),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
       turnEndGuard: this._codexTurnEndGuard,
     }

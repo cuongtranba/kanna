@@ -75,7 +75,7 @@ export interface CommandDescriptor {
   readonly resultSchema: JsonObject
 }
 
-function renderJsonSchema(schema: z.ZodType, io: "input" | "output"): JsonObject {
+export function renderJsonSchema(schema: z.ZodType, io: "input" | "output"): JsonObject {
   const rendered = safeJsonParse(JSON.stringify(z.toJSONSchema(schema, { io, unrepresentable: "any" })))
   if (rendered === null || !isJsonObject(rendered)) return {}
   const { $schema: _dialect, ...rest } = rendered

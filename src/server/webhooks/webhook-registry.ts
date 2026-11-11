@@ -20,7 +20,7 @@ import {
   type WebhookFilterInput,
   type WebhookFilterVerdict,
 } from "./webhook-filter"
-import { WebhookRateLimiter, type RateDecision } from "./webhook-rate-limit"
+import { RateLimiter, type RateDecision } from "../rate-limiter"
 
 export interface StoredWebhook extends WebhookConfig {
   secret: string
@@ -111,13 +111,13 @@ export class WebhookRegistry {
   private readonly recentDeliveryIds = new Map<string, string[]>()
   private readonly filters = new Map<string, WebhookFilter>()
   private readonly listeners = new Set<() => void>()
-  private readonly limiter: WebhookRateLimiter
+  private readonly limiter: RateLimiter
 
   constructor(
     private readonly store: WebhookStorePort,
     private readonly now: () => number = Date.now,
   ) {
-    this.limiter = new WebhookRateLimiter(WEBHOOK_RATE_LIMIT_PER_MINUTE, now)
+    this.limiter = new RateLimiter([{ limit: WEBHOOK_RATE_LIMIT_PER_MINUTE, windowMs: 60_000 }], now)
   }
 
   async initialize(): Promise<void> {

@@ -62,6 +62,7 @@ export interface RunClaudeSessionDeps {
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
+  onChatSettled?(chatId: string): Promise<void>
   turnEndGuard?: TurnEndGuard
   onLiveBlock?: LiveBlockSink
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
@@ -218,6 +219,7 @@ export async function runClaudeSession(
             deps.pendingTools.discard(session.chatId)
             deps.emitStateChange(session.chatId)
             await deps.maybeStartNextQueuedMessage(session.chatId)
+            await deps.onChatSettled?.(session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
           if (session.canArmSelfWake()) {
@@ -326,6 +328,7 @@ export async function runClaudeSession(
         }
         if (!active.cancelRequested) {
           await deps.maybeStartNextQueuedMessage(session.chatId)
+          await deps.onChatSettled?.(session.chatId)
         }
       } else if (event.entry.kind === "result" && event.entry.isError) {
         await settleFailedTurn(

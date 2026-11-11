@@ -18,7 +18,6 @@ import {
   type CommandExecutionApprovalDecision,
   type CommandExecutionRequestApprovalParams,
   type CommandExecutionRequestApprovalResponse,
-  type DynamicToolCallResponse,
   type FileChangeApprovalDecision,
   type FileChangeRequestApprovalParams,
   type FileChangeRequestApprovalResponse,
@@ -42,8 +41,7 @@ import {
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
-import { isJsonObject, safeJsonParse } from "../shared/json"
-import { parsePlanSteps } from "./codex-plan-steps"
+import { safeJsonParse } from "../shared/json"
 import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
@@ -61,7 +59,8 @@ import {
   webSearchQuery,
   DEFERRED_DYNAMIC_TOOLS,
 } from "./codex-transcript-translator"
-import { dynamicToolPayload, genericDynamicToolCall, toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { answerDynamicToolCall, type CodexKannaTools } from "./codex-dynamic-tool-call"
 import { decodeNestedId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
 export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
@@ -235,6 +234,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 export class CodexAppServerManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnCodexAppServer
+  private readonly kannaTools: CodexKannaTools | undefined
 
   private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
     if (scope === "sub:") {
@@ -243,8 +243,13 @@ export class CodexAppServerManager {
     return `${chatId}::${scope}`
   }
 
-  constructor(args: { spawnProcess?: SpawnCodexAppServer } = {}) {
+  constructor(args: { spawnProcess?: SpawnCodexAppServer; kannaTools?: CodexKannaTools } = {}) {
     this.spawnProcess = args.spawnProcess ?? defaultSpawnCodexAppServer
+    this.kannaTools = args.kannaTools
+  }
+
+  get offersKannaTools(): boolean {
+    return this.kannaTools !== undefined
   }
 
   async startSession(args: StartCodexSessionArgs) {
@@ -296,6 +301,7 @@ export class CodexAppServerManager {
       serviceTier: args.serviceTier,
       experimentalRawEvents: false,
       developerInstructions: args.developerInstructions?.trim() || null,
+      ...(scope === "main" && this.kannaTools ? { dynamicTools: this.kannaTools.specs } : {}),
     } satisfies ThreadStartParams
 
     let threadId: string
@@ -608,60 +614,14 @@ export class CodexAppServerManager {
     }
 
     if (request.method === "item/tool/call") {
-      pendingTurn.handledDynamicToolIds.add(request.params.callId)
-      if (request.params.tool === "update_plan") {
-        const rawArguments = request.params.arguments
-        const plan = rawArguments !== undefined && isJsonObject(rawArguments) ? parsePlanSteps(rawArguments) : null
-
-        if (plan !== null) {
-          pendingTurn.latestPlanSteps = plan.steps
-          pendingTurn.latestPlanExplanation = plan.explanation ?? pendingTurn.latestPlanExplanation
-          pendingTurn.queue.push({
-            type: "transcript",
-            entry: todoToolCall(request.params.callId, plan.steps),
-          })
-          pendingTurn.queue.push({
-            type: "transcript",
-            entry: timestamped({
-              kind: "tool_result",
-              toolId: request.params.callId,
-              content: "",
-            }),
-          })
-        }
-
-        this.writeMessage(context, {
-          id: request.id,
-          result: {
-            contentItems: [],
-            success: true,
-          } satisfies DynamicToolCallResponse,
-        })
-        return
-      }
-
-      const payload = dynamicToolPayload(request.params.arguments)
-      pendingTurn.queue.push({
-        type: "transcript",
-        entry: genericDynamicToolCall(request.params.callId, request.params.tool, payload),
+      const result = await answerDynamicToolCall({
+        request,
+        turn: pendingTurn,
+        chatId: context.chatId,
+        isMainScope: context.scope === "main",
+        kannaTools: this.kannaTools,
       })
-      const errorMessage = `Unsupported dynamic tool call: ${request.params.tool}`
-      pendingTurn.queue.push({
-        type: "transcript",
-        entry: timestamped({
-          kind: "tool_result",
-          toolId: request.params.callId,
-          content: errorMessage,
-          isError: true,
-        }),
-      })
-      this.writeMessage(context, {
-        id: request.id,
-        result: {
-          contentItems: [{ type: "inputText", text: errorMessage }],
-          success: false,
-        } satisfies DynamicToolCallResponse,
-      })
+      this.writeMessage(context, { id: request.id, result })
       return
     }
 
