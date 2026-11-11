@@ -8,7 +8,7 @@ code:
   - src/server/webhooks/webhook-filter.ts
   - src/server/webhooks/webhook-http-routes.ts
   - src/server/webhooks/webhook-http-routes.test.ts
-  - src/server/webhooks/webhook-rate-limit.ts
+  - src/server/rate-limiter.ts
   - src/server/webhooks/webhook-registry.ts
   - src/server/webhooks/webhook-registry.test.ts
   - src/server/webhooks/webhook-service.ts

@@ -52,3 +52,5 @@ The main agent picks how to run a subagent through `delegate_subagent`:
 - `KANNA_SUBAGENT_MAX_LIVE` (default 5) — max concurrent keep-alive processes per chat. Over cap, `keep_alive` delegation fails `CAP_EXCEEDED`.
 - `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — an idle keep-alive session auto-closes after this window; the timer resets on each turn.
 - Concurrent **active** turns are bounded by the shared permit pool; cancelling the chat or run cascade-closes every live session.
+
+Subagents cannot message other chats. To let a chat talk to another chat, see [Messaging between chats](/guides/user/peer-messaging/).

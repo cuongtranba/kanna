@@ -1,0 +1,18 @@
+fact: c3-249
+claim: "cross-chat peer messaging is implemented at src/server/peer-messaging/ with the contract in src/shared/peer-messaging/ and the tools registered in src/server/kanna-mcp-peer.ts"
+code:
+  - src/shared/peer-messaging/inbound.ts
+  - src/shared/peer-messaging/inbound.schema.ts
+  - src/shared/peer-messaging/limits.ts
+  - src/shared/peer-messaging/render-prompt.ts
+  - src/shared/peer-messaging/render-prompt.test.ts
+  - src/shared/peer-messaging/tool-names.ts
+  - src/shared/peer-messaging/tool-specs.schema.ts
+  - src/shared/command-origin.schema.test.ts
+  - src/server/peer-messaging/create-peer-messaging.ts
+  - src/server/peer-messaging/peer-messenger.ts
+  - src/server/peer-messaging/peer-messenger.test.ts
+  - src/server/peer-messaging/peer-tools.ts
+  - src/server/kanna-mcp-peer.ts
+  - src/client/components/messages/OriginChip.tsx
+  - src/client/app/GeneralPeerRow.tsx
