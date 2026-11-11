@@ -54,6 +54,7 @@ import {
 import { mcpSourceInputSchema, mcpSourcePatchSchema, mcpSourceSchema } from "./mcp-sources/types.schema"
 import { serviceBusSettingsPatchSchema, serviceBusSettingsPublicSchema } from "./service-bus/jetstream-config.schema"
 import { subagentInputSchema, subagentPatchSchema, subagentSchema } from "./subagent-types.schema"
+import { peerInboundModeSchema } from "./peer-messaging/inbound.schema"
 import { assertParity } from "./type-parity"
 
 const oauthTokenEntrySchema = z.object({
@@ -156,6 +157,7 @@ export const appSettingsPatchSchema = z.object({
   claudeDriver: z.object({ lifecycle: claudeLifecycleSettingsSchema.partial().optional() }).optional(),
   globalPromptAppend: z.string().optional(),
   shareDefaultTtlHours: z.number().optional(),
+  peerMessagesInbound: peerInboundModeSchema.optional(),
   subagentRuntime: subagentRuntimeSettingsSchema.partial().optional(),
   packageUpdates: packageUpdateSettingsSchema.partial().optional(),
   plugins: pluginSettingsSchema.partial().optional(),
@@ -209,6 +211,7 @@ export const appSettingsSnapshotSchema = z.object({
   claudeDriver: claudeDriverSettingsSchema,
   globalPromptAppend: z.string(),
   shareDefaultTtlHours: z.number(),
+  peerMessagesInbound: peerInboundModeSchema,
   subagentRuntime: subagentRuntimeSettingsSchema,
   packageUpdates: packageUpdateSettingsSchema,
   plugins: pluginSettingsSchema,

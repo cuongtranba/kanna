@@ -3,6 +3,7 @@ import type { JsonObject } from "../shared/json"
 import type { ChatHistoryPage, StackBinding } from "../shared/types"
 import type { ClientCommand, CommandResult, ServerEnvelope } from "../shared/protocol"
 import type { ChatPermissionPolicyOverride, ToolRequestDecision } from "../shared/permission-policy"
+import type { PeerInboundMode } from "../shared/peer-messaging/inbound"
 import { ackResult } from "./ws-router-ack"
 import { deleteChatCascade } from "./chat-teardown"
 
@@ -19,6 +20,7 @@ export interface ChatStoreDep {
   deleteChat(chatId: string): Promise<void>
   setChatReadState(chatId: string, unread: boolean): Promise<void>
   setChatPolicyOverride(chatId: string, policyOverride: ChatPermissionPolicyOverride | null): Promise<void>
+  setChatPeerInbound(chatId: string, peerInbound: PeerInboundMode | null): Promise<void>
   getChat(chatId: string): { id: string } | null | undefined
   getMessagesPageBefore(chatId: string, beforeCursor: string, limit: number): ChatHistoryPage
   getToolRequest(toolRequestId: string): { chatId: string } | undefined | null
@@ -149,6 +151,12 @@ export async function handleChatCommand(
     }
     case "chat.setPolicyOverride": {
       await store.setChatPolicyOverride(command.chatId, command.policyOverride ?? null)
+      send(ackResult(id, command))
+      await broadcastChatAndSidebar(command.chatId)
+      return true
+    }
+    case "chat.setPeerInbound": {
+      await store.setChatPeerInbound(command.chatId, command.peerInbound)
       send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true

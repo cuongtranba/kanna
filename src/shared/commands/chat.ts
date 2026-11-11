@@ -1,8 +1,9 @@
 import { z } from "zod"
 import { defineCommand, defineCommands, noResult, REMOTE_ALLOWED, remoteExcluded } from "./define"
 import { chatIdParams, chatIdShape, projectIdShape } from "./fragments"
-import { remoteMcpOriginSchema } from "../command-origin.schema"
+import { commandOriginSchema } from "../command-origin.schema"
 import { agentProviderSchema } from "../core-types.schema"
+import { peerInboundModeSchema } from "../peer-messaging/inbound.schema"
 import { jsonObjectSchema, jsonValueSchema } from "../genui/json-schema"
 import { cronJobPatchSchema } from "../cron/types.schema"
 import { chatPermissionPolicyOverrideSchema, toolRequestDecisionSchema } from "../permission-policy.schema"
@@ -29,7 +30,7 @@ const messageDeliveryShape = {
   modelOptions: modelOptionsSchema.optional().describe("Per-provider model options such as reasoning effort or context window"),
   planMode: z.boolean().optional().describe("Run in plan mode"),
   autoResumeOnRateLimit: z.boolean().optional().describe("Resume the turn automatically when a rate limit clears"),
-  origin: remoteMcpOriginSchema.optional(),
+  origin: commandOriginSchema.optional(),
 }
 
 const chatAndQueuedMessageParams = z.object({ ...chatIdShape, queuedMessageId: z.string() })
@@ -111,6 +112,13 @@ export const chatCommands = defineCommands(
     result: noResult,
     params: z.object({ ...chatIdShape, policyOverride: chatPermissionPolicyOverrideSchema.nullable() }),
     summary: "Set or clear the permission policy override of a chat.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
+  defineCommand("chat.setPeerInbound", {
+    result: noResult,
+    params: z.object({ ...chatIdShape, peerInbound: peerInboundModeSchema.nullable() }),
+    summary: "Set or clear whether a chat accepts messages from other chats, overriding the global setting.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),

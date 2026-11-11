@@ -97,6 +97,7 @@ import {
 import { normalizeAnthropicBaseUrl } from "../shared/anthropic-base-url"
 import { assertWithinBound, normalizeBounded } from "../shared/numeric"
 import { oneOf } from "../shared/vocab"
+import { normalizePeerInbound } from "../shared/peer-messaging/inbound"
 import { AUTH_SESSION_MAX_AGE_DAYS_BOUND, normalizeAuthSettings } from "../shared/settings/auth"
 import { normalizeUploadSettings, UPLOAD_MAX_FILE_SIZE_MB_BOUND } from "../shared/settings/uploads"
 import {
@@ -153,6 +154,7 @@ interface AppSettingsFile {
   claudeDriver?: JsonObject
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  peerMessagesInbound?: string
   subagentRuntime?: {
     runTimeoutMs?: number
     defaultLoopSubagentId?: string | null
@@ -708,13 +710,7 @@ function normalizeAppSettings<T>(
   const claudeDriver = normalizeClaudeDriverSettings(source?.claudeDriver, warnings)
   const globalPromptAppend = normalizeGlobalPromptAppend(source?.globalPromptAppend, warnings)
 
-  const shareDefaultTtlHours = normalizeBounded(
-    SHARE_DEFAULT_TTL_HOURS_BOUND,
-    source?.shareDefaultTtlHours,
-    DEFAULT_SHARE_DEFAULT_TTL_HOURS,
-    "fallback",
-    warnings,
-  )
+  const shareDefaultTtlHours = normalizeBounded(SHARE_DEFAULT_TTL_HOURS_BOUND, source?.shareDefaultTtlHours, DEFAULT_SHARE_DEFAULT_TTL_HOURS, "fallback", warnings)
 
   const subagentRuntime = normalizeSubagentRuntime(source?.subagentRuntime, subagents, warnings)
   const packageUpdates = normalizePackageUpdateSettings(source?.packageUpdates, warnings)
@@ -760,6 +756,7 @@ function normalizeAppSettings<T>(
     claudeDriver,
     globalPromptAppend,
     shareDefaultTtlHours,
+    peerMessagesInbound: normalizePeerInbound(source?.peerMessagesInbound),
     subagentRuntime,
     packageUpdates,
     ...pluginState,

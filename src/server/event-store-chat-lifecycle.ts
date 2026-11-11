@@ -316,6 +316,13 @@ export function applyChatLifecycleEvent(
       chat.updatedAt = event.timestamp
       break
     }
+    case "chat_peer_inbound_set": {
+      const chat = state.chatsById.get(event.chatId)
+      if (!chat) break
+      chat.peerInbound = event.peerInbound
+      chat.updatedAt = event.timestamp
+      break
+    }
     case "chat_compact_failures_set": {
       const chat = state.chatsById.get(event.chatId)
       if (!chat) break

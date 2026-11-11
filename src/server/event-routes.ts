@@ -51,6 +51,7 @@ export const EVENT_ROUTES = {
   chat_read_state_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_source_hash_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_policy_override_set: { log: "chats", family: "chat", replayPriority: 9 },
+  chat_peer_inbound_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_compact_failures_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_deleted: { log: "chats", family: "chat", replayPriority: 10 },
   chat_archived: { log: "chats", family: "chat", replayPriority: 10 },
