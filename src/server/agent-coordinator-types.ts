@@ -51,6 +51,7 @@ export interface AgentCoordinatorArgs {
   boardRegistry?: import("./board-registry").BoardRegistry
   inboxRegistry?: import("./inbox/inbox-registry").InboxRegistry
   beaconRegistry?: import("./beacon-registry").BeaconRegistry
+  peerMessenger?: import("./peer-messaging/peer-messenger").PeerMessenger
   getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>

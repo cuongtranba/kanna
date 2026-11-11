@@ -19,6 +19,7 @@ export type SettingsSections = Pick<
   | "claudeDriver"
   | "globalPromptAppend"
   | "shareDefaultTtlHours"
+  | "peerMessagesInbound"
   | "subagentRuntime"
   | "packageUpdates"
 >
@@ -59,6 +60,7 @@ export function mergeSettingsSections(current: SettingsSections, patch: AppSetti
     claudeDriver: { lifecycle: { ...current.claudeDriver.lifecycle, ...patch.claudeDriver?.lifecycle } },
     globalPromptAppend: patch.globalPromptAppend ?? current.globalPromptAppend,
     shareDefaultTtlHours: patch.shareDefaultTtlHours ?? current.shareDefaultTtlHours,
+    peerMessagesInbound: patch.peerMessagesInbound ?? current.peerMessagesInbound,
     subagentRuntime: {
       runTimeoutMs: patch.subagentRuntime?.runTimeoutMs ?? current.subagentRuntime.runTimeoutMs,
       defaultLoopSubagentId: patch.subagentRuntime?.defaultLoopSubagentId !== undefined

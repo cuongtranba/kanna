@@ -385,6 +385,7 @@ c3-210:
   - src/server/chat-tool-events.test.ts
   - src/server/test-helpers/sdk-tool.ts
 c3-211:
+  - src/server/codex-dynamic-tool-call.ts
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
@@ -868,7 +869,7 @@ c3-243:
   - src/server/webhooks/webhook-filter.ts
   - src/server/webhooks/webhook-http-routes.ts
   - src/server/webhooks/webhook-http-routes.test.ts
-  - src/server/webhooks/webhook-rate-limit.ts
+  - src/server/rate-limiter.ts
   - src/server/webhooks/webhook-registry.ts
   - src/server/webhooks/webhook-registry.test.ts
   - src/server/webhooks/webhook-service.ts
@@ -973,3 +974,19 @@ c3-248:
   - src/client/lib/mcpSourceDraft.ts
   - src/client/lib/mcpSourceAutonomyDraft.ts
   - src/client/lib/mcpSourcePresentation.ts
+c3-249:
+  - src/shared/peer-messaging/inbound.ts
+  - src/shared/peer-messaging/inbound.schema.ts
+  - src/shared/peer-messaging/limits.ts
+  - src/shared/peer-messaging/render-prompt.ts
+  - src/shared/peer-messaging/render-prompt.test.ts
+  - src/shared/peer-messaging/tool-names.ts
+  - src/shared/peer-messaging/tool-specs.schema.ts
+  - src/shared/command-origin.schema.test.ts
+  - src/server/peer-messaging/create-peer-messaging.ts
+  - src/server/peer-messaging/peer-messenger.ts
+  - src/server/peer-messaging/peer-messenger.test.ts
+  - src/server/peer-messaging/peer-tools.ts
+  - src/server/kanna-mcp-peer.ts
+  - src/client/components/messages/OriginChip.tsx
+  - src/client/app/GeneralPeerRow.tsx

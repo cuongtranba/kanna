@@ -2,14 +2,14 @@ import type { HookCallbackMatcher, HookInput, HookJSONOutput } from "@anthropic-
 import { inboxHandlerTurnKind } from "../shared/inbound/handler-turn"
 import type { McpServerConfig } from "../shared/mcp-types"
 import type { McpSource } from "../shared/mcp-sources/types"
-import { mcpToolName } from "../shared/tools"
+import { mcpToolName, SEND_CHAT_MESSAGE_TOOL_NAME } from "../shared/tools"
 
 export interface InboxToolPolicy {
   replyServerNames: readonly string[]
 }
 
 export const INBOX_HANDLER_TOOL_DENIED_MESSAGE =
-  "Inbox handler turns cannot send or run shell commands. Report with inbox_report; to reply, use propose_send and Kanna will decide."
+  "Inbox handler turns cannot send, message other chats or run shell commands. Report with inbox_report; to reply, use propose_send and Kanna will decide."
 
 const BASH_TOOL = "Bash"
 
@@ -29,7 +29,7 @@ export function inboxToolPolicyOf(
 }
 
 function isDeniedTool(toolName: string, policy: InboxToolPolicy): boolean {
-  if (toolName === BASH_TOOL) return true
+  if (toolName === BASH_TOOL || toolName === SEND_CHAT_MESSAGE_TOOL_NAME) return true
   return policy.replyServerNames.some((name) =>
     toolName.startsWith(mcpToolName(name, "")) || toolName.startsWith(mcpToolName(normalizedServerName(name), "")),
   )

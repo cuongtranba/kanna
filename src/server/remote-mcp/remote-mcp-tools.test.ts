@@ -262,7 +262,7 @@ describe("remote MCP typed tools", () => {
     const chatId = stringField(sent.json, "chatId")
 
     const prompt = server.store.getMessages(chatId).find((entry: TranscriptEntry) => entry.kind === "user_prompt")
-    if (prompt?.kind !== "user_prompt" || !prompt.origin) throw new Error("expected the prompt to carry an origin")
+    if (prompt?.kind !== "user_prompt" || prompt.origin?.kind !== "remote_mcp") throw new Error("expected the prompt to carry an MCP origin")
     expect(prompt.origin).toMatchObject({ kind: "remote_mcp", clientId: "password", via: "password", tool: "send_message" })
     const record = await auditRecordFor(prompt.origin.callId)
     expect(record).toMatchObject({ tool: "send_message", clientId: "password", via: "password", outcome: "ok", chatId })

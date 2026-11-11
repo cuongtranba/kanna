@@ -21,6 +21,7 @@ export const STORE_EVENT_SUBJECT = {
   chat_plan_mode_set: BUS_SUBJECT_SUFFIX.chatPlanMode,
   chat_policy_override_set: BUS_SUBJECT_SUFFIX.chatPolicy,
   chat_read_state_set: null,
+  chat_peer_inbound_set: null,
   chat_source_hash_set: null,
   chat_compact_failures_set: null,
   message_appended: null,

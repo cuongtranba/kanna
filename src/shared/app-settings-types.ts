@@ -12,6 +12,7 @@ import {
   type DefaultProviderPreference,
 } from "./core-types"
 import { oneOf } from "./vocab"
+import type { PeerInboundMode } from "./peer-messaging/inbound"
 import type { BeaconConfig, BeaconPatch } from "./beacon-config"
 import type { BeaconScope } from "./beacon-scope"
 import type { McpSource, McpSourceInput, McpSourcePatch } from "./mcp-sources/types"
@@ -311,6 +312,7 @@ export interface AppSettingsSnapshot {
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
+  peerMessagesInbound: PeerInboundMode
   subagentRuntime: SubagentRuntimeSettings
   packageUpdates: PackageUpdateSettings
   plugins: PluginSettings
@@ -399,6 +401,7 @@ export interface AppSettingsPatch {
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  peerMessagesInbound?: PeerInboundMode
   subagentRuntime?: Partial<SubagentRuntimeSettings>
   packageUpdates?: Partial<PackageUpdateSettings>
   plugins?: Partial<PluginSettings>

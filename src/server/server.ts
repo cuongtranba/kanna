@@ -14,6 +14,7 @@ import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
 import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent-coordinator"
+import { createPeerMessaging } from "./peer-messaging/create-peer-messaging"
 import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
 import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -366,8 +367,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   let cronDrain: Promise<void> = Promise.resolve()
   lifetime.defer("quiesce", () => { cronDrain = cronScheduler.shutdown() })
+  const peerMessaging = createPeerMessaging(store, () => agent, () => appSettings.getSnapshot().peerMessagesInbound)
   agent = new AgentCoordinator({
     store,
+    ...peerMessaging,
     scheduleManager,
     cronScheduler,
     runtimeConfig: resolveAgentRuntimeConfig(process.env),

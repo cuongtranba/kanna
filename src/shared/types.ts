@@ -1,6 +1,7 @@
 import type { CommandOrigin } from "./command-origin"
 import type { JsonValue } from "./json"
 import type { ChatPermissionPolicyOverride } from "./permission-policy"
+import type { PeerInboundMode } from "./peer-messaging/inbound"
 
 export * from "./core-types"
 export * from "./provider-model-types"
@@ -248,6 +249,7 @@ export interface SidebarChatRow {
   stackId?: string
   sessionState?: ClaudeSessionLifecycleStatus
   hasPolicyOverride?: boolean
+  peerInbound?: PeerInboundMode
   pinnedAt?: number
 }
 

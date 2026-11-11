@@ -1418,6 +1418,86 @@ describe("CodexAppServerManager", () => {
     })
   })
 
+  test("offers Kanna tools on thread/start and routes their calls to the Kanna handler with the calling chat", async () => {
+    const calls: Array<{ chatId: string; tool: string; args: JsonValue }> = []
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+        for (const [id, tool] of [["dyn-kanna", "send_chat_message"], ["dyn-other", "custom_tool"]]) {
+          child.writeServerMessage({
+            id,
+            method: "item/tool/call",
+            params: { threadId: "thread-1", turnId: "turn-1", callId: id, tool, arguments: { to: "chat-2" } },
+          })
+        }
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: { threadId: "thread-1", turn: { id: "turn-1", status: "completed", error: null } },
+        })
+      }
+    })
+    const specs = [{ type: "function" as const, name: "send_chat_message", description: "Send", inputSchema: { type: "object" } }]
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+      kannaTools: {
+        specs,
+        call: async (chatId, tool, args) => {
+          if (tool !== "send_chat_message") return null
+          calls.push({ chatId, tool, args })
+          return { text: "delivered", isError: false }
+        },
+      },
+    })
+
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    const turn = await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "go", planMode: false, onToolRequest: async () => ({}) })
+    await collectStream(turn.stream)
+
+    const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+    expect(threadStart.params.dynamicTools).toEqual(specs)
+    expect(calls).toEqual([{ chatId: "chat-1", tool: "send_chat_message", args: { to: "chat-2" } }])
+    expect(process.messages.find((message: any) => message.id === "dyn-kanna")).toEqual({
+      id: "dyn-kanna",
+      result: { contentItems: [{ type: "inputText", text: "delivered" }], success: true },
+    })
+    expect(process.messages.find((message: any) => message.id === "dyn-other")).toEqual({
+      id: "dyn-other",
+      result: { contentItems: [{ type: "inputText", text: "Unsupported dynamic tool call: custom_tool" }], success: false },
+    })
+  })
+
+  test("does not offer Kanna tools to a subagent session", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      }
+    })
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+      kannaTools: { specs: [], call: async () => null },
+    })
+
+    await manager.startSession({ chatId: "chat-1", scope: "sub:run-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+
+    const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+    expect(threadStart.params.dynamicTools).toBeUndefined()
+  })
+
   test("answers requestUserInput requests with the official JSON-RPC result payload", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {

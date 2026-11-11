@@ -18,6 +18,7 @@ import {
   normalizeServerModel,
 } from "./provider-catalog"
 import { wrapSteeredMessage } from "../shared/steered-message"
+import { isPeerChatOrigin } from "../shared/command-origin"
 import { isChatBusy } from "./claude-session-state-queries"
 import type { SessionBackgroundTask } from "./claude-session-state"
 import {
@@ -321,7 +322,8 @@ export async function dequeueAndStartQueuedMessage(
   const provider = resolveProvider(queuedMessage, chat.provider)
   const settings = resolveTurnProviderSettings(deps, chatId, provider, queuedMessage)
 
-  const builtin = options?.steered ? null : parseBuiltinCommand(queuedMessage.content)
+  const literalText = options?.steered === true || isPeerChatOrigin(queuedMessage.origin)
+  const builtin = literalText ? null : parseBuiltinCommand(queuedMessage.content)
   if (builtin) {
     await runBuiltinCommand(deps, chatId, builtin, provider, settings, release)
     await maybeStartNextQueuedMessage(deps, chatId)
@@ -334,7 +336,7 @@ export async function dequeueAndStartQueuedMessage(
     && !options.steered
     && isPromptAlreadyAppended(deps.store.getMessages(chatId), queuedMessage)
 
-  const expansion = options?.steered
+  const expansion = literalText
     ? null
     : resolveSlashExpansion(deps, chatId, provider, queuedMessage.content)
 

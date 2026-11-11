@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
 import { renderToStaticMarkup } from "react-dom/server"
+import { MemoryRouter } from "react-router-dom"
 import type { CommandOrigin } from "../../../shared/command-origin"
 import { ThemeProvider } from "../../hooks/useTheme"
 import { UserMessage } from "./UserMessage"
@@ -124,11 +125,13 @@ describe("UserMessage expanded command", () => {
 describe("UserMessage origin", () => {
   function renderOrigin(origin?: CommandOrigin) {
     return renderToStaticMarkup(
-      <ThemeProvider>
-        <UserMessageStore.Provider init={undefined}>
-          <UserMessage content="start the build" origin={origin} />
-        </UserMessageStore.Provider>
-      </ThemeProvider>,
+      <MemoryRouter>
+        <ThemeProvider>
+          <UserMessageStore.Provider init={undefined}>
+            <UserMessage content="start the build" origin={origin} />
+          </UserMessageStore.Provider>
+        </ThemeProvider>
+      </MemoryRouter>,
     )
   }
 
@@ -141,6 +144,14 @@ describe("UserMessage origin", () => {
   test("falls back to the client id when the client sent no name", () => {
     const html = renderOrigin({ kind: "remote_mcp", clientId: "password", via: "password", tool: "send_message", callId: "call-1" })
     expect(html).toContain("via MCP · password")
+  })
+
+  test("labels a message from another chat and links to the chat that sent it", () => {
+    const html = renderOrigin({ kind: "peer_chat", fromChatId: "chat-9", fromTitle: "Backend", fromProjectId: "project-1", fromProjectTitle: "API", messageId: "msg-1" })
+    expect(html).toContain("from chat · Backend")
+    expect(html).toContain('href="/chat/chat-9"')
+    expect(html).toContain(">Backend</span>")
+    expect(html).not.toContain(">You</span>")
   })
 
   test("says nothing about the source of a message typed in the app", () => {

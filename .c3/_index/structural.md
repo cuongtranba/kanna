@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:2d9b3da242f8fda19fdabb1740f9ccacb56ac6d5cabfd2707e2abb7c7187863d -->
+<!-- hash: sha256:8374d4d4e1f19b8f16f12fd4af955c40b8ca3741ca911e5c419823ea33d004a3 -->
 
 ## c3-0 — Kanna (system)
 
@@ -168,7 +168,7 @@ files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
 refs: ref-provider-adapter, ref-strong-typing, rule-strong-typing
-files: src/server/codex-app-server-decode.ts, src/server/codex-app-server-protocol.ts, src/server/codex-app-server.test.ts, src/server/codex-app-server.ts, src/server/codex-plan-steps.test.ts, src/server/codex-plan-steps.ts, src/server/codex-rollout-to-thread-item.ts, src/server/codex-session-types.ts, src/server/codex-spawn.adapter.ts, src/server/codex-tool-payloads.ts, src/server/codex-transcript-translator.ts
+files: src/server/codex-app-server-decode.ts, src/server/codex-app-server-protocol.ts, src/server/codex-app-server.test.ts, src/server/codex-app-server.ts, src/server/codex-dynamic-tool-call.ts, src/server/codex-plan-steps.test.ts, src/server/codex-plan-steps.ts, src/server/codex-rollout-to-thread-item.ts, src/server/codex-session-types.ts, src/server/codex-spawn.adapter.ts, src/server/codex-tool-payloads.ts, src/server/codex-transcript-translator.ts
 
 ## c3-212 — provider-catalog (component)
 container: c3-2 | context: c3-0
@@ -324,7 +324,7 @@ files: src/ops/parity/remote-mcp-docs.test.ts, src/server/better-auth-oauth.adap
 ## c3-243 — webhooks (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-side-effect-adapter, ref-strong-typing
-files: src/server/secret-json-store.adapter.ts, src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-filter.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-rate-limit.ts, src/server/webhooks/webhook-registry.test.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-response.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
+files: src/server/rate-limiter.ts, src/server/secret-json-store.adapter.ts, src/server/test-helpers/webhook-harness.ts, src/server/webhooks/webhook-auth.ts, src/server/webhooks/webhook-boot.ts, src/server/webhooks/webhook-delivery.test.ts, src/server/webhooks/webhook-delivery.ts, src/server/webhooks/webhook-filter.ts, src/server/webhooks/webhook-http-routes.test.ts, src/server/webhooks/webhook-http-routes.ts, src/server/webhooks/webhook-registry.test.ts, src/server/webhooks/webhook-registry.ts, src/server/webhooks/webhook-response.ts, src/server/webhooks/webhook-service.ts, src/server/webhooks/webhook-store.adapter.test.ts, src/server/webhooks/webhook-store.adapter.ts, src/server/ws-router-webhooks.ts, src/shared/webhooks/types.ts, src/shared/webhooks/validate.test.ts, src/shared/webhooks/validate.ts
 
 ## c3-244 — push-notifications (component)
 container: c3-2 | context: c3-0
@@ -349,6 +349,11 @@ files: src/server/inbound/deliver-inbound.test.ts, src/server/inbound/deliver-in
 container: c3-2 | context: c3-0
 refs: ref-provider-adapter, ref-side-effect-adapter, ref-strong-typing
 files: src/client/app/McpSourceAutonomyFields.tsx, src/client/app/McpSourceForm.tsx, src/client/app/McpSourceFormField.tsx, src/client/app/McpSourcesSection.test.tsx, src/client/app/McpSourcesSection.tsx, src/client/lib/mcpSourceAutonomyDraft.ts, src/client/lib/mcpSourceDraft.test.ts, src/client/lib/mcpSourceDraft.ts, src/client/lib/mcpSourcePresentation.test.ts, src/client/lib/mcpSourcePresentation.ts, src/client/stores/mcpSourcesSectionStore.ts, src/client/stores/mcpSourcesStore.ts, src/server/mcp-sources-settings.test.ts, src/server/mcp-sources-settings.ts, src/server/mcp-sources/mcp-source-client.adapter.test.ts, src/server/mcp-sources/mcp-source-client.adapter.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.test.ts, src/server/mcp-sources/mcp-source-cursor-store.adapter.ts, src/server/mcp-sources/mcp-source-fetch.ts, src/server/mcp-sources/mcp-source-runner.test.ts, src/server/mcp-sources/mcp-source-runner.ts, src/server/mcp-sources/mcp-sources-boot.ts, src/shared/mcp-sources/presets.ts, src/shared/mcp-sources/types.ts, src/shared/mcp-sources/validate.test.ts, src/shared/mcp-sources/validate.ts
+
+## c3-249 — peer-messaging (component)
+container: c3-2 | context: c3-0
+refs: ref-side-effect-adapter, ref-strong-typing
+files: src/client/app/GeneralPeerRow.tsx, src/client/components/messages/OriginChip.tsx, src/server/kanna-mcp-peer.ts, src/server/peer-messaging/create-peer-messaging.ts, src/server/peer-messaging/peer-messenger.test.ts, src/server/peer-messaging/peer-messenger.ts, src/server/peer-messaging/peer-tools.ts, src/shared/command-origin.schema.test.ts, src/shared/peer-messaging/inbound.schema.ts, src/shared/peer-messaging/inbound.ts, src/shared/peer-messaging/limits.ts, src/shared/peer-messaging/render-prompt.test.ts, src/shared/peer-messaging/render-prompt.ts, src/shared/peer-messaging/tool-names.ts, src/shared/peer-messaging/tool-specs.schema.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -439,12 +444,12 @@ reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
 citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
@@ -948,6 +953,7 @@ src/server/codex-app-server-decode.ts → c3-211
 src/server/codex-app-server-protocol.ts → c3-211
 src/server/codex-app-server.test.ts → c3-211
 src/server/codex-app-server.ts → c3-211
+src/server/codex-dynamic-tool-call.ts → c3-211
 src/server/codex-plan-steps.test.ts → c3-211
 src/server/codex-plan-steps.ts → c3-211
 src/server/codex-rollout-to-thread-item.ts → c3-211
@@ -1207,6 +1213,7 @@ src/shared/command-origin.ts → c3-242
 src/shared/remote-mcp/topics.ts → c3-242
 src/shared/settings/remote-mcp.test.ts → c3-242
 src/shared/settings/remote-mcp.ts → c3-242
+src/server/rate-limiter.ts → c3-243
 src/server/secret-json-store.adapter.ts → c3-243
 src/server/test-helpers/webhook-harness.ts → c3-243
 src/server/webhooks/webhook-auth.ts → c3-243
@@ -1216,7 +1223,6 @@ src/server/webhooks/webhook-delivery.ts → c3-243
 src/server/webhooks/webhook-filter.ts → c3-243
 src/server/webhooks/webhook-http-routes.test.ts → c3-243
 src/server/webhooks/webhook-http-routes.ts → c3-243
-src/server/webhooks/webhook-rate-limit.ts → c3-243
 src/server/webhooks/webhook-registry.test.ts → c3-243
 src/server/webhooks/webhook-registry.ts → c3-243
 src/server/webhooks/webhook-response.ts → c3-243
@@ -1347,6 +1353,21 @@ src/shared/mcp-sources/presets.ts → c3-248
 src/shared/mcp-sources/types.ts → c3-248
 src/shared/mcp-sources/validate.test.ts → c3-248
 src/shared/mcp-sources/validate.ts → c3-248
+src/client/app/GeneralPeerRow.tsx → c3-249
+src/client/components/messages/OriginChip.tsx → c3-249
+src/server/kanna-mcp-peer.ts → c3-249
+src/server/peer-messaging/create-peer-messaging.ts → c3-249
+src/server/peer-messaging/peer-messenger.test.ts → c3-249
+src/server/peer-messaging/peer-messenger.ts → c3-249
+src/server/peer-messaging/peer-tools.ts → c3-249
+src/shared/command-origin.schema.test.ts → c3-249
+src/shared/peer-messaging/inbound.schema.ts → c3-249
+src/shared/peer-messaging/inbound.ts → c3-249
+src/shared/peer-messaging/limits.ts → c3-249
+src/shared/peer-messaging/render-prompt.test.ts → c3-249
+src/shared/peer-messaging/render-prompt.ts → c3-249
+src/shared/peer-messaging/tool-names.ts → c3-249
+src/shared/peer-messaging/tool-specs.schema.ts → c3-249
 src/shared/analytics.ts → c3-301
 src/shared/app-settings-types.ts → c3-301
 src/shared/builtin-commands.ts → c3-301

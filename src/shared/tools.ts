@@ -20,6 +20,7 @@ import type {
 import { isJsonObject, type JsonObject, type JsonValue } from "./json"
 import { isTaskStatus } from "./tool-call-types"
 import { beaconToolOp, summarizeBeaconCall } from "./beacon-tools"
+import { SEND_CHAT_MESSAGE_TOOL } from "./peer-messaging/tool-names"
 
 export * from "./beacon-tools"
 
@@ -73,6 +74,7 @@ export const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
 export const CLAUDE_EXIT_PLAN_MODE_TOOL_NAME = "ExitPlanMode"
 export const CLAUDE_TODO_WRITE_TOOL_NAME = "TodoWrite"
 export const CARD_MOVE_TOOL_NAME = kannaToolName("card_move")
+export const SEND_CHAT_MESSAGE_TOOL_NAME = kannaToolName(SEND_CHAT_MESSAGE_TOOL)
 
 function asRecord(value: JsonValue | undefined): JsonObject | null {
   return value !== undefined && isJsonObject(value) ? value : null

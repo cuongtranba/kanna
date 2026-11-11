@@ -262,6 +262,7 @@ export function deriveSidebarData(
         stackId: chat.stackId,
         sessionState: claudeSessionStates.get(chat.id) ?? "cold",
         hasPolicyOverride: chat.policyOverride != null,
+        ...(chat.peerInbound != null ? { peerInbound: chat.peerInbound } : {}),
         ...(chat.pinnedAt !== undefined ? { pinnedAt: chat.pinnedAt } : {}),
       }))
   }

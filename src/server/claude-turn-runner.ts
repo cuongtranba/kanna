@@ -44,6 +44,7 @@ export interface RunTurnDeps {
   clearDrainingStream: (chatId: string) => void
   startTurnForChat: (args: StartTurnForChatArgs) => Promise<void>
   maybeStartNextQueuedMessage: (chatId: string) => Promise<boolean | void>
+  onChatSettled?: (chatId: string) => Promise<void>
   stopCodexSession: (chatId: string) => void
   turnEndGuard?: TurnEndGuard
 }
@@ -171,6 +172,7 @@ export async function runTurn(deps: RunTurnDeps, active: ActiveTurn): Promise<vo
     } else if (!active.cancelRequested) {
       try {
         await deps.maybeStartNextQueuedMessage(active.chatId)
+        await deps.onChatSettled?.(active.chatId)
       } catch (error) {
         const message = errorMessage(error)
         await recordTurnError(deps.store, active.chatId, message)

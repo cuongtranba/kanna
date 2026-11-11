@@ -291,6 +291,8 @@ arguments with secrets removed and long text cut to 500 characters. The
 to the exact tool call and a retry loop shows up as repeated records from one
 client.
 
+Agents that Kanna runs can also message each other chat to chat; see [Messaging between chats](/guides/user/peer-messaging/).
+
 ## Security notes
 
 - **A client with your password or an OAuth token can do what you can do** in the

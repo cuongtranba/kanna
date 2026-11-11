@@ -30,6 +30,8 @@ import { decideMentionedProjectBindings } from "./project-mention-attach"
 import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
+import { isPeerChatOrigin } from "../shared/command-origin"
+import { renderPeerPrompt } from "../shared/peer-messaging/render-prompt"
 import { timestamped } from "../shared/transcript-entry"
 import { appendTurnError } from "./claude-turn-outcome"
 import { errorMessage, projectNotFound } from "../shared/errors"
@@ -303,7 +305,8 @@ async function startTurnAfterTurnStarted(
     targetProvider,
     Boolean(args.userClearedContext),
   )
-  const typedPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
+  const promptBody = isPeerChatOrigin(args.origin) ? renderPeerPrompt(args.content, args.origin) : args.content
+  const typedPromptText = buildPromptText(args.promptOverride ?? promptBody, args.attachments)
   const userPromptText = providerUsesSdkSession(args.provider)
     ? withBeaconMentions(typedPromptText, args.content, deps.getBeacons(), deps.isBeaconOnline)
     : typedPromptText
@@ -374,6 +377,7 @@ async function startTurnAfterTurnStarted(
         skills: deps.listSkills(args.chatId),
         genui: isGenUIEnabled(),
         planProgress: true,
+        peerMessaging: deps.codexManager.offersKannaTools,
       }),
     })
     if (pendingForkToken && sessionToken) {

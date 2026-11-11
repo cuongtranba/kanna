@@ -17,6 +17,10 @@ import {
 } from "../../../lib/chatStatusIndicator"
 import { selectIsSpawning, useNewSessionStore } from "../../../stores/newSessionStore"
 import { runPendingAction, usePendingAction } from "../../../stores/pendingActionsStore"
+import { useAppSettingsStore } from "../../../stores/appSettingsStore"
+import { useOptionalKannaSocket } from "../../../app/KannaSocketProvider"
+import { surfaceCommandError } from "../../../lib/commandFeedback"
+import { DEFAULT_PEER_INBOUND_MODE, resolvePeerInbound } from "../../../../shared/peer-messaging/inbound"
 import { Spinner } from "../../ui/spinner"
 import { ChatRowMenu } from "./Menus"
 import { chatRowActionKey, useChatRowPending, type ChatRowAction } from "./sidebarPendingActions"
@@ -90,6 +94,19 @@ function ChatRowImpl({
 
   function launch(action: ChatRowAction, run: () => Promise<void>) {
     runPendingAction(chatRowActionKey(action, chat.chatId), run)
+  }
+
+  const socket = useOptionalKannaSocket()
+  const globalPeerInbound = useAppSettingsStore((s) => s.settings?.peerMessagesInbound ?? DEFAULT_PEER_INBOUND_MODE)
+  const acceptsPeerMessages = resolvePeerInbound(chat.peerInbound, globalPeerInbound) === "accept"
+
+  async function togglePeerInbound(target: NonNullable<typeof socket>) {
+    const next = acceptsPeerMessages ? "refuse" : "accept"
+    await surfaceCommandError(() => target.command({
+      type: "chat.setPeerInbound",
+      chatId: chat.chatId,
+      peerInbound: next === globalPeerInbound ? null : next,
+    }))
   }
 
   function handleMainClick(event: MouseEvent) {
@@ -233,6 +250,8 @@ function ChatRowImpl({
           onTogglePin={() => launch("chat.setPin", () => onTogglePin(chat.chatId, chat.pinnedAt === undefined))}
           onDelete={() => launch("chat.delete", () => onDeleteChat(chat.chatId))}
           onEditPermissions={onEditPermissions ? () => onEditPermissions(chat.chatId) : undefined}
+          acceptsPeerMessages={acceptsPeerMessages}
+          onTogglePeerInbound={socket ? () => launch("chat.setPeerInbound", () => togglePeerInbound(socket)) : undefined}
         >
           {mainAction}
         </ChatRowMenu>

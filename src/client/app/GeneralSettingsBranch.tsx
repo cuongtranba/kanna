@@ -3,6 +3,7 @@ import type { DomPort } from "../ports/domPort"
 import { domAdapter } from "../adapters/dom.adapter"
 import { GeneralAppearanceRows } from "./GeneralAppearanceRows"
 import { GeneralPrivacyRows } from "./GeneralPrivacyRows"
+import { GeneralPeerRow } from "./GeneralPeerRow"
 import { GeneralShareRow } from "./GeneralShareRow"
 import { GeneralTerminalRows } from "./GeneralTerminalRows"
 import { GeneralTunnelRows } from "./GeneralTunnelRows"
@@ -24,6 +25,7 @@ export function GeneralSettingsBranch({ state, dom = domAdapter }: { state: Kann
       </div>
       <GeneralTunnelRows state={state} />
       <GeneralShareRow state={state} />
+      <GeneralPeerRow state={state} />
     </>
   )
 }
