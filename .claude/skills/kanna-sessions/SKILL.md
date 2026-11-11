@@ -354,9 +354,7 @@ reason to call the shims there. **A restricted subagent is different:**
 toolset whenever `restrictedAllowedPaths` is set, and the shims — registered
 with those paths — become its only file tools, each call checked by
 `permission-gate.ts`. With the flag off, such a subagent has no file tools at
-all; PR 4 of #1382 replaces this with a PreToolUse hook
-that keeps the native tools. The removed PTY driver also routed through the
-shims, via `--tools "mcp__kanna__*"`.
+all.
 
 ## The `LSP` tool — one tool, every language
 

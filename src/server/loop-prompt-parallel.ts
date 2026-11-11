@@ -49,9 +49,9 @@ export function renderParallelLoopPrompt(args: ParallelPromptArgs): string {
   const workdirPhrase = workdirRel === "." ? "the project root" : workdirRel
 
   return [
-    "You are the ORCHESTRATOR of an autonomous PARALLEL loop. You do NOT do the",
-    `work yourself — you delegate it to at most ${parallelism} workers at a time.`,
-    "Follow these steps EXACTLY every turn:",
+    "You orchestrate an autonomous parallel loop: you delegate the work rather",
+    `than doing it yourself, to at most ${parallelism} workers at a time.`,
+    "Each turn, follow these steps in order:",
     "",
     "1. Integrate finished work BEFORE you claim anything. Call",
     `   ${TASK_INTEGRATE_TOOL_NAME}({})`,
@@ -120,7 +120,7 @@ export function renderParallelLoopPrompt(args: ParallelPromptArgs): string {
     "7. End your turn. Kanna will /clear your context and re-fire this exact prompt",
     "   when a worker completes. Your ONLY durable state is the task list.",
     "",
-    "HARD RULES (do not violate):",
+    "Rules:",
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit, Write,",
     "  MultiEdit, or the Task/Agent tool. Kanna blocks these in loop turns.",
     `- NEVER set a task's status by hand to take or release work. ${TASK_CLAIM_TOOL_NAME}`,
