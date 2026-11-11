@@ -33,6 +33,10 @@ export function originClientLabel(origin: RemoteMcpOrigin): string {
   return name ? name : origin.clientId
 }
 
+export function messageAuthorLabel(origin: CommandOrigin | undefined): string {
+  return origin?.kind === "peer_chat" ? origin.fromTitle : "You"
+}
+
 export function originLabel(origin: CommandOrigin): string {
   if (origin.kind === "peer_chat") return `from chat · ${origin.fromTitle}`
   return `via MCP · ${originClientLabel(origin)}`

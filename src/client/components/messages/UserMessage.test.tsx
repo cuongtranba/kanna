@@ -150,6 +150,8 @@ describe("UserMessage origin", () => {
     const html = renderOrigin({ kind: "peer_chat", fromChatId: "chat-9", fromTitle: "Backend", fromProjectId: "project-1", fromProjectTitle: "API", messageId: "msg-1" })
     expect(html).toContain("from chat · Backend")
     expect(html).toContain('href="/chat/chat-9"')
+    expect(html).toContain(">Backend</span>")
+    expect(html).not.toContain(">You</span>")
   })
 
   test("says nothing about the source of a message typed in the app", () => {
