@@ -8,11 +8,11 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/useKannaState.ts": 790,
   "src/client/components/chat-ui/ChatInput.tsx": 879,
   "src/client/components/chat-ui/RightSidebar.tsx": 1975,
-  "src/server/agent-coordinator.ts": 1222,
-  "src/server/app-settings.ts": 1546,
+  "src/server/agent-coordinator.ts": 1217,
+  "src/server/app-settings.ts": 1543,
   "src/server/board-store.adapter.ts": 1294,
-  "src/server/codex-app-server.ts": 997,
-  "src/server/kanna-mcp.ts": 1009,
+  "src/server/codex-app-server.ts": 957,
+  "src/server/kanna-mcp.ts": 1007,
   "src/server/subagent-orchestrator.ts": 1043,
 }
 

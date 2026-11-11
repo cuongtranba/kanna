@@ -14,9 +14,7 @@ import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
 import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent-coordinator"
-import { CodexAppServerManager } from "./codex-app-server"
-import { createPeerMessenger } from "./peer-messaging/create-peer-messenger"
-import { createCodexKannaTools } from "./peer-messaging/peer-tools"
+import { createPeerMessaging } from "./peer-messaging/create-peer-messaging"
 import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
 import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -369,15 +367,10 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   let cronDrain: Promise<void> = Promise.resolve()
   lifetime.defer("quiesce", () => { cronDrain = cronScheduler.shutdown() })
-  const peerMessenger = createPeerMessenger({
-    store,
-    agent: () => agent,
-    globalInbound: () => appSettings.getSnapshot().peerMessagesInbound,
-  })
+  const peerMessaging = createPeerMessaging(store, () => agent, () => appSettings.getSnapshot().peerMessagesInbound)
   agent = new AgentCoordinator({
     store,
-    peerMessenger,
-    codexManager: new CodexAppServerManager({ kannaTools: createCodexKannaTools(peerMessenger) }),
+    ...peerMessaging,
     scheduleManager,
     cronScheduler,
     runtimeConfig: resolveAgentRuntimeConfig(process.env),

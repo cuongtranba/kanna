@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react"
 import { withScopedStore } from "../../lib/createScopedStore"
-import { originDetail, originLabel, type CommandOrigin } from "../../../shared/command-origin"
+import type { CommandOrigin } from "../../../shared/command-origin"
 import { unwrapSteeredMessage } from "../../../shared/steered-message"
 import type { ChatAttachment, SlashCommandKind } from "../../../shared/types"
 import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
@@ -9,7 +9,7 @@ import { AttachmentFileCard, AttachmentImageCard } from "./AttachmentCard"
 import { FilePreviewSheet } from "./file-preview/FilePreviewSheet"
 import { toPreviewSourceFromAttachment, type PreviewSource } from "./file-preview/types"
 import { Zap } from "lucide-react"
-import { HoverHint } from "../ui/truncated-text"
+import { OriginChip } from "./OriginChip"
 import { useTranscriptRenderOptions } from "./render-context"
 import { UserMessageStore } from "./UserMessage.store"
 import type { DomPort } from "../../ports/domPort"
@@ -104,11 +104,7 @@ function UserMessageInner({ content, attachments = [], steered = false, autoCont
             ran the <span className="font-mono">{expandedCommand.name}</span> {expandedCommand.kind}
           </span>
         ) : null}
-        {origin ? (
-          <HoverHint label={originDetail(origin)}>
-            <span className="text-xs text-muted-foreground opacity-70">via {originLabel(origin)}</span>
-          </HoverHint>
-        ) : null}
+        {origin ? <OriginChip origin={origin} linked={!renderOptions.readonly} /> : null}
         {autoContinue ? (
           <span className="text-xs text-muted-foreground opacity-70">auto-sent</span>
         ) : null}

@@ -70,6 +70,11 @@ export interface RunClaudeSessionDeps {
 }
 
 
+async function drainQueueThenSettle(deps: RunClaudeSessionDeps, chatId: string): Promise<void> {
+  await deps.maybeStartNextQueuedMessage(chatId)
+  await deps.onChatSettled?.(chatId)
+}
+
 async function discardInvalidSession(deps: RunClaudeSessionDeps, session: ClaudeSessionState): Promise<void> {
   deps.closeClaudeSession(session.chatId, session)
   await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
@@ -218,8 +223,7 @@ export async function runClaudeSession(
             session.selfWakeActive = false
             deps.pendingTools.discard(session.chatId)
             deps.emitStateChange(session.chatId)
-            await deps.maybeStartNextQueuedMessage(session.chatId)
-            await deps.onChatSettled?.(session.chatId)
+            await drainQueueThenSettle(deps, session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
           if (session.canArmSelfWake()) {
@@ -327,8 +331,7 @@ export async function runClaudeSession(
           deps.oauthPool?.release(session.chatId)
         }
         if (!active.cancelRequested) {
-          await deps.maybeStartNextQueuedMessage(session.chatId)
-          await deps.onChatSettled?.(session.chatId)
+          await drainQueueThenSettle(deps, session.chatId)
         }
       } else if (event.entry.kind === "result" && event.entry.isError) {
         await settleFailedTurn(

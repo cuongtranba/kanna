@@ -4,7 +4,9 @@ import type { PeerInboundMode } from "../../shared/peer-messaging/inbound"
 import type { QueuedChatMessage } from "../../shared/types"
 import type { ChatRecord } from "../events"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
+import { CodexAppServerManager } from "../codex-app-server"
 import { PeerMessenger, type PeerChatInfo } from "./peer-messenger"
+import { createCodexKannaTools } from "./peer-tools"
 
 export interface PeerStoreView {
   readonly state: { readonly chatsById: ReadonlyMap<string, ChatRecord> }
@@ -15,20 +17,29 @@ export interface PeerStoreView {
 
 export interface PeerAgentView {
   getActiveStatuses(): ReadonlyMap<string, KannaStatus>
-  enqueueMessage(chatId: string, content: string, attachments: [], options: SendMessageOptions): Promise<unknown>
-  maybeStartNextQueuedMessage(chatId: string): Promise<unknown>
+  enqueueMessage(chatId: string, content: string, attachments: [], options: SendMessageOptions): Promise<QueuedChatMessage>
+  maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
 }
 
-export interface PeerMessengerSources {
-  store: PeerStoreView
-  agent: () => PeerAgentView
-  globalInbound: () => PeerInboundMode
-  now?: () => number
-  newId?: () => string
+export interface PeerMessagingServices {
+  peerMessenger: PeerMessenger
+  codexManager: CodexAppServerManager
 }
 
-export function createPeerMessenger(sources: PeerMessengerSources): PeerMessenger {
-  const { store, agent } = sources
+export function createPeerMessaging(
+  store: PeerStoreView,
+  agent: () => PeerAgentView,
+  globalInbound: () => PeerInboundMode,
+): PeerMessagingServices {
+  const peerMessenger = createPeerMessenger(store, agent, globalInbound)
+  return { peerMessenger, codexManager: new CodexAppServerManager({ kannaTools: createCodexKannaTools(peerMessenger) }) }
+}
+
+function createPeerMessenger(
+  store: PeerStoreView,
+  agent: () => PeerAgentView,
+  globalInbound: () => PeerInboundMode,
+): PeerMessenger {
   const infoOf = (chat: ChatRecord): PeerChatInfo => ({
     chatId: chat.id,
     title: chat.title,
@@ -46,14 +57,14 @@ export function createPeerMessenger(sources: PeerMessengerSources): PeerMessenge
     },
     activeStatuses: () => agent().getActiveStatuses(),
     queuedMessages: (chatId) => store.getQueuedMessages(chatId),
-    globalInbound: sources.globalInbound,
+    globalInbound,
     enqueue: async (chatId, content, origin) => {
       await agent().enqueueMessage(chatId, content, [], { origin })
     },
     startNextQueued: async (chatId) => {
       await agent().maybeStartNextQueuedMessage(chatId)
     },
-    now: sources.now ?? Date.now,
-    newId: sources.newId ?? randomUUID,
+    now: Date.now,
+    newId: randomUUID,
   })
 }
