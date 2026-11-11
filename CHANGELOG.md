@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.108.1](https://github.com/cuongtranba/kanna/compare/v1.108.0...v1.108.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **prompts:** state loop rules as current facts, drop pressure register ([#1481](https://github.com/cuongtranba/kanna/issues/1481)) ([38b34fe](https://github.com/cuongtranba/kanna/commit/38b34fe5bfb80d639159f4cb783a2f3ef8e1d4df))
+
 ## [1.108.0](https://github.com/cuongtranba/kanna/compare/v1.107.5...v1.108.0) (2026-11-11)
 
 
