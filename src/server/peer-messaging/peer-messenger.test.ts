@@ -124,6 +124,26 @@ describe("PeerMessenger", () => {
     expect(await messenger.send({ fromChatId: "a", to: "b", message: "after the pause" })).toMatchObject({ ok: true })
   })
 
+  test("a send refused because the target's queue is full does not use up the sender's rate allowance", async () => {
+    const senders = ["c", "d", "e", "f"]
+    const { messenger, world, endTurn } = createWorld([chat("a"), chat("b"), ...senders.map((id) => chat(id))])
+    world.busy.add("b")
+    for (const sender of senders) {
+      for (let index = 0; index < 5; index += 1) {
+        await messenger.send({ fromChatId: sender, to: "b", message: `${sender} ${String(index)}` })
+      }
+    }
+    const whileFull = []
+    for (let index = 0; index < 6; index += 1) {
+      const result = await messenger.send({ fromChatId: "a", to: "b", message: `full ${String(index)}` })
+      whileFull.push(result.ok ? "ok" : result.reason)
+    }
+    expect(whileFull).toEqual(Array.from({ length: 6 }, () => "queue_full"))
+    for (let index = 0; index <= 20; index += 1) await endTurn("b")
+    const afterDrain = await messenger.send({ fromChatId: "a", to: "b", message: "now there is room" })
+    expect(afterDrain).toMatchObject({ ok: true })
+  })
+
   test("notify_when_idle tells the sender once when the target goes idle", async () => {
     const { messenger, world, endTurn } = createWorld([chat("a"), chat("b")])
     await messenger.send({ fromChatId: "a", to: "b", message: "do the thing", notifyWhenIdle: true })

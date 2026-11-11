@@ -172,13 +172,13 @@ export class PeerMessenger {
     if (recent.some((entry) => entry.digest === digest)) {
       return refuse("duplicate", "An identical message was sent to that chat in the last minute, so it was not sent again.")
     }
-    const decision = this.limiter.take(pair)
-    if (!decision.allowed) {
-      return refuse("rate_limited", `Too many messages to that chat. Retry in ${String(decision.retryAfterSeconds)} seconds.`)
-    }
     const queuedPeers = this.ports.queuedMessages(target.chatId).filter((queued) => queued.origin?.kind === "peer_chat")
     if (queuedPeers.length >= PEER_QUEUE_LIMIT) {
       return refuse("queue_full", "That chat already has too many unread messages from other chats.")
+    }
+    const decision = this.limiter.take(pair)
+    if (!decision.allowed) {
+      return refuse("rate_limited", `Too many messages to that chat. Retry in ${String(decision.retryAfterSeconds)} seconds.`)
     }
     recent.push({ digest, at: this.ports.now() })
     return null
