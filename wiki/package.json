@@ -12,8 +12,8 @@
     "export:github-wiki": "bun run scripts/export-github-wiki.ts"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.42.9",
-    "astro": "^7.4.7",
+    "@astrojs/starlight": "^0.42.10",
+    "astro": "^7.4.8",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
