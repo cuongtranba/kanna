@@ -14,6 +14,9 @@ export interface PeerChatOrigin {
   fromProjectId: string
   fromProjectTitle: string
   messageId: string
+  fromRunId?: string
+  fromSubagentName?: string
+  inReplyTo?: string
 }
 
 export type CommandOrigin = RemoteMcpOrigin | PeerChatOrigin

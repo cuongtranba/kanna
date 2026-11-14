@@ -46,6 +46,7 @@ export interface ActiveTurn {
   usage?: import("../shared/subagent-types").ProviderUsage
   userMessageId: string | null
   scheduleId?: string
+  midTurnInjections?: number
 }
 
 export interface ClaudeSessionStateInit {
@@ -122,6 +123,7 @@ export class ClaudeSessionState {
   suppressSessionTokenPersist: boolean
   backgroundTaskWakeSuppressed: boolean
   contextClearPending = false
+  readonly injectedPromptIds = new Set<string>()
   mcpBearersUsableUntil: number | null
 
   constructor(init: ClaudeSessionStateInit) {

@@ -16,12 +16,26 @@ function createWorld(chats: PeerChatInfo[]) {
   const busy = new Set<string>()
   const queues = new Map<string, QueuedChatMessage[]>()
   const started: StartedTurn[] = []
+  const timers = new Map<number, () => void>()
+  const injected: string[] = []
   const world = {
     clock: 1_000_000,
     globalInbound: "accept" as PeerInboundMode,
     idCounter: 0,
+    queueCounter: 0,
+    acceptInjection: false,
+    liveRuns: new Set<string>(),
+    delivered: [] as { chatId: string; runId: string; content: string; origin: PeerChatOrigin }[],
     started,
+    injected,
     busy,
+    fireTimers: () => {
+      for (const [id, run] of [...timers]) {
+        timers.delete(id)
+        run()
+      }
+    },
+    pendingTimers: () => timers.size,
   }
   const queueOf = (chatId: string) => {
     const queue = queues.get(chatId) ?? []
@@ -42,9 +56,30 @@ function createWorld(chats: PeerChatInfo[]) {
     queuedMessages: queueOf,
     globalInbound: () => world.globalInbound,
     enqueue: async (chatId, content, origin) => {
-      queueOf(chatId).push({ id: `q-${String(queueOf(chatId).length)}`, content, attachments: [], createdAt: world.clock, origin })
+      const id = `q-${String(++world.queueCounter)}`
+      queueOf(chatId).push({ id, content, attachments: [], createdAt: world.clock, origin })
+      return id
     },
     startNextQueued,
+    injectMidTurn: async (chatId, queuedMessageId) => {
+      if (!world.acceptInjection) return false
+      const queue = queueOf(chatId)
+      const index = queue.findIndex((queued) => queued.id === queuedMessageId)
+      if (index < 0) return false
+      const [taken] = queue.splice(index, 1)
+      injected.push(taken?.content ?? "")
+      return true
+    },
+    deliverToRun: async (chatId, runId, content, origin) => {
+      if (!world.liveRuns.has(runId)) return false
+      world.delivered.push({ chatId, runId, content, origin })
+      return true
+    },
+    after: (_delayMs, run) => {
+      const id = ++world.queueCounter
+      timers.set(id, run)
+      return () => { timers.delete(id) }
+    },
     now: () => world.clock,
     newId: () => `msg-${String(++world.idCounter)}`,
   })
@@ -72,7 +107,17 @@ describe("PeerMessenger", () => {
     }])
   })
 
-  test("a message to a busy chat waits and runs after its turn ends", async () => {
+  test("a message to a busy chat is read in its running turn when the provider takes it", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    world.acceptInjection = true
+    const result = await messenger.send({ fromChatId: "a", to: "b", message: "when you can" })
+    expect(result).toMatchObject({ ok: true, status: "injected" })
+    expect(world.injected).toEqual(["when you can"])
+    expect(world.started).toEqual([])
+  })
+
+  test("a message to a busy chat that cannot take it mid-turn waits and runs after its turn ends", async () => {
     const { messenger, world, endTurn } = createWorld([chat("a"), chat("b")])
     world.busy.add("b")
     const result = await messenger.send({ fromChatId: "a", to: "b", message: "when you can" })
@@ -80,6 +125,120 @@ describe("PeerMessenger", () => {
     expect(world.started).toEqual([])
     await endTurn("b")
     expect(world.started.map((turn) => turn.content)).toEqual(["when you can"])
+  })
+
+  test("reply_to is stamped on the message so the receiver can tell which message was answered", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    await messenger.send({ fromChatId: "a", to: "b", message: "here is the answer", replyTo: "msg-from-b" })
+    expect(world.started[0]?.origin).toMatchObject({ messageId: "msg-1", inReplyTo: "msg-from-b" })
+  })
+
+  test("a message addressed to a running subagent run goes to that run, not the chat's queue", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.liveRuns.add("run-1")
+    const result = await messenger.send({
+      fromChatId: "a",
+      to: "b",
+      message: "use the new schema",
+      runId: "run-1",
+      fromRunId: "run-9",
+      fromSubagentName: "reviewer",
+    })
+    expect(result).toMatchObject({ ok: true, status: "injected" })
+    expect(world.delivered).toHaveLength(1)
+    expect(world.delivered[0]).toMatchObject({
+      chatId: "b",
+      runId: "run-1",
+      content: "use the new schema",
+      origin: { fromRunId: "run-9", fromSubagentName: "reviewer" },
+    })
+    expect(world.started).toEqual([])
+  })
+
+  test("a message addressed to a run that is no longer running falls back to the chat itself", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    const result = await messenger.send({ fromChatId: "a", to: "b", message: "are you there", runId: "run-gone" })
+    expect(result).toMatchObject({ ok: true, status: "delivered" })
+    expect(world.started.map((turn) => turn.content)).toEqual(["are you there"])
+  })
+
+  test("a message handed back from a subagent run that ended unread is delivered to the chat like a normal peer message", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    const origin: PeerChatOrigin = { kind: "peer_chat", fromChatId: "a", fromTitle: "Chat a", fromProjectId: "project-a", fromProjectTitle: "Project a", messageId: "msg-7", fromRunId: "run-9" }
+    await messenger.deliverToChat("b", "use the new schema", origin)
+    expect(world.started).toEqual([{ chatId: "b", content: "use the new schema", origin }])
+  })
+
+  test("a chat waiting for a message receives it directly without it being queued", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    const waiting = messenger.waitForMessage({ chatId: "b", from: "a" })
+    const result = await messenger.send({ fromChatId: "a", to: "b", message: "the build is green" })
+    expect(result).toMatchObject({ ok: true, status: "delivered" })
+    const received = await waiting
+    expect(received).toMatchObject({ status: "message", messageId: "msg-1", fromChatId: "a" })
+    expect(received.status === "message" ? received.message : "").toContain("the build is green")
+    expect(world.started).toEqual([])
+    expect(world.pendingTimers()).toBe(0)
+  })
+
+  test("a wait that names a sender ignores messages from other chats", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b"), chat("c")])
+    world.busy.add("b")
+    const waiting = messenger.waitForMessage({ chatId: "b", from: "a" })
+    const result = await messenger.send({ fromChatId: "c", to: "b", message: "not for the waiter" })
+    expect(result).toMatchObject({ ok: true, status: "queued" })
+    world.fireTimers()
+    expect(await waiting).toEqual({ status: "timeout" })
+  })
+
+  test("a wait that nobody answers ends with a timeout", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    const waiting = messenger.waitForMessage({ chatId: "b" })
+    world.fireTimers()
+    expect(await waiting).toEqual({ status: "timeout" })
+  })
+
+  test("a new wait replaces the previous one, which ends with a timeout", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    const first = messenger.waitForMessage({ chatId: "b" })
+    const second = messenger.waitForMessage({ chatId: "b" })
+    expect(await first).toEqual({ status: "timeout" })
+    await messenger.send({ fromChatId: "a", to: "b", message: "for the second wait" })
+    expect(await second).toMatchObject({ status: "message" })
+  })
+
+  test("a wait returns at once when a message is already pending, saying it reaches the agent when the tool returns", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    await messenger.send({ fromChatId: "a", to: "b", message: "already here" })
+    world.acceptInjection = true
+    const result = await messenger.waitForMessage({ chatId: "b" })
+    expect(result.status).toBe("pending")
+    expect(result.status === "pending" ? result.note : "").toContain("as soon as this tool returns")
+    expect(world.injected).toEqual(["already here"])
+  })
+
+  test("a message sent to a chat whose wait was left over from an ended turn is delivered normally", async () => {
+    const { messenger, world, endTurn } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    const waiting = messenger.waitForMessage({ chatId: "b" })
+    world.busy.delete("b")
+    const result = await messenger.send({ fromChatId: "a", to: "b", message: "after the turn" })
+    expect(result).toMatchObject({ ok: true, status: "delivered" })
+    expect(await waiting).toEqual({ status: "timeout" })
+    expect(world.started.map((turn) => turn.content)).toEqual(["after the turn"])
+    await endTurn("b")
+  })
+
+  test("cancelling a chat ends its wait", async () => {
+    const { messenger, world } = createWorld([chat("a"), chat("b")])
+    world.busy.add("b")
+    const waiting = messenger.waitForMessage({ chatId: "b" })
+    messenger.cancelWaits("b")
+    expect(await waiting).toEqual({ status: "timeout" })
   })
 
   test("refuses a chat that does not exist, itself, an archived chat, and a chat that opted out", async () => {

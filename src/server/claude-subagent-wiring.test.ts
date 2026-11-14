@@ -9,7 +9,9 @@ import {
 import type { ProviderRunStart } from "./subagent-orchestrator"
 import type { Subagent } from "../shared/subagent-types"
 import type { ToolCallbackService } from "./tool-callback"
-import type { KannaMcpDelegationContext } from "./kanna-mcp"
+import { buildKannaMcpTools, type ChatTaskStorePort, type KannaMcpDelegationContext } from "./kanna-mcp"
+import type { PeerChatOrigin } from "../shared/command-origin"
+import { PeerMessenger, type PeerChatInfo } from "./peer-messaging/peer-messenger"
 
 
 const NOOP_PROMISE = () => Promise.resolve(null as unknown as never)
@@ -335,5 +337,77 @@ describe("buildSubagentProviderRunForChat — custom endpoint session", () => {
 
     expect(started?.endpoint).toBeNull()
     expect(started?.contextWindowOverride).toBeUndefined()
+  })
+})
+
+
+describe("the kanna tools a Claude subagent session receives", () => {
+  const PARENT_CHAT = "chat-1"
+  const peerChat = (chatId: string): PeerChatInfo => ({
+    chatId, title: `Chat ${chatId}`, projectId: "proj-1", projectTitle: "Project", provider: "claude", peerInbound: null, archived: false,
+  })
+  const sent: { chatId: string; content: string; origin: PeerChatOrigin }[] = []
+  const messenger = new PeerMessenger({
+    listChats: () => [peerChat(PARENT_CHAT), peerChat("chat-2")],
+    getChat: (chatId) => peerChat(chatId),
+    activeStatuses: () => new Map(),
+    queuedMessages: () => [],
+    globalInbound: () => "accept",
+    enqueue: async (chatId, content, origin) => { sent.push({ chatId, content, origin }); return "q-1" },
+    startNextQueued: async () => {},
+    injectMidTurn: async () => false,
+    after: () => () => {},
+    now: () => 0,
+    newId: () => "msg-1",
+  })
+  const taskStore: ChatTaskStorePort = {
+    appendEvents: async () => {},
+    project: () => { throw new Error("not used") },
+    decide: async () => { throw new Error("not used") },
+    mergeBranch: async () => ({ ok: true, conflicts: [], detail: "" }),
+  }
+
+  async function subagentTools() {
+    const captured: Parameters<SubagentWiringDeps["startClaudeSessionFn"]>[0][] = []
+    const starter = buildClaudeSubagentStarter(
+      makeDeps({
+        chatTaskStore: taskStore,
+        isRunAlive: () => true,
+        peerMessenger: messenger,
+        startClaudeSessionFn: async (a) => {
+          captured.push(a)
+          return {} as never
+        },
+      }),
+      {
+        delegationContext: { ...DELEGATION_CONTEXT, parentRunId: "run-1", parentSubagentName: "reviewer" },
+        beaconToolsAllowed: false,
+      },
+    )
+    await starter({
+      projectId: "proj", localPath: "/tmp/x", model: "claude-opus-4-5", effort: undefined, planMode: false,
+      sessionToken: null, forkSession: false, oauthToken: null, chatId: PARENT_CHAT, onToolRequest: async () => null,
+    } as never)
+    const kannaMcp = captured[0]?.kannaMcp
+    if (!kannaMcp) throw new Error("the session was started without kanna tools")
+    return buildKannaMcpTools({ ...kannaMcp, projectId: "proj", localPath: "/tmp/x", chatId: PARENT_CHAT })
+  }
+
+  test("a subagent can use the parent chat's task tools", async () => {
+    const names = (await subagentTools()).map((t) => t.name)
+    expect(names).toEqual(expect.arrayContaining(["task_create", "task_update", "task_list"]))
+  })
+
+  test("a subagent can message other chats, and the message names the subagent run that sent it", async () => {
+    const tools = await subagentTools()
+    expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(["list_peer_chats", "send_chat_message", "wait_for_chat_message"]))
+    const send = tools.find((t) => t.name === "send_chat_message")
+    if (!send) throw new Error("send_chat_message missing")
+    await send.handler({ to: "chat-2", message: "can you review this" }, undefined)
+    expect(sent).toEqual([{
+      chatId: "chat-2",
+      content: "can you review this",
+      origin: expect.objectContaining({ fromChatId: PARENT_CHAT, fromRunId: "run-1", fromSubagentName: "reviewer" }),
+    }])
   })
 })

@@ -548,7 +548,7 @@ visible and `resume_loop` possible, and the un-armed delivery prompt that names
 the plan absolutely or names nothing — is in
 `.claude/skills/kanna-loop/SKILL.md`.
 
-See `adr-20260813-queued-message-dequeue-on-commit`.
+See `adr-20260813-queued-message-dequeue-on-commit`; a peer message pushed into a running turn is released on its echo instead ([references/peer-mid-turn-delivery.md](references/peer-mid-turn-delivery.md)).
 
 ## Transcript memory is bounded by bytes, and loaded lazily
 

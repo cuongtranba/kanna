@@ -5,6 +5,8 @@ code:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/async-queue.ts
+  - src/server/codex-pending-turn.ts
   - src/server/codex-app-server-decode.ts
   - src/server/codex-rollout-to-thread-item.ts
   - src/server/codex-session-types.ts

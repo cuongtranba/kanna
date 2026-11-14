@@ -13,6 +13,9 @@ code:
   - src/server/peer-messaging/peer-messenger.ts
   - src/server/peer-messaging/peer-messenger.test.ts
   - src/server/peer-messaging/peer-tools.ts
+  - src/server/peer-messaging/mid-turn-delivery.ts
+  - src/server/peer-messaging/mid-turn-delivery.test.ts
+  - src/server/peer-messaging/peer-tools.test.ts
   - src/server/kanna-mcp-peer.ts
   - src/client/components/messages/OriginChip.tsx
   - src/client/app/GeneralPeerRow.tsx

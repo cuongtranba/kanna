@@ -10,6 +10,7 @@ import { settleFailedTurn, type AuthErrorDetectable, type FailureSettlement } fr
 import { recordTurnError } from "./claude-turn-outcome"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import type { HarnessEvent } from "./harness-types"
 import { isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { TurnEndGuard } from "./turn-end-guard"
@@ -63,6 +64,8 @@ export interface RunClaudeSessionDeps {
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
   onChatSettled?(chatId: string): Promise<void>
+  onPromptDelivered?(session: ClaudeSessionState, promptId: string): Promise<void>
+  onTurnResult?(session: ClaudeSessionState): void
   turnEndGuard?: TurnEndGuard
   onLiveBlock?: LiveBlockSink
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
@@ -95,6 +98,23 @@ function failureSettlement(deps: RunClaudeSessionDeps): FailureSettlement {
 function firstEntryTimeoutMessage(session: ClaudeSessionState, timeoutMs: number): string {
   const label = session.endpointLabel ?? "The endpoint"
   return `${label} produced no response within ${timeoutMs}ms — the selected model may be invalid or the upstream stalled.`
+}
+
+type StreamEvent = Exclude<HarnessEvent, { type: "prompt_delivered" }>
+
+async function* withoutPromptDeliveries(
+  stream: AsyncIterable<HarnessEvent>,
+  onPromptDelivered: (promptId: string) => Promise<void> | undefined,
+  onTurnResult: () => void,
+): AsyncGenerator<StreamEvent> {
+  for await (const event of stream) {
+    if (event.type === "prompt_delivered") {
+      await onPromptDelivered(event.promptId)
+      continue
+    }
+    if (event.type === "transcript" && event.entry.kind === "result") onTurnResult()
+    yield event
+  }
 }
 
 export async function runClaudeSession(
@@ -144,7 +164,11 @@ export async function runClaudeSession(
     }, deps.endpointFirstEntryTimeoutMs)
   }
   try {
-    loop: for await (const event of session.session.stream) {
+    loop: for await (const event of withoutPromptDeliveries(
+      session.session.stream,
+      (promptId) => deps.onPromptDelivered?.(session, promptId),
+      () => { deps.onTurnResult?.(session) },
+    )) {
       switch (event.type) {
         case "session_token": {
           session.sessionToken = event.sessionToken
@@ -396,6 +420,7 @@ export async function runClaudeSession(
       deps.pendingTools.discard(session.chatId)
     }
     session.selfWakeActive = false
+    session.injectedPromptIds.clear()
     session.session.close()
     deps.emitStateChange(session.chatId)
   }

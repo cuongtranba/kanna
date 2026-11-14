@@ -109,6 +109,11 @@ export async function* createClaudeHarnessStream(
 
     if (sdkMessage?.type === "system" && sdkMessage.subtype === "thinking_tokens") continue
 
+    if (sdkMessage?.type === "user" && sdkMessage.isReplay === true) {
+      if (typeof sdkMessage.uuid === "string") yield { type: "prompt_delivered", promptId: sdkMessage.uuid }
+      continue
+    }
+
     const sessionToken = typeof sdkMessage.session_id === "string" ? sdkMessage.session_id : null
     if (sessionToken) {
       yield { type: "session_token", sessionToken }

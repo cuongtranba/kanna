@@ -8,8 +8,11 @@ import {
   PEER_QUEUE_LIMIT,
   PEER_RATE_PER_HOUR,
   PEER_RATE_PER_MINUTE,
+  PEER_WAIT_DEFAULT_SECONDS,
+  PEER_WAIT_MAX_SECONDS,
 } from "../../shared/peer-messaging/limits"
 import { resolvePeerInbound, type PeerInboundMode } from "../../shared/peer-messaging/inbound"
+import { renderPeerPrompt } from "../../shared/peer-messaging/render-prompt"
 import type { QueuedChatMessage } from "../../shared/types"
 import { log } from "../../shared/log"
 import { RateLimiter } from "../rate-limiter"
@@ -41,8 +44,11 @@ export interface PeerMessengerPorts {
   activeStatuses(): ReadonlyMap<string, KannaStatus>
   queuedMessages(chatId: string): readonly QueuedChatMessage[]
   globalInbound(): PeerInboundMode
-  enqueue(chatId: string, content: string, origin: PeerChatOrigin): Promise<void>
+  enqueue(chatId: string, content: string, origin: PeerChatOrigin): Promise<string>
   startNextQueued(chatId: string): Promise<void>
+  injectMidTurn(chatId: string, queuedMessageId: string): Promise<boolean>
+  deliverToRun?(chatId: string, runId: string, content: string, origin: PeerChatOrigin): Promise<boolean>
+  after(delayMs: number, run: () => void): () => void
   now(): number
   newId(): string
 }
@@ -59,7 +65,7 @@ export type PeerRefusal =
   | "queue_full"
 
 export type PeerSendResult =
-  | { ok: true; status: "delivered" | "queued" | "subscribed"; messageId: string | null; subscribed: boolean }
+  | { ok: true; status: "delivered" | "injected" | "queued" | "subscribed"; messageId: string | null; subscribed: boolean }
   | { ok: false; reason: PeerRefusal; detail: string }
 
 export interface PeerSendRequest {
@@ -67,6 +73,27 @@ export interface PeerSendRequest {
   to: string
   message?: string
   notifyWhenIdle?: boolean
+  fromRunId?: string
+  fromSubagentName?: string
+  runId?: string
+  replyTo?: string
+}
+
+export interface PeerWaitRequest {
+  chatId: string
+  runId?: string
+  from?: string
+  timeoutSeconds?: number
+}
+
+export type PeerWaitResult =
+  | { status: "message"; message: string; messageId: string; fromChatId: string }
+  | { status: "pending"; note: string }
+  | { status: "timeout" }
+
+interface MessageWaiter {
+  from: string | undefined
+  settle(result: PeerWaitResult): void
 }
 
 interface IdleSubscription {
@@ -87,7 +114,9 @@ function digestOf(content: string): string {
   return createHash("sha256").update(content).digest("hex")
 }
 
-function originOf(sender: PeerChatInfo, messageId: string): PeerChatOrigin {
+type OriginExtras = Pick<PeerChatOrigin, "fromRunId" | "fromSubagentName" | "inReplyTo">
+
+function originOf(sender: PeerChatInfo, messageId: string, extras: OriginExtras = {}): PeerChatOrigin {
   return {
     kind: "peer_chat",
     fromChatId: sender.chatId,
@@ -95,13 +124,32 @@ function originOf(sender: PeerChatInfo, messageId: string): PeerChatOrigin {
     fromProjectId: sender.projectId,
     fromProjectTitle: sender.projectTitle,
     messageId,
+    ...extras,
   }
+}
+
+function originExtrasOf(request: PeerSendRequest): OriginExtras {
+  return {
+    ...(request.fromRunId !== undefined ? { fromRunId: request.fromRunId } : {}),
+    ...(request.fromSubagentName !== undefined ? { fromSubagentName: request.fromSubagentName } : {}),
+    ...(request.replyTo !== undefined ? { inReplyTo: request.replyTo } : {}),
+  }
+}
+
+function waiterKey(chatId: string, runId: string | undefined): string {
+  return `${chatId}::${runId ?? ""}`
+}
+
+function waitSeconds(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) return PEER_WAIT_DEFAULT_SECONDS
+  return Math.min(PEER_WAIT_MAX_SECONDS, Math.max(1, requested))
 }
 
 export class PeerMessenger {
   private readonly limiter: RateLimiter
   private readonly recentByPair = new Map<string, { digest: string; at: number }[]>()
   private readonly subscriptions = new Map<string, IdleSubscription[]>()
+  private readonly waiters = new Map<string, MessageWaiter>()
 
   constructor(private readonly ports: PeerMessengerPorts) {
     this.limiter = new RateLimiter(RATE_WINDOWS, () => ports.now())
@@ -144,19 +192,84 @@ export class PeerMessenger {
     if (refusal) return refusal
 
     const messageId = this.ports.newId()
-    const wasSettled = this.isSettled(target.chatId)
-    await this.ports.enqueue(target.chatId, message, originOf(sender, messageId))
-    await this.ports.startNextQueued(target.chatId)
+    const origin = originOf(sender, messageId, originExtrasOf(request))
+    const status = await this.deliver(target.chatId, request.runId, message, origin)
     if (notify) this.subscribe(target.chatId, sender.chatId)
-    return { ok: true, status: wasSettled ? "delivered" : "queued", messageId, subscribed: notify }
+    return { ok: true, status, messageId, subscribed: notify }
+  }
+
+  waitForMessage(request: PeerWaitRequest): Promise<PeerWaitResult> {
+    const pending = request.runId === undefined ? this.pendingPeerMessages(request.chatId, request.from) : []
+    if (pending.length > 0) return this.pendingResult(request.chatId, pending)
+    const key = waiterKey(request.chatId, request.runId)
+    this.waiters.get(key)?.settle({ status: "timeout" })
+    return new Promise<PeerWaitResult>((resolve) => {
+      const cancelTimer = this.ports.after(waitSeconds(request.timeoutSeconds) * 1000, () => waiter.settle({ status: "timeout" }))
+      const waiter: MessageWaiter = {
+        from: request.from,
+        settle: (result) => {
+          cancelTimer()
+          if (this.waiters.get(key) === waiter) this.waiters.delete(key)
+          resolve(result)
+        },
+      }
+      this.waiters.set(key, waiter)
+    })
+  }
+
+  async deliverToChat(chatId: string, message: string, origin: PeerChatOrigin): Promise<void> {
+    await this.deliver(chatId, undefined, message, origin)
+  }
+
+  cancelWaits(chatId: string, runId?: string): void {
+    this.waiters.get(waiterKey(chatId, runId))?.settle({ status: "timeout" })
   }
 
   async onChatSettled(chatId: string): Promise<void> {
+    this.cancelWaits(chatId)
     try {
       await this.fireIfSettled(chatId)
     } catch (error) {
       log.warn("[kanna/peer] idle notice failed", String(error))
     }
+  }
+
+  private async deliver(
+    chatId: string,
+    runId: string | undefined,
+    message: string,
+    origin: PeerChatOrigin,
+  ): Promise<"delivered" | "injected" | "queued"> {
+    if (this.handToWaiter(chatId, runId, message, origin)) return "delivered"
+    if (runId !== undefined && await this.ports.deliverToRun?.(chatId, runId, message, origin) === true) return "injected"
+    const queuedId = await this.ports.enqueue(chatId, message, origin)
+    await this.ports.startNextQueued(chatId)
+    if (!this.ports.queuedMessages(chatId).some((queued) => queued.id === queuedId)) return "delivered"
+    return await this.ports.injectMidTurn(chatId, queuedId) ? "injected" : "queued"
+  }
+
+  private handToWaiter(chatId: string, runId: string | undefined, message: string, origin: PeerChatOrigin): boolean {
+    const waiter = this.waiters.get(waiterKey(chatId, runId))
+    if (!waiter || (waiter.from !== undefined && waiter.from !== origin.fromChatId)) return false
+    if (runId === undefined && !this.ports.activeStatuses().has(chatId)) {
+      waiter.settle({ status: "timeout" })
+      return false
+    }
+    waiter.settle({ status: "message", message: renderPeerPrompt(message, origin), messageId: origin.messageId, fromChatId: origin.fromChatId })
+    return true
+  }
+
+  private pendingPeerMessages(chatId: string, from: string | undefined): readonly QueuedChatMessage[] {
+    return this.ports.queuedMessages(chatId).filter(
+      (queued) => queued.origin?.kind === "peer_chat" && (from === undefined || queued.origin.fromChatId === from),
+    )
+  }
+
+  private async pendingResult(chatId: string, pending: readonly QueuedChatMessage[]): Promise<PeerWaitResult> {
+    let injected = false
+    for (const queued of pending) injected = await this.ports.injectMidTurn(chatId, queued.id) || injected
+    const when = injected ? "as soon as this tool returns" : "when your current turn ends"
+    return { status: "pending", note: `A message from another chat is already pending. It reaches you ${when}, so there is nothing to wait for.` }
   }
 
   private checkDelivery(sender: PeerChatInfo, target: PeerChatInfo, message: string): PeerSendResult | null {

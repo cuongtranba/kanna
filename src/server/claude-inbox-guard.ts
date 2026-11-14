@@ -2,7 +2,7 @@ import type { HookCallbackMatcher, HookInput, HookJSONOutput } from "@anthropic-
 import { inboxHandlerTurnKind } from "../shared/inbound/handler-turn"
 import type { McpServerConfig } from "../shared/mcp-types"
 import type { McpSource } from "../shared/mcp-sources/types"
-import { mcpToolName, SEND_CHAT_MESSAGE_TOOL_NAME } from "../shared/tools"
+import { mcpToolName, SEND_CHAT_MESSAGE_TOOL_NAME, WAIT_FOR_CHAT_MESSAGE_TOOL_NAME } from "../shared/tools"
 
 export interface InboxToolPolicy {
   replyServerNames: readonly string[]
@@ -12,6 +12,7 @@ export const INBOX_HANDLER_TOOL_DENIED_MESSAGE =
   "Inbox handler turns cannot send, message other chats or run shell commands. Report with inbox_report; to reply, use propose_send and Kanna will decide."
 
 const BASH_TOOL = "Bash"
+const DENIED_PEER_TOOLS: ReadonlySet<string> = new Set([SEND_CHAT_MESSAGE_TOOL_NAME, WAIT_FOR_CHAT_MESSAGE_TOOL_NAME])
 
 function normalizedServerName(name: string): string {
   return name.replace(/[^A-Za-z0-9_]/g, "_")
@@ -29,7 +30,7 @@ export function inboxToolPolicyOf(
 }
 
 function isDeniedTool(toolName: string, policy: InboxToolPolicy): boolean {
-  if (toolName === BASH_TOOL || toolName === SEND_CHAT_MESSAGE_TOOL_NAME) return true
+  if (toolName === BASH_TOOL || DENIED_PEER_TOOLS.has(toolName)) return true
   return policy.replyServerNames.some((name) =>
     toolName.startsWith(mcpToolName(name, "")) || toolName.startsWith(mcpToolName(normalizedServerName(name), "")),
   )

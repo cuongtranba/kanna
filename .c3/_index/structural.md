@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:8374d4d4e1f19b8f16f12fd4af955c40b8ca3741ca911e5c419823ea33d004a3 -->
+<!-- hash: sha256:9350c8ec7c6dbfe592a38ff732dd2a8fd5707d53536c952a6d1ec2c69288a8ec -->
 
 ## c3-0 — Kanna (system)
 
@@ -163,12 +163,12 @@ files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/chat-tool-events.test.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/parking-claude-session.ts, src/server/test-helpers/sdk-tool.ts
+files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/chat-tool-events.test.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-pausable-timeout.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-run-injection.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/parking-claude-session.ts, src/server/test-helpers/sdk-tool.ts, src/server/turn-spend.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
 refs: ref-provider-adapter, ref-strong-typing, rule-strong-typing
-files: src/server/codex-app-server-decode.ts, src/server/codex-app-server-protocol.ts, src/server/codex-app-server.test.ts, src/server/codex-app-server.ts, src/server/codex-dynamic-tool-call.ts, src/server/codex-plan-steps.test.ts, src/server/codex-plan-steps.ts, src/server/codex-rollout-to-thread-item.ts, src/server/codex-session-types.ts, src/server/codex-spawn.adapter.ts, src/server/codex-tool-payloads.ts, src/server/codex-transcript-translator.ts
+files: src/server/async-queue.ts, src/server/codex-app-server-decode.ts, src/server/codex-app-server-protocol.ts, src/server/codex-app-server.test.ts, src/server/codex-app-server.ts, src/server/codex-dynamic-tool-call.ts, src/server/codex-pending-turn.ts, src/server/codex-plan-steps.test.ts, src/server/codex-plan-steps.ts, src/server/codex-rollout-to-thread-item.ts, src/server/codex-session-types.ts, src/server/codex-spawn.adapter.ts, src/server/codex-tool-payloads.ts, src/server/codex-transcript-translator.ts
 
 ## c3-212 — provider-catalog (component)
 container: c3-2 | context: c3-0
@@ -353,7 +353,7 @@ files: src/client/app/McpSourceAutonomyFields.tsx, src/client/app/McpSourceForm.
 ## c3-249 — peer-messaging (component)
 container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing
-files: src/client/app/GeneralPeerRow.tsx, src/client/components/messages/OriginChip.tsx, src/server/kanna-mcp-peer.ts, src/server/peer-messaging/create-peer-messaging.ts, src/server/peer-messaging/peer-messenger.test.ts, src/server/peer-messaging/peer-messenger.ts, src/server/peer-messaging/peer-tools.ts, src/shared/command-origin.schema.test.ts, src/shared/peer-messaging/inbound.schema.ts, src/shared/peer-messaging/inbound.ts, src/shared/peer-messaging/limits.ts, src/shared/peer-messaging/render-prompt.test.ts, src/shared/peer-messaging/render-prompt.ts, src/shared/peer-messaging/tool-names.ts, src/shared/peer-messaging/tool-specs.schema.ts
+files: src/client/app/GeneralPeerRow.tsx, src/client/components/messages/OriginChip.tsx, src/server/kanna-mcp-peer.ts, src/server/peer-messaging/create-peer-messaging.ts, src/server/peer-messaging/mid-turn-delivery.test.ts, src/server/peer-messaging/mid-turn-delivery.ts, src/server/peer-messaging/peer-messenger.test.ts, src/server/peer-messaging/peer-messenger.ts, src/server/peer-messaging/peer-tools.test.ts, src/server/peer-messaging/peer-tools.ts, src/shared/command-origin.schema.test.ts, src/shared/peer-messaging/inbound.schema.ts, src/shared/peer-messaging/inbound.ts, src/shared/peer-messaging/limits.ts, src/shared/peer-messaging/render-prompt.test.ts, src/shared/peer-messaging/render-prompt.ts, src/shared/peer-messaging/tool-names.ts, src/shared/peer-messaging/tool-specs.schema.ts
 
 ## c3-3 — Shared (container)
 context: c3-0
@@ -942,18 +942,23 @@ src/server/subagent-entry-cap.adapter.ts → c3-210
 src/server/subagent-entry-cap.test.ts → c3-210
 src/server/subagent-orchestrator.test.ts → c3-210
 src/server/subagent-orchestrator.ts → c3-210
+src/server/subagent-pausable-timeout.ts → c3-210
 src/server/subagent-provider-run.test.ts → c3-210
 src/server/subagent-provider-run.ts → c3-210
+src/server/subagent-run-injection.ts → c3-210
 src/server/subagent-transcript-io.adapter.ts → c3-210
 src/server/subagent-transcript-registry.ts → c3-210
 src/server/test-helpers/failing-claude-session.ts → c3-210
 src/server/test-helpers/parking-claude-session.ts → c3-210
 src/server/test-helpers/sdk-tool.ts → c3-210
+src/server/turn-spend.ts → c3-210
+src/server/async-queue.ts → c3-211
 src/server/codex-app-server-decode.ts → c3-211
 src/server/codex-app-server-protocol.ts → c3-211
 src/server/codex-app-server.test.ts → c3-211
 src/server/codex-app-server.ts → c3-211
 src/server/codex-dynamic-tool-call.ts → c3-211
+src/server/codex-pending-turn.ts → c3-211
 src/server/codex-plan-steps.test.ts → c3-211
 src/server/codex-plan-steps.ts → c3-211
 src/server/codex-rollout-to-thread-item.ts → c3-211
@@ -1357,8 +1362,11 @@ src/client/app/GeneralPeerRow.tsx → c3-249
 src/client/components/messages/OriginChip.tsx → c3-249
 src/server/kanna-mcp-peer.ts → c3-249
 src/server/peer-messaging/create-peer-messaging.ts → c3-249
+src/server/peer-messaging/mid-turn-delivery.test.ts → c3-249
+src/server/peer-messaging/mid-turn-delivery.ts → c3-249
 src/server/peer-messaging/peer-messenger.test.ts → c3-249
 src/server/peer-messaging/peer-messenger.ts → c3-249
+src/server/peer-messaging/peer-tools.test.ts → c3-249
 src/server/peer-messaging/peer-tools.ts → c3-249
 src/shared/command-origin.schema.test.ts → c3-249
 src/shared/peer-messaging/inbound.schema.ts → c3-249

@@ -8,7 +8,7 @@ import {
 } from "../shared/types"
 import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
-import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpDelegationContext } from "./kanna-mcp"
+import type { ArmedLoopInfo, ChatTaskStorePort, KannaMcpArgs, KannaMcpDelegationContext } from "./kanna-mcp"
 import type { ChatRecord, ProjectRecord, StackRecord, SubagentRunEvent } from "./events"
 import type { ProviderRunStart, SubagentOrchestrator } from "./subagent-orchestrator"
 import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
@@ -72,6 +72,8 @@ export interface SubagentWiringDeps {
   getCustomProviderCredential: (id: string) => CustomProviderCredential | null
   getArmedLoop?: (chatId: string) => ArmedLoopInfo | null
   chatTaskStore?: ChatTaskStorePort
+  isRunAlive?: KannaMcpArgs["isRunAlive"]
+  peerMessenger?: KannaMcpArgs["peerMessenger"]
   beaconRegistry?: BeaconRegistry
   getBeacons?: () => readonly BeaconConfig[]
   toolCallback?: ToolCallbackService | null
@@ -113,6 +115,8 @@ export function buildClaudeSubagentStarter(
         delegationContext: scope.delegationContext,
         getArmedLoop: deps.getArmedLoop,
         chatTaskStore: deps.chatTaskStore,
+        isRunAlive: deps.isRunAlive,
+        peerMessenger: deps.peerMessenger,
         beaconRegistry: deps.beaconRegistry,
         getBeacons: deps.getBeacons,
         beaconToolsAllowed: scope.beaconToolsAllowed,
@@ -172,6 +176,7 @@ export function buildSubagentProviderRunForChat(
   const delegationContext: KannaMcpDelegationContext = {
     parentSubagentId: args.subagent.id,
     parentRunId: args.runId,
+    parentSubagentName: args.subagent.name,
     ancestorSubagentIds: [...args.ancestorSubagentIds, args.subagent.id],
     depth: args.depth + 1,
     getParentUserMessageId: () => args.parentUserMessageId,

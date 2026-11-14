@@ -5,6 +5,8 @@ import type { QueuedChatMessage } from "../../shared/types"
 import type { ChatRecord } from "../events"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { CodexAppServerManager } from "../codex-app-server"
+import type { SubagentOrchestrator } from "../subagent-orchestrator"
+import type { MidTurnDelivery } from "./mid-turn-delivery"
 import { PeerMessenger, type PeerChatInfo } from "./peer-messenger"
 import { createCodexKannaTools } from "./peer-tools"
 
@@ -19,6 +21,8 @@ export interface PeerAgentView {
   getActiveStatuses(): ReadonlyMap<string, KannaStatus>
   enqueueMessage(chatId: string, content: string, attachments: [], options: SendMessageOptions): Promise<QueuedChatMessage>
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean>
+  readonly midTurnDelivery: Pick<MidTurnDelivery, "injectQueuedMessage">
+  getSubagentOrchestrator(): Pick<SubagentOrchestrator, "deliverToRun">
 }
 
 export interface PeerMessagingServices {
@@ -58,11 +62,16 @@ function createPeerMessenger(
     activeStatuses: () => agent().getActiveStatuses(),
     queuedMessages: (chatId) => store.getQueuedMessages(chatId),
     globalInbound,
-    enqueue: async (chatId, content, origin) => {
-      await agent().enqueueMessage(chatId, content, [], { origin })
-    },
+    enqueue: async (chatId, content, origin) => (await agent().enqueueMessage(chatId, content, [], { origin })).id,
     startNextQueued: async (chatId) => {
       await agent().maybeStartNextQueuedMessage(chatId)
+    },
+    injectMidTurn: (chatId, queuedMessageId) => agent().midTurnDelivery.injectQueuedMessage(chatId, queuedMessageId),
+    deliverToRun: (chatId, runId, content, origin) =>
+      Promise.resolve(agent().getSubagentOrchestrator().deliverToRun(chatId, runId, content, origin)),
+    after: (delayMs, run) => {
+      const timer = setTimeout(run, delayMs)
+      return () => clearTimeout(timer)
     },
     now: Date.now,
     newId: randomUUID,

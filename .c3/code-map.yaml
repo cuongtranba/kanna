@@ -326,6 +326,9 @@ c3-210:
   - src/server/subagent-entry-cap.test.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts
+  - src/server/subagent-run-injection.ts
+  - src/server/subagent-pausable-timeout.ts
+  - src/server/turn-spend.ts
   - src/server/subagent-provider-run.test.ts
   - src/server/subagent-provider-run.ts
   - src/server/claude-live-block.ts
@@ -389,6 +392,8 @@ c3-211:
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/async-queue.ts
+  - src/server/codex-pending-turn.ts
   - src/server/codex-app-server-decode.ts
   - src/server/codex-rollout-to-thread-item.ts
   - src/server/codex-session-types.ts
@@ -987,6 +992,9 @@ c3-249:
   - src/server/peer-messaging/peer-messenger.ts
   - src/server/peer-messaging/peer-messenger.test.ts
   - src/server/peer-messaging/peer-tools.ts
+  - src/server/peer-messaging/mid-turn-delivery.ts
+  - src/server/peer-messaging/mid-turn-delivery.test.ts
+  - src/server/peer-messaging/peer-tools.test.ts
   - src/server/kanna-mcp-peer.ts
   - src/client/components/messages/OriginChip.tsx
   - src/client/app/GeneralPeerRow.tsx

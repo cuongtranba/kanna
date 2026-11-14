@@ -11,6 +11,7 @@ import type { CompactionTrigger } from "../shared/transcript-types"
 import { createKannaMcpServer, type KannaMcpArgs } from "./kanna-mcp"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { homedir } from "node:os"
+import type { UUID } from "node:crypto"
 import type { McpServerConfig } from "../shared/types"
 import { KANNA_SYSTEM_PROMPT_BASE } from "../shared/kanna-system-prompt"
 import {
@@ -203,7 +204,7 @@ export async function startClaudeSession(
         : {}),
       model: args.model,
       effort: toSdkEffort(args.effort),
-      extraArgs: { "thinking-display": "summarized" },
+      extraArgs: { "thinking-display": "summarized", "replay-user-messages": null },
       ...(args.streamLiveBlocks === true ? { includePartialMessages: true } : {}),
       resume: args.sessionToken ?? undefined,
       forkSession: args.forkSession,
@@ -256,6 +257,18 @@ export async function startClaudeSession(
     })
   }
 
+  const injectUserPrompt = (promptId: string, content: string): boolean => {
+    if (!isSdkUuid(promptId)) return false
+    promptQueue.push({
+      type: "user",
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      session_id: args.sessionToken ?? "",
+      uuid: promptId,
+    })
+    return true
+  }
+
   const enqueueUserPrompt = (content: string) => {
     promptQueue.push({
       type: "user",
@@ -302,6 +315,7 @@ export async function startClaudeSession(
     sendPrompt: async (content: string) => {
       enqueueUserPrompt(content)
     },
+    injectPrompt: injectUserPrompt,
     setModel: async (model: string) => {
       await q.setModel(model)
     },
@@ -320,6 +334,12 @@ export async function startClaudeSession(
     },
     closed: sessionClosed,
   }
+}
+
+const SDK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isSdkUuid(value: string): value is UUID {
+  return SDK_UUID.test(value)
 }
 
 function makeSessionClosedSignal(): { sessionClosed: Promise<void>; resolveSessionClosed: () => void } {
