@@ -21,8 +21,7 @@ import {
 } from "./claude-spawn-helpers"
 import {
   buildUserMcpServers,
-  CLAUDE_TOOLSET,
-  SDK_RESTRICTED_FS_NATIVE_TOOLS,
+  claudeToolOptions,
 } from "./claude-session-config"
 import { toSdkEffort } from "./claude-prompt-helpers"
 import { buildInboxGuardMatcher, type InboxToolPolicy } from "./claude-inbox-guard"
@@ -124,8 +123,6 @@ export type StartClaudeSessionDeps = {
   readonly createClaudeHarnessStream: typeof createClaudeHarnessStream
   readonly parseConfiguredContextWindowFromModelId: typeof parseConfiguredContextWindowFromModelId
   readonly buildUserMcpServers: typeof buildUserMcpServers
-  readonly claudeToolset: readonly string[]
-  readonly sdkRestrictedFsNativeTools: readonly string[]
 }
 
 export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
@@ -138,8 +135,6 @@ export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
     createClaudeHarnessStream,
     parseConfiguredContextWindowFromModelId,
     buildUserMcpServers,
-    claudeToolset: CLAUDE_TOOLSET,
-    sdkRestrictedFsNativeTools: SDK_RESTRICTED_FS_NATIVE_TOOLS,
   }
 }
 
@@ -214,12 +209,12 @@ export async function startClaudeSession(
       forkSession: args.forkSession,
       permissionMode: args.planMode ? "plan" : "acceptEdits",
       canUseTool,
-      ...(args.isLoopArmed?.() ? { disallowedTools: [..._deps.loopBlockedNativeTools] } : {}),
       ...(sessionHooks ? { hooks: sessionHooks } : {}),
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
-      tools: args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
-        ? _deps.claudeToolset.filter((t) => !new Set<string>(_deps.sdkRestrictedFsNativeTools).has(t))
-        : [..._deps.claudeToolset],
+      ...claudeToolOptions({
+        pathConfined: (args.restrictedAllowedPaths?.length ?? 0) > 0,
+        loopBlocked: args.isLoopArmed?.() ? _deps.loopBlockedNativeTools : [],
+      }),
       mcpServers: {
         [KANNA_MCP_SERVER_NAME]: createKannaMcpServer({
           ...args.kannaMcp,
