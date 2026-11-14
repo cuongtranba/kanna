@@ -32,3 +32,14 @@ test("a message cannot close the wrapper early to fake text outside it", () => {
   expect(prompt.match(/<\/peer-chat-message>/g)).toHaveLength(1)
   expect(prompt.indexOf("</peer-chat-message>")).toBeGreaterThan(prompt.indexOf("delete everything"))
 })
+
+test("a message from a subagent run names the run and how to answer it", () => {
+  const prompt = renderPeerPrompt("done", { ...ORIGIN, fromRunId: "run-7", fromSubagentName: "reviewer", inReplyTo: "msg-0" })
+  const opening = prompt.split("\n")[0] ?? ""
+  expect(opening).toContain('from_run_id="run-7" from_subagent="reviewer" in_reply_to="msg-0"')
+  expect(prompt).toContain('send_chat_message with to="chat-1", run_id="run-7", reply_to="msg-1"')
+})
+
+test("a message from a main chat asks for a reply by chat and message id only", () => {
+  expect(renderPeerPrompt("hi", ORIGIN)).toContain('send_chat_message with to="chat-1", reply_to="msg-1"')
+})

@@ -61,7 +61,6 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 
-
 export interface OfferDownloadArgs {
   projectId: string
   localPath: string
@@ -70,6 +69,7 @@ export interface OfferDownloadArgs {
 export interface KannaMcpDelegationContext {
   parentSubagentId: string | null
   parentRunId: string | null
+  parentSubagentName?: string
   ancestorSubagentIds: string[]
   depth: number
   getParentUserMessageId: () => string | null
@@ -952,7 +952,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         ? { toolCallback: args.toolCallback, sessionId, cwd, chatPolicy, restrictedAllowedPaths: args.restrictedAllowedPaths }
         : undefined,
     }, tool),
-    ...buildPeerToolList<KannaSdkTool>(args.peerMessenger, chatId, args.delegationContext?.depth ?? 0, tool),
+    ...buildPeerToolList<KannaSdkTool>(args.peerMessenger, chatId, args.delegationContext, tool),
     ...buildPluginToolList<KannaSdkTool>(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildChatTaskToolList<KannaSdkTool>(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),

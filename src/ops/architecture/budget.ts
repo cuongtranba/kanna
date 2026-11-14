@@ -13,7 +13,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/server/board-store.adapter.ts": 1294,
   "src/server/codex-app-server.ts": 957,
   "src/server/kanna-mcp.ts": 1007,
-  "src/server/subagent-orchestrator.ts": 1043,
+  "src/server/subagent-orchestrator.ts": 1036,
 }
 
 export const PRODUCTION_EXCLUDES: readonly string[] = [

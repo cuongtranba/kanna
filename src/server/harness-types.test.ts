@@ -8,6 +8,7 @@ function exhaustiveSwitch(ev: HarnessEvent): string {
     case "session_token": return `token:${ev.sessionToken}`
     case "rate_limit":    return `rl:${ev.rateLimit.resetAt}`
     case "live":          return `live:${ev.block.kind}`
+    case "prompt_delivered": return `delivered:${ev.promptId}`
     default: {
       const _never: never = ev
       void _never
@@ -23,5 +24,6 @@ describe("HarnessEvent discriminated union", () => {
     expect(exhaustiveSwitch({ type: "session_token", sessionToken: "s" })).toBe("token:s")
     expect(exhaustiveSwitch({ type: "rate_limit", rateLimit: { resetAt: 1, tz: "UTC" } })).toBe("rl:1")
     expect(exhaustiveSwitch({ type: "live", block: { kind: "text", text: "t" } })).toBe("live:text")
+    expect(exhaustiveSwitch({ type: "prompt_delivered", promptId: "p" })).toBe("delivered:p")
   })
 })

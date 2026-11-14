@@ -6,6 +6,7 @@ export type HarnessEvent =
   | { type: "session_token"; sessionToken: string }
   | { type: "rate_limit"; rateLimit: { resetAt: number; tz: string } }
   | { type: "live"; block: LiveBlock }
+  | { type: "prompt_delivered"; promptId: string }
 
 export interface HarnessToolRequest {
   tool: NormalizedToolCall & { toolKind: "ask_user_question" | "exit_plan_mode" }
@@ -35,6 +36,7 @@ export interface ClaudeSessionHandle extends HarnessTurn {
   provider: "claude"
   closed: Promise<void>
   sendPrompt: (content: string) => Promise<void>
+  injectPrompt?: (promptId: string, content: string) => boolean
   setModel: (model: string) => Promise<void>
   setPermissionMode: (planMode: boolean) => Promise<void>
   pushChannelPrompt?: (text: string) => Promise<void>

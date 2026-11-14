@@ -678,6 +678,19 @@ describe("sendCommand", () => {
     expect(session.backgroundTaskWakeSuppressed).toBe(false)
   })
 
+  test("queues instead of starting a turn while the CLI still holds an injected peer message", async () => {
+    const session = makeTestSession()
+    session.injectedPromptIds.add("0b5f4f0e-0000-4000-8000-000000000001")
+    const d = makeDeps({ session })
+    const result = await sendCommand(d, {
+      type: "chat.send",
+      content: "while the cli is about to run the peer message",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+    expect(result.queued).toBe(true)
+    expect(d.startTurnCalled).toEqual([])
+  })
+
   test("tracks message_sent analytics", async () => {
     await sendCommand(deps, {
       type: "chat.send",

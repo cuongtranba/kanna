@@ -53,4 +53,8 @@ The main agent picks how to run a subagent through `delegate_subagent`:
 - `KANNA_SUBAGENT_IDLE_TIMEOUT_MS` (default 300000) — an idle keep-alive session auto-closes after this window; the timer resets on each turn.
 - Concurrent **active** turns are bounded by the shared permit pool; cancelling the chat or run cascade-closes every live session.
 
-Subagents cannot message other chats. To let a chat talk to another chat, see [Messaging between chats](/guides/user/peer-messaging/).
+Overlapping `send_subagent_message` calls to one keep-alive session run one after another, and each caller gets its own reply.
+
+Subagents share their chat's task list: a subagent's `task_*` calls (`task_note`, `task_settle` and the rest) land on the parent chat's Progress list.
+
+Claude subagents can also message other chats and receive replies while they run; Codex subagents cannot. See [Messaging between chats](/guides/user/peer-messaging/#subagents).

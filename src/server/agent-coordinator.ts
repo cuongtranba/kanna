@@ -56,6 +56,7 @@ import { log } from "../shared/log"
 import type { SendToStartingProfile } from "./claude-steer-log"
 import type { SendMessageOptions, StartTurnForChatArgs } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { createMidTurnDelivery, type MidTurnDelivery } from "./peer-messaging/mid-turn-delivery"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
   startTurnForChat as startTurnForChatFn,
@@ -181,37 +182,19 @@ import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveChatCwd } from "./claude-session-config"
 import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
 import { readCatalogFileBody } from "./local-catalog-io.adapter"
-import {
-  addCounter,
-  recordHistogram,
-  TURN_COST_USD,
-  TURN_DURATION_MS,
-  TURN_TOKENS,
-} from "./observability"
-import { splitBilledTokens } from "../shared/token-pricing"
+import { recordHistogram, TURN_DURATION_MS } from "./observability"
+import { recordTurnSpend } from "./turn-spend"
 import type {
   AgentCoordinatorArgs,
   ClaudeSessionLifecycleOptions,
 } from "./agent-coordinator-types"
-
-function recordTurnSpend(active: ActiveTurn): void {
-  const usage = active.usage
-  if (!usage) return
-  const attributes = { provider: active.provider, model: active.model }
-  for (const [kind, count] of splitBilledTokens(usage)) {
-    addCounter(TURN_TOKENS, count, { ...attributes, kind })
-  }
-  const cost = usage.costUsd
-  if (cost !== undefined && Number.isFinite(cost) && cost >= 0) {
-    addCounter(TURN_COST_USD, cost, attributes)
-  }
-}
 
 export class AgentCoordinator {
   readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   readonly analytics: AnalyticsReporter
   readonly codexManager: CodexAppServerManager
+  readonly midTurnDelivery: MidTurnDelivery
   readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   reportBackgroundError: ((message: string) => void) | null = null
@@ -280,6 +263,15 @@ export class AgentCoordinator {
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.midTurnDelivery = createMidTurnDelivery({
+      store: this.store,
+      activeTurns: this.activeTurns,
+      claudeSessions: this.claudeSessions,
+      steerCodexTurn: (chatId, text, clientUserMessageId) => this.codexManager.steerTurn(chatId, text, clientUserMessageId),
+      startNextQueued: async (chatId) => { await this.maybeStartNextQueuedMessage(chatId) },
+      after: (delayMs, run) => { setTimeout(run, delayMs) },
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    })
     this.generateTitle = args.generateTitle
       ?? ((messageContent, cwd) =>
         generateTitleForChatDetailed(messageContent, cwd, new QuickResponseAdapter({ oauthPool: args.oauthPool })))
@@ -359,6 +351,7 @@ export class AgentCoordinator {
       onBackgroundRunComplete: (chatId, runId, outcome) => {
         void this.deliverSubagentToMain(chatId, runId, outcome)
       },
+      redeliverPeerMessage: (chatId, content, origin) => this.peerMessenger?.deliverToChat(chatId, content, origin) ?? Promise.resolve(),
       maxLive: config.subagentMaxLive,
       liveIdleTimeoutMs: config.subagentIdleTimeoutMs,
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
@@ -633,6 +626,7 @@ export class AgentCoordinator {
       startingTurns: this.startingTurns,
       store: this.store,
       claudeSessions: this.claudeSessions,
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       emitStateChange: (chatId) => this.emitStateChange(chatId),
     }
   }
@@ -697,6 +691,9 @@ export class AgentCoordinator {
       readLlmProvider: () => this.readLlmProvider(),
       getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
+      isRunAlive: (chatId, runId) => this.isRunAlive(chatId, runId),
+      chatTaskStore: this.chatTaskStore(),
+      peerMessenger: this.peerMessenger ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
       getBeacons: this.getBeacons,
       toolCallback: this.toolCallback,
@@ -1036,6 +1033,8 @@ export class AgentCoordinator {
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
       onChatSettled: (chatId) => this.peerMessenger?.onChatSettled(chatId) ?? Promise.resolve(),
+      onPromptDelivered: (session, promptId) => this.midTurnDelivery.onPromptDelivered(session, promptId),
+      onTurnResult: (session) => { this.midTurnDelivery.onTurnResult(session) },
       turnEndGuard: this._turnEndGuard,
       onLiveBlock: this.liveBlocks
         ? (chatId, block) => { this.liveBlocks!.publish(chatId, block) }
@@ -1198,6 +1197,7 @@ export class AgentCoordinator {
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
+    this.peerMessenger?.cancelWaits(chatId)
     return cancelChatFn(this.cancelHandlerDeps(), chatId, options)
   }
 

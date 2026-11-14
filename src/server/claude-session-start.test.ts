@@ -340,13 +340,40 @@ describe("startClaudeSession live streaming options", () => {
     await startClaudeSession({ ...BASE_ARGS, streamLiveBlocks: true }, makeFakeDeps())
     const captured = capturedQueryArgs as CapturedOptions
     expect(captured.options.includePartialMessages).toBe(true)
-    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized" })
+    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized", "replay-user-messages": null })
   })
 
   test("a session that does not opt in does not stream partial messages", async () => {
     await startClaudeSession(BASE_ARGS, makeFakeDeps())
     const captured = capturedQueryArgs as CapturedOptions
     expect(captured.options.includePartialMessages).toBeUndefined()
-    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized" })
+    expect(captured.options.extraArgs).toEqual({ "thinking-display": "summarized", "replay-user-messages": null })
+  })
+})
+
+describe("startClaudeSession injected prompts", () => {
+  const PROMPT_ID = "0b5f4f0e-0000-4000-8000-000000000001"
+
+  function pushedMessages(): unknown[] {
+    const captured = capturedQueryArgs as { prompt: FakeQueue<unknown> }
+    return captured.prompt.pushedItems
+  }
+
+  test("an injected prompt is pushed into the open input queue under the id Kanna will wait for", async () => {
+    const handle = await startClaudeSession({ ...BASE_ARGS, sessionToken: "tok-1" }, makeFakeDeps())
+
+    expect(handle.injectPrompt?.(PROMPT_ID, "peer text")).toBe(true)
+
+    expect(pushedMessages()).toEqual([
+      { type: "user", message: { role: "user", content: "peer text" }, parent_tool_use_id: null, session_id: "tok-1", uuid: PROMPT_ID },
+    ])
+  })
+
+  test("an id the CLI could not echo back as a uuid is refused and nothing is pushed", async () => {
+    const handle = await startClaudeSession(BASE_ARGS, makeFakeDeps())
+
+    expect(handle.injectPrompt?.("not-a-uuid", "peer text")).toBe(false)
+
+    expect(pushedMessages()).toEqual([])
   })
 })

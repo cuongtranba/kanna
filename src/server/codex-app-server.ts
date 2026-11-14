@@ -6,7 +6,6 @@ import { createInterface } from "node:readline"
 import type { Readable, Writable } from "node:stream"
 import type {
   CodexReasoningEffort,
-  ContextWindowUsageSnapshot,
   ServiceTier,
   TranscriptEntry,
 } from "../shared/types"
@@ -15,11 +14,7 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import {
   type ContextCompactedNotification,
   type CodexRequestId,
-  type CommandExecutionApprovalDecision,
-  type CommandExecutionRequestApprovalParams,
   type CommandExecutionRequestApprovalResponse,
-  type FileChangeApprovalDecision,
-  type FileChangeRequestApprovalParams,
   type FileChangeRequestApprovalResponse,
   type InitializeParams,
   type ItemCompletedNotification,
@@ -32,16 +27,18 @@ import {
   type ThreadForkParams,
   type ThreadStartParams,
   type ThreadTokenUsageUpdatedNotification,
-  type TurnPlanStep,
   type TurnPlanUpdatedNotification,
   type TurnCompletedNotification,
   type TurnInterruptParams,
   type TurnStartParams,
+  type TurnSteerParams,
   isJsonRpcResponse,
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
 import { safeJsonParse } from "../shared/json"
+import { AsyncQueue } from "./async-queue"
+import type { PendingTurn } from "./codex-pending-turn"
 import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
@@ -93,36 +90,6 @@ interface PendingRequest<TResult> {
   method: string
   resolve: (value: TResult) => void
   reject: (error: Error) => void
-}
-
-interface PendingTurn {
-  turnId: string | null
-  model: string
-  planMode: boolean
-  queue: AsyncQueue<HarnessEvent>
-  startedToolIds: Set<string>
-  handledDynamicToolIds: Set<string>
-  latestPlanExplanation: string | null
-  latestPlanSteps: TurnPlanStep[]
-  latestPlanText: string | null
-  planTextByItemId: Map<string, string>
-  todoSequence: number
-  pendingWebSearchResultToolId: string | null
-  lastUsageSnapshot?: ContextWindowUsageSnapshot
-  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-  onApprovalRequest?: (
-    request:
-      | {
-          requestId: CodexRequestId
-          kind: "command_execution"
-          params: CommandExecutionRequestApprovalParams
-        }
-      | {
-          requestId: CodexRequestId
-          kind: "file_change"
-          params: FileChangeRequestApprovalParams
-        }
-  ) => Promise<CommandExecutionApprovalDecision | FileChangeApprovalDecision>
 }
 
 interface SessionContext {
@@ -183,52 +150,6 @@ function isRecoverableResumeError(error: Error): boolean {
   return ["not found", "missing thread", "no such thread", "unknown thread", "does not exist"].some((snippet) =>
     message.includes(snippet)
   )
-}
-
-class AsyncQueue<T> implements AsyncIterable<T> {
-  private values: T[] = []
-  private resolvers: Array<(value: IteratorResult<T>) => void> = []
-  private done = false
-
-  push(value: T) {
-    if (this.done) return
-    const resolver = this.resolvers.shift()
-    if (resolver) {
-      resolver({ value, done: false })
-      return
-    }
-    this.values.push(value)
-  }
-
-  finish() {
-    if (this.done) return
-    this.done = true
-    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    while (this.resolvers.length > 0) {
-      const resolver = this.resolvers.shift()
-      resolver?.(doneResult)
-    }
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<T> {
-    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    return {
-      next: () => {
-        if (this.values.length > 0) {
-          const next = this.values.shift()
-          if (next !== undefined) {
-            return Promise.resolve({ value: next, done: false as const })
-          }
-        }
-        if (this.done) {
-          return Promise.resolve(doneResult)
-        }
-        return new Promise<IteratorResult<T>>((resolve) => {
-          this.resolvers.push(resolve)
-        })
-      },
-    }
-  }
 }
 
 export class CodexAppServerManager {
@@ -413,6 +334,23 @@ export class CodexAppServerManager {
     }
   }
 
+  async steerTurn(chatId: string, text: string, clientUserMessageId: string): Promise<boolean> {
+    const context = this.sessions.get(CodexAppServerManager.keyFor(chatId, "main"))
+    const turnId = context?.pendingTurn?.turnId
+    if (!context || !turnId || !context.sessionToken) return false
+    try {
+      await this.sendRequest(context, "turn/steer", {
+        threadId: context.sessionToken,
+        expectedTurnId: turnId,
+        input: [{ type: "text", text, text_elements: [] }],
+        clientUserMessageId,
+      } satisfies TurnSteerParams)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async generateStructured(args: GenerateStructuredArgs): Promise<string | null> {
     const chatId = `quick-${randomUUID()}`
     let turn: HarnessTurn | null = null
@@ -446,6 +384,7 @@ export class CodexAppServerManager {
           case "session_token": break
           case "rate_limit": break
           case "live": break
+          case "prompt_delivered": break
           case "transcript": {
             if (event.entry.kind === "assistant_text") {
               assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text

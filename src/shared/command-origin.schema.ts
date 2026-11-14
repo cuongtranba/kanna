@@ -18,6 +18,9 @@ export const peerChatOriginSchema = z.object({
   fromProjectId: z.string(),
   fromProjectTitle: z.string(),
   messageId: z.string(),
+  fromRunId: z.string().optional(),
+  fromSubagentName: z.string().optional(),
+  inReplyTo: z.string().optional(),
 })
 
 export const commandOriginSchema = z.discriminatedUnion("kind", [remoteMcpOriginSchema, peerChatOriginSchema])

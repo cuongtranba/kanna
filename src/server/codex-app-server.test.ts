@@ -1892,6 +1892,65 @@ describe("CodexAppServerManager", () => {
     })
   })
 
+  test("steerTurn sends the text into the running turn and reports success", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+      } else if (message.method === "turn/steer") {
+        child.writeServerMessage({ id: message.id, result: { turnId: "turn-1" } })
+      }
+    })
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "work", planMode: false, onToolRequest: async () => ({}) })
+
+    expect(await manager.steerTurn("chat-1", "also check the logs", "queued-1")).toBe(true)
+
+    const steer = process.messages.find((message: any) => message.method === "turn/steer") as any
+    expect(steer.params).toEqual({
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "also check the logs", text_elements: [] }],
+      clientUserMessageId: "queued-1",
+    })
+  })
+
+  test("steerTurn reports failure when no turn is running or the app-server refuses", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+      } else if (message.method === "turn/steer") {
+        child.writeServerMessage({ id: message.id, error: { message: "no active turn to steer" } })
+      }
+    })
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
+    await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "work", planMode: false, onToolRequest: async () => ({}) })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
+  })
+
   test("interrupt clears a pending exit-plan wait so a new turn can start immediately", async () => {
     let resolveToolRequest!: (value: JsonValue) => void
 

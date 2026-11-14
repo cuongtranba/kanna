@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vite-plus/test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { PeerChatOrigin } from "../shared/command-origin"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { EventStore } from "./event-store"
 import { createTestEventStore } from "./storage/test-helpers"
@@ -74,6 +75,7 @@ interface OrchestratorHarness {
   progressCalls: Array<{ chatId: string; runId: string }>
   terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }>
   backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }>
+  redelivered: Array<{ chatId: string; content: string; origin: PeerChatOrigin }>
 }
 
 async function setupHarness(opts: {
@@ -105,6 +107,7 @@ async function setupHarness(opts: {
   const progressCalls: Array<{ chatId: string; runId: string }> = []
   const terminalCalls: Array<{ chatId: string; runId: string; reason: "failed" | "completed" }> = []
   const backgroundCompletions: Array<{ chatId: string; runId: string; outcome: DelegationOutcome }> = []
+  const redelivered: OrchestratorHarness["redelivered"] = []
 
   let nowCounter = chat.createdAt + 1
   const orchestrator = new SubagentOrchestrator({
@@ -118,6 +121,7 @@ async function setupHarness(opts: {
     onRunProgress: (chatId, runId) => { progressCalls.push({ chatId, runId }) },
     onRunTerminal: (chatId, runId, reason) => { terminalCalls.push({ chatId, runId, reason }) },
     onBackgroundRunComplete: (chatId, runId, outcome) => { backgroundCompletions.push({ chatId, runId, outcome }) },
+    redeliverPeerMessage: async (chatId, content, origin) => { redelivered.push({ chatId, content, origin }) },
     startProviderRun: ({ subagent }): ProviderRunStart => {
       if (providerRunOverride) {
         return {
@@ -192,6 +196,7 @@ async function setupHarness(opts: {
     progressCalls,
     terminalCalls,
     backgroundCompletions,
+    redelivered,
   }
 }
 
@@ -1672,6 +1677,30 @@ describe("SubagentOrchestrator", () => {
       expect(out.status === "failed" && out.errorCode).toBe("NO_LIVE_SESSION")
     })
 
+    test("overlapping sendToLiveRun calls run one after another and each caller gets its own reply", async () => {
+      const gate = Promise.withResolvers<void>()
+      const started: string[] = []
+      const live: LiveTurnSource = {
+        async runTurn(prompt) {
+          started.push(prompt)
+          if (prompt === "first") await gate.promise
+          return { text: `reply to ${prompt}` }
+        },
+        async close() {},
+      }
+      const h = await setupHarness({ subagents: [makeSubagent({})] })
+      const orch = makeOrchestrator(h, live)
+      const d = await orch.delegateRun(baseArgs(h))
+      const first = orch.sendToLiveRun(d.runId, "first")
+      const second = orch.sendToLiveRun(d.runId, "second")
+      for (let turn = 0; turn < 10; turn += 1) await Promise.resolve()
+      expect(started).toEqual(["first"])
+      gate.resolve()
+      expect(await first).toMatchObject({ status: "completed", text: "reply to first" })
+      expect(await second).toMatchObject({ status: "completed", text: "reply to second" })
+      expect(started).toEqual(["first", "second"])
+    })
+
     test("cancelChat closes live sessions for the chat", async () => {
       const { live } = makeLiveTurnSource()
       const h = await setupHarness({ subagents: [makeSubagent({})] })
@@ -1844,6 +1873,63 @@ describe("SubagentOrchestrator", () => {
     expect(getMessagesCalls).toBe(0)
     expect(capturedPrimer).not.toBeNull()
     expect(capturedPrimer).toContain("hi there")
+  })
+
+  const PEER_ORIGIN: PeerChatOrigin = {
+    kind: "peer_chat",
+    fromChatId: "chat-9",
+    fromTitle: "Other chat",
+    fromProjectId: "proj-9",
+    fromProjectTitle: "Other project",
+    messageId: "msg-1",
+  }
+
+  async function startRunAcceptingPeerMessages() {
+    const h = await setupHarness({ subagents: [makeSubagent({})] })
+    const finish = Promise.withResolvers<void>()
+    const opened = Promise.withResolvers<void>()
+    const pushedToProvider: string[] = []
+    h.mockProviderRun({
+      authReady: async () => true,
+      async start(_onChunk, _onEntry, opts) {
+        opts?.injection?.openTurn((_promptId, text) => { pushedToProvider.push(text); return true }, () => {})
+        opened.resolve()
+        await finish.promise
+        return { text: "done" }
+      },
+    })
+    const outcome = h.orchestrator.delegateRun({
+      chatId: h.chatId,
+      parentUserMessageId: h.userMessageId,
+      parentRunId: null,
+      parentSubagentId: null,
+      ancestorSubagentIds: [],
+      depth: 0,
+      subagentId: "sa-1",
+      prompt: "work",
+      mentionedSubagentIds: [],
+    })
+    await opened.promise
+    const runId = Object.keys(h.store.getSubagentRuns(h.chatId))[0] ?? ""
+    return { h, runId, finish, outcome, pushedToProvider }
+  }
+
+  test("a peer message to a running run reaches the run, and one it never read goes back to the chat when the run ends", async () => {
+    const { h, runId, finish, outcome, pushedToProvider } = await startRunAcceptingPeerMessages()
+    expect(h.orchestrator.deliverToRun(h.chatId, runId, "use the new schema", PEER_ORIGIN)).toBe(true)
+    expect(pushedToProvider).toHaveLength(1)
+    expect(h.orchestrator.deliverToRun("another-chat", runId, "wrong chat", PEER_ORIGIN)).toBe(false)
+    expect(h.redelivered).toEqual([])
+    finish.resolve()
+    await outcome
+    expect(h.redelivered).toEqual([{ chatId: h.chatId, content: "use the new schema", origin: PEER_ORIGIN }])
+  })
+
+  test("a peer message to a run that has finished is refused so the sender falls back to the chat", async () => {
+    const { h, runId, finish, outcome } = await startRunAcceptingPeerMessages()
+    finish.resolve()
+    await outcome
+    expect(h.orchestrator.deliverToRun(h.chatId, runId, "late", PEER_ORIGIN)).toBe(false)
   })
 
   describe("kanna.subagent.run.duration_ms", () => {

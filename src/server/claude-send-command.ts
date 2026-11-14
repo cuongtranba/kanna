@@ -65,6 +65,7 @@ interface ClaudeSessionsMap {
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
     selfWakeActive: boolean
+    injectedPromptIds: ReadonlySet<string>
     backgroundTaskWakeSuppressed: boolean
     noteUserSend(maxMs: number, now: number): void
   } | undefined

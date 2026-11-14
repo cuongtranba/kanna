@@ -52,6 +52,8 @@ export interface CancelHandlerDeps {
 
   claudeSessions: ClaudeSessionsMap
 
+  closeClaudeSession(chatId: string, session: ClaudeSessionState): void
+
   emitStateChange(chatId: string): void
 }
 
@@ -149,4 +151,7 @@ export async function cancelChat(
 
   await interruptWithGrace(active.turn)
   active.turn.close()
+
+  const session = deps.claudeSessions.get(chatId)
+  if (session && session.injectedPromptIds.size > 0) deps.closeClaudeSession(chatId, session)
 }

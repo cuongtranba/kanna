@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { AgentCoordinator } from "./agent-coordinator"
+import { buildKannaMcpTools } from "./kanna-mcp"
 import { buildCanUseTool, buildClaudeEnv } from "./claude-spawn-helpers"
 import { buildTaskNotification, buildUserMcpServers } from "./claude-session-config"
 import { buildAttachmentHintText, buildPromptText } from "./claude-prompt-helpers"
@@ -2092,7 +2093,7 @@ describe("AgentCoordinator claude integration", () => {
       content: "first",
       model: "claude-opus-4-1",
     })
-    await waitFor(() => store.turnFinishedCount === 1)
+    await waitFor(() => store.turnFinishedCount === 1 && !coordinator.getActiveTurnMap().has("chat-1"))
 
     const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     session.lastUsedAt = 0
@@ -2518,7 +2519,7 @@ describe("AgentCoordinator claude integration", () => {
       content: "ls",
       model: "claude-opus-4-1",
     })
-    await waitFor(() => store.turnFinishedCount === 1)
+    await waitFor(() => store.turnFinishedCount === 1 && !coordinator.getActiveTurnMap().has("chat-1"))
 
     const session = coordinator.getClaudeSessionMap().get("chat-1") as any
     expect(session.backgroundTasks.size).toBe(0)
@@ -2816,7 +2817,7 @@ describe("AgentCoordinator claude integration", () => {
       model: "claude-opus-4-1",
     })
 
-    await waitFor(() => store.turnFinishedCount === 1)
+    await waitFor(() => store.turnFinishedCount === 1 && !coordinator.getActiveTurnMap().has("chat-1"))
     expect(coordinator.getActiveStatuses().has("chat-1")).toBe(false)
     expect(coordinator.getDrainingChatIds().has("chat-1")).toBe(false)
 
@@ -4801,6 +4802,46 @@ describe("AgentCoordinator subagent mention gating", () => {
     expect(runs[0].error?.code).toBe("UNKNOWN_SUBAGENT")
   })
 
+  test("a delegated subagent session is started with the parent chat's task tools", async () => {
+    const store = createFakeStore()
+    let toolNames: string[] = []
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      getSubagents: () => [makeSubagentRecord({ id: "sa-1", name: "alpha" })],
+      getAppSettingsSnapshot: () => ({}),
+      startClaudeSession: async (args) => {
+        if (args.kannaMcp) {
+          toolNames = buildKannaMcpTools({ ...args.kannaMcp, projectId: args.projectId, localPath: args.localPath, chatId: args.chatId }).map((t) => t.name)
+        }
+        return {
+          provider: "claude" as const,
+          stream: (async function* () {})(),
+          interrupt: async () => {},
+          close: () => {},
+          closed: Promise.resolve(),
+          sendPrompt: async () => {},
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+        }
+      },
+    })
+
+    await coordinator.getSubagentOrchestrator().delegateRun({
+      chatId: "chat-1",
+      parentUserMessageId: "umsg-1",
+      parentRunId: null,
+      parentSubagentId: null,
+      ancestorSubagentIds: [],
+      depth: 0,
+      mentionedSubagentIds: [],
+      subagentId: "sa-1",
+      prompt: "go",
+    })
+
+    expect(toolNames).toEqual(expect.arrayContaining(["task_create", "task_update", "task_list"]))
+  })
+
   test("subagent AskUserQuestion forwards via subagent_tool_pending and respondSubagentTool resolves it", async () => {
     const store = createFakeStore()
     let toolRequestPromise: Promise<unknown> | null = null
@@ -5506,7 +5547,7 @@ describe("AgentCoordinator late tool request", () => {
       model: "claude-opus-4-7",
     })
 
-    await waitFor(() => store.turnFinishedCount === 1)
+    await waitFor(() => store.turnFinishedCount === 1 && !coordinator.getActiveTurnMap().has("chat-1"))
     expect(coordinator.getActiveTurnMap().has("chat-1")).toBe(false)
     expect(capturedOnToolRequest).not.toBeNull()
 
