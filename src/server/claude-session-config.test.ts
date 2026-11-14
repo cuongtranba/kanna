@@ -250,6 +250,10 @@ describe("CLAUDE_TOOLSET", () => {
     expect(new Set<string>(CLAUDE_TOOLSET).has("SendMessage")).toBe(true)
   })
 
+  test("includes ToolSearch — this allowlist is exclusive, and without it the CLI cannot defer MCP tools, so every server's full schema loads into every chat's context", () => {
+    expect(new Set<string>(CLAUDE_TOOLSET).has("ToolSearch")).toBe(true)
+  })
+
   test("includes the four Task tools — this allowlist is exclusive, and naming them is also what opts a model off the CLI's default list into task tracking", () => {
     const set = new Set<string>(CLAUDE_TOOLSET)
     for (const tool of ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"]) {

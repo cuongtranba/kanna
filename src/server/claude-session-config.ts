@@ -115,6 +115,7 @@ export const CLAUDE_TOOLSET = [
   "TaskOutput",
   "SendMessage",
   "Workflow",
+  "ToolSearch",
   "Bash",
   "Glob",
   "Grep",
