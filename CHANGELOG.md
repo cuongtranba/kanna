@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.109.0](https://github.com/cuongtranba/kanna/compare/v1.108.2...v1.109.0) (2026-11-14)
+
+
+### Features
+
+* deliver peer messages into a busy agent's running turn ([#1494](https://github.com/cuongtranba/kanna/issues/1494)) ([7edf051](https://github.com/cuongtranba/kanna/commit/7edf0511d1f001bd5df23ed3bf29ca399bd1f87e))
+* give Claude chats the CLI's claude_code tool preset instead of a hand-kept list ([#1492](https://github.com/cuongtranba/kanna/issues/1492)) ([ae59ad2](https://github.com/cuongtranba/kanna/commit/ae59ad2e2d6a7e036a53ff399552f47d92c6d15c))
+
 ## [1.108.2](https://github.com/cuongtranba/kanna/compare/v1.108.1...v1.108.2) (2026-11-14)
 
 
