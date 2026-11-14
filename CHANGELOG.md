@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.108.2](https://github.com/cuongtranba/kanna/compare/v1.108.1...v1.108.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* give Claude sessions ToolSearch so MCP tool schemas load on demand ([#1489](https://github.com/cuongtranba/kanna/issues/1489)) ([8cf53e9](https://github.com/cuongtranba/kanna/commit/8cf53e9ac4f4afd8e9dcb79199f0c5e40c7de832))
+
 ## [1.108.1](https://github.com/cuongtranba/kanna/compare/v1.108.0...v1.108.1) (2026-11-11)
 
 
