@@ -4,8 +4,7 @@ import {
   buildTaskNotification,
   resolveSpawnPaths,
   resolveStackProjects,
-  CLAUDE_TOOLSET,
-  SDK_RESTRICTED_FS_NATIVE_TOOLS,
+  claudeToolOptions,
 } from "./claude-session-config"
 import type { McpServerConfig } from "../shared/types"
 import type { BackgroundRunOutcome } from "./subagent-orchestrator"
@@ -233,44 +232,34 @@ describe("buildTaskNotification", () => {
 })
 
 
-describe("CLAUDE_TOOLSET", () => {
-  test("includes core tools", () => {
-    const set = new Set(CLAUDE_TOOLSET)
-    expect(set.has("Bash")).toBe(true)
-    expect(set.has("Read")).toBe(true)
-    expect(set.has("AskUserQuestion")).toBe(true)
-    expect(set.has("ExitPlanMode")).toBe(true)
+describe("claudeToolOptions", () => {
+  const TASK_TOOLS = ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"]
+  const KANNA_OWNED = ["CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "PushNotification", "RemoteTrigger", "SendToProject", "SendToProjectContext", "ListAgents"]
+  const OUTSIDE_PATHS = ["Read", "Edit", "Write", "NotebookEdit", "Bash", "Monitor", "Glob", "Grep", "LSP", "WebFetch"]
+
+  test("a chat gets the CLI's claude_code preset, so a tool the CLI adds later (ToolSearch was one) reaches it without a Kanna change", () => {
+    expect(claudeToolOptions({ pathConfined: false, loopBlocked: [] }).tools).toEqual({ type: "preset", preset: "claude_code" })
   })
 
-  test("includes LSP so code navigation reaches the model on every language", () => {
-    expect(new Set<string>(CLAUDE_TOOLSET).has("LSP")).toBe(true)
+  test("adds Grep, Glob and the Task tools the preset leaves out, which search and the task card rely on", () => {
+    const { allowedTools } = claudeToolOptions({ pathConfined: false, loopBlocked: [] })
+    expect(allowedTools).toEqual(expect.arrayContaining(["Grep", "Glob", ...TASK_TOOLS]))
   })
 
-  test("includes SendMessage — the CLI's own Agent launch result tells the model to use it to continue a spawned agent", () => {
-    expect(new Set<string>(CLAUDE_TOOLSET).has("SendMessage")).toBe(true)
+  test("denies the CLI's own scheduler, push and cross-project messaging, which would bypass Kanna's cron, push and peer chats", () => {
+    const { disallowedTools } = claudeToolOptions({ pathConfined: false, loopBlocked: [] })
+    expect(disallowedTools).toEqual(expect.arrayContaining(KANNA_OWNED))
   })
 
-  test("includes ToolSearch — this allowlist is exclusive, and without it the CLI cannot defer MCP tools, so every server's full schema loads into every chat's context", () => {
-    expect(new Set<string>(CLAUDE_TOOLSET).has("ToolSearch")).toBe(true)
+  test("an armed loop's denials join the Kanna-owned ones", () => {
+    const { disallowedTools } = claudeToolOptions({ pathConfined: false, loopBlocked: ["Edit", "Agent"] })
+    expect(disallowedTools).toEqual(expect.arrayContaining(["Edit", "Agent", ...KANNA_OWNED]))
   })
 
-  test("includes the four Task tools — this allowlist is exclusive, and naming them is also what opts a model off the CLI's default list into task tracking", () => {
-    const set = new Set<string>(CLAUDE_TOOLSET)
-    for (const tool of ["TaskCreate", "TaskUpdate", "TaskGet", "TaskList"]) {
-      expect(set.has(tool)).toBe(true)
-    }
-  })
-})
-
-describe("SDK_RESTRICTED_FS_NATIVE_TOOLS", () => {
-  test("is a subset of CLAUDE_TOOLSET", () => {
-    const full = new Set<string>(CLAUDE_TOOLSET)
-    for (const t of SDK_RESTRICTED_FS_NATIVE_TOOLS) {
-      expect(full.has(t)).toBe(true)
-    }
-  })
-
-  test("strips LSP — permission-gate cannot see native LSP reads, so a path-confined subagent must not get it", () => {
-    expect(new Set<string>(SDK_RESTRICTED_FS_NATIVE_TOOLS).has("LSP")).toBe(true)
+  test("a path-confined chat gets a closed allowlist with no tool that reads, writes or runs outside its paths, so a tool the CLI adds later cannot widen it", () => {
+    const { tools } = claudeToolOptions({ pathConfined: true, loopBlocked: [] })
+    if (!Array.isArray(tools)) throw new Error("a path-confined chat must get an explicit tool list")
+    for (const tool of OUTSIDE_PATHS) expect(tools).not.toContain(tool)
+    for (const tool of ["ToolSearch", "Workflow", "SendMessage", "AskUserQuestion", "ExitPlanMode", ...TASK_TOOLS]) expect(tools).toContain(tool)
   })
 })

@@ -107,22 +107,30 @@ export function resolveProjectInstructions(
 }
 
 
-export const CLAUDE_TOOLSET = [
+const CLAUDE_CODE_TOOL_PRESET = { type: "preset", preset: "claude_code" } as const
+
+const TOOLS_THE_PRESET_LEAVES_OUT = ["Grep", "Glob", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList"] as const
+
+const CLI_TOOLS_KANNA_OWNS = [
+  "CronCreate",
+  "CronDelete",
+  "CronList",
+  "ScheduleWakeup",
+  "PushNotification",
+  "RemoteTrigger",
+  "SendToProject",
+  "SendToProjectContext",
+  "ListAgents",
+] as const
+
+const PATH_CONFINED_TOOLSET = [
   "Skill",
-  "WebFetch",
   "WebSearch",
   "Task",
   "TaskOutput",
   "SendMessage",
   "Workflow",
   "ToolSearch",
-  "Bash",
-  "Glob",
-  "Grep",
-  "LSP",
-  "Read",
-  "Edit",
-  "Write",
   "TodoWrite",
   "TaskCreate",
   "TaskUpdate",
@@ -134,7 +142,25 @@ export const CLAUDE_TOOLSET = [
   "ExitPlanMode",
 ] as const
 
-export const SDK_RESTRICTED_FS_NATIVE_TOOLS = ["Read", "Edit", "Write", "Bash", "Glob", "Grep", "LSP", "WebFetch"] as const
+export type ClaudeToolOptions = {
+  tools: string[] | typeof CLAUDE_CODE_TOOL_PRESET
+  allowedTools?: string[]
+  disallowedTools?: string[]
+}
+
+export function claudeToolOptions(args: { pathConfined: boolean; loopBlocked: readonly string[] }): ClaudeToolOptions {
+  if (args.pathConfined) {
+    return {
+      tools: [...PATH_CONFINED_TOOLSET],
+      ...(args.loopBlocked.length > 0 ? { disallowedTools: [...args.loopBlocked] } : {}),
+    }
+  }
+  return {
+    tools: CLAUDE_CODE_TOOL_PRESET,
+    allowedTools: [...TOOLS_THE_PRESET_LEAVES_OUT],
+    disallowedTools: [...CLI_TOOLS_KANNA_OWNS, ...args.loopBlocked],
+  }
+}
 
 
 const TASK_NOTIFICATION_RESULT_MAX_CHARS = 4_000

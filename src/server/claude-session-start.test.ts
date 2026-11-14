@@ -72,8 +72,6 @@ function makeFakeDeps(): StartClaudeSessionDeps {
     createClaudeHarnessStream: () => (async function* () {})(),
     parseConfiguredContextWindowFromModelId: () => undefined,
     buildUserMcpServers: () => ({}),
-    claudeToolset: ["Bash", "Read", "Write"] as readonly string[],
-    sdkRestrictedFsNativeTools: ["Read", "Write"] as readonly string[],
   }
 }
 
