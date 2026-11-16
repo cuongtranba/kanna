@@ -161,6 +161,7 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
       recordClientError: () => {},
       setEnabled: async () => {},
       restore: () => {},
+      startEnabled: async () => {},
       start: async () => {},
       status: (id) => (id === "hello" ? { state: "running" } : undefined),
       call: async () => ({ ok: true, output: null }),
