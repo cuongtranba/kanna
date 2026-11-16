@@ -1,13 +1,15 @@
 import { afterAll, beforeAll, expect, test } from "vite-plus/test"
-import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { runOxlint } from "../lint/oxlint-run.adapter"
 
 const ROOT = path.resolve(import.meta.dirname, "../../..")
-const SNIPPET_DIR = path.join(ROOT, "src/client/app/__pending_gate_tmp__")
+const LINT_ROOT = mkdtempSync(path.join(tmpdir(), "kanna-pending-gate-"))
+const SNIPPET_DIR = path.join(LINT_ROOT, "src/client/app")
 
 const PRELUDE = `
-import { runPendingAction } from "../../stores/pendingActionsStore"
+import { runPendingAction } from "../stores/pendingActionsStore"
 declare function save(): Promise<void>
 `
 
@@ -23,23 +25,35 @@ type SnippetName = keyof typeof SNIPPETS
 
 const fileOf = (name: SnippetName): string => path.join(SNIPPET_DIR, `${name}.tsx`)
 
+function mirrorLintSetup(): void {
+  mkdirSync(SNIPPET_DIR, { recursive: true })
+  symlinkSync(path.join(ROOT, "node_modules"), path.join(LINT_ROOT, "node_modules"), "dir")
+  symlinkSync(path.join(ROOT, "src/client/stores"), path.join(LINT_ROOT, "src/client/stores"), "dir")
+  writeFileSync(path.join(LINT_ROOT, "package.json"), JSON.stringify({ name: "pending-gate", private: true, type: "module" }))
+  writeFileSync(path.join(LINT_ROOT, "vite.config.ts"), `export { default } from ${JSON.stringify(path.join(ROOT, "vite.config.ts"))}\n`)
+  writeFileSync(
+    path.join(LINT_ROOT, "tsconfig.json"),
+    JSON.stringify({ extends: path.join(ROOT, "tsconfig.json"), include: ["src/**/*.tsx"] }),
+  )
+}
+
 let reported: ReadonlyMap<SnippetName, string[]>
 
 beforeAll(() => {
-  mkdirSync(SNIPPET_DIR, { recursive: true })
+  mirrorLintSetup()
   const names = Object.keys(SNIPPETS).filter((name): name is SnippetName => name in SNIPPETS)
   for (const name of names) writeFileSync(fileOf(name), `${PRELUDE}${SNIPPETS[name]}`)
-  const diagnostics = runOxlint(ROOT, names.map((name) => path.relative(ROOT, fileOf(name))))
+  const diagnostics = runOxlint(LINT_ROOT, names.map((name) => path.relative(LINT_ROOT, fileOf(name))))
   reported = new Map(
     names.map((name) => [
       name,
-      diagnostics.filter((d) => path.resolve(ROOT, d.filename) === fileOf(name)).map((d) => d.rule),
+      diagnostics.filter((d) => path.resolve(LINT_ROOT, d.filename) === fileOf(name)).map((d) => d.rule),
     ]),
   )
 }, 180_000)
 
 afterAll(() => {
-  rmSync(SNIPPET_DIR, { recursive: true, force: true })
+  rmSync(LINT_ROOT, { recursive: true, force: true })
 })
 
 test("a promise discarded with void in a click handler fails lint", () => {
