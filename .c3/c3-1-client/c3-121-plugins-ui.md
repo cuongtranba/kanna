@@ -1,6 +1,6 @@
 ---
 id: c3-121
-c3-seal: c655679710db72a75d04df3e02dbace66e66adf51f0591d689ab4a171f1967b2
+c3-seal: 773555d3eab200f0b73f5bcc3f0b857c92c5f63116cac31052e7964336bd5481
 title: plugins-ui
 type: component
 category: feature
@@ -42,9 +42,11 @@ A plugin's UI is third-party code running inside Kanna's own React tree, so the 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
 | Host module registry | OUT | require(name) answers only an allowlisted set, so react identity matches the app shell and an off-list request fails with a documented message | c3-238 | src/client/plugins/hostModuleRegistry.ts |
+| Workspace hook | OUT | useKannaWorkspace is handed to plugins through the @kanna/plugin host module: projects with chats and read-only cron jobs from the existing sidebar and cron-jobs stores, openChat, and startChat launched through runPendingAction with an optional prompt sent in the same step. Its public types are declared once in kanna-plugin.d.ts and imported type-only | c3-313 | src/client/plugins/pluginWorkspaceApi.ts |
 | Plugin evaluator | OUT | Blob + object-URL + dynamic import, with the host global confined to the call and restored in a finally | c3-238 | src/client/plugins/evaluatePlugin.ts |
 | Contribution registry | OUT | createPluginContext(pluginId, registry) is what a plugin's default export is called with; the host builds it locally and never imports @kanna/plugin at runtime | c3-313 | src/client/plugins/contributionRegistry.ts |
 | Contribution store | OUT | React-visible projection of what plugins contributed, populated by usePluginContributions from the global switch | c3-112 | src/client/stores/pluginContributionsStore.ts |
+| Plugin page | OUT | A plugin sidebar item opens its surface at /plugins/:pluginId/:surfaceId as a page tab titled from the item, with the sidebar entry marked while the page is open | c3-112 | src/client/app/PluginPage.tsx |
 | Error isolation | OUT | PluginBoundary contains a render-time throw per plugin, including under the legacy server renderer | c3-112 | src/client/plugins/PluginBoundary.tsx |
 
 ## Derived Materials

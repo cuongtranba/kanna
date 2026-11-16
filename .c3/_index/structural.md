@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:9350c8ec7c6dbfe592a38ff732dd2a8fd5707d53536c952a6d1ec2c69288a8ec -->
+<!-- hash: sha256:53557475917ad4d858878add6c1300b83b5e583470e21f6880f437b5b0307a47 -->
 
 ## c3-0 — Kanna (system)
 
@@ -84,7 +84,7 @@ files: src/client/app/CronJobEditDialog.store.ts, src/client/app/CronJobEditDial
 ## c3-121 — plugins-ui (component)
 container: c3-1 | context: c3-0
 refs: ref-strong-typing, rule-colocated-bun-test, rule-zustand-store
-files: src/client/app/KannaPluginsSection.tsx, src/client/app/KannaPluginsSettingsBranch.tsx, src/client/app/PluginSidebarItems.tsx, src/client/app/PluginsFooterSection.tsx, src/client/app/PluginsFooterSlot.test.tsx, src/client/app/PluginsFooterSlot.tsx, src/client/plugins/**/*.ts, src/client/plugins/**/*.tsx, src/client/stores/pluginContributionsStore.ts
+files: src/client/app/KannaPluginsSection.tsx, src/client/app/KannaPluginsSettingsBranch.tsx, src/client/app/PluginPage.tsx, src/client/app/PluginSidebarItems.tsx, src/client/app/PluginsFooterSection.tsx, src/client/app/PluginsFooterSlot.test.tsx, src/client/app/PluginsFooterSlot.tsx, src/client/plugins/**/*.ts, src/client/plugins/**/*.tsx, src/client/stores/pluginContributionsStore.ts
 
 ## c3-122 — stacks-ui (component)
 container: c3-1 | context: c3-0
@@ -662,6 +662,7 @@ src/client/components/messages/CronRunSkippedMessage.tsx → c3-120
 src/client/stores/cronJobsStore.ts → c3-120
 src/client/app/KannaPluginsSection.tsx → c3-121
 src/client/app/KannaPluginsSettingsBranch.tsx → c3-121
+src/client/app/PluginPage.tsx → c3-121
 src/client/app/PluginSidebarItems.tsx → c3-121
 src/client/app/PluginsFooterSection.tsx → c3-121
 src/client/app/PluginsFooterSlot.test.tsx → c3-121

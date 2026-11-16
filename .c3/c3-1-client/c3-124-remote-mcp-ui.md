@@ -1,6 +1,6 @@
 ---
 id: c3-124
-c3-seal: 75fb61098d1af67d018fd72868e34cb0336077c90246baf5ec6ef6dff39b5448
+c3-seal: caed9559d818c126de8ec1548ae4dba2b9e082ff731e8e2679e6884932013fcf
 title: remote-mcp-ui
 type: component
 category: feature
@@ -62,7 +62,7 @@ Renders the Remote MCP page registered in the settings sidebar: a notice when Ka
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| RemoteMcpSection | OUT | Registered as the remote-mcp service branch of the settings page; takes handleWriteAppSettings and an optional DomPort | c3-116 | src/client/components/settings/RemoteMcpSection.tsx |
+| RemoteMcpSection | OUT | Registered as the remote-mcp service branch of the settings page; takes handleWriteAppSettings and an optional DomPort. With no public URL saved and an https non-loopback page, it warns that sign-in would point at loopback and offers a button that saves the page origin | c3-116 | src/client/components/settings/RemoteMcpSection.tsx |
 | buildRemoteMcpSetupSnippets | OUT | Returns one snippet per client with the endpoint filled in and the placeholder text where the password goes | c3-242 | src/shared/remote-mcp/setup-snippets.ts |
 
 ## Change Safety
