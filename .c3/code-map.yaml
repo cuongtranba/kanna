@@ -336,6 +336,7 @@ c3-210:
   - src/server/claude-inbox-guard.ts
   - src/server/claude-inbox-guard.test.ts
   - src/server/agent-coordinator.ts
+  - src/server/detached-work.ts
   - src/server/agent-coordinator-types.ts
   - src/server/agent-app-settings-view.ts
   - src/server/claude-autocontinue-commands.ts

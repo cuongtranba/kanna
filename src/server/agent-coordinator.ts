@@ -57,6 +57,7 @@ import type { SendToStartingProfile } from "./claude-steer-log"
 import type { SendMessageOptions, StartTurnForChatArgs } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
 import { createMidTurnDelivery, type MidTurnDelivery } from "./peer-messaging/mid-turn-delivery"
+import { DetachedWork } from "./detached-work"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
   startTurnForChat as startTurnForChatFn,
@@ -210,7 +211,8 @@ export class AgentCoordinator {
   readonly scheduleManager: ScheduleManager | null
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly cronSkipCoalescer = new CronSkipCoalescer()
-  private readonly pendingCronOutcomes = new Set<Promise<void>>()
+  private readonly cronOutcomes = new DetachedWork()
+  private readonly sessionRuns = new DetachedWork()
   private readonly unsubscribeTurnTerminal: () => void
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
@@ -449,11 +451,7 @@ export class AgentCoordinator {
     if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
     const tag = active?.cronRun
     if (!tag) return
-    const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
-      log.error("[kanna/cron] failed to record run outcome:", String(error))
-    })
-    this.pendingCronOutcomes.add(p)
-    p.finally(() => this.pendingCronOutcomes.delete(p))
+    this.cronOutcomes.track("[kanna/cron] failed to record run outcome:", recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome))
   }
 
   async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
@@ -464,9 +462,10 @@ export class AgentCoordinator {
       this.closeClaudeSession(chatId, session)
       return closed
     })
-    if (closedPromises.length === 0) return
+    const settling = [...closedPromises, ...this.sessionRuns.inFlight()]
+    if (settling.length === 0) return
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, gracefulTimeoutMs))
-    await Promise.race([Promise.allSettled(closedPromises), timeout])
+    await Promise.race([Promise.allSettled(settling), timeout])
   }
 
   getActiveStatuses() {
@@ -954,7 +953,7 @@ export class AgentCoordinator {
       resumeLoop: (chatId) => this.resumeLoop(chatId),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
       getCostBaselineUsd: (chatId) => this.store.getLatestClaudeCumulativeCostUsd(chatId),
-      runClaudeSession: (session) => { void this.runClaudeSession(session) },
+      runClaudeSession: (session) => { this.sessionRuns.track("[kanna/agent] claude session run failed:", this.runClaudeSession(session)) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       onCompaction: (event) => { this.handleCompaction(event) },
       onCliCommands: (commands) => { this.cliCommands?.record(commands) },
@@ -1187,9 +1186,8 @@ export class AgentCoordinator {
     )
   }
 
-  async drainCronOutcomes(): Promise<void> {
-    if (this.pendingCronOutcomes.size === 0) return
-    await Promise.allSettled([...this.pendingCronOutcomes])
+  drainCronOutcomes(): Promise<void> {
+    return this.cronOutcomes.drain()
   }
 
   listLiveSchedules(chatId: string): string[] {

@@ -63,8 +63,9 @@ describe("auto-continue end-to-end", () => {
   test("rate limit → proposed → accept → timer fires → auto_continue_fired, no 'continue' user_prompt bubble", async () => {
     const dir = await mkdtemp(join(tmpdir(), "kanna-ac-e2e-"))
     let scheduleManager: ScheduleManager | undefined
+    let coordinator: AgentCoordinator | undefined
+    const store = new EventStore(dir)
     try {
-      const store = new EventStore(dir)
       await store.initialize()
       const project = await store.openProject("/tmp/e2e-proj")
       const chat = await store.createChat(project.id)
@@ -74,11 +75,10 @@ describe("auto-continue end-to-end", () => {
       const clock = new FakeClock(clockStart)
       const resetAtMs = clockStart + 10_000
 
-      let coordinator!: AgentCoordinator
       scheduleManager = new ScheduleManager({
         clock,
         fire: async (cid, sid) => {
-          await coordinator.fireAutoContinue(cid, sid)
+          await coordinator?.fireAutoContinue(cid, sid)
         },
       })
 
@@ -96,7 +96,7 @@ describe("auto-continue end-to-end", () => {
           stream: events,
           getAccountInfo: async () => null,
           interrupt: async () => {},
-          close: () => {},
+          close: () => events.close(),
           closed: Promise.resolve(),
           setModel: async () => {},
           setPermissionMode: async () => {},
@@ -155,6 +155,8 @@ describe("auto-continue end-to-end", () => {
       expect(continuePrompts).toHaveLength(0)
     } finally {
       scheduleManager?.shutdown()
+      await coordinator?.dispose()
+      await store.flush()
       await rm(dir, { recursive: true, force: true })
     }
   })
