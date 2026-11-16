@@ -98,13 +98,13 @@ function settlePendingCalls(record: PluginRuntimeRecord, result: PluginCallResul
   record.pendingCalls.clear()
 }
 
-export function createPluginService(
-  deps: {
-    readonly homeDir?: string
-    readonly installed?: InstalledPluginStore
-    readonly log?: (message: string) => void
-  } = {},
-): PluginService {
+export interface PluginServiceOptions {
+  readonly homeDir?: string
+  readonly installed?: InstalledPluginStore
+  readonly log?: (message: string) => void
+}
+
+export function createPluginService(deps: PluginServiceOptions = {}): PluginService {
   const homeDir = deps.homeDir ?? homedir()
   const installed = deps.installed
   const logFailure = deps.log ?? ((message: string) => defaultLog.error(message))
