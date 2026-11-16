@@ -456,8 +456,15 @@ export function effectiveContextWindowOptions(
   return PROVIDER_CATALOG[provider].models.find((m) => m.id === modelId)?.contextWindowOptions ?? []
 }
 
+const CLAUDE_1M_API_SUFFIX = "[1m]"
+
 export function resolveClaudeApiModelId(modelId: string, contextWindow?: ClaudeContextWindow): string {
-  return contextWindow === "1m" ? `${modelId}[1m]` : modelId
+  return contextWindow === "1m" ? `${modelId}${CLAUDE_1M_API_SUFFIX}` : modelId
+}
+
+export function splitClaudeApiModelId(apiModelId: string): { modelId: string; contextWindow: ClaudeContextWindow } {
+  if (!apiModelId.endsWith(CLAUDE_1M_API_SUFFIX)) return { modelId: apiModelId, contextWindow: "200k" }
+  return { modelId: apiModelId.slice(0, -CLAUDE_1M_API_SUFFIX.length), contextWindow: "1m" }
 }
 
 export function resolveClaudeContextWindowTokens(contextWindow: ClaudeContextWindow): number {

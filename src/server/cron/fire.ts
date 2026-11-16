@@ -1,5 +1,6 @@
 
-import type { ChatAttachment, QueuedChatMessage } from "../../shared/types"
+import { DEFAULT_CLAUDE_MODEL_OPTIONS, type AgentProvider, type ChatAttachment, type QueuedChatMessage } from "../../shared/types"
+import { splitClaudeApiModelId } from "../../shared/provider-model-types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { chatAutomationEnvelope } from "../auto-continue/events"
@@ -9,7 +10,7 @@ import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalesce
 
 export interface CronFireDeps extends CronCommandDeps {
   skipCoalescer: CronSkipCoalescerPort
-  getChatRecord(chatId: string): { projectId: string } | null
+  getChatRecord(chatId: string): { projectId: string; provider: AgentProvider | null } | null
   isChatBusy(chatId: string): boolean
   holdsBackgroundWork(chatId: string): boolean
   clearChatContext(chatId: string): Promise<void>
@@ -70,7 +71,7 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
       runId,
     })
     const tag: CronRunTag = { jobId, runId, originChatId: chatId }
-    await deps.enqueueMessage(chatId, job.instruction, [], { cronRun: tag })
+    await deps.enqueueMessage(chatId, job.instruction, [], cronRunOptions(job, tag, deps.getChatRecord(chatId)?.provider ?? null))
     await deps.maybeStartNextQueuedMessage(chatId)
     return
   }
@@ -100,7 +101,7 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
     firedAt,
   })
   const tag: CronRunTag = { jobId, runId, originChatId: chatId }
-  await deps.enqueueMessage(spawned.id, job.instruction, [], { cronRun: tag })
+  await deps.enqueueMessage(spawned.id, job.instruction, [], cronRunOptions(job, tag, project.provider))
   await deps.maybeStartNextQueuedMessage(spawned.id)
   deps.emitStateChange(spawned.id)
 }
@@ -191,6 +192,19 @@ async function writeSkip(
     ...missed,
   })
   await appendCronEntry(deps, chatId, { kind: "cron_run_skipped", jobId, reason, ...missed })
+}
+
+function cronRunOptions(job: CronJobSnapshot, cronRun: CronRunTag, provider: AgentProvider | null): SendMessageOptions {
+  if (job.model === undefined) return { cronRun }
+  const { modelId, contextWindow } = splitClaudeApiModelId(job.model)
+  return {
+    cronRun,
+    model: modelId,
+    ...(provider ? { provider } : {}),
+    ...(contextWindow === "1m"
+      ? { modelOptions: { claude: { reasoningEffort: DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort, contextWindow } } }
+      : {}),
+  }
 }
 
 function latestRealRun(job: CronJobSnapshot): CronRunSnapshot | null {
