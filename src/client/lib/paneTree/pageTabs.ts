@@ -15,6 +15,12 @@ export function chatPath(chatId: string): string {
   return `/chat/${chatId}`
 }
 
+export const PLUGIN_PAGE_ROUTE_PATTERN = "/plugins/:pluginId/:surfaceId"
+
+export function pluginPagePath(pluginId: string, surfaceId: string): string {
+  return `/plugins/${encodeURIComponent(pluginId)}/${encodeURIComponent(surfaceId)}`
+}
+
 export interface PageRoute {
   page: PageKind
   params: Record<string, string>
@@ -31,6 +37,7 @@ const PAGE_ROUTE_PATTERNS: ReadonlyArray<{ page: PageKind; pattern: string }> = 
   { page: "workflows", pattern: "/workflows/:chatId" },
   { page: "boards", pattern: "/boards/stack/:stackId" },
   { page: "boards", pattern: "/boards/:projectId" },
+  { page: "plugin", pattern: PLUGIN_PAGE_ROUTE_PATTERN },
 ]
 
 export function resolvePageRoute(path: string): PageRoute | null {

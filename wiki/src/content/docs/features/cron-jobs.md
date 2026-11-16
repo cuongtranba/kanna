@@ -55,6 +55,10 @@ the word "inline" or "spawn", wrap it in double quotes:
 
 A chat can hold **any number of jobs**, each with its own id, schedule, and mode.
 
+A job remembers the model of the chat that armed it, and every run starts on
+that model: the chat itself for `inline`, the new chat for `spawn`. Without
+this, a spawned run would start on the provider default.
+
 ## Editing a job
 
 Change a job's instruction, mode or schedule with `/cron update`, the pencil

@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { Check, Copy } from "lucide-react"
+import { Check, Copy, TriangleAlert } from "lucide-react"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
 import { SettingsRow } from "./SettingsList"
@@ -16,7 +16,7 @@ import { copyWithFeedback, useCopied } from "../../stores/copyFeedbackStore"
 import { useAuthStatusStore } from "../../stores/authStatusStore"
 import { errorMessage } from "../../../shared/errors"
 import { buildRemoteMcpSetupSnippets, type RemoteMcpSetupSnippet } from "../../../shared/remote-mcp/setup-snippets"
-import { normalizeRemoteMcpPublicUrl } from "../../../shared/settings/remote-mcp"
+import { normalizeRemoteMcpPublicUrl, suggestRemoteMcpPublicUrl } from "../../../shared/settings/remote-mcp"
 
 const ENABLED_KEY = pendingActionKey("settings.remoteMcp", "enabled")
 const PUBLIC_URL_KEY = pendingActionKey("settings.remoteMcp", "publicUrl")
@@ -79,6 +79,7 @@ export function RemoteMcpSection({ state, dom = domAdapter }: { state: Pick<Kann
   const invalid = trimmed !== "" && normalizeRemoteMcpPublicUrl(trimmed) === null
   const dirty = trimmed !== (settings.publicUrl ?? "")
   const origin = settings.publicUrl ?? normalizeRemoteMcpPublicUrl(originOf(dom.getHref()))
+  const suggestedUrl = suggestRemoteMcpPublicUrl(settings.publicUrl, dom.getHref())
   const snippets = buildRemoteMcpSetupSnippets({ publicOrigin: origin, passwordConfigured: authEnabled })
 
   const setEnabled = useCallback(
@@ -86,15 +87,18 @@ export function RemoteMcpSection({ state, dom = domAdapter }: { state: Pick<Kann
     [state],
   )
 
-  const savePublicUrl = useCallback(async () => {
+  const writePublicUrl = useCallback(async (publicUrl: string | null) => {
     setError(null)
     try {
-      await state.handleWriteAppSettings({ remoteMcp: { publicUrl: trimmed === "" ? null : trimmed } })
+      await state.handleWriteAppSettings({ remoteMcp: { publicUrl } })
       setDraft(null)
     } catch (caught) {
       setError(errorMessage(caught))
     }
-  }, [state, trimmed, setDraft, setError])
+  }, [state, setDraft, setError])
+
+  const savePublicUrl = useCallback(() => writePublicUrl(trimmed === "" ? null : trimmed), [writePublicUrl, trimmed])
+  const adoptSuggestedUrl = useCallback(() => writePublicUrl(suggestedUrl), [writePublicUrl, suggestedUrl])
 
   return (
     <div className="flex flex-col gap-2">
@@ -149,6 +153,27 @@ export function RemoteMcpSection({ state, dom = domAdapter }: { state: Pick<Kann
                 Save
               </Button>
             </div>
+            {suggestedUrl ? (
+              <div className="flex flex-col gap-2 rounded-md border border-border bg-warning/[0.06] p-3">
+                <div className="flex items-start gap-2">
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden="true" />
+                  <p className="min-w-0 break-words text-xs text-foreground">
+                    No public URL is set, so Kanna tells remote clients to sign in at its loopback address (127.0.0.1), which only
+                    works on this machine. You are reaching Kanna at {suggestedUrl}; the setup commands below use that address, but
+                    the sign-in step would still point at loopback.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="max-w-full self-start"
+                  onClick={() => runPendingAction(PUBLIC_URL_KEY, adoptSuggestedUrl)}
+                  pending={saving}
+                >
+                  <span className="truncate">Use {suggestedUrl}</span>
+                </Button>
+              </div>
+            ) : null}
             {error ? <div className="text-xs text-destructive-text">{error}</div> : null}
           </div>
         </SettingsRow>

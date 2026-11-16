@@ -1,4 +1,5 @@
 import {
+  Blocks,
   CalendarClock,
   FolderOpen,
   GitCompare,
@@ -33,6 +34,7 @@ export interface TabPresentationContext {
   chatTitles?: Record<string, string>
   chatStatuses?: Readonly<Record<string, ChatTabStatus>>
   boardTitles?: Record<string, string>
+  pluginPageTitles?: Record<string, string>
 }
 
 export interface TabPresentation {
@@ -52,6 +54,7 @@ const PAGE_PRESENTATION: Readonly<Record<PageKind, { label: string; icon: Lucide
   inbox: { label: "Inbox", icon: Inbox },
   workflows: { label: "Workflows", icon: Workflow },
   boards: { label: "Boards", icon: SquareKanban },
+  plugin: { label: "Plugin", icon: Blocks },
 }
 
 export function describeTab(
@@ -74,6 +77,9 @@ export function describeTab(
     case "page":
       return {
         ...PAGE_PRESENTATION[target.page],
+        ...(target.page === "plugin" && context.pluginPageTitles?.[target.path]
+          ? { label: context.pluginPageTitles[target.path] }
+          : {}),
         pinned: false,
         closable: true,
         indicator: null,

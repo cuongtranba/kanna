@@ -31,7 +31,10 @@ Open **Settings → Remote MCP**.
 - **Public URL** is the address clients use: an https URL, or http on localhost.
   Kanna keeps only the origin (scheme, host and port). The OAuth issuer and the
   MCP resource are derived from it, so set it to the URL your clients actually
-  open. Leave it empty to use the loopback address.
+  open. Leave it empty to use the loopback address. If you open Settings through
+  an https address while it is empty, Kanna warns that clients would be sent to
+  loopback and offers a **Use https://your-host** button that saves the address
+  you are on. Kanna never guesses this from request headers.
 - **Connect a client** shows a copy-ready snippet for each client below, with the
   endpoint filled in. The snippets never contain your password; they use the
   placeholder `<your Kanna password>`.

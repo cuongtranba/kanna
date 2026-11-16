@@ -540,6 +540,32 @@ test("ensureFreshMcpToken persists error state when refresh endpoint returns err
   expect(persistedStates.at(-1)!.errorMessage).toMatch(/^token refresh failed: .*refresh token revoked/)
 })
 
+test("a refresh that cannot reach the authorization server leaves the server authenticated, so the next session retries it", async () => {
+  const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 100, "STALE")
+  const unreachable: typeof fetch = Object.assign(
+    async (): Promise<Response> => {
+      throw new TypeError("getaddrinfo ENOTFOUND as.test")
+    },
+    { preconnect: fetch.preconnect },
+  )
+  const metadata: AuthorizationServerMetadata = {
+    issuer: "https://as.test/v1/mcp",
+    authorization_endpoint: "https://as.test/oauth/authorize",
+    token_endpoint: "https://as.test/oauth/token",
+    response_types_supported: ["code"],
+  }
+  const persisted: McpOAuthState[] = []
+
+  await expect(
+    ensureFreshMcpToken(cfg, {
+      fetchFn: unreachable,
+      persist: (oauth) => { persisted.push(oauth) },
+      metadataByIssuer: { "https://as.test/v1/mcp": metadata },
+    }),
+  ).rejects.toThrow(/ENOTFOUND/)
+  expect(persisted.filter((oauth) => oauth.status !== "authenticated")).toEqual([])
+})
+
 test("ensureFreshMcpToken returns cached token without refresh when expires_in is absent", async () => {
   const cfg = authedTokenConfig(Date.now() - 30000 * 1000, 0, "FOREVER")
   if (cfg.transport !== "stdio" && cfg.oauth) {

@@ -20,7 +20,16 @@ export {
 
 export { MIN_PANE_FRACTION, clampPairSizes, normalizeSizes, redistributeToMinimum } from "./sizes"
 
-export { CHAT_ROUTE_PATTERN, chatPath, fallbackPathAfterClose, pageTargetForPath, resolvePageRoute, type PageRoute } from "./pageTabs"
+export {
+  CHAT_ROUTE_PATTERN,
+  PLUGIN_PAGE_ROUTE_PATTERN,
+  chatPath,
+  fallbackPathAfterClose,
+  pageTargetForPath,
+  pluginPagePath,
+  resolvePageRoute,
+  type PageRoute,
+} from "./pageTabs"
 
 export { buildTabId, isSingletonTabKind, normalizeTabTarget, tabTargetsEqual } from "./tabTarget"
 

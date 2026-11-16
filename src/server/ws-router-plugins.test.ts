@@ -12,6 +12,7 @@ function fakeService(reloaded: string[]): PluginService {
     recordClientError: () => {},
     setEnabled: async () => {},
     restore: () => {},
+    startEnabled: async () => {},
     start: async () => {},
     status: (id) => (id === "hello" ? { state: "running" } : undefined),
     call: async () => ({ ok: true, output: null }),

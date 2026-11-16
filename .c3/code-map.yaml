@@ -775,6 +775,8 @@ c3-237:
   - src/server/skills-cli.test.ts
 c3-121:
   - src/client/app/KannaPluginsSettingsBranch.tsx
+  - src/client/app/PluginPage.tsx
+  - src/client/app/PluginPage.test.tsx
   - src/client/app/PluginSidebarItems.tsx
   - src/client/app/PluginsFooterSection.tsx
   - src/client/app/PluginsFooterSlot.test.tsx

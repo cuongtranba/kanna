@@ -109,7 +109,8 @@ export function createHttpDispatcher(
 ): (req: Request, server: Server<SocketState>) => Promise<Response | undefined> {
   const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, inboxApproveProposal, distDir, bindHost, trustProxy } = deps
 
-  configurePluginService(createInstalledPluginStore(appSettings))
+  const pluginService = configurePluginService(createInstalledPluginStore(appSettings))
+  if (appSettings.getSnapshot().plugins.enabled) void pluginService.startEnabled()
 
   const guardOrigin = createRequestOriginGuard({ hasPassword: auth !== null, trustProxy, bindHost })
 

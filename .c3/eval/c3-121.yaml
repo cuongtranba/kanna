@@ -4,6 +4,7 @@ code:
   - src/client/plugins/**/*.ts
   - src/client/plugins/**/*.tsx
   - src/client/stores/pluginContributionsStore.ts
+  - src/client/app/PluginPage.tsx
   - src/client/app/PluginSidebarItems.tsx
   - src/client/app/PluginsFooterSection.tsx
   - src/client/app/PluginsFooterSlot.tsx
