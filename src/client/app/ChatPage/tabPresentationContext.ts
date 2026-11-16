@@ -3,6 +3,8 @@ import type { ProjectTerminalLayout } from "../../stores/terminalLayoutStore"
 import type { BoardSummary, BoardViewSnapshot } from "../../../shared/boards/types"
 import type { SidebarData } from "../../../shared/types"
 import { allChatRows } from "../../../shared/sidebar-data"
+import { pluginPagePath } from "../../lib/paneTree"
+import type { PluginSidebarItem } from "../../plugins/contributionRegistry"
 
 
 export interface TabPresentationSources {
@@ -10,6 +12,7 @@ export interface TabPresentationSources {
   sidebarData: SidebarData
   boardsByOwner: Record<string, readonly BoardSummary[]>
   boardViews?: Record<string, BoardViewSnapshot | null>
+  pluginSidebarItems?: readonly PluginSidebarItem[]
 }
 
 export function buildTabPresentationContext(
@@ -38,5 +41,8 @@ export function buildTabPresentationContext(
         boards.map((board) => [board.id, board.title] as const),
       ),
     ]),
+    pluginPageTitles: Object.fromEntries(
+      (sources.pluginSidebarItems ?? []).map((item) => [pluginPagePath(item.pluginId, item.surface), item.title] as const),
+    ),
   }
 }

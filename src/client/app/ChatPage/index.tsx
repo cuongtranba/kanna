@@ -33,6 +33,7 @@ import type { TabPresentationContext } from "../../components/panes/tabPresentat
 import { buildTabPresentationContext } from "./tabPresentationContext"
 import { buildBoardChatFacts } from "../../lib/boards/boardChatFacts"
 import { useBoardsStore } from "../../stores/boardsStore"
+import { selectPluginSidebarItems, usePluginContributionsStore } from "../../stores/pluginContributionsStore"
 import { ChatTabRoot } from "./ChatTabRoot"
 import { useRouteTabSync } from "./useRouteTabSync"
 import { PageTabContent } from "../../components/panes/PageTabContent"
@@ -97,6 +98,7 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   const terminalProjects = useTerminalLayoutStore((store) => store.projects)
   const boardsByOwner = useBoardsStore((store) => store.boardsByOwner)
   const boardViews = useBoardsStore((store) => store.viewByBoard)
+  const pluginSidebarItems = usePluginContributionsStore(selectPluginSidebarItems)
   const { terminalLayout, showRightSidebar } = useProjectPanelVisibility(projectId)
   const globalRightSidebarSize = useRightSidebarStore((store) => store.size)
   const addTerminal = useTerminalLayoutStore((store) => store.addTerminal)
@@ -218,8 +220,8 @@ export function WorkspacePage({ ports = {} }: { ports?: ChatPagePorts } = {}) {
   )
 
   const presentation = useMemo<TabPresentationContext>(
-    () => buildTabPresentationContext({ terminalProjects, sidebarData, boardsByOwner, boardViews }),
-    [terminalProjects, sidebarData, boardsByOwner, boardViews],
+    () => buildTabPresentationContext({ terminalProjects, sidebarData, boardsByOwner, boardViews, pluginSidebarItems }),
+    [terminalProjects, sidebarData, boardsByOwner, boardViews, pluginSidebarItems],
   )
 
   const boardChatFacts = useMemo(() => buildBoardChatFacts(sidebarData), [sidebarData])

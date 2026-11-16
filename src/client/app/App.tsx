@@ -51,7 +51,7 @@ import { fetchAuthStatus, postAuthLogin, type AuthStatusResponse } from "../api/
 import { runDetached } from "../lib/runDetached"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/pendingActionsStore"
 import { createChatKey, openProjectKey } from "../components/chat-ui/sidebar/sidebarPendingActions"
-import { chatPath, CHAT_ROUTE_PATTERN } from "../lib/paneTree"
+import { chatPath, CHAT_ROUTE_PATTERN, PLUGIN_PAGE_ROUTE_PATTERN } from "../lib/paneTree"
 
 const drawerVisual = createDrawerVisual()
 
@@ -72,6 +72,7 @@ const WORKSPACE_PATHS = [
   "/boards/:projectId/:boardId",
   "/boards/stack/:stackId",
   "/boards/stack/:stackId/:boardId",
+  PLUGIN_PAGE_ROUTE_PATTERN,
 ] as const
 const WorkspacePage = lazy(() => import("./ChatPage").then((module) => ({ default: module.WorkspacePage })))
 

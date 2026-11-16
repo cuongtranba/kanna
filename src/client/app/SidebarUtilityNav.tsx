@@ -7,6 +7,7 @@ import { formatUnreadBadge } from "../lib/inboxPresentation"
 import { selectInboxUnreadCount, useInboxStore } from "../stores/inboxStore"
 import { PluginSidebarItems } from "./PluginSidebarItems"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"
+import { pluginPagePath } from "../lib/paneTree"
 import type { SocketStatus } from "./socket"
 
 const WORKFLOWS_PREFIX = "/workflows"
@@ -14,8 +15,15 @@ const INBOX_PREFIX = "/inbox"
 const CRON_PREFIX = "/cron"
 const WEBHOOKS_PREFIX = "/webhooks"
 const SETTINGS_PREFIX = "/settings"
+const PLUGINS_PREFIX = "/plugins/"
 
-const UTILITY_PREFIXES = [WORKFLOWS_PREFIX, INBOX_PREFIX, CRON_PREFIX, WEBHOOKS_PREFIX, SETTINGS_PREFIX]
+const UTILITY_PREFIXES = [WORKFLOWS_PREFIX, INBOX_PREFIX, CRON_PREFIX, WEBHOOKS_PREFIX, SETTINGS_PREFIX, PLUGINS_PREFIX]
+
+function selectedPluginKey(pathname: string, items: readonly PluginSidebarItem[]): string | null {
+  if (!pathname.startsWith(PLUGINS_PREFIX)) return null
+  const match = items.find((item) => pluginPagePath(item.pluginId, item.surface) === pathname)
+  return match ? `${match.pluginId}:${match.id}` : null
+}
 
 export function isUtilityRoute(pathname: string): boolean {
   return pathname === "/" || UTILITY_PREFIXES.some((prefix) => pathname.startsWith(prefix))
@@ -61,7 +69,6 @@ export interface SidebarUtilityNavProps {
   readonly onClose: () => void
   readonly connectionStatus: SocketStatus
   readonly pluginItems: readonly PluginSidebarItem[]
-  readonly onSelectPluginItem?: (item: PluginSidebarItem) => void
 }
 
 export function SidebarUtilityNav({
@@ -69,7 +76,6 @@ export function SidebarUtilityNav({
   onClose,
   connectionStatus,
   pluginItems,
-  onSelectPluginItem,
 }: SidebarUtilityNavProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -116,7 +122,11 @@ export function SidebarUtilityNav({
       <UtilityButton icon={CalendarClock} label="Cron jobs" active={pathname.startsWith(CRON_PREFIX)} onClick={go(CRON_PREFIX)} />
       <UtilityButton icon={Webhook} label="Webhooks" active={pathname.startsWith(WEBHOOKS_PREFIX)} onClick={go(WEBHOOKS_PREFIX)} />
       <UtilityButton icon={Settings} label="Settings" active={pathname.startsWith(SETTINGS_PREFIX)} onClick={go(`${SETTINGS_PREFIX}/general`)} />
-      <PluginSidebarItems items={pluginItems} onSelect={onSelectPluginItem} />
+      <PluginSidebarItems
+        items={pluginItems}
+        selectedKey={selectedPluginKey(pathname, pluginItems)}
+        onSelect={(item) => go(pluginPagePath(item.pluginId, item.surface))()}
+      />
       <div className="flex items-center gap-2 px-3 pb-2.5 pt-0.5">
         <span
           className={cn("h-1.5 w-1.5 rounded-full shrink-0", indicator.dotClass)}

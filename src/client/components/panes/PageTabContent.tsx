@@ -10,6 +10,7 @@ const WorkflowsPage = lazy(() => import("../../app/WorkflowsPage").then((module)
 const WebhooksPage = lazy(() => import("../../app/WebhooksPage").then((module) => ({ default: module.WebhooksPage })))
 const InboxPage = lazy(() => import("../../app/InboxPage").then((module) => ({ default: module.InboxPage })))
 const CronJobsPage = lazy(() => import("../../app/CronJobsPage").then((module) => ({ default: module.CronJobsPage })))
+const PluginPage = lazy(() => import("../../app/PluginPage").then((module) => ({ default: module.PluginPage })))
 
 function PageTabFallback() {
   return (
@@ -40,6 +41,8 @@ function PageBody({ target }: { target: PageTabTarget }) {
       ) : (
         <BoardsRoutePage projectId={params.projectId ?? ""} />
       )
+    case "plugin":
+      return <PluginPage pluginId={params.pluginId ?? ""} surfaceId={params.surfaceId ?? ""} />
   }
 }
 
