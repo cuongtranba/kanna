@@ -8,9 +8,9 @@ import type { PluginSidebarItem } from "../plugins/contributionRegistry"
 
 const NO_ITEMS: readonly PluginSidebarItem[] = []
 
-function render(items: readonly PluginSidebarItem[] = NO_ITEMS, activeChatId: string | null = "chat-1") {
+function render(items: readonly PluginSidebarItem[] = NO_ITEMS, activeChatId: string | null = "chat-1", path = "/") {
   return renderToStaticMarkup(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <SidebarUtilityNav
         activeChatId={activeChatId}
         onClose={() => {}}
@@ -63,11 +63,22 @@ describe("SidebarUtilityNav", () => {
     expect(html).toContain("Hello")
     expect(html).toContain("Workflows")
   })
+
+  test("a plugin's sidebar item opens its page and is marked while that page is open", () => {
+    const items: readonly PluginSidebarItem[] = [
+      { pluginId: "hello", id: "main", title: "Hello", icon: "LayoutDashboard", surface: "main" },
+    ]
+    const idle = render(items)
+    expect(idle).not.toMatch(/data-testid="plugin-sidebar-item:hello:main"[^>]*disabled/)
+    expect(idle).not.toMatch(/plugin-sidebar-item:hello:main"[^>]*bg-muted font-medium/)
+    const open = render(items, "chat-1", "/plugins/hello/main")
+    expect(open).toMatch(/plugin-sidebar-item:hello:main"[^>]*bg-muted font-medium/)
+  })
 })
 
 describe("isUtilityRoute", () => {
   test("covers the home page and every utility section", () => {
-    for (const path of ["/", "/settings/general", "/workflows/chat-1", "/cron", "/webhooks", "/inbox/thread-1"]) {
+    for (const path of ["/", "/settings/general", "/workflows/chat-1", "/cron", "/webhooks", "/inbox/thread-1", "/plugins/hello/main"]) {
       expect(isUtilityRoute(path)).toBe(true)
     }
   })
