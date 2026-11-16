@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.110.0](https://github.com/cuongtranba/kanna/compare/v1.109.0...v1.110.0) (2026-11-16)
+
+
+### Features
+
+* **plugins:** plugin pages, useKannaWorkspace and boot start; cron fires on its armed model; Remote MCP public URL warning ([#1495](https://github.com/cuongtranba/kanna/issues/1495)) ([9462f60](https://github.com/cuongtranba/kanna/commit/9462f60fb11e7afe741dabd2efc508d993538973))
+
 ## [1.109.0](https://github.com/cuongtranba/kanna/compare/v1.108.2...v1.109.0) (2026-11-14)
 
 
