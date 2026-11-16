@@ -78,3 +78,23 @@ func isMissing(err error) bool {
 		errors.Is(err, windows.ERROR_BAD_NETPATH) ||
 		isNotDir(err)
 }
+
+// bareServerRoot reports whether root is a UNC server with no share
+// (\\server, any mix of separators, trailing separators ignored) and returns
+// it as \\server. The \\?\ and \\.\ device namespaces are not servers, and
+// \\.. would normalize to a root holding every UNC path.
+func bareServerRoot(root string) (string, bool) {
+	trimmed := strings.TrimRight(root, `\/`)
+	if len(trimmed) < 3 || !isSeparator(trimmed[0]) || !isSeparator(trimmed[1]) {
+		return "", false
+	}
+	host := trimmed[2:]
+	if strings.ContainsAny(host, `\/`) || host == "?" || host == "." || host == ".." {
+		return "", false
+	}
+	return `\\` + host, true
+}
+
+func isSeparator(c byte) bool {
+	return c == '\\' || c == '/'
+}

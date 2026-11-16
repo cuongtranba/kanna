@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -143,6 +144,45 @@ func TestARootThatDoesNotExistIsDroppedSilently(t *testing.T) {
 	fs := fsops.New(func() []string { return []string{filepath.Join(s.base, "gone"), s.root} })
 	if _, err := fs.Stat(filepath.Join(s.root, "a.txt")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func adminSharePath(t *testing.T, path string) string {
+	t.Helper()
+	if runtime.GOOS != "windows" {
+		t.Skip("UNC server roots exist only on Windows")
+	}
+	volume := filepath.VolumeName(path)
+	shared := `\\localhost\` + volume[:1] + "$" + path[len(volume):]
+	if _, err := os.Stat(filepath.Dir(shared)); err != nil {
+		t.Skipf("administrative share is not reachable: %v", err)
+	}
+	return shared
+}
+
+func TestABareServerRootGrantsReadsOnEveryShareOfThatServer(t *testing.T) {
+	s := newSandbox(t)
+	write(t, filepath.Join(s.root, "a.txt"), []byte("12345"))
+	shared := adminSharePath(t, filepath.Join(s.root, "a.txt"))
+	fs := fsops.New(func() []string { return []string{`\\localhost`} })
+	file, err := fs.Stat(shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Size != 5 {
+		t.Fatalf("Stat size = %d, want 5", file.Size)
+	}
+}
+
+func TestABareServerRootGrantsWritesOnEveryShareOfThatServer(t *testing.T) {
+	s := newSandbox(t)
+	shared := adminSharePath(t, filepath.Join(s.root, "new.txt"))
+	got, err := fsops.ResolveForWrite(shared, []string{`\\localhost`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.EqualFold(got, shared) {
+		t.Fatalf("ResolveForWrite = %q, want %q", got, shared)
 	}
 }
 
