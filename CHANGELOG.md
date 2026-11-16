@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.110.1](https://github.com/cuongtranba/kanna/compare/v1.110.0...v1.110.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **agent:** track detached Claude session runs so a failed write never escapes as an unhandled rejection ([#1497](https://github.com/cuongtranba/kanna/issues/1497)) ([c511f75](https://github.com/cuongtranba/kanna/commit/c511f75a96cd6ebfdd031e3f7ad078ecdd760d82))
+
 ## [1.110.0](https://github.com/cuongtranba/kanna/compare/v1.109.0...v1.110.0) (2026-11-16)
 
 
