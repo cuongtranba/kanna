@@ -78,6 +78,13 @@ may be a non-resolvable resource URL like `https://claude.ai/v1/design/mcp` —
 re-discovery there returns SPA HTML and was the cause of "token refresh failed"
 forcing an 8 h re-auth; see adr-20260630-mcp-oauth-refresh-metadata). Entries
 authenticated before this fix lack persisted metadata and must re-auth once.
+Only a refusal from the AS (an `OAuthError` such as `invalid_grant`, excluding
+`server_error` and `temporarily_unavailable`) marks the entry `error`. A refresh
+that never reached the AS (DNS, connection, timeout) or hit a 5xx throws without
+persisting, so the entry stays `authenticated` and the next chat spawn retries it.
+Before this, one DNS blip at spawn flipped every OAuth server to `error`, and
+`claude-session-config-helpers.ts` skips non-`authenticated` entries, so they
+stayed dead until a manual re-auth.
 
 **Kanna asks for `offline_access` whenever the AS advertises it.** The requested
 scope is the protected-resource metadata's `scopes_supported` plus
