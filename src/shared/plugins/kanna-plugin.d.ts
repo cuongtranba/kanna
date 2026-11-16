@@ -12,6 +12,55 @@ declare module "@kanna/plugin" {
     readonly theme: PluginTheme
   }
 
+  export type WorkspaceChatStatus = "idle" | "starting" | "running" | "waiting_for_user" | "failed"
+
+  export interface WorkspaceChat {
+    readonly chatId: string
+    readonly title: string
+    readonly status: WorkspaceChatStatus
+    readonly unread: boolean
+    readonly lastMessageAt: number | null
+  }
+
+  export interface WorkspaceCronRun {
+    readonly status: "running" | "completed" | "failed" | "skipped"
+    readonly firedAt: number
+  }
+
+  export interface WorkspaceCronJob {
+    readonly jobId: string
+    readonly chatId: string
+    readonly instruction: string
+    readonly mode: "inline" | "spawn"
+    readonly schedule: string
+    readonly scheduleHuman: string
+    readonly paused: boolean
+    readonly model: string | null
+    readonly nextFireAt: number | null
+    readonly lastRun: WorkspaceCronRun | null
+  }
+
+  export interface WorkspaceProject {
+    readonly localPath: string
+    readonly name: string
+    readonly chats: readonly WorkspaceChat[]
+    readonly cronJobs: readonly WorkspaceCronJob[]
+  }
+
+  export interface StartChatOptions {
+    readonly prompt?: string
+  }
+
+  export interface Workspace {
+    readonly projects: readonly WorkspaceProject[]
+    readonly ready: boolean
+    readonly starting: boolean
+    openChat(chatId: string): void
+    startChat(localPath: string, options?: StartChatOptions): void
+  }
+
+  export function useKannaWorkspace(): Workspace
+
   export type PluginSurfaceComponent = ComponentType<PluginSurfaceProps>
 
   export interface PluginSidebarItemInput {
