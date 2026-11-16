@@ -24,3 +24,7 @@ func isNotDir(err error) bool {
 func isMissing(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || isNotDir(err)
 }
+
+func bareServerRoot(string) (string, bool) {
+	return "", false
+}

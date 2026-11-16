@@ -34,11 +34,13 @@ export type BeaconEvalContext = {
 type NormalizedPath = {
   absolute: boolean
   drive: string | null
+  unc: boolean
   segments: readonly string[]
 }
 
 const WINDOWS_DRIVE = /^[A-Za-z]:$/
 const SEPARATORS = /[\\/]/
+const UNC_PREFIX = /^[\\/]{2}[^\\/]/
 
 function normalizePath(path: string): NormalizedPath {
   const parts = path.split(SEPARATORS)
@@ -61,7 +63,7 @@ function normalizePath(path: string): NormalizedPath {
       segments.push(part)
     }
   }
-  return { absolute, drive, segments }
+  return { absolute, drive, unc: UNC_PREFIX.test(path), segments }
 }
 
 function isInsideRoot(target: NormalizedPath, root: NormalizedPath): boolean {
@@ -69,7 +71,10 @@ function isInsideRoot(target: NormalizedPath, root: NormalizedPath): boolean {
   if (target.absolute !== root.absolute) return false
   if (target.drive !== root.drive) return false
   if (root.segments.length > target.segments.length) return false
-  return root.segments.every((segment, index) => segment === target.segments[index])
+  return root.segments.every((segment, index) => {
+    const candidate = target.segments[index]
+    return root.unc && index === 0 ? segment.toLowerCase() === candidate?.toLowerCase() : segment === candidate
+  })
 }
 
 export const MAX_READ_ROOTS = 64

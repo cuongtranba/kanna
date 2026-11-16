@@ -111,11 +111,16 @@ func New(roots func() []string) *FS {
 	return &FS{roots: roots}
 }
 
+// realRoots resolves each root to its real path and silently drops the ones
+// that cannot be resolved, except a bare UNC server root (\\server): it cannot
+// be opened, yet it grants every share on that server.
 func realRoots(roots []string) []string {
 	resolved := make([]string, 0, len(roots))
 	for _, root := range roots {
 		if real, err := realpath(root); err == nil {
 			resolved = append(resolved, real)
+		} else if server, ok := bareServerRoot(root); ok {
+			resolved = append(resolved, server)
 		}
 	}
 	return resolved
