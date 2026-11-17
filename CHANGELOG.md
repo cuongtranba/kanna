@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.110.3](https://github.com/cuongtranba/kanna/compare/v1.110.2...v1.110.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* list recent peer chats first and retry a deleted Claude resume on a fresh session ([#1505](https://github.com/cuongtranba/kanna/issues/1505)) ([f9ae72f](https://github.com/cuongtranba/kanna/commit/f9ae72febb4ee1c7848341bad89c6adff3936134))
+
 ## [1.110.2](https://github.com/cuongtranba/kanna/compare/v1.110.1...v1.110.2) (2026-11-16)
 
 
