@@ -169,7 +169,9 @@ async function buildTarget(args: TargetBuildArgs): Promise<TargetBuildResult> {
 
 function describeThrownBuildError(error: Error): string[] {
   if (error instanceof AggregateError && error.errors.length > 0) {
-    return error.errors.map((sub) => errorMessage(sub))
+    return error.errors.map((sub) =>
+      sub instanceof BuildMessage || sub instanceof ResolveMessage ? sub.message : errorMessage(sub),
+    )
   }
   return [errorMessage(error)]
 }
