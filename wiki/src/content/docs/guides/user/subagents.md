@@ -44,7 +44,7 @@ the work, they do not sub-delegate.
 The main agent picks how to run a subagent through `delegate_subagent`:
 
 - **Blocking (default):** `delegate_subagent({ subagent_id, prompt })` runs one turn and blocks until the subagent's final reply comes back, which the main agent then synthesizes into its own turn.
-- **Keep-alive (multi-turn):** `delegate_subagent({ ..., keep_alive: true })` leaves the subagent's session warm after the first reply. The reply includes a `run_id`. The main agent drives further turns into the **same** warm session with `send_subagent_message({ run_id, prompt })`, and tears it down with `close_subagent({ run_id })`. No re-spawn, no re-trust, warm cache. Claude only (Codex rejects `keep_alive`).
+- **Keep-alive (multi-turn):** `delegate_subagent({ ..., keep_alive: true })` leaves the subagent's session warm after the first reply. The reply includes a `run_id`. The main agent drives further turns into the **same** warm session with `send_subagent_message({ run_id, prompt })`, and tears it down with `close_subagent({ run_id })`. No re-spawn, no re-trust, warm cache. Claude only (Codex and Antigravity reject `keep_alive`).
 - **Background:** `delegate_subagent({ ..., run_in_background: true })` launches without blocking the main turn — it returns immediately with `{ status: "async_launched", run_id }`, and the subagent's final reply is delivered back into the chat as a fresh turn when it finishes. Works for any provider. Mutually exclusive with `keep_alive`.
 
 ## Bounds
@@ -57,4 +57,4 @@ Overlapping `send_subagent_message` calls to one keep-alive session run one afte
 
 Subagents share their chat's task list: a subagent's `task_*` calls (`task_note`, `task_settle` and the rest) land on the parent chat's Progress list.
 
-Claude subagents can also message other chats and receive replies while they run; Codex subagents cannot. See [Messaging between chats](/guides/user/peer-messaging/#subagents).
+Claude subagents can also message other chats and receive replies while they run; Codex and Antigravity subagents cannot. See [Messaging between chats](/guides/user/peer-messaging/#subagents).

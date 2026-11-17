@@ -1,6 +1,6 @@
 ---
 name: kanna-providers
-description: Model and provider catalog in Kanna — customModels and mergeCustomModels, the 1M context-window option, custom Anthropic-compatible endpoints (the custom provider, resolveSdkEndpoint, endpointSpawnFingerprint, model alias env vars, contextWindow), and Codex failure classification (codexErrorInfo, willRetry). Use whenever a task touches PROVIDERS, provider-catalog, Settings → Models or Providers, sdk-endpoint, a wrong or downgraded model or context window, an Ollama/GLM/Qwen endpoint, or a Codex turn that failed or offered Retry.
+description: Model and provider catalog in Kanna — customModels and mergeCustomModels, the 1M context-window option, custom Anthropic-compatible endpoints (the custom provider, resolveSdkEndpoint, endpointSpawnFingerprint, model alias env vars, contextWindow), Codex failure classification (codexErrorInfo, willRetry), and the Antigravity provider (agy over ACP, AntigravityAcpManager, the agent-tools bridge). Use whenever a task touches PROVIDERS, provider-catalog, Settings → Models or Providers, sdk-endpoint, a wrong or downgraded model or context window, an Ollama/GLM/Qwen endpoint, a Codex turn that failed or offered Retry, or an agy or Antigravity chat that fails to start, resume or reach Kanna's peer tools.
 ---
 
 # Kanna providers and models
@@ -204,3 +204,67 @@ Not wired: `quota` (`usageLimitExceeded`) does not arm auto-continue —
 error (`claude-turn-runner.ts` catch branch); a `turn/completed` failure never
 reaches it, which is why c3-227's documented precondition ("a Claude or Codex
 turn emits a result event with subtype: error") is still only half true.
+
+## Antigravity (`agy` over ACP)
+
+The fifth provider runs Google's `agy` CLI (v1.5.9+) as an Agent Client Protocol
+server on stdio. c3 component `c3-250`, ADR `adr-20261117-antigravity-acp-provider`
+(why ACP, why auto-approve, why an HTTP MCP bridge). User docs:
+`wiki/src/content/docs/features/providers-models.mdx`.
+
+**Where it lives**
+
+- `src/server/antigravity-acp.ts` `AntigravityAcpManager`: one `agy` child per
+  chat (scope `main`) or subagent run (scope `sub:<runId>`), the counterpart of
+  `CodexAppServerManager`. `antigravity-acp-protocol.ts` decodes ACP envelopes,
+  `antigravity-acp-translator.ts` maps `session/update` onto transcript entries.
+- `src/server/antigravity-spawn.adapter.ts` is the only spawn site:
+  `agy acp --dangerously-skip-permissions`. `src/server/stdio-process.ts` is the
+  `StdioProcess` port Codex and Antigravity share, and
+  `src/server/test-helpers/fake-acp-process.ts` is the fake the tests drive.
+- Wiring: `claude-turn-starter.ts` (turn start), `claude-send-command.ts`
+  (`/compact` passthrough via `providerCompactsNatively`), `subagent-provider-run.ts`
+  (`runAntigravitySubagent`), `peer-messaging/create-peer-messaging.ts`
+  (constructs the manager and the bridge). Catalog and defaults live in
+  `src/shared/provider-model-types.ts` and `src/shared/settings/provider-defaults.ts`.
+
+**ACP facts that are easy to get wrong**
+
+- Developer instructions go in `session/new` as `_meta.antigravity.systemPrompt.append`
+  and persist across resume; `session/resume` falls back to `session/new` when agy
+  no longer has the session (`isRecoverableResumeError`).
+- Model and thinking level are `session/set_config_option`; plan mode is
+  `session/set_mode`. The plan document is the `write_file` artifact whose
+  `ArtifactMetadata.RequestFeedback` is true, proposed through `ExitPlanMode`.
+- Cancel is `session/cancel`. `/compact` is passed through (agy compacts natively).
+- No fork (a fork starts a new session), no steering (peer and queued messages wait
+  for the turn to end, `mid-turn-delivery.ts` returns false), no custom models,
+  no fast mode, no context-window picker, no `keep_alive` subagents.
+- Approvals are auto-granted by the spawn flag, parity with Codex `approvalPolicy: "never"`.
+  Do not add a permission card without revisiting the ADR.
+- `ask_question` arrives as plain text; `list_dir`, `grep_search` and `find_by_name`
+  render as generic tool entries.
+- Effort is `low | medium | high`, default `medium`; default model `gemini-4-carbon`.
+
+**Peer tools bridge** (`src/server/agent-tools-bridge.ts`). Codex gets
+`list_peer_chats`, `send_chat_message` and `wait_for_chat_message` as in-process
+`dynamicTools`; ACP has no such channel, so agy gets them as an HTTP MCP server at
+`AGENT_TOOLS_MCP_PATH` (`/agent-tools/mcp`), mounted in `http-dispatcher.ts` after
+remote MCP. Invariants a change must keep:
+
+- A random 32 byte bearer per main session maps to its chat id; the manager passes
+  it in `mcpServers` headers on `session/new` and `session/resume`, and revokes it
+  on `stopSession` and on failure. Subagent scopes get no grant.
+- Only direct loopback POSTs: no `Origin`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP`
+  or `CF-Connecting-IP` header. Otherwise 403; non-POST 405; missing, unknown or
+  revoked bearer 401; the OAuth discovery path 404 (agy must not start an OAuth flow).
+- `server.timeout(req, 0)` per request so `wait_for_chat_message` can hold it open.
+- agy reports no result for MCP calls, so the bridge outcome is recorded as the
+  `tool_result` of the agy tool call, also when the HTTP call lands before the ACP
+  `tool_call`.
+
+**Run it locally.** Install `agy` and log in (`agy` once, or `agy acp --login`), start
+`bun run dev`, pick Antigravity in the composer. Unit tests need no agy; they drive the
+fake ACP process: `bun run test src/server/antigravity-acp.test.ts
+src/server/agent-tools-bridge.test.ts`. Debug a stuck chat with `kanna-debug`; the
+stored session token is the agy session id.

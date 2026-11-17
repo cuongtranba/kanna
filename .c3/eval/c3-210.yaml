@@ -44,6 +44,7 @@ code:
   - src/server/claude-live-block.ts
   - src/server/claude-live-publisher.ts
   - src/server/agent-coordinator.ts
+  - src/server/turn-end-guards.ts
   - src/server/detached-work.ts
   - src/server/agent-coordinator-types.ts
   - src/server/agent-app-settings-view.ts

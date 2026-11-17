@@ -54,7 +54,7 @@ path means `HOME` is not pointing at the mount.
 
 ## The agent runs inside the container
 
-Kanna spawns the `claude` / `codex` CLIs as subprocesses, and they inherit the
+Kanna spawns the `claude` / `codex` / `agy` CLIs as subprocesses, and they inherit the
 container's filesystem and `HOME`. So a containerised install needs those CLIs
 present in the image, and the repositories you want to work on mounted in. It is
 the same trade-off as any dev-container setup — the agent can only see what the

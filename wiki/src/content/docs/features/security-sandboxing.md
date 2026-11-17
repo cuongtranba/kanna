@@ -115,7 +115,7 @@ Back that file up as a secret, or exclude it from backups entirely.
 
 ## What Kanna does NOT do
 
-- **No code upload.** The agent runs locally as a `claude` / `codex` subprocess.
+- **No code upload.** The agent runs locally as a `claude` / `codex` / `agy` subprocess.
   Only the prompts and tool output you send reach a model.
 - **No remote control surface** beyond a Cloudflare tunnel you approve per
   `expose_port` call, `--share` / `--cloudflared` that you pass yourself, or a

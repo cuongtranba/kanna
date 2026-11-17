@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: fe576860dc7987f6c6416b1fcaf9bf83544661ed8313bae3920c5bb3553fb6eb
+c3-seal: 206dedd397c131503d327e0d4d1d6344dc56938c0b7c27bb31354d23bcf529b1
 title: Server
 type: container
 boundary: service
@@ -76,3 +76,4 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-247 | inbox | feature | active | Turn every inbound message Kanna receives, from a webhook or an MCP source, into a conversation thread the user can read, have pre-handled by an agent in its own chat, and answer from one place, while every other bus event is kept as a browsable activity record. |
 | c3-248 | mcp-sources | feature | active | Let Kanna itself hold a long-lived connection to a user-configured MCP server and turn the messages that server exposes, by resource subscription or by polling a list tool, into inbox threads, so a conversation that happens on another service reaches the user and their agent without the model having to poll. |
 | c3-249 | peer-messaging | feature | active | Let an agent in one Kanna chat message an agent in another chat, in any project on this server, with the sender stamped by the server and the target protected by fixed guardrails. |
+| c3-250 | antigravity-acp | feature | active | Drive Google's agy CLI over the Agent Client Protocol on stdio: boot, run turns, translate ACP session updates into coordinator-friendly transcript entries, and expose Kanna's peer tools to agy through a token-gated loopback MCP endpoint. |

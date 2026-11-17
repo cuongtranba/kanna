@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:cea60030a11201dc3a6f5e904c7a95f6e0f3aff2e2613f86ab8f4e7747617da5 -->
+<!-- hash: sha256:541917236dce5b1444159532d5299a60dc4f9f0b0f060772f0f854a26e5e8045 -->
 
 ## c3-0 — Kanna (system)
 
@@ -122,7 +122,7 @@ files: src/server/cli-bootstrap.adapter.ts, src/server/cli-runtime.test.ts, src/
 ## c3-202 — http-ws-server (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-ws-subscription
-files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/env-int.test.ts, src/server/env-int.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-route-inventory.test.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/json-settings-file.adapter.ts, src/server/lifetime.test.ts, src/server/lifetime.ts, src/server/request-origin-guard.test.ts, src/server/request-origin-guard.ts, src/server/router-housekeeping.ts, src/server/server-data-dir.test.ts, src/server/server-io.adapter.ts, src/server/server.ts
+files: src/server/analytics.ts, src/server/app-settings-io.adapter.ts, src/server/app-settings.ts, src/server/beacon-connection.test.ts, src/server/beacon-connection.ts, src/server/beacon-crypto.test.ts, src/server/beacon-crypto.ts, src/server/beacon-pairing-host.ts, src/server/beacon-pairing.test.ts, src/server/beacon-pairing.ts, src/server/beacon-registry.test.ts, src/server/beacon-registry.ts, src/server/beacon-services.test.ts, src/server/beacon-services.ts, src/server/beacon-settings.test.ts, src/server/beacon-settings.ts, src/server/beacon-transfer-files.adapter.ts, src/server/beacon-transfer-files.ts, src/server/beacon-transfer-http.adapter.ts, src/server/beacon-transfer-http.test.ts, src/server/beacon-transfer-tickets.ts, src/server/custom-providers-settings.ts, src/server/env-int.test.ts, src/server/env-int.ts, src/server/fs-stat.adapter.ts, src/server/http-api-routes.ts, src/server/http-dispatcher.ts, src/server/http-route-inventory.test.ts, src/server/http-static.ts, src/server/input-validation.ts, src/server/json-boundary.ts, src/server/json-settings-file.adapter.ts, src/server/lifetime.test.ts, src/server/lifetime.ts, src/server/request-origin-guard.test.ts, src/server/request-origin-guard.ts, src/server/router-housekeeping.ts, src/server/scheduled-work-rehydrate.ts, src/server/server-data-dir.test.ts, src/server/server-io.adapter.ts, src/server/server.ts
 
 ## c3-203 — auth (component)
 container: c3-2 | context: c3-0
@@ -157,13 +157,13 @@ files: src/server/chat-ops-diff.test.ts, src/server/chat-ops-diff.ts, src/server
 ## c3-209 — process-utils (component)
 container: c3-2 | context: c3-0
 refs: ref-strong-typing, rule-strong-typing
-files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts
+files: src/server/process-utils.adapter.ts, src/server/process-utils.test.ts, src/server/stdio-process.ts
 
 ## c3-210 — agent-coordinator (component)
 container: c3-2 | context: c3-0
 refs: ref-colocated-bun-test, ref-event-sourcing, ref-provider-adapter, ref-tool-hydration, rule-colocated-bun-test
 reverse deps: adr-20260617-subagent-id-or-name-resolution, adr-20260617-subagent-trigger-mode
-files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/chat-tool-events.test.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/detached-work.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-pausable-timeout.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-run-injection.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/parking-claude-session.ts, src/server/test-helpers/sdk-tool.ts, src/server/turn-spend.ts
+files: src/server/agent-app-settings-view.ts, src/server/agent-coordinator-types.ts, src/server/agent-coordinator.ts, src/server/agent-runtime-config.test.ts, src/server/agent-runtime-config.ts, src/server/agent.test.ts, src/server/background-task-output-io.adapter.ts, src/server/background-task-output-registry.ts, src/server/beacon-mention-prompt.test.ts, src/server/beacon-mention-prompt.ts, src/server/chat-teardown.test.ts, src/server/chat-teardown.ts, src/server/chat-tool-events.test.ts, src/server/claude-autocontinue-commands.ts, src/server/claude-cancel-handler.ts, src/server/claude-chat-management.ts, src/server/claude-context-commands.test.ts, src/server/claude-context-commands.ts, src/server/claude-harness-stream.ts, src/server/claude-inbox-guard.test.ts, src/server/claude-inbox-guard.ts, src/server/claude-live-block.ts, src/server/claude-live-publisher.ts, src/server/claude-loop-commands.ts, src/server/claude-message-normalizer.ts, src/server/claude-prompt-helpers.ts, src/server/claude-sdk-queue.ts, src/server/claude-send-command.test.ts, src/server/claude-send-command.ts, src/server/claude-session-config-helpers.ts, src/server/claude-session-error-handler.ts, src/server/claude-session-lifecycle.test.ts, src/server/claude-session-lifecycle.ts, src/server/claude-session-runner.test.ts, src/server/claude-session-runner.ts, src/server/claude-session-spawner.ts, src/server/claude-session-start.ts, src/server/claude-session-state-queries.test.ts, src/server/claude-session-state-queries.ts, src/server/claude-session-state.ts, src/server/claude-spawn-helpers.ts, src/server/claude-steer-log.ts, src/server/claude-subagent-tool-response.ts, src/server/claude-subagent-wiring.ts, src/server/claude-tool-respond.ts, src/server/claude-turn-failure.test.ts, src/server/claude-turn-failure.ts, src/server/claude-turn-outcome.ts, src/server/claude-turn-runner.ts, src/server/claude-turn-starter-types.ts, src/server/claude-turn-starter.ts, src/server/claude-usage-math.ts, src/server/compaction.test.ts, src/server/compaction.ts, src/server/context-usage-snapshot.ts, src/server/detached-work.ts, src/server/history-primer.test.ts, src/server/history-primer.ts, src/server/loop-integrate-io.adapter.ts, src/server/loop-prompt-parallel.ts, src/server/loop-template-io.adapter.ts, src/server/loop-template.ts, src/server/loop-verify-cache.ts, src/server/loop-verify-io.adapter.ts, src/server/loop-wake-prompt.ts, src/server/loop-wake-recovery.test.ts, src/server/loop-wake-recovery.ts, src/server/mention-parser.test.ts, src/server/mention-parser.ts, src/server/mermaid-guard.ts, src/server/mermaid-parse.adapter.ts, src/server/model-escalation.ts, src/server/pending-tool-slot.ts, src/server/proactive-compact.test.ts, src/server/proactive-compact.ts, src/server/project-mention-attach.test.ts, src/server/project-mention-attach.ts, src/server/project-process-env.ts, src/server/queued-message-recovery.ts, src/server/serial-lane.test.ts, src/server/serial-lane.ts, src/server/subagent-entry-cap.adapter.ts, src/server/subagent-entry-cap.test.ts, src/server/subagent-orchestrator.test.ts, src/server/subagent-orchestrator.ts, src/server/subagent-pausable-timeout.ts, src/server/subagent-provider-run.test.ts, src/server/subagent-provider-run.ts, src/server/subagent-run-injection.ts, src/server/subagent-transcript-io.adapter.ts, src/server/subagent-transcript-registry.ts, src/server/test-helpers/failing-claude-session.ts, src/server/test-helpers/parking-claude-session.ts, src/server/test-helpers/sdk-tool.ts, src/server/turn-end-guards.ts, src/server/turn-spend.ts
 
 ## c3-211 — codex-app-server (component)
 container: c3-2 | context: c3-0
@@ -355,6 +355,11 @@ container: c3-2 | context: c3-0
 refs: ref-side-effect-adapter, ref-strong-typing
 files: src/client/app/GeneralPeerRow.tsx, src/client/components/messages/OriginChip.tsx, src/server/kanna-mcp-peer.ts, src/server/peer-messaging/create-peer-messaging.ts, src/server/peer-messaging/mid-turn-delivery.test.ts, src/server/peer-messaging/mid-turn-delivery.ts, src/server/peer-messaging/peer-messenger.test.ts, src/server/peer-messaging/peer-messenger.ts, src/server/peer-messaging/peer-tools.test.ts, src/server/peer-messaging/peer-tools.ts, src/shared/command-origin.schema.test.ts, src/shared/peer-messaging/inbound.schema.ts, src/shared/peer-messaging/inbound.ts, src/shared/peer-messaging/limits.ts, src/shared/peer-messaging/render-prompt.test.ts, src/shared/peer-messaging/render-prompt.ts, src/shared/peer-messaging/tool-names.ts, src/shared/peer-messaging/tool-specs.schema.ts
 
+## c3-250 — antigravity-acp (component)
+container: c3-2 | context: c3-0
+refs: ref-provider-adapter, ref-side-effect-adapter, ref-strong-typing, rule-strong-typing
+files: src/server/agent-tools-bridge.test.ts, src/server/agent-tools-bridge.ts, src/server/antigravity-acp-protocol.ts, src/server/antigravity-acp-translator.ts, src/server/antigravity-acp.test.ts, src/server/antigravity-acp.ts, src/server/antigravity-spawn.adapter.ts
+
 ## c3-3 — Shared (container)
 context: c3-0
 
@@ -440,16 +445,16 @@ reverse deps: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3
 citers: c3-116, c3-117, c3-201, c3-202, c3-203, c3-204, c3-206, c3-214, c3-217, c3-218, c3-221, c3-222, c3-224, c3-226, c3-228, c3-231, c3-232, c3-234, c3-235, c3-243, c3-244, c3-305
 
 ## ref-provider-adapter — Provider Adapter (ref)
-reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
-citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248
+reverse deps: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248, c3-250
+citers: c3-113, c3-115, c3-210, c3-211, c3-212, c3-213, c3-229, c3-248, c3-250
 
 ## ref-side-effect-adapter — side-effect-adapter (ref)
-reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-312, c3-313
-citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-312, c3-313
+reverse deps: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-250, c3-312, c3-313
+citers: c3-228, c3-229, c3-230, c3-231, c3-232, c3-236, c3-237, c3-238, c3-240, c3-241, c3-242, c3-243, c3-244, c3-246, c3-247, c3-248, c3-249, c3-250, c3-312, c3-313
 
 ## ref-strong-typing — Strong Typing Policy (ref)
-reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
-citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+reverse deps: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-250, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
+citers: c3-101, c3-102, c3-103, c3-104, c3-114, c3-119, c3-121, c3-126, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-228, c3-229, c3-230, c3-232, c3-236, c3-238, c3-239, c3-242, c3-243, c3-246, c3-247, c3-248, c3-249, c3-250, c3-301, c3-302, c3-303, c3-304, c3-306, c3-307, c3-310, c3-312, c3-313
 
 ## ref-tool-hydration — Tool Call Hydration (ref)
 reverse deps: c3-113, c3-114, c3-210, c3-215, c3-226, c3-229, c3-303
@@ -472,8 +477,8 @@ reverse deps: c3-232
 citers: c3-232
 
 ## rule-strong-typing — strong-typing (rule)
-reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
-citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+reverse deps: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-250, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
+citers: c3-101, c3-102, c3-103, c3-114, c3-120, c3-122, c3-123, c3-124, c3-205, c3-207, c3-209, c3-211, c3-219, c3-223, c3-224, c3-226, c3-227, c3-229, c3-233, c3-242, c3-250, c3-301, c3-302, c3-303, c3-304, c3-306, c3-310, c3-311, c3-314, c3-315
 
 ## rule-zustand-store — zustand-store (rule)
 reverse deps: c3-102, c3-111, c3-115, c3-116, c3-118, c3-119, c3-120, c3-121, c3-122, c3-123, c3-124, c3-125, c3-126, c3-229
@@ -781,6 +786,7 @@ src/server/lifetime.ts → c3-202
 src/server/request-origin-guard.test.ts → c3-202
 src/server/request-origin-guard.ts → c3-202
 src/server/router-housekeeping.ts → c3-202
+src/server/scheduled-work-rehydrate.ts → c3-202
 src/server/server-data-dir.test.ts → c3-202
 src/server/server-io.adapter.ts → c3-202
 src/server/server.ts → c3-202
@@ -859,6 +865,7 @@ src/server/ws-router.test.ts → c3-208
 src/server/ws-router.ts → c3-208
 src/server/process-utils.adapter.ts → c3-209
 src/server/process-utils.test.ts → c3-209
+src/server/stdio-process.ts → c3-209
 src/server/agent-app-settings-view.ts → c3-210
 src/server/agent-coordinator-types.ts → c3-210
 src/server/agent-coordinator.ts → c3-210
@@ -953,6 +960,7 @@ src/server/subagent-transcript-registry.ts → c3-210
 src/server/test-helpers/failing-claude-session.ts → c3-210
 src/server/test-helpers/parking-claude-session.ts → c3-210
 src/server/test-helpers/sdk-tool.ts → c3-210
+src/server/turn-end-guards.ts → c3-210
 src/server/turn-spend.ts → c3-210
 src/server/async-queue.ts → c3-211
 src/server/codex-app-server-decode.ts → c3-211
@@ -1378,6 +1386,13 @@ src/shared/peer-messaging/render-prompt.test.ts → c3-249
 src/shared/peer-messaging/render-prompt.ts → c3-249
 src/shared/peer-messaging/tool-names.ts → c3-249
 src/shared/peer-messaging/tool-specs.schema.ts → c3-249
+src/server/agent-tools-bridge.test.ts → c3-250
+src/server/agent-tools-bridge.ts → c3-250
+src/server/antigravity-acp-protocol.ts → c3-250
+src/server/antigravity-acp-translator.ts → c3-250
+src/server/antigravity-acp.test.ts → c3-250
+src/server/antigravity-acp.ts → c3-250
+src/server/antigravity-spawn.adapter.ts → c3-250
 src/shared/analytics.ts → c3-301
 src/shared/app-settings-types.ts → c3-301
 src/shared/builtin-commands.ts → c3-301

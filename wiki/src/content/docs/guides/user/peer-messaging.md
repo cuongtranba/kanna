@@ -5,7 +5,7 @@ description: Let an agent in one chat message an agent in another chat, in any p
 
 Agents in different chats can talk to each other. A backend chat can tell a
 client chat that a schema changed, or ask a research chat for an answer, without
-you copying the text across. It works between Claude and Codex chats, in any
+you copying the text across. It works between Claude, Codex and Antigravity chats, in any
 project on the same Kanna server.
 
 ## How it works
@@ -24,7 +24,9 @@ Messages are **accepted automatically**. There is no approval card.
 - If it is **busy**, the message is handed to the running turn: the agent reads
   it at its next step, after the tool it is running finishes, and can change
   course straight away. A Claude chat that is writing its final answer reads it
-  as soon as that answer ends; a Codex chat reads it within the same turn.
+  as soon as that answer ends; a Codex chat reads it within the same turn. An
+  Antigravity chat cannot take a message mid-turn, so the message waits in its
+  queue and runs when the turn ends.
 - If the chat is waiting on you (a question or a permission prompt), or a turn
   has already taken five messages from other chats, the message waits in the
   queue and runs when the current turn ends.
@@ -50,7 +52,7 @@ A Claude [subagent](/guides/user/subagents/) can use these tools too. Its
 messages are labelled with the chat it runs in and its own run and name, and a
 reply that names its `run_id` goes straight into that subagent while it is still
 running. If the subagent has already finished, or runs as a keep-alive session,
-the reply goes to its chat instead. Codex subagents cannot message other chats.
+the reply goes to its chat instead. Codex and Antigravity subagents cannot message other chats.
 
 ## Notify when idle
 
@@ -81,14 +83,24 @@ is refused with a reason the agent can read.
 - One turn takes at most 5 messages from other chats while it runs; later ones wait for the turn to end.
 - A chat holds at most 20 queued messages from other chats.
 - Archived and deleted chats cannot be messaged, and a chat cannot message itself.
-- The main agent of a chat and its Claude subagents can send. Codex subagents
-  cannot, and neither can an [Inbox](/guides/user/inbox/) triage turn.
+- The main agent of a chat and its Claude subagents can send. Codex and
+  Antigravity subagents cannot, and neither can an [Inbox](/guides/user/inbox/) triage turn.
 
 ## Codex chats
 
 Codex receives the tools when its thread is created, so a Codex chat that
 started before you updated Kanna keeps working without them. Start a new Codex
 chat to use messaging from Codex. Claude chats get the tools when their session next starts, so a chat that is already open picks them up after it goes idle and restarts or after you /clear it.
+
+## Antigravity chats
+
+Antigravity chats get the three tools from a local MCP server that Kanna runs at
+`/agent-tools/mcp` on its own port. Each chat session gets its own random bearer
+token, and the server only answers requests that arrive directly on the loopback
+interface with that token. Requests that pass through a proxy or tunnel, or carry
+an `Origin` header, are refused. The token is revoked when the chat's session
+stops, so the tools stop working with it. Only the main agent gets them; an
+Antigravity subagent does not.
 
 ## Related
 
