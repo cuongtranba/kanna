@@ -15,6 +15,7 @@ interface Harness {
   appended: TranscriptEntry[]
   closedChatIds: string[]
   stoppedCodexChatIds: string[]
+  stoppedAntigravityChatIds: string[]
   stateChanges: string[]
   session: ClaudeSessionState | undefined
 }
@@ -31,6 +32,7 @@ function makeHarness(options?: {
   const appended: TranscriptEntry[] = []
   const closedChatIds: string[] = []
   const stoppedCodexChatIds: string[] = []
+  const stoppedAntigravityChatIds: string[] = []
   const stateChanges: string[] = []
 
   const session = options?.session
@@ -48,6 +50,7 @@ function makeHarness(options?: {
     appended,
     closedChatIds,
     stoppedCodexChatIds,
+    stoppedAntigravityChatIds,
     stateChanges,
     session,
     deps: {
@@ -64,6 +67,7 @@ function makeHarness(options?: {
       hasLiveWorkflow: () => options?.hasLiveWorkflow === true,
       closeClaudeSession: (chatId) => { closedChatIds.push(chatId) },
       stopCodexSession: (chatId) => { stoppedCodexChatIds.push(chatId) },
+      stopAntigravitySession: (chatId) => { stoppedAntigravityChatIds.push(chatId) },
       emitStateChange: (chatId) => { stateChanges.push(chatId) },
     },
   }
@@ -79,12 +83,13 @@ describe("clearChatContext", () => {
     expect(h.tokenWrites.every((w) => w.token === null)).toBe(true)
   })
 
-  test("stops the codex session — a live one is reused regardless of token", async () => {
+  test("stops the codex and antigravity sessions — a live one is reused regardless of token", async () => {
     const h = makeHarness()
 
     await clearChatContext(h.deps, "chat-1")
 
     expect(h.stoppedCodexChatIds).toEqual(["chat-1"])
+    expect(h.stoppedAntigravityChatIds).toEqual(["chat-1"])
   })
 
   test("suppresses session-token persist on a live claude session", async () => {

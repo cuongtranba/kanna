@@ -7,6 +7,8 @@ import { RunInjection, type UndeliveredPeerMessage } from "./subagent-run-inject
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
 import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { StartCodexTurnArgs } from "./codex-app-server"
+import { AntigravityAcpManager } from "./antigravity-acp"
+import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
 
 
 function makeSubagent(over: Partial<Subagent> = {}): Subagent {
@@ -89,6 +91,7 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
       },
       stopSession: () => {},
     } as unknown as BuildSubagentProviderRunArgs["codexManager"],
+    antigravityManager: new AntigravityAcpManager(),
     onToolRequest: noopOnToolRequest,
     authReady: async () => true,
     pickOauthToken: () => null,
@@ -906,5 +909,30 @@ describe("peer messages pushed into a running subagent run", () => {
     r.emit(makeResultEvent())
     const started = await r.result
     expect(started.text).toBe("working")
+  })
+})
+
+describe("buildSubagentProviderRun – Antigravity", () => {
+  test("runs the subagent in a sub:runId session with its model and effort, then stops that session", async () => {
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => {
+      if (agent.answerSetup(request)) return
+      if (request.method === "session/prompt" && request.id !== null) {
+        agent.update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "antigravity reply" } })
+        agent.respond(request.id, { stopReason: "end_turn", usage: { inputTokens: 10, outputTokens: 5 } })
+      }
+    })
+    const manager = new AntigravityAcpManager({ spawnProcess: () => agent })
+    const run = buildSubagentProviderRun(makeArgs({
+      subagent: makeSubagent({ provider: "antigravity", model: "gemini-3.8-flash", modelOptions: { reasoningEffort: "low" } }),
+      runId: "run-xyz",
+      antigravityManager: manager,
+    }))
+
+    const result = await run.start(() => {}, () => {})
+
+    expect(result.text).toBe("antigravity reply")
+    expect(agent.setConfigCalls()).toEqual(["model=gemini-3.8-flash", "thought_level=low"])
+    expect(manager.hasSession("chat-1", "sub:run-xyz")).toBe(false)
+    expect(agent.killed).toBe(true)
   })
 })

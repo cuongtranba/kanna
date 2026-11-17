@@ -15,6 +15,7 @@ import type { BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import { buildSubagentProviderRun } from "./subagent-provider-run"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { AntigravityAcpManager } from "./antigravity-acp"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
 import { toJsonObject } from "./json-boundary"
@@ -53,6 +54,7 @@ export interface SubagentWiringDeps {
 
   subagentOrchestrator: SubagentOrchestrator
   codexManager: CodexAppServerManager
+  antigravityManager: AntigravityAcpManager
   oauthPool: SubagentWiringOAuthPool | null
 
   subagentPendingResolvers: Map<string, { resolve: (v: JsonValue) => void; reject: (e: Error) => void }>
@@ -212,6 +214,7 @@ export function buildSubagentProviderRunForChat(
       beaconToolsAllowed: args.subagent.allowBeaconTools === true,
     }),
     codexManager: deps.codexManager,
+    antigravityManager: deps.antigravityManager,
     onToolRequest,
     globalPromptAppend: deps.getAppSettingsSnapshot().globalPromptAppend,
     customModels: deps.getAppSettingsSnapshot().customModels,

@@ -85,7 +85,7 @@ type DepsOptions = {
   startingChatIds?: string[]
   pendingToolChatIds?: string[]
   queuedMessages?: QueuedChatMessage[]
-  chatProvider?: "claude" | "openrouter" | "codex" | null
+  chatProvider?: "claude" | "openrouter" | "codex" | "antigravity" | null
   chatModel?: string
   chatModelOptions?: ModelOptions
   providerDefaults?: ChatProviderPreferences
@@ -882,6 +882,19 @@ describe("builtin /compact", () => {
 
   test("on openrouter takes the same CLI passthrough", async () => {
     const deps = makeDeps({ chatProvider: "openrouter" })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled[0].content).toBe("/compact")
+    expect(deps.startTurnCalled[0].compactionTurn).toBe("user")
+  })
+
+  test("on antigravity passes the agent's native command through", async () => {
+    const deps = makeDeps({ chatProvider: "antigravity" })
 
     await sendCommand(deps, {
       type: "chat.send",

@@ -12,7 +12,7 @@ import { MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, shouldProactivelyCompact } from "
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
-  isClaudeSdkProvider,
+  providerCompactsNatively,
   normalizeAntigravityModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
@@ -273,7 +273,7 @@ export async function runBuiltinCommand(
     return
   }
 
-  const cliPassthrough = isClaudeSdkProvider(provider)
+  const cliPassthrough = providerCompactsNatively(provider)
   const cliCommand = command.instructions ? `/compact ${command.instructions}` : "/compact"
   await deps.startTurnForChat({
     chatId,

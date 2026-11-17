@@ -3,7 +3,7 @@ import { resolveModelPrice } from "../shared/token-pricing"
 import { DEFAULT_CODEX_CHAT_MODEL } from "../shared/provider-model-types"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
-import type { Readable, Writable } from "node:stream"
+import type { StdioProcess } from "./stdio-process"
 import type {
   CodexReasoningEffort,
   ServiceTier,
@@ -61,19 +61,7 @@ import { answerDynamicToolCall, type CodexKannaTools } from "./codex-dynamic-too
 import { decodeNestedId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
 export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
-export interface CodexAppServerProcess {
-  stdin: Writable
-  stdout: Readable
-  stderr: Readable
-  killed?: boolean
-  kill(signal?: NodeJS.Signals | number): void
-  on(event: "close", listener: (code: number | null) => void): this
-  on(event: "error", listener: (error: Error) => void): this
-  once(event: "close", listener: (code: number | null) => void): this
-  once(event: "error", listener: (error: Error) => void): this
-}
-
-export type SpawnCodexAppServer = (cwd: string) => CodexAppServerProcess
+export type SpawnCodexAppServer = (cwd: string) => StdioProcess
 
 const CODEX_THREAD_CONFIG: JsonObject = { "tools.update_plan": { enabled: true } }
 
@@ -97,7 +85,7 @@ interface SessionContext {
   scope: CodexSessionScope
   cwd: string
   projectId: string | null
-  child: CodexAppServerProcess
+  child: StdioProcess
   pendingRequests: Map<CodexRequestId, PendingRequest<JsonValue>>
   pendingTurn: PendingTurn | null
   sessionToken: string | null

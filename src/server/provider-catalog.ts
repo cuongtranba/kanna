@@ -115,6 +115,10 @@ export function isClaudeSdkProvider(provider: AgentProvider): boolean {
   return provider === "claude" || isEndpointProvider(provider)
 }
 
+export function providerCompactsNatively(provider: AgentProvider): boolean {
+  return isClaudeSdkProvider(provider) || provider === "antigravity"
+}
+
 export function openrouterAuthReady(snapshot: LlmProviderSnapshot): boolean {
   return snapshot.provider === "openrouter" && snapshot.enabled && snapshot.apiKey.length > 0
 }

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { PeerChatOrigin } from "../shared/command-origin"
 import type { ClaudeModelOptions, Subagent, TranscriptEntry } from "../shared/types"
 import type { EventStore } from "./event-store"
+import { AntigravityAcpManager } from "./antigravity-acp"
 import { createTestEventStore } from "./storage/test-helpers"
 import {
   SubagentOrchestrator,
@@ -537,6 +538,7 @@ describe("SubagentOrchestrator", () => {
         cwd: "/tmp", projectId: "p1",
         startClaudeSession: async () => fakeSession,
         codexManager: {} as never,
+        antigravityManager: new AntigravityAcpManager(),
         onToolRequest: async () => null,
         authReady: async () => true,
         pickOauthToken: () => null,
