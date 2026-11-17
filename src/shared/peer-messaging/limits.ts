@@ -7,3 +7,5 @@ export const PEER_NOTIFY_TTL_MS = 12 * 60 * 60 * 1000
 export const PEER_MID_TURN_LIMIT = 5
 export const PEER_WAIT_DEFAULT_SECONDS = 120
 export const PEER_WAIT_MAX_SECONDS = 600
+export const PEER_LIST_DEFAULT_LIMIT = 50
+export const PEER_LIST_MAX_LIMIT = 200

@@ -344,7 +344,7 @@ describe("buildSubagentProviderRunForChat — custom endpoint session", () => {
 describe("the kanna tools a Claude subagent session receives", () => {
   const PARENT_CHAT = "chat-1"
   const peerChat = (chatId: string): PeerChatInfo => ({
-    chatId, title: `Chat ${chatId}`, projectId: "proj-1", projectTitle: "Project", provider: "claude", peerInbound: null, archived: false,
+    chatId, title: `Chat ${chatId}`, projectId: "proj-1", projectTitle: "Project", provider: "claude", peerInbound: null, archived: false, lastActiveAt: 0,
   })
   const sent: { chatId: string; content: string; origin: PeerChatOrigin }[] = []
   const messenger = new PeerMessenger({

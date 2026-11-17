@@ -237,10 +237,10 @@ export interface LintLimitPin {
 export const LINT_LIMIT_PINS: readonly LintLimitPin[] = [
   {
     rule: "eslint-js/complexity",
-    max: 96,
+    max: 95,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (96), down from 122 when turn-failure settlement moved into claude-turn-failure.ts (#1379). The previous peak, the SettingsPage component (127), fell when the page became a table of per-page components; normalizeClaudeStreamMessage (82) is next.",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (95), down from 122 when turn-failure settlement moved into claude-turn-failure.ts (#1379) and to 95 when the thrown-error settlement and the fresh-session retry moved into helpers. The previous peak, the SettingsPage component (127), fell when the page became a table of per-page components; normalizeClaudeStreamMessage (82) is next.",
   },
   {
     rule: "eslint-js/max-params",

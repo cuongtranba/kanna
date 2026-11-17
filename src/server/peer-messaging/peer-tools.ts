@@ -7,9 +7,10 @@ import {
   LIST_PEER_CHATS_DESCRIPTION,
   SEND_CHAT_MESSAGE_DESCRIPTION,
   WAIT_FOR_CHAT_MESSAGE_DESCRIPTION,
-  listPeerChatsInputShape,
+  listPeerChatsInputSchema,
   sendChatMessageInputSchema,
   waitForChatMessageInputSchema,
+  type ListPeerChatsInput,
   type SendChatMessageInput,
   type WaitForChatMessageInput,
 } from "../../shared/peer-messaging/tool-specs.schema"
@@ -31,7 +32,7 @@ const PEER_TOOL_SPECS: readonly DynamicToolSpec[] = [
     type: "function",
     name: LIST_PEER_CHATS_TOOL,
     description: LIST_PEER_CHATS_DESCRIPTION,
-    inputSchema: renderJsonSchema(z.object(listPeerChatsInputShape), "input"),
+    inputSchema: renderJsonSchema(listPeerChatsInputSchema, "input"),
   },
   {
     type: "function",
@@ -47,8 +48,8 @@ const PEER_TOOL_SPECS: readonly DynamicToolSpec[] = [
   },
 ]
 
-export function listPeerChats(messenger: PeerMessenger, chatId: string): PeerToolResult {
-  return { text: JSON.stringify({ chats: messenger.listPeers(chatId) }), isError: false }
+export function listPeerChats(messenger: PeerMessenger, chatId: string, input: ListPeerChatsInput = {}): PeerToolResult {
+  return { text: JSON.stringify(messenger.listPeers(chatId, input)), isError: false }
 }
 
 export async function sendChatMessage(
@@ -91,7 +92,11 @@ async function runPeerTool(
   tool: string,
   args: JsonValue,
 ): Promise<PeerToolResult | null> {
-  if (tool === LIST_PEER_CHATS_TOOL) return listPeerChats(messenger, chatId)
+  if (tool === LIST_PEER_CHATS_TOOL) {
+    const parsed = listPeerChatsInputSchema.safeParse(args)
+    if (!parsed.success) return { text: `Invalid arguments: ${z.prettifyError(parsed.error)}`, isError: true }
+    return listPeerChats(messenger, chatId, parsed.data)
+  }
   if (tool === SEND_CHAT_MESSAGE_TOOL) {
     const parsed = sendChatMessageInputSchema.safeParse(args)
     if (!parsed.success) return { text: `Invalid arguments: ${z.prettifyError(parsed.error)}`, isError: true }

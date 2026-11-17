@@ -1,6 +1,6 @@
 ---
 id: c3-249
-c3-seal: 6e72bdeecdd28400384379f63329bb011089883500f24caa3fe75aa8a656e443
+c3-seal: bba9ad92f678633995114bf867b5662d20a5dfa5cac6ee942fad41889786f2a3
 title: peer-messaging
 type: component
 category: feature
@@ -26,7 +26,7 @@ Let an agent in one Kanna chat message an agent in another chat, in any project 
 
 ## Purpose
 
-Owns cross-chat messaging: list_peer_chats, send_chat_message and wait_for_chat_message for Claude and Codex, the peer_chat origin that the server stamps on the queued message (with the sending subagent run and the message it answers, when present), the escaped prompt wrapper the target model sees, the inbound setting (global peerMessagesInbound and per-chat chat_peer_inbound_set), mid-turn delivery into a running turn, and the guardrails: valid target, inbound enabled, 100000 character cap, identical-content drop within 60 seconds, 6 per minute and 60 per hour per sender and target pair, 20 queued peer messages per target, and at most 5 messages injected into one turn. Notify-when-idle subscriptions and message waits are in memory, so they are lost on restart; a subscription fires once and expires after 12 hours, a wait ends after at most 600 seconds. A main chat and a Claude subagent can send; Codex subagents and inbox triage turns cannot. A peer message never runs as a builtin or slash command. Non-goals: no approval step, no persistence of subscriptions or waits, no messaging across machines.
+Owns cross-chat messaging: list_peer_chats (newest activity first, filtered by project title or title text, capped at 50 rows by default and 200 at most, with the total match count), send_chat_message and wait_for_chat_message for Claude and Codex, the peer_chat origin that the server stamps on the queued message (with the sending subagent run and the message it answers, when present), the escaped prompt wrapper the target model sees, the inbound setting (global peerMessagesInbound and per-chat chat_peer_inbound_set), mid-turn delivery into a running turn, and the guardrails: valid target, inbound enabled, 100000 character cap, identical-content drop within 60 seconds, 6 per minute and 60 per hour per sender and target pair, 20 queued peer messages per target, and at most 5 messages injected into one turn. Notify-when-idle subscriptions and message waits are in memory, so they are lost on restart; a subscription fires once and expires after 12 hours, a wait ends after at most 600 seconds. A main chat and a Claude subagent can send; Codex subagents and inbox triage turns cannot. A peer message never runs as a builtin or slash command. Non-goals: no approval step, no persistence of subscriptions or waits, no messaging across machines.
 
 ## Governance
 

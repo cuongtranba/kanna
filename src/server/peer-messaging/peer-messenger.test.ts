@@ -92,7 +92,7 @@ function createWorld(chats: PeerChatInfo[]) {
 }
 
 function chat(chatId: string, overrides: Partial<PeerChatInfo> = {}): PeerChatInfo {
-  return { chatId, title: `Chat ${chatId}`, projectId: `project-${chatId}`, projectTitle: `Project ${chatId}`, provider: "claude", peerInbound: null, archived: false, ...overrides }
+  return { chatId, title: `Chat ${chatId}`, projectId: `project-${chatId}`, projectTitle: `Project ${chatId}`, provider: "claude", peerInbound: null, archived: false, lastActiveAt: 1_000_000, ...overrides }
 }
 
 describe("PeerMessenger", () => {
@@ -258,7 +258,26 @@ describe("PeerMessenger", () => {
     const allowed = await messenger.send({ fromChatId: "a", to: "open", message: "hi" })
     expect(refused).toMatchObject({ ok: false, reason: "inbound_refused" })
     expect(allowed).toMatchObject({ ok: true })
-    expect(messenger.listPeers("a").map((row) => [row.chatId, row.accepts])).toEqual([["b", false], ["open", true]])
+    expect(messenger.listPeers("a").chats.map((row) => [row.chatId, row.accepts])).toEqual([["b", false], ["open", true]])
+  })
+
+  test("lists the most recently active chats first, caps them, and reports how many matched", () => {
+    const day = 86_400_000
+    const { messenger } = createWorld([
+      chat("a"),
+      chat("stale", { title: "Open the PR", projectTitle: "Kanna", lastActiveAt: 1_000_000 }),
+      chat("fresh", { title: "Open the PR", projectTitle: "kanna", lastActiveAt: 1_000_000 + 68 * day }),
+      chat("other", { title: "Unrelated", projectTitle: "Docs", lastActiveAt: 1_000_000 + 30 * day }),
+    ])
+
+    const capped = messenger.listPeers("a", { limit: 2 })
+    expect(capped.chats.map((row) => row.chatId)).toEqual(["fresh", "other"])
+    expect(capped.chats[0]?.lastActiveAt).toBe(new Date(1_000_000 + 68 * day).toISOString())
+    expect(capped.total).toBe(3)
+
+    const narrowed = messenger.listPeers("a", { project: "KANNA", query: "the pr" })
+    expect(narrowed.chats.map((row) => row.chatId)).toEqual(["fresh", "stale"])
+    expect(narrowed.total).toBe(2)
   })
 
   test("an identical message to the same chat within a minute is dropped, but sent again later", async () => {

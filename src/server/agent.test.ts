@@ -1923,42 +1923,52 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
-  test("clears the stored session token when resume fails with 'No conversation found'", async () => {
-    const events = new AsyncEventQueue<any>()
-    let closeCount = 0
+  test("retries once on a fresh session when resuming a deleted Claude session fails with 'No conversation found'", async () => {
+    const spawns: Array<{ sessionToken: string | null; prompts: string[] }> = []
+    const streams: Array<AsyncEventQueue<any>> = []
 
     const store = createFakeStore()
     await store.setSessionTokenForProvider("chat-1", "claude", "poisoned-old")
     const coordinator = new AgentCoordinator({
       store: store as never,
       onStateChange: () => {},
-      startClaudeSession: async () => ({
-        provider: "claude",
-        stream: events,
-        getAccountInfo: async () => null,
-        interrupt: async () => {},
-        close: () => {
-          closeCount += 1
-        },
-        closed: Promise.resolve(),
-        setModel: async () => {},
-        setPermissionMode: async () => {},
-        sendPrompt: async () => {
-          events.push({ type: "session_token" as const, sessionToken: "poisoned-new" })
-          events.push({
-            type: "transcript" as const,
-            entry: timestamped({
-              kind: "result",
-              subtype: "error",
-              isError: true,
-              durationMs: 0,
-              result: "",
-              debugRaw:
-                '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: poisoned-old"]}',
-            }),
-          })
-        },
-      }),
+      startClaudeSession: async (args) => {
+        const events = new AsyncEventQueue<any>()
+        const spawn = { sessionToken: args.sessionToken, prompts: [] as string[] }
+        spawns.push(spawn)
+        streams.push(events)
+        const resumed = spawns.length === 1
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {
+            events.close()
+          },
+          closed: Promise.resolve(),
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          sendPrompt: async (content: string) => {
+            spawn.prompts.push(content)
+            events.push({ type: "session_token" as const, sessionToken: resumed ? "poisoned-new" : "fresh-token" })
+            events.push({
+              type: "transcript" as const,
+              entry: resumed
+                ? timestamped({
+                    kind: "result",
+                    subtype: "error",
+                    isError: true,
+                    durationMs: 0,
+                    result: "",
+                    debugRaw:
+                      '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: poisoned-old"]}',
+                  })
+                : timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
+            })
+          },
+        }
+      },
     })
 
     await coordinator.send({
@@ -1968,12 +1978,17 @@ describe("AgentCoordinator claude integration", () => {
       content: "hello",
       model: "claude-opus-4-1",
     })
-    await waitFor(() => store.turnFailedCount === 1)
+    await waitFor(() => store.turnFinishedCount === 1)
 
-    expect(store.chat.sessionTokensByProvider.claude ?? null).toBeNull()
-    expect(closeCount).toBeGreaterThanOrEqual(1)
+    expect(spawns.map((spawn) => spawn.sessionToken)).toEqual(["poisoned-old", null])
+    expect(spawns[1]?.prompts).toHaveLength(1)
+    expect(spawns[1]?.prompts[0]).toContain("hello")
+    expect(store.messages.filter((entry) => entry.kind === "user_prompt")).toHaveLength(1)
+    expect(store.turnFailedCount).toBe(0)
+    expect(store.chat.sessionTokensByProvider.claude).not.toBe("poisoned-old")
+    expect(store.chat.sessionTokensByProvider.claude).not.toBe("poisoned-new")
 
-    events.close()
+    for (const events of streams) events.close()
   })
 
   test("does not persist a session token that arrives after cancel()", async () => {

@@ -52,6 +52,7 @@ function createPeerMessenger(
     provider: chat.provider,
     peerInbound: chat.peerInbound ?? null,
     archived: chat.archivedAt !== undefined,
+    lastActiveAt: chat.updatedAt,
   })
   return new PeerMessenger({
     listChats: () => [...store.state.chatsById.values()].filter((chat) => chat.deletedAt === undefined).map(infoOf),

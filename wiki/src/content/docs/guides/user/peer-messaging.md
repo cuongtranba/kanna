@@ -14,7 +14,7 @@ Every agent in a chat's main conversation gets three tools:
 
 | Tool | What it does |
 | --- | --- |
-| `list_peer_chats` | Lists the other chats it can message: id, title, project, provider, status (`idle`, `working` or `waiting_for_user`) and whether the chat accepts messages. |
+| `list_peer_chats` | Lists the other chats it can message: id, title, project, provider, status (`idle`, `working` or `waiting_for_user`), when it was last active, and whether the chat accepts messages. The most recently active chats come first, 50 by default and 200 at most; the agent can narrow the list by project or by words in the title, and the result says how many chats matched in total. |
 | `send_chat_message` | Sends a message to one chat by id. Optionally asks to be told when that chat next goes idle (`notify_when_idle`), answers a message (`reply_to`), or addresses one running subagent of that chat (`run_id`). |
 | `wait_for_chat_message` | Waits, during the agent's own turn, for the next message from another chat (optionally from one chat only) and returns it. It gives up after 120 seconds by default, 600 at most. |
 

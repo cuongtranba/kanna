@@ -47,6 +47,7 @@ export interface ActiveTurn {
   userMessageId: string | null
   scheduleId?: string
   midTurnInjections?: number
+  retryOnFreshSession?: () => Promise<void>
 }
 
 export interface ClaudeSessionStateInit {

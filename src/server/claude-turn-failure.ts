@@ -16,18 +16,17 @@ export interface FailureDetectors {
 export interface TurnFailure {
   limit: LimitDetection | null
   auth: AuthErrorDetection | null
-  sessionInvalid: boolean
+  conversationMissing: boolean
+  promptTooLong: boolean
 }
+
+export type FailureOutcome = "handled" | "unhandled" | "retry_on_fresh_session"
 
 type FailedTurn =
   | { kind: "result"; text: string; debugRaw: string }
   | { kind: "thrown"; error: Error }
 
 type HandledFailureLabel = "rate_limit" | "auth_error"
-
-function isSessionInvalid(...texts: readonly string[]): boolean {
-  return texts.some((text) => isPromptTooLongMessage(text) || isNoConversationFoundMessage(text))
-}
 
 function classifyResultFailure(
   detectors: FailureDetectors,
@@ -40,7 +39,13 @@ function classifyResultFailure(
     ? null
     : detectors.auth.detectFromResultText(chatId, resultText)
       ?? detectors.auth.detectFromResultText(chatId, debugRaw)
-  return { limit, auth, sessionInvalid: isSessionInvalid(resultText, debugRaw) }
+  const texts = [resultText, debugRaw]
+  return {
+    limit,
+    auth,
+    conversationMissing: texts.some(isNoConversationFoundMessage),
+    promptTooLong: texts.some(isPromptTooLongMessage),
+  }
 }
 
 function classifyThrownFailure(
@@ -50,7 +55,12 @@ function classifyThrownFailure(
 ): TurnFailure {
   const limit = detectors.limit.detect(chatId, error)
   const auth = limit ? null : detectors.auth.detect(chatId, error)
-  return { limit, auth, sessionInvalid: isSessionInvalid(error.message) }
+  return {
+    limit,
+    auth,
+    conversationMissing: isNoConversationFoundMessage(error.message),
+    promptTooLong: isPromptTooLongMessage(error.message),
+  }
 }
 
 export interface FailureHandlers {
@@ -79,18 +89,23 @@ export async function settleFailedTurn(
   session: ClaudeSessionState,
   failed: FailedTurn,
   recordOutcome: boolean,
-): Promise<boolean> {
+  freshSessionRetryAvailable = false,
+): Promise<FailureOutcome> {
   const failure = failed.kind === "result"
     ? classifyResultFailure(settlement, session.chatId, failed.text, failed.debugRaw)
     : classifyThrownFailure(settlement, session.chatId, failed.error)
   const label = await handleDetectedFailure(settlement, session, failure)
-  if (!recordOutcome) return label !== null
+  if (!recordOutcome) return label !== null ? "handled" : "unhandled"
   if (label !== null) {
     await settlement.recordTurnFailed(session.chatId, label)
-    return true
+    return "handled"
+  }
+  if (failure.conversationMissing && freshSessionRetryAvailable) {
+    await settlement.discardInvalidSession(session)
+    return "retry_on_fresh_session"
   }
   if (failed.kind === "result") await settlement.recordTurnFailed(session.chatId, failed.text)
   else await settlement.recordTurnError(session.chatId, failed.error.message)
-  if (failure.sessionInvalid) await settlement.discardInvalidSession(session)
-  return false
+  if (failure.conversationMissing || failure.promptTooLong) await settlement.discardInvalidSession(session)
+  return "unhandled"
 }
