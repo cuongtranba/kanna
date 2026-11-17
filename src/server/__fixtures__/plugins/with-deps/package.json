@@ -1,0 +1,8 @@
+{
+  "name": "kanna-fixture-plugin-with-deps",
+  "private": true,
+  "dependencies": {
+    "kanna-fixture-client-pkg": "file:../packages/client-pkg",
+    "kanna-fixture-server-pkg": "file:../packages/server-pkg"
+  }
+}

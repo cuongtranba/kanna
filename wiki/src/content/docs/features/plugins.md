@@ -137,6 +137,50 @@ Selecting a plugin's `/` entry inserts its `prompt` text into the composer, so i
 works on every provider. A plugin can add picker entries but never replace one:
 if the name is already taken, the plugin's entry is dropped.
 
+### Use npm packages
+
+A plugin can use any npm package. Add a `package.json` (and commit its `bun.lock`)
+next to `kanna-plugin.json`:
+
+```json title="package.json"
+{
+  "private": true,
+  "dependencies": { "@slack/web-api": "^8.0.0" }
+}
+```
+
+Before compiling, `kanna plugin install` and `plugin_validate` run `bun install` in
+the plugin directory: with `--frozen-lockfile` when `bun.lock` or `bun.lockb` is
+present, otherwise with `--no-save` so no lockfile is written. Add `node_modules/`
+to the plugin's `.gitignore`. A plugin without a `package.json` skips this step.
+
+Kanna then bundles every package into the plugin's two bundles, so nothing is
+resolved from `node_modules` at run time. Kanna checks the plugin's contract
+(manifest, `kannaPluginApi`, RPC contracts, no server literal reaching the
+browser), never which packages it uses.
+
+Your `index.ts` runs in both the browser and the plugin's server process, so code
+that only works on the server must stay out of the browser bundle:
+
+- **Import server-only packages and Node builtins from a `*.server.ts` file.** In
+  the browser build, every package and every `node:*`, `bun` or `bun:*` module
+  imported directly from a `*.server.ts` file becomes an inert placeholder, so
+  `import { WebClient } from "@slack/web-api"` there is safe. The same import
+  from any other file is bundled for the browser and fails if the package needs
+  Node; a `node:*` import from a non-server file fails with
+  `Module "node:fs" is server-only: import it from a *.server.ts file`.
+- **Only call server code on the server.** The placeholder does nothing, so guard
+  top-level server work, for example with
+  `typeof window === "undefined"`.
+- **`react`, `react/jsx-runtime`, `@tanstack/react-query`, `zod` and
+  `@kanna/plugin*` always come from Kanna**, even when a package imports them, so
+  the page never loads two copies of React.
+
+`bun install` follows Bun's defaults: lifecycle scripts of dependencies run only
+for packages you list in `trustedDependencies`, while your own `package.json`
+scripts do run. A package that ships a native addon (`.node` file) or reads files
+next to itself at run time cannot be bundled and is not supported.
+
 ## Install and manage
 
 Enabled plugins start when the server boots, so a restart does not leave them
@@ -158,5 +202,6 @@ The agent has the same verbs as tools (`plugin_scaffold`, `plugin_validate`,
 `plugin_install`, `plugin_list`, `plugin_reload`, `plugin_logs`), so you can ask a
 chat to build and iterate on a plugin for you.
 
-Each compile runs in a separate process with a 20-second deadline. A build that
-hangs fails cleanly instead of freezing Kanna.
+Each compile runs in a separate process with a 20-second deadline, after the
+dependency install, which has its own 5-minute deadline. A build that hangs fails
+cleanly instead of freezing Kanna.

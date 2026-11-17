@@ -1,17 +1,14 @@
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { readFile, realpath } from "node:fs/promises"
+import { isBuiltin } from "node:module"
 import { createInterface } from "node:readline"
-import { join, relative, resolve } from "node:path"
+import { join, relative, resolve, sep } from "node:path"
 import { toError } from "../../shared/errors"
 import { isPathInside } from "../path-containment"
 import { errorMessage } from "../../shared/errors"
 import { isJsonArray, isJsonObject, safeJsonParse } from "../../shared/json"
-import {
-  CLIENT_HOST_MODULES,
-  hostModuleUnavailableMessage,
-  PLUGIN_HOST_GLOBAL,
-  type PluginHostTarget,
-} from "../../shared/plugins/host-modules"
+import { CLIENT_HOST_MODULES, PLUGIN_HOST_GLOBAL, type PluginHostTarget } from "../../shared/plugins/host-modules"
+import { spawnCapture } from "../process-utils.adapter"
 import { SERVER_HOST_MODULES } from "./server-host-modules"
 import * as pluginRpcProtocolModule from "./plugin-rpc-protocol"
 
@@ -42,16 +39,46 @@ const LITERAL_EXPORT_PATTERN = /export\s+const\s+[A-Za-z_$][\w$]*\s*=\s*(["'`])(
 
 const HOST_REQUIRE_NAMESPACE = "kanna-host-require"
 const HOST_STUB_NAMESPACE = "kanna-host-stub"
+const SERVER_ONLY_STUB_NAMESPACE = "kanna-server-only-stub"
+
+const DEPENDENCY_INSTALL_DEADLINE_MS = 300_000
+
+const LOCKFILE_NAMES = ["bun.lock", "bun.lockb"] as const
 
 const STUB_EXPORT_NAMES: Readonly<Record<string, readonly string[]>> = {
   "@kanna/plugin/server": Object.keys(pluginRpcProtocolModule),
 }
 
-function hostModulePlugin(
-  host: PluginHostTarget,
-  ownModules: readonly string[],
-  otherModules: readonly string[],
-): Bun.BunPlugin {
+const SERVER_ONLY_STUB_SOURCE = [
+  "const inert = new Proxy(function () {}, {",
+  "  get: (_target, prop) => (prop === 'then' ? undefined : prop === Symbol.toPrimitive ? () => '' : inert),",
+  "  apply: () => inert,",
+  "  construct: () => inert,",
+  "  getPrototypeOf: () => inert,",
+  "})",
+  "module.exports = inert",
+].join("\n")
+
+function isRuntimeBuiltin(specifier: string): boolean {
+  return isBuiltin(specifier) || specifier === "bun" || specifier.startsWith("bun:")
+}
+
+function isPluginOwnFile(pluginRoot: string, importer: string): boolean {
+  return importer.length > 0 && isPathInside(pluginRoot, importer) && !importer.split(sep).includes("node_modules")
+}
+
+function serverOnlyBuiltinMessage(specifier: string): string {
+  return `Module "${specifier}" is server-only: import it from a *.server.ts file so the client build can stub it`
+}
+
+interface HostModulePluginArgs {
+  readonly host: PluginHostTarget
+  readonly sourceDir: string
+  readonly ownModules: readonly string[]
+  readonly otherModules: readonly string[]
+}
+
+function hostModulePlugin({ host, sourceDir, ownModules, otherModules }: HostModulePluginArgs): Bun.BunPlugin {
   return {
     name: "kanna-host-modules",
     setup(build) {
@@ -62,8 +89,17 @@ function hostModulePlugin(
         if (otherModules.includes(args.path)) {
           return { path: args.path, namespace: HOST_STUB_NAMESPACE }
         }
-        throw new Error(hostModuleUnavailableMessage(args.path, host))
+        if (host === "server" || !isPluginOwnFile(sourceDir, args.importer)) return undefined
+        if (SERVER_FILE_PATTERN.test(args.importer)) {
+          return { path: args.path, namespace: SERVER_ONLY_STUB_NAMESPACE }
+        }
+        if (isRuntimeBuiltin(args.path)) throw new Error(serverOnlyBuiltinMessage(args.path))
+        return undefined
       })
+      build.onLoad({ filter: /.*/, namespace: SERVER_ONLY_STUB_NAMESPACE }, () => ({
+        contents: SERVER_ONLY_STUB_SOURCE,
+        loader: "js",
+      }))
       build.onLoad({ filter: /.*/, namespace: HOST_REQUIRE_NAMESPACE }, (args) => ({
         contents: `module.exports = globalThis.${PLUGIN_HOST_GLOBAL}.require(${JSON.stringify(args.path)})`,
         loader: "js",
@@ -110,7 +146,14 @@ async function buildTarget(args: TargetBuildArgs): Promise<TargetBuildResult> {
       minify: args.minify,
       metafile: true,
       define: { "process.env.NODE_ENV": JSON.stringify("production") },
-      plugins: [hostModulePlugin(args.target === "browser" ? "client" : "server", args.ownModules, args.otherModules)],
+      plugins: [
+        hostModulePlugin({
+          host: args.target === "browser" ? "client" : "server",
+          sourceDir: args.sourceDir,
+          ownModules: args.ownModules,
+          otherModules: args.otherModules,
+        }),
+      ],
     })
     if (!result.success) {
       return { ok: false, errors: result.logs.map((log) => log.message) }
@@ -155,9 +198,10 @@ async function findServerLiteralLeaks(
 }
 
 export async function buildPluginBundlesInProcess({
-  sourceDir,
+  sourceDir: givenSourceDir,
   entry,
 }: BuildPluginBundlesArgs): Promise<BuildPluginBundlesResult> {
+  const sourceDir = await realpath(givenSourceDir).catch(() => resolve(givenSourceDir))
   const client = await buildTarget({
     sourceDir,
     entry,
@@ -259,7 +303,25 @@ function runBuildChild(args: {
   })
 }
 
+async function installPluginDependencies(sourceDir: string): Promise<string[]> {
+  if (!(await Bun.file(join(sourceDir, "package.json")).exists())) return []
+  const lockfiles = await Promise.all(LOCKFILE_NAMES.map((name) => Bun.file(join(sourceDir, name)).exists()))
+  const deadline = AbortSignal.timeout(DEPENDENCY_INSTALL_DEADLINE_MS)
+  const run = await spawnCapture(
+    [process.execPath, "install", lockfiles.some(Boolean) ? "--frozen-lockfile" : "--no-save"],
+    { cwd: sourceDir, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" }, signal: deadline },
+  )
+  if (run.exitCode === 0) return []
+  const tail = run.stderr.trim().split("\n").slice(-STDERR_TAIL_LINES).join(" | ")
+  const cause = deadline.aborted
+    ? `bun install did not finish within ${DEPENDENCY_INSTALL_DEADLINE_MS}ms and was killed`
+    : `bun install exited with code ${run.exitCode}`
+  return [`Installing plugin dependencies failed (${cause}): ${tail}`]
+}
+
 export async function buildPluginBundles(args: BuildPluginBundlesArgs): Promise<BuildPluginBundlesResult> {
+  const installErrors = await installPluginDependencies(args.sourceDir)
+  if (installErrors.length > 0) return { ok: false, errors: installErrors }
   const childArgs = {
     sourceDir: args.sourceDir,
     entry: args.entry,

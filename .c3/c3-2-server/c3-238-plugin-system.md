@@ -1,6 +1,6 @@
 ---
 id: c3-238
-c3-seal: 2cca272e0254a848b36bfe9e088305dd9fb832af672df77de9635019c8786f00
+c3-seal: 212fecd005c486189e40ee5f34471cbdef4a6458bc0d79f2ced16bc88ea5125c
 title: plugin-system
 type: component
 category: feature
@@ -68,5 +68,6 @@ A plugin is untrusted third-party code, so the design keeps it at arm's length i
 | --- | --- | --- | --- |
 | A second service instance is created, splitting the registry | Calling createPluginService() directly instead of getPluginService() | An install made on one surface is invisible to another | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
 | An install stops surviving restart | Removing the configurePluginService call or the settings write | plugin ls reports nothing after a reboot while bundles sit on disk | The P11 acceptance case builds a second service over the same records |
-| A server-only import leaks into a client bundle | Widening the compile allowlist | Two SECURITY assertions in the acceptance suite | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
+| A server-only import leaks into a client bundle | A package or builtin that needs Node imported from a non-\*.server file, or the client build bundling an import made by a \*.server file instead of stubbing it | Two SECURITY assertions and the P13 client-bundle case in the acceptance suite | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
 | A stale client bundle is served after reload | Dropping the no-store header | plugin reload appears to do nothing in the browser | Route test asserting cache-control: no-store |
+| A plugin's npm dependencies are missing at compile time | Skipping or reordering the bun install step in buildPluginBundles | The compile fails with Bun's could-not-resolve error for the package | The P13 acceptance case installs the with-deps fixture and calls its node:zlib handler |

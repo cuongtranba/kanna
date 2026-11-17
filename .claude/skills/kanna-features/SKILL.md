@@ -296,6 +296,26 @@ used to need. The deadline path is pinned by the `stalling-build-child`
 fixture test in `plugin-build.adapter.test.ts`; do not move the compile back
 in-process.
 
+**A plugin's own npm packages are installed, then bundled; Kanna checks the
+contract, never the package list.** `buildPluginBundles` runs `bun install` in the
+source directory first when it holds a `package.json` (`--frozen-lockfile` with a
+`bun.lock`/`bun.lockb`, `--no-save` without), under its own 5-minute deadline, so
+install and `plugin_validate` share one path and a plugin without `package.json`
+builds exactly as before. Every non-host package is bundled, because
+`build/server.js` is imported from the data directory where no `node_modules`
+exists. Host modules still resolve to Kanna's copy even from inside
+`node_modules`, so there is one React. The server build leaves `node:*`/`bun:*`
+external. In the client build, a package or builtin imported **directly by a
+plugin-own `*.server.*` file** becomes an inert stub (callable, constructible,
+`then` undefined, so a top-level `new WebClient()` still evaluates), and a builtin
+imported from any other plugin file is refused with a pointer to `*.server.ts`.
+The stub is per import, never per file: real plugins import their `.server.ts`
+files from `index.ts`, so stubbing whole files would turn exported values into
+stubs and blind `findServerLiteralLeaks`. `sourceDir` is canonicalised with
+`realpath` first because Bun reports importers by real path (`/private/var/…`
+on macOS). Pinned by the P13 cases and the `with-deps` fixture
+(`adr-20261117-plugin-npm-dependencies`).
+
 **A failed RPC is `200 {ok:false}`, not a 4xx.** The transport succeeded and the
 caller needs the plugin's own message; only a malformed REQUEST is a 4xx. A
 well-formed id that is not installed is `404`, and a **disabled** surface is
