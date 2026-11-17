@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.111.0](https://github.com/cuongtranba/kanna/compare/v1.110.3...v1.111.0) (2026-11-17)
+
+
+### Features
+
+* **providers:** add Antigravity (agy) as an agent provider over ACP ([#1504](https://github.com/cuongtranba/kanna/issues/1504)) ([f97cc64](https://github.com/cuongtranba/kanna/commit/f97cc645871f90df2e1c76bc0b98391cd3aca028))
+
 ## [1.110.3](https://github.com/cuongtranba/kanna/compare/v1.110.2...v1.110.3) (2026-11-17)
 
 
