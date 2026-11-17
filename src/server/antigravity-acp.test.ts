@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { HarnessEvent, HarnessToolRequest } from "./harness-types"
+import { isJsonArray, isJsonObject, stringField, type JsonObject } from "../shared/json"
+import { AGENT_TOOLS_MCP_PATH, AgentToolsBridge } from "./agent-tools-bridge"
 import { AntigravityAcpManager, type StartAntigravityTurnArgs } from "./antigravity-acp"
 import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
 import { waitFor } from "./test-helpers/wait-for"
@@ -43,6 +45,29 @@ function replyToPrompt(agent: FakeAcpAgent, script: (agent: FakeAcpAgent) => voi
     script(agent)
     agent.respond(request.id, { stopReason, usage: { inputTokens: 100, outputTokens: 10, cachedReadTokens: 50 } })
   }
+}
+
+function bridgeFixture() {
+  const bridge = new AgentToolsBridge({
+    specs: [],
+    call: async (chatId, tool) => ({ text: `${chatId}:${tool}`, isError: false }),
+  })
+  bridge.bindPort(4242)
+  return bridge
+}
+
+function offeredServers(agent: FakeAcpAgent): JsonObject[] {
+  const servers = agent.requests.find((request) => request.method === "session/new")?.params.mcpServers
+  return servers !== undefined && isJsonArray(servers) ? servers.filter(isJsonObject) : []
+}
+
+function callBridgeTool(bridge: AgentToolsBridge, server: JsonObject | undefined, tool: string): Promise<Response | null> {
+  const headers = server?.headers
+  const header = headers !== undefined && isJsonArray(headers) ? headers[0] : undefined
+  const authorization = header !== undefined && isJsonObject(header) ? stringField(header, "value") ?? "" : ""
+  const url = new URL(`http://127.0.0.1:4242${AGENT_TOOLS_MCP_PATH}`)
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: {} } })
+  return bridge.handle(new Request(url, { method: "POST", headers: { authorization }, body }), url, "127.0.0.1", () => {})
 }
 
 describe("AntigravityAcpManager", () => {
@@ -262,5 +287,81 @@ describe("AntigravityAcpManager", () => {
     const kinds = entriesOf(await collect(turn.stream)).map((entry) => entry.kind)
 
     expect(kinds).toEqual(["system_init", "compact_boundary", "result"])
+  })
+
+  test("a main session is offered the Kanna HTTP MCP server with a bearer, a subagent session none", async () => {
+    const main: FakeAcpAgent = new FakeAcpAgent((request) => { main.answerSetup(request) })
+    const sub: FakeAcpAgent = new FakeAcpAgent((request) => { sub.answerSetup(request) })
+    const spawned = [main, sub]
+    const manager = new AntigravityAcpManager({ spawnProcess: () => spawned.shift() ?? sub, toolBridge: bridgeFixture() })
+
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+    await manager.startSession({ chatId: "chat-1", scope: "sub:run-1", cwd: "/tmp/project", sessionToken: null })
+
+    expect(offeredServers(main)).toMatchObject([
+      { type: "http", name: "kanna", url: `http://127.0.0.1:4242${AGENT_TOOLS_MCP_PATH}`, headers: [{ name: "Authorization" }] },
+    ])
+    expect(offeredServers(sub)).toEqual([])
+  })
+
+  test("stopping the session revokes its bearer so a later tool call is refused", async () => {
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => { agent.answerSetup(request) })
+    const bridge = bridgeFixture()
+    const manager = new AntigravityAcpManager({ spawnProcess: () => agent, toolBridge: bridge })
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+    const server = offeredServers(agent)[0]
+    expect((await callBridgeTool(bridge, server, "list_peer_chats"))?.status).toBe(200)
+
+    manager.stopSession("chat-1")
+
+    expect((await callBridgeTool(bridge, server, "list_peer_chats"))?.status).toBe(401)
+  })
+
+  test("a Kanna tool answered during a turn becomes the result of its mcp tool call exactly once", async () => {
+    const bridge = bridgeFixture()
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => {
+      if (agent.answerSetup(request)) return
+      if (request.method !== "session/prompt" || request.id === null) return
+      const promptId = request.id
+      const toolCall = { toolCallId: "t1", name: "mcp_kanna_list_peer_chats", kind: "other", rawInput: {} }
+      agent.update({ sessionUpdate: "tool_call", status: "in_progress", ...toolCall })
+      void callBridgeTool(bridge, offeredServers(agent)[0], "list_peer_chats").then(() => {
+        agent.update({ sessionUpdate: "tool_call_update", status: "completed", ...toolCall })
+        agent.respond(promptId, { stopReason: "end_turn" })
+      })
+    })
+    const manager = new AntigravityAcpManager({ spawnProcess: () => agent, toolBridge: bridge })
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+
+    const turn = await manager.startTurn(turnArgs())
+    const entries = entriesOf(await collect(turn.stream))
+
+    expect(entries.flatMap((entry) => (entry.kind === "tool_result" ? [entry] : []))).toMatchObject([
+      { toolId: "t1", content: "chat-1:list_peer_chats", isError: false },
+    ])
+  })
+
+  test("a Kanna tool answered before agy reports the tool call still becomes that call's result", async () => {
+    const bridge = bridgeFixture()
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => {
+      if (agent.answerSetup(request)) return
+      if (request.method !== "session/prompt" || request.id === null) return
+      const promptId = request.id
+      const toolCall = { toolCallId: "t1", name: "mcp_kanna_list_peer_chats", kind: "other", rawInput: {} }
+      void callBridgeTool(bridge, offeredServers(agent)[0], "list_peer_chats").then(() => {
+        agent.update({ sessionUpdate: "tool_call", status: "in_progress", ...toolCall })
+        agent.update({ sessionUpdate: "tool_call_update", status: "completed", ...toolCall })
+        agent.respond(promptId, { stopReason: "end_turn" })
+      })
+    })
+    const manager = new AntigravityAcpManager({ spawnProcess: () => agent, toolBridge: bridge })
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+
+    const turn = await manager.startTurn(turnArgs())
+    const entries = entriesOf(await collect(turn.stream))
+
+    expect(entries.flatMap((entry) => (entry.kind === "tool_result" ? [entry] : []))).toMatchObject([
+      { toolId: "t1", content: "chat-1:list_peer_chats", isError: false },
+    ])
   })
 })

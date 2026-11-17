@@ -28,6 +28,7 @@ import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import type { BeaconInput } from "../shared/beacon-config"
 import { API_PATH_PREFIX } from "../shared/http-routes"
 import { BEACON_SOCKET_ROUTE } from "../shared/beacon-protocol"
+import type { AgentToolsBridge } from "./agent-tools-bridge"
 import { createRequestOriginGuard } from "./request-origin-guard"
 
 const BYTES_PER_MB = 1024 * 1024
@@ -44,6 +45,7 @@ export interface HttpDispatcherDeps {
   auth: AuthManager | null
   sessionShare: SessionShareService
   remoteMcp: RemoteMcpRuntime
+  agentTools: Pick<AgentToolsBridge, "handle">
   webhooks: WebhookService
   beaconTransferTickets: BeaconTransferTickets
   inboxApproveProposal: InboxActions["approveProposal"]
@@ -107,7 +109,7 @@ async function handleBeaconPair(req: Request, appSettings: AppSettingsManager): 
 export function createHttpDispatcher(
   deps: HttpDispatcherDeps,
 ): (req: Request, server: Server<SocketState>) => Promise<Response | undefined> {
-  const { store, appSettings, auth, sessionShare, remoteMcp, webhooks, beaconTransferTickets, inboxApproveProposal, distDir, bindHost, trustProxy } = deps
+  const { store, appSettings, auth, sessionShare, remoteMcp, agentTools, webhooks, beaconTransferTickets, inboxApproveProposal, distDir, bindHost, trustProxy } = deps
 
   const pluginService = configurePluginService(createInstalledPluginStore(appSettings))
   if (appSettings.getSnapshot().plugins.enabled) void pluginService.startEnabled()
@@ -149,6 +151,9 @@ export function createHttpDispatcher(
 
     const remoteMcpResponse = await remoteMcp.handle(req, url, server.requestIP(req)?.address ?? null, (seconds) => server.timeout(req, seconds))
     if (remoteMcpResponse) return remoteMcpResponse
+
+    const agentToolsResponse = await agentTools.handle(req, url, server.requestIP(req)?.address ?? null, () => server.timeout(req, 0))
+    if (agentToolsResponse) return agentToolsResponse
 
     if (auth) {
       if (url.pathname === "/auth/login") {

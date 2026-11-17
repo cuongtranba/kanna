@@ -106,6 +106,11 @@ function normalizeTool(call: AcpToolCall): NormalizedToolCall {
   return { ...base, toolKind: "unknown_tool", toolName: name, input: { payload: input } }
 }
 
+interface McpToolOutcome {
+  text: string
+  isError: boolean
+}
+
 export interface AcpPlanProposal {
   plan: string
   summary?: string
@@ -147,10 +152,11 @@ export class AcpTurnTranslator {
   private text = ""
   private thought = ""
   private lastText = ""
-  private readonly started = new Set<string>()
+  private readonly started = new Map<string, string>()
   private readonly resolved = new Set<string>()
   private latestUsage: ContextWindowUsageSnapshot | undefined
   private proposedPlan: AcpPlanProposal | null = null
+  private readonly earlyMcpOutcomes = new Map<string, McpToolOutcome[]>()
 
   get planProposal(): AcpPlanProposal | null {
     if (this.proposedPlan !== null) return this.proposedPlan
@@ -183,6 +189,28 @@ export class AcpTurnTranslator {
     }
   }
 
+  answerMcpTool(server: string, tool: string, outcome: McpToolOutcome): TranscriptEntry[] {
+    const name = `mcp_${server}_${tool}`
+    for (const [id, startedName] of this.started) {
+      if (startedName !== name || this.resolved.has(id)) continue
+      return [this.resolveMcpTool(id, outcome)]
+    }
+    this.earlyMcpOutcomes.set(name, [...(this.earlyMcpOutcomes.get(name) ?? []), outcome])
+    return []
+  }
+
+  private resolveMcpTool(id: string, outcome: McpToolOutcome): TranscriptEntry {
+    this.resolved.add(id)
+    return timestamped({ kind: "tool_result", toolId: id, content: outcome.text, isError: outcome.isError })
+  }
+
+  private takeEarlyMcpOutcome(name: string): McpToolOutcome | undefined {
+    const [first, ...rest] = this.earlyMcpOutcomes.get(name) ?? []
+    if (rest.length > 0) this.earlyMcpOutcomes.set(name, rest)
+    else this.earlyMcpOutcomes.delete(name)
+    return first
+  }
+
   flush(): TranscriptEntry[] {
     return [...this.takeThought(), ...this.takeText()]
   }
@@ -191,8 +219,11 @@ export class AcpTurnTranslator {
     const entries = this.flush()
     this.proposedPlan = planProposalOf(call) ?? this.proposedPlan
     if (!this.started.has(call.id)) {
-      this.started.add(call.id)
+      const name = call.name ?? call.title ?? "tool"
+      this.started.set(call.id, name)
       entries.push(timestamped({ kind: "tool_call", tool: normalizeTool(call) }))
+      const early = this.takeEarlyMcpOutcome(name)
+      if (early !== undefined) entries.push(this.resolveMcpTool(call.id, early))
     }
     const finished = call.status === "completed" || call.status === "failed"
     if (finished && !this.resolved.has(call.id)) {

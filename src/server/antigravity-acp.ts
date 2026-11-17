@@ -30,6 +30,7 @@ import {
   antigravitySystemInitEntry,
   type AcpPlanProposal,
 } from "./antigravity-acp-translator"
+import type { KannaToolOutcome } from "./codex-dynamic-tool-call"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { StdioProcess } from "./stdio-process"
 
@@ -37,7 +38,15 @@ export type SpawnAntigravityAcp = (cwd: string) => StdioProcess
 
 export type AntigravitySessionScope = "main" | `sub:${string}`
 
-export type AntigravityMcpServers = (chatId: string) => readonly JsonObject[]
+export interface AntigravityToolGrant {
+  server: JsonObject
+  serverName: string
+  revoke(): void
+}
+
+export interface AntigravityToolBridge {
+  grant(chatId: string, onOutcome: (tool: string, outcome: KannaToolOutcome) => void): AntigravityToolGrant | null
+}
 
 export interface StartAntigravitySessionArgs {
   chatId: string
@@ -83,6 +92,7 @@ interface SessionContext {
   pendingRequests: Map<AcpRequestId, PendingRequest>
   pendingTurn: PendingTurn | null
   sessionToken: string | null
+  grant: AntigravityToolGrant | null
   config: AcpConfigState
   planMode: boolean
   stderrLines: string[]
@@ -105,7 +115,7 @@ function textPrompt(sessionId: string, text: string): JsonObject {
 export class AntigravityAcpManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnAntigravityAcp
-  private readonly mcpServers: AntigravityMcpServers
+  private readonly toolBridge: AntigravityToolBridge | undefined
 
   private static keyFor(chatId: string, scope: AntigravitySessionScope = "main"): string {
     if (scope === "sub:") {
@@ -114,9 +124,13 @@ export class AntigravityAcpManager {
     return `${chatId}::${scope}`
   }
 
-  constructor(args: { spawnProcess?: SpawnAntigravityAcp; mcpServers?: AntigravityMcpServers } = {}) {
+  constructor(args: { spawnProcess?: SpawnAntigravityAcp; toolBridge?: AntigravityToolBridge } = {}) {
     this.spawnProcess = args.spawnProcess ?? defaultSpawnAntigravityAcp
-    this.mcpServers = args.mcpServers ?? (() => [])
+    this.toolBridge = args.toolBridge
+  }
+
+  get offersKannaTools(): boolean {
+    return this.toolBridge !== undefined
   }
 
   async startSession(args: StartAntigravitySessionArgs): Promise<string | null> {
@@ -137,11 +151,15 @@ export class AntigravityAcpManager {
       pendingRequests: new Map(),
       pendingTurn: null,
       sessionToken: null,
+      grant: null,
       config: { model: null, thoughtLevel: null },
       planMode: false,
       stderrLines: [],
       closed: false,
     }
+    context.grant = scope === "main"
+      ? this.toolBridge?.grant(args.chatId, (tool, outcome) => this.recordToolOutcome(context, tool, outcome)) ?? null
+      : null
     this.sessions.set(key, context)
     this.attachListeners(context)
 
@@ -200,6 +218,7 @@ export class AntigravityAcpManager {
     const context = this.sessions.get(key)
     if (!context) return
     context.closed = true
+    context.grant?.revoke()
     context.pendingTurn?.queue.finish()
     context.pendingTurn = null
     this.sessions.delete(key)
@@ -234,7 +253,7 @@ export class AntigravityAcpManager {
   }
 
   private async openSession(context: SessionContext, args: StartAntigravitySessionArgs): Promise<AcpSessionSetup> {
-    const mcpServers = context.scope === "main" ? [...this.mcpServers(context.chatId)] : []
+    const mcpServers = context.grant ? [context.grant.server] : []
     if (args.sessionToken) {
       try {
         const resumed = await this.request(context, "session/resume", {
@@ -463,6 +482,15 @@ export class AntigravityAcpManager {
     }
     this.rejectPending(context, new Error(message))
     context.closed = true
+    context.grant?.revoke()
+  }
+
+  private recordToolOutcome(context: SessionContext, tool: string, outcome: KannaToolOutcome) {
+    const turn = context.pendingTurn
+    if (!turn || !context.grant) return
+    for (const entry of turn.translator.answerMcpTool(context.grant.serverName, tool, outcome)) {
+      turn.queue.push({ type: "transcript", entry })
+    }
   }
 
   private rejectPending(context: SessionContext, error: Error) {

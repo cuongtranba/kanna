@@ -373,6 +373,7 @@ async function startTurnAfterTurnStarted(
         stackProjects,
         skills: deps.listSkills(args.chatId),
         genui: isGenUIEnabled(),
+        peerMessaging: deps.antigravityManager.offersKannaTools,
       }),
     })
     if (pendingForkToken) {
