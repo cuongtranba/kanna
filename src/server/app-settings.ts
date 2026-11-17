@@ -24,10 +24,9 @@ import { normalizeChatSoundId, normalizeChatSoundPreference } from "../shared/se
 import { normalizeEditorCommandTemplate, normalizeEditorPreset } from "../shared/settings/editor"
 import { mergeSettingsSections } from "../shared/settings/merge-settings-sections"
 import {
-  normalizeClaudePreference,
-  normalizeCodexPreference,
   normalizeDefaultProvider,
   normalizeProviderDefaults,
+  normalizeSubagentModelSelection,
   type RawProviderDefaults,
 } from "../shared/settings/provider-defaults"
 import {
@@ -37,9 +36,8 @@ import {
   isAppThemePreference,
   GLOBAL_PROMPT_APPEND_MAX_CHARS,
   isAgentProvider,
+  isAntigravityReasoningEffort,
   isClaudeReasoningEffort,
-  normalizeClaudeModelId,
-  normalizeCodexModelId,
   OAUTH_TOKEN_CONCURRENCY_DEFAULT,
   OAUTH_TOKEN_BASE_URL_MAX,
   OAUTH_TOKEN_LABEL_MAX,
@@ -52,11 +50,8 @@ import {
   type AuthSettings,
   type ClaudeAuthSettings,
   type ClaudeDriverSettings,
-  type ClaudeModelOptions,
   type ClaudeLifecycleSettings,
   type CloudflareTunnelSettings,
-  type CodexModelOptions,
-  type OpenRouterModelOptions,
   type ClaudeReasoningEffort,
   type CustomModelEntry,
   type CustomModelInput,
@@ -242,10 +237,10 @@ function validateSubagentRestriction(
 ): SubagentValidationError | null {
   const hasRestriction = workingDir !== undefined || allowedPaths !== undefined
   if (!hasRestriction) return null
-  if (provider === "codex") {
+  if (provider === "codex" || provider === "antigravity") {
     return {
       code: "RESTRICTION_NOT_SUPPORTED",
-      message: "workingDir / allowedPaths are not supported for codex subagents",
+      message: `workingDir / allowedPaths are not supported for ${provider} subagents`,
     }
   }
   const validateRelativePath = (raw: string, field: string): SubagentValidationError | null => {
@@ -323,15 +318,7 @@ function normalizeSubagentEntry<T>(
   }
   const rawModelOptions = isRecord(source.modelOptions) ? source.modelOptions : {}
   const rawModel = typeof source.model === "string" ? source.model : undefined
-  let model = rawModel ?? ""
-  let modelOptions: Subagent["modelOptions"] = {}
-  if (provider === "claude") {
-    model = normalizeClaudeModelId(rawModel, undefined, customModels)
-    modelOptions = normalizeClaudePreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
-  } else if (provider === "codex") {
-    model = normalizeCodexModelId(rawModel, undefined, customModels)
-    modelOptions = normalizeCodexPreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions
-  }
+  const { model, modelOptions } = normalizeSubagentModelSelection(provider, rawModel, rawModelOptions, customModels)
   const contextScope: SubagentContextScope =
     source.contextScope === "full-transcript" ? "full-transcript" : "previous-assistant-reply"
   const triggerMode: SubagentTriggerMode =
@@ -1105,9 +1092,9 @@ function normalizeCustomModels<T>(value: T, warnings: string[]): CustomModelEntr
 }
 
 function mergeSubagentModelOptions(
-  existing: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions,
-  patch: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | OpenRouterModelOptions | undefined,
-): ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions {
+  existing: Subagent["modelOptions"],
+  patch: SubagentPatch["modelOptions"],
+): Subagent["modelOptions"] {
   if (!patch) return existing
   if ("contextWindow" in existing) {
     const claudePatch = "contextWindow" in patch ? patch : undefined
@@ -1121,6 +1108,13 @@ function mergeSubagentModelOptions(
     return {
       reasoningEffort: codexPatch?.reasoningEffort ?? existing.reasoningEffort,
       fastMode: codexPatch?.fastMode ?? existing.fastMode,
+    }
+  }
+  if ("reasoningEffort" in existing) {
+    const antigravityPatch = "reasoningEffort" in patch ? patch : undefined
+    const effort = antigravityPatch?.reasoningEffort
+    return {
+      reasoningEffort: isAntigravityReasoningEffort(effort) ? effort : existing.reasoningEffort,
     }
   }
   return existing

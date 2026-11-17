@@ -4,6 +4,7 @@ import {
   SUBAGENT_NAME_MAX,
 } from "../../shared/settings/validation"
 import {
+  DEFAULT_ANTIGRAVITY_MODEL_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   getProviderCatalog,
@@ -42,6 +43,9 @@ function defaultModelOptionsFor(
 ): SubagentInput["modelOptions"] {
   if (provider === "claude") return { ...(providerDefaults?.claude.modelOptions ?? DEFAULT_CLAUDE_MODEL_OPTIONS) }
   if (provider === "codex") return { ...(providerDefaults?.codex.modelOptions ?? DEFAULT_CODEX_MODEL_OPTIONS) }
+  if (provider === "antigravity") {
+    return { ...(providerDefaults?.antigravity.modelOptions ?? DEFAULT_ANTIGRAVITY_MODEL_OPTIONS) }
+  }
   return {}
 }
 

@@ -22,6 +22,7 @@ import {
 import {
   chatProviderPreferencesSchema,
   claudeModelOptionsSchema,
+  antigravityModelOptionsSchema,
   codexModelOptionsSchema,
   customModelEntrySchema,
   customModelInputSchema,
@@ -117,6 +118,7 @@ export const appSettingsPatchSchema = z.object({
     .object({
       claude: providerPreferencePatch(claudeModelOptionsSchema).optional(),
       codex: providerPreferencePatch(codexModelOptionsSchema).optional(),
+      antigravity: providerPreferencePatch(antigravityModelOptionsSchema).optional(),
       openrouter: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
       custom: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
     })

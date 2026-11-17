@@ -219,6 +219,34 @@ function ProviderDefaultRows({ state }: { state: Pick<KannaState, "handleWriteAp
           />
         </div>
       </SettingsRow>
+
+      <SettingsRow
+        title="Antigravity Defaults"
+        description="Saved defaults when using Antigravity."
+        alignStart
+      >
+        <div className="max-w-[420px]">
+          <ChatPreferenceControls
+            availableProviders={mergedProviders}
+            selectedProvider="antigravity"
+            showProviderPicker={false}
+            model={providerDefaults.antigravity.model}
+            modelOptions={providerDefaults.antigravity.modelOptions}
+            onModelChange={(_, model) => {
+              handleModelChange("antigravity", model)
+            }}
+            onModelOptionChange={(change) => {
+              if (change.type === "antigravityReasoningEffort") {
+                handleModelOptionsChange("antigravity", { reasoningEffort: change.effort })
+              }
+            }}
+            planMode={providerDefaults.antigravity.planMode}
+            onPlanModeChange={(planMode) => handlePlanModeChange("antigravity", planMode)}
+            includePlanMode
+            className="justify-start flex-wrap"
+          />
+        </div>
+      </SettingsRow>
     </>
   )
 }

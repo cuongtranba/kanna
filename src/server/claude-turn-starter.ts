@@ -357,6 +357,8 @@ async function startTurnAfterTurnStarted(
       provider: args.provider,
       model: args.model,
     })
+  } else if (args.provider === "antigravity") {
+    throw new Error("Antigravity runtime is not available")
   } else {
     logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
       chatId: args.chatId,

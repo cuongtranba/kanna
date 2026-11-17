@@ -13,6 +13,7 @@ import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
   isClaudeSdkProvider,
+  normalizeAntigravityModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
@@ -166,6 +167,16 @@ export function getProviderSettings(
     return {
       model,
       effort: undefined,
+      serviceTier: undefined,
+      planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+    }
+  }
+
+  if (provider === "antigravity") {
+    const modelOptions = normalizeAntigravityModelOptions(options.modelOptions, options.effort)
+    return {
+      model: normalizeServerModel(provider, options.model, customModels),
+      effort: modelOptions.reasoningEffort,
       serviceTier: undefined,
       planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
     }

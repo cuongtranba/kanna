@@ -326,6 +326,13 @@ describe("startTurnForChat", () => {
     })
   })
 
+  test("an Antigravity turn is refused instead of falling into the Codex runtime", async () => {
+    const deps = makeDeps()
+    await expect(startTurnForChat(deps, makeArgs({ provider: "antigravity", model: "gemini-4-carbon" })))
+      .rejects.toThrow("Antigravity runtime is not available")
+    expect(deps.codexManager.startTurn as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
+  })
+
   test("10. routes to startClaudeTurn for claude provider", async () => {
     const deps = makeDeps()
     const fakeTurn = makeFakeTurn()

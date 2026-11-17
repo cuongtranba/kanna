@@ -8,6 +8,7 @@ export const isCustomModelProvider = oneOf(CUSTOM_MODEL_PROVIDERS)
 export const DEFAULT_OPENROUTER_SDK_MODEL = "moonshotai/kimi-k2.5:nitro"
 export const DEFAULT_CLAUDE_CHAT_MODEL = "claude-opus-4-7"
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.5"
+export const DEFAULT_ANTIGRAVITY_CHAT_MODEL = "gemini-4-carbon"
 export const QUICK_RESPONSE_CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api"
@@ -56,8 +57,15 @@ export const CODEX_REASONING_OPTIONS = [
   { id: "xhigh", label: "XHigh" },
 ] as const satisfies readonly ProviderEffortOption[]
 
+export const ANTIGRAVITY_REASONING_OPTIONS = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+] as const satisfies readonly ProviderEffortOption[]
+
 export type ClaudeReasoningEffort = (typeof CLAUDE_REASONING_OPTIONS)[number]["id"]
 export type CodexReasoningEffort = (typeof CODEX_REASONING_OPTIONS)[number]["id"]
+export type AntigravityReasoningEffort = (typeof ANTIGRAVITY_REASONING_OPTIONS)[number]["id"]
 export type ClaudeContextWindow = "200k" | "1m"
 export type ServiceTier = "fast"
 
@@ -71,11 +79,16 @@ export interface CodexModelOptions {
   fastMode: boolean
 }
 
+export interface AntigravityModelOptions {
+  reasoningEffort: AntigravityReasoningEffort
+}
+
 export type OpenRouterModelOptions = Record<string, never>
 
 export interface ProviderModelOptionsByProvider {
   claude: ClaudeModelOptions
   codex: CodexModelOptions
+  antigravity: AntigravityModelOptions
   openrouter: OpenRouterModelOptions
   custom: OpenRouterModelOptions
 }
@@ -89,6 +102,7 @@ export interface ProviderPreference<TModelOptions> {
 export type ChatProviderPreferences = {
   claude: ProviderPreference<ClaudeModelOptions>
   codex: ProviderPreference<CodexModelOptions>
+  antigravity: ProviderPreference<AntigravityModelOptions>
   openrouter: ProviderPreference<OpenRouterModelOptions>
   custom: ProviderPreference<OpenRouterModelOptions>
 }
@@ -108,12 +122,20 @@ export const DEFAULT_CODEX_MODEL_OPTIONS = {
   fastMode: false,
 } as const satisfies CodexModelOptions
 
+export const DEFAULT_ANTIGRAVITY_MODEL_OPTIONS = {
+  reasoningEffort: "medium",
+} as const satisfies AntigravityModelOptions
+
 export function isClaudeReasoningEffort(value: string | null | undefined): value is ClaudeReasoningEffort {
   return CLAUDE_REASONING_OPTIONS.some((option) => option.id === value)
 }
 
 export function isCodexReasoningEffort(value: string | null | undefined): value is CodexReasoningEffort {
   return CODEX_REASONING_OPTIONS.some((option) => option.id === value)
+}
+
+export function isAntigravityReasoningEffort(value: string | null | undefined): value is AntigravityReasoningEffort {
+  return ANTIGRAVITY_REASONING_OPTIONS.some((option) => option.id === value)
 }
 
 export const CLAUDE_CONTEXT_WINDOW_OPTIONS = [
@@ -210,6 +232,22 @@ const PROVIDER_CATALOG: Readonly<Record<AgentProvider, ProviderCatalogEntry>> = 
       { id: "gpt-5.3-codex-spark", label: "GPT-5.3 Codex Spark" },
     ],
     efforts: [],
+  },
+  antigravity: {
+    id: "antigravity",
+    label: "Antigravity",
+    defaultModel: DEFAULT_ANTIGRAVITY_CHAT_MODEL,
+    defaultEffort: DEFAULT_ANTIGRAVITY_MODEL_OPTIONS.reasoningEffort,
+    supportsPlanMode: true,
+    models: [
+      { id: "gemini-4-carbon", label: "Gemini 4 Carbon" },
+      { id: "gemini-4-argon", label: "Gemini 4 Argon" },
+      { id: "gemini-4-hydrogen", label: "Gemini 4 Hydrogen" },
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+      { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+      { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+    ],
+    efforts: [...ANTIGRAVITY_REASONING_OPTIONS],
   },
   openrouter: {
     id: "openrouter",

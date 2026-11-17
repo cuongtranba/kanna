@@ -2,7 +2,7 @@ import { type JsonObject } from "./json"
 import { oneOf } from "./vocab"
 
 import type { AgentProvider } from "./core-types"
-import type { ClaudeModelOptions, CodexModelOptions, OpenRouterModelOptions } from "./provider-model-types"
+import type { AntigravityModelOptions, ClaudeModelOptions, CodexModelOptions, OpenRouterModelOptions } from "./provider-model-types"
 import type { TranscriptEntry } from "./transcript-types"
 
 export const SUBAGENT_CONTEXT_SCOPES = ["previous-assistant-reply", "full-transcript"] as const
@@ -22,7 +22,7 @@ export interface Subagent {
   description?: string
   provider: AgentProvider
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | AntigravityModelOptions | OpenRouterModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
   triggerMode: SubagentTriggerMode
@@ -39,7 +39,7 @@ export interface SubagentInput {
   description?: string
   provider: AgentProvider
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | AntigravityModelOptions | OpenRouterModelOptions
   systemPrompt: string
   contextScope: SubagentContextScope
   triggerMode?: SubagentTriggerMode
@@ -54,7 +54,7 @@ export interface SubagentPatch {
   description?: string | null
   provider?: AgentProvider
   model?: string
-  modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | OpenRouterModelOptions
+  modelOptions?: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | Partial<AntigravityModelOptions> | OpenRouterModelOptions
   systemPrompt?: string
   contextScope?: SubagentContextScope
   triggerMode?: SubagentTriggerMode

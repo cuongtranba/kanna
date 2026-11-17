@@ -42,6 +42,7 @@ function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettings
         modelOptions: { reasoningEffort: "high", fastMode: false },
         planMode: false,
       },
+      antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
       openrouter: {
         model: "moonshotai/kimi-k2.5:nitro",
         modelOptions: {},
@@ -101,6 +102,7 @@ describe("buildAgentAppSettingsView", () => {
         providerDefaults: {
           claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
           codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
+          antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
           openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
           custom: { model: "", modelOptions: {}, planMode: false },
         },

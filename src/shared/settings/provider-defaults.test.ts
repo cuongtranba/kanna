@@ -34,6 +34,19 @@ describe("normalizeProviderDefaults", () => {
     expect(normalizeProviderDefaults({ openrouter: { planMode: true } }).openrouter.planMode).toBe(true)
   })
 
+  test("provider defaults saved before Antigravity existed load with its defaults", () => {
+    const stored = JSON.parse('{"claude":{"model":"claude-opus-5"},"codex":{"model":"gpt-5.5"}}')
+    expect(normalizeProviderDefaults(stored).antigravity).toEqual(createDefaultProviderDefaults().antigravity)
+  })
+
+  test("an unknown Antigravity model or effort in settings.json falls back to the defaults", () => {
+    const stored = JSON.parse('{"antigravity":{"model":"gemini-9","modelOptions":{"reasoningEffort":"xhigh"},"planMode":true}}')
+    expect(normalizeProviderDefaults(stored).antigravity).toEqual({
+      ...createDefaultProviderDefaults().antigravity,
+      planMode: true,
+    })
+  })
+
   test("openrouter and custom coerce a truthy settings.json value with Boolean semantics", () => {
     const stored = JSON.parse('{"openrouter":{"planMode":1},"custom":{"planMode":"yes"}}')
     const normalized = normalizeProviderDefaults(stored)

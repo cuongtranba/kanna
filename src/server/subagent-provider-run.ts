@@ -93,6 +93,9 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
         const endpoint = await args.resolveEndpoint?.(args.subagent.provider, args.subagent.model) ?? null
         return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, endpoint, injection: opts?.injection })
       }
+      if (args.subagent.provider === "antigravity") {
+        throw new Error("Antigravity runtime is not available")
+      }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
   }

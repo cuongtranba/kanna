@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { DEFAULT_OPENAI_SDK_MODEL } from "../shared/core-types"
-import { isClaudeReasoningEffort, isCodexReasoningEffort } from "../shared/provider-model-types"
+import { isAntigravityReasoningEffort, isClaudeReasoningEffort, isCodexReasoningEffort } from "../shared/provider-model-types"
 import { mergeAppSettingsPatch } from "../shared/settings/merge-settings-sections"
 import type {
   AppSettingsPatch,
@@ -30,6 +30,11 @@ function mergeSubagentModelOptions(
     return {
       reasoningEffort: isCodexReasoningEffort(patchedEffort) ? patchedEffort : current.reasoningEffort,
       fastMode: "fastMode" in patch && patch.fastMode !== undefined ? patch.fastMode : current.fastMode,
+    }
+  }
+  if ("reasoningEffort" in current) {
+    return {
+      reasoningEffort: isAntigravityReasoningEffort(patchedEffort) ? patchedEffort : current.reasoningEffort,
     }
   }
   return current

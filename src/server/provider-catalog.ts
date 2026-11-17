@@ -1,5 +1,6 @@
 import type {
   AgentProvider,
+  AntigravityModelOptions,
   ClaudeModelOptions,
   CodexModelOptions,
   ModelOptions,
@@ -9,11 +10,13 @@ import type {
   CustomModelEntry,
 } from "../shared/types"
 import {
+  DEFAULT_ANTIGRAVITY_MODEL_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   PROVIDERS,
   normalizeClaudeContextWindow,
   normalizeProviderModelId,
+  isAntigravityReasoningEffort,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   isEndpointProvider,
@@ -92,6 +95,16 @@ export function normalizeCodexModelOptions(modelOptions?: ModelOptions, legacyEf
       ? modelOptions.codex.fastMode
       : DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
   }
+}
+
+export function normalizeAntigravityModelOptions(
+  modelOptions?: ModelOptions,
+  legacyEffort?: string,
+): AntigravityModelOptions {
+  const rawEffort = modelOptions?.antigravity?.reasoningEffort
+  if (isAntigravityReasoningEffort(rawEffort)) return { reasoningEffort: rawEffort }
+  if (isAntigravityReasoningEffort(legacyEffort)) return { reasoningEffort: legacyEffort }
+  return { reasoningEffort: DEFAULT_ANTIGRAVITY_MODEL_OPTIONS.reasoningEffort }
 }
 
 export function codexServiceTierFromModelOptions(modelOptions: CodexModelOptions): ServiceTier | undefined {

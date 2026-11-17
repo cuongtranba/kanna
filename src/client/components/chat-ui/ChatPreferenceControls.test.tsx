@@ -36,6 +36,30 @@ describe("ChatPreferenceControls", () => {
     expect(html).not.toContain("Plan Mode")
   })
 
+  test("antigravity shows its effort and plan mode but no fast mode or context window", () => {
+    const html = renderToStaticMarkup(
+      <ChatPreferenceControls
+        availableProviders={PROVIDERS}
+        selectedProvider="antigravity"
+        model="gemini-4-carbon"
+        modelOptions={{ reasoningEffort: "medium" }}
+        onProviderChange={() => {}}
+        onModelChange={() => {}}
+        onModelOptionChange={() => {}}
+        planMode
+        onPlanModeChange={() => {}}
+      />
+    )
+
+    expect(html).toContain("Antigravity")
+    expect(html).toContain("Gemini 4 Carbon")
+    expect(html).toContain("Medium")
+    expect(html).toContain("Plan Mode")
+    expect(html).not.toContain("Fast Mode")
+    expect(html).not.toContain("Standard")
+    expect(html).not.toContain("1M")
+  })
+
   test("renders claude plan mode controls when enabled", () => {
     const html = renderToStaticMarkup(
       <ChatPreferenceControls

@@ -239,6 +239,11 @@ describe("getProviderSettings", () => {
     expect(settings.planMode).toBe(false)
   })
 
+  test("antigravity provider resolves its default model, effort and no fast tier", () => {
+    const settings = getProviderSettings("antigravity", { modelOptions: { antigravity: { reasoningEffort: "high" } } }, [])
+    expect(settings).toEqual({ model: "gemini-4-carbon", effort: "high", serviceTier: undefined, planMode: false })
+  })
+
   test("openrouter provider uses model from options directly", () => {
     const settings = getProviderSettings("openrouter", { model: "anthropic/claude-3.5-sonnet" }, [])
     expect(settings.model).toBe("anthropic/claude-3.5-sonnet")
@@ -1068,6 +1073,7 @@ describe("model resolution for server-originated turns", () => {
   const CLAUDE_DEFAULTS: ChatProviderPreferences = {
     claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
     codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
+    antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
     openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
     custom: { model: "", modelOptions: {}, planMode: false },
   }

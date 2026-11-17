@@ -10,7 +10,7 @@ export function isUntitledChat(title: string): boolean {
   return title === DEFAULT_CHAT_TITLE
 }
 
-export const AGENT_PROVIDERS = ["claude", "codex", "openrouter", "custom"] as const
+export const AGENT_PROVIDERS = ["claude", "codex", "antigravity", "openrouter", "custom"] as const
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number]
 export const isAgentProvider = oneOf(AGENT_PROVIDERS)
 export const LLM_PROVIDER_KINDS = ["openai", "openrouter", "custom"] as const
