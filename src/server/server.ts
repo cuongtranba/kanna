@@ -14,6 +14,7 @@ import { PushManager, realWebPushSender } from "./push/push-manager"
 import { loadOrGenerateVapidKeys } from "./push/vapid.adapter"
 import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent-coordinator"
+import type { AgentToolsBridge } from "./agent-tools-bridge"
 import { createPeerMessaging } from "./peer-messaging/create-peer-messaging"
 import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
 import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
@@ -61,7 +62,6 @@ import { compareVersions } from "./cli-runtime"
 import { createUpdateStrategy } from "./update-strategy"
 import { createWsRouter } from "./ws-router"
 import type { SocketState } from "./ws-router-utils"
-import { isAutoContinueScheduleEvent } from "./auto-continue/events"
 import { ScheduleManager } from "./auto-continue/schedule-manager"
 import { CronScheduler } from "./cron/scheduler"
 import { OAuthTokenPool } from "./oauth-pool/oauth-token-pool"
@@ -70,7 +70,7 @@ import { TunnelManager } from "./cloudflare-tunnel/tunnel-manager.adapter"
 import { TunnelLifecycle } from "./cloudflare-tunnel/lifecycle"
 import { initToolCallbackOnBoot, type ToolCallbackService } from "./tool-callback"
 import { SessionShareService } from "./session-share"
-import { recoverQueuedMessages } from "./queued-message-recovery"
+import { rehydrateScheduledWork } from "./scheduled-work-rehydrate"
 import { initObservability } from "./otel.adapter"
 import { createWorkflowRegistry } from "./workflow-registry"
 import { createSlashCommandSources } from "./slash-command-sources.adapter"
@@ -144,6 +144,7 @@ interface ApplicationServices {
   store: EventStore
   diffStore: DiffStore
   auth: PasswordAuth | null
+  agentToolsBridge: AgentToolsBridge
   analytics: KannaAnalyticsReporter
   updateManager: UpdateManager | null
   agent: AgentCoordinator
@@ -367,7 +368,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   let cronDrain: Promise<void> = Promise.resolve()
   lifetime.defer("quiesce", () => { cronDrain = cronScheduler.shutdown() })
-  const peerMessaging = createPeerMessaging(store, () => agent, () => appSettings.getSnapshot().peerMessagesInbound)
+  const { agentToolsBridge, ...peerMessaging } = createPeerMessaging(store, () => agent, () => appSettings.getSnapshot().peerMessagesInbound)
   agent = new AgentCoordinator({
     store,
     ...peerMessaging,
@@ -583,6 +584,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     store,
     diffStore,
     auth,
+    agentToolsBridge,
     analytics,
     updateManager,
     agent,
@@ -601,36 +603,6 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   }
 }
 
-function rehydrateScheduledWork(services: ApplicationServices): void {
-  const { store, agent, scheduleManager, cronScheduler } = services
-  scheduleManager.rehydrate(
-    store
-      .listAutoContinueChats()
-      .flatMap((chatId) => store.getAutoContinueEvents(chatId))
-      .filter(isAutoContinueScheduleEvent),
-  )
-  const cronChatIds = store.listAutoContinueChats()
-  const missedCronFires = cronScheduler.rehydrate(
-    cronChatIds.flatMap((chatId) => store.getAutoContinueEvents(chatId)),
-  )
-  void agent.reconcileCronRunsAtBoot(missedCronFires, cronChatIds).catch((error) => {
-    log.error("[kanna/cron] boot reconciliation failed:", String(error))
-  })
-
-  void recoverQueuedMessages({
-    listChatsWithQueuedMessages: () => store.listChatsWithQueuedMessages(),
-    maybeStartNextQueuedMessage: (chatId, opts) => agent.maybeStartNextQueuedMessage(chatId, opts),
-  }).then(async (recovered) => {
-    if (recovered.length > 0) {
-      log.info("[kanna] resumed queued messages after restart", { chats: recovered.length })
-    }
-    const rearmed = await agent.recoverArmedLoopWakes()
-    if (rearmed.length > 0) {
-      log.info("[kanna] re-fired lost loop wakes after restart", { chats: rearmed.length })
-    }
-  })
-}
-
 async function shutdownServices(services: ApplicationServices, server: Server<SocketState>): Promise<void> {
   await services.lifetime.disposeAll()
   server.stop(true)
@@ -646,7 +618,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
   const hostname = options.host ?? "127.0.0.1"
   const trustProxy = options.trustProxy ?? false
-  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets, inboxApproveProposal: services.inboxActions.approveProposal, bindHost: hostname, trustProxy })
+  const fetchHandler = createHttpDispatcher({ store, appSettings, auth, sessionShare: sessionShareService, remoteMcp, distDir, agentTools: services.agentToolsBridge, webhooks: services.webhooks, beaconTransferTickets: beacon.registry.transfer.tickets, inboxApproveProposal: services.inboxActions.approveProposal, bindHost: hostname, trustProxy })
   const exposureWarning = unprotectedExposureWarning({ hasPassword: auth !== null, trustProxy, bindHost: hostname })
   if (exposureWarning !== null) log.warn(exposureWarning)
 
@@ -680,6 +652,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
 
   const boundPort = server.port ?? actualPort
   remoteMcp.start(boundPort)
+  services.agentToolsBridge.bindPort(boundPort)
 
   analytics.trackLaunch({ port: boundPort, host: hostname, openBrowser: options.openBrowser ?? true, share: options.share ?? false, password: options.password ?? null, strictPort })
 

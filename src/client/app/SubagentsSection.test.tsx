@@ -59,6 +59,7 @@ const defaultProviderPrefs: ChatProviderPreferences = {
     modelOptions: { reasoningEffort: "high", fastMode: false },
     planMode: false,
   },
+  antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
   openrouter: {
     model: DEFAULT_OPENROUTER_SDK_MODEL,
     modelOptions: {},

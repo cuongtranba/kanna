@@ -7,6 +7,7 @@ import {
   type BuildSubagentProviderRunForChatArgs,
 } from "./claude-subagent-wiring"
 import type { ProviderRunStart } from "./subagent-orchestrator"
+import { AntigravityAcpManager } from "./antigravity-acp"
 import type { Subagent } from "../shared/subagent-types"
 import type { ToolCallbackService } from "./tool-callback"
 import { buildKannaMcpTools, type ChatTaskStorePort, type KannaMcpDelegationContext } from "./kanna-mcp"
@@ -57,6 +58,7 @@ function makeDeps(overrides: Partial<SubagentWiringDeps> = {}): SubagentWiringDe
       notifySubagentToolPending: () => {},
     } as never,
     codexManager: {} as never,
+    antigravityManager: new AntigravityAcpManager(),
     oauthPool: null,
     subagentPendingResolvers: pendingResolvers as never,
     realpath: (p) => p,

@@ -1,6 +1,7 @@
 
 import type { AgentProvider, TranscriptEntry } from "../shared/types"
 import type { JsonValue } from "../shared/json"
+import { providerUsesSdkSession } from "../shared/provider-model-types"
 import { readPlanDecision } from "./claude-spawn-helpers"
 import type { ActiveTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
@@ -81,7 +82,7 @@ export async function respondTool(
       )
     }
 
-    if (pending.provider === "codex" && active) {
+    if (!providerUsesSdkSession(pending.provider) && active) {
       active.postToolFollowUp = confirmed
         ? {
             content: message

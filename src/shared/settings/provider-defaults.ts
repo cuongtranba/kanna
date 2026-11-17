@@ -1,23 +1,29 @@
-import { isAgentProvider, type DefaultProviderPreference } from "../core-types"
+import { isAgentProvider, type AgentProvider, type DefaultProviderPreference } from "../core-types"
 import type { JsonValue } from "../json"
 import {
+  DEFAULT_ANTIGRAVITY_CHAT_MODEL,
+  DEFAULT_ANTIGRAVITY_MODEL_OPTIONS,
   DEFAULT_CLAUDE_CHAT_MODEL,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_CHAT_MODEL,
   DEFAULT_CODEX_MODEL_OPTIONS,
   DEFAULT_OPENROUTER_SDK_MODEL,
+  isAntigravityReasoningEffort,
   isClaudeReasoningEffort,
   isCodexReasoningEffort,
   normalizeClaudeContextWindow,
   normalizeClaudeModelId,
   normalizeClaudeReasoningEffort,
   normalizeCodexModelId,
+  normalizeProviderModelId,
+  type AntigravityModelOptions,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
   type CodexModelOptions,
   type CustomModelEntry,
   type ProviderPreference,
 } from "../provider-model-types"
+import type { Subagent } from "../subagent-types"
 
 interface RawProviderPreference<TOptions> {
   model?: string
@@ -29,6 +35,7 @@ interface RawProviderPreference<TOptions> {
 export interface RawProviderDefaults {
   claude?: RawProviderPreference<ClaudeModelOptions>
   codex?: RawProviderPreference<CodexModelOptions>
+  antigravity?: RawProviderPreference<AntigravityModelOptions>
   openrouter?: { model?: string; planMode?: boolean }
   custom?: { model?: string; planMode?: boolean }
 }
@@ -43,6 +50,11 @@ export function createDefaultProviderDefaults(): ChatProviderPreferences {
     codex: {
       model: DEFAULT_CODEX_CHAT_MODEL,
       modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS },
+      planMode: false,
+    },
+    antigravity: {
+      model: DEFAULT_ANTIGRAVITY_CHAT_MODEL,
+      modelOptions: { ...DEFAULT_ANTIGRAVITY_MODEL_OPTIONS },
       planMode: false,
     },
     openrouter: { model: DEFAULT_OPENROUTER_SDK_MODEL, modelOptions: {}, planMode: false },
@@ -102,6 +114,40 @@ export function normalizeCodexPreference(
   }
 }
 
+export function normalizeAntigravityPreference(
+  value?: RawProviderPreference<AntigravityModelOptions>,
+): ProviderPreference<AntigravityModelOptions> {
+  const effort = [value?.modelOptions?.reasoningEffort, value?.effort]
+    .map(stringOrUndefined)
+    .find(isAntigravityReasoningEffort)
+  return {
+    model: normalizeProviderModelId("antigravity", stringOrUndefined(value?.model)),
+    modelOptions: { reasoningEffort: effort ?? DEFAULT_ANTIGRAVITY_MODEL_OPTIONS.reasoningEffort },
+    planMode: value?.planMode === true,
+  }
+}
+
+export function normalizeSubagentModelSelection(
+  provider: AgentProvider,
+  rawModel: string | undefined,
+  rawModelOptions: Partial<Record<keyof (ClaudeModelOptions & CodexModelOptions & AntigravityModelOptions), JsonValue>>,
+  customModels?: readonly CustomModelEntry[],
+): { model: string; modelOptions: Subagent["modelOptions"] } {
+  if (provider === "claude") {
+    const model = normalizeClaudeModelId(rawModel, undefined, customModels)
+    return { model, modelOptions: normalizeClaudePreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions }
+  }
+  if (provider === "codex") {
+    const model = normalizeCodexModelId(rawModel, undefined, customModels)
+    return { model, modelOptions: normalizeCodexPreference({ model, modelOptions: rawModelOptions }, customModels).modelOptions }
+  }
+  if (provider === "antigravity") {
+    const model = normalizeProviderModelId("antigravity", rawModel)
+    return { model, modelOptions: normalizeAntigravityPreference({ model, modelOptions: rawModelOptions }).modelOptions }
+  }
+  return { model: rawModel ?? "", modelOptions: {} }
+}
+
 export function normalizeProviderDefaults(
   value?: RawProviderDefaults,
   customModels?: readonly CustomModelEntry[],
@@ -109,6 +155,7 @@ export function normalizeProviderDefaults(
   return {
     claude: normalizeClaudePreference(value?.claude, customModels),
     codex: normalizeCodexPreference(value?.codex, customModels),
+    antigravity: normalizeAntigravityPreference(value?.antigravity),
     openrouter: {
       model: value?.openrouter?.model ?? DEFAULT_OPENROUTER_SDK_MODEL,
       modelOptions: {},

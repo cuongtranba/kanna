@@ -173,6 +173,7 @@ c3-201:
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/scheduled-work-rehydrate.ts
   - src/server/router-housekeeping.ts
   - src/server/http-dispatcher.ts
   - src/server/request-origin-guard.ts
@@ -291,6 +292,7 @@ c3-208:
   - src/server/ws-router-coverage.test.ts
 c3-209:
   - src/server/process-utils.adapter.ts
+  - src/server/stdio-process.ts
   - src/server/process-utils.test.ts
 c3-210:
   - src/server/agent.test.ts
@@ -336,6 +338,7 @@ c3-210:
   - src/server/claude-inbox-guard.ts
   - src/server/claude-inbox-guard.test.ts
   - src/server/agent-coordinator.ts
+  - src/server/turn-end-guards.ts
   - src/server/detached-work.ts
   - src/server/agent-coordinator-types.ts
   - src/server/agent-app-settings-view.ts
@@ -1001,3 +1004,11 @@ c3-249:
   - src/server/kanna-mcp-peer.ts
   - src/client/components/messages/OriginChip.tsx
   - src/client/app/GeneralPeerRow.tsx
+c3-250:
+  - src/server/antigravity-acp.ts
+  - src/server/antigravity-acp-protocol.ts
+  - src/server/antigravity-acp-translator.ts
+  - src/server/antigravity-spawn.adapter.ts
+  - src/server/antigravity-acp.test.ts
+  - src/server/agent-tools-bridge.ts
+  - src/server/agent-tools-bridge.test.ts

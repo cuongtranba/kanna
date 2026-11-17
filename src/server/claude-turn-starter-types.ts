@@ -18,6 +18,7 @@ import type { PendingToolSlots } from "./pending-tool-slot"
 import type { HarnessTurn, HarnessToolRequest } from "./harness-types"
 import type { EventStore } from "./event-store"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { AntigravityAcpManager } from "./antigravity-acp"
 import type { SubagentOrchestrator } from "./subagent-orchestrator"
 import type { SendToStartingProfile } from "./claude-steer-log"
 
@@ -61,6 +62,7 @@ export interface StartTurnDeps {
 
   store: EventStore
   codexManager: CodexAppServerManager
+  antigravityManager: AntigravityAcpManager
   subagentOrchestrator: Pick<SubagentOrchestrator, "clearChatCancellation">
 
   clearDrainingStream: (chatId: string) => void

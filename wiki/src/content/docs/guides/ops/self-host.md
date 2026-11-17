@@ -56,7 +56,7 @@ HOME=/srv/kanna kanna --remote --password '<secret>'
 ```
 
 Note that this changes `HOME` for everything the agent spawns too, including
-the `claude` and `codex` CLIs and their own credentials.
+the `claude`, `codex` and `agy` CLIs and their own credentials.
 :::
 
 Setting `KANNA_RUNTIME_PROFILE=dev` switches the root to `~/.kanna-dev`, so a

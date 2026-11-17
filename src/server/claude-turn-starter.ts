@@ -1,5 +1,6 @@
 import type { AgentProvider } from "../shared/types"
 import {
+  isAntigravityReasoningEffort,
   isCodexReasoningEffort,
   isEndpointProvider,
   providerUsesSdkSession,
@@ -351,6 +352,45 @@ async function startTurnAfterTurnStarted(
       forkSession: pendingForkToken != null,
       onToolRequest,
       provider: args.provider,
+    })
+    logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
+  } else if (args.provider === "antigravity") {
+    logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
+    await deps.antigravityManager.startSession({
+      chatId: args.chatId,
+      cwd: resolveSpawnPaths(chat, project.localPath).cwd,
+      sessionToken: pendingForkToken ? null : existingToken,
+      developerInstructions: buildCodexDeveloperInstructions({
+        ...instructionOptions,
+        stackProjects,
+        skills: deps.listSkills(args.chatId),
+        genui: isGenUIEnabled(),
+        peerMessaging: deps.antigravityManager.offersKannaTools,
+      }),
+    })
+    if (pendingForkToken) {
+      await deps.store.setPendingForkSessionToken(args.chatId, null)
+    }
+    logSendToStartingProfile(args.profile, "start_turn.session_ready", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
+    turn = await deps.antigravityManager.startTurn({
+      chatId: args.chatId,
+      content: promptContent,
+      model: args.model,
+      effort: isAntigravityReasoningEffort(args.effort) ? args.effort : undefined,
+      planMode: args.planMode,
+      onToolRequest,
     })
     logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
       chatId: args.chatId,

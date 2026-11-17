@@ -10,9 +10,11 @@ import {
 import type { SubagentCommandResult, SubagentDeleteResult } from "./protocol"
 import { agentProviderSchema } from "./core-types.schema"
 import {
+  antigravityModelOptionsSchema,
   claudeModelOptionsSchema,
   codexModelOptionsSchema,
   openRouterModelOptionsSchema,
+  strictPartialAntigravityModelOptionsSchema,
   strictPartialClaudeModelOptionsSchema,
   strictPartialCodexModelOptionsSchema,
 } from "./provider-model-types.schema"
@@ -26,7 +28,7 @@ export const subagentInputSchema = z.object({
   description: z.string().optional(),
   provider: agentProviderSchema,
   model: z.string(),
-  modelOptions: z.union([claudeModelOptionsSchema, codexModelOptionsSchema, openRouterModelOptionsSchema]),
+  modelOptions: z.union([claudeModelOptionsSchema, codexModelOptionsSchema, antigravityModelOptionsSchema, openRouterModelOptionsSchema]),
   systemPrompt: z.string(),
   contextScope: subagentContextScopeSchema,
   triggerMode: subagentTriggerModeSchema.optional(),
@@ -42,7 +44,12 @@ export const subagentPatchSchema = z.object({
   provider: agentProviderSchema.optional(),
   model: z.string().optional(),
   modelOptions: z
-    .union([strictPartialClaudeModelOptionsSchema, strictPartialCodexModelOptionsSchema, openRouterModelOptionsSchema])
+    .union([
+      strictPartialClaudeModelOptionsSchema,
+      strictPartialCodexModelOptionsSchema,
+      strictPartialAntigravityModelOptionsSchema,
+      openRouterModelOptionsSchema,
+    ])
     .optional(),
   systemPrompt: z.string().optional(),
   contextScope: subagentContextScopeSchema.optional(),
@@ -53,7 +60,7 @@ export const subagentPatchSchema = z.object({
   allowBeaconTools: z.boolean().optional(),
 })
 
-const subagentModelOptionsSchema = z.union([claudeModelOptionsSchema, codexModelOptionsSchema, openRouterModelOptionsSchema])
+const subagentModelOptionsSchema = z.union([claudeModelOptionsSchema, codexModelOptionsSchema, antigravityModelOptionsSchema, openRouterModelOptionsSchema])
 
 export const subagentSchema = z.object({
   id: z.string(),

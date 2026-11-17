@@ -18,6 +18,7 @@ import { EventStore, type TurnOutcome } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
+import { AntigravityAcpManager } from "./antigravity-acp"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
 import { QuickResponseAdapter } from "./quick-response"
 import type { HarnessTurn } from "./harness-types"
@@ -170,16 +171,11 @@ import { currentBranchName, mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
-import { createMermaidGuard } from "./mermaid-guard"
-import { composeTurnEndGuards, type TurnEndGuard } from "./turn-end-guard"
-import { createGenUIGuard } from "./genui/genui-guard"
-import { isGenUIEnabled } from "./genui/genui-config"
-import type { DatasetDecl } from "../shared/genui"
+import type { TurnEndGuard } from "./turn-end-guard"
+import { createCoordinatorTurnEndGuards } from "./turn-end-guards"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { createModelEscalation, type ModelEscalation } from "./model-escalation"
-import { parseMermaid } from "./mermaid-parse.adapter"
-import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveChatCwd } from "./claude-session-config"
 import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
 import { readCatalogFileBody } from "./local-catalog-io.adapter"
@@ -195,6 +191,7 @@ export class AgentCoordinator {
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   readonly analytics: AnalyticsReporter
   readonly codexManager: CodexAppServerManager
+  readonly antigravityManager: AntigravityAcpManager
   readonly midTurnDelivery: MidTurnDelivery
   readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
@@ -265,6 +262,7 @@ export class AgentCoordinator {
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.antigravityManager = args.antigravityManager ?? new AntigravityAcpManager()
     this.midTurnDelivery = createMidTurnDelivery({
       store: this.store,
       activeTurns: this.activeTurns,
@@ -298,25 +296,13 @@ export class AgentCoordinator {
         drain: true,
       }),
     })
-    const genuiDatasets = args.genuiDatasets
-    const checkGenUIDataset = async (chatId: string, decl: DatasetDecl) =>
-      (genuiDatasets ? await genuiDatasets.checkResolvable(chatId, decl) : null)
-    const genuiEscalation = this._buildModelEscalation({ name: "genui", enabled: isGenUIEnabled() })
-    this._codexTurnEndGuard = createGenUIGuard(genuiEscalation, checkGenUIDataset, false)
-    this._turnEndGuard = composeTurnEndGuards(
-      createMermaidGuard({
-        escalation: this._buildModelEscalation({
-          name: "mermaid",
-          enabled: config.mermaidGuardEnabled,
-        }),
-        parse: parseMermaid,
-        repair: (source) => {
-          const result = repairMermaidSource(source)
-          return { source: result.source, repaired: result.repairs.length > 0 }
-        },
-      }),
-      createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
-    )
+    const turnEndGuards = createCoordinatorTurnEndGuards({
+      genuiDatasets: args.genuiDatasets,
+      buildEscalation: (opts) => this._buildModelEscalation(opts),
+      mermaidGuardEnabled: config.mermaidGuardEnabled,
+    })
+    this._turnEndGuard = turnEndGuards.claude
+    this._codexTurnEndGuard = turnEndGuards.codex
     const onTurnOutcome = args.onTurnOutcome
     this.unsubscribeTurnTerminal = this.store.subscribeTurnTerminal((chatId, outcome) => {
       this.handleTurnTerminal(chatId, outcome, onTurnOutcome)
@@ -457,6 +443,7 @@ export class AgentCoordinator {
   async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
     this.unsubscribeTurnTerminal()
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
+    this.antigravityManager.stopAll()
     const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
       const closed = session.session.closed
       this.closeClaudeSession(chatId, session)
@@ -677,6 +664,7 @@ export class AgentCoordinator {
       startClaudeSessionFn: this.startClaudeSessionFn,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       codexManager: this.codexManager,
+      antigravityManager: this.antigravityManager,
       oauthPool: this.oauthPool,
       subagentPendingResolvers: this.subagentPendingResolvers,
       realpath: realpathAdapter,
@@ -859,6 +847,7 @@ export class AgentCoordinator {
       hasLiveWorkflow: (chatId) => hasLiveWorkflowFn(this.sessionLifecycle, chatId),
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
+      stopAntigravitySession: (chatId) => this.antigravityManager.stopSession(chatId),
       emitStateChange: (chatId) => this.emitStateChange(chatId),
     }
   }
@@ -872,6 +861,7 @@ export class AgentCoordinator {
       mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
       store: this.store,
       codexManager: this.codexManager,
+      antigravityManager: this.antigravityManager,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
       emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),

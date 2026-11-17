@@ -1,0 +1,10 @@
+fact: c3-250
+claim: "Antigravity ACP driver is at src/server/antigravity-acp.ts with its protocol, translator and spawn adapter, and the peer tools bridge is at src/server/agent-tools-bridge.ts"
+code:
+  - src/server/antigravity-acp.ts
+  - src/server/antigravity-acp-protocol.ts
+  - src/server/antigravity-acp-translator.ts
+  - src/server/antigravity-spawn.adapter.ts
+  - src/server/antigravity-acp.test.ts
+  - src/server/agent-tools-bridge.ts
+  - src/server/agent-tools-bridge.test.ts

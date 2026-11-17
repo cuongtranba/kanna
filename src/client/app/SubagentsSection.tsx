@@ -17,13 +17,10 @@ import { pendingActionKey, runPendingAction, usePendingAction } from "../stores/
 import {
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
   CLAUDE_REASONING_OPTIONS,
-  CODEX_REASONING_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
-  DEFAULT_CODEX_MODEL_OPTIONS,
   getProviderCatalog,
   isClaudeContextWindow,
   isClaudeReasoningEffort,
-  isCodexReasoningEffort,
   isAgentProvider,
   isSubagentContextScope,
   isSubagentTriggerMode,
@@ -34,10 +31,7 @@ import {
   type ClaudeContextWindow,
   type ClaudeModelOptions,
   type ClaudeReasoningEffort,
-  type CodexModelOptions,
-  type CodexReasoningEffort,
   type OpenRouterModel,
-  type OpenRouterModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
   type SubagentInput,
@@ -57,17 +51,15 @@ import {
   toSubagentInput,
   toSubagentPatch,
 } from "../lib/subagentDraft"
+import { subagentEffortControl } from "../lib/subagentEffort"
 import { useSubagentsSectionStore } from "../stores/subagentsSectionStore"
 import { useOpenRouterModelsStore } from "../stores/openrouterModelsStore"
 import { useShallow } from "zustand/react/shallow"
 import { FormRow } from "./SubagentFormRow"
 import { SubagentScopeFields } from "./SubagentScopeFields"
 
-function isClaudeModelOptions(opts: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions): opts is ClaudeModelOptions {
+function isClaudeModelOptions(opts: Subagent["modelOptions"]): opts is ClaudeModelOptions {
   return "contextWindow" in opts
-}
-function isCodexModelOptions(opts: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions): opts is CodexModelOptions {
-  return "fastMode" in opts
 }
 
 export interface SubagentsSectionHandlers {
@@ -323,10 +315,9 @@ function SubagentForm(props: SubagentFormProps) {
     patchFormDraft({ modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...opts, contextWindow: value } })
   }
 
-  function handleCodexReasoning(value: CodexReasoningEffort) {
-    if (draft.provider !== "codex") return
-    const opts = isCodexModelOptions(draft.modelOptions) ? draft.modelOptions : DEFAULT_CODEX_MODEL_OPTIONS
-    patchFormDraft({ modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS, ...opts, reasoningEffort: value } })
+  function handleProviderEffort(value: string) {
+    const modelOptions = effortControl?.apply(value)
+    if (modelOptions) patchFormDraft({ modelOptions })
   }
 
   async function handleSubmit() {
@@ -364,9 +355,7 @@ function SubagentForm(props: SubagentFormProps) {
   const claudeOptions: ClaudeModelOptions | null = draft.provider === "claude"
     ? { ...DEFAULT_CLAUDE_MODEL_OPTIONS, ...(isClaudeModelOptions(draft.modelOptions) ? draft.modelOptions : {}) }
     : null
-  const codexOptions: CodexModelOptions | null = draft.provider === "codex"
-    ? { ...DEFAULT_CODEX_MODEL_OPTIONS, ...(isCodexModelOptions(draft.modelOptions) ? draft.modelOptions : {}) }
-    : null
+  const effortControl = subagentEffortControl(draft)
   const providerCatalog =
     props.availableProviders.find((entry) => entry.id === draft.provider) ?? getProviderCatalog(draft.provider)
 
@@ -457,14 +446,12 @@ function SubagentForm(props: SubagentFormProps) {
         </>
       ) : null}
 
-      {codexOptions ? (
+      {effortControl ? (
         <FormRow label="Reasoning effort">
           <SegmentedControl
-            value={codexOptions.reasoningEffort}
-            onValueChange={(value) => {
-              if (isCodexReasoningEffort(value)) handleCodexReasoning(value)
-            }}
-            options={CODEX_REASONING_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+            value={effortControl.value}
+            onValueChange={handleProviderEffort}
+            options={effortControl.options}
             size="sm"
           />
         </FormRow>

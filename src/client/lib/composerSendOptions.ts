@@ -1,4 +1,5 @@
 import {
+  DEFAULT_ANTIGRAVITY_MODEL_OPTIONS,
   DEFAULT_CLAUDE_MODEL_OPTIONS,
   DEFAULT_CODEX_MODEL_OPTIONS,
   isEndpointProvider,
@@ -26,6 +27,7 @@ export function toSendOptions(state: ComposerState, includePlanMode: boolean): C
 function modelOptionsOf(state: ComposerState): ModelOptions {
   if (state.provider === "claude") return { claude: { ...state.modelOptions } }
   if (state.provider === "codex") return { codex: { ...state.modelOptions } }
+  if (state.provider === "antigravity") return { antigravity: { ...state.modelOptions } }
   return {}
 }
 
@@ -54,6 +56,18 @@ export function fromSendOptions(options?: ComposerSendOptions): ComposerState | 
       modelOptions: {
         reasoningEffort: codex.reasoningEffort ?? DEFAULT_CODEX_MODEL_OPTIONS.reasoningEffort,
         fastMode: codex.fastMode ?? DEFAULT_CODEX_MODEL_OPTIONS.fastMode,
+      },
+      planMode,
+    }
+  }
+
+  if (options.provider === "antigravity" && options.modelOptions?.antigravity) {
+    const antigravity = options.modelOptions.antigravity
+    return {
+      provider: "antigravity",
+      model: options.model,
+      modelOptions: {
+        reasoningEffort: antigravity.reasoningEffort ?? DEFAULT_ANTIGRAVITY_MODEL_OPTIONS.reasoningEffort,
       },
       planMode,
     }

@@ -1,12 +1,14 @@
 import { useCallback, useMemo, type ComponentType, type SVGProps } from "react"
-import { Box, Brain, Gauge, ListTodo, Lock, LockOpen, Search, Server, SquareMenu, SquareMinus } from "lucide-react"
+import { Box, Brain, Gauge, ListTodo, Lock, LockOpen, Search, Server, Sparkles, SquareMenu, SquareMinus } from "lucide-react"
 import {
+  ANTIGRAVITY_REASONING_OPTIONS,
   CLAUDE_CONTEXT_WINDOW_OPTIONS,
-  CLAUDE_REASONING_OPTIONS,
   CODEX_REASONING_OPTIONS,
   getClaudeModelEffortOptions,
   isEndpointProvider,
   type AgentProvider,
+  type AntigravityModelOptions,
+  type AntigravityReasoningEffort,
   type ClaudeContextWindow,
   type ClaudeModelOptions,
   type ClaudeReasoningEffort,
@@ -89,6 +91,7 @@ function OpenRouterIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
 export const PROVIDER_ICONS: Record<AgentProvider, IconComponent> = {
   claude: AnthropicIcon,
   codex: OpenAIIcon,
+  antigravity: Sparkles,
   openrouter: OpenRouterIcon,
   custom: Server,
 }
@@ -296,14 +299,47 @@ export type ModelOptionChange =
   | { type: "claudeReasoningEffort"; effort: ClaudeReasoningEffort }
   | { type: "contextWindow"; contextWindow: ClaudeContextWindow }
   | { type: "codexReasoningEffort"; effort: CodexReasoningEffort }
+  | { type: "antigravityReasoningEffort"; effort: AntigravityReasoningEffort }
   | { type: "fastMode"; fastMode: boolean }
+
+interface EffortChoice {
+  id: string
+  label: string
+  change: ModelOptionChange
+}
+
+function effortChoicesFor(
+  provider: AgentProvider,
+  model: string,
+  customModels: Parameters<typeof getClaudeModelEffortOptions>[1],
+): EffortChoice[] | null {
+  if (provider === "claude") {
+    return getClaudeModelEffortOptions(model, customModels).map((effort) => ({
+      ...effort,
+      change: { type: "claudeReasoningEffort", effort: effort.id },
+    }))
+  }
+  if (provider === "codex") {
+    return CODEX_REASONING_OPTIONS.map((effort) => ({
+      ...effort,
+      change: { type: "codexReasoningEffort", effort: effort.id },
+    }))
+  }
+  if (provider === "antigravity") {
+    return ANTIGRAVITY_REASONING_OPTIONS.map((effort) => ({
+      ...effort,
+      change: { type: "antigravityReasoningEffort", effort: effort.id },
+    }))
+  }
+  return null
+}
 
 interface ChatPreferenceControlsProps {
   availableProviders: ProviderCatalogEntry[]
   selectedProvider: AgentProvider
   showProviderPicker?: boolean
   model: string
-  modelOptions: ClaudeModelOptions | CodexModelOptions | OpenRouterModelOptions
+  modelOptions: ClaudeModelOptions | CodexModelOptions | AntigravityModelOptions | OpenRouterModelOptions
   onProviderChange?: (provider: AgentProvider) => void
   onModelChange: (provider: AgentProvider, model: string) => void
   modelLock?: ModelLock | null
@@ -341,6 +377,7 @@ export function ChatPreferenceControls({
   const contextWindowOptions = providerModels.find((candidate) => candidate.id === model)?.contextWindowOptions ?? []
   const selectedContextWindow = claudeModelOptions?.contextWindow ?? CLAUDE_CONTEXT_WINDOW_OPTIONS[0].id
   const ContextWindowIcon = selectedContextWindow === "1m" ? SquareMenu : SquareMinus
+  const effortChoices = effortChoicesFor(activeProvider, model, customModels)
   const modelLabel = providerModels.find((candidate) => candidate.id === model)?.label ?? model
   const unlockedModelPicker = isEndpointProvider(activeProvider) ? (
     <SearchableModelPopover
@@ -427,47 +464,28 @@ export function ChatPreferenceControls({
         </HoverHint>
       ) : unlockedModelPicker}
 
-      {!isEndpointProvider(activeProvider) ? (
-      <InputPopover
-        trigger={(
-          <>
-            <Brain className="h-3.5 w-3.5" />
-            <span>{
-              activeProvider === "claude"
-                ? CLAUDE_REASONING_OPTIONS.find((effort) => effort.id === modelOptions.reasoningEffort)?.label ?? modelOptions.reasoningEffort
-                : CODEX_REASONING_OPTIONS.find((effort) => effort.id === modelOptions.reasoningEffort)?.label ?? modelOptions.reasoningEffort
-            }</span>
-          </>
-        )}
-      >
-        {(close) => (
-          activeProvider === "claude"
-            ? getClaudeModelEffortOptions(model, customModels).map((effort) => (
-              <PopoverMenuItem
-                key={effort.id}
-                onClick={() => {
-                  onModelOptionChange({ type: "claudeReasoningEffort", effort: effort.id })
-                  close()
-                }}
-                selected={modelOptions.reasoningEffort === effort.id}
-                icon={<Brain className="h-4 w-4 text-muted-foreground" />}
-                label={effort.label}
-              />
-            ))
-            : CODEX_REASONING_OPTIONS.map((effort) => (
-              <PopoverMenuItem
-                key={effort.id}
-                onClick={() => {
-                  onModelOptionChange({ type: "codexReasoningEffort", effort: effort.id })
-                  close()
-                }}
-                selected={modelOptions.reasoningEffort === effort.id}
-                icon={<Brain className="h-4 w-4 text-muted-foreground" />}
-                label={effort.label}
-              />
-            ))
-        )}
-      </InputPopover>
+      {effortChoices ? (
+        <InputPopover
+          trigger={(
+            <>
+              <Brain className="h-3.5 w-3.5" />
+              <span>{effortChoices.find((effort) => effort.id === modelOptions.reasoningEffort)?.label ?? modelOptions.reasoningEffort}</span>
+            </>
+          )}
+        >
+          {(close) => effortChoices.map((effort) => (
+            <PopoverMenuItem
+              key={effort.id}
+              onClick={() => {
+                onModelOptionChange(effort.change)
+                close()
+              }}
+              selected={modelOptions.reasoningEffort === effort.id}
+              icon={<Brain className="h-4 w-4 text-muted-foreground" />}
+              label={effort.label}
+            />
+          ))}
+        </InputPopover>
       ) : null}
 
       {activeProvider === "claude" && contextWindowOptions.length > 1 ? (

@@ -3,6 +3,7 @@ import type { AgentAppSettingsView } from "./agent-app-settings-view"
 import type { AnalyticsReporter } from "./analytics"
 import type { StartClaudeSessionArgs } from "./claude-session-start"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { AntigravityAcpManager } from "./antigravity-acp"
 import type { GenerateChatTitleResult } from "./generate-title"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type {
@@ -32,6 +33,7 @@ export interface AgentCoordinatorArgs {
   onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   analytics?: AnalyticsReporter
   codexManager?: CodexAppServerManager
+  antigravityManager?: AntigravityAcpManager
   generateTitle?: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   tunnelGateway?: TunnelGateway
   startClaudeSession?: (args: StartClaudeSessionArgs) => Promise<ClaudeSessionHandle>

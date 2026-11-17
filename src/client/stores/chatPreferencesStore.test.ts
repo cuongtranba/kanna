@@ -260,6 +260,7 @@ describe("chat preference store", () => {
         planMode: true,
       },
       codex: { ...INITIAL_STATE.providerDefaults.codex },
+      antigravity: { ...INITIAL_STATE.providerDefaults.antigravity },
       openrouter: { ...INITIAL_STATE.providerDefaults.openrouter },
       custom: { ...INITIAL_STATE.providerDefaults.custom },
     })

@@ -12,7 +12,8 @@ import { MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, shouldProactivelyCompact } from "
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
-  isClaudeSdkProvider,
+  providerCompactsNatively,
+  normalizeAntigravityModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
@@ -171,6 +172,16 @@ export function getProviderSettings(
     }
   }
 
+  if (provider === "antigravity") {
+    const modelOptions = normalizeAntigravityModelOptions(options.modelOptions, options.effort)
+    return {
+      model: normalizeServerModel(provider, options.model, customModels),
+      effort: modelOptions.reasoningEffort,
+      serviceTier: undefined,
+      planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+    }
+  }
+
   const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
   return {
     model: normalizeServerModel(provider, options.model, customModels),
@@ -262,7 +273,7 @@ export async function runBuiltinCommand(
     return
   }
 
-  const cliPassthrough = isClaudeSdkProvider(provider)
+  const cliPassthrough = providerCompactsNatively(provider)
   const cliCommand = command.instructions ? `/compact ${command.instructions}` : "/compact"
   await deps.startTurnForChat({
     chatId,

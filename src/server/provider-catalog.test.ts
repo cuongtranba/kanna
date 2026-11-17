@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vite-plus/test"
 import {
   codexServiceTierFromModelOptions,
+  normalizeAntigravityModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
@@ -102,6 +103,13 @@ describe("provider catalog normalization", () => {
       log.warn = original
     }
     expect(warnings).toEqual([])
+  })
+
+  test("Antigravity effort falls back to medium when the requested effort is unknown", () => {
+    expect(normalizeAntigravityModelOptions(undefined)).toEqual({ reasoningEffort: "medium" })
+    expect(normalizeAntigravityModelOptions({ antigravity: { reasoningEffort: "high" } })).toEqual({ reasoningEffort: "high" })
+    expect(normalizeAntigravityModelOptions(undefined, "low")).toEqual({ reasoningEffort: "low" })
+    expect(normalizeAntigravityModelOptions(undefined, "xhigh")).toEqual({ reasoningEffort: "medium" })
   })
 
   test("normalizes Codex model options and fast mode defaults", () => {

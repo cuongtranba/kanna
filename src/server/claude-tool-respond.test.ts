@@ -281,6 +281,18 @@ describe("respondTool", () => {
     })
   })
 
+  it("continues an approved antigravity plan with a follow-up turn", async () => {
+    const slots = new PendingToolSlots()
+
+    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), () => {}, "antigravity")
+    const active = makeActiveTurn({ provider: "antigravity" })
+    const deps = makeDeps(new Map([["chat-1", active]]), slots)
+
+    await respondTool(deps, makeCommand({ result: { confirmed: true, clearContext: false } }))
+
+    expect(active.postToolFollowUp).toEqual({ content: "Proceed with the approved plan.", planMode: false })
+  })
+
   it("uses default messages when message field is empty", async () => {
     const slots = new PendingToolSlots()
     const resolve = vi.fn((_v: JsonValue) => {})

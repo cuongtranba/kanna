@@ -79,6 +79,7 @@ import type {
   ChatProviderPreferences,
   ProviderPreference,
   ClaudeModelOptions,
+  AntigravityModelOptions,
   CodexModelOptions,
   OpenRouterModelOptions,
   CustomModelEntry,
@@ -373,6 +374,7 @@ export interface AppSettingsPatch {
   providerDefaults?: {
     claude?: Partial<ProviderPreference<ClaudeModelOptions>>
     codex?: Partial<ProviderPreference<CodexModelOptions>>
+    antigravity?: Partial<ProviderPreference<AntigravityModelOptions>>
     openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
     custom?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }

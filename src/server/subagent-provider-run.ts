@@ -1,6 +1,7 @@
 import type { JsonValue } from "../shared/json"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { AntigravityAcpManager } from "./antigravity-acp"
 import type {
   AgentProvider,
   CustomModelEntry,
@@ -9,7 +10,12 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import { isEndpointProvider, normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
+import {
+  isAntigravityReasoningEffort,
+  isEndpointProvider,
+  normalizeClaudeContextWindow,
+  resolveClaudeApiModelId,
+} from "../shared/types"
 import { endpointEnvOf, type SdkEndpoint } from "./sdk-endpoint"
 import {
   buildCodexDeveloperInstructions,
@@ -58,6 +64,7 @@ export interface BuildSubagentProviderRunArgs {
   allowedPaths?: string[]
   startClaudeSession: (args: SubagentSessionArgs) => Promise<ClaudeSessionHandle>
   codexManager: CodexAppServerManager
+  antigravityManager: AntigravityAcpManager
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
   pickOauthToken: () => { token: string; baseUrl?: string } | null
@@ -92,6 +99,9 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
       if (args.subagent.provider === "claude" || isEndpointProvider(args.subagent.provider)) {
         const endpoint = await args.resolveEndpoint?.(args.subagent.provider, args.subagent.model) ?? null
         return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, endpoint, injection: opts?.injection })
+      }
+      if (args.subagent.provider === "antigravity") {
+        return runAntigravitySubagent({ args, initialPrompt, onChunk, onEntry })
       }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
@@ -243,6 +253,39 @@ async function runCodexSubagent(opts: {
     return await drainHarnessTurn(turn, onChunk, onEntry)
   } finally {
     args.codexManager.stopSession(args.chatId, scope)
+  }
+}
+
+async function runAntigravitySubagent(opts: {
+  args: BuildSubagentProviderRunArgs
+  initialPrompt: string
+  onChunk: (chunk: string) => void
+  onEntry: (entry: TranscriptEntry) => void
+}): Promise<{ text: string; usage?: ProviderUsage }> {
+  const { args, initialPrompt, onChunk, onEntry } = opts
+  const scope = `sub:${args.runId}` as const
+  args.abortSignal.addEventListener("abort", () => { args.antigravityManager.stopSession(args.chatId, scope) }, { once: true })
+  await args.antigravityManager.startSession({
+    chatId: args.chatId,
+    scope,
+    cwd: args.cwd,
+    sessionToken: null,
+    developerInstructions: buildCodexDeveloperInstructions(subagentPromptOptions(args)),
+  })
+  try {
+    const { modelOptions } = args.subagent
+    const turn = await args.antigravityManager.startTurn({
+      chatId: args.chatId,
+      scope,
+      content: initialPrompt,
+      model: args.subagent.model,
+      effort: isAntigravityReasoningEffort(modelOptions?.reasoningEffort) ? modelOptions.reasoningEffort : undefined,
+      planMode: false,
+      onToolRequest: args.onToolRequest,
+    })
+    return await drainHarnessTurn(turn, onChunk, onEntry)
+  } finally {
+    args.antigravityManager.stopSession(args.chatId, scope)
   }
 }
 

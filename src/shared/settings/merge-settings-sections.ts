@@ -43,6 +43,11 @@ export function mergeSettingsSections(current: SettingsSections, patch: AppSetti
         ...providerPatch?.codex,
         modelOptions: { ...providers.codex.modelOptions, ...providerPatch?.codex?.modelOptions },
       },
+      antigravity: {
+        ...providers.antigravity,
+        ...providerPatch?.antigravity,
+        modelOptions: { ...providers.antigravity.modelOptions, ...providerPatch?.antigravity?.modelOptions },
+      },
       openrouter: { ...providers.openrouter, ...providerPatch?.openrouter, modelOptions: {} },
       custom: { ...providers.custom, ...providerPatch?.custom, modelOptions: {} },
     },

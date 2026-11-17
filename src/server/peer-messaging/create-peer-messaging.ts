@@ -4,6 +4,8 @@ import type { PeerInboundMode } from "../../shared/peer-messaging/inbound"
 import type { QueuedChatMessage } from "../../shared/types"
 import type { ChatRecord } from "../events"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
+import { AgentToolsBridge } from "../agent-tools-bridge"
+import { AntigravityAcpManager } from "../antigravity-acp"
 import { CodexAppServerManager } from "../codex-app-server"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import type { MidTurnDelivery } from "./mid-turn-delivery"
@@ -28,6 +30,8 @@ export interface PeerAgentView {
 export interface PeerMessagingServices {
   peerMessenger: PeerMessenger
   codexManager: CodexAppServerManager
+  antigravityManager: AntigravityAcpManager
+  agentToolsBridge: AgentToolsBridge
 }
 
 export function createPeerMessaging(
@@ -36,7 +40,14 @@ export function createPeerMessaging(
   globalInbound: () => PeerInboundMode,
 ): PeerMessagingServices {
   const peerMessenger = createPeerMessenger(store, agent, globalInbound)
-  return { peerMessenger, codexManager: new CodexAppServerManager({ kannaTools: createCodexKannaTools(peerMessenger) }) }
+  const kannaTools = createCodexKannaTools(peerMessenger)
+  const agentToolsBridge = new AgentToolsBridge(kannaTools)
+  return {
+    peerMessenger,
+    codexManager: new CodexAppServerManager({ kannaTools }),
+    antigravityManager: new AntigravityAcpManager({ toolBridge: agentToolsBridge }),
+    agentToolsBridge,
+  }
 }
 
 function createPeerMessenger(

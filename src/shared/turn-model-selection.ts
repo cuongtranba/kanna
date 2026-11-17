@@ -21,6 +21,11 @@ export function providerDefaultSelection(
     if (!preference?.model) return {}
     return { model: preference.model, modelOptions: { codex: preference.modelOptions } }
   }
+  if (provider === "antigravity") {
+    const preference = preferences.antigravity
+    if (!preference?.model) return {}
+    return { model: preference.model, modelOptions: { antigravity: preference.modelOptions } }
+  }
   if (provider === "custom") {
     const preference = preferences.custom
     if (!preference?.model) return {}
