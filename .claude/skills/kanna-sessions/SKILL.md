@@ -503,6 +503,8 @@ A superseding session's bookkeeping is still left strictly alone: wiping it
 leaves its stream running headless (no isError branch fires → `sessionToken`
 never cleared → the next turn loops on the same too-large `--resume` context).
 
+A resume whose Claude Code session file was deleted (`No conversation found`) retries the turn once on a fresh, primed session instead of failing it: [references/stale-session-retry.md](references/stale-session-retry.md).
+
 ## Queued messages are released on commit, not on dequeue
 
 A queued message is a chat's only durable "start this once idle" trigger. For a

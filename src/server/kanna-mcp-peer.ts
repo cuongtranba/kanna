@@ -36,8 +36,8 @@ export function buildPeerToolList<TTool>(
   const { subagent } = caller
 
   return [
-    tool(LIST_PEER_CHATS_TOOL, LIST_PEER_CHATS_DESCRIPTION, listPeerChatsInputShape, async () =>
-      toToolResult(listPeerChats(messenger, chatId)),
+    tool(LIST_PEER_CHATS_TOOL, LIST_PEER_CHATS_DESCRIPTION, listPeerChatsInputShape, async (input) =>
+      toToolResult(listPeerChats(messenger, chatId, input)),
     ),
     tool(SEND_CHAT_MESSAGE_TOOL, SEND_CHAT_MESSAGE_DESCRIPTION, sendChatMessageInputShape, async (input) => {
       try {

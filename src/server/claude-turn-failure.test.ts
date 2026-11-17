@@ -80,21 +80,21 @@ describe("settleFailedTurn with a result", () => {
   test("a rate limit wins over an auth match and is recorded under the rate_limit label", async () => {
     const { calls, settlement } = harness({ limitText: LIMIT, authText: () => AUTH })
     const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "limit reached", debugRaw: "" }, true)
-    expect(handled).toBe(true)
+    expect(handled).toBe("handled")
     expect(calls).toEqual(["handleLimit", "failed:rate_limit"])
   })
 
   test("auth is read from the result text first and the debug dump second, recorded as auth_error", async () => {
     const { calls, settlement } = harness({ authText: (text) => (text === "raw dump" ? AUTH : null) })
     const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "boom", debugRaw: "raw dump" }, true)
-    expect(handled).toBe(true)
+    expect(handled).toBe("handled")
     expect(calls).toEqual(["handleAuth", "failed:auth_error"])
   })
 
   test("an unclassified failure records the raw text and discards an invalid session", async () => {
     const { calls, settlement } = harness()
     const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "Prompt is too long", debugRaw: "" }, true)
-    expect(handled).toBe(false)
+    expect(handled).toBe("unhandled")
     expect(calls).toEqual(["failed:Prompt is too long", "discard"])
   })
 
@@ -104,17 +104,30 @@ describe("settleFailedTurn with a result", () => {
     expect(calls).toEqual(["failed:boom", "discard"])
   })
 
+  test("a missing conversation with a fresh-session retry available only discards the session and asks for the retry", async () => {
+    const { calls, settlement } = harness()
+    const outcome = await settleFailedTurn(
+      settlement,
+      session,
+      { kind: "result", text: "", debugRaw: "No conversation found with session ID: x" },
+      true,
+      true,
+    )
+    expect(outcome).toBe("retry_on_fresh_session")
+    expect(calls).toEqual(["discard"])
+  })
+
   test("a detection the handler declines is recorded as a plain failure", async () => {
     const { calls, settlement } = harness({ limitText: LIMIT, handled: false })
     const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "limit reached", debugRaw: "" }, true)
-    expect(handled).toBe(false)
+    expect(handled).toBe("unhandled")
     expect(calls).toEqual(["handleLimit", "failed:limit reached"])
   })
 
   test("without an active turn it handles the detection but records nothing", async () => {
     const { calls, settlement } = harness({ authText: () => AUTH })
     const handled = await settleFailedTurn(settlement, session, { kind: "result", text: "401", debugRaw: "" }, false)
-    expect(handled).toBe(true)
+    expect(handled).toBe("handled")
     expect(calls).toEqual(["handleAuth"])
   })
 })
@@ -138,7 +151,7 @@ describe("settleFailedTurn with a thrown error", () => {
       { kind: "thrown", error: new Error("No conversation found with session ID: abc") },
       true,
     )
-    expect(handled).toBe(false)
+    expect(handled).toBe("unhandled")
     expect(calls).toEqual(["error:No conversation found with session ID: abc", "discard"])
   })
 })

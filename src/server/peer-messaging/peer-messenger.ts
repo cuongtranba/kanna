@@ -3,6 +3,8 @@ import type { PeerChatOrigin } from "../../shared/command-origin"
 import type { AgentProvider, KannaStatus } from "../../shared/core-types"
 import {
   PEER_DUPLICATE_WINDOW_MS,
+  PEER_LIST_DEFAULT_LIMIT,
+  PEER_LIST_MAX_LIMIT,
   PEER_MESSAGE_MAX_CHARS,
   PEER_NOTIFY_TTL_MS,
   PEER_QUEUE_LIMIT,
@@ -27,6 +29,7 @@ export interface PeerChatInfo {
   provider: AgentProvider | null
   peerInbound: PeerInboundMode | null
   archived: boolean
+  lastActiveAt: number
 }
 
 export interface PeerChatRow {
@@ -36,6 +39,18 @@ export interface PeerChatRow {
   provider: AgentProvider | null
   status: PeerChatStatus
   accepts: boolean
+  lastActiveAt: string
+}
+
+export interface PeerListFilter {
+  project?: string
+  query?: string
+  limit?: number
+}
+
+export interface PeerListing {
+  chats: PeerChatRow[]
+  total: number
 }
 
 export interface PeerMessengerPorts {
@@ -145,6 +160,11 @@ function waitSeconds(requested: number | undefined): number {
   return Math.min(PEER_WAIT_MAX_SECONDS, Math.max(1, requested))
 }
 
+function listLimit(requested: number | undefined): number {
+  if (requested === undefined || !Number.isFinite(requested)) return PEER_LIST_DEFAULT_LIMIT
+  return Math.min(PEER_LIST_MAX_LIMIT, Math.max(1, Math.floor(requested)))
+}
+
 export class PeerMessenger {
   private readonly limiter: RateLimiter
   private readonly recentByPair = new Map<string, { digest: string; at: number }[]>()
@@ -155,19 +175,26 @@ export class PeerMessenger {
     this.limiter = new RateLimiter(RATE_WINDOWS, () => ports.now())
   }
 
-  listPeers(senderChatId: string): PeerChatRow[] {
+  listPeers(senderChatId: string, filter: PeerListFilter = {}): PeerListing {
     const statuses = this.ports.activeStatuses()
     const globalMode = this.ports.globalInbound()
-    return this.ports.listChats()
+    const project = filter.project?.toLowerCase()
+    const query = filter.query?.toLowerCase()
+    const matches = this.ports.listChats()
       .filter((chat) => chat.chatId !== senderChatId && !chat.archived)
-      .map((chat) => ({
-        chatId: chat.chatId,
-        title: chat.title,
-        projectTitle: chat.projectTitle,
-        provider: chat.provider,
-        status: statusOf(statuses.get(chat.chatId)),
-        accepts: resolvePeerInbound(chat.peerInbound, globalMode) === "accept",
-      }))
+      .filter((chat) => project === undefined || chat.projectTitle.toLowerCase() === project)
+      .filter((chat) => query === undefined || chat.title.toLowerCase().includes(query))
+      .sort((a, b) => b.lastActiveAt - a.lastActiveAt)
+    const chats = matches.slice(0, listLimit(filter.limit)).map((chat) => ({
+      chatId: chat.chatId,
+      title: chat.title,
+      projectTitle: chat.projectTitle,
+      provider: chat.provider,
+      status: statusOf(statuses.get(chat.chatId)),
+      accepts: resolvePeerInbound(chat.peerInbound, globalMode) === "accept",
+      lastActiveAt: new Date(chat.lastActiveAt).toISOString(),
+    }))
+    return { chats, total: matches.length }
   }
 
   async send(request: PeerSendRequest): Promise<PeerSendResult> {

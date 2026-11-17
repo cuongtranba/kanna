@@ -1,10 +1,19 @@
 import { z } from "zod"
-import { PEER_MESSAGE_MAX_CHARS, PEER_WAIT_DEFAULT_SECONDS, PEER_WAIT_MAX_SECONDS } from "./limits"
+import {
+  PEER_LIST_DEFAULT_LIMIT,
+  PEER_LIST_MAX_LIMIT,
+  PEER_MESSAGE_MAX_CHARS,
+  PEER_WAIT_DEFAULT_SECONDS,
+  PEER_WAIT_MAX_SECONDS,
+} from "./limits"
 
 export const LIST_PEER_CHATS_DESCRIPTION =
   "List the other chats on this Kanna server, in every project, that you can message. "
-  + "Each row has the chat id (use it as `to` in send_chat_message), its title, project, provider and status "
-  + "(idle, working or waiting_for_user). accepts is false when that chat refuses messages from other chats."
+  + "Each row has the chat id (use it as `to` in send_chat_message), its title, project, provider, status "
+  + "(idle, working or waiting_for_user) and lastActiveAt (ISO 8601 time of its latest activity). "
+  + "accepts is false when that chat refuses messages from other chats. "
+  + `Rows come newest activity first and are capped at ${String(PEER_LIST_DEFAULT_LIMIT)} by default, so a stale chat may not appear: `
+  + "set `project` or `query` to narrow the list, or raise `limit`. total is how many chats matched before the cap."
 
 export const SEND_CHAT_MESSAGE_DESCRIPTION =
   "Send a message to an agent working in another Kanna chat. `to` is the target chat id from list_peer_chats (titles can repeat, so never address by title). "
@@ -22,7 +31,15 @@ export const WAIT_FOR_CHAT_MESSAGE_DESCRIPTION =
   + `Returns the message text, or a timeout note after timeout_seconds (default ${String(PEER_WAIT_DEFAULT_SECONDS)}, at most ${String(PEER_WAIT_MAX_SECONDS)}). `
   + "If a message is already pending for you, this returns at once with a note: that message reaches you as soon as this tool returns, so you do not need to wait for it."
 
-export const listPeerChatsInputShape = {}
+export const listPeerChatsInputShape = {
+  project: z.string().optional().describe("Only list chats whose project title equals this, ignoring case"),
+  query: z.string().optional().describe("Only list chats whose title contains this text, ignoring case"),
+  limit: z.number().optional().describe(`Most rows to return (default ${String(PEER_LIST_DEFAULT_LIMIT)}, at most ${String(PEER_LIST_MAX_LIMIT)})`),
+}
+
+export const listPeerChatsInputSchema = z.object(listPeerChatsInputShape)
+
+export type ListPeerChatsInput = z.output<typeof listPeerChatsInputSchema>
 
 export const sendChatMessageInputShape = {
   to: z.string().describe("The chat id of the target chat, from list_peer_chats"),

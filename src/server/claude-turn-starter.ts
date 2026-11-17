@@ -436,6 +436,12 @@ async function startTurnAfterTurnStarted(
     compactionTurn: args.compactionTurn,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
     scheduleId: args.autoContinue?.scheduleId,
+    ...(isClaudeSdkProvider(args.provider) && (pendingForkToken ?? existingToken) !== null
+      ? {
+          retryOnFreshSession: () =>
+            startTurnForChat(deps, { ...args, appendUserPrompt: false, onTurnRecorded: undefined, profile: null }),
+        }
+      : {}),
   }
   deps.activeTurns.set(args.chatId, active)
   logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {
