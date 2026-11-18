@@ -911,14 +911,18 @@ describe("AgentCoordinator codex integration", () => {
     expect(turnCalls).toEqual([{ effort: "xhigh", serviceTier: "fast" }])
   })
 
-  test("approving synthetic codex ExitPlanMode starts a hidden follow-up turn and can clear context", async () => {
+  test("approving synthetic codex ExitPlanMode with clear context restarts the session and runs the plan in a new turn", async () => {
     const sessionCalls: Array<{ chatId: string; sessionToken: string | null }> = []
     const startTurnCalls: Array<{ content: string; planMode: boolean }> = []
     let turnCount = 0
 
+    const stoppedSessions: string[] = []
     const fakeCodexManager = {
       async startSession(args: { chatId: string; sessionToken: string | null }) {
         sessionCalls.push({ chatId: args.chatId, sessionToken: args.sessionToken })
+      },
+      stopSession(chatId: string) {
+        stoppedSessions.push(chatId)
       },
       async startTurn(args: {
         content: string
@@ -1039,14 +1043,17 @@ describe("AgentCoordinator codex integration", () => {
 
     expect(startTurnCalls).toEqual([
       { content: "plan this", planMode: true },
-      { content: "Proceed with the approved plan. Additional guidance: Use the fast path", planMode: false },
+      {
+        content: "Implement the following approved plan.\n\n## Plan\n\n- [ ] Ship it\n\nAdditional guidance: Use the fast path",
+        planMode: false,
+      },
     ])
     expect(sessionCalls).toEqual([
       { chatId: "chat-1", sessionToken: null },
       { chatId: "chat-1", sessionToken: null },
     ])
-    expect(store.messages.filter((entry) => entry.kind === "user_prompt")).toHaveLength(1)
-    expect(store.messages.some((entry) => entry.kind === "context_cleared")).toBe(true)
+    expect(stoppedSessions).toEqual(["chat-1"])
+    expect(store.messages.filter((entry) => entry.kind === "context_cleared")).toHaveLength(1)
     expect(store.chat.sessionToken).toBe("thread-2")
   })
 
@@ -1851,6 +1858,102 @@ describe("AgentCoordinator claude integration", () => {
     expect(store.chat.sessionToken).toBe("claude-session-1")
 
     events.close()
+  })
+
+  test("approving a Claude plan with clear context closes the old session and runs the plan on a fresh one", async () => {
+    const planText = "## Plan\n\n- [ ] Ship it"
+    const closedSessions: string[] = []
+    const promptsBySession: Record<string, string[]> = { "session-1": [], "session-2": [] }
+    const sessionTokens: Array<string | null> = []
+
+    const store = createFakeStore()
+    const coordinator = new AgentCoordinator({
+      store: store as never,
+      onStateChange: () => {},
+      startClaudeSession: async (args) => {
+        const sessionName = `session-${sessionTokens.length + 1}`
+        sessionTokens.push(args.sessionToken)
+        const events = new AsyncEventQueue<any>()
+        return {
+          provider: "claude",
+          stream: events,
+          getAccountInfo: async () => null,
+          interrupt: async () => {},
+          close: () => {
+            closedSessions.push(sessionName)
+            events.close()
+          },
+          closed: Promise.resolve(),
+          setModel: async () => {},
+          setPermissionMode: async () => {},
+          sendPrompt: async (content: string) => {
+            promptsBySession[sessionName]?.push(content)
+            events.push({ type: "session_token" as const, sessionToken: `claude-${sessionName}` })
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "system_init",
+                provider: "claude",
+                model: "claude-opus-4-1",
+                tools: [],
+                agents: [],
+                slashCommands: [],
+                mcpServers: [],
+              }),
+            })
+            if (sessionName === "session-1") {
+              void args.onToolRequest({
+                tool: {
+                  kind: "tool",
+                  toolKind: "exit_plan_mode",
+                  toolName: "ExitPlanMode",
+                  toolId: "exit-1",
+                  input: { plan: planText },
+                  rawInput: { plan: planText },
+                },
+              })
+              return
+            }
+            events.push({
+              type: "transcript" as const,
+              entry: timestamped({
+                kind: "result",
+                subtype: "success",
+                isError: false,
+                durationMs: 0,
+                result: "done",
+              }),
+            })
+          },
+        }
+      },
+    })
+
+    await coordinator.send({
+      type: "chat.send",
+      chatId: "chat-1",
+      provider: "claude",
+      content: "plan this",
+      model: "claude-opus-4-1",
+      planMode: true,
+    })
+    await waitFor(() => coordinator.getPendingTool("chat-1")?.toolKind === "exit_plan_mode")
+
+    await coordinator.respondTool({
+      type: "chat.respondTool",
+      chatId: "chat-1",
+      toolUseId: "exit-1",
+      result: { confirmed: true, clearContext: true },
+    })
+
+    await waitFor(() => store.turnFinishedCount === 1)
+
+    expect(closedSessions).toContain("session-1")
+    expect(sessionTokens).toEqual([null, null])
+    expect(promptsBySession["session-1"]).toEqual(["plan this"])
+    expect(promptsBySession["session-2"]).toHaveLength(1)
+    expect(promptsBySession["session-2"]?.[0]).toContain(planText)
+    expect(store.messages.filter((entry) => entry.kind === "context_cleared")).toHaveLength(1)
   })
 
   test("cancel() suppresses the SDK interrupt-induced tail error result", async () => {

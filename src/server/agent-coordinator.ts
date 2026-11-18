@@ -601,7 +601,6 @@ export class AgentCoordinator {
     }
   }
 
-
   private cancelHandlerDeps(): CancelHandlerDeps {
     return {
       drainingStreams: this.drainingStreams,
@@ -616,7 +615,6 @@ export class AgentCoordinator {
       emitStateChange: (chatId) => this.emitStateChange(chatId),
     }
   }
-
 
   private chatManagementDeps(): ChatManagementDeps {
     return {
@@ -635,7 +633,6 @@ export class AgentCoordinator {
         this.dequeueAndStartQueuedMessage(chatId, queuedMessage, options),
     }
   }
-
 
   private sendCommandDeps(): SendCommandDeps {
     return {
@@ -759,6 +756,9 @@ export class AgentCoordinator {
       pendingTools: this.pendingTools,
       store: this.store,
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      cancel: (chatId, options) => this.cancel(chatId, options),
+      clearChatContext: (chatId) => this.clearChatContext(chatId),
+      startApprovedPlanTurn: async (chatId, prompt) => this.dequeueAndStartQueuedMessage(chatId, await this.enqueueMessage(chatId, prompt, [], { planMode: false })),
     }
   }
 

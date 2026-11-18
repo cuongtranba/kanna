@@ -20,13 +20,13 @@ function askUserQuestionTool(toolId: string): AskUserQuestionToolCall {
   }
 }
 
-function exitPlanModeTool(toolId: string): ExitPlanModeToolCall {
+function exitPlanModeTool(toolId: string, plan?: string): ExitPlanModeToolCall {
   return {
     kind: "tool",
     toolKind: "exit_plan_mode",
     toolName: "exit_plan_mode",
     toolId,
-    input: {},
+    input: plan === undefined ? {} : { plan },
   }
 }
 
@@ -51,29 +51,25 @@ function makeActiveTurn(overrides: Partial<ActiveTurn> = {}): ActiveTurn {
 }
 
 type AppendMessageFn = (chatId: string, entry: { kind: string }) => Promise<void>
-type SetSessionTokenFn = (
-  chatId: string,
-  provider: string,
-  token: string | null,
-) => Promise<void>
 
 function makeDeps(
   activeTurns: Map<string, ActiveTurn>,
   pendingTools: PendingToolSlots,
   appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {}),
-  setSessionTokenForProvider = vi.fn(
-    async (_chatId: string, _provider: string, _token: string | null) => {},
-  ),
   emitStateChange = vi.fn((_chatId: string) => {}),
+  overrides: Partial<ToolRespondDeps> = {},
 ): ToolRespondDeps {
   return {
     activeTurns,
     pendingTools,
     store: {
       appendMessage: appendMessage as unknown as AppendMessageFn,
-      setSessionTokenForProvider: setSessionTokenForProvider as unknown as SetSessionTokenFn,
     },
     emitStateChange,
+    cancel: async () => {},
+    clearChatContext: async () => {},
+    startApprovedPlanTurn: async () => {},
+    ...overrides,
   }
 }
 
@@ -147,13 +143,7 @@ describe("respondTool", () => {
       waitStartedAt: 12345,
     })
     const turns = new Map([["chat-1", active]])
-    const deps = makeDeps(
-      turns,
-      slots,
-      appendMessage,
-      vi.fn(async (_chatId: string, _provider: string, _token: string | null) => {}),
-      emitStateChange,
-    )
+    const deps = makeDeps(turns, slots, appendMessage, emitStateChange)
 
     await respondTool(deps, makeCommand({ result }))
 
@@ -188,53 +178,78 @@ describe("respondTool", () => {
     expect(appendMessage).toHaveBeenCalledTimes(1)
   })
 
-  it("clears session token and appends context_cleared when exit_plan_mode confirmed+clearContext", async () => {
+  it("ends the turn, clears context, then starts a fresh turn with the plan when exit_plan_mode is approved with clearContext", async () => {
     const slots = new PendingToolSlots()
-    const resolve = vi.fn((_v: JsonValue) => {})
-    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
-    const setSessionTokenForProvider = vi.fn(
-      async (_chatId: string, _provider: string, _token: string | null) => {},
-    )
-    const emitStateChange = vi.fn((_chatId: string) => {})
+    const resolved: JsonValue[] = []
+    const calls: string[] = []
+    const prompts: string[] = []
 
-    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve)
-    const active = makeActiveTurn({ provider: "claude" })
+    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc", "## Plan\n\n- ship"), (v) => resolved.push(v))
+    const active = makeActiveTurn({ provider: "codex" })
     const turns = new Map([["chat-1", active]])
-    const deps = makeDeps(turns, slots, appendMessage, setSessionTokenForProvider, emitStateChange)
+    const deps = makeDeps(turns, slots, undefined, undefined, {
+      cancel: async (chatId) => {
+        calls.push("cancel")
+        turns.delete(chatId)
+      },
+      clearChatContext: async () => { calls.push("clear") },
+      startApprovedPlanTurn: async (_chatId, prompt) => {
+        calls.push("start")
+        prompts.push(prompt)
+      },
+    })
 
     await respondTool(
       deps,
-      makeCommand({
-        result: { confirmed: true, clearContext: true, message: "" },
-      }),
+      makeCommand({ result: { confirmed: true, clearContext: true, message: "go fast" } }),
     )
 
-    expect(setSessionTokenForProvider).toHaveBeenCalledWith("chat-1", "claude", null)
+    expect(calls).toEqual(["cancel", "clear", "start"])
+    expect(prompts).toEqual([
+      "Implement the following approved plan.\n\n## Plan\n\n- ship\n\nAdditional guidance: go fast",
+    ])
+    expect(resolved).toEqual([{ discarded: true }])
+    expect(active.postToolFollowUp).toBeNull()
+  })
 
-    expect(appendMessage).toHaveBeenCalledTimes(2)
-    const call2 = appendMessage.mock.calls[1] as unknown as [string, { kind: string }]
-    expect(call2[1].kind).toBe("context_cleared")
+  it("approves without clearing when clearContext is requested but the plan text is missing", async () => {
+    const slots = new PendingToolSlots()
+    const resolved: JsonValue[] = []
+    const calls: string[] = []
+
+    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), (v) => resolved.push(v))
+    const deps = makeDeps(new Map([["chat-1", makeActiveTurn()]]), slots, undefined, undefined, {
+      cancel: async () => { calls.push("cancel") },
+      clearChatContext: async () => { calls.push("clear") },
+      startApprovedPlanTurn: async () => { calls.push("start") },
+    })
+
+    const result: JsonValue = { confirmed: true, clearContext: true }
+    await respondTool(deps, makeCommand({ result }))
+
+    expect(calls).toEqual([])
+    expect(resolved).toEqual([result])
   })
 
   it("does NOT clear context when confirmed=false even if clearContext=true", async () => {
     const slots = new PendingToolSlots()
     const resolve = vi.fn((_v: JsonValue) => {})
-    const appendMessage = vi.fn(async (_chatId: string, _entry: unknown) => {})
-    const setSessionTokenForProvider = vi.fn(
-      async (_chatId: string, _provider: string, _token: string | null) => {},
-    )
+    const calls: string[] = []
 
-    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc"), resolve)
+    parkTool(slots, "chat-1", exitPlanModeTool("tool-abc", "plan"), resolve)
     const turns = new Map([["chat-1", makeActiveTurn({ provider: "claude" })]])
-    const deps = makeDeps(turns, slots, appendMessage, setSessionTokenForProvider)
+    const deps = makeDeps(turns, slots, undefined, undefined, {
+      cancel: async () => { calls.push("cancel") },
+      clearChatContext: async () => { calls.push("clear") },
+      startApprovedPlanTurn: async () => { calls.push("start") },
+    })
 
     await respondTool(
       deps,
       makeCommand({ result: { confirmed: false, clearContext: true } }),
     )
 
-    expect(setSessionTokenForProvider).not.toHaveBeenCalled()
-    expect(appendMessage).toHaveBeenCalledTimes(1)
+    expect(calls).toEqual([])
   })
 
   it("sets postToolFollowUp on codex provider when exit_plan_mode confirmed", async () => {
