@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.112.1](https://github.com/cuongtranba/kanna/compare/v1.112.0...v1.112.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **chat:** reset the context meter when a chat's context is cleared ([#1512](https://github.com/cuongtranba/kanna/issues/1512)) ([4586993](https://github.com/cuongtranba/kanna/commit/458699326c152d8e617fca9d06438f0d14f7f23a))
+
 ## [1.112.0](https://github.com/cuongtranba/kanna/compare/v1.111.0...v1.112.0) (2026-11-18)
 
 
