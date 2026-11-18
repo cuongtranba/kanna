@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.112.2](https://github.com/cuongtranba/kanna/compare/v1.112.1...v1.112.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* **chat:** really clear context when a plan is approved with clear context ([#1514](https://github.com/cuongtranba/kanna/issues/1514)) ([b739d38](https://github.com/cuongtranba/kanna/commit/b739d38a3a9f84cebb35a49af5fe0b4b003b61d7))
+
 ## [1.112.1](https://github.com/cuongtranba/kanna/compare/v1.112.0...v1.112.1) (2026-11-18)
 
 
