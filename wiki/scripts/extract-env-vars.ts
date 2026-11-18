@@ -69,6 +69,7 @@ const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
 
 const INDIRECT_READS: Record<string, string> = {
   KANNA_RUNTIME_PROFILE: 'shared/branding.ts',
+  KANNA_DISABLE_SELF_UPDATE: 'server/restart.ts',
 }
 
 const seen = new Set<string>()
