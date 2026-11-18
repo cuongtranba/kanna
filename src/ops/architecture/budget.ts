@@ -148,7 +148,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-mock-functions",
     include: TEST_SCOPE,
     pattern: "(^|[^.\\w])mock\\(|\\bjest\\.fn\\b|(?<!typeof )\\bvi\\.(fn|spyOn)\\b(?!\\s*[>,)\\]])",
-    max: 519,
+    max: 511,
     issue: 1375,
     rationale:
       "A mock function or spy asserts that a call happened, not that the user-visible result did, so it keeps passing when the real collaborator breaks and fails when an equivalent refactor reorders calls. Hand the code a real, in-memory, or deterministic fake through a parameter and assert the public outcome; a callback recorder is a plain array the fake pushes into. Re-baselined 516 → 519 when the suite moved to Vitest: the pattern now counts generic vi.fn<T>( and vi.spyOn( mocks that the bun spelling never matched.",
@@ -194,7 +194,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-double-casts",
     include: TEST_SCOPE,
     pattern: "\\bas unknown as\\b",
-    max: 302,
+    max: 300,
     issue: 1375,
     rationale:
       "A double cast builds a value the type system says cannot exist, so the test exercises a state production never reaches and keeps compiling when the real type changes underneath it. Build the fixture through the public constructor or a complete literal.",
