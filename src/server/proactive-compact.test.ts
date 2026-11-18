@@ -196,6 +196,14 @@ describe("scanLatestContextWindowUsage", () => {
     expect(scanLatestContextWindowUsage(messages)).toEqual({ found: true, usage: null })
   })
 
+  test("regression: a newer context_cleared reports a null usage so a cleared chat never proactively compacts", () => {
+    const messages = [
+      usageEntry(950_000, 1_000_000, 1),
+      { _id: "cc-2", createdAt: 2, kind: "context_cleared" } as TranscriptEntry,
+    ]
+    expect(scanLatestContextWindowUsage(messages)).toEqual({ found: true, usage: null })
+  })
+
   test("getLatestContextWindowUsage flattens both null shapes identically", () => {
     expect(getLatestContextWindowUsage([])).toBe(null)
     expect(getLatestContextWindowUsage([compactBoundary(1)])).toBe(null)

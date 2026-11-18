@@ -43,6 +43,15 @@ describe("deriveLatestContextWindowSnapshot", () => {
 
     expect(snapshot?.compactsAutomatically).toBe(true)
   })
+
+  test("regression: a context clear hides the pre-clear usage until a new turn reports usage", () => {
+    const beforeClear = entry({ kind: "context_window_updated", usage: { usedTokens: 950_000, maxTokens: 1_000_000, compactsAutomatically: false } }, 1)
+    const cleared = entry({ kind: "context_cleared" }, 2)
+    const afterClear = entry({ kind: "context_window_updated", usage: { usedTokens: 20_000, maxTokens: 1_000_000, compactsAutomatically: false } }, 3)
+
+    expect(deriveLatestContextWindowSnapshot([beforeClear, cleared])).toBeNull()
+    expect(deriveLatestContextWindowSnapshot([beforeClear, cleared, afterClear])?.usedTokens).toBe(20_000)
+  })
 })
 
 describe("formatContextWindowTokens", () => {

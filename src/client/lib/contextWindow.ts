@@ -48,6 +48,7 @@ export function deriveLatestContextWindowSnapshot(
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index]
     if (!entry) continue
+    if (entry.kind === "context_cleared") return null
 
     if (entry.kind !== "context_window_updated" || entry.usage.usedTokens <= 0) {
       continue
