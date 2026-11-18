@@ -4,9 +4,6 @@ import type { HarnessToolRequest } from "./harness-types"
 import { CLAUDE_ASK_USER_QUESTION_TOOL_NAME, normalizeToolCall } from "../shared/tools"
 import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json"
 import { toJsonObject } from "./json-boundary"
-import type { ToolCallbackService } from "./tool-callback"
-import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { projectProcessEnv } from "./project-process-env"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
 import { claudeCredentialKind } from "../shared/claude-credential"
@@ -26,12 +23,7 @@ export const LOOP_BLOCKED_TOOL_MESSAGE =
   + "goal is met. Do not edit files directly."
 
 export interface BuildCanUseToolArgs {
-  localPath: string
-  chatId?: string
-  sessionToken?: string | null
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-  toolCallback?: ToolCallbackService
-  chatPolicy?: ChatPermissionPolicy
 }
 
 export interface PlanDecision {
@@ -93,24 +85,6 @@ export function buildCanUseTool(
 
     if (tool.toolKind !== "ask_user_question" && tool.toolKind !== "exit_plan_mode") {
       return { behavior: "deny", message: "Unsupported tool request" }
-    }
-
-    if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
-      const result = await args.toolCallback.submit({
-        chatId: args.chatId ?? "",
-        sessionId: args.sessionToken ?? "",
-        toolUseId: options.toolUseID,
-        toolName: `mcp__kanna__${tool.toolKind}`,
-        args: tool.rawInput ?? {},
-        chatPolicy: args.chatPolicy ?? POLICY_DEFAULT,
-        cwd: args.localPath,
-      })
-
-      if (result.decision.kind === "deny") {
-        return { behavior: "deny", message: result.decision.reason ?? "denied" }
-      }
-
-      return permissionResultFor(tool, result.decision.payload)
     }
 
     const result = await args.onToolRequest({ tool })

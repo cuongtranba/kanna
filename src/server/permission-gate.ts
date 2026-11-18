@@ -15,7 +15,6 @@ import { expandHomePrefix, resolveUserPath } from "./home-path"
 import { isInsideAny } from "./path-containment"
 import { buildBeaconRequest } from "../shared/beacon-tool-request"
 import { BEACON_LIST_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../shared/beacon-tools"
-import { ASK_USER_QUESTION_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME } from "../shared/tools"
 
 export interface EvaluateArgs {
   toolName: string
@@ -121,8 +120,6 @@ export function pathMatchesDeny(absPath: string, deny: string[]): string | null 
   return null
 }
 
-const INTERACTIVE_TOOLS = new Set([ASK_USER_QUESTION_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME])
-
 const NO_TRUSTED_SCRIPT_HASHES: ReadonlySet<string> = new Set()
 
 function beaconEvalContext(scope: BeaconConfig["scope"], request: NonNullable<ReturnType<typeof buildBeaconRequest>>): BeaconEvalContext {
@@ -221,9 +218,6 @@ function evaluateBash(args: EvaluateArgs, roots: readonly string[] | null): Eval
 
 export const policy = {
   evaluate(args: EvaluateArgs): EvaluateResult {
-    if (INTERACTIVE_TOOLS.has(args.toolName)) {
-      return { verdict: "ask", reason: "interactive tool: always asks the user" }
-    }
     const roots = args.restrictedAllowedPaths && args.restrictedAllowedPaths.length > 0
       ? args.restrictedAllowedPaths
       : null

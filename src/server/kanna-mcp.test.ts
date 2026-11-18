@@ -106,36 +106,6 @@ const makeArgs = (toolCallback?: Parameters<typeof buildKannaMcpTools>[0]["toolC
   tunnelGateway: null,
 })
 
-test("feature flag on → all 8 new mcp__kanna__* tools registered", () => {
-  process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
-  try {
-    const stub = {
-      submit: async () => ({ status: "answered", decision: { kind: "deny" } }),
-      answer: async () => {},
-      cancel: async () => {},
-      cancelAllForChat: async () => {},
-      recoverOnStartup: async () => {},
-    }
-    const tools = buildKannaMcpTools({
-      projectId: "p",
-      localPath: "/tmp",
-      chatId: "c",
-      sessionId: "s",
-      toolCallback: stub as unknown as Parameters<typeof buildKannaMcpTools>[0]["toolCallback"],
-      chatPolicy: POLICY_DEFAULT,
-      tunnelGateway: null,
-    })
-    const names = tools.map((t) => t.name)
-    for (const n of ["read", "glob", "grep", "bash", "edit", "write", "webfetch"]) {
-      expect(names).toContain(n)
-    }
-    expect(names).not.toContain("probe_unavailable")
-  } finally {
-    delete process.env.KANNA_MCP_TOOL_CALLBACKS
-  }
-})
-
-
 describe("buildDelegateProgressEmitter", () => {
   function makeEntry(over: Partial<TranscriptEntry> = {}): TranscriptEntry {
     return { _id: "e1", createdAt: 1, kind: "assistant_text", text: "x", ...over } as TranscriptEntry

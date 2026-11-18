@@ -2,14 +2,11 @@ import type { HydratedTranscriptMessage } from "../../../shared/types"
 import type { ToolRequestDecision } from "../../../shared/permission-policy"
 import { isJsonArray, type JsonObject } from "../../../shared/json"
 import { Button } from "../ui/button"
-import { AskUserQuestionInteractive } from "./AskUserQuestionInteractive"
-import { encodeAskUserQuestionResult } from "../../lib/askUserQuestionJson"
 import { StateMarkLabel } from "../ui/state-mark"
 import { useCallback } from "react"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { selectBeaconById, useBeaconsStore } from "../../stores/beaconsStore"
 import { BEACON_SCRIPT_TOOL_NAME, BEACON_TOOL_PREFIX, beaconToolOp } from "../../../shared/beacon-tools"
-import { ASK_USER_QUESTION_TOOL_NAME, EXIT_PLAN_MODE_TOOL_NAME, normalizeToolCall } from "../../../shared/tools"
 
 export type PendingToolRequestHydrated = Extract<HydratedTranscriptMessage, { kind: "pending_tool_request" }>
 
@@ -45,42 +42,6 @@ function useToolRequestResponder(toolRequestId: string, onAnswer: AnswerToolRequ
   }, [busy, denyKey, onAnswer, toolRequestId])
   return { answering, denying, answer, deny }
 }
-
-function ExitPlanModePending({ plan, responder }: { plan: string; responder: ToolRequestResponder }) {
-  return (
-    <div className="rounded-2xl border border-border overflow-hidden">
-      <div className="font-medium text-sm p-3 px-4 bg-muted border-b border-border flex items-center justify-between">
-        <span>Plan</span>
-        <span className="text-xs text-muted-foreground">Reconnected — awaiting your response</span>
-      </div>
-      <div className="bg-background px-4 py-3">
-        <p className="text-sm whitespace-pre-wrap">{plan}</p>
-      </div>
-      <div className="flex justify-end gap-2 px-4 py-3 bg-background border-t border-border">
-        <Button
-          size="sm"
-          variant="outline"
-          className="rounded-full"
-          pending={responder.denying}
-          disabled={responder.answering}
-          onClick={responder.deny}
-        >
-          Edit
-        </Button>
-        <Button
-          size="sm"
-          className="rounded-full"
-          pending={responder.answering}
-          disabled={responder.denying}
-          onClick={() => responder.answer({ kind: "answer", payload: { confirmed: true } })}
-        >
-          Confirm
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 
 function GenericPending({
   toolName,
@@ -208,32 +169,6 @@ function BeaconPending({
 export function PendingToolRequestMessage({ entry, onAnswer }: Props) {
   const { toolRequestId, toolName, arguments: args } = entry
   const responder = useToolRequestResponder(toolRequestId, onAnswer)
-
-  const call = normalizeToolCall({ toolName, toolId: toolRequestId, input: args })
-
-  if (toolName === ASK_USER_QUESTION_TOOL_NAME && call.toolKind === "ask_user_question") {
-    const questions = call.input.questions
-    return (
-      <AskUserQuestionInteractive
-        questions={questions}
-        onSubmit={(finalAnswers) =>
-          responder.answer({
-            kind: "answer",
-            payload: encodeAskUserQuestionResult(questions, finalAnswers),
-          })
-        }
-        onCancel={responder.deny}
-        submitPending={responder.answering}
-        cancelPending={responder.denying}
-      />
-    )
-  }
-
-  if (toolName === EXIT_PLAN_MODE_TOOL_NAME && call.toolKind === "exit_plan_mode") {
-    return (
-      <ExitPlanModePending plan={call.input.plan ?? ""} responder={responder} />
-    )
-  }
 
   if (toolName.startsWith(BEACON_TOOL_PREFIX)) {
     return <BeaconPending toolName={toolName} args={args} responder={responder} />

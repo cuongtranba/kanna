@@ -27,7 +27,6 @@ const OUT = path.join(import.meta.dirname, '../src/content/docs/reference/env-va
 
 const DESCRIPTIONS: Record<string, { default: string; description: string }> = {
   KANNA_CLAUDE_DRIVER: { default: '(unset)', description: 'Ignored. The PTY driver was removed and every Claude chat runs on the Claude Agent SDK. Setting it to "pty" only logs a warning at boot; leave it unset.' },
-  KANNA_MCP_TOOL_CALLBACKS: { default: '0', description: 'Set to "1" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol.' },
   KANNA_SERVER_SECRET: { default: '(random per process)', description: 'Stabilises HMAC tool-request ids across process restarts.' },
   KANNA_PROACTIVE_COMPACT: { default: 'disabled', description: 'Set to "enabled" to restore Kanna\'s own proactive /compact injection. Off by default because the Claude Code CLI auto-compacts on its own (Settings.autoCompactEnabled, on by default), and Kanna\'s threshold is lower, so both running means Kanna always wins and the CLI never compacts. Turn it on only if you have set autoCompactEnabled: false in your CLI settings.' },
   KANNA_CRON_REPAIR: { default: 'enabled', description: 'Set to "disabled" to stop handing an invalid /cron line to the agent for repair. It only ever fires where Kanna has no corrected command of its own; the validate_cron / arm_cron tools stay registered either way.' },

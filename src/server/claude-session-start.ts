@@ -183,14 +183,7 @@ export async function startClaudeSession(
   args: StartClaudeSessionArgs,
   _deps: StartClaudeSessionDeps = buildStartClaudeSessionDeps(),
 ): Promise<ClaudeSessionHandle> {
-  const canUseTool = _deps.buildCanUseTool({
-    localPath: args.localPath,
-    chatId: args.chatId,
-    sessionToken: args.sessionToken,
-    onToolRequest: args.onToolRequest,
-    toolCallback: args.toolCallback,
-    chatPolicy: args.chatPolicy,
-  })
+  const canUseTool = _deps.buildCanUseTool({ onToolRequest: args.onToolRequest })
 
   const promptQueue = new _deps.AsyncMessageQueueCtor<SDKUserMessage>()
   const sessionHooks = buildSessionHooks(args, _deps.loopBlockedNativeTools)

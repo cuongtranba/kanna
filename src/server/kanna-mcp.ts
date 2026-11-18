@@ -18,7 +18,6 @@ import type { BoardRegistry } from "./board-registry"
 import type { InboxRegistry } from "./inbox/inbox-registry"
 import { z } from "zod"
 import path from "node:path"
-import { randomUUID } from "node:crypto"
 import type { JsonObject } from "../shared/json"
 import { isRecord } from "../shared/errors"
 import { resolveExistingProjectFile } from "./project-file-path"
@@ -27,14 +26,6 @@ import { buildProjectFileContentUrl, buildLocalFileContentUrl } from "../shared/
 import { inferAttachmentContentType } from "./uploads"
 import type { TranscriptEntry } from "../shared/types"
 import type { TunnelGateway } from "./cloudflare-tunnel/gateway"
-import { createReadTool } from "./kanna-mcp-tools/read.adapter"
-import { createGlobTool } from "./kanna-mcp-tools/glob.adapter"
-import { createGrepTool } from "./kanna-mcp-tools/grep.adapter"
-import { createBashTool } from "./kanna-mcp-tools/bash.adapter"
-import { createEditTool } from "./kanna-mcp-tools/edit.adapter"
-import { createWriteTool } from "./kanna-mcp-tools/write.adapter"
-import { createWebFetchTool } from "./kanna-mcp-tools/webfetch"
-import type { BuiltinShim, ToolHandlerContext } from "./kanna-mcp-tools/tool-callback-shim"
 import {
   createDelegateSubagentTool,
   DELEGATE_SUBAGENT_DESCRIPTION,
@@ -881,23 +872,6 @@ function resolveChatTaskDeps(args: KannaMcpArgs, chatId: string | null): ChatTas
   }
 }
 
-const BUILTIN_SHIM_FACTORIES: readonly ((deps: { toolCallback: ToolCallbackService }) => BuiltinShim)[] = [
-  createReadTool,
-  createGlobTool,
-  createGrepTool,
-  createBashTool,
-  createEditTool,
-  createWriteTool,
-  createWebFetchTool,
-]
-
-function toolUseIdOf(extra: SdkToolExtra): string {
-  if (isRecord(extra) && (typeof extra.requestId === "string" || typeof extra.requestId === "number")) {
-    return String(extra.requestId)
-  }
-  return randomUUID()
-}
-
 export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
   const tunnelGateway = args.tunnelGateway ?? null
   const chatId = args.chatId ?? null
@@ -979,21 +953,6 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         },
       ),
     )
-  }
-
-  if (process.env.KANNA_MCP_TOOL_CALLBACKS === "1" && args.toolCallback) {
-    const toolCallback = args.toolCallback
-    const contextOf = (extra: SdkToolExtra): ToolHandlerContext => ({
-      chatId: chatId ?? "",
-      sessionId,
-      toolUseId: toolUseIdOf(extra),
-      cwd,
-      chatPolicy,
-      restrictedAllowedPaths: args.restrictedAllowedPaths,
-    })
-    for (const createShim of BUILTIN_SHIM_FACTORIES) {
-      tools.push(createShim({ toolCallback }).register<KannaSdkTool>(tool, contextOf))
-    }
   }
 
   return tools

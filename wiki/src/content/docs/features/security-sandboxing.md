@@ -8,16 +8,17 @@ that means and which controls are real.
 
 ## Durable approval protocol
 
-Plan-mode approvals and `AskUserQuestion` prompts are parked as **durable**
-requests rather than in-memory promises. A pending request survives a server
-restart (resolved fail-closed as `session_closed` on boot) and replays to the
-browser on reconnect, so a question cannot silently strand a chat.
+A beacon tool call that its scope does not allow outright is parked as a
+**durable** approval request rather than an in-memory promise. It is persisted,
+replays to the browser on reconnect, and can be answered from the browser or
+from the remote MCP `answer_tool_request` tool. A server restart fail-closes it
+as `session_closed`, so a restart never approves anything. There is no timeout:
+a request waits until you answer, cancel the chat, or the server restarts.
+Optional `KANNA_SERVER_SECRET` stabilises request ids across a process
+lifetime.
 
-Set `KANNA_MCP_TOOL_CALLBACKS=1` to route them, plus a set of built-in tool
-shims, through that protocol. Optional `KANNA_SERVER_SECRET` stabilises request
-ids across a process lifetime.
-
-Requests time out after 600 s as an explicit deny — never as an approval.
+Plan approvals and `AskUserQuestion` prompts do not use this protocol. They
+park in memory until you answer, so a server restart does not keep them.
 
 ## Password gate
 
