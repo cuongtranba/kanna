@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.112.0](https://github.com/cuongtranba/kanna/compare/v1.111.0...v1.112.0) (2026-11-18)
+
+
+### Features
+
+* **plugins:** let a plugin bundle its own npm dependencies ([#1509](https://github.com/cuongtranba/kanna/issues/1509)) ([63d46b8](https://github.com/cuongtranba/kanna/commit/63d46b8484acf7c29696949426c7e8399cb8aa47))
+
 ## [1.111.0](https://github.com/cuongtranba/kanna/compare/v1.110.3...v1.111.0) (2026-11-17)
 
 
