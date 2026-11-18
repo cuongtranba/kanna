@@ -42,13 +42,16 @@ gh workflow run release-please.yml -f tag=v1.32.0
 That rebuilds and publishes from the tag through CI, so the package keeps its
 provenance signature. A local `npm publish` would not.
 
-## The npm token expires
+## How the publish authenticates
 
-`NPM_TOKEN` is an npm granular access token, which npm caps at **90 days**. When
-it expires, `npm publish` fails with a misleading `E404 Not Found` rather than an
-authentication error. Create a new token on npmjs.com (all packages, read and
-write), then:
+The `publish` job uses npm **Trusted Publishing** (OIDC), not a stored token.
+On npmjs.com, `@cuongtran001/kanna` trusts GitHub Actions runs of
+`cuongtranba/kanna` from the workflow file `release-please.yml`; the job's
+`id-token: write` permission lets npm (11.5.1 or newer) swap the run's OIDC token
+for a short-lived publish token. Nothing expires, and no `NPM_TOKEN` secret is read.
 
-```bash
-gh secret set NPM_TOKEN
-```
+An `E404 Not Found` on `PUT https://registry.npmjs.org/@cuongtran001%2fkanna`
+means npm did not accept the run as the trusted publisher. Check the package's
+Trusted Publisher settings on npmjs.com (owner, repository and workflow file name
+must match exactly), and check that the publish ran from `release-please.yml`.
+Then publish the tag again as above.
