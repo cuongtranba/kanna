@@ -16,16 +16,21 @@ import { fail, ok, requireNonBlank, type KannaToolFactory, type ToolResult } fro
 
 const PLUGIN_LIST_DESCRIPTION = "List installed Kanna plugins and their runtime state."
 
+const PLUGIN_DEPENDENCIES_NOTE =
+  "A package.json in the plugin directory is installed with bun install (--frozen-lockfile when bun.lock exists) "
+  + "before compiling, and its packages are bundled; packages and node:* builtins imported from *.server.ts files "
+  + "are kept out of the browser bundle."
+
 const PLUGIN_VALIDATE_DESCRIPTION =
-  "Validate a plugin source directory's manifest and entry points without installing it."
+  `Validate a plugin source directory's manifest and entry points without installing it into Kanna. ${PLUGIN_DEPENDENCIES_NOTE}`
 
 const PLUGIN_LOGS_DESCRIPTION = "Read the recent log lines for one installed plugin."
 
-const PLUGIN_SCAFFOLD_DESCRIPTION = "Scaffold a new Kanna plugin project at a directory."
+const PLUGIN_SCAFFOLD_DESCRIPTION = `Scaffold a new Kanna plugin project at a directory. ${PLUGIN_DEPENDENCIES_NOTE}`
 
 const PLUGIN_INSTALL_DESCRIPTION =
   "Compile a plugin source directory and install it. A newly installed plugin starts disabled and does not run until "
-  + "the user enables it; reinstalling an installed id rebuilds its bundles and keeps its enabled state."
+  + `the user enables it; reinstalling an installed id rebuilds its bundles and keeps its enabled state. ${PLUGIN_DEPENDENCIES_NOTE}`
 
 const PLUGIN_RELOAD_DESCRIPTION = "Stop and restart a running plugin, picking up a rebuilt bundle."
 

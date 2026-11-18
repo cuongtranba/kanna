@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "kanna-fixture-plugin-with-deps",
+      "dependencies": {
+        "kanna-fixture-client-pkg": "file:../packages/client-pkg",
+        "kanna-fixture-server-pkg": "file:../packages/server-pkg",
+      },
+    },
+  },
+  "packages": {
+    "kanna-fixture-client-pkg": ["kanna-fixture-client-pkg@file:../packages/client-pkg", {}],
+
+    "kanna-fixture-server-pkg": ["kanna-fixture-server-pkg@file:../packages/server-pkg", {}],
+  }
+}
