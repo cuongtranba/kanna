@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.112.3](https://github.com/cuongtranba/kanna/compare/v1.112.2...v1.112.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **wiki:** keep KANNA_DISABLE_SELF_UPDATE in the generated env var list ([#1517](https://github.com/cuongtranba/kanna/issues/1517)) ([2f62f49](https://github.com/cuongtranba/kanna/commit/2f62f49f999044dcf5c27baeeb75a6af4305462c))
+
 ## [1.112.2](https://github.com/cuongtranba/kanna/compare/v1.112.1...v1.112.2) (2026-11-18)
 
 
