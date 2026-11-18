@@ -1,7 +1,7 @@
 ---
 id: c3-2
 c3-version: 4
-c3-seal: 206dedd397c131503d327e0d4d1d6344dc56938c0b7c27bb31354d23bcf529b1
+c3-seal: 234a9dfd0718a7a2327a2b3e84708f49a8530be055c06ef81d39f17c0ece037b
 title: Server
 type: container
 boundary: service
@@ -18,7 +18,7 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 - Own the authoritative event log and derived read models; every state mutation lands as a JSONL event first.
 - Accept WebSocket subscriptions and commands; push fresh snapshots on every change.
 - Drive multi-provider agent turns (Claude Agent SDK, Codex App Server) through a single coordinator.
-- Host the in-process MCP server for `mcp__kanna__*` shims and route interactive tool requests through a durable approval protocol that survives restart.
+- Host the in-process MCP server for the `mcp__kanna__*` tool surface and gate beacon tool calls through a durable approval protocol.
 - Detect rate-limit / auth-error turn endings and auto-resume the chat at the right wake-up moment without user intervention.
 - Discover local projects, manage terminals and uploads, operate share tunnels.
 - Gate network access (auth), supervise its own CLI lifecycle, and refuse to leave localhost unless explicitly asked.
@@ -52,7 +52,7 @@ Run the local Bun backend: serve HTTP+WebSocket on localhost, coordinate Claude 
 | c3-222 | keybindings | feature | active | Persist user keybindings |
 | c3-223 | cloudflare-tunnel | feature | active | Detect dev-server ports and expose via cloudflared quick tunnels |
 | c3-224 | oauth-token-pool | feature | active | Multi-account OAuth token pool: per-chat reservation, rate-limit/auth-error rotation, refusal classifier |
-| c3-226 | kanna-mcp-host | feature | active | In-process MCP server + built-in shims + durable approval protocol + path-deny |
+| c3-226 | kanna-mcp-host | feature | active | In-process MCP server + durable approval protocol for beacon tools + path-deny |
 | c3-227 | auto-continue |  | active | Detect rate-limit / auth-error endings, schedule retries, replay queued prompts |
 | c3-228 | session-share | feature | active | Mint read-only share tokens for finished chats; serve frozen snapshots at /share/:token without auth |
 | c3-229 | workflow-status |  | active | Disk-watch sidecar read-model for Claude workflow runs; WorkflowRegistry + WorkflowsSnapshot WS topic |

@@ -47,36 +47,6 @@ describe("policy.evaluate basics", () => {
     })
     expect(verdict.verdict).toBe("auto-deny")
   })
-
-  test("mcp__kanna__ask_user_question always asks even under auto-allow policy", () => {
-    const verdict = policy.evaluate({
-      toolName: "mcp__kanna__ask_user_question",
-      args: { questions: [{ text: "x", header: "h", multiSelect: false, options: [{ label: "a", description: "" }, { label: "b", description: "" }] }] },
-      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
-      cwd: "/tmp",
-    })
-    expect(verdict.verdict).toBe("ask")
-  })
-
-  test("mcp__kanna__exit_plan_mode always asks even under auto-allow policy", () => {
-    const verdict = policy.evaluate({
-      toolName: "mcp__kanna__exit_plan_mode",
-      args: { plan: "do stuff" },
-      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
-      cwd: "/tmp",
-    })
-    expect(verdict.verdict).toBe("ask")
-  })
-
-  test("interactive tools also ask under auto-deny policy (UI is the only outcome)", () => {
-    const verdict = policy.evaluate({
-      toolName: "mcp__kanna__ask_user_question",
-      args: { questions: [] },
-      chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-deny" },
-      cwd: "/tmp",
-    })
-    expect(verdict.verdict).toBe("ask")
-  })
 })
 
 describe("bash arg parsing", () => {
