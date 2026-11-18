@@ -41,5 +41,7 @@ The same parser (`src/ops/release/commit-message.ts`) runs in `.githooks/commit-
 Re-running the workflow does not help: release-please sees the release exists and
 skips `publish`. Publish the existing tag instead, which keeps the provenance
 signature: `gh workflow run release-please.yml --repo cuongtranba/kanna -f tag=vX.Y.Z`.
-An `E404 Not Found` from `npm publish` usually means `NPM_TOKEN` (90-day cap)
-expired. Details: `wiki/src/content/docs/guides/contributing/releasing.md`.
+`publish` authenticates with npm Trusted Publishing (OIDC) from `release-please.yml`,
+not with `NPM_TOKEN`; an `E404 Not Found` on PUT means npm rejected the run as the
+trusted publisher (settings on npmjs.com, or a publish from another workflow file).
+Details: `wiki/src/content/docs/guides/contributing/releasing.md`.
