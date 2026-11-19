@@ -2,6 +2,7 @@ import { describe, test, expect, vi } from "vite-plus/test"
 import {
   getEnabledCustomMcpServers,
   buildOAuthBearers,
+  createCustomMcpServerResolver,
   resolveChatPolicy,
   type ClaudeSessionConfigHelpersDeps,
 } from "./claude-session-config-helpers"
@@ -46,6 +47,15 @@ describe("getEnabledCustomMcpServers", () => {
     const result = getEnabledCustomMcpServers(deps)
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe("s1")
+  })
+
+  test("never offers a server named after Kanna's own MCP server", () => {
+    const deps = makeDeps({
+      getAppSettingsSnapshot: () => ({
+        customMcpServers: [makeServer({ id: "s1", name: "kanna" }), makeServer({ id: "s2", name: "other" })],
+      }),
+    })
+    expect(getEnabledCustomMcpServers(deps).map((s) => s.id)).toEqual(["s2"])
   })
 
   test("returns empty array when customMcpServers is not an array", () => {
@@ -159,6 +169,26 @@ describe("buildOAuthBearers", () => {
     const result = await buildOAuthBearers(makeDeps(), [makeServer({ oauth: authOauth })])
 
     expect(result.usableUntil).toBeNull()
+  })
+})
+
+
+describe("createCustomMcpServerResolver", () => {
+  test("hands every provider the enabled servers with a fresh OAuth bearer in their headers", async () => {
+    const authOauth: McpOAuthState = { enabled: true, status: "authenticated" }
+    const resolve = createCustomMcpServerResolver(makeDeps({
+      getAppSettingsSnapshot: () => ({
+        customMcpServers: [
+          makeServer({ id: "oauth", name: "oauth", headers: { K: "v" }, oauth: authOauth }),
+          makeServer({ id: "off", name: "off", enabled: false }),
+        ],
+      }),
+      ensureFreshToken: async () => "fresh",
+    }))
+
+    const grant = await resolve()
+
+    expect(grant.servers).toMatchObject([{ id: "oauth", headers: { K: "v", Authorization: "Bearer fresh" } }])
   })
 })
 

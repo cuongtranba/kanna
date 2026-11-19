@@ -3,6 +3,8 @@ import type { HarnessEvent, HarnessToolRequest } from "./harness-types"
 import { isJsonArray, isJsonObject, stringField, type JsonObject } from "../shared/json"
 import { AGENT_TOOLS_MCP_PATH, AgentToolsBridge } from "./agent-tools-bridge"
 import { AntigravityAcpManager, type StartAntigravityTurnArgs } from "./antigravity-acp"
+import type { CustomMcpServerGrant } from "./claude-session-config-helpers"
+import type { McpServerConfig } from "../shared/types"
 import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
 import { waitFor } from "./test-helpers/wait-for"
 
@@ -302,6 +304,62 @@ describe("AntigravityAcpManager", () => {
       { type: "http", name: "kanna", url: `http://127.0.0.1:4242${AGENT_TOOLS_MCP_PATH}`, headers: [{ name: "Authorization" }] },
     ])
     expect(offeredServers(sub)).toEqual([])
+  })
+
+  test("a session is offered the enabled custom MCP servers, and only a main session also gets Kanna's bridge", async () => {
+    const stamps = { enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" } } as const
+    const servers: McpServerConfig[] = [
+      { ...stamps, id: "s1", name: "files", transport: "stdio", command: "/bin/files", args: ["--x"], env: { A: "1" } },
+      { ...stamps, id: "h1", name: "design", transport: "http", url: "https://example.com/mcp", headers: { K: "v", Authorization: "Bearer TOKEN" } },
+      { ...stamps, id: "e1", name: "events", transport: "sse", url: "https://example.com/sse", headers: {} },
+    ]
+    const grant: CustomMcpServerGrant = { servers, usableUntil: null }
+    const main: FakeAcpAgent = new FakeAcpAgent((request) => { main.answerSetup(request) })
+    const sub: FakeAcpAgent = new FakeAcpAgent((request) => { sub.answerSetup(request) })
+    const spawned = [main, sub]
+    const manager = new AntigravityAcpManager({
+      spawnProcess: () => spawned.shift() ?? sub,
+      toolBridge: bridgeFixture(),
+      resolveCustomMcpServers: async () => grant,
+    })
+
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+    await manager.startSession({ chatId: "chat-1", scope: "sub:run-1", cwd: "/tmp/project", sessionToken: null })
+
+    const customs = [
+      { name: "files", command: "/bin/files", args: ["--x"], env: [{ name: "A", value: "1" }] },
+      {
+        type: "http",
+        name: "design",
+        url: "https://example.com/mcp",
+        headers: [{ name: "K", value: "v" }, { name: "Authorization", value: "Bearer TOKEN" }],
+      },
+    ]
+    expect(offeredServers(sub)).toEqual(customs)
+    expect(offeredServers(main)).toMatchObject([...customs, { type: "http", name: "kanna" }])
+  })
+
+  test("a session whose MCP bearer has expired respawns on the next start", async () => {
+    let clock = 1_000
+    let spawned = 0
+    const manager = new AntigravityAcpManager({
+      spawnProcess: () => {
+        spawned += 1
+        const agent: FakeAcpAgent = new FakeAcpAgent((request) => { agent.answerSetup(request) })
+        return agent
+      },
+      resolveCustomMcpServers: async () => ({ servers: [], usableUntil: 2_000 }),
+      now: () => clock,
+    })
+    const start = () => manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", sessionToken: null })
+
+    await start()
+    await start()
+    expect(spawned).toBe(1)
+
+    clock = 2_000
+    await start()
+    expect(spawned).toBe(2)
   })
 
   test("stopping the session revokes its bearer so a later tool call is refused", async () => {

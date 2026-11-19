@@ -6,6 +6,8 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "no
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CodexAppServerManager, normalizeCodexTokenUsage, type CodexSessionScope } from "./codex-app-server"
+import type { CustomMcpServerGrant } from "./claude-session-config-helpers"
+import type { McpServerConfig } from "../shared/types"
 
 class FakeCodexProcess extends EventEmitter {
   readonly stdin = new PassThrough()
@@ -198,6 +200,70 @@ describe("CodexAppServerManager", () => {
 
     const threadResume = process.messages.find((message: any) => message.method === "thread/resume") as any
     expect(threadResume.params.config).toEqual({ "tools.update_plan": { enabled: true } })
+  })
+
+  test("a Codex session offers every enabled custom MCP server in its thread config", async () => {
+    const stamps = { enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" } } as const
+    const servers: McpServerConfig[] = [
+      { ...stamps, id: "s1", name: "files", transport: "stdio", command: "/bin/files", args: ["--x"], env: { A: "1" }, cwd: "/srv" },
+      { ...stamps, id: "h1", name: "design", transport: "http", url: "https://example.com/mcp", headers: { K: "v", Authorization: "Bearer TOKEN" } },
+      { ...stamps, id: "e1", name: "events", transport: "sse", url: "https://example.com/sse", headers: {} },
+    ]
+    const grant: CustomMcpServerGrant = { servers, usableUntil: null }
+    const expectedConfig = {
+      "tools.update_plan": { enabled: true },
+      "mcp_servers.files": { command: "/bin/files", args: ["--x"], env: { A: "1" }, cwd: "/srv" },
+      "mcp_servers.design": { url: "https://example.com/mcp", http_headers: { K: "v", Authorization: "Bearer TOKEN" } },
+    }
+    for (const scope of ["main", "sub:run-1"] as const) {
+      const process = new FakeCodexProcess((message, child) => {
+        if (message.method === "initialize") {
+          child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+        } else if (message.method === "thread/start" || message.method === "thread/resume") {
+          child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-1" } } })
+        }
+      })
+      const manager = new CodexAppServerManager({
+        spawnProcess: () => process as never,
+        resolveCustomMcpServers: async () => grant,
+      })
+
+      await manager.startSession({ chatId: "chat-1", scope, cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+      await manager.startSession({ chatId: "chat-2", scope, cwd: "/tmp/project", model: "gpt-5.4", sessionToken: "thread-old" })
+
+      const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+      const threadResume = process.messages.find((message: any) => message.method === "thread/resume") as any
+      expect(threadStart.params.config).toEqual(expectedConfig)
+      expect(threadResume.params.config).toEqual(expectedConfig)
+    }
+  })
+
+  test("a session whose MCP bearer has expired respawns on the next start", async () => {
+    let clock = 1_000
+    let spawned = 0
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => {
+        spawned += 1
+        return new FakeCodexProcess((message, child) => {
+          if (message.method === "initialize") {
+            child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+          } else if (message.method === "thread/start") {
+            child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-1" } } })
+          }
+        }) as never
+      },
+      resolveCustomMcpServers: async () => ({ servers: [], usableUntil: 2_000 }),
+      now: () => clock,
+    })
+    const start = () => manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+
+    await start()
+    await start()
+    expect(spawned).toBe(1)
+
+    clock = 2_000
+    await start()
+    expect(spawned).toBe(2)
   })
 
   test("maps fast mode and reasoning into app-server params", async () => {

@@ -17,6 +17,20 @@ merges it into the `mcpServers` map passed to `query()` alongside
 `mcp__kanna__*`. Kanna settings remain the single source of truth for which
 servers a session sees.
 
+Codex and Antigravity sessions (main and `sub:` scopes) get the same servers.
+`createCustomMcpServerResolver` (`claude-session-config-helpers.ts`) is the one owner
+of "which servers, with which bearer": `getEnabledCustomMcpServers` (enabled, never
+`kanna`) plus `buildOAuthBearers`, with the bearer already merged into `headers`. It is
+injected into `CodexAppServerManager` and `AntigravityAcpManager` by
+`createPeerMessaging`; each manager maps it to its own wire shape. Codex: dotted
+`config["mcp_servers.<name>"]` keys on `thread/start`, `thread/resume` and
+`thread/fork` (per-name keys merge with the user's `~/.codex` servers; a nested
+`mcp_servers` object would replace them). ACP: entries in `session/new` and
+`session/resume` `mcpServers`, ahead of the main-only bridge grant. Both take only
+`stdio` and `http`; `sse`/`ws` entries are skipped with a `log.warn` naming them.
+Each manager respawns a reused session on the next `startSession` once the grant's
+`usableUntil` passes, unless a turn is running.
+
 User MCP tool calls auto-allow (`canUseTool` already returns
 `{ behavior: "allow" }` for any tool that isn't `AskUserQuestion` /
 `ExitPlanMode`, which includes every `mcp__<name>__*` whose `<name>`
@@ -33,8 +47,9 @@ per-row status pill plus a manual "Test" button that drives the
 explicit `settings.testMcpServer` RPC.
 
 **Boundary rule:** user MCP server names MUST NOT equal
-`KANNA_MCP_SERVER_NAME`. Enforced by both `validateMcpShape`
-(`app-settings.ts`) and the `buildUserMcpServers` filter
+`KANNA_MCP_SERVER_NAME`. Enforced by `validateMcpShape`
+(`app-settings.ts`), `getEnabledCustomMcpServers`
+(`claude-session-config-helpers.ts`) and the `buildUserMcpServers` filter
 (`claude-session-config.ts`).
 
 ### Custom MCP Servers → OAuth

@@ -4,7 +4,7 @@ import { isErrnoException } from "../shared/errors"
 import { serveHttp } from "./server-io.adapter"
 import { bin as cloudflaredBin } from "cloudflared"
 import { getRuntimeProfile } from "../shared/branding"
-import { CLOUDFLARE_TUNNEL_DEFAULTS } from "../shared/types"
+import { CLOUDFLARE_TUNNEL_DEFAULTS, type McpOAuthState } from "../shared/types"
 import type { ShareMode } from "../shared/share"
 import { createPasswordAuth, type PasswordAuth } from "./better-auth.adapter"
 import { createRemoteMcpRuntime } from "./remote-mcp/remote-mcp-boot"
@@ -16,6 +16,8 @@ import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent-coordinator"
 import type { AgentToolsBridge } from "./agent-tools-bridge"
 import { createPeerMessaging } from "./peer-messaging/create-peer-messaging"
+import { createCustomMcpServerResolver } from "./claude-session-config-helpers"
+import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
 import { resolveAgentRuntimeConfig } from "./agent-runtime-config"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
@@ -368,7 +370,20 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
   })
   let cronDrain: Promise<void> = Promise.resolve()
   lifetime.defer("quiesce", () => { cronDrain = cronScheduler.shutdown() })
-  const { agentToolsBridge, ...peerMessaging } = createPeerMessaging(store, () => agent, () => appSettings.getSnapshot().peerMessagesInbound)
+  const getAppSettingsSnapshot = () => buildAgentAppSettingsView(appSettings.getSnapshot())
+  const persistOAuthState = (id: string, oauth: McpOAuthState) =>
+    void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } })
+  const resolveCustomMcpServers = createCustomMcpServerResolver({
+    getAppSettingsSnapshot,
+    ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
+    persistOAuthState,
+  })
+  const { agentToolsBridge, ...peerMessaging } = createPeerMessaging(
+    store,
+    () => agent,
+    () => appSettings.getSnapshot().peerMessagesInbound,
+    resolveCustomMcpServers,
+  )
   agent = new AgentCoordinator({
     store,
     ...peerMessaging,
@@ -396,8 +411,8 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     onTurnOutcome: (chatId, outcome) => pushManager.noteTurnOutcome(chatId, outcome),
     chatPolicy: { ...POLICY_DEFAULT, defaultAction: "auto-allow" },
     getSubagents: () => appSettings.getSnapshot().subagents,
-    getAppSettingsSnapshot: () => buildAgentAppSettingsView(appSettings.getSnapshot()),
-    persistOAuthState: (id, oauth) => void appSettings.writePatch({ customMcpServers: { setOAuthState: { id, oauth } } }),
+    getAppSettingsSnapshot,
+    persistOAuthState,
     readLlmProvider: () => readLlmProviderSnapshot(),
     getCustomProviderCredential: (id) => appSettings.getCustomProviderCredential(id),
     listOpenRouterModels: () => openrouterModelCache.list(),
