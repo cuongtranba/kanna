@@ -1,11 +1,15 @@
 ---
 id: c3-226
-c3-seal: 2d37b0ca0ae7a69a9fde275801e6e598a97081f85c4130beeb96606336fb670b
+c3-seal: 6613e482525beb170efb797c485383be832f6cac70f0dd3c156706702bd5bf4a
 title: kanna-mcp-host
 type: component
 category: feature
 parent: c3-2
-goal: Host the in-process MCP server that the Claude session attaches to its query, publish the mcp__kanna__* tool surface, and run the durable approval protocol that gates beacon tool calls before any side-effect runs.
+goal: |-
+    Host the in-process MCP server that the Claude session attaches
+    to its query, publish the mcp__kanna__* tool surface, and run the
+    durable approval protocol that gates beacon tool calls before any
+    side-effect runs.
 uses:
     - ref-local-first-data
     - ref-strong-typing
