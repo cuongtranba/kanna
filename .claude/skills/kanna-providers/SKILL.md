@@ -254,7 +254,9 @@ remote MCP. Invariants a change must keep:
 
 - A random 32 byte bearer per main session maps to its chat id; the manager passes
   it in `mcpServers` headers on `session/new` and `session/resume`, and revokes it
-  on `stopSession` and on failure. Subagent scopes get no grant.
+  on `stopSession` and on failure. Subagent scopes get no grant. This is about the
+  bridge only: the user's custom MCP servers reach every scope, listed ahead of the
+  grant (`kanna-mcp` skill).
 - Only direct loopback POSTs: no `Origin`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP`
   or `CF-Connecting-IP` header. Otherwise 403; non-POST 405; missing, unknown or
   revoked bearer 401; the OAuth discovery path 404 (agy must not start an OAuth flow).

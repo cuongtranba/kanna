@@ -1,6 +1,6 @@
 ---
 id: c3-250
-c3-seal: cf5a90f3ef867febcda82c0bf635a2a7384e867e9728dd42a14e2c461cb1bc34
+c3-seal: 91e3a9e99806ef1bb46cf1c5b0d8f6f10cf3bc2fbcd1666f80dab2ee9f1ec20c
 title: antigravity-acp
 type: component
 category: feature
@@ -38,7 +38,7 @@ Spawns agy acp with --dangerously-skip-permissions, speaks Agent Client Protocol
 | Precondition | agy v1.5.9 or newer is on PATH and logged in; Kanna never injects credentials | c3-2 |
 | Input — stdio port | StdioProcess is the child-process port shared with the Codex driver; only antigravity-spawn.adapter.ts touches child\_process | c3-209 |
 | Input — protocol | Typed ACP envelopes decoded with JsonValue narrowing, no casts | c3-301 |
-| Initialization | Lazy spawn on the first Antigravity turn; session/new carries developer instructions in \_meta.antigravity.systemPrompt.append and the MCP grant in mcpServers | c3-210 |
+| Initialization | Lazy spawn on the first Antigravity turn; session/new carries developer instructions in \_meta.antigravity.systemPrompt.append; session/new and session/resume mcpServers carry every enabled custom MCP server from the injected ResolveCustomMcpServers port (stdio and http only, every scope), followed by the agent-tools bridge grant for a main scope only (see adr-20261119-custom-mcp-for-codex-and-antigravity) | c3-210 |
 
 ## Business Flow
 

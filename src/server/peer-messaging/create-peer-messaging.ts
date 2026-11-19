@@ -6,6 +6,7 @@ import type { ChatRecord } from "../events"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { AgentToolsBridge } from "../agent-tools-bridge"
 import { AntigravityAcpManager } from "../antigravity-acp"
+import type { ResolveCustomMcpServers } from "../claude-session-config-helpers"
 import { CodexAppServerManager } from "../codex-app-server"
 import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import type { MidTurnDelivery } from "./mid-turn-delivery"
@@ -38,14 +39,15 @@ export function createPeerMessaging(
   store: PeerStoreView,
   agent: () => PeerAgentView,
   globalInbound: () => PeerInboundMode,
+  resolveCustomMcpServers: ResolveCustomMcpServers,
 ): PeerMessagingServices {
   const peerMessenger = createPeerMessenger(store, agent, globalInbound)
   const kannaTools = createCodexKannaTools(peerMessenger)
   const agentToolsBridge = new AgentToolsBridge(kannaTools)
   return {
     peerMessenger,
-    codexManager: new CodexAppServerManager({ kannaTools }),
-    antigravityManager: new AntigravityAcpManager({ toolBridge: agentToolsBridge }),
+    codexManager: new CodexAppServerManager({ kannaTools, resolveCustomMcpServers }),
+    antigravityManager: new AntigravityAcpManager({ toolBridge: agentToolsBridge, resolveCustomMcpServers }),
     agentToolsBridge,
   }
 }

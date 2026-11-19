@@ -42,6 +42,8 @@ import type { PendingTurn } from "./codex-pending-turn"
 import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
+import { log } from "../shared/log"
+import type { CustomMcpServerGrant, ResolveCustomMcpServers } from "./claude-session-config-helpers"
 import { type CodexErrorInfo } from "../shared/codex-error-classification"
 import {
   type TranslationContext,
@@ -69,8 +71,32 @@ const KANNA_THREAD_POLICY = {
   approvalPolicy: "never",
   sandbox: "danger-full-access",
   persistExtendedHistory: false,
-  config: CODEX_THREAD_CONFIG,
 } as const
+
+const NO_CUSTOM_MCP_SERVERS: CustomMcpServerGrant = { servers: [], usableUntil: null }
+
+function codexMcpServerEntries(grant: CustomMcpServerGrant): JsonObject {
+  const entries: [string, JsonObject][] = []
+  const skipped: string[] = []
+  for (const server of grant.servers) {
+    if (server.transport === "stdio") {
+      entries.push([`mcp_servers.${server.name}`, {
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        ...(server.cwd ? { cwd: server.cwd } : {}),
+      }])
+    } else if (server.transport === "http") {
+      entries.push([`mcp_servers.${server.name}`, { url: server.url, http_headers: server.headers }])
+    } else {
+      skipped.push(server.name)
+    }
+  }
+  if (skipped.length > 0) {
+    log.warn("[kanna/codex] custom MCP servers skipped, Codex supports only stdio and http:", skipped.join(", "))
+  }
+  return Object.fromEntries(entries)
+}
 
 const QUICK_SERVICE_TIER = "fast"
 
@@ -89,6 +115,7 @@ interface SessionContext {
   pendingRequests: Map<CodexRequestId, PendingRequest<JsonValue>>
   pendingTurn: PendingTurn | null
   sessionToken: string | null
+  mcpUsableUntil: number | null
   stderrLines: string[]
   closed: boolean
 }
@@ -144,6 +171,8 @@ export class CodexAppServerManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnCodexAppServer
   private readonly kannaTools: CodexKannaTools | undefined
+  private readonly resolveCustomMcpServers: ResolveCustomMcpServers | undefined
+  private readonly now: () => number
 
   private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
     if (scope === "sub:") {
@@ -152,9 +181,18 @@ export class CodexAppServerManager {
     return `${chatId}::${scope}`
   }
 
-  constructor(args: { spawnProcess?: SpawnCodexAppServer; kannaTools?: CodexKannaTools } = {}) {
+  constructor(
+    args: {
+      spawnProcess?: SpawnCodexAppServer
+      kannaTools?: CodexKannaTools
+      resolveCustomMcpServers?: ResolveCustomMcpServers
+      now?: () => number
+    } = {},
+  ) {
     this.spawnProcess = args.spawnProcess ?? defaultSpawnCodexAppServer
     this.kannaTools = args.kannaTools
+    this.resolveCustomMcpServers = args.resolveCustomMcpServers
+    this.now = args.now ?? Date.now
   }
 
   get offersKannaTools(): boolean {
@@ -165,7 +203,13 @@ export class CodexAppServerManager {
     const scope: CodexSessionScope = args.scope ?? "main"
     const key = CodexAppServerManager.keyFor(args.chatId, scope)
     const existing = this.sessions.get(key)
-    if (existing && !existing.closed && existing.cwd === args.cwd && !args.pendingForkSessionToken) {
+    if (
+      existing
+      && !existing.closed
+      && existing.cwd === args.cwd
+      && !args.pendingForkSessionToken
+      && (existing.pendingTurn !== null || existing.mcpUsableUntil === null || this.now() < existing.mcpUsableUntil)
+    ) {
       return
     }
 
@@ -183,6 +227,7 @@ export class CodexAppServerManager {
       pendingRequests: new Map(),
       pendingTurn: null,
       sessionToken: null,
+      mcpUsableUntil: null,
       stderrLines: [],
       closed: false,
     }
@@ -203,8 +248,12 @@ export class CodexAppServerManager {
       method: "initialized",
     })
 
+    const customMcp = this.resolveCustomMcpServers ? await this.resolveCustomMcpServers() : NO_CUSTOM_MCP_SERVERS
+    context.mcpUsableUntil = customMcp.usableUntil
+    const policy = { ...KANNA_THREAD_POLICY, config: { ...CODEX_THREAD_CONFIG, ...codexMcpServerEntries(customMcp) } }
+
     const threadParams = {
-      ...KANNA_THREAD_POLICY,
+      ...policy,
       model: args.model,
       cwd: args.cwd,
       serviceTier: args.serviceTier,
@@ -216,7 +265,7 @@ export class CodexAppServerManager {
     let threadId: string
     if (args.pendingForkSessionToken) {
       threadId = await this.requestThreadId(context, "thread/fork", {
-        ...KANNA_THREAD_POLICY,
+        ...policy,
         threadId: args.pendingForkSessionToken,
         model: args.model,
         cwd: args.cwd,
@@ -225,7 +274,7 @@ export class CodexAppServerManager {
     } else if (args.sessionToken) {
       try {
         threadId = await this.requestThreadId(context, "thread/resume", {
-          ...KANNA_THREAD_POLICY,
+          ...policy,
           threadId: args.sessionToken,
           model: args.model,
           cwd: args.cwd,

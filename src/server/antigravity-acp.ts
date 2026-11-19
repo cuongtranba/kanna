@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto"
 import { createInterface } from "node:readline"
 import { errorMessage, toError } from "../shared/errors"
 import { isJsonObject, safeJsonParse, type JsonObject, type JsonValue } from "../shared/json"
+import { log } from "../shared/log"
 import type { AntigravityReasoningEffort } from "../shared/provider-model-types"
 import { timestamped } from "../shared/transcript-entry"
 import type { TranscriptEntry } from "../shared/types"
@@ -30,6 +31,7 @@ import {
   antigravitySystemInitEntry,
   type AcpPlanProposal,
 } from "./antigravity-acp-translator"
+import type { CustomMcpServerGrant, ResolveCustomMcpServers } from "./claude-session-config-helpers"
 import type { KannaToolOutcome } from "./codex-dynamic-tool-call"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { StdioProcess } from "./stdio-process"
@@ -93,10 +95,41 @@ interface SessionContext {
   pendingTurn: PendingTurn | null
   sessionToken: string | null
   grant: AntigravityToolGrant | null
+  mcpUsableUntil: number | null
   config: AcpConfigState
   planMode: boolean
   stderrLines: string[]
   closed: boolean
+}
+
+const NO_CUSTOM_MCP_SERVERS: CustomMcpServerGrant = { servers: [], usableUntil: null }
+
+function acpMcpServerEntries(grant: CustomMcpServerGrant): JsonObject[] {
+  const entries: JsonObject[] = []
+  const skipped: string[] = []
+  for (const server of grant.servers) {
+    if (server.transport === "stdio") {
+      entries.push({
+        name: server.name,
+        command: server.command,
+        args: server.args,
+        env: Object.entries(server.env).map(([name, value]) => ({ name, value })),
+      })
+    } else if (server.transport === "http") {
+      entries.push({
+        type: "http",
+        name: server.name,
+        url: server.url,
+        headers: Object.entries(server.headers).map(([name, value]) => ({ name, value })),
+      })
+    } else {
+      skipped.push(server.name)
+    }
+  }
+  if (skipped.length > 0) {
+    log.warn("[kanna/antigravity] custom MCP servers skipped, Antigravity supports only stdio and http:", skipped.join(", "))
+  }
+  return entries
 }
 
 const STDERR_TAIL_LINES = 20
@@ -116,6 +149,8 @@ export class AntigravityAcpManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnAntigravityAcp
   private readonly toolBridge: AntigravityToolBridge | undefined
+  private readonly resolveCustomMcpServers: ResolveCustomMcpServers | undefined
+  private readonly now: () => number
 
   private static keyFor(chatId: string, scope: AntigravitySessionScope = "main"): string {
     if (scope === "sub:") {
@@ -124,9 +159,18 @@ export class AntigravityAcpManager {
     return `${chatId}::${scope}`
   }
 
-  constructor(args: { spawnProcess?: SpawnAntigravityAcp; toolBridge?: AntigravityToolBridge } = {}) {
+  constructor(
+    args: {
+      spawnProcess?: SpawnAntigravityAcp
+      toolBridge?: AntigravityToolBridge
+      resolveCustomMcpServers?: ResolveCustomMcpServers
+      now?: () => number
+    } = {},
+  ) {
     this.spawnProcess = args.spawnProcess ?? defaultSpawnAntigravityAcp
     this.toolBridge = args.toolBridge
+    this.resolveCustomMcpServers = args.resolveCustomMcpServers
+    this.now = args.now ?? Date.now
   }
 
   get offersKannaTools(): boolean {
@@ -137,7 +181,12 @@ export class AntigravityAcpManager {
     const scope: AntigravitySessionScope = args.scope ?? "main"
     const key = AntigravityAcpManager.keyFor(args.chatId, scope)
     const existing = this.sessions.get(key)
-    if (existing && !existing.closed && existing.cwd === args.cwd) {
+    if (
+      existing
+      && !existing.closed
+      && existing.cwd === args.cwd
+      && (existing.pendingTurn !== null || existing.mcpUsableUntil === null || this.now() < existing.mcpUsableUntil)
+    ) {
       return existing.sessionToken
     }
     if (existing) this.stopSession(args.chatId, scope)
@@ -152,6 +201,7 @@ export class AntigravityAcpManager {
       pendingTurn: null,
       sessionToken: null,
       grant: null,
+      mcpUsableUntil: null,
       config: { model: null, thoughtLevel: null },
       planMode: false,
       stderrLines: [],
@@ -165,7 +215,9 @@ export class AntigravityAcpManager {
 
     try {
       await this.request(context, "initialize", { protocolVersion: 1, clientCapabilities: {} })
-      const setup = await this.openSession(context, args)
+      const customMcp = this.resolveCustomMcpServers ? await this.resolveCustomMcpServers() : NO_CUSTOM_MCP_SERVERS
+      context.mcpUsableUntil = customMcp.usableUntil
+      const setup = await this.openSession(context, args, customMcp)
       context.sessionToken = setup.sessionId
       context.config = setup.config
     } catch (error) {
@@ -252,8 +304,12 @@ export class AntigravityAcpManager {
     return context
   }
 
-  private async openSession(context: SessionContext, args: StartAntigravitySessionArgs): Promise<AcpSessionSetup> {
-    const mcpServers = context.grant ? [context.grant.server] : []
+  private async openSession(
+    context: SessionContext,
+    args: StartAntigravitySessionArgs,
+    customMcp: CustomMcpServerGrant,
+  ): Promise<AcpSessionSetup> {
+    const mcpServers = [...acpMcpServerEntries(customMcp), ...(context.grant ? [context.grant.server] : [])]
     if (args.sessionToken) {
       try {
         const resumed = await this.request(context, "session/resume", {

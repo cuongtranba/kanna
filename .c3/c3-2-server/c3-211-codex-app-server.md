@@ -1,7 +1,7 @@
 ---
 id: c3-211
 c3-version: 4
-c3-seal: 8a6dc0dc945c347d387572ff20a55e1a1b875f2730e2233e306fe78380ebc5ff
+c3-seal: 46461a18672df04193911c0afb7b7c7e451b272e8fc08da294d7ac83ed1559af
 title: codex-app-server
 type: component
 category: feature
@@ -52,7 +52,7 @@ Spawns the Codex App Server child process, speaks JSON-RPC, maps its event strea
 | Alternate — cancel | RPC cancel propagates to running turn | c3-210 |
 | Failure — child crash | Restart child; surface error event | c3-209 |
 | Alternate — compaction | The protocol is initialize, initialized, thread/{fork,resume,start}, turn/{start,interrupt} — there is no compaction request, so Kanna can observe thread/compacted but never ask for it. A user /compact is therefore a Kanna-driven summarize turn plus a session-token wipe plus stopSession; the stop is required because startSession reuses a live session on a cwd match and never consults the token | c3-210 |
-| Alternate — no tool declaration | The protocol offers no way to give Codex a tool: ThreadStartParams carries no mcpServers, TurnStartParams no tools, and an unrecognised item/tool/call is answered Unsupported dynamic tool call. developerInstructions is therefore the ONLY per-session injection point, and it is how c3-210 delivers the local skill roster — naming each absolute SKILL.md path, which the thread can read because it runs approvalPolicy: "never" with sandbox: "danger-full-access". See adr-20260905-provider-agnostic-slash-commands | c3-210 |
+| Alternate — tool declaration | The protocol has no tool declaration: ThreadStartParams carries no mcpServers field, TurnStartParams no tools, and an unrecognised item/tool/call is answered Unsupported dynamic tool call. Two channels exist. developerInstructions carries per-session text, and it is how c3-210 delivers the local skill roster, naming each absolute SKILL.md path, which the thread can read because it runs approvalPolicy: "never" with sandbox: "danger-full-access" (see adr-20260905-provider-agnostic-slash-commands). ThreadStartParams.config is a free-form override map on thread/start, thread/resume and thread/fork: it carries tools.update\_plan, and one dotted mcp\_servers.NAME key per enabled custom MCP server from the injected ResolveCustomMcpServers port, stdio and http only, so the keys merge with the user's own Codex servers (see adr-20261119-custom-mcp-for-codex-and-antigravity) | c3-210 |
 
 ## Governance
 
