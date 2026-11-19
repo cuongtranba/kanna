@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.113.0](https://github.com/cuongtranba/kanna/compare/v1.112.3...v1.113.0) (2026-11-19)
+
+
+### Features
+
+* **mcp:** give Codex and Antigravity sessions the custom MCP servers ([#1521](https://github.com/cuongtranba/kanna/issues/1521)) ([594c37d](https://github.com/cuongtranba/kanna/commit/594c37dfefd121229ceff62e91cd036cd8116b22))
+
 ## [1.112.3](https://github.com/cuongtranba/kanna/compare/v1.112.2...v1.112.3) (2026-11-18)
 
 
