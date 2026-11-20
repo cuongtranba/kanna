@@ -21,13 +21,13 @@ import {
 } from "./core-types.schema"
 import {
   chatProviderPreferencesSchema,
-  claudeModelOptionsSchema,
-  antigravityModelOptionsSchema,
-  codexModelOptionsSchema,
   customModelEntrySchema,
   customModelInputSchema,
   customModelPatchSchema,
   openRouterModelOptionsSchema,
+  partialAntigravityModelOptionsSchema,
+  partialClaudeModelOptionsSchema,
+  partialCodexModelOptionsSchema,
   textSnippetInputSchema,
   textSnippetPatchSchema,
   textSnippetSchema,
@@ -116,9 +116,9 @@ export const appSettingsPatchSchema = z.object({
   defaultProvider: defaultProviderPreferenceSchema.optional(),
   providerDefaults: z
     .object({
-      claude: providerPreferencePatch(claudeModelOptionsSchema).optional(),
-      codex: providerPreferencePatch(codexModelOptionsSchema).optional(),
-      antigravity: providerPreferencePatch(antigravityModelOptionsSchema).optional(),
+      claude: providerPreferencePatch(partialClaudeModelOptionsSchema).optional(),
+      codex: providerPreferencePatch(partialCodexModelOptionsSchema).optional(),
+      antigravity: providerPreferencePatch(partialAntigravityModelOptionsSchema).optional(),
       openrouter: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
       custom: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
     })
