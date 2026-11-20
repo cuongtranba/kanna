@@ -372,9 +372,9 @@ export interface AppSettingsPatch {
   editor?: Partial<AppSettingsSnapshot["editor"]>
   defaultProvider?: DefaultProviderPreference
   providerDefaults?: {
-    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
-    codex?: Partial<ProviderPreference<CodexModelOptions>>
-    antigravity?: Partial<ProviderPreference<AntigravityModelOptions>>
+    claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>>
+    codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>>
+    antigravity?: Partial<ProviderPreference<Partial<AntigravityModelOptions>>>
     openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
     custom?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }

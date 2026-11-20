@@ -31,6 +31,15 @@ describe("command registry", () => {
     expect(parsed.error).toContain("modelOptions.claude.reasoningEffort")
   })
 
+  test("a provider-defaults patch that changes only the context window is accepted, not rejected for a missing reasoningEffort", () => {
+    const patch = { providerDefaults: { claude: { modelOptions: { contextWindow: "1m" } } } }
+
+    expect(parseClientCommand({ type: "settings.writeAppSettingsPatch", patch })).toEqual({
+      ok: true,
+      command: { type: "settings.writeAppSettingsPatch", patch },
+    })
+  })
+
   test("an unknown command type is rejected", () => {
     expect(parseClientCommand({ type: "chat.explode" })).toEqual({ ok: false, error: 'Unknown command "chat.explode"' })
   })
