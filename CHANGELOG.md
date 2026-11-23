@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.114.0](https://github.com/cuongtranba/kanna/compare/v1.113.1...v1.114.0) (2026-11-23)
+
+
+### Features
+
+* **client:** show the model a subagent runs on ([#1527](https://github.com/cuongtranba/kanna/issues/1527)) ([2cdb2d7](https://github.com/cuongtranba/kanna/commit/2cdb2d7640c6154e7555ff6aa70f030f38698fb9))
+
 ## [1.113.1](https://github.com/cuongtranba/kanna/compare/v1.113.0...v1.113.1) (2026-11-20)
 
 
