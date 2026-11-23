@@ -6,7 +6,7 @@ import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-ty
 import { RunInjection, type UndeliveredPeerMessage } from "./subagent-run-injection"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
 import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
-import type { StartCodexTurnArgs } from "./codex-app-server"
+import { CodexAppServerManager, type StartCodexTurnArgs } from "./codex-app-server"
 import { AntigravityAcpManager } from "./antigravity-acp"
 import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
 
@@ -507,6 +507,33 @@ describe("buildSubagentProviderRun – Codex", () => {
 
     expect(calls).toEqual(["startSession", "startTurn", "stopSession:sub:run-fail"])
   })
+
+  test("a turn that dies on a provider error fails with the provider's message instead of completing with partial text", async () => {
+    const capacityError: TranscriptEntry = {
+      _id: "entry-capacity",
+      createdAt: Date.now(),
+      kind: "result",
+      subtype: "error",
+      isError: true,
+      durationMs: 0,
+      result: "Selected model is at capacity. Please try a different model.",
+    }
+    class CapacityFailingCodex extends CodexAppServerManager {
+      override async startSession(): Promise<string | undefined> { return undefined }
+      override async startTurn(): Promise<HarnessTurn> {
+        return makeHarnessTurn([makeTextEvent("partial findings"), { type: "transcript", entry: capacityError }])
+      }
+      override stopSession(): void {}
+    }
+    const args = makeArgs({
+      subagent: makeSubagent({ provider: "codex", model: "gpt-5.5" }),
+      codexManager: new CapacityFailingCodex(),
+    })
+
+    const run = buildSubagentProviderRun(args)
+
+    await expect(run.start(() => {}, () => {})).rejects.toThrow("Selected model is at capacity. Please try a different model.")
+  })
 })
 
 
@@ -702,7 +729,6 @@ describe("drainOneTurn", () => {
     expect(out.text).toBe("hello world")
     expect(chunks).toEqual(["hello ", "world"])
     expect(out.sawResult).toBe(true)
-    expect(out.sawError).toBe(false)
 
     const next = await it.next()
     const nextEvent = next.value as Extract<HarnessEvent, { type: "transcript" }>
@@ -737,7 +763,7 @@ describe("drainOneTurn", () => {
     expect(out.sawResult).toBe(true)
   })
 
-  test("sets sawError when api_error entry is received", async () => {
+  test("rejects with the API error text when the stream ends after an api_error without a result", async () => {
     const it = makeIterator([
       {
         type: "transcript",
@@ -745,26 +771,12 @@ describe("drainOneTurn", () => {
           _id: "ae1",
           createdAt: 1,
           kind: "api_error",
-          status: 500,
-          text: "internal server error",
-        } as TranscriptEntry,
-      },
-      {
-        type: "transcript",
-        entry: {
-          _id: "r2",
-          createdAt: 2,
-          kind: "result",
-          subtype: "error",
-          isError: true,
-          durationMs: 10,
-          result: "failed",
+          status: 529,
+          text: "API Error: 529 overloaded",
         } as TranscriptEntry,
       },
     ])
-    const out = await drainOneTurn(it, () => {}, () => {})
-    expect(out.sawError).toBe(true)
-    expect(out.sawResult).toBe(true)
+    await expect(drainOneTurn(it, () => {}, () => {})).rejects.toThrow("API Error: 529 overloaded")
   })
 
   test("skips non-transcript events", async () => {
@@ -800,27 +812,6 @@ describe("drainOneTurn", () => {
     expect(out.text).toBe("")
     expect(out.usage).toBeUndefined()
     expect(out.sawResult).toBe(false)
-    expect(out.sawError).toBe(false)
-  })
-
-  test("result with isError:true (no preceding api_error) sets sawError via result branch", async () => {
-    const it = makeIterator([
-      {
-        type: "transcript",
-        entry: {
-          _id: "synth1",
-          createdAt: 1,
-          kind: "result",
-          subtype: "error",
-          isError: true,
-          durationMs: 0,
-          result: "process died",
-        } as TranscriptEntry,
-      },
-    ])
-    const out = await drainOneTurn(it, () => {}, () => {})
-    expect(out.sawResult).toBe(true)
-    expect(out.sawError).toBe(true)
   })
 })
 

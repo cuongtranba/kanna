@@ -152,6 +152,17 @@ describe("normalizeClaudeStreamMessage", () => {
     expect(r.result).toBe("all good")
   })
 
+  test("a run that reaches its maxTurns bound ends as a successful result, not an error", () => {
+    const msg: ClaudeRawSdkMessage = {
+      type: "result",
+      subtype: "error_max_turns",
+      is_error: true,
+      duration_ms: 900,
+    }
+    const [entry] = normalizeClaudeStreamMessage(msg)
+    expect(entry).toMatchObject({ kind: "result", subtype: "success", isError: false })
+  })
+
   test("normalizes api_error assistant message to api_error entry", () => {
     const msg: ClaudeRawSdkMessage = {
       type: "assistant",
