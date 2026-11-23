@@ -8,6 +8,14 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.114.2](https://github.com/cuongtranba/kanna/compare/v1.114.1...v1.114.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **cron:** clear the chat task list when an inline run clears context ([#1531](https://github.com/cuongtranba/kanna/issues/1531)) ([5f22387](https://github.com/cuongtranba/kanna/commit/5f223875b9863f30f182de159b79cd6f2fa1e6f3))
+* **subagents:** fail a run that ends on a provider error ([#1533](https://github.com/cuongtranba/kanna/issues/1533)) ([104be14](https://github.com/cuongtranba/kanna/commit/104be1459a8cb59165cb7e0dd941af7a3dad8d95)), closes [#1392](https://github.com/cuongtranba/kanna/issues/1392)
+
 ## [1.114.1](https://github.com/cuongtranba/kanna/compare/v1.114.0...v1.114.1) (2026-11-23)
 
 
