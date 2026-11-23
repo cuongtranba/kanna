@@ -259,7 +259,7 @@ export function normalizeToolCall(args: {
   }
 
   if (typeof input.subagent_type === "string") {
-    return call("subagent_task", { subagentType: input.subagent_type })
+    return call("subagent_task", { subagentType: input.subagent_type, model: optionalStringInput(input, "model") })
   }
 
   return call("unknown_tool", { payload: input })

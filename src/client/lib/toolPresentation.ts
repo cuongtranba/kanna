@@ -151,8 +151,10 @@ export function toolTitle(tool: ToolLike, localPath: string | null | undefined):
       return `${toTitleCase(tool.input.tool)} from ${toTitleCase(tool.input.server)}`
     case "beacon":
       return tool.input.beaconId ? `Beacon ${tool.input.beaconId}: ${tool.input.summary}` : tool.input.summary
-    case "subagent_task":
-      return tool.input.subagentType || tool.toolName
+    case "subagent_task": {
+      const name = tool.input.subagentType || tool.toolName
+      return tool.input.model ? `${name} · ${tool.input.model}` : name
+    }
     case "workflow":
       return tool.input.name ?? "Workflow"
     case "ask_user_question":

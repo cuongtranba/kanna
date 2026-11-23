@@ -162,6 +162,7 @@ export function ToolCallMessage({ message, isLoading = false, localPath, chatId 
     toolContent = (
       <SubagentTaskMessage
         subagentType={message.input.subagentType}
+        model={message.input.model}
         result={message.result}
         isError={message.isError}
         localPath={localPath}
