@@ -559,7 +559,7 @@ export class AgentCoordinator {
     }
   }
 
-  private cronCommandDeps(): CronCommandDeps {
+  private cronCommandDeps(): CronCommandDeps & { store: EventStore } {
     return {
       store: this.store,
       cronScheduler: this.cronScheduler,

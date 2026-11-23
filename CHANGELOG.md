@@ -8,6 +8,27 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.114.1](https://github.com/cuongtranba/kanna/compare/v1.114.0...v1.114.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **cron:** let cron.update change a job's model and effort ([#1529](https://github.com/cuongtranba/kanna/issues/1529)) ([d893462](https://github.com/cuongtranba/kanna/commit/d893462f8bcc77dcbb6f6e00fd679b04d5972103))
+
+## [1.114.0](https://github.com/cuongtranba/kanna/compare/v1.113.1...v1.114.0) (2026-11-23)
+
+
+### Features
+
+* **client:** show the model a subagent runs on ([#1527](https://github.com/cuongtranba/kanna/issues/1527)) ([2cdb2d7](https://github.com/cuongtranba/kanna/commit/2cdb2d7640c6154e7555ff6aa70f030f38698fb9))
+
+## [1.113.1](https://github.com/cuongtranba/kanna/compare/v1.113.0...v1.113.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **settings:** accept a partial modelOptions in a provider-defaults patch ([#1523](https://github.com/cuongtranba/kanna/issues/1523)) ([a1d381f](https://github.com/cuongtranba/kanna/commit/a1d381f7b88a21036d86343b18d453dbe8949e3b))
+
 ## [1.113.0](https://github.com/cuongtranba/kanna/compare/v1.112.3...v1.113.0) (2026-11-19)
 
 

@@ -3,7 +3,7 @@ import { deriveChatTasks } from "../shared/chat-tasks/read-model"
 import { CHAT_TASK_EVENT_VERSION, type ChatTaskEvent } from "../shared/chat-tasks/types"
 import { normalizeToolCall } from "../shared/tools"
 import type { TranscriptEntry } from "../shared/types"
-import { applyChatTaskEvent, mirrorTranscriptEntry, type PendingNativeTaskCalls } from "./event-store-tasks"
+import { applyChatTaskEvent, clearChatTaskListEvents, mirrorTranscriptEntry, type PendingNativeTaskCalls } from "./event-store-tasks"
 import { buildSnapshotFile, loadSnapshotIntoState } from "./event-store-snapshot"
 import { createEmptyState } from "./events"
 
@@ -73,6 +73,22 @@ test("a Kanna-owned task survives context_cleared — the loop's whole durabilit
   const projection = h.project()
   expect(projection.tasks.map((t) => t.id)).toEqual(["k:plan"])
   expect(projection.staleTaskIds.has("k:plan")).toBe(false)
+})
+
+test("clearing the task list empties the projection, drops the history before it, and accepts new tasks", () => {
+  const h = harness([kannaTask])
+  h.feed(toolCall("t1", "TaskCreate", { subject: "Scratch note" }))
+  h.feed(toolResult("t1", JSON.stringify({ task: { id: "7", subject: "Scratch note" } })))
+  h.feed({ _id: "c1", createdAt: 5, kind: "context_cleared" })
+  expect(h.chatTasksByChatId.get(CHAT)?.some((event) => event.type === "chat_task_epoch_advanced")).toBe(true)
+
+  for (const event of clearChatTaskListEvents(h.chatTasksByChatId, CHAT, 200)) applyChatTaskEvent(h.chatTasksByChatId, event)
+
+  expect(h.project().tasks).toEqual([])
+  expect(h.project().epoch).toBe(0)
+  expect(h.chatTasksByChatId.get(CHAT)).toEqual([])
+  applyChatTaskEvent(h.chatTasksByChatId, { ...kannaTask, taskId: "k:next", timestamp: 300 })
+  expect(h.project().tasks.map((t) => t.id)).toEqual(["k:next"])
 })
 
 test("a native task goes stale after context_cleared instead of vanishing", () => {

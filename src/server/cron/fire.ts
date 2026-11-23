@@ -1,14 +1,20 @@
 
-import { DEFAULT_CLAUDE_MODEL_OPTIONS, type AgentProvider, type ChatAttachment, type QueuedChatMessage } from "../../shared/types"
-import { splitClaudeApiModelId } from "../../shared/provider-model-types"
+import { type AgentProvider, type ChatAttachment, type QueuedChatMessage } from "../../shared/types"
+import { splitClaudeApiModelId, type ModelOptions } from "../../shared/provider-model-types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { chatAutomationEnvelope } from "../auto-continue/events"
+import { deriveLoopState } from "../auto-continue/read-model"
 import { deriveCronJobs, findRunningCronRuns } from "./read-model"
-import { emitCronEvent, appendCronEntry, type CronCommandDeps } from "./commands"
+import { emitCronEvent, appendCronEntry, type CronCommandDeps, type CronCommandStore } from "./commands"
 import type { CoalescedSkipReason, CronSkipCoalescerPort } from "./skip-coalescer"
 
+export interface CronFireStore extends CronCommandStore {
+  clearChatTaskList(chatId: string, now: number): Promise<void>
+}
+
 export interface CronFireDeps extends CronCommandDeps {
+  store: CronFireStore
   skipCoalescer: CronSkipCoalescerPort
   getChatRecord(chatId: string): { projectId: string; provider: AgentProvider | null } | null
   isChatBusy(chatId: string): boolean
@@ -64,6 +70,9 @@ export async function fireCronJob(deps: CronFireDeps, chatId: string, jobId: str
     }
     await flushSkipStreak(deps, chatId, jobId)
     await deps.clearChatContext(chatId)
+    if (deriveLoopState(deps.store.getAutoContinueEvents(chatId), chatId) === null) {
+      await deps.store.clearChatTaskList(chatId, deps.now())
+    }
     const runId = newRunId()
     await emitCronEvent(deps, {
       ...chatAutomationEnvelope(chatId, jobId, deps.now()),
@@ -195,15 +204,16 @@ async function writeSkip(
 }
 
 function cronRunOptions(job: CronJobSnapshot, cronRun: CronRunTag, provider: AgentProvider | null): SendMessageOptions {
-  if (job.model === undefined) return { cronRun }
-  const { modelId, contextWindow } = splitClaudeApiModelId(job.model)
+  if (job.model === undefined && job.modelOptions === undefined) return { cronRun }
+  const split = job.model !== undefined ? splitClaudeApiModelId(job.model) : null
+  const modelOptions: ModelOptions | undefined =
+    split?.contextWindow === "1m"
+      ? { ...job.modelOptions, claude: { ...job.modelOptions?.claude, contextWindow: "1m" } }
+      : job.modelOptions
   return {
     cronRun,
-    model: modelId,
-    ...(provider ? { provider } : {}),
-    ...(contextWindow === "1m"
-      ? { modelOptions: { claude: { reasoningEffort: DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort, contextWindow } } }
-      : {}),
+    ...(split ? { model: split.modelId, ...(provider ? { provider } : {}) } : {}),
+    ...(modelOptions !== undefined ? { modelOptions } : {}),
   }
 }
 

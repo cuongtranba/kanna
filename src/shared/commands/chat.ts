@@ -258,7 +258,7 @@ export const chatCommands = defineCommands(
   defineCommand("cron.update", {
     result: noResult,
     params: z.object({ ...chatIdShape, jobId: z.string(), patch: cronJobPatchSchema }),
-    summary: "Change a cron job's schedule, mode or instruction.",
+    summary: "Change a cron job's schedule, mode, instruction, model or reasoning effort. Unknown patch keys are rejected.",
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),

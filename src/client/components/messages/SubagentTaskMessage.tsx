@@ -15,6 +15,7 @@ import { SubagentTaskMessageStore } from "./SubagentTaskMessage.store"
 
 interface Props {
   subagentType?: string
+  model?: string
   result?: SubagentTaskResult
   isError?: boolean
   localPath?: string | null
@@ -40,8 +41,9 @@ function summarizeToolStats(stats: SubagentToolStats | undefined): string {
   return parts.join(" · ")
 }
 
-function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: Props) {
+function SubagentTaskMessageInner({ subagentType, model, result, isError, localPath }: Props) {
   const name = subagentType || "Agent"
+  const shownModel = result?.resolvedModel ?? model
   const tone = toneFor(result?.status, isError)
   const toolSummary = summarizeToolStats(result?.toolStats)
 
@@ -86,15 +88,16 @@ function SubagentTaskMessageInner({ subagentType, result, isError, localPath }: 
       )}
       <div className="flex flex-1 items-center gap-2 min-w-0 overflow-hidden">
         <span className="font-medium text-foreground/80 text-sm truncate">{name}</span>
+        {shownModel && <span className="shrink-0 text-xs text-muted-foreground font-mono">{shownModel}</span>}
         {result?.status && <StateMarkLabel tone={tone} label={result.status} />}
         {result?.totalTokens != null && result.totalTokens > 0 && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
+          <span className="inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground tabular-nums">
             <ArrowUp className="size-3" aria-hidden />
             {formatContextWindowTokens(result.totalTokens)} tokens
           </span>
         )}
         {result?.totalDurationMs != null && result.totalDurationMs > 0 && (
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {formatCompactDuration(result.totalDurationMs)}
           </span>
         )}

@@ -99,6 +99,25 @@ describe("processTranscriptMessages", () => {
     expect(r?.content).toBe("final reply")
   })
 
+  test("hydrates the live tool_use_result sidecar of an Agent call, including its resolved model", () => {
+    const debugRaw = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: "tool-agent3", content: "done" }] },
+      tool_use_result: { status: "completed", resolvedModel: "claude-opus-5-5[1m]" },
+    })
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "tool_call",
+        tool: { kind: "tool", toolKind: "subagent_task", toolName: "Agent", toolId: "tool-agent3", input: { subagentType: "general-purpose" } },
+      }),
+      entry({ kind: "tool_result", toolId: "tool-agent3", content: "done", debugRaw }),
+    ])
+
+    if (messages[0]?.kind !== "tool" || messages[0].toolKind !== "subagent_task") throw new Error("unexpected message")
+    expect(messages[0].result?.status).toBe("completed")
+    expect(messages[0].result?.resolvedModel).toBe("claude-opus-5-5[1m]")
+  })
+
   test("Agent tool with no toolUseResult sidecar leaves result undefined (fallback)", () => {
     const messages = processTranscriptMessages([
       entry({

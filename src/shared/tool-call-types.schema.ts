@@ -55,7 +55,7 @@ export const normalizedToolCallSchema = z.discriminatedUnion("toolKind", [
   toolCall("write_file", z.object({ filePath: z.string(), content: z.string() })),
   toolCall("edit_file", z.object({ filePath: z.string(), oldString: z.string(), newString: z.string() })),
   toolCall("delete_file", z.object({ filePath: z.string(), content: z.string() })),
-  toolCall("subagent_task", z.object({ subagentType: z.string().optional() })),
+  toolCall("subagent_task", z.object({ subagentType: z.string().optional(), model: z.string().optional() })),
   toolCall("mcp_generic", z.object({ server: z.string(), tool: z.string(), payload: jsonObjectSchema })),
   toolCall("beacon", z.object({ op: beaconToolOpSchema, beaconId: z.string(), summary: z.string() })),
   toolCall("offer_download", z.object({ path: z.string(), label: z.string().optional() })),

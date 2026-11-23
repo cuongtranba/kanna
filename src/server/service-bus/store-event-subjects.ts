@@ -76,6 +76,7 @@ export const STORE_EVENT_SUBJECT = {
   chat_task_integrated: BUS_SUBJECT_SUFFIX.taskIntegrated,
   chat_task_note: BUS_SUBJECT_SUFFIX.taskNote,
   chat_task_epoch_advanced: BUS_SUBJECT_SUFFIX.taskEpochAdvanced,
+  chat_task_list_cleared: BUS_SUBJECT_SUFFIX.taskListCleared,
   chat_task_native_synced: BUS_SUBJECT_SUFFIX.taskNativeSynced,
 } satisfies Record<StoreEventKind, string | null>
 
