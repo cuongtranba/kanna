@@ -1,4 +1,4 @@
-import webpush from "web-push"
+import { sendNotification } from "web-push"
 import { log } from "../../shared/log"
 import { isRecord } from "../../shared/errors"
 import { INBOX_PUSH_PROPOSAL_BODY, INBOX_PUSH_SEND_ACTION, inboxPushPreview } from "../../shared/inbox/push"
@@ -459,7 +459,7 @@ function safeEndpointHost(endpoint: string): string {
 
 export const realWebPushSender: WebPushSender = {
   async send(sub, payload, opts) {
-    await webpush.sendNotification(
+    await sendNotification(
       { endpoint: sub.endpoint, keys: sub.keys },
       payload,
       {
