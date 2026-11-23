@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
-import webpush from "web-push"
+import { generateVAPIDKeys } from "web-push"
 import { DEFAULT_VAPID_SUBJECT, isValidVapidSubject } from "../../shared/vapid-subject"
 
 export interface VapidKeypair {
@@ -29,7 +29,7 @@ export async function loadOrGenerateVapidKeys(dataDir: string): Promise<VapidKey
       return healed
     }
   } catch {}
-  const generated = webpush.generateVAPIDKeys()
+  const generated = generateVAPIDKeys()
   const keypair: VapidKeypair = {
     publicKey: generated.publicKey,
     privateKey: generated.privateKey,
