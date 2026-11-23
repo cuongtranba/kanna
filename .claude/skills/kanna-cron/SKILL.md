@@ -5,6 +5,10 @@ description: The /cron feature — parser and refusal path, validate_cron / arm_
 
 # Kanna /cron
 
+## Inline runs clear the task list
+
+`fireCronJob` clears the chat's context and then, unless the chat's automation events show an armed loop (`deriveLoopState`), its durable task list (`store.clearChatTaskList`, one `chat_task_list_cleared` event, written only when the chat has task events). The event is a compaction barrier, so it also sweeps the epoch events each context clear emits. Manual `/clear` and loop wakes keep the list; an armed loop's plan is that list, so cron never wipes it. Spawn runs clear nothing.
+
 ## `/cron` Self-Repair (KANNA_CRON_REPAIR)
 
 `/cron` always intercepts and never starts a turn, so a rejected line used to be

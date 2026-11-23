@@ -25,7 +25,10 @@ Every job picks one, and the difference is where the work happens.
 clears the chat's context before *every* cycle (the `/clear` machinery), so the
 agent starts fresh each time and the chat never accumulates history. That means
 anything you discussed in the chat by hand is wiped on the next fire — the
-arming card says so.
+arming card says so. The chat's task list is cleared with it, so each run starts
+with an empty list instead of inheriting the finished tasks of every earlier
+run. The one exception is a chat with an armed [loop](/features/loops/): its
+task list is the loop's plan, so a cron fire leaves it alone.
 
 **`spawn`** is for work that deserves its own thread. Each fire creates a chat
 in the arming chat's project and runs the instruction there; the arming chat

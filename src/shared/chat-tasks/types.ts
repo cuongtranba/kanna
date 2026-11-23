@@ -128,6 +128,9 @@ export type ChatTaskEvent =
     readonly epoch: number
   })
   | (ChatTaskEventBase & {
+    readonly type: "chat_task_list_cleared"
+  })
+  | (ChatTaskEventBase & {
     readonly type: "chat_task_native_synced"
     readonly rows: readonly ChatTaskNativeRow[]
     readonly scope?: string
