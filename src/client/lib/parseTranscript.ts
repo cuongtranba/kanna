@@ -128,8 +128,8 @@ function getSubagentTaskResultFromDebug(
   if (!entry.debugRaw) return undefined
   let sidecar: JsonValue | undefined
   try {
-    const parsed: { toolUseResult?: JsonValue } = JSON.parse(entry.debugRaw)
-    sidecar = parsed.toolUseResult
+    const parsed: { tool_use_result?: JsonValue; toolUseResult?: JsonValue } = JSON.parse(entry.debugRaw)
+    sidecar = parsed.tool_use_result ?? parsed.toolUseResult
   } catch {
     return undefined
   }
@@ -143,6 +143,7 @@ function getSubagentTaskResultFromDebug(
     totalDurationMs: num(r.totalDurationMs),
     totalToolUseCount: num(r.totalToolUseCount),
     toolStats: parseSubagentToolStats(r.toolStats),
+    resolvedModel: str(r.resolvedModel),
     content: str(r.content),
   }
   const hasSignal = result.agentId !== undefined || result.agentType !== undefined

@@ -90,7 +90,7 @@ export interface DeleteFileToolCall
   extends ToolCallBase<"delete_file", { filePath: string; content: string }> { }
 
 export interface SubagentTaskToolCall
-  extends ToolCallBase<"subagent_task", { subagentType?: string }> { }
+  extends ToolCallBase<"subagent_task", { subagentType?: string; model?: string }> { }
 
 export interface McpGenericToolCall
   extends ToolCallBase<"mcp_generic", { server: string; tool: string; payload: JsonObject }> { }
@@ -310,6 +310,7 @@ export interface SubagentTaskResult {
   totalDurationMs?: number
   totalToolUseCount?: number
   toolStats?: SubagentToolStats
+  resolvedModel?: string
   content?: string
 }
 
