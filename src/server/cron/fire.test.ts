@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test"
-import type { ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../../shared/types"
-import type { ChatAutomationEvent } from "../auto-continue/events"
+import type { AgentProvider, ChatAttachment, QueuedChatMessage, TranscriptEntry } from "../../shared/types"
+import { chatAutomationEnvelope, type ChatAutomationEvent } from "../auto-continue/events"
 import { parseCronCommand } from "../../shared/cron/parse-command"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { runCronCommand } from "./commands"
@@ -15,10 +15,11 @@ interface EnqueuedRecord {
   options?: SendMessageOptions
 }
 
-function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; now?: number } = {}) {
+function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; now?: number; chatProvider?: AgentProvider } = {}) {
   const entries: Array<{ chatId: string; entry: TranscriptEntry }> = []
   const events: ChatAutomationEvent[] = []
   const cleared: string[] = []
+  const tasksCleared: string[] = []
   const enqueued: EnqueuedRecord[] = []
   const drained: string[] = []
   const createdChats: string[] = []
@@ -38,12 +39,15 @@ function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; 
         events.push(event)
       },
       getAutoContinueEvents: (chatId) => events.filter((event) => event.chatId === chatId),
+      clearChatTaskList: async (chatId) => {
+        tasksCleared.push(chatId)
+      },
     },
     cronScheduler: null,
     emitStateChange: () => {},
     now: () => clock.now,
     newJobId: () => "cron-abc",
-    getChatRecord: (chatId) => (chatId === CHAT ? { projectId: "proj-1" } : null),
+    getChatRecord: (chatId) => (chatId === CHAT ? { projectId: "proj-1", provider: opts.chatProvider ?? "claude" } : null),
     isChatBusy: (chatId) => busy.has(chatId),
     holdsBackgroundWork: (chatId) => background.has(chatId),
     clearChatContext: async (chatId) => {
@@ -76,13 +80,13 @@ function makeDeps(opts: { busyChatIds?: string[]; backgroundChatIds?: string[]; 
     },
     getQueuedMessages: (chatId) => queuedByChatId.get(chatId) ?? [],
   }
-  return { deps, entries, events, cleared, enqueued, drained, createdChats, busy, background, clock, queuedByChatId }
+  return { deps, entries, events, cleared, tasksCleared, enqueued, drained, createdChats, busy, background, clock, queuedByChatId }
 }
 
-async function armJob(deps: CronFireDeps, line: string) {
+async function armJob(deps: CronFireDeps, line: string, model?: string) {
   const parsed = parseCronCommand(line)
   if (!parsed) throw new Error("not a cron line")
-  await runCronCommand(deps, CHAT, parsed)
+  await runCronCommand(deps, CHAT, parsed, model)
 }
 
 describe("fireCronJob — inline", () => {
@@ -99,6 +103,26 @@ describe("fireCronJob — inline", () => {
     expect(enqueued[0]).toMatchObject({ chatId: CHAT, content: "check ci" })
     expect(enqueued[0]!.options?.cronRun).toMatchObject({ jobId: "cron-abc", originChatId: CHAT })
     expect(drained).toEqual([CHAT])
+  })
+
+  test("an inline run starts with an empty task list", async () => {
+    const { deps, tasksCleared } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(tasksCleared).toEqual([CHAT])
+  })
+
+  test("an inline run keeps the task list while a loop is armed, since the list is the loop's plan", async () => {
+    const { deps, events, cleared, tasksCleared } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m")
+    events.push({ ...chatAutomationEnvelope(CHAT, "loop-1", 1), kind: "loop_armed", subagentId: "sub-1", prompt: "ship it" })
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(cleared).toEqual([CHAT])
+    expect(tasksCleared).toEqual([])
   })
 
   test("busy chat skips with a visible chat_busy notice and no context clear", async () => {
@@ -175,15 +199,85 @@ describe("fireCronJob — inline", () => {
   })
 })
 
+describe("fireCronJob — armed model", () => {
+  test("an inline run starts on the model the job was armed with", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron check ci inline every 5m", "claude-haiku-4-5")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({ model: "claude-haiku-4-5", provider: "claude" })
+  })
+
+  test("a spawned run starts its new chat on the armed model and the provider that owns it", async () => {
+    const { deps, enqueued } = makeDeps({ chatProvider: "codex" })
+    await armJob(deps, "/cron nightly report spawn @daily", "gpt-5.5")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]).toMatchObject({ chatId: "spawned-1" })
+    expect(enqueued[0]!.options).toMatchObject({ model: "gpt-5.5", provider: "codex" })
+  })
+
+  test("a 1M-context model fires as the base model with the 1M window, not as an unknown id", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily", "claude-opus-4-6[1m]")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({
+      model: "claude-opus-4-6",
+      modelOptions: { claude: { contextWindow: "1m" } },
+    })
+  })
+
+  test("a run starts with the reasoning effort the job was updated to", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily", "claude-opus-4-6")
+    await armJob(deps, "/cron update cron-abc effort low")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({
+      model: "claude-opus-4-6",
+      modelOptions: { claude: { reasoningEffort: "low" } },
+    })
+  })
+
+  test("a 1M-context model keeps the stored effort alongside the 1M window", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily", "claude-opus-4-6[1m]")
+    await armJob(deps, "/cron update cron-abc effort medium")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({
+      model: "claude-opus-4-6",
+      modelOptions: { claude: { reasoningEffort: "medium", contextWindow: "1m" } },
+    })
+  })
+
+  test("a job armed without a model leaves the model and provider to the defaults", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options?.model).toBeUndefined()
+    expect(enqueued[0]!.options?.provider).toBeUndefined()
+  })
+})
+
 describe("fireCronJob — spawn", () => {
   test("creates a chat in the arming chat's project and runs there, carding the arming chat", async () => {
-    const { deps, events, entries, enqueued, createdChats, cleared } = makeDeps()
+    const { deps, events, entries, enqueued, createdChats, cleared, tasksCleared } = makeDeps()
     await armJob(deps, "/cron nightly report spawn @daily")
 
     await fireCronJob(deps, CHAT, "cron-abc")
 
     expect(createdChats).toEqual(["proj-1"])
     expect(cleared).toEqual([])
+    expect(tasksCleared).toEqual([])
     const started = events.find((event) => event.kind === "cron_run_started")
     expect(started).toMatchObject({ chatId: CHAT, spawnedChatId: "spawned-1" })
     const card = entries.find((record) => record.entry.kind === "cron_run")

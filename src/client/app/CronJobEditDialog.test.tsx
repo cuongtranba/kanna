@@ -206,10 +206,10 @@ describe("CronJobEditDialog", () => {
     }
   })
 
-  test("saving warns that run history and the created age are reset", async () => {
+  test("the dialog says changes apply from the next run", async () => {
     const harness = await mount()
     try {
-      expect(document.body.textContent ?? "").toContain("run history")
+      expect(document.body.textContent ?? "").toContain("changes apply from the next run")
     } finally {
       await harness.unmount()
     }

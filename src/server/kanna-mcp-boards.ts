@@ -21,7 +21,9 @@ const CARD_MOVE_DESCRIPTION =
   + "The move is attributed to you, which is what keeps it from being pushed to a connected tracker "
   + "unless that board opted in."
 
-const CARD_CREATE_DESCRIPTION = "Add a card to a column on a board in this chat's project."
+const CARD_CREATE_DESCRIPTION =
+  "Add a card with a title to a column on a board in this chat's project. The card lands at the top of the column, "
+  + "is attributed to you, and its id is returned; use card_comment to record detail beyond the title."
 
 const CARD_COMMENT_DESCRIPTION =
   "Leave a comment on a card — what you did, what you found, why you moved it."

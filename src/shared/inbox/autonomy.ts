@@ -1,5 +1,6 @@
 import type { AgentProvider } from "../core-types"
 import { clampRounded } from "../numeric"
+import { providerUsesSdkSession } from "../provider-model-types"
 import { oneOf } from "../vocab"
 import { INBOX_REPLY_MAX_CHARS } from "./types"
 
@@ -74,7 +75,7 @@ export function autonomyNeedsReplyTarget(level: InboxAutonomyLevel): boolean {
 }
 
 export function providerAllowsAuto(provider: AgentProvider | undefined): boolean {
-  return provider !== "codex"
+  return provider === undefined || providerUsesSdkSession(provider)
 }
 
 function clampThreshold(value: number | undefined): number {

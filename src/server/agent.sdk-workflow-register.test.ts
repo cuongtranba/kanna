@@ -281,9 +281,9 @@ describe("AgentCoordinator — SDK workflow dir registration", () => {
   )
 })
 
-describe("CLAUDE_TOOLSET — Workflow tool", () => {
-  test("includes Workflow so SDK sessions can launch runs that feed the /workflows page", async () => {
-    const { CLAUDE_TOOLSET } = await import("./claude-session-config")
-    expect(CLAUDE_TOOLSET).toContain("Workflow")
+describe("claudeToolOptions — Workflow tool", () => {
+  test("never denies Workflow, so SDK sessions can launch runs that feed the /workflows page", async () => {
+    const { claudeToolOptions } = await import("./claude-session-config")
+    expect(claudeToolOptions({ pathConfined: false, loopBlocked: [] }).disallowedTools).not.toContain("Workflow")
   })
 })

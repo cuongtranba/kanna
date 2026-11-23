@@ -1,4 +1,4 @@
-import type { ChatProviderPreferences, ClaudeModelOptions, CodexModelOptions } from "../../shared/types"
+import type { AntigravityModelOptions, ChatProviderPreferences, ClaudeModelOptions, CodexModelOptions } from "../../shared/types"
 
 function claudeModelOptionsEqual(a: ClaudeModelOptions, b: ClaudeModelOptions) {
   return a.reasoningEffort === b.reasoningEffort && a.contextWindow === b.contextWindow
@@ -6,6 +6,10 @@ function claudeModelOptionsEqual(a: ClaudeModelOptions, b: ClaudeModelOptions) {
 
 function codexModelOptionsEqual(a: CodexModelOptions, b: CodexModelOptions) {
   return a.reasoningEffort === b.reasoningEffort && a.fastMode === b.fastMode
+}
+
+function antigravityModelOptionsEqual(a: AntigravityModelOptions, b: AntigravityModelOptions) {
+  return a.reasoningEffort === b.reasoningEffort
 }
 
 export function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProviderPreferences) {
@@ -16,6 +20,9 @@ export function providerDefaultsEqual(a: ChatProviderPreferences, b: ChatProvide
     && a.codex.model === b.codex.model
     && a.codex.planMode === b.codex.planMode
     && codexModelOptionsEqual(a.codex.modelOptions, b.codex.modelOptions)
+    && a.antigravity.model === b.antigravity.model
+    && a.antigravity.planMode === b.antigravity.planMode
+    && antigravityModelOptionsEqual(a.antigravity.modelOptions, b.antigravity.modelOptions)
     && a.openrouter.model === b.openrouter.model
     && a.openrouter.planMode === b.openrouter.planMode
     && a.custom.model === b.custom.model

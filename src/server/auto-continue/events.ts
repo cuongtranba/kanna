@@ -1,4 +1,5 @@
 import type { CronMode, CronSchedule, CronSkipReason } from "../../shared/cron/types"
+import type { ModelOptions } from "../../shared/provider-model-types"
 
 export const AUTO_CONTINUE_EVENT_VERSION = 3 as const
 
@@ -71,7 +72,17 @@ export type CronEvent =
       scheduleText: string
       schedule: CronSchedule
       model?: string
+      modelOptions?: ModelOptions
       paused?: boolean
+    })
+  | (ChatAutomationEventBase & {
+      kind: "cron_updated"
+      instruction: string
+      mode: CronMode
+      scheduleText: string
+      schedule: CronSchedule
+      model?: string
+      modelOptions?: ModelOptions
     })
   | (ChatAutomationEventBase & {
       kind: "cron_disarmed"

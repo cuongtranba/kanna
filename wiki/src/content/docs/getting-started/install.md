@@ -12,6 +12,7 @@ Kanna ships as a global Bun CLI: `@cuongtran001/kanna`.
 - Credentials for at least one provider:
   - **Claude** — a Claude OAuth token, added in [Settings → Providers](/getting-started/oauth-pool-setup/)
   - **Codex** — a working `codex` CLI login
+  - **Antigravity** — `agy` v1.5.9 or newer on your `PATH`, logged in (run `agy` once, or `agy acp --login`)
   - **OpenRouter** — an OpenRouter API key
 
 ## Install

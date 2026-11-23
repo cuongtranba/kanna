@@ -1,9 +1,12 @@
-import { Blocks, type LucideIcon } from "lucide-react"
+import { Blocks, ChartNoAxesColumn, ListTodo, LayoutDashboard, type LucideIcon } from "lucide-react"
 import { cn } from "../lib/utils"
 import type { PluginSidebarItem } from "../plugins/contributionRegistry"
 
 const PLUGIN_SIDEBAR_ICONS: Record<string, LucideIcon> = {
   Blocks,
+  ChartNoAxesColumn,
+  LayoutDashboard,
+  ListTodo,
 }
 
 function resolvePluginIcon(name: string): LucideIcon {

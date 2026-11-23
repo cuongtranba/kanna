@@ -6,6 +6,7 @@ type normalizedPath struct {
 	absolute bool
 	drive    string
 	hasDrive bool
+	unc      bool
 	segments []string
 }
 
@@ -18,7 +19,8 @@ func isWindowsDrive(part string) bool {
 }
 
 func normalizePath(path string) normalizedPath {
-	parts := strings.Split(strings.ReplaceAll(path, "\\", "/"), "/")
+	slashed := strings.ReplaceAll(path, "\\", "/")
+	parts := strings.Split(slashed, "/")
 	leadingSeparator := len(parts) > 1 && parts[0] == ""
 	named := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -26,7 +28,7 @@ func normalizePath(path string) normalizedPath {
 			named = append(named, part)
 		}
 	}
-	result := normalizedPath{}
+	result := normalizedPath{unc: len(slashed) > 2 && slashed[:2] == "//" && slashed[2] != '/'}
 	rest := named
 	if len(named) > 0 && isWindowsDrive(named[0]) {
 		result.drive = strings.ToUpper(named[0])
@@ -61,7 +63,11 @@ func isInsideRoot(target, root normalizedPath) bool {
 		return false
 	}
 	for index, segment := range root.segments {
-		if target.segments[index] != segment {
+		if index == 0 && root.unc {
+			if !strings.EqualFold(target.segments[0], segment) {
+				return false
+			}
+		} else if target.segments[index] != segment {
 			return false
 		}
 	}
@@ -70,7 +76,8 @@ func isInsideRoot(target, root normalizedPath) bool {
 
 // IsPathInsideRoots mirrors isPathInsideRoots in src/shared/beacon-scope.ts:
 // pure string logic over "/" and "\" separators, an upper-cased drive letter,
-// ".." resolution, and case-sensitive segment comparison.
+// ".." resolution, and case-sensitive segment comparison, except that the
+// server name of a UNC root (\\server\...) compares case-insensitively.
 func IsPathInsideRoots(target string, roots []string) bool {
 	normalizedTarget := normalizePath(target)
 	for _, root := range roots {

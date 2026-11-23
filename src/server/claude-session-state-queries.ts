@@ -31,7 +31,7 @@ export interface ChatBusyDeps {
   activeTurns: { has(chatId: string): boolean }
   startingTurns: { has(chatId: string): boolean }
   pendingTools: { has(chatId: string): boolean }
-  claudeSessions: { get(chatId: string): { selfWakeActive: boolean } | undefined }
+  claudeSessions: { get(chatId: string): { selfWakeActive: boolean; injectedPromptIds: ReadonlySet<string> } | undefined }
 }
 
 export function isChatBusy(deps: ChatBusyDeps, chatId: string): boolean {
@@ -39,6 +39,7 @@ export function isChatBusy(deps: ChatBusyDeps, chatId: string): boolean {
     || deps.startingTurns.has(chatId)
     || deps.pendingTools.has(chatId)
     || deps.claudeSessions.get(chatId)?.selfWakeActive === true
+    || (deps.claudeSessions.get(chatId)?.injectedPromptIds.size ?? 0) > 0
 }
 
 export function isAnyChatBusy(

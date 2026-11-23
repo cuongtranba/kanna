@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
+import type { JsonObject } from "../json"
 import { COMMAND_REGISTRY, parseClientCommand } from "./index"
 
 describe("command registry", () => {
@@ -29,6 +30,25 @@ describe("command registry", () => {
     if (parsed.ok) throw new Error("expected a rejection")
     expect(parsed.error).toContain("chat.send")
     expect(parsed.error).toContain("modelOptions.claude.reasoningEffort")
+  })
+
+  test("a provider-defaults patch that changes only the context window is accepted, not rejected for a missing reasoningEffort", () => {
+    const patch = { providerDefaults: { claude: { modelOptions: { contextWindow: "1m" } } } }
+
+    expect(parseClientCommand({ type: "settings.writeAppSettingsPatch", patch })).toEqual({
+      ok: true,
+      command: { type: "settings.writeAppSettingsPatch", patch },
+    })
+  })
+
+  test("cron.update accepts a model patch and rejects unknown patch keys, even inside modelOptions", () => {
+    const update = (patch: JsonObject) =>
+      parseClientCommand({ type: "cron.update", chatId: "chat-1", jobId: "cron-1", patch })
+
+    expect(update({ model: "claude-sonnet-5-5" }).ok).toBe(true)
+    expect(update({ modelOptions: { claude: { reasoningEffort: "low" } } }).ok).toBe(true)
+    expect(update({ bogus: 1 }).ok).toBe(false)
+    expect(update({ modelOptions: { claude: { effort: "low" } } }).ok).toBe(false)
   })
 
   test("an unknown command type is rejected", () => {

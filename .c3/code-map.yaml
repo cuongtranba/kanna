@@ -173,6 +173,7 @@ c3-201:
 c3-202:
   - src/server/app-settings.ts
   - src/server/server.ts
+  - src/server/scheduled-work-rehydrate.ts
   - src/server/router-housekeeping.ts
   - src/server/http-dispatcher.ts
   - src/server/request-origin-guard.ts
@@ -291,6 +292,7 @@ c3-208:
   - src/server/ws-router-coverage.test.ts
 c3-209:
   - src/server/process-utils.adapter.ts
+  - src/server/stdio-process.ts
   - src/server/process-utils.test.ts
 c3-210:
   - src/server/agent.test.ts
@@ -326,6 +328,9 @@ c3-210:
   - src/server/subagent-entry-cap.test.ts
   - src/server/subagent-orchestrator.test.ts
   - src/server/subagent-orchestrator.ts
+  - src/server/subagent-run-injection.ts
+  - src/server/subagent-pausable-timeout.ts
+  - src/server/turn-spend.ts
   - src/server/subagent-provider-run.test.ts
   - src/server/subagent-provider-run.ts
   - src/server/claude-live-block.ts
@@ -333,6 +338,8 @@ c3-210:
   - src/server/claude-inbox-guard.ts
   - src/server/claude-inbox-guard.test.ts
   - src/server/agent-coordinator.ts
+  - src/server/turn-end-guards.ts
+  - src/server/detached-work.ts
   - src/server/agent-coordinator-types.ts
   - src/server/agent-app-settings-view.ts
   - src/server/claude-autocontinue-commands.ts
@@ -385,9 +392,12 @@ c3-210:
   - src/server/chat-tool-events.test.ts
   - src/server/test-helpers/sdk-tool.ts
 c3-211:
+  - src/server/codex-dynamic-tool-call.ts
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/async-queue.ts
+  - src/server/codex-pending-turn.ts
   - src/server/codex-app-server-decode.ts
   - src/server/codex-rollout-to-thread-item.ts
   - src/server/codex-session-types.ts
@@ -769,6 +779,8 @@ c3-237:
   - src/server/skills-cli.test.ts
 c3-121:
   - src/client/app/KannaPluginsSettingsBranch.tsx
+  - src/client/app/PluginPage.tsx
+  - src/client/app/PluginPage.test.tsx
   - src/client/app/PluginSidebarItems.tsx
   - src/client/app/PluginsFooterSection.tsx
   - src/client/app/PluginsFooterSlot.test.tsx
@@ -868,7 +880,7 @@ c3-243:
   - src/server/webhooks/webhook-filter.ts
   - src/server/webhooks/webhook-http-routes.ts
   - src/server/webhooks/webhook-http-routes.test.ts
-  - src/server/webhooks/webhook-rate-limit.ts
+  - src/server/rate-limiter.ts
   - src/server/webhooks/webhook-registry.ts
   - src/server/webhooks/webhook-registry.test.ts
   - src/server/webhooks/webhook-service.ts
@@ -973,3 +985,30 @@ c3-248:
   - src/client/lib/mcpSourceDraft.ts
   - src/client/lib/mcpSourceAutonomyDraft.ts
   - src/client/lib/mcpSourcePresentation.ts
+c3-249:
+  - src/shared/peer-messaging/inbound.ts
+  - src/shared/peer-messaging/inbound.schema.ts
+  - src/shared/peer-messaging/limits.ts
+  - src/shared/peer-messaging/render-prompt.ts
+  - src/shared/peer-messaging/render-prompt.test.ts
+  - src/shared/peer-messaging/tool-names.ts
+  - src/shared/peer-messaging/tool-specs.schema.ts
+  - src/shared/command-origin.schema.test.ts
+  - src/server/peer-messaging/create-peer-messaging.ts
+  - src/server/peer-messaging/peer-messenger.ts
+  - src/server/peer-messaging/peer-messenger.test.ts
+  - src/server/peer-messaging/peer-tools.ts
+  - src/server/peer-messaging/mid-turn-delivery.ts
+  - src/server/peer-messaging/mid-turn-delivery.test.ts
+  - src/server/peer-messaging/peer-tools.test.ts
+  - src/server/kanna-mcp-peer.ts
+  - src/client/components/messages/OriginChip.tsx
+  - src/client/app/GeneralPeerRow.tsx
+c3-250:
+  - src/server/antigravity-acp.ts
+  - src/server/antigravity-acp-protocol.ts
+  - src/server/antigravity-acp-translator.ts
+  - src/server/antigravity-spawn.adapter.ts
+  - src/server/antigravity-acp.test.ts
+  - src/server/agent-tools-bridge.ts
+  - src/server/agent-tools-bridge.test.ts

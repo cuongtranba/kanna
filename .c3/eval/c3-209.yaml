@@ -2,4 +2,5 @@ fact: c3-209
 claim: "process utilities are at src/server/process-utils.adapter.ts"
 code:
   - src/server/process-utils.adapter.ts
+  - src/server/stdio-process.ts
   - src/server/process-utils.test.ts

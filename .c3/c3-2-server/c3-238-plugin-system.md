@@ -1,6 +1,6 @@
 ---
 id: c3-238
-c3-seal: a5214aecb088c9060438f1086e751fd4fe7f868f9f04982b933f24936fcd331c
+c3-seal: 212fecd005c486189e40ee5f34471cbdef4a6458bc0d79f2ced16bc88ea5125c
 title: plugin-system
 type: component
 category: feature
@@ -44,7 +44,7 @@ A plugin is untrusted third-party code, so the design keeps it at arm's length i
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| PluginService | OUT | install / list / reload / restore / setEnabled / start / stop / status / call / logs / clientBundle / recordClientError — the one surface the CLI, HTTP and MCP paths share | c3-210 | src/server/plugins/plugin-service.ts |
+| PluginService | OUT | install / list / reload / restore / setEnabled / start / startEnabled / stop / status / call / logs / clientBundle / recordClientError — the one surface the CLI, HTTP and MCP paths share. startEnabled starts every enabled plugin, logs a failure and continues; only the server's http-dispatcher calls it, behind the global plugins switch, never the CLI process | c3-210 | src/server/plugins/plugin-service.ts |
 | HTTP /api/plugins/* | OUT | client.js, logs, rpc, client-error. Inherits the /api/ auth gate; a disabled surface answers 404 everywhere, never 403. The plugin list and reload moved to the plugins.list and plugins.reload commands, which answer an empty list or an error while plugins are switched off | c3-121 | src/server/plugin-http-routes.ts, src/server/ws-router-plugins.ts |
 | Install persistence | IN | InstalledPluginStore port bound to settings.installedPlugins; restore() re-registers at boot without recompiling | c3-206 | src/server/plugins/installed-plugin-store.ts |
 | MCP authoring tools | OUT | plugin_list / plugin_validate / plugin_logs / plugin_scaffold / plugin_install / plugin_reload; the three mutating tools are withheld at depth > 0 | c3-210 | src/server/kanna-mcp-plugins.ts |
@@ -68,5 +68,6 @@ A plugin is untrusted third-party code, so the design keeps it at arm's length i
 | --- | --- | --- | --- |
 | A second service instance is created, splitting the registry | Calling createPluginService() directly instead of getPluginService() | An install made on one surface is invisible to another | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
 | An install stops surviving restart | Removing the configurePluginService call or the settings write | plugin ls reports nothing after a reboot while bundles sit on disk | The P11 acceptance case builds a second service over the same records |
-| A server-only import leaks into a client bundle | Widening the compile allowlist | Two SECURITY assertions in the acceptance suite | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
+| A server-only import leaks into a client bundle | A package or builtin that needs Node imported from a non-\*.server file, or the client build bundling an import made by a \*.server file instead of stubbing it | Two SECURITY assertions and the P13 client-bundle case in the acceptance suite | bun test --conditions production src/server/plugin-system-acceptance.test.tsx |
 | A stale client bundle is served after reload | Dropping the no-store header | plugin reload appears to do nothing in the browser | Route test asserting cache-control: no-store |
+| A plugin's npm dependencies are missing at compile time | Skipping or reordering the bun install step in buildPluginBundles | The compile fails with Bun's could-not-resolve error for the package | The P13 acceptance case installs the with-deps fixture and calls its node:zlib handler |

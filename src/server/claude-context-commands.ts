@@ -26,6 +26,7 @@ export interface ClearChatContextDeps extends ClearClaudeContextDeps {
     appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
   }
   stopCodexSession(chatId: string): void
+  stopAntigravitySession(chatId: string): void
   emitStateChange(chatId: string): void
 }
 
@@ -54,6 +55,7 @@ export async function clearChatContext(
   }
   await clearClaudeSessionContext(deps, chatId)
   deps.stopCodexSession(chatId)
+  deps.stopAntigravitySession(chatId)
   await deps.store.appendMessage(chatId, timestamped({ kind: "context_cleared" }))
   deps.emitStateChange(chatId)
 }

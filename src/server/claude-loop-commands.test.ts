@@ -395,10 +395,10 @@ describe("deliverSubagentToMain — naming the plan when no loop is armed", () =
     return accepted.prompt ?? ""
   }
 
-  test("names the disarmed loop's real plan as an absolute path", async () => {
+  test("points a disarmed loop's plan at the task list, not a tracking file", async () => {
     const prompt = await deliver([armedEvent(), disarmedEvent()])
-    expect(prompt).toContain("/repo/PROGRESS.md")
-    expect(prompt).toContain("/repo")
+    expect(prompt).toContain("mcp__kanna__task_list")
+    expect(prompt).not.toContain("PROGRESS.md")
   })
 
   test("names no file at all when the chat never ran a loop", async () => {

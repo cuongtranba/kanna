@@ -40,6 +40,11 @@ describe("toolTitle and toolActivity", () => {
     expect(toolActivity(tool, "/work/app")).toBe("reading file...")
   })
 
+  test("a subagent title names the model it was asked to run on", () => {
+    const tool = normalizeToolCall({ toolName: "Agent", toolId: "1", input: { subagent_type: "reviewer", model: "opus" } })
+    expect(toolTitle(tool, null)).toBe("reviewer · opus")
+  })
+
   test("an unrecognised tool is titled by its own name", () => {
     const tool = normalizeToolCall({ toolName: "Mystery", toolId: "1", input: {} })
     expect(toolTitle(tool, null)).toBe("Mystery")

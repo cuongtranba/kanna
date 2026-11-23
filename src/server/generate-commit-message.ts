@@ -61,7 +61,6 @@ function buildCommitMessagePrompt(args: {
 
   return [
     "Generate a git commit message for the selected changes.",
-    "Return JSON with keys: subject, body.",
     "Rules:",
     "- subject must be imperative, under 72 chars, and have no trailing period",
     "- body may be an empty string or 3-5 bullet points",

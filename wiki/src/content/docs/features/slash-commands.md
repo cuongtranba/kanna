@@ -30,12 +30,12 @@ current turn finishes rather than interrupting it.
 ## `/clear`
 
 Starts no turn at all. It drops the session token for every provider, stops the
-Codex process if one is running, and marks the transcript with a context-cleared
+Codex or Antigravity process if one is running, and marks the transcript with a context-cleared
 divider.
 
 Stopping the Codex process is not incidental — Codex reuses a live session for
 the same directory regardless of the token, so clearing the token alone would
-have no effect on the next turn.
+have no effect on the next turn. Antigravity is stopped the same way.
 
 Your transcript is not deleted. You keep reading it; the *model* starts fresh
 from the divider.
@@ -49,7 +49,8 @@ say what to keep:
 /compact focus on the auth refactor, drop the CSS debugging
 ```
 
-On Claude and OpenRouter the command goes to the CLI as-is. **Codex has no
+On Claude, OpenRouter and Antigravity the command goes to the CLI as-is, and
+`agy` compacts natively. **Codex has no
 compaction request of its own**, so Kanna runs the summarisation itself and
 writes the result into the transcript in the same shape.
 
@@ -85,8 +86,8 @@ panel are not offered, because the CLI cannot show them inside Kanna.
 
 Kanna learns the list from the CLI each time a Claude session starts and keeps
 it in its data folder, so after a restart the commands are already in the
-picker. Before the very first Claude session the list is empty. Codex chats do
-not show these commands, because Codex cannot run them.
+picker. Before the very first Claude session the list is empty. Codex and
+Antigravity chats do not show these commands, because those CLIs cannot run them.
 
 When a skill on disk shares a name with a built-in command, Claude runs the
 built-in. The picker shows the built-in first.
@@ -103,12 +104,12 @@ on **every provider**:
 
 - **Claude and OpenRouter** resolve `/name` themselves, as the Claude Code CLI
   does.
-- **Codex** does not, so Kanna expands the command before sending it. A command
+- **Codex and Antigravity** do not, so Kanna expands the command before sending it. A command
   file becomes its body with `$ARGUMENTS` and `$1`–`$9` filled in; a skill is
   sent as a pointer to its `SKILL.md` with your arguments. The transcript still
   shows the line you typed, with a note that it was expanded.
-- Codex also gets a roster of your skills in its instructions, so it can pick
-  one up on its own when it fits, the way Claude does.
+- Codex and Antigravity also get a roster of your skills in their instructions, so they can pick
+  one up on their own when it fits, the way Claude does.
 
 Shell lines (`` !`cmd` ``) and `@path` references inside a command are **not**
 run during expansion. They are passed on for the agent to run or read with its

@@ -26,6 +26,7 @@ import { LogWriter } from "./event-store-writer"
 import { liveRecord, requireLiveChat } from "./event-store-lookup"
 import { SeenMessageIds } from "./seen-message-ids"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { PeerInboundMode } from "../shared/peer-messaging/inbound"
 import type { CloudflareTunnelEvent } from "./cloudflare-tunnel/events"
 import type { PushEvent, PushEventStore } from "./push/events"
 import type { ShareEvent } from "./session-share/share-projection"
@@ -69,6 +70,7 @@ import { writeSidebarOrderFile } from "./event-store-snapshot"
 import {
   buildAddProjectToStackEvent,
   buildChatPolicyOverrideEvent,
+  buildChatPeerInboundEvent,
   buildChatModelEvent,
   buildChatProviderEvent,
   buildChatReadStateEvent,
@@ -380,6 +382,10 @@ export class EventStore implements PushEventStore {
     await this.commit(buildChatPolicyOverrideEvent(this.state.chatsById, chatId, policyOverride))
   }
 
+  async setChatPeerInbound(chatId: string, peerInbound: PeerInboundMode | null) {
+    await this.commit(buildChatPeerInboundEvent(this.state.chatsById, chatId, peerInbound))
+  }
+
   async appendMessage(chatId: string, entry: TranscriptEntry) {
     await TranscriptWrite.appendMessage(this.chatTranscriptDeps, chatId, entry)
     this.tap?.onEntryAppended(chatId, entry)
@@ -558,6 +564,14 @@ export class EventStore implements PushEventStore {
         await this.writer.appendInsideStep(this.layout.logPath(logOfEvent(event)), event, () => { this.applyEvent(event) })
       }
       return decision
+    })
+  }
+
+  async clearChatTaskList(chatId: string, now: number): Promise<void> {
+    await this.writer.serialize(async () => {
+      for (const event of ChatTasks.clearChatTaskListEvents(this.state.chatTasksByChatId, chatId, now)) {
+        await this.writer.appendInsideStep(this.layout.logPath(logOfEvent(event)), event, () => { this.applyEvent(event) })
+      }
     })
   }
 

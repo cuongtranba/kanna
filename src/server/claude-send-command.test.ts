@@ -85,7 +85,7 @@ type DepsOptions = {
   startingChatIds?: string[]
   pendingToolChatIds?: string[]
   queuedMessages?: QueuedChatMessage[]
-  chatProvider?: "claude" | "openrouter" | "codex" | null
+  chatProvider?: "claude" | "openrouter" | "codex" | "antigravity" | null
   chatModel?: string
   chatModelOptions?: ModelOptions
   providerDefaults?: ChatProviderPreferences
@@ -237,6 +237,11 @@ describe("getProviderSettings", () => {
   test("claude provider sets planMode false when not set", () => {
     const settings = getProviderSettings("claude", {}, [])
     expect(settings.planMode).toBe(false)
+  })
+
+  test("antigravity provider resolves its default model, effort and no fast tier", () => {
+    const settings = getProviderSettings("antigravity", { modelOptions: { antigravity: { reasoningEffort: "high" } } }, [])
+    expect(settings).toEqual({ model: "gemini-4-carbon", effort: "high", serviceTier: undefined, planMode: false })
   })
 
   test("openrouter provider uses model from options directly", () => {
@@ -678,6 +683,19 @@ describe("sendCommand", () => {
     expect(session.backgroundTaskWakeSuppressed).toBe(false)
   })
 
+  test("queues instead of starting a turn while the CLI still holds an injected peer message", async () => {
+    const session = makeTestSession()
+    session.injectedPromptIds.add("0b5f4f0e-0000-4000-8000-000000000001")
+    const d = makeDeps({ session })
+    const result = await sendCommand(d, {
+      type: "chat.send",
+      content: "while the cli is about to run the peer message",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+    expect(result.queued).toBe(true)
+    expect(d.startTurnCalled).toEqual([])
+  })
+
   test("tracks message_sent analytics", async () => {
     await sendCommand(deps, {
       type: "chat.send",
@@ -875,6 +893,19 @@ describe("builtin /compact", () => {
     expect(deps.startTurnCalled[0].compactionTurn).toBe("user")
   })
 
+  test("on antigravity passes the agent's native command through", async () => {
+    const deps = makeDeps({ chatProvider: "antigravity" })
+
+    await sendCommand(deps, {
+      type: "chat.send",
+      content: "/compact",
+      chatId: "chat-1",
+    } as Parameters<typeof sendCommand>[1])
+
+    expect(deps.startTurnCalled[0].content).toBe("/compact")
+    expect(deps.startTurnCalled[0].compactionTurn).toBe("user")
+  })
+
   test("on codex starts a Kanna summarize turn", async () => {
     const deps = makeDeps({ chatProvider: "codex" })
 
@@ -1055,6 +1086,7 @@ describe("model resolution for server-originated turns", () => {
   const CLAUDE_DEFAULTS: ChatProviderPreferences = {
     claude: { model: "claude-opus-5", modelOptions: { reasoningEffort: "high", contextWindow: "1m" }, planMode: false },
     codex: { model: "gpt-5.5", modelOptions: { reasoningEffort: "high", fastMode: false }, planMode: false },
+    antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
     openrouter: { model: "moonshotai/kimi-k2.5", modelOptions: {}, planMode: false },
     custom: { model: "", modelOptions: {}, planMode: false },
   }

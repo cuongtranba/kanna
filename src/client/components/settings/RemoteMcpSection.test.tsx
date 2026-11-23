@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "vite-plus/test"
+import { act } from "react"
 import { defaultAppSettingsSnapshot } from "../../../server/app-settings"
 import type { RemoteMcpSettings } from "../../../shared/settings/remote-mcp"
+import type { AppSettingsPatch } from "../../../shared/app-settings-types"
+import { makeFakeDomPort } from "../../lib/testing/fakePorts"
 import { renderClientMarkup } from "../../lib/testing/renderClientMarkup"
+import { waitFor } from "../../lib/testing/waitFor"
 import { renderForLoopCheck } from "../../lib/testing/renderForLoopCheck"
 import { useAppSettingsStore } from "../../stores/appSettingsStore"
 import { useRemoteMcpSectionStore } from "../../stores/remoteMcpSectionStore"
@@ -67,5 +71,55 @@ describe("RemoteMcpSection", () => {
     expect(result.loopWarnings).toEqual([])
     expect(result.thrown).toBeNull()
     await result.cleanup()
+  })
+
+  test("behind an https host with no public url it warns that clients are sent to the loopback address", async () => {
+    seed({ enabled: true, publicUrl: null }, true)
+
+    const rendered = await renderClientMarkup(
+      <RemoteMcpSection state={STATE} dom={makeFakeDomPort({ href: "https://kanna.example.com/settings/remote-mcp" })} />,
+    )
+
+    expect(rendered.html).toContain("127.0.0.1")
+    expect(rendered.html).toContain("Use https://kanna.example.com")
+    await rendered.cleanup()
+  })
+
+  test("the warning's button saves the page origin as the public url", async () => {
+    seed({ enabled: true, publicUrl: null }, true)
+    const written: AppSettingsPatch[] = []
+    const state = {
+      handleWriteAppSettings: async (patch: AppSettingsPatch) => {
+        written.push(patch)
+      },
+    }
+
+    const rendered = await renderClientMarkup(
+      <RemoteMcpSection state={state} dom={makeFakeDomPort({ href: "https://kanna.example.com/chat/c1" })} />,
+    )
+    const button = Array.from(rendered.container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("Use https://kanna.example.com"),
+    )
+    await act(async () => button?.click())
+    await waitFor(() => written.length === 1, 2000, "the public url write")
+
+    expect(written[0]).toEqual({ remoteMcp: { publicUrl: "https://kanna.example.com" } })
+    await rendered.cleanup()
+  })
+
+  test("a saved public url or a loopback page needs no warning", async () => {
+    seed({ enabled: true, publicUrl: "https://kanna.example.dev" }, true)
+    const saved = await renderClientMarkup(
+      <RemoteMcpSection state={STATE} dom={makeFakeDomPort({ href: "https://kanna.example.com/" })} />,
+    )
+    expect(saved.html).not.toContain("Use https://")
+    await saved.cleanup()
+
+    seed({ enabled: true, publicUrl: null }, true)
+    const local = await renderClientMarkup(
+      <RemoteMcpSection state={STATE} dom={makeFakeDomPort({ href: "http://localhost:5174/" })} />,
+    )
+    expect(local.html).not.toContain("Use http")
+    await local.cleanup()
   })
 })

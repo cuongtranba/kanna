@@ -17,6 +17,20 @@ merges it into the `mcpServers` map passed to `query()` alongside
 `mcp__kanna__*`. Kanna settings remain the single source of truth for which
 servers a session sees.
 
+Codex and Antigravity sessions (main and `sub:` scopes) get the same servers.
+`createCustomMcpServerResolver` (`claude-session-config-helpers.ts`) is the one owner
+of "which servers, with which bearer": `getEnabledCustomMcpServers` (enabled, never
+`kanna`) plus `buildOAuthBearers`, with the bearer already merged into `headers`. It is
+injected into `CodexAppServerManager` and `AntigravityAcpManager` by
+`createPeerMessaging`; each manager maps it to its own wire shape. Codex: dotted
+`config["mcp_servers.<name>"]` keys on `thread/start`, `thread/resume` and
+`thread/fork` (per-name keys merge with the user's `~/.codex` servers; a nested
+`mcp_servers` object would replace them). ACP: entries in `session/new` and
+`session/resume` `mcpServers`, ahead of the main-only bridge grant. Both take only
+`stdio` and `http`; `sse`/`ws` entries are skipped with a `log.warn` naming them.
+Each manager respawns a reused session on the next `startSession` once the grant's
+`usableUntil` passes, unless a turn is running.
+
 User MCP tool calls auto-allow (`canUseTool` already returns
 `{ behavior: "allow" }` for any tool that isn't `AskUserQuestion` /
 `ExitPlanMode`, which includes every `mcp__<name>__*` whose `<name>`
@@ -33,9 +47,10 @@ per-row status pill plus a manual "Test" button that drives the
 explicit `settings.testMcpServer` RPC.
 
 **Boundary rule:** user MCP server names MUST NOT equal
-`KANNA_MCP_SERVER_NAME`. Enforced by both `validateMcpShape`
-(`app-settings.ts`) and `buildUserMcpServers` / `buildMcpConfigJson`
-filters (belt-and-suspenders).
+`KANNA_MCP_SERVER_NAME`. Enforced by `validateMcpShape`
+(`app-settings.ts`), `getEnabledCustomMcpServers`
+(`claude-session-config-helpers.ts`) and the `buildUserMcpServers` filter
+(`claude-session-config.ts`).
 
 ### Custom MCP Servers → OAuth
 
@@ -78,6 +93,13 @@ may be a non-resolvable resource URL like `https://claude.ai/v1/design/mcp` —
 re-discovery there returns SPA HTML and was the cause of "token refresh failed"
 forcing an 8 h re-auth; see adr-20260630-mcp-oauth-refresh-metadata). Entries
 authenticated before this fix lack persisted metadata and must re-auth once.
+Only a refusal from the AS (an `OAuthError` such as `invalid_grant`, excluding
+`server_error` and `temporarily_unavailable`) marks the entry `error`. A refresh
+that never reached the AS (DNS, connection, timeout) or hit a 5xx throws without
+persisting, so the entry stays `authenticated` and the next chat spawn retries it.
+Before this, one DNS blip at spawn flipped every OAuth server to `error`, and
+`claude-session-config-helpers.ts` skips non-`authenticated` entries, so they
+stayed dead until a manual re-auth.
 
 **Kanna asks for `offline_access` whenever the AS advertises it.** The requested
 scope is the protected-resource metadata's `scopes_supported` plus
@@ -92,14 +114,12 @@ expired and no refresh token` a quarter hour after every connect. The MCP SDK
 (1.29) does not add the scope itself. An entry authenticated before this fix
 holds no refresh token and must reconnect once.
 
-**A dead token is not "authenticated", in either direction.** An expired access
-token with no refresh token used to stay `status: "authenticated"`:
-`ensureFreshMcpToken` threw without persisting anything, and `startMcpOAuth`
-answered `alreadyAuthenticated` for any authenticated entry holding tokens — so
-the Authenticate button silently did nothing and the only way out was deleting
-the server. Now the refresh path persists `status: "error"` before throwing, and
-`startMcpOAuth` short-circuits only while `canStillAuthorize` holds (a refresh
-token, or an access token still inside `bearerUsableUntil`).
+**A dead token is not "authenticated", in either direction.** On an expired
+access token with no refresh token, the refresh path persists `status: "error"`
+before throwing, and `startMcpOAuth` answers `alreadyAuthenticated` only while
+`canStillAuthorize` holds (a refresh token, or an access token still inside
+`bearerUsableUntil`); otherwise the Authenticate button would silently do
+nothing.
 
 **Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
 stored inside the server entry in `settings.json` (written with the default
@@ -175,7 +195,7 @@ ADR `adr-20261011-remote-mcp-server`; users read the wiki guide
   schema-typed result `chat.loadHistory` returns).
 - **The command registry is the only command catalog.** `src/shared/commands`
   derives `ClientCommand`, validates `kanna_command` params and publishes the
-  JSON Schemas; `COMMAND_CATALOG` is gone. Every command declares a `result`
+  JSON Schemas. Every command declares a `result`
   schema (`defineCommand` requires it), so `kanna_commands` always lists a
   `resultSchema`. A command that acks with nothing declares `noResult`, which
   renders as `{ "not": {} }` with a description that the ack carries no result

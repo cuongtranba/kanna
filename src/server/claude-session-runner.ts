@@ -6,10 +6,11 @@ import type { AgentProvider, Subagent, TranscriptEntry } from "../shared/types"
 import type { LimitDetector, LimitDetection } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
 import { backgroundTaskLaunchesFromToolResult, toolCallDescription } from "./claude-prompt-helpers"
-import { settleFailedTurn, type AuthErrorDetectable, type FailureSettlement } from "./claude-turn-failure"
+import { settleFailedTurn, type AuthErrorDetectable, type FailureOutcome, type FailureSettlement } from "./claude-turn-failure"
 import { recordTurnError } from "./claude-turn-outcome"
 import { logClaudeSteer } from "./claude-steer-log"
 import type { ClaudeSessionState, ActiveTurn } from "./claude-session-state"
+import type { HarnessEvent } from "./harness-types"
 import { isProactiveCompactTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
 import type { TurnEndGuard } from "./turn-end-guard"
@@ -62,6 +63,9 @@ export interface RunClaudeSessionDeps {
   handleAuthFailure(session: ClaudeSessionState, detection: AuthErrorDetection): Promise<boolean>
   closeClaudeSession(chatId: string, session: ClaudeSessionState): void
   maybeStartNextQueuedMessage(chatId: string): Promise<boolean | void>
+  onChatSettled?(chatId: string): Promise<void>
+  onPromptDelivered?(session: ClaudeSessionState, promptId: string): Promise<void>
+  onTurnResult?(session: ClaudeSessionState): void
   turnEndGuard?: TurnEndGuard
   onLiveBlock?: LiveBlockSink
   onBackgroundTaskLaunch?(chatId: string, taskId: string, outputPath: string | null): void
@@ -69,9 +73,44 @@ export interface RunClaudeSessionDeps {
 }
 
 
+async function drainQueueThenSettle(deps: RunClaudeSessionDeps, chatId: string): Promise<void> {
+  await deps.maybeStartNextQueuedMessage(chatId)
+  await deps.onChatSettled?.(chatId)
+}
+
+async function continueAfterTurn(
+  deps: RunClaudeSessionDeps,
+  chatId: string,
+  outcome: FailureOutcome,
+  retryOnFreshSession: (() => Promise<void>) | undefined,
+): Promise<void> {
+  if (outcome === "retry_on_fresh_session" && retryOnFreshSession) await retryOnFreshSession()
+  else await drainQueueThenSettle(deps, chatId)
+}
+
+async function settleThrownFailure(
+  deps: RunClaudeSessionDeps,
+  session: ClaudeSessionState,
+  error: Error,
+): Promise<(() => Promise<void>) | undefined> {
+  const active = deps.activeTurns.get(session.chatId)
+  if (!active || active.cancelRequested) return undefined
+  const outcome = await settleFailedTurn(
+    failureSettlement(deps),
+    session,
+    { kind: "thrown", error },
+    true,
+    active.retryOnFreshSession !== undefined,
+  )
+  if (outcome !== "retry_on_fresh_session") return undefined
+  active.hasFinalResult = true
+  return active.retryOnFreshSession
+}
+
 async function discardInvalidSession(deps: RunClaudeSessionDeps, session: ClaudeSessionState): Promise<void> {
   deps.closeClaudeSession(session.chatId, session)
   await deps.store.setSessionTokenForProvider(session.chatId, "claude", null)
+  await deps.store.setPendingForkSessionToken(session.chatId, null)
 }
 
 function failureSettlement(deps: RunClaudeSessionDeps): FailureSettlement {
@@ -91,12 +130,30 @@ function firstEntryTimeoutMessage(session: ClaudeSessionState, timeoutMs: number
   return `${label} produced no response within ${timeoutMs}ms — the selected model may be invalid or the upstream stalled.`
 }
 
+type StreamEvent = Exclude<HarnessEvent, { type: "prompt_delivered" }>
+
+async function* withoutPromptDeliveries(
+  stream: AsyncIterable<HarnessEvent>,
+  onPromptDelivered: (promptId: string) => Promise<void> | undefined,
+  onTurnResult: () => void,
+): AsyncGenerator<StreamEvent> {
+  for await (const event of stream) {
+    if (event.type === "prompt_delivered") {
+      await onPromptDelivered(event.promptId)
+      continue
+    }
+    if (event.type === "transcript" && event.entry.kind === "result") onTurnResult()
+    yield event
+  }
+}
+
 export async function runClaudeSession(
   deps: RunClaudeSessionDeps,
   session: ClaudeSessionState,
 ): Promise<void> {
   const isEndpointSession = session.endpointModel !== null
   let turnAssistantText: string[] = []
+  let retryAfterTeardown: (() => Promise<void>) | undefined
   let firstEntrySeen = false
   let firstEntryWatchdog: ReturnType<typeof setTimeout> | null = null
   const clearFirstEntryWatchdog = () => {
@@ -138,7 +195,11 @@ export async function runClaudeSession(
     }, deps.endpointFirstEntryTimeoutMs)
   }
   try {
-    loop: for await (const event of session.session.stream) {
+    loop: for await (const event of withoutPromptDeliveries(
+      session.session.stream,
+      (promptId) => deps.onPromptDelivered?.(session, promptId),
+      () => { deps.onTurnResult?.(session) },
+    )) {
       switch (event.type) {
         case "session_token": {
           session.sessionToken = event.sessionToken
@@ -217,7 +278,7 @@ export async function runClaudeSession(
             session.selfWakeActive = false
             deps.pendingTools.discard(session.chatId)
             deps.emitStateChange(session.chatId)
-            await deps.maybeStartNextQueuedMessage(session.chatId)
+            await drainQueueThenSettle(deps, session.chatId)
           }
         } else if (SELF_WAKE_ARMING_KINDS.has(event.entry.kind) && !session.selfWakeActive) {
           if (session.canArmSelfWake()) {
@@ -299,14 +360,15 @@ export async function runClaudeSession(
       ) {
         active.hasFinalResult = true
         active.usage = billedUsageOfResult(event.entry)
-        let failureHandled = false
+        let failureOutcome: FailureOutcome = "unhandled"
         if (event.entry.isError) {
           const resultText = event.entry.result || "Turn failed"
-          failureHandled = await settleFailedTurn(
+          failureOutcome = await settleFailedTurn(
             failureSettlement(deps),
             session,
             { kind: "result", text: resultText, debugRaw: event.entry.debugRaw ?? "" },
             true,
+            active.retryOnFreshSession !== undefined,
           )
           if (isProactiveCompactTurn(active)) {
             const prev = deps.store.getChat(session.chatId)?.compactFailureCount ?? 0
@@ -321,11 +383,11 @@ export async function runClaudeSession(
         }
         deps.pendingTools.discard(session.chatId)
         deps.activeTurns.delete(session.chatId)
-        if (!failureHandled) {
+        if (failureOutcome !== "handled") {
           deps.oauthPool?.release(session.chatId)
         }
         if (!active.cancelRequested) {
-          await deps.maybeStartNextQueuedMessage(session.chatId)
+          await continueAfterTurn(deps, session.chatId, failureOutcome, active.retryOnFreshSession)
         }
       } else if (event.entry.kind === "result" && event.entry.isError) {
         await settleFailedTurn(
@@ -349,11 +411,7 @@ export async function runClaudeSession(
       }
     }
   } catch (caught) {
-    const error = toError(caught)
-    const active = deps.activeTurns.get(session.chatId)
-    if (active && !active.cancelRequested) {
-      await settleFailedTurn(failureSettlement(deps), session, { kind: "thrown", error }, true)
-    }
+    retryAfterTeardown = await settleThrownFailure(deps, session, toError(caught))
   } finally {
     clearFirstEntryWatchdog()
     livePublisher.clear()
@@ -390,7 +448,9 @@ export async function runClaudeSession(
       deps.pendingTools.discard(session.chatId)
     }
     session.selfWakeActive = false
+    session.injectedPromptIds.clear()
     session.session.close()
     deps.emitStateChange(session.chatId)
+    await retryAfterTeardown?.()
   }
 }

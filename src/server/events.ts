@@ -16,6 +16,7 @@ import type { ChatAutomationEvent } from "./auto-continue/events"
 import type { ChatTaskEvent } from "../shared/chat-tasks/types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
 import type { JsonArray, JsonObject } from "../shared/json"
+import type { PeerInboundMode } from "../shared/peer-messaging/inbound"
 import type { STORE_VERSION } from "../shared/types"
 
 type StoreVersion = typeof STORE_VERSION
@@ -48,6 +49,7 @@ export interface ChatRecord {
   stackId?: string
   stackBindings?: StackBinding[]
   policyOverride?: ChatPermissionPolicyOverride | null
+  peerInbound?: PeerInboundMode | null
   compactFailureCount?: number
 }
 
@@ -228,6 +230,13 @@ export type ChatEvent =
       timestamp: number
       chatId: string
       policyOverride: ChatPermissionPolicyOverride | null
+    }
+  | {
+      v: StoreVersion
+      type: "chat_peer_inbound_set"
+      timestamp: number
+      chatId: string
+      peerInbound: PeerInboundMode | null
     }
   | {
       v: StoreVersion

@@ -37,7 +37,9 @@ import { CloudflareTunnelCard } from "../../components/chat-ui/CloudflareTunnelC
 import {
   CHAT_NAVBAR_OFFSET_PX,
   EMPTY_STATE_TEXT,
+  isTranscriptPinnedToEnd,
   scrollTranscriptListToEnd,
+  TRANSCRIPT_TOUCH_HOLD_LIMIT_PX,
 } from "./transcriptViewport"
 import { runDetached } from "../../lib/runDetached"
 import { MAX_FILES_PER_DROP } from "../../lib/composerLimits"
@@ -52,6 +54,7 @@ import { BackgroundTasksSection } from "../BackgroundTasksSection"
 import { PluginsFooterSlot } from "../PluginsFooterSlot"
 import { useArrivingRows } from "./useArrivingRows"
 import { TranscriptRowFrame, delegateRunIdOf } from "./TranscriptRowFrame"
+import { installTouchScrollGuard } from "./touchScrollGuard"
 import {
   extractDelegateCalls,
   matchRunsToDelegateCalls,
@@ -265,20 +268,11 @@ export const ChatTranscriptViewport = memo(({
   )
 
   const handleScroll = useCallback((event?: ScrollEventLike) => {
-    const currentTarget = event?.currentTarget instanceof HTMLElement
+    const target = event?.currentTarget instanceof HTMLElement
       ? event.currentTarget
       : listRef.current?.getScrollableNode?.()
-
-    if (currentTarget instanceof HTMLElement) {
-      const distanceFromEnd = currentTarget.scrollHeight - currentTarget.clientHeight - currentTarget.scrollTop
-      onIsAtEndChange(distanceFromEnd <= 4)
-      return
-    }
-
-    const state = listRef.current?.getState?.()
-    if (state) {
-      onIsAtEndChange(state.isAtEnd)
-    }
+    const pinned = isTranscriptPinnedToEnd(listRef.current, target instanceof HTMLElement ? target : null)
+    if (pinned !== null) onIsAtEndChange(pinned)
   }, [listRef, onIsAtEndChange])
 
   useEffect(() => {
@@ -312,52 +306,7 @@ export const ChatTranscriptViewport = memo(({
       const scrollNode = listRef.current?.getScrollableNode?.()
       if (!(scrollNode instanceof HTMLElement)) return
 
-      const nativeScrollBy = scrollNode.scrollBy
-      if (typeof nativeScrollBy !== "function") return
-
-      let gestureActive = false
-      let settleTimer: number | undefined
-
-      const armSettle = () => {
-        if (settleTimer !== undefined) timer.clearTimeout(settleTimer)
-        settleTimer = timer.setTimeout(() => {
-          settleTimer = undefined
-          gestureActive = false
-        }, 120)
-      }
-
-      function guardedScrollBy(options?: ScrollToOptions): void
-      function guardedScrollBy(x: number, y: number): void
-      function guardedScrollBy(...args: [ScrollToOptions?] | [number, number]): void {
-        if (!gestureActive) Reflect.apply(nativeScrollBy, scrollNode, args)
-      }
-      scrollNode.scrollBy = guardedScrollBy
-
-      const onTouchStart = () => {
-        if (settleTimer !== undefined) {
-          timer.clearTimeout(settleTimer)
-          settleTimer = undefined
-        }
-        gestureActive = true
-      }
-      const onTouchEnd = () => { armSettle() }
-      const onScrollWhileGesturing = () => { if (gestureActive) armSettle() }
-
-      scrollNode.addEventListener("touchstart", onTouchStart, { passive: true })
-      scrollNode.addEventListener("touchend", onTouchEnd, { passive: true })
-      scrollNode.addEventListener("touchcancel", onTouchEnd, { passive: true })
-      scrollNode.addEventListener("scroll", onScrollWhileGesturing, { passive: true })
-
-      cleanup = () => {
-        if (settleTimer !== undefined) timer.clearTimeout(settleTimer)
-        scrollNode.removeEventListener("touchstart", onTouchStart)
-        scrollNode.removeEventListener("touchend", onTouchEnd)
-        scrollNode.removeEventListener("touchcancel", onTouchEnd)
-        scrollNode.removeEventListener("scroll", onScrollWhileGesturing)
-        if (scrollNode.scrollBy === guardedScrollBy) {
-          Reflect.deleteProperty(scrollNode, "scrollBy")
-        }
-      }
+      cleanup = installTouchScrollGuard(scrollNode, timer, TRANSCRIPT_TOUCH_HOLD_LIMIT_PX)
     })
 
     return () => {
@@ -405,6 +354,11 @@ export const ChatTranscriptViewport = memo(({
       />
     )
   }, [toolGroupExpanded, runsByDelegateToolId, renderRunTree, gapClassByRowId, arrivingRows])
+
+  const extraData = useMemo(
+    () => ({ toolGroupExpanded, schedules, tunnels, liveTunnelId }),
+    [toolGroupExpanded, schedules, tunnels, liveTunnelId],
+  )
 
   const listHeader = (
     <div className="mx-auto w-full max-w-[800px]" style={{ paddingTop: `${headerOffsetPx}px` }}>
@@ -532,8 +486,9 @@ export const ChatTranscriptViewport = memo(({
         <LegendList<ResolvedTranscriptRow>
           ref={listRef}
           data={resolvedRows}
-          extraData={{ toolGroupExpanded, schedules, tunnels, liveTunnelId }}
+          extraData={extraData}
           keyExtractor={keyExtractor}
+          getItemType={itemTypeOf}
           renderItem={renderItem}
           estimatedItemSize={48}
           initialScrollAtEnd
@@ -657,4 +612,8 @@ export const ChatTranscriptViewport = memo(({
 
 function keyExtractor(item: ResolvedTranscriptRow) {
   return item.id
+}
+
+function itemTypeOf(item: ResolvedTranscriptRow): string {
+  return item.kind === "tool-group" ? item.kind : item.message.kind
 }

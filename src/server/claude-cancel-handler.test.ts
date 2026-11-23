@@ -106,6 +106,7 @@ type DepOverrides = {
   stateChanges?: string[]
   rejectCalled?: string[]
   orchestratorCancelled?: string[]
+  closedSessions?: string[]
 }
 
 function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
@@ -119,6 +120,7 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
   const stateChanges = overrides.stateChanges ?? []
   const rejectCalled = overrides.rejectCalled ?? []
   const orchestratorCancelled = overrides.orchestratorCancelled ?? []
+  const closedSessions = overrides.closedSessions ?? []
 
   return {
     drainingStreams,
@@ -132,6 +134,7 @@ function makeDeps(overrides: DepOverrides = {}): CancelHandlerDeps {
       recordTurnCancelled: async (chatId) => { turnCancelledFor.push(chatId) },
     },
     claudeSessions,
+    closeClaudeSession: (chatId) => { closedSessions.push(chatId) },
     emitStateChange: (chatId) => { stateChanges.push(chatId) },
   }
 }
@@ -588,5 +591,36 @@ describe("backgroundTaskWakeSuppressed", () => {
     await cancelChat(deps, "chat-1")
 
     expect(session.backgroundTaskWakeSuppressed).toBe(true)
+  })
+})
+
+
+describe("stopping a turn that has an injected peer message the CLI has not read yet", () => {
+  test("closes the session so the CLI cannot run the message after the interrupt", async () => {
+    const session = makeSession()
+    session.injectedPromptIds.add("queued-1")
+    const closedSessions: string[] = []
+    const deps = makeDeps({
+      activeTurns: new Map([["chat-1", makeActiveTurn()]]),
+      claudeSessions: new Map([["chat-1", session]]),
+      closedSessions,
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(closedSessions).toEqual(["chat-1"])
+  })
+
+  test("keeps the session when nothing was injected", async () => {
+    const closedSessions: string[] = []
+    const deps = makeDeps({
+      activeTurns: new Map([["chat-1", makeActiveTurn()]]),
+      claudeSessions: new Map([["chat-1", makeSession()]]),
+      closedSessions,
+    })
+
+    await cancelChat(deps, "chat-1")
+
+    expect(closedSessions).toEqual([])
   })
 })

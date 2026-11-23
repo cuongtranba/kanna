@@ -2,6 +2,7 @@ import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
   type AgentProvider,
+  type AntigravityModelOptions,
   type ChatProviderPreferences,
   type ClaudeModelOptions,
   type CodexModelOptions,
@@ -9,11 +10,14 @@ import {
   type DefaultProviderPreference,
   type ProviderPreference,
   type ProviderModelOptionsByProvider,
+  isAntigravityReasoningEffort,
+  isClaudeReasoningEffort,
+  isCodexReasoningEffort,
   isEndpointProvider,
 } from "../../shared/types"
 import { useAppSettingsStore } from "./appSettingsStore"
-import { createDefaultProviderDefaults, normalizeClaudePreference, normalizeCodexPreference } from "../../shared/settings/provider-defaults"
-import { claudeOptionsPatch, codexOptionsPatch } from "./providerOptionsPatch"
+import { createDefaultProviderDefaults, normalizeAntigravityPreference, normalizeClaudePreference, normalizeCodexPreference } from "../../shared/settings/provider-defaults"
+import { antigravityOptionsPatch, claudeOptionsPatch, codexOptionsPatch } from "./providerOptionsPatch"
 import { providerDefaultsEqual } from "./providerDefaultsEqual"
 import { log } from "../../shared/log"
 
@@ -37,11 +41,30 @@ export type ComposerState =
     planMode: boolean
   }
   | {
+    provider: "antigravity"
+    model: string
+    modelOptions: AntigravityModelOptions
+    planMode: boolean
+  }
+  | {
     provider: "openrouter" | "custom"
     model: string
     modelOptions: Record<string, never>
     planMode: boolean
   }
+
+export function withComposerReasoningEffort(state: ComposerState, reasoningEffort: string): ComposerState {
+  if (state.provider === "claude" && isClaudeReasoningEffort(reasoningEffort)) {
+    return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+  }
+  if (state.provider === "codex" && isCodexReasoningEffort(reasoningEffort)) {
+    return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+  }
+  if (state.provider === "antigravity" && isAntigravityReasoningEffort(reasoningEffort)) {
+    return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
+  }
+  return state
+}
 
 export const NEW_CHAT_COMPOSER_ID = "__new__"
 
@@ -78,6 +101,16 @@ function composerFromProviderDefaults(
     }
   }
 
+  if (provider === "antigravity") {
+    const preference = providerDefaults.antigravity
+    return {
+      provider: "antigravity",
+      model: preference.model,
+      modelOptions: { ...preference.modelOptions },
+      planMode: preference.planMode,
+    }
+  }
+
   const preference = providerDefaults.codex
   return {
     provider: "codex",
@@ -99,6 +132,14 @@ function cloneComposerState(state: ComposerState): ComposerState {
   if (state.provider === "codex") {
     return {
       provider: "codex",
+      model: state.model,
+      modelOptions: { ...state.modelOptions },
+      planMode: state.planMode,
+    }
+  }
+  if (state.provider === "antigravity") {
+    return {
+      provider: "antigravity",
       model: state.model,
       modelOptions: { ...state.modelOptions },
       planMode: state.planMode,
@@ -188,7 +229,7 @@ interface ChatPreferencesState {
   setChatComposerModel: (chatId: string, model: string) => void
   setChatComposerModelOptions: (
     chatId: string,
-    modelOptions: Partial<ClaudeModelOptions> | Partial<CodexModelOptions>
+    modelOptions: Partial<ClaudeModelOptions> | Partial<CodexModelOptions> | Partial<AntigravityModelOptions>
   ) => void
   setChatComposerPlanMode: (chatId: string, planMode: boolean) => void
   resetChatComposerFromProvider: (chatId: string, provider: AgentProvider) => void
@@ -233,6 +274,14 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               },
             }
           }
+          if (provider === "antigravity") {
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: normalizeAntigravityPreference({ ...state.providerDefaults.antigravity, model }),
+              },
+            }
+          }
           return {
             providerDefaults: {
               ...state.providerDefaults,
@@ -263,6 +312,21 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               providerDefaults: {
                 ...state.providerDefaults,
                 [provider]: { ...state.providerDefaults[provider], modelOptions: {} },
+              },
+            }
+          }
+          if (provider === "antigravity") {
+            const antigravityOptions = antigravityOptionsPatch(modelOptions)
+            return {
+              providerDefaults: {
+                ...state.providerDefaults,
+                [provider]: normalizeAntigravityPreference({
+                  ...state.providerDefaults.antigravity,
+                  modelOptions: {
+                    ...state.providerDefaults.antigravity.modelOptions,
+                    ...antigravityOptions,
+                  },
+                }),
               },
             }
           }
@@ -381,6 +445,14 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
               planMode: composerState.planMode,
             }
           }
+          if (composerState.provider === "antigravity") {
+            return {
+              provider: "antigravity",
+              model,
+              modelOptions: normalizeAntigravityPreference({ ...composerState, model }).modelOptions,
+              planMode: composerState.planMode,
+            }
+          }
           return {
             provider: composerState.provider,
             model,
@@ -418,6 +490,21 @@ export const useChatPreferencesStore = create<ChatPreferencesState>()(
                   ...codexOptions,
                 },
               }, customModels).modelOptions,
+              planMode: composerState.planMode,
+            }
+          }
+          if (composerState.provider === "antigravity") {
+            const antigravityOptions = antigravityOptionsPatch(modelOptions)
+            return {
+              provider: "antigravity",
+              model: composerState.model,
+              modelOptions: normalizeAntigravityPreference({
+                ...composerState,
+                modelOptions: {
+                  ...composerState.modelOptions,
+                  ...antigravityOptions,
+                },
+              }).modelOptions,
               planMode: composerState.planMode,
             }
           }

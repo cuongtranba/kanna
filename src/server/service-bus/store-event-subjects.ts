@@ -21,6 +21,7 @@ export const STORE_EVENT_SUBJECT = {
   chat_plan_mode_set: BUS_SUBJECT_SUFFIX.chatPlanMode,
   chat_policy_override_set: BUS_SUBJECT_SUFFIX.chatPolicy,
   chat_read_state_set: null,
+  chat_peer_inbound_set: null,
   chat_source_hash_set: null,
   chat_compact_failures_set: null,
   message_appended: null,
@@ -62,6 +63,7 @@ export const STORE_EVENT_SUBJECT = {
   cron_disarmed: BUS_SUBJECT_SUFFIX.cronDisarmed,
   cron_paused: BUS_SUBJECT_SUFFIX.cronPaused,
   cron_resumed: BUS_SUBJECT_SUFFIX.cronResumed,
+  cron_updated: BUS_SUBJECT_SUFFIX.cronUpdated,
   cron_run_started: BUS_SUBJECT_SUFFIX.cronRunStarted,
   cron_run_outcome: BUS_SUBJECT_SUFFIX.cronRunOutcome,
   cron_run_skipped: BUS_SUBJECT_SUFFIX.cronRunSkipped,
@@ -74,6 +76,7 @@ export const STORE_EVENT_SUBJECT = {
   chat_task_integrated: BUS_SUBJECT_SUFFIX.taskIntegrated,
   chat_task_note: BUS_SUBJECT_SUFFIX.taskNote,
   chat_task_epoch_advanced: BUS_SUBJECT_SUFFIX.taskEpochAdvanced,
+  chat_task_list_cleared: BUS_SUBJECT_SUFFIX.taskListCleared,
   chat_task_native_synced: BUS_SUBJECT_SUFFIX.taskNativeSynced,
 } satisfies Record<StoreEventKind, string | null>
 

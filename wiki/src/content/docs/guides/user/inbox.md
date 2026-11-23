@@ -167,9 +167,9 @@ overridable per thread:
 Pick the level for one thread with the **Autonomy** menu in its header: **Source
 default (…)**, Off, Suggest, Approve or Auto. Approve and Auto are greyed out,
 with the reason beside the menu, when the source has no **Reply tool**. Auto is
-also greyed out when the source's handler runs a Codex model: only Claude
-handler turns can be stopped from sending on their own, so Codex is capped at
-Approve.
+also greyed out when the source's handler runs a Codex or Antigravity model:
+only Claude handler turns can be stopped from sending on their own, so Codex and
+Antigravity are capped at Approve.
 
 ### Guardrails for Auto
 
@@ -207,7 +207,8 @@ the sender expires a waiting proposal, because it answered an older message.
   before the auto-send.
 - In a triage or ask turn the agent cannot run shell commands or call the reply
   tool's server at all; it can only report and propose. That is enforced for
-  Claude turns. Codex has no such guard, which is why Auto is not offered for it.
+  Claude turns. Codex and Antigravity have no such guard, which is why Auto is
+  not offered for them.
 
 ### Who sent what
 

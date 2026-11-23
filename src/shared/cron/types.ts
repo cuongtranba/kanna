@@ -1,3 +1,4 @@
+import type { ModelOptions } from "../provider-model-types"
 import { oneOf } from "../vocab"
 
 export const CRON_MODES = ["inline", "spawn"] as const
@@ -39,6 +40,8 @@ export interface CronJobPatch {
   mode?: CronMode
   schedule?: CronSchedule
   scheduleText?: string
+  model?: string
+  modelOptions?: ModelOptions
 }
 
 export type CronCommand =
@@ -83,6 +86,7 @@ export interface CronJobSnapshot {
   paused: boolean
   armedAt: number
   model?: string
+  modelOptions?: ModelOptions
   nextFireAt: number | null
   lastRun: CronRunSnapshot | null
   recentRuns: readonly CronRunSnapshot[]

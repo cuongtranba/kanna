@@ -50,6 +50,19 @@ describe("createClaudeHarnessStream", () => {
     expect(events).toHaveLength(0)
   })
 
+  test("a replayed user message is reported as a delivered prompt and never becomes a transcript entry", async () => {
+    const events = await collect([
+      {
+        type: "user",
+        isReplay: true,
+        uuid: "0b5f4f0e-0000-4000-8000-000000000001",
+        session_id: "sess-abc",
+        message: { role: "user", content: "<peer-chat-message>hi</peer-chat-message>" },
+      },
+    ])
+    expect(events).toEqual([{ type: "prompt_delivered", promptId: "0b5f4f0e-0000-4000-8000-000000000001" }])
+  })
+
   test("session_token event emitted when sdkMessage.session_id is present", async () => {
     const events = await collect([
       {

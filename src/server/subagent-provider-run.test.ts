@@ -1,10 +1,14 @@
 import { describe, expect, test } from "vite-plus/test"
 import type { JsonValue } from "../shared/json"
 import type { ClaudeModelOptions, CustomModelEntry, Subagent, TranscriptEntry } from "../shared/types"
+import type { PeerChatOrigin } from "../shared/command-origin"
 import type { HarnessEvent, HarnessTurn, HarnessToolRequest } from "./harness-types"
+import { RunInjection, type UndeliveredPeerMessage } from "./subagent-run-injection"
 import type { StartCodexSessionArgs, CodexSessionScope } from "./codex-app-server"
 import { buildSubagentProviderRun, composeInitialPrompt, composeSubagentSystemPrompt, drainOneTurn, type BuildSubagentProviderRunArgs } from "./subagent-provider-run"
 import type { StartCodexTurnArgs } from "./codex-app-server"
+import { AntigravityAcpManager } from "./antigravity-acp"
+import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
 
 
 function makeSubagent(over: Partial<Subagent> = {}): Subagent {
@@ -87,6 +91,7 @@ function makeArgs(over: Partial<BuildSubagentProviderRunArgs> = {}): BuildSubage
       },
       stopSession: () => {},
     } as unknown as BuildSubagentProviderRunArgs["codexManager"],
+    antigravityManager: new AntigravityAcpManager(),
     onToolRequest: noopOnToolRequest,
     authReady: async () => true,
     pickOauthToken: () => null,
@@ -132,7 +137,7 @@ describe("composeInitialPrompt", () => {
 
   test("instruction + primer → instruction rendered above primer", () => {
     const prompt = composeInitialPrompt(subagent, "Previous reply text", "review my code")
-    expect(prompt).toBe("User asked: review my code\n\nPrevious reply text")
+    expect(prompt).toBe("Previous reply text\n\nUser asked: review my code")
   })
 
   test("instruction only → no primer block", () => {
@@ -816,5 +821,118 @@ describe("drainOneTurn", () => {
     const out = await drainOneTurn(it, () => {}, () => {})
     expect(out.sawResult).toBe(true)
     expect(out.sawError).toBe(true)
+  })
+})
+
+
+describe("peer messages pushed into a running subagent run", () => {
+  const PEER: PeerChatOrigin = {
+    kind: "peer_chat",
+    fromChatId: "chat-9",
+    fromTitle: "Other chat",
+    fromProjectId: "proj-9",
+    fromProjectTitle: "Other project",
+    messageId: "msg-1",
+  }
+
+  function makeControlledSession() {
+    const queue: HarnessEvent[] = []
+    const waiting: { wake: (() => void) | null } = { wake: null }
+    const pushed: { promptId: string; text: string }[] = []
+    const state = { closed: false }
+    const session = {
+      provider: "claude" as const,
+      stream: (async function* () {
+        while (true) {
+          const next = queue.shift()
+          if (next) { yield next; continue }
+          await new Promise<void>((resolve) => { waiting.wake = resolve })
+        }
+      })(),
+      interrupt: async () => {},
+      close: () => { state.closed = true },
+      closed: Promise.resolve(),
+      sendPrompt: async () => {},
+      pushChannelPrompt: async () => {},
+      injectPrompt: (promptId: string, text: string) => { pushed.push({ promptId, text }); return true },
+      setModel: async () => {},
+      setPermissionMode: async () => {},
+    }
+    const emit = (...events: HarnessEvent[]) => { queue.push(...events); waiting.wake?.() }
+    return { session, emit, pushed, state }
+  }
+
+  function startRun(keepAlive: boolean) {
+    const { session, emit, pushed, state } = makeControlledSession()
+    const unread: UndeliveredPeerMessage[] = []
+    const injection = new RunInjection((message) => { unread.push(message) })
+    const entries: TranscriptEntry[] = []
+    const working = Promise.withResolvers<void>()
+    const run = buildSubagentProviderRun(makeArgs({ startClaudeSession: async () => session }))
+    const result = run.start(() => {}, (entry) => { entries.push(entry); working.resolve() }, { keepAlive, injection })
+    const whenWorking = async () => {
+      emit(makeTextEvent("working"))
+      await working.promise
+    }
+    return { result, emit, pushed, state, unread, entries, injection, whenWorking }
+  }
+
+  test("a message the subagent reads before finishing is logged as read, with who sent it", async () => {
+    const r = startRun(false)
+    await r.whenWorking()
+    expect(r.injection.push("use the new schema", PEER)).toBe(true)
+    expect(r.pushed).toHaveLength(1)
+    expect(r.pushed[0]?.text).toContain("use the new schema")
+    r.emit({ type: "prompt_delivered", promptId: r.pushed[0]?.promptId ?? "" }, makeResultEvent())
+    await r.result
+    const read = r.entries.find((entry) => entry.kind === "user_prompt")
+    expect(read).toMatchObject({ kind: "user_prompt", content: "use the new schema", origin: PEER })
+    expect(r.unread).toEqual([])
+    expect(r.state.closed).toBe(true)
+  })
+
+  test("a message the subagent never read is handed back, and a finished run takes no more", async () => {
+    const r = startRun(false)
+    await r.whenWorking()
+    r.injection.push("use the new schema", PEER)
+    r.emit(makeResultEvent())
+    await r.result
+    expect(r.unread).toEqual([{ content: "use the new schema", origin: PEER }])
+    expect(r.injection.push("too late", PEER)).toBe(false)
+  })
+
+  test("a kept-alive run takes no pushed messages, so they reach the parent chat instead", async () => {
+    const r = startRun(true)
+    await r.whenWorking()
+    expect(r.injection.push("use the new schema", PEER)).toBe(false)
+    expect(r.pushed).toEqual([])
+    r.emit(makeResultEvent())
+    const started = await r.result
+    expect(started.text).toBe("working")
+  })
+})
+
+describe("buildSubagentProviderRun – Antigravity", () => {
+  test("runs the subagent in a sub:runId session with its model and effort, then stops that session", async () => {
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => {
+      if (agent.answerSetup(request)) return
+      if (request.method === "session/prompt" && request.id !== null) {
+        agent.update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "antigravity reply" } })
+        agent.respond(request.id, { stopReason: "end_turn", usage: { inputTokens: 10, outputTokens: 5 } })
+      }
+    })
+    const manager = new AntigravityAcpManager({ spawnProcess: () => agent })
+    const run = buildSubagentProviderRun(makeArgs({
+      subagent: makeSubagent({ provider: "antigravity", model: "gemini-3.8-flash", modelOptions: { reasoningEffort: "low" } }),
+      runId: "run-xyz",
+      antigravityManager: manager,
+    }))
+
+    const result = await run.start(() => {}, () => {})
+
+    expect(result.text).toBe("antigravity reply")
+    expect(agent.setConfigCalls()).toEqual(["model=gemini-3.8-flash", "thought_level=low"])
+    expect(manager.hasSession("chat-1", "sub:run-xyz")).toBe(false)
+    expect(agent.killed).toBe(true)
   })
 })

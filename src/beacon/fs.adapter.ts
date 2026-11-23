@@ -15,6 +15,7 @@ const MAX_GREP_FILE_BYTES = 2 * 1024 * 1024
 const MAX_GREP_LINE_CHARS = 400
 const MAX_HASH_CACHE = 8
 const GLOB_CHARS = /[*?[\]{}]/
+const BARE_UNC_SERVER = /^[\\/]{2}([^\\/]+)$/
 
 interface HashProgress {
   hash: Hash
@@ -25,13 +26,20 @@ export function isMissingPathError(error: Error): boolean {
   return "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
 }
 
+function bareServerRoot(root: string): string | null {
+  if (process.platform !== "win32") return null
+  const host = BARE_UNC_SERVER.exec(root.replace(/[\\/]+$/, ""))?.[1]
+  return host === undefined || host === "?" || host === "." || host === ".." ? null : `\\\\${host}`
+}
+
 export async function realRoots(roots: readonly string[]): Promise<string[]> {
   const resolved: string[] = []
   for (const root of roots) {
     try {
       resolved.push(await realpath(root))
     } catch {
-      continue
+      const server = bareServerRoot(root)
+      if (server !== null) resolved.push(server)
     }
   }
   return resolved

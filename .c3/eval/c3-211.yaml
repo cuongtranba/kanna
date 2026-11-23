@@ -1,9 +1,12 @@
 fact: c3-211
 claim: "Codex App Server driver is at src/server/codex-app-server.ts and protocol"
 code:
+  - src/server/codex-dynamic-tool-call.ts
   - src/server/codex-app-server-protocol.ts
   - src/server/codex-app-server.test.ts
   - src/server/codex-app-server.ts
+  - src/server/async-queue.ts
+  - src/server/codex-pending-turn.ts
   - src/server/codex-app-server-decode.ts
   - src/server/codex-rollout-to-thread-item.ts
   - src/server/codex-session-types.ts

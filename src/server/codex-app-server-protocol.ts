@@ -39,9 +39,18 @@ export interface ThreadPolicyParams {
   config?: JsonObject | null
 }
 
+export interface DynamicToolSpec {
+  type: "function"
+  name: string
+  description: string
+  inputSchema: JsonObject
+  deferLoading?: boolean
+}
+
 export interface ThreadStartParams extends ThreadPolicyParams {
   experimentalRawEvents: boolean
   developerInstructions?: string | null
+  dynamicTools?: readonly DynamicToolSpec[]
 }
 
 export interface ThreadResumeParams extends ThreadPolicyParams {
@@ -83,6 +92,17 @@ export interface TurnStartParams {
 
 export interface TurnInterruptParams {
   threadId: string
+  turnId: string
+}
+
+export interface TurnSteerParams {
+  threadId: string
+  expectedTurnId: string
+  input: CodexUserInput[]
+  clientUserMessageId?: string
+}
+
+export interface TurnSteerResponse {
   turnId: string
 }
 

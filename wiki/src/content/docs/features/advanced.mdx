@@ -29,6 +29,9 @@ The agent can call `mcp__kanna__expose_port` right after it starts a dev server,
 
 Register your own MCP servers from **Settings → MCP servers**. Entries persist in `settings.json` (`customMcpServers`) and are merged in at chat spawn time, so their tools appear as `mcp__<name>__<tool>`.
 
+- **Providers:** every enabled server reaches every provider, in main chats and in subagent runs alike: Claude (including OpenRouter and custom endpoints), Codex and Antigravity. Codex and Antigravity accept only `stdio` and `http` servers; an `sse` or `ws` server reaches Claude only, and Kanna logs a warning naming it when it starts a Codex or Antigravity session. Antigravity ignores a `stdio` server's working directory.
+- **No approval step:** Codex and Antigravity run without approvals and without the hooks in `.claude/settings.json`, so an enabled server's tools, including write tools, run unattended there. Disable a server you do not want those providers to use.
+
 - **Transports:** `stdio`, `http`, `sse`, `ws`. The name `kanna` is reserved.
 - **OAuth:** `http` and `sse` servers support OAuth 2.1 (PKCE + dynamic client registration + rotating refresh). Kanna has no redirect server, so after the provider redirects to `http://localhost:8765/callback?code=…` you copy that URL from the address bar and paste it back into Settings to complete the flow. Tokens refresh automatically before expiry.
 - **Connect-test:** creating or updating a server fires a list-tools probe; the row shows a status pill, and a manual **Test** button re-runs it.

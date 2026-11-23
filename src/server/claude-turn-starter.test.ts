@@ -9,6 +9,9 @@ import { renderGenUIPromptSection } from "../shared/genui"
 import { CODEX_PLAN_PROGRESS_SECTION } from "../shared/kanna-system-prompt"
 import type { BeaconConfig } from "../shared/beacon-config"
 import { DEFAULT_BEACON_SCOPE } from "../shared/beacon-scope"
+import { AntigravityAcpManager } from "./antigravity-acp"
+import { FakeAcpAgent } from "./test-helpers/fake-acp-process"
+import { waitFor } from "./test-helpers/wait-for"
 
 
 function makeSdkSession(handle: Partial<ClaudeSessionHandle>): ClaudeSessionState {
@@ -120,6 +123,8 @@ function makeDeps(overrides: Partial<StartTurnDeps> = {}): StartTurnDeps {
       startSession: vi.fn(async () => null),
       startTurn: vi.fn(async () => fakeTurn),
     } as unknown as StartTurnDeps["codexManager"],
+
+    antigravityManager: new AntigravityAcpManager(),
 
     subagentOrchestrator: {
       clearChatCancellation: vi.fn(() => {}),
@@ -324,6 +329,28 @@ describe("startTurnForChat", () => {
       await startTurnForChat(deps, makeArgs({ provider: "codex" }))
       expect(instructionsOfSession(deps)).toBe(`## Workspace instructions\n\nAlways TDD.\n\n${CODEX_PLAN_PROGRESS_SECTION}\n\n${renderGenUIPromptSection({ canValidate: false })}`)
     })
+  })
+
+  test("an Antigravity turn runs on the Antigravity runtime with the chat's instructions, model and effort", async () => {
+    const agent: FakeAcpAgent = new FakeAcpAgent((request) => {
+      if (agent.answerSetup(request)) return
+      if (request.method === "session/prompt" && request.id !== null) {
+        agent.respond(request.id, { stopReason: "end_turn" })
+      }
+    })
+    const deps = makeDeps({
+      antigravityManager: new AntigravityAcpManager({ spawnProcess: () => agent }),
+      getAppSettingsSnapshot: () => ({ globalPromptAppend: "Be terse." }),
+    })
+
+    await startTurnForChat(deps, makeArgs({ provider: "antigravity", model: "gemini-3.8-flash", effort: "low", content: "hello world" }))
+
+    await waitFor(() => agent.methods().includes("session/prompt"), 2000, "the prompt to reach the agent")
+    const created = agent.requests.find((request) => request.method === "session/new")
+    expect(JSON.stringify(created?.params)).toContain("Be terse.")
+    expect(agent.setConfigCalls()).toEqual(["model=gemini-3.8-flash", "thought_level=low"])
+    expect(deps.codexManager.startTurn as ReturnType<typeof vi.fn>).not.toHaveBeenCalled()
+    expect(deps.activeTurns.get("chat-1")?.provider).toBe("antigravity")
   })
 
   test("10. routes to startClaudeTurn for claude provider", async () => {

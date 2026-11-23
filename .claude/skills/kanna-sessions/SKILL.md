@@ -1,31 +1,27 @@
 ---
 name: kanna-sessions
-description: Claude session and turn lifecycle in Kanna — the Agent SDK driver, builtin /clear and /compact, compaction and the history primer, PendingToolSlots and KANNA_MCP_TOOL_CALLBACKS, the kanna-mcp built-in shims, the LSP tool allowlist, background-task keep-alive, self-wake, live blocks (chat.live), isSessionInUse and session teardown, queued messages and their recovery, transcript memory budgets, the workflow status panel, projectProcessEnv, and /name skill expansion on Codex. Use whenever a change touches claude-session-*, claude-send-command, claude-turn-*, agent-coordinator, event-store queue or transcript code, the idle reaper or budget enforcer, CLAUDE_TOOLSET, compaction, or a chat that is stuck busy, lost a queued message, or got torn down mid-turn.
+description: Claude session and turn lifecycle in Kanna — the Agent SDK driver, builtin /clear and /compact, compaction and the history primer, PendingToolSlots and the AskUserQuestion/ExitPlanMode answer path, the durable approval protocol for beacon tools, the LSP tool allowlist, background-task keep-alive, self-wake, live blocks (chat.live), isSessionInUse and session teardown, queued messages and their recovery, transcript memory budgets, the workflow status panel, projectProcessEnv, and /name skill expansion on Codex. Use whenever a change touches claude-session-*, claude-send-command, claude-turn-*, agent-coordinator, event-store queue or transcript code, the idle reaper or budget enforcer, CLAUDE_TOOLSET, compaction, or a chat that is stuck busy, lost a queued message, or got torn down mid-turn.
 ---
 
 # Kanna sessions — turns, compaction, queue, keep-alive
 
 These invariants are each backed by a measured incident; read the relevant section before editing the code it names.
 
-## Tool Callback Feature Flag (KANNA_MCP_TOOL_CALLBACKS)
+## AskUserQuestion and ExitPlanMode have one answer path
 
-Setting `KANNA_MCP_TOOL_CALLBACKS=1` routes `AskUserQuestion` and
-`ExitPlanMode` through the durable approval protocol in
-`src/server/tool-callback.ts`. Pending requests survive server restart
-(resolved as `session_closed` fail-closed on boot) and are replayed to the
-client on reconnect as `pending_tool_request` transcript entries. Default is
-off; without the flag the legacy `canUseTool` → `onToolRequest` path runs.
+The model's native `AskUserQuestion` / `ExitPlanMode` reach the UI through
+`buildCanUseTool` (`claude-spawn-helpers.ts`) → `onToolRequest` →
+`PendingToolSlots`, and the answer comes back through `chat.respondTool` →
+`respondTool` (`claude-tool-respond.ts`). Codex and Antigravity park in the same
+slots. The `KANNA_MCP_TOOL_CALLBACKS` flag that once sent these answers through
+the durable approval protocol, and registered seven `mcp__kanna__*` file and
+shell shims, was removed in `adr-20261118-remove-tool-callbacks-flag`: the two
+paths had drifted (the durable plan card had no clear-context option and no
+feedback text). Do not add a second answer path for these tools.
 
-The model's native `AskUserQuestion` / `ExitPlanMode` reach the durable protocol
-through `buildCanUseTool` (`claude-spawn-helpers.ts`), so Kanna registers no
-`ask_user_question` / `exit_plan_mode` MCP stand-ins and there is no
-`forceInteractiveToolCallbacks` argument. The flag **exclusively** gates that
-`canUseTool` routing and the 8 built-in shims
-(`read/glob/grep/bash/edit/write/webfetch/websearch`).
+### Pending-tool lifecycle (PendingToolSlots)
 
-### Pending-tool lifecycle (legacy `canUseTool` path — PendingToolSlots)
-
-On the legacy path the parked request is nothing but an in-memory promise:
+The parked request is nothing but an in-memory promise:
 the parked `resolve` IS the SDK worker's `canUseTool` continuation. Drop it
 and that worker blocks forever, `respondTool` throws `"No pending tool
 request"`, and the chat is wedged with no way back — under the SDK driver
@@ -65,12 +61,16 @@ has a parked slot — the worker is blocked inside `canUseTool`, so
 slot ∨ streaming self-wake. The send gate and `maybeStartNextQueuedMessage`
 both consume it; never combine the underlying maps ad-hoc.
 
-Optional `KANNA_SERVER_SECRET` env var stabilises HMAC tool-request ids
-across the process lifetime. Cross-restart idempotency does not matter
-because `recoverOnStartup()` fail-closes all pending records on boot.
+### The durable approval protocol is for beacon tools
 
-Periodic `tickTimeouts` driver fires every 5s; default request timeout is
-600s. Pending requests time out as `{kind:"deny", reason:"timeout"}`.
+`src/server/tool-callback.ts` still runs on every server: beacon tool calls
+submit to it (`kanna-mcp-beacon.ts`), `permission-gate.ts` decides the verdict,
+and an `ask` verdict becomes a `pending_tool_request` card answered through
+`chat.toolRequestAnswer` (or the remote MCP `answer_tool_request`). A pending
+record replays on browser reconnect; on server boot `recoverOnStartup()`
+fail-closes it as `session_closed`, so it does not survive a restart. There is
+no wall-clock timeout. Optional `KANNA_SERVER_SECRET` stabilises the HMAC
+request ids across the process lifetime.
 
 ## Claude sessions run on the Agent SDK only
 
@@ -160,7 +160,8 @@ prime" was always right; the bug was *what* got primed.
 
 The picker merges the builtins in `localCommandsForCwd`, not in
 `LocalCatalogService.list` (whose contract stays the disk catalog). The catalog
-is no longer narrowed by provider — see **Local skills on every provider** below.
+is not narrowed by provider on disk; the picker's `commandsForProvider`
+(`SlashCommandTypeaheadPlugin.tsx`) drops only `cli`-scope commands for providers that do not expand slash commands.
 A project-authored `.claude/commands/clear.md` is dropped from the listing
 because dispatch intercepts that name first; rename it.
 
@@ -226,8 +227,8 @@ compaction; both return `{}`. Three bounds are load-bearing:
   summary, so a re-fire dedupes.
 
 **Telemetry is recorded at `EventStore.appendMessage`, not in the runner**, and
-both reasons matter. `runClaudeSession` measures 122 against the `complexity`
-ceiling pinned in `budget.ts` (127), so it has almost no headroom. And it is
+both reasons matter. `runClaudeSession` is the function that sets the
+`complexity` pin in `budget.ts`, so it has no headroom. And it is
 Claude-only: Codex's synthesized boundary (`claude-turn-runner.ts`) and its
 native one (`codex-app-server.ts`) never reach it, while every producer funnels
 through `appendMessage`. Attributes are `{provider, trigger}` only — at that
@@ -259,15 +260,15 @@ No new store and no new IO — `writeDoc` already `mkdir -p`s, and the same
 `StructuredDoc` engine reads it back by section.
 
 **This is a DIFFERENT surface from the loop's task list.** A loop's plan lives in
-the chat-scoped, event-sourced task store (`mcp__kanna__task_*`, above), which is
+the chat-scoped, event-sourced task store (`mcp__kanna__task_*`, see kanna-loop), which is
 not in git and holds structured rows; this tracking document is on disk and holds
 prose. Use `mcp__kanna__task_*` for a structured checklist for THIS chat that
 survives `/clear` and compaction and shows in the footer; use the tracking
 document for a durable repo-resident record the user will read, commit and diff.
-The loop no longer uses these tools at all.
+The loop does not use these tools.
 
 **The skeleton says `## Objective`, never `## Goal`.** The default filename is
-`PROGRESS.md`. Because the loop no longer reads or writes any tracking file, a
+`PROGRESS.md`. Because the loop reads and writes no tracking file, a
 document created this way can never collide with a loop's plan or reach the
 Progress panel.
 
@@ -339,26 +340,13 @@ of the turn meant to approve it.
 may be a path, or a command the provider itself knows; an unreadable `.claude`
 directory costs a skill, while failing the send costs the turn.
 
-## Kanna-MCP Built-in Shims
+## Restricted subagents have no file tools
 
-When `KANNA_MCP_TOOL_CALLBACKS=1`, kanna-mcp registers 8 additional tools
-that mirror Claude's built-ins: `mcp__kanna__{read, glob, grep, bash, edit,
-write, webfetch, websearch}`. They route through the durable approval
-protocol with the same path-deny rules as the bash tool from P1 (readPathDeny
-for `read`/`glob`/`grep`, writePathDeny for `edit`/`write`).
-
-An ordinary SDK session keeps the model's native built-ins, so the model has no
-reason to call the shims there. **A restricted subagent is different:**
-`claude-session-start.ts` strips `SDK_RESTRICTED_FS_NATIVE_TOOLS` from its
-toolset whenever `restrictedAllowedPaths` is set, and the shims — registered
-with those paths — become its only file tools, each call checked by
-`permission-gate.ts`. With the flag off, such a subagent has no file tools at
-all; PR 4 of #1382 replaces this with a PreToolUse hook
-that keeps the native tools. The removed PTY driver also routed through the
-shims, via `--tools "mcp__kanna__*"`.
-
-`websearch` is a stub that always returns `isError: true` — real web search
-needs an external API integration which is out of scope for P3a.
+`claude-session-start.ts` strips `SDK_RESTRICTED_FS_NATIVE_TOOLS` from a
+subagent's toolset whenever `restrictedAllowedPaths` is set, and kanna-mcp ships
+no file or shell shims, so such a subagent has no file tools at all. Giving it
+any means adding gated tools that check every path in `permission-gate.ts`, with
+allow rules, since the default policy asks for everything.
 
 ## The `LSP` tool — one tool, every language
 
@@ -400,9 +388,8 @@ server launched from a profile-less context may see neither.
 
 **The restricted path deliberately strips `LSP`** — it is in
 `SDK_RESTRICTED_FS_NATIVE_TOOLS`. Restricted mode exists to confine a subagent to `restrictedAllowedPaths`, and it
-does that by removing the native FS tools so the `mcp__kanna__*` shims can route
-every read through `permission-gate.ts`. **`LSP` is a file-read primitive that
-gate cannot see**: `goToDefinition` returns file locations and contents, so a
+does that by removing the native FS tools. **`LSP` is a file-read primitive that
+`permission-gate.ts` cannot see**: `goToDefinition` returns file locations and contents, so a
 native `LSP` in a confined subagent would read straight past its allowed roots.
 The CLI's own boundary is no substitute — it enforces cwd + `--add-dir`, which is
 broader than `restrictedAllowedPaths` by construction. The CLI classifies `LSP`
@@ -507,6 +494,8 @@ A superseding session's bookkeeping is still left strictly alone: wiping it
 leaves its stream running headless (no isError branch fires → `sessionToken`
 never cleared → the next turn loops on the same too-large `--resume` context).
 
+A resume whose Claude Code session file was deleted (`No conversation found`) retries the turn once on a fresh, primed session instead of failing it: [references/stale-session-retry.md](references/stale-session-retry.md).
+
 ## Queued messages are released on commit, not on dequeue
 
 A queued message is a chat's only durable "start this once idle" trigger. For a
@@ -552,7 +541,7 @@ visible and `resume_loop` possible, and the un-armed delivery prompt that names
 the plan absolutely or names nothing — is in
 `.claude/skills/kanna-loop/SKILL.md`.
 
-See `adr-20260813-queued-message-dequeue-on-commit`.
+See `adr-20260813-queued-message-dequeue-on-commit`; a peer message pushed into a running turn is released on its echo instead ([references/peer-mid-turn-delivery.md](references/peer-mid-turn-delivery.md)).
 
 ## Transcript memory is bounded by bytes, and loaded lazily
 
@@ -563,12 +552,14 @@ consequences, both fixed — and both easy to reintroduce.
 **`TranscriptCache` budgets bytes, not chats.** `maxChats = 4` was never a
 memory bound: MEASURED, the four largest transcripts on that install cost
 **220 MB RSS** (~4.7x their 47 MB of source text, parsed to JS objects). The
-cache now enforces `maxBytes` (default 24 MiB of SOURCE bytes ≈ 110 MB RSS)
-alongside the chat cap, and always retains the most recent entry so a single
-oversized transcript degrades to a re-read instead of thrashing. `set()` takes
+cache enforces `maxBytes` (default 24 MiB of SOURCE bytes ≈ 110 MB RSS)
+alongside the chat cap. A transcript over the budget is never held: `set()`
+refuses it and `evict()` drops even a sole entry that `appendTo()` grows past it,
+so reads of that chat take `getRecentMessagesPageTail`. `set()` takes
 the source size — `loadTranscriptWithBytes` hands it over for free — and falls
 back to `estimateTranscriptBytes` when a caller has no cheap size. **A count
-cap over unbounded-size items is not a bound**; do not swap back.
+cap over unbounded-size items is not a bound**; do not swap back. Larger-corpus
+measurements and the pm2 clamp: [references/transcript-cache-measurements.md](references/transcript-cache-measurements.md).
 
 **`startTurnForChat` no longer loads the transcript per turn.**
 `store.getMessages` loads the whole file AND deep-clones it — tens of MB of
@@ -591,7 +582,7 @@ dropped first using Set insertion order. Safe because Claude API always generate
 fresh `messageId`s per response; historical ids that age out will never repeat.
 Without the cap, a long-running server accumulates one entry per message forever.
 `state.autoContinueEventsByChatId` is evicted only by whole-chat delete, but its
-dominant contributors are now bounded — see **Cron run-event retention** below.
+dominant contributors are bounded — see **Cron run-event retention** (`kanna-cron`).
 `compactLoopWakeEvents` (`auto-continue/compact-loop-wakes.ts`) also trims
 superseded `loop_armed` events: once a later `loop_armed` or `loop_disarmed`
 arrives, all prior loop-state events (`loop_armed`, `loop_disarmed`,

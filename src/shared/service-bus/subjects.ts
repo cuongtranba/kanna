@@ -51,6 +51,7 @@ export const BUS_SUBJECT_SUFFIX = {
   cronDisarmed: "cron.disarmed",
   cronPaused: "cron.paused",
   cronResumed: "cron.resumed",
+  cronUpdated: "cron.updated",
   cronRunStarted: "cron.runStarted",
   cronRunOutcome: "cron.runOutcome",
   cronRunSkipped: "cron.runSkipped",
@@ -63,6 +64,7 @@ export const BUS_SUBJECT_SUFFIX = {
   taskIntegrated: "task.integrated",
   taskNote: "task.note",
   taskEpochAdvanced: "task.epochAdvanced",
+  taskListCleared: "task.listCleared",
   taskNativeSynced: "task.nativeSynced",
 } as const
 

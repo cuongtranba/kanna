@@ -39,6 +39,7 @@ function mountGesture(sidebarOpen: boolean): Harness {
       calls.push(`settle:${target}`)
       return new Promise<void>((resolve) => { resolveSettle = resolve })
     },
+    present: async (target) => { calls.push(`present:${target}`) },
     release: () => { calls.push("release") },
   }
 

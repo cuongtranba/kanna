@@ -99,7 +99,7 @@ fail. No answer means no test.
   literals. `as unknown as` builds a value production can never hold.
 - **Errors.** Guard for control flow, then assert only the promised payload, never
   the class, name, or message unless they are stable API.
-- **Never commit `.only` or `.skip`.** Use `test.failing` for a documented known bug.
+- **Never commit `.only` or `.skip`.** Use `test.fails` for a documented known bug.
   Never weaken, skip, or delete a valid test to get green; say the test is wrong.
 
 The injection shape (the remedy #1141 applied):
@@ -138,7 +138,7 @@ there (not a CLI flag), so a slower test gets an explicit timeout
   `const NODES = [...KANNA_MESSAGE_NODES]` spreads an export the cycle has not
   initialised yet. Make it lazy, as `renderMessage.tsx` does, rather than reordering
   imports.
-- **The `production` export condition is test-mode only.** Lexical 0.45's dev ESM build
+- **The `production` export condition is test-mode only.** Lexical's dev ESM build
   has a circular-dependency TDZ, so `resolve.conditions` and `ssr.resolve` carry
   `production` when `mode === "test"`. Setting it unconditionally changes the client
   build; `bun run build:client` + `bun run check:bundle` must report the same gzip bytes.
@@ -168,11 +168,8 @@ for this, because the setup file's sweep must run after every hook a test regist
 so a hung credential prompt cannot eat the 30s timeout from `vite.config.ts`.
 
 **`vi.mock` and `vi.doMock` are banned.** A module mock substitutes the module for
-every importer in the file and keeps passing when the real dependency breaks. Under the
-old `bun test` runner `mock.module` also rewrote the process-wide registry and killed
-unrelated suites in CI's file order, which blocked the v1.58.0 publish (#1141); Vitest
-isolates each file, so that is historical, but the policy stays. Inject the dependency
-instead (the shape above). `src/ops/testing/module-mock-guard.test.ts` fails any mock
+every importer in the file and keeps passing when the real dependency breaks. Inject the
+dependency instead (the shape above). `src/ops/testing/module-mock-guard.test.ts` fails any mock
 outside `LEGACY_MODULE_MOCKS`; that list only shrinks, so converting a file to
 injection deletes its entry in the same PR. The one sanctioned module patch is the
 `node:fs` watch shim in `scripts/test-setup.ts`, armed only by `KANNA_WATCH_LEAK=1`: it

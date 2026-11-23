@@ -5,6 +5,7 @@ import type { AgentProvider, ModelOptions, QueuedChatMessage, StackBinding } fro
 import { STORE_VERSION, DEFAULT_CHAT_TITLE } from "../shared/types"
 import { GLOBAL_PROMPT_APPEND_MAX_CHARS } from "../shared/app-settings-types"
 import type { ChatPermissionPolicyOverride, ToolRequest, ToolRequestDecision, ToolRequestStatus } from "../shared/permission-policy"
+import type { PeerInboundMode } from "../shared/peer-messaging/inbound"
 import type {
   ChatEvent,
   ChatRecord,
@@ -393,6 +394,18 @@ export function buildChatPolicyOverrideEvent(
   return {
     v: STORE_VERSION, type: "chat_policy_override_set", timestamp: Date.now(),
     chatId, policyOverride,
+  }
+}
+
+export function buildChatPeerInboundEvent(
+  chatsById: Map<string, ChatRecord>,
+  chatId: string,
+  peerInbound: PeerInboundMode | null,
+): ChatEvent {
+  requireLiveChat(chatsById, chatId)
+  return {
+    v: STORE_VERSION, type: "chat_peer_inbound_set", timestamp: Date.now(),
+    chatId, peerInbound,
   }
 }
 

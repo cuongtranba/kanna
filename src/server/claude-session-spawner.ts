@@ -19,6 +19,7 @@ import { log } from "../shared/log"
 import { pickOAuthTokenOrRefuse } from "./oauth-errors"
 import type { ClaudeSessionHandle, HarnessTurn, HarnessToolRequest } from "./harness-types"
 import { inboxToolPolicyOf } from "./claude-inbox-guard"
+import type { PeerMessenger } from "./peer-messaging/peer-messenger"
 import { ClaudeSessionState } from "./claude-session-state"
 import type { ActiveTurn, SessionBackgroundTask } from "./claude-session-state"
 import type { KannaMcpDelegationContext, SetupLoopHandlerResult } from "./kanna-mcp"
@@ -85,6 +86,7 @@ export interface SpawnClaudeTurnDeps {
   boardRegistry?: BoardRegistry
   inboxRegistry?: InboxRegistry
   beaconRegistry?: BeaconRegistry
+  peerMessenger?: PeerMessenger
   getBeacons?: () => readonly BeaconConfig[]
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
@@ -162,6 +164,7 @@ export async function spawnClaudeTurn(
       ...args.instructions,
       stackProjects: args.stackProjects,
       genui: isGenUIEnabled(),
+      peerMessaging: deps.peerMessenger !== undefined,
     })
     const chatIdForCtx = args.chatId
     const delegationContext: KannaMcpDelegationContext = {
@@ -221,6 +224,7 @@ export async function spawnClaudeTurn(
           inboxRegistry: deps.inboxRegistry,
           beaconRegistry: deps.beaconRegistry,
           getBeacons: deps.getBeacons,
+          peerMessenger: deps.peerMessenger,
         },
         toolCallback: deps.toolCallback ?? undefined,
         chatPolicy: deps.resolveChatPolicy(args.chatId),

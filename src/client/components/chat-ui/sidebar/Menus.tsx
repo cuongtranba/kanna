@@ -1,5 +1,5 @@
 import { type ReactNode } from "react"
-import { Archive, Code, Copy, EyeOff, FolderOpen, Pencil, Pin, PinOff, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2 } from "lucide-react"
+import { Archive, Code, Copy, EyeOff, FolderOpen, MessageSquare, MessageSquareOff, Pencil, Pin, PinOff, ScrollText, ShieldAlert, Split, SquareKanban, Star, StarOff, Trash2 } from "lucide-react"
 import { ContextMenu, ContextMenuTrigger } from "../../ui/context-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/popover"
 import { InputPopoverStore } from "../InputPopover.store"
@@ -84,6 +84,8 @@ export function ChatRowMenu({
   onTogglePin,
   onDelete,
   onEditPermissions,
+  acceptsPeerMessages,
+  onTogglePeerInbound,
   children,
 }: {
   canFork?: boolean
@@ -95,6 +97,8 @@ export function ChatRowMenu({
   onTogglePin: () => void
   onDelete: () => void
   onEditPermissions?: () => void
+  acceptsPeerMessages?: boolean
+  onTogglePeerInbound?: () => void
   children: ReactNode
 }) {
   const actions: MenuAction[] = [
@@ -110,6 +114,15 @@ export function ChatRowMenu({
     { id: "fork", label: "Fork", icon: Split, run: onFork, disabled: !canFork, keepsMenuOpen: true },
     ...(onEditPermissions
       ? [{ id: "permissions", label: "Permissions…", icon: ShieldAlert, run: onEditPermissions, keepsMenuOpen: true }]
+      : []),
+    ...(onTogglePeerInbound
+      ? [{
+          id: "peer-inbound",
+          label: acceptsPeerMessages ? "Stop accepting chat messages" : "Accept messages from other chats",
+          icon: acceptsPeerMessages ? MessageSquareOff : MessageSquare,
+          run: onTogglePeerInbound,
+          keepsMenuOpen: true,
+        }]
       : []),
     { id: "archive", label: "Archive", icon: Archive, run: onArchive, keepsMenuOpen: true },
     { id: "delete", label: "Delete", icon: Trash2, run: onDelete, destructive: true, keepsMenuOpen: true },

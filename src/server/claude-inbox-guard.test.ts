@@ -65,3 +65,9 @@ test("the legacy agent-reply turn and an ordinary turn are not restricted", asyn
   expect(await decisionFor(null, "Bash")).toBeUndefined()
   expect(await decisionFor(null, "mcp__zalo-mcp__zalo_send_message")).toBeUndefined()
 })
+
+test("a triage turn can neither message other chats nor wait for a reply from one", async () => {
+  const policy = policyForTurn("webhook-hook-1-delivery-9")
+  expect(await decisionFor(policy, "mcp__kanna__send_chat_message")).toBe("deny")
+  expect(await decisionFor(policy, "mcp__kanna__wait_for_chat_message")).toBe("deny")
+})

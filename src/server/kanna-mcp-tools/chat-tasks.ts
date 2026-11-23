@@ -22,7 +22,7 @@ import {
 } from "../../shared/chat-tasks/types"
 
 export const TASK_CREATE_DESCRIPTION =
-  "Add a task to THIS chat's durable task list. Unlike the CLI's own TaskCreate, this survives /clear, compaction and a server restart, and a subagent's call lands on the parent chat — which is what makes it usable as an autonomous loop's plan. Pass needs to declare dependencies, and worktree/branch when the task will be worked in its own git worktree. The list shows tasks in the order they were created and offers no way to reorder them, and parallel task_create calls are recorded in arbitrary order, so create tasks one call at a time in the order they should be listed."
+  "Add a task to THIS chat's durable task list. Unlike the CLI's own TaskCreate, this survives /clear, compaction and a server restart (only an inline /cron run starts with a cleared list), and a subagent's call lands on the parent chat — which is what makes it usable as an autonomous loop's plan. Pass needs to declare dependencies, and worktree/branch when the task will be worked in its own git worktree. The list shows tasks in the order they were created and offers no way to reorder them, and parallel task_create calls are recorded in arbitrary order, so create tasks one call at a time in the order they should be listed."
 
 export const TASK_UPDATE_DESCRIPTION =
   "Change a durable task: its status (pending / in_progress / completed), subject, description, dependencies or worktree. Replacing a task's status is how progress is recorded — there is no log to append to and no way for completed work to pile up and be redone."
@@ -37,7 +37,7 @@ export const TASK_NOTE_DESCRIPTION =
   "Record prose against the plan: kind 'failed_approach' so a later iteration does not repeat a dead end, 'progress' for what was done, 'decision' for why. Omit task_id for a note that belongs to the plan as a whole rather than one task."
 
 export const TASK_CLAIM_DESCRIPTION =
-  "Atomically lease ONE claimable task so no two workers ever get the same one. Returns the task plus a claim_id — pass that claim_id to delegate_subagent so the lease binds to the worker's run and is recovered if it dies. A task is claimable only when every id in its needs is completed and its worktree is not held by a live worker. When nothing is claimable the result says which: WAIT (a live worker still holds what the rest depend on — end your turn, it will wake you) or QUEUE BLOCKED (a cycle, an unknown dependency, or a missing worktree — stop and let a human repair the plan)."
+  "Atomically lease ONE claimable task so no two workers ever get the same one. Returns the task plus a claim_id — pass that claim_id to delegate_subagent so the lease binds to the worker's run and is recovered if it dies. A task is claimable only when every id in its needs is completed and its worktree is not held by a live worker. When nothing is claimable the result says which: WAIT (a live worker still holds what the rest depend on — end your turn, it will wake you), QUEUE BLOCKED (a cycle, an unknown dependency, or a missing worktree — stop and let a human repair the plan), or exhausted (every task is completed, or the list is empty — nothing is left to claim)."
 
 export const TASK_SETTLE_DESCRIPTION =
   "Settle a task you claimed. outcome 'done' marks it completed; outcome 'release' returns it to the plan so a later iteration retries it instead of the work being lost. Always call this before terminating — a lease you never settle is only recovered once Kanna notices your run has ended."

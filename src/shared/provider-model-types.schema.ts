@@ -1,5 +1,7 @@
 import { z } from "zod"
 import type {
+  AntigravityModelOptions,
+  AntigravityReasoningEffort,
   ClaudeContextWindow,
   ClaudeModelOptions,
   ClaudeReasoningEffort,
@@ -21,6 +23,7 @@ import { assertParity } from "./type-parity"
 
 export const claudeReasoningEffortSchema = z.enum(["low", "medium", "high", "xhigh", "max"])
 export const codexReasoningEffortSchema = z.enum(["minimal", "low", "medium", "high", "xhigh"])
+export const antigravityReasoningEffortSchema = z.enum(["low", "medium", "high"])
 export const claudeContextWindowSchema = z.enum(["200k", "1m"])
 
 export const claudeModelOptionsSchema = z.object({
@@ -33,19 +36,34 @@ export const codexModelOptionsSchema = z.object({
   fastMode: z.boolean(),
 })
 
+export const antigravityModelOptionsSchema = z.object({
+  reasoningEffort: antigravityReasoningEffortSchema,
+})
+
 export const openRouterModelOptionsSchema = z.record(z.string(), z.never())
 
 const optionalSlotSchema = z.record(z.string(), z.never().optional())
 
 export const partialClaudeModelOptionsSchema = claudeModelOptionsSchema.partial()
 export const partialCodexModelOptionsSchema = codexModelOptionsSchema.partial()
+export const partialAntigravityModelOptionsSchema = antigravityModelOptionsSchema.partial()
 
 export const strictPartialClaudeModelOptionsSchema = z.strictObject(partialClaudeModelOptionsSchema.shape)
 export const strictPartialCodexModelOptionsSchema = z.strictObject(partialCodexModelOptionsSchema.shape)
+export const strictPartialAntigravityModelOptionsSchema = z.strictObject(partialAntigravityModelOptionsSchema.shape)
 
 export const modelOptionsSchema = z.object({
   claude: partialClaudeModelOptionsSchema.optional(),
   codex: partialCodexModelOptionsSchema.optional(),
+  antigravity: partialAntigravityModelOptionsSchema.optional(),
+  openrouter: optionalSlotSchema.optional(),
+  custom: optionalSlotSchema.optional(),
+})
+
+export const strictModelOptionsSchema = z.strictObject({
+  claude: strictPartialClaudeModelOptionsSchema.optional(),
+  codex: strictPartialCodexModelOptionsSchema.optional(),
+  antigravity: strictPartialAntigravityModelOptionsSchema.optional(),
   openrouter: optionalSlotSchema.optional(),
   custom: optionalSlotSchema.optional(),
 })
@@ -85,6 +103,7 @@ function providerPreferenceSchema<M extends z.ZodType>(modelOptions: M) {
 export const chatProviderPreferencesSchema = z.object({
   claude: providerPreferenceSchema(claudeModelOptionsSchema),
   codex: providerPreferenceSchema(codexModelOptionsSchema),
+  antigravity: providerPreferenceSchema(antigravityModelOptionsSchema),
   openrouter: providerPreferenceSchema(openRouterModelOptionsSchema),
   custom: providerPreferenceSchema(openRouterModelOptionsSchema),
 })
@@ -111,11 +130,14 @@ export const textSnippetPatchSchema = textSnippetInputSchema.partial()
 
 assertParity<z.output<typeof claudeReasoningEffortSchema>, ClaudeReasoningEffort>()
 assertParity<z.output<typeof codexReasoningEffortSchema>, CodexReasoningEffort>()
+assertParity<z.output<typeof antigravityReasoningEffortSchema>, AntigravityReasoningEffort>()
+assertParity<z.output<typeof antigravityModelOptionsSchema>, AntigravityModelOptions>()
 assertParity<z.output<typeof claudeContextWindowSchema>, ClaudeContextWindow>()
 assertParity<z.output<typeof claudeModelOptionsSchema>, ClaudeModelOptions>()
 assertParity<z.output<typeof codexModelOptionsSchema>, CodexModelOptions>()
 assertParity<z.output<typeof openRouterModelOptionsSchema>, OpenRouterModelOptions>()
 assertParity<z.output<typeof modelOptionsSchema>, ModelOptions>()
+assertParity<z.output<typeof strictModelOptionsSchema>, ModelOptions>()
 assertParity<z.output<typeof providerContextWindowOptionSchema>, ProviderContextWindowOption>()
 assertParity<z.output<typeof customModelInputSchema>, CustomModelInput>()
 assertParity<z.output<typeof customModelPatchSchema>, CustomModelPatch>()

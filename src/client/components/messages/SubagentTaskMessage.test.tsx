@@ -42,6 +42,13 @@ describe("SubagentTaskMessage", () => {
     expect(html).toContain("2 reads")
     expect(html).toContain("1 edit")
   })
+
+  test("shows the resolved model over the requested one", () => {
+    const html = renderThemed(
+      <SubagentTaskMessage subagentType="x" model="opus" result={{ ...RESULT, resolvedModel: "claude-opus-5-5" }} />
+    )
+    expect(html).toContain("claude-opus-5-5")
+  })
 })
 
 describe("SubagentTaskMessage — expandable drill-in", () => {

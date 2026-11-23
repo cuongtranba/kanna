@@ -6,11 +6,11 @@ description: Quick answers.
 ## Is Kanna free?
 
 The Kanna software itself is free and open source. Underlying provider costs
-(Claude, Codex, OpenRouter) depend on your account.
+(Claude, Codex, Antigravity, OpenRouter) depend on your account.
 
 ## Does Kanna upload my code anywhere?
 
-No. The agent runs locally — `claude` or `codex` CLI subprocesses on your
+No. The agent runs locally — `claude`, `codex` or `agy` CLI subprocesses on your
 machine. Only the prompts and tool outputs you explicitly send go to the model.
 
 Telemetry (turn timings, memory, run counts — never prompt or code content) is
@@ -23,7 +23,7 @@ Whichever plan the OAuth token you registered belongs to. Kanna passes your
 token through to the Claude Agent SDK; add one in
 [Settings → Providers](/getting-started/oauth-pool-setup/).
 
-## Can I use both Claude and Codex in the same chat?
+## Can I use more than one provider in the same chat?
 
 Yes — switch providers mid-chat from the composer. Previous turns remain
 unchanged; the new turn uses the picked provider.

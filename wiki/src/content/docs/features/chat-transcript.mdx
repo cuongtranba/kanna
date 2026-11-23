@@ -11,8 +11,8 @@ import Diagram from '../../../components/Diagram.astro'
 On chats that run on the Claude Agent SDK (Claude, OpenRouter and custom endpoints) you
 watch the model work instead of a spinner. Its thinking, the reply it is writing, and a
 tool call being prepared (with the file it targets and the size of its input so far)
-stream into the transcript as they are generated. Codex chats show finished entries
-only. When a block finishes, the live preview is replaced by the finished entry in the
+stream into the transcript as they are generated. Codex and Antigravity chats show
+finished entries only. When a block finishes, the live preview is replaced by the finished entry in the
 same frame.
 
 The reply is typed out with a small caret rather than appearing in jumps. The text on
@@ -118,7 +118,7 @@ A task the agent launches in the background — a dev server, a long build, an a
 
 They are more than a display. A chat with a live background task is held open: Kanna will not reap the session out from under a task that is still running, which is what used to kill long jobs silently a few minutes after they went quiet. The chat also keeps showing as running while the agent works after its turn, rather than looking idle.
 
-Pending tool requests survive a server restart and replay on reconnect (with `KANNA_MCP_TOOL_CALLBACKS=1`).
+A question or plan waiting for your answer is still there when the browser reconnects. A server restart does not keep it; ask the agent again after a restart.
 
 ## Auto-resume on rate limit
 

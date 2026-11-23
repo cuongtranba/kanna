@@ -1,6 +1,6 @@
 import { pendingActionKey, usePendingActionsStore } from "../../../stores/pendingActionsStore"
 
-const CHAT_ROW_ACTIONS = ["chat.rename", "chat.fork", "chat.archive", "chat.setPin", "chat.delete", "chat.openInFinder"] as const
+const CHAT_ROW_ACTIONS = ["chat.rename", "chat.fork", "chat.archive", "chat.setPin", "chat.delete", "chat.openInFinder", "chat.setPeerInbound"] as const
 
 export type ChatRowAction = (typeof CHAT_ROW_ACTIONS)[number]
 

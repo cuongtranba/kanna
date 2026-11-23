@@ -6,6 +6,8 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "no
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CodexAppServerManager, normalizeCodexTokenUsage, type CodexSessionScope } from "./codex-app-server"
+import type { CustomMcpServerGrant } from "./claude-session-config-helpers"
+import type { McpServerConfig } from "../shared/types"
 
 class FakeCodexProcess extends EventEmitter {
   readonly stdin = new PassThrough()
@@ -198,6 +200,70 @@ describe("CodexAppServerManager", () => {
 
     const threadResume = process.messages.find((message: any) => message.method === "thread/resume") as any
     expect(threadResume.params.config).toEqual({ "tools.update_plan": { enabled: true } })
+  })
+
+  test("a Codex session offers every enabled custom MCP server in its thread config", async () => {
+    const stamps = { enabled: true, createdAt: "", updatedAt: "", lastTest: { status: "untested" } } as const
+    const servers: McpServerConfig[] = [
+      { ...stamps, id: "s1", name: "files", transport: "stdio", command: "/bin/files", args: ["--x"], env: { A: "1" }, cwd: "/srv" },
+      { ...stamps, id: "h1", name: "design", transport: "http", url: "https://example.com/mcp", headers: { K: "v", Authorization: "Bearer TOKEN" } },
+      { ...stamps, id: "e1", name: "events", transport: "sse", url: "https://example.com/sse", headers: {} },
+    ]
+    const grant: CustomMcpServerGrant = { servers, usableUntil: null }
+    const expectedConfig = {
+      "tools.update_plan": { enabled: true },
+      "mcp_servers.files": { command: "/bin/files", args: ["--x"], env: { A: "1" }, cwd: "/srv" },
+      "mcp_servers.design": { url: "https://example.com/mcp", http_headers: { K: "v", Authorization: "Bearer TOKEN" } },
+    }
+    for (const scope of ["main", "sub:run-1"] as const) {
+      const process = new FakeCodexProcess((message, child) => {
+        if (message.method === "initialize") {
+          child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+        } else if (message.method === "thread/start" || message.method === "thread/resume") {
+          child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-1" } } })
+        }
+      })
+      const manager = new CodexAppServerManager({
+        spawnProcess: () => process as never,
+        resolveCustomMcpServers: async () => grant,
+      })
+
+      await manager.startSession({ chatId: "chat-1", scope, cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+      await manager.startSession({ chatId: "chat-2", scope, cwd: "/tmp/project", model: "gpt-5.4", sessionToken: "thread-old" })
+
+      const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+      const threadResume = process.messages.find((message: any) => message.method === "thread/resume") as any
+      expect(threadStart.params.config).toEqual(expectedConfig)
+      expect(threadResume.params.config).toEqual(expectedConfig)
+    }
+  })
+
+  test("a session whose MCP bearer has expired respawns on the next start", async () => {
+    let clock = 1_000
+    let spawned = 0
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => {
+        spawned += 1
+        return new FakeCodexProcess((message, child) => {
+          if (message.method === "initialize") {
+            child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+          } else if (message.method === "thread/start") {
+            child.writeServerMessage({ id: message.id, result: { thread: { id: "thread-1" } } })
+          }
+        }) as never
+      },
+      resolveCustomMcpServers: async () => ({ servers: [], usableUntil: 2_000 }),
+      now: () => clock,
+    })
+    const start = () => manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+
+    await start()
+    await start()
+    expect(spawned).toBe(1)
+
+    clock = 2_000
+    await start()
+    expect(spawned).toBe(2)
   })
 
   test("maps fast mode and reasoning into app-server params", async () => {
@@ -1418,6 +1484,86 @@ describe("CodexAppServerManager", () => {
     })
   })
 
+  test("offers Kanna tools on thread/start and routes their calls to the Kanna handler with the calling chat", async () => {
+    const calls: Array<{ chatId: string; tool: string; args: JsonValue }> = []
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+        for (const [id, tool] of [["dyn-kanna", "send_chat_message"], ["dyn-other", "custom_tool"]]) {
+          child.writeServerMessage({
+            id,
+            method: "item/tool/call",
+            params: { threadId: "thread-1", turnId: "turn-1", callId: id, tool, arguments: { to: "chat-2" } },
+          })
+        }
+        child.writeServerMessage({
+          method: "turn/completed",
+          params: { threadId: "thread-1", turn: { id: "turn-1", status: "completed", error: null } },
+        })
+      }
+    })
+    const specs = [{ type: "function" as const, name: "send_chat_message", description: "Send", inputSchema: { type: "object" } }]
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+      kannaTools: {
+        specs,
+        call: async (chatId, tool, args) => {
+          if (tool !== "send_chat_message") return null
+          calls.push({ chatId, tool, args })
+          return { text: "delivered", isError: false }
+        },
+      },
+    })
+
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    const turn = await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "go", planMode: false, onToolRequest: async () => ({}) })
+    await collectStream(turn.stream)
+
+    const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+    expect(threadStart.params.dynamicTools).toEqual(specs)
+    expect(calls).toEqual([{ chatId: "chat-1", tool: "send_chat_message", args: { to: "chat-2" } }])
+    expect(process.messages.find((message: any) => message.id === "dyn-kanna")).toEqual({
+      id: "dyn-kanna",
+      result: { contentItems: [{ type: "inputText", text: "delivered" }], success: true },
+    })
+    expect(process.messages.find((message: any) => message.id === "dyn-other")).toEqual({
+      id: "dyn-other",
+      result: { contentItems: [{ type: "inputText", text: "Unsupported dynamic tool call: custom_tool" }], success: false },
+    })
+  })
+
+  test("does not offer Kanna tools to a subagent session", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      }
+    })
+    const manager = new CodexAppServerManager({
+      spawnProcess: () => process as never,
+      kannaTools: { specs: [], call: async () => null },
+    })
+
+    await manager.startSession({ chatId: "chat-1", scope: "sub:run-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+
+    const threadStart = process.messages.find((message: any) => message.method === "thread/start") as any
+    expect(threadStart.params.dynamicTools).toBeUndefined()
+  })
+
   test("answers requestUserInput requests with the official JSON-RPC result payload", async () => {
     const process = new FakeCodexProcess((message, child) => {
       if (message.method === "initialize") {
@@ -1810,6 +1956,65 @@ describe("CodexAppServerManager", () => {
         turnId: "turn-1",
       },
     })
+  })
+
+  test("steerTurn sends the text into the running turn and reports success", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+      } else if (message.method === "turn/steer") {
+        child.writeServerMessage({ id: message.id, result: { turnId: "turn-1" } })
+      }
+    })
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "work", planMode: false, onToolRequest: async () => ({}) })
+
+    expect(await manager.steerTurn("chat-1", "also check the logs", "queued-1")).toBe(true)
+
+    const steer = process.messages.find((message: any) => message.method === "turn/steer") as any
+    expect(steer.params).toEqual({
+      threadId: "thread-1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "also check the logs", text_elements: [] }],
+      clientUserMessageId: "queued-1",
+    })
+  })
+
+  test("steerTurn reports failure when no turn is running or the app-server refuses", async () => {
+    const process = new FakeCodexProcess((message, child) => {
+      if (message.method === "initialize") {
+        child.writeServerMessage({ id: message.id, result: { userAgent: "codex-test" } })
+      } else if (message.method === "thread/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { thread: { id: "thread-1" }, model: "gpt-5.4", reasoningEffort: "high" },
+        })
+      } else if (message.method === "turn/start") {
+        child.writeServerMessage({
+          id: message.id,
+          result: { turn: { id: "turn-1", status: "inProgress", error: null } },
+        })
+      } else if (message.method === "turn/steer") {
+        child.writeServerMessage({ id: message.id, error: { message: "no active turn to steer" } })
+      }
+    })
+    const manager = new CodexAppServerManager({ spawnProcess: () => process as never })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
+    await manager.startSession({ chatId: "chat-1", cwd: "/tmp/project", model: "gpt-5.4", sessionToken: null })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
+    await manager.startTurn({ chatId: "chat-1", model: "gpt-5.4", content: "work", planMode: false, onToolRequest: async () => ({}) })
+    expect(await manager.steerTurn("chat-1", "hello", "queued-1")).toBe(false)
   })
 
   test("interrupt clears a pending exit-plan wait so a new turn can start immediately", async () => {

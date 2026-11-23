@@ -3,10 +3,9 @@ import { resolveModelPrice } from "../shared/token-pricing"
 import { DEFAULT_CODEX_CHAT_MODEL } from "../shared/provider-model-types"
 import { defaultSpawnCodexAppServer } from "./codex-spawn.adapter"
 import { createInterface } from "node:readline"
-import type { Readable, Writable } from "node:stream"
+import type { StdioProcess } from "./stdio-process"
 import type {
   CodexReasoningEffort,
-  ContextWindowUsageSnapshot,
   ServiceTier,
   TranscriptEntry,
 } from "../shared/types"
@@ -15,12 +14,7 @@ import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-ty
 import {
   type ContextCompactedNotification,
   type CodexRequestId,
-  type CommandExecutionApprovalDecision,
-  type CommandExecutionRequestApprovalParams,
   type CommandExecutionRequestApprovalResponse,
-  type DynamicToolCallResponse,
-  type FileChangeApprovalDecision,
-  type FileChangeRequestApprovalParams,
   type FileChangeRequestApprovalResponse,
   type InitializeParams,
   type ItemCompletedNotification,
@@ -33,20 +27,23 @@ import {
   type ThreadForkParams,
   type ThreadStartParams,
   type ThreadTokenUsageUpdatedNotification,
-  type TurnPlanStep,
   type TurnPlanUpdatedNotification,
   type TurnCompletedNotification,
   type TurnInterruptParams,
   type TurnStartParams,
+  type TurnSteerParams,
   isJsonRpcResponse,
   isServerNotification,
   isServerRequest,
 } from "./codex-app-server-protocol"
-import { isJsonObject, safeJsonParse } from "../shared/json"
-import { parsePlanSteps } from "./codex-plan-steps"
+import { safeJsonParse } from "../shared/json"
+import { AsyncQueue } from "./async-queue"
+import type { PendingTurn } from "./codex-pending-turn"
 import { timestamped } from "../shared/transcript-entry"
 import { errorMessage as sharedErrorMessage, toError } from "../shared/errors"
 import type { JsonObject, JsonValue } from "../shared/json"
+import { log } from "../shared/log"
+import type { CustomMcpServerGrant, ResolveCustomMcpServers } from "./claude-session-config-helpers"
 import { type CodexErrorInfo } from "../shared/codex-error-classification"
 import {
   type TranslationContext,
@@ -61,23 +58,12 @@ import {
   webSearchQuery,
   DEFERRED_DYNAMIC_TOOLS,
 } from "./codex-transcript-translator"
-import { dynamicToolPayload, genericDynamicToolCall, toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { toAskUserQuestionRawInput, toToolRequestUserInputResponse } from "./codex-tool-payloads"
+import { answerDynamicToolCall, type CodexKannaTools } from "./codex-dynamic-tool-call"
 import { decodeNestedId, type CodexRequestParams, type OutgoingCodexMessage } from "./codex-app-server-decode"
 export { normalizeCodexTokenUsage } from "./codex-transcript-translator"
 
-export interface CodexAppServerProcess {
-  stdin: Writable
-  stdout: Readable
-  stderr: Readable
-  killed?: boolean
-  kill(signal?: NodeJS.Signals | number): void
-  on(event: "close", listener: (code: number | null) => void): this
-  on(event: "error", listener: (error: Error) => void): this
-  once(event: "close", listener: (code: number | null) => void): this
-  once(event: "error", listener: (error: Error) => void): this
-}
-
-export type SpawnCodexAppServer = (cwd: string) => CodexAppServerProcess
+export type SpawnCodexAppServer = (cwd: string) => StdioProcess
 
 const CODEX_THREAD_CONFIG: JsonObject = { "tools.update_plan": { enabled: true } }
 
@@ -85,8 +71,32 @@ const KANNA_THREAD_POLICY = {
   approvalPolicy: "never",
   sandbox: "danger-full-access",
   persistExtendedHistory: false,
-  config: CODEX_THREAD_CONFIG,
 } as const
+
+const NO_CUSTOM_MCP_SERVERS: CustomMcpServerGrant = { servers: [], usableUntil: null }
+
+function codexMcpServerEntries(grant: CustomMcpServerGrant): JsonObject {
+  const entries: [string, JsonObject][] = []
+  const skipped: string[] = []
+  for (const server of grant.servers) {
+    if (server.transport === "stdio") {
+      entries.push([`mcp_servers.${server.name}`, {
+        command: server.command,
+        args: server.args,
+        env: server.env,
+        ...(server.cwd ? { cwd: server.cwd } : {}),
+      }])
+    } else if (server.transport === "http") {
+      entries.push([`mcp_servers.${server.name}`, { url: server.url, http_headers: server.headers }])
+    } else {
+      skipped.push(server.name)
+    }
+  }
+  if (skipped.length > 0) {
+    log.warn("[kanna/codex] custom MCP servers skipped, Codex supports only stdio and http:", skipped.join(", "))
+  }
+  return Object.fromEntries(entries)
+}
 
 const QUICK_SERVICE_TIER = "fast"
 
@@ -96,45 +106,16 @@ interface PendingRequest<TResult> {
   reject: (error: Error) => void
 }
 
-interface PendingTurn {
-  turnId: string | null
-  model: string
-  planMode: boolean
-  queue: AsyncQueue<HarnessEvent>
-  startedToolIds: Set<string>
-  handledDynamicToolIds: Set<string>
-  latestPlanExplanation: string | null
-  latestPlanSteps: TurnPlanStep[]
-  latestPlanText: string | null
-  planTextByItemId: Map<string, string>
-  todoSequence: number
-  pendingWebSearchResultToolId: string | null
-  lastUsageSnapshot?: ContextWindowUsageSnapshot
-  onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
-  onApprovalRequest?: (
-    request:
-      | {
-          requestId: CodexRequestId
-          kind: "command_execution"
-          params: CommandExecutionRequestApprovalParams
-        }
-      | {
-          requestId: CodexRequestId
-          kind: "file_change"
-          params: FileChangeRequestApprovalParams
-        }
-  ) => Promise<CommandExecutionApprovalDecision | FileChangeApprovalDecision>
-}
-
 interface SessionContext {
   chatId: string
   scope: CodexSessionScope
   cwd: string
   projectId: string | null
-  child: CodexAppServerProcess
+  child: StdioProcess
   pendingRequests: Map<CodexRequestId, PendingRequest<JsonValue>>
   pendingTurn: PendingTurn | null
   sessionToken: string | null
+  mcpUsableUntil: number | null
   stderrLines: string[]
   closed: boolean
 }
@@ -186,55 +167,12 @@ function isRecoverableResumeError(error: Error): boolean {
   )
 }
 
-class AsyncQueue<T> implements AsyncIterable<T> {
-  private values: T[] = []
-  private resolvers: Array<(value: IteratorResult<T>) => void> = []
-  private done = false
-
-  push(value: T) {
-    if (this.done) return
-    const resolver = this.resolvers.shift()
-    if (resolver) {
-      resolver({ value, done: false })
-      return
-    }
-    this.values.push(value)
-  }
-
-  finish() {
-    if (this.done) return
-    this.done = true
-    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    while (this.resolvers.length > 0) {
-      const resolver = this.resolvers.shift()
-      resolver?.(doneResult)
-    }
-  }
-
-  [Symbol.asyncIterator](): AsyncIterator<T> {
-    const doneResult: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    return {
-      next: () => {
-        if (this.values.length > 0) {
-          const next = this.values.shift()
-          if (next !== undefined) {
-            return Promise.resolve({ value: next, done: false as const })
-          }
-        }
-        if (this.done) {
-          return Promise.resolve(doneResult)
-        }
-        return new Promise<IteratorResult<T>>((resolve) => {
-          this.resolvers.push(resolve)
-        })
-      },
-    }
-  }
-}
-
 export class CodexAppServerManager {
   private readonly sessions = new Map<string, SessionContext>()
   private readonly spawnProcess: SpawnCodexAppServer
+  private readonly kannaTools: CodexKannaTools | undefined
+  private readonly resolveCustomMcpServers: ResolveCustomMcpServers | undefined
+  private readonly now: () => number
 
   private static keyFor(chatId: string, scope: CodexSessionScope = "main"): string {
     if (scope === "sub:") {
@@ -243,15 +181,35 @@ export class CodexAppServerManager {
     return `${chatId}::${scope}`
   }
 
-  constructor(args: { spawnProcess?: SpawnCodexAppServer } = {}) {
+  constructor(
+    args: {
+      spawnProcess?: SpawnCodexAppServer
+      kannaTools?: CodexKannaTools
+      resolveCustomMcpServers?: ResolveCustomMcpServers
+      now?: () => number
+    } = {},
+  ) {
     this.spawnProcess = args.spawnProcess ?? defaultSpawnCodexAppServer
+    this.kannaTools = args.kannaTools
+    this.resolveCustomMcpServers = args.resolveCustomMcpServers
+    this.now = args.now ?? Date.now
+  }
+
+  get offersKannaTools(): boolean {
+    return this.kannaTools !== undefined
   }
 
   async startSession(args: StartCodexSessionArgs) {
     const scope: CodexSessionScope = args.scope ?? "main"
     const key = CodexAppServerManager.keyFor(args.chatId, scope)
     const existing = this.sessions.get(key)
-    if (existing && !existing.closed && existing.cwd === args.cwd && !args.pendingForkSessionToken) {
+    if (
+      existing
+      && !existing.closed
+      && existing.cwd === args.cwd
+      && !args.pendingForkSessionToken
+      && (existing.pendingTurn !== null || existing.mcpUsableUntil === null || this.now() < existing.mcpUsableUntil)
+    ) {
       return
     }
 
@@ -269,6 +227,7 @@ export class CodexAppServerManager {
       pendingRequests: new Map(),
       pendingTurn: null,
       sessionToken: null,
+      mcpUsableUntil: null,
       stderrLines: [],
       closed: false,
     }
@@ -289,19 +248,24 @@ export class CodexAppServerManager {
       method: "initialized",
     })
 
+    const customMcp = this.resolveCustomMcpServers ? await this.resolveCustomMcpServers() : NO_CUSTOM_MCP_SERVERS
+    context.mcpUsableUntil = customMcp.usableUntil
+    const policy = { ...KANNA_THREAD_POLICY, config: { ...CODEX_THREAD_CONFIG, ...codexMcpServerEntries(customMcp) } }
+
     const threadParams = {
-      ...KANNA_THREAD_POLICY,
+      ...policy,
       model: args.model,
       cwd: args.cwd,
       serviceTier: args.serviceTier,
       experimentalRawEvents: false,
       developerInstructions: args.developerInstructions?.trim() || null,
+      ...(scope === "main" && this.kannaTools ? { dynamicTools: this.kannaTools.specs } : {}),
     } satisfies ThreadStartParams
 
     let threadId: string
     if (args.pendingForkSessionToken) {
       threadId = await this.requestThreadId(context, "thread/fork", {
-        ...KANNA_THREAD_POLICY,
+        ...policy,
         threadId: args.pendingForkSessionToken,
         model: args.model,
         cwd: args.cwd,
@@ -310,7 +274,7 @@ export class CodexAppServerManager {
     } else if (args.sessionToken) {
       try {
         threadId = await this.requestThreadId(context, "thread/resume", {
-          ...KANNA_THREAD_POLICY,
+          ...policy,
           threadId: args.sessionToken,
           model: args.model,
           cwd: args.cwd,
@@ -407,6 +371,23 @@ export class CodexAppServerManager {
     }
   }
 
+  async steerTurn(chatId: string, text: string, clientUserMessageId: string): Promise<boolean> {
+    const context = this.sessions.get(CodexAppServerManager.keyFor(chatId, "main"))
+    const turnId = context?.pendingTurn?.turnId
+    if (!context || !turnId || !context.sessionToken) return false
+    try {
+      await this.sendRequest(context, "turn/steer", {
+        threadId: context.sessionToken,
+        expectedTurnId: turnId,
+        input: [{ type: "text", text, text_elements: [] }],
+        clientUserMessageId,
+      } satisfies TurnSteerParams)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async generateStructured(args: GenerateStructuredArgs): Promise<string | null> {
     const chatId = `quick-${randomUUID()}`
     let turn: HarnessTurn | null = null
@@ -440,6 +421,7 @@ export class CodexAppServerManager {
           case "session_token": break
           case "rate_limit": break
           case "live": break
+          case "prompt_delivered": break
           case "transcript": {
             if (event.entry.kind === "assistant_text") {
               assistantText += assistantText ? `\n${event.entry.text}` : event.entry.text
@@ -608,60 +590,14 @@ export class CodexAppServerManager {
     }
 
     if (request.method === "item/tool/call") {
-      pendingTurn.handledDynamicToolIds.add(request.params.callId)
-      if (request.params.tool === "update_plan") {
-        const rawArguments = request.params.arguments
-        const plan = rawArguments !== undefined && isJsonObject(rawArguments) ? parsePlanSteps(rawArguments) : null
-
-        if (plan !== null) {
-          pendingTurn.latestPlanSteps = plan.steps
-          pendingTurn.latestPlanExplanation = plan.explanation ?? pendingTurn.latestPlanExplanation
-          pendingTurn.queue.push({
-            type: "transcript",
-            entry: todoToolCall(request.params.callId, plan.steps),
-          })
-          pendingTurn.queue.push({
-            type: "transcript",
-            entry: timestamped({
-              kind: "tool_result",
-              toolId: request.params.callId,
-              content: "",
-            }),
-          })
-        }
-
-        this.writeMessage(context, {
-          id: request.id,
-          result: {
-            contentItems: [],
-            success: true,
-          } satisfies DynamicToolCallResponse,
-        })
-        return
-      }
-
-      const payload = dynamicToolPayload(request.params.arguments)
-      pendingTurn.queue.push({
-        type: "transcript",
-        entry: genericDynamicToolCall(request.params.callId, request.params.tool, payload),
+      const result = await answerDynamicToolCall({
+        request,
+        turn: pendingTurn,
+        chatId: context.chatId,
+        isMainScope: context.scope === "main",
+        kannaTools: this.kannaTools,
       })
-      const errorMessage = `Unsupported dynamic tool call: ${request.params.tool}`
-      pendingTurn.queue.push({
-        type: "transcript",
-        entry: timestamped({
-          kind: "tool_result",
-          toolId: request.params.callId,
-          content: errorMessage,
-          isError: true,
-        }),
-      })
-      this.writeMessage(context, {
-        id: request.id,
-        result: {
-          contentItems: [{ type: "inputText", text: errorMessage }],
-          success: false,
-        } satisfies DynamicToolCallResponse,
-      })
+      this.writeMessage(context, { id: request.id, result })
       return
     }
 

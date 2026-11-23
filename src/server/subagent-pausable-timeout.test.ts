@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import { PausableTimeout } from "./subagent-orchestrator"
+import { PausableTimeout } from "./subagent-pausable-timeout"
 
 const noop = () => {}
 

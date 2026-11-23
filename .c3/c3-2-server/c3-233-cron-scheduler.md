@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: 72f979cf209219d1ce0a755594fc3cfd87aae2193d926b65eec95ae127011a4b
+c3-seal: a86f9c8f7970f19e2973da9e0625f11ee332660b5650aa9c4a6aafde54ba3520
 title: cron-scheduler
 type: component
 category: feature
@@ -43,14 +43,23 @@ parsed commands (arm/list/remove/pause/resume/update) through `emitCronEvent` �
 one write path: append event, scheduler.onEvent, chat broadcast, global-topic
 push — and refuses every invalid line through the single `refuseCronCommand`
 choke point, which cards the failure and offers it to the model together.
-The `update` case reads the current job from `deriveCronJobs`, guards against
-an active run (`hasActiveRun`), merges the `CronJobPatch`, and emits ONE
-`cron_armed` event with the same `scheduleId` — the "re-arming replaces
-wholesale" read-model rule handles idempotency. An optional `paused?: boolean`
-field on `cron_armed` preserves the paused state on update; both `deriveCronJobs`
-and `CronScheduler.onEvent` derive paused as `event.paused ?? false`; the
-scheduler skips `arm()` when the job is paused. The `update_cron` MCP tool
-wraps the update dispatch; a `cron.update` WS command exposes it from the UI.
+The `update` case reads the current job from `deriveCronJobs`, merges the
+`CronJobPatch`, and emits ONE `cron_updated` event with the same `scheduleId`.
+`cron_updated` edits the definition in place: the read model overwrites
+instruction, mode, scheduleText and schedule, overwrites model and modelOptions
+only when the event carries them (an event logged before they were updatable
+replays without wiping an armed model), and keeps runs, armedAt and paused. A
+patched modelOptions merges per provider into the stored one, so an effort
+change keeps a stored context window. `cronJobPatchSchema` is strict, so a
+`cron.update` patch with an unknown key is rejected instead of acknowledged as
+a no-op. `fireCronJob` enqueues the job's model and modelOptions, forcing the
+1M window when the model id carries the `[1m]` suffix, so an update is accepted while a run is in flight and that run still
+settles; `findRunningCronRuns` and `compactCronRunEvents` ignore it, unlike a
+re-arming `cron_armed`, which would orphan the live run. The scheduler mutates
+the existing armed job's schedule and re-arms it unless paused, so the next
+fire is re-timed at once and `runFire` re-arms the same object. The fire path
+reads the job at fire time, so the change applies from the next tick. The `update_cron` MCP tool
+wraps the update dispatch (schedule, mode, instruction, model, effort); a `cron.update` WS command exposes it from the UI.
 `createCronRepair` is the repair offer: when the parser produced no suggestion of
 its own it enqueues a repair prompt and drains the queue (`/cron` starts no
 turn, so nothing else would), bounded to arm-shaped failures, one ask per
@@ -120,7 +129,7 @@ scheduler (c3-227), UI rendering (c3-120).
 
 | Surface | Direction | Contract | Boundary | Evidence |
 | --- | --- | --- | --- | --- |
-| Cron events | OUT | cron_armed/cron_disarmed/cron_paused/cron_resumed/cron_run_started/cron_run_outcome/cron_run_skipped on the auto-continue JSONL log; scheduleId doubles as job id | c3-227 | src/server/auto-continue/events.ts, src/server/cron/commands.ts |
+| Cron events | OUT | cron_armed/cron_updated/cron_disarmed/cron_paused/cron_resumed/cron_run_started/cron_run_outcome/cron_run_skipped on the auto-continue JSONL log; scheduleId doubles as job id | c3-227 | src/server/auto-continue/events.ts, src/server/cron/commands.ts |
 | /cron dispatch | IN | runBuiltinCommand routes every parsed /cron message (valid or error) to runCronCommand; never starts a turn | c3-210 | src/server/claude-send-command.ts, src/server/cron/commands.ts |
 | Fire | IN | CronScheduler fire callback invokes AgentCoordinator.fireCronJob(chatId, jobId); inline clears context then enqueues; spawn creates a chat then enqueues there; a skipped tick writes only what CronSkipCoalescer hands back, and both fire paths flush the pending streak before starting a run | c3-210 | src/server/cron/scheduler.ts, src/server/cron/fire.ts, src/server/cron/skip-coalescer.ts |
 | Run outcome | IN | The EventStore.subscribeTurnTerminal listener AgentCoordinator.handleTurnTerminal (fed by the single recordTurnFinished/Failed/Cancelled choke point) reports the tagged turn's outcome; recordCronTurnOutcome lands it on the arming chat | c3-206 | src/server/event-store.ts, src/server/cron/fire.ts |

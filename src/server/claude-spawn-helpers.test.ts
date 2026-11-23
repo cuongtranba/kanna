@@ -8,16 +8,12 @@ import {
   type BuildCanUseToolArgs,
 } from "./claude-spawn-helpers"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
-import type { ToolCallbackService } from "./tool-callback"
 import type { JsonValue } from "../shared/json"
 import type { HarnessToolRequest } from "./harness-types"
 
 
 function makeArgs(overrides: Partial<BuildCanUseToolArgs> = {}): BuildCanUseToolArgs {
   return {
-    localPath: "/tmp/test",
-    chatId: "chat-1",
-    sessionToken: "tok-1",
     onToolRequest: async (_req) => ({ confirmed: true }),
     ...overrides,
   }
@@ -85,72 +81,6 @@ describe("buildCanUseTool", () => {
     )
     const result = await canUseTool("ExitPlanMode", { plan: "the plan" }, TOOL_OPTIONS)
     expect(result.behavior).toBe("allow")
-  })
-
-  test("routes AskUserQuestion through toolCallback when KANNA_MCP_TOOL_CALLBACKS=1", async () => {
-    const originalEnv = process.env.KANNA_MCP_TOOL_CALLBACKS
-    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
-    try {
-      const toolCallback: ToolCallbackService = {
-        submit: vi.fn(async () => ({
-          status: "answered" as const,
-          decision: {
-            kind: "allow" as const,
-            payload: { answers: { q1: "yes" }, questions: [] },
-          },
-        })),
-        answer: vi.fn(async () => {}),
-        cancel: vi.fn(async () => {}),
-        cancelAllForChat: vi.fn(async () => {}),
-        recoverOnStartup: vi.fn(async () => {}),
-      }
-      const canUseTool = buildCanUseTool(makeArgs({ toolCallback }))
-      const result = await canUseTool(
-        "AskUserQuestion",
-        { questions: [{ question: "OK?", header: "Check", options: [], multiSelect: false }] },
-        TOOL_OPTIONS,
-      )
-      expect(result.behavior).toBe("allow")
-      expect(toolCallback.submit).toHaveBeenCalledTimes(1)
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.KANNA_MCP_TOOL_CALLBACKS
-      } else {
-        process.env.KANNA_MCP_TOOL_CALLBACKS = originalEnv
-      }
-    }
-  })
-
-  test("routes ExitPlanMode through toolCallback when KANNA_MCP_TOOL_CALLBACKS=1 — deny on unconfirmed", async () => {
-    const originalEnv = process.env.KANNA_MCP_TOOL_CALLBACKS
-    process.env.KANNA_MCP_TOOL_CALLBACKS = "1"
-    try {
-      const toolCallback: ToolCallbackService = {
-        submit: vi.fn(async () => ({
-          status: "answered" as const,
-          decision: {
-            kind: "allow" as const,
-            payload: { confirmed: false, message: "needs changes" },
-          },
-        })),
-        answer: vi.fn(async () => {}),
-        cancel: vi.fn(async () => {}),
-        cancelAllForChat: vi.fn(async () => {}),
-        recoverOnStartup: vi.fn(async () => {}),
-      }
-      const canUseTool = buildCanUseTool(makeArgs({ toolCallback }))
-      const result = await canUseTool("ExitPlanMode", { plan: "the plan" }, TOOL_OPTIONS)
-      expect(result.behavior).toBe("deny")
-      if (result.behavior === "deny") {
-        expect(result.message).toContain("needs changes")
-      }
-    } finally {
-      if (originalEnv === undefined) {
-        delete process.env.KANNA_MCP_TOOL_CALLBACKS
-      } else {
-        process.env.KANNA_MCP_TOOL_CALLBACKS = originalEnv
-      }
-    }
   })
 })
 

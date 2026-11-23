@@ -12,6 +12,7 @@ import {
   type DefaultProviderPreference,
 } from "./core-types"
 import { oneOf } from "./vocab"
+import type { PeerInboundMode } from "./peer-messaging/inbound"
 import type { BeaconConfig, BeaconPatch } from "./beacon-config"
 import type { BeaconScope } from "./beacon-scope"
 import type { McpSource, McpSourceInput, McpSourcePatch } from "./mcp-sources/types"
@@ -78,6 +79,7 @@ import type {
   ChatProviderPreferences,
   ProviderPreference,
   ClaudeModelOptions,
+  AntigravityModelOptions,
   CodexModelOptions,
   OpenRouterModelOptions,
   CustomModelEntry,
@@ -311,6 +313,7 @@ export interface AppSettingsSnapshot {
   claudeDriver: ClaudeDriverSettings
   globalPromptAppend: string
   shareDefaultTtlHours: number
+  peerMessagesInbound: PeerInboundMode
   subagentRuntime: SubagentRuntimeSettings
   packageUpdates: PackageUpdateSettings
   plugins: PluginSettings
@@ -369,8 +372,9 @@ export interface AppSettingsPatch {
   editor?: Partial<AppSettingsSnapshot["editor"]>
   defaultProvider?: DefaultProviderPreference
   providerDefaults?: {
-    claude?: Partial<ProviderPreference<ClaudeModelOptions>>
-    codex?: Partial<ProviderPreference<CodexModelOptions>>
+    claude?: Partial<ProviderPreference<Partial<ClaudeModelOptions>>>
+    codex?: Partial<ProviderPreference<Partial<CodexModelOptions>>>
+    antigravity?: Partial<ProviderPreference<Partial<AntigravityModelOptions>>>
     openrouter?: Partial<ProviderPreference<OpenRouterModelOptions>>
     custom?: Partial<ProviderPreference<OpenRouterModelOptions>>
   }
@@ -399,6 +403,7 @@ export interface AppSettingsPatch {
   }
   globalPromptAppend?: string
   shareDefaultTtlHours?: number
+  peerMessagesInbound?: PeerInboundMode
   subagentRuntime?: Partial<SubagentRuntimeSettings>
   packageUpdates?: Partial<PackageUpdateSettings>
   plugins?: Partial<PluginSettings>

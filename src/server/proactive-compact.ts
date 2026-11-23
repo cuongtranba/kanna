@@ -54,7 +54,7 @@ export function scanLatestContextWindowUsage(
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const entry = messages[i]
     if (entry.kind === "context_window_updated") return { found: true, usage: entry.usage }
-    if (entry.kind === "compact_boundary") return { found: true, usage: null }
+    if (entry.kind === "compact_boundary" || entry.kind === "context_cleared") return { found: true, usage: null }
   }
   return { found: false }
 }

@@ -24,52 +24,9 @@ import type { EventStore } from "./event-store"
 import { buildHistoryPrimer, extractPreviousAssistantReply } from "./history-primer"
 import { parseMentions, type ParsedMention } from "./mention-parser"
 import { SUBAGENT_RUN_TIMEOUT_MS_DEFAULT } from "../shared/settings/bounds"
-
-export class PausableTimeout {
-  remainingMs: number
-  private readonly totalMs: number
-  private deadline: number | null = null
-  private handle: ReturnType<typeof setTimeout> | null = null
-  private onFire: () => void
-
-  constructor(totalMs: number, onFire: () => void) {
-    this.totalMs = totalMs
-    this.remainingMs = totalMs
-    this.onFire = onFire
-  }
-
-  start(now: number = Date.now()): void {
-    this.deadline = now + this.remainingMs
-    this.handle = setTimeout(this.onFire, this.remainingMs)
-  }
-
-  pause(now: number = Date.now()): void {
-    if (this.handle == null || this.deadline == null) return
-    clearTimeout(this.handle)
-    this.handle = null
-    this.remainingMs = Math.max(0, this.deadline - now)
-    this.deadline = null
-  }
-
-  resume(now: number = Date.now()): void {
-    if (this.handle != null) return
-    this.start(now)
-  }
-
-  reset(now: number = Date.now()): void {
-    if (this.handle == null) return
-    this.remainingMs = this.totalMs
-    clearTimeout(this.handle)
-    this.deadline = now + this.remainingMs
-    this.handle = setTimeout(this.onFire, this.remainingMs)
-  }
-
-  clear(): void {
-    if (this.handle != null) clearTimeout(this.handle)
-    this.handle = null
-    this.deadline = null
-  }
-}
+import { PausableTimeout } from "./subagent-pausable-timeout"
+import { RunInjection, type UndeliveredPeerMessage } from "./subagent-run-injection"
+import type { PeerChatOrigin } from "../shared/command-origin"
 
 type RunStopReason = "timeout" | "max_turns" | "user_cancelled" | "chat_cancelled"
 
@@ -136,7 +93,7 @@ export interface ProviderRunStart {
   start: (
     onChunk: (chunk: string) => void,
     onEntry: (entry: TranscriptEntry) => void,
-    opts?: { keepAlive?: boolean },
+    opts?: { keepAlive?: boolean; injection?: RunInjection },
   ) => Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }>
   authReady: () => Promise<boolean>
 }
@@ -162,6 +119,7 @@ export interface SubagentOrchestratorDeps {
   onRunTerminal?: (chatId: string, runId: string, reason: "failed" | "completed") => void
   onRunProgress?: (chatId: string, runId: string) => void
   onBackgroundRunComplete?: (chatId: string, runId: string, outcome: BackgroundRunOutcome) => void
+  redeliverPeerMessage?: (chatId: string, content: string, origin: PeerChatOrigin) => Promise<void>
   now?: () => number
   maxParallel?: number
   maxChainDepth?: number
@@ -220,6 +178,8 @@ interface LiveSession {
   live: LiveTurnSource
   idleTimer: ReturnType<typeof setTimeout> | null
   lastActivity: number
+  turnChain: Promise<void>
+  queuedTurns: number
 }
 
 interface RunState {
@@ -239,6 +199,7 @@ export class SubagentOrchestrator {
   private readonly cancelledChats = new Set<string>()
   private readonly runStateByRunId = new Map<string, RunState>()
   private readonly liveSessions = new Map<string, LiveSession>()
+  private readonly runInjections = new Map<string, RunInjection>()
 
   private readonly recoveryPromise: Promise<void>
 
@@ -746,6 +707,8 @@ export class SubagentOrchestrator {
       permitWaiter: null,
     }
     this.runStateByRunId.set(runId, runState)
+    const injection = new RunInjection((message) => this.redeliverToChat(args.chatId, message))
+    this.runInjections.set(runId, injection)
     if (args.parentRunId != null) {
       this.runStateByRunId.get(args.parentRunId)?.childRunIds.add(runId)
     }
@@ -845,7 +808,7 @@ export class SubagentOrchestrator {
             abortListener()
           }
           result = await Promise.race([
-            runStart.start(sink.onChunk, sink.onEntry, { keepAlive: args.keepAlive }),
+            runStart.start(sink.onChunk, sink.onEntry, { keepAlive: args.keepAlive, injection }),
             timeoutRejection.promise,
             maxTurnsRejection.promise,
             abortRejection.promise,
@@ -936,6 +899,8 @@ export class SubagentOrchestrator {
           live: liveHandle,
           idleTimer: null,
           lastActivity: this.now(),
+          turnChain: Promise.resolve(),
+          queuedTurns: 0,
         }
         this.liveSessions.set(runId, session)
         this.armIdleTimer(runId)
@@ -955,16 +920,27 @@ export class SubagentOrchestrator {
     s.idleTimer = setTimeout(() => { void this.closeLiveRun(s.chatId, runId, "idle_timeout") }, this.idleTimeoutMs())
   }
 
-  async sendToLiveRun(runId: string, prompt: string): Promise<BackgroundRunOutcome> {
+  sendToLiveRun(runId: string, prompt: string): Promise<BackgroundRunOutcome> {
     const session = this.liveSessions.get(runId)
     if (!session) {
+      return Promise.resolve({ status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` })
+    }
+    if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null }
+    session.queuedTurns += 1
+    const turn = session.turnChain.then(() => this.runLiveTurn(session, prompt))
+    session.turnChain = turn.then(() => {})
+    return turn
+  }
+
+  private async runLiveTurn(session: LiveSession, prompt: string): Promise<BackgroundRunOutcome> {
+    const { chatId, runId } = session
+    if (this.liveSessions.get(runId) !== session) {
       return { status: "failed", runId, errorCode: "NO_LIVE_SESSION", errorMessage: `No live subagent session ${runId}` }
     }
     if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null }
-
-    const releaseSlot = await this.acquireSlot(session.chatId, runId)
+    let releaseSlot: (() => void) | null = null
     try {
-      const { chatId } = session
+      releaseSlot = await this.acquireSlot(chatId, runId)
       const sink = this.createRunSink(chatId, runId)
 
       let turn: { text: string; usage?: ProviderUsage }
@@ -975,15 +951,30 @@ export class SubagentOrchestrator {
       }
 
       session.lastActivity = this.now()
-      this.armIdleTimer(runId)
       return { status: "completed", runId, text: turn.text }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      await this.closeLiveRun(session.chatId, runId, "error")
+      await this.closeLiveRun(chatId, runId, "error")
       return { status: "failed", runId, errorCode: "PROVIDER_ERROR", errorMessage: message }
     } finally {
-      releaseSlot()
+      releaseSlot?.()
+      session.queuedTurns -= 1
+      if (session.queuedTurns === 0) this.armIdleTimer(runId)
     }
+  }
+
+  deliverToRun(chatId: string, runId: string, content: string, origin: PeerChatOrigin): boolean {
+    const state = this.runStateByRunId.get(runId)
+    if (!state || state.chatId !== chatId || state.cancelled) return false
+    return this.runInjections.get(runId)?.push(content, origin) ?? false
+  }
+
+  private redeliverToChat(chatId: string, message: UndeliveredPeerMessage): void {
+    const redeliver = this.deps.redeliverPeerMessage
+    if (!redeliver) return
+    redeliver(chatId, message.content, message.origin).catch((err) => {
+      log.warn(`${LOG_PREFIX} redelivering an unread peer message to the chat failed`, { chatId, err })
+    })
   }
 
   async closeLiveRun(
@@ -1008,6 +999,8 @@ export class SubagentOrchestrator {
     const state = this.runStateByRunId.get(runId)
     if (!state) return
     state.timeout?.clear()
+    this.runInjections.get(runId)?.closeTurn()
+    this.runInjections.delete(runId)
     if (state.parentRunId != null) {
       this.runStateByRunId.get(state.parentRunId)?.childRunIds.delete(runId)
     }

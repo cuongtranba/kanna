@@ -8,6 +8,148 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.114.1](https://github.com/cuongtranba/kanna/compare/v1.114.0...v1.114.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **cron:** let cron.update change a job's model and effort ([#1529](https://github.com/cuongtranba/kanna/issues/1529)) ([d893462](https://github.com/cuongtranba/kanna/commit/d893462f8bcc77dcbb6f6e00fd679b04d5972103))
+
+## [1.114.0](https://github.com/cuongtranba/kanna/compare/v1.113.1...v1.114.0) (2026-11-23)
+
+
+### Features
+
+* **client:** show the model a subagent runs on ([#1527](https://github.com/cuongtranba/kanna/issues/1527)) ([2cdb2d7](https://github.com/cuongtranba/kanna/commit/2cdb2d7640c6154e7555ff6aa70f030f38698fb9))
+
+## [1.113.1](https://github.com/cuongtranba/kanna/compare/v1.113.0...v1.113.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **settings:** accept a partial modelOptions in a provider-defaults patch ([#1523](https://github.com/cuongtranba/kanna/issues/1523)) ([a1d381f](https://github.com/cuongtranba/kanna/commit/a1d381f7b88a21036d86343b18d453dbe8949e3b))
+
+## [1.113.0](https://github.com/cuongtranba/kanna/compare/v1.112.3...v1.113.0) (2026-11-19)
+
+
+### Features
+
+* **mcp:** give Codex and Antigravity sessions the custom MCP servers ([#1521](https://github.com/cuongtranba/kanna/issues/1521)) ([594c37d](https://github.com/cuongtranba/kanna/commit/594c37dfefd121229ceff62e91cd036cd8116b22))
+
+## [1.112.3](https://github.com/cuongtranba/kanna/compare/v1.112.2...v1.112.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **wiki:** keep KANNA_DISABLE_SELF_UPDATE in the generated env var list ([#1517](https://github.com/cuongtranba/kanna/issues/1517)) ([2f62f49](https://github.com/cuongtranba/kanna/commit/2f62f49f999044dcf5c27baeeb75a6af4305462c))
+
+## [1.112.2](https://github.com/cuongtranba/kanna/compare/v1.112.1...v1.112.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* **chat:** really clear context when a plan is approved with clear context ([#1514](https://github.com/cuongtranba/kanna/issues/1514)) ([b739d38](https://github.com/cuongtranba/kanna/commit/b739d38a3a9f84cebb35a49af5fe0b4b003b61d7))
+
+## [1.112.1](https://github.com/cuongtranba/kanna/compare/v1.112.0...v1.112.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **chat:** reset the context meter when a chat's context is cleared ([#1512](https://github.com/cuongtranba/kanna/issues/1512)) ([4586993](https://github.com/cuongtranba/kanna/commit/458699326c152d8e617fca9d06438f0d14f7f23a))
+
+## [1.112.0](https://github.com/cuongtranba/kanna/compare/v1.111.0...v1.112.0) (2026-11-18)
+
+
+### Features
+
+* **plugins:** let a plugin bundle its own npm dependencies ([#1509](https://github.com/cuongtranba/kanna/issues/1509)) ([63d46b8](https://github.com/cuongtranba/kanna/commit/63d46b8484acf7c29696949426c7e8399cb8aa47))
+
+## [1.111.0](https://github.com/cuongtranba/kanna/compare/v1.110.3...v1.111.0) (2026-11-17)
+
+
+### Features
+
+* **providers:** add Antigravity (agy) as an agent provider over ACP ([#1504](https://github.com/cuongtranba/kanna/issues/1504)) ([f97cc64](https://github.com/cuongtranba/kanna/commit/f97cc645871f90df2e1c76bc0b98391cd3aca028))
+
+## [1.110.3](https://github.com/cuongtranba/kanna/compare/v1.110.2...v1.110.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* list recent peer chats first and retry a deleted Claude resume on a fresh session ([#1505](https://github.com/cuongtranba/kanna/issues/1505)) ([f9ae72f](https://github.com/cuongtranba/kanna/commit/f9ae72febb4ee1c7848341bad89c6adff3936134))
+
+## [1.110.2](https://github.com/cuongtranba/kanna/compare/v1.110.1...v1.110.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **beacon:** let a bare UNC server root grant every share on it ([#1501](https://github.com/cuongtranba/kanna/issues/1501)) ([6fe0994](https://github.com/cuongtranba/kanna/commit/6fe0994bbcd4edbf12d8f94f23e01f7bc45774b4))
+
+## [1.110.1](https://github.com/cuongtranba/kanna/compare/v1.110.0...v1.110.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **agent:** track detached Claude session runs so a failed write never escapes as an unhandled rejection ([#1497](https://github.com/cuongtranba/kanna/issues/1497)) ([c511f75](https://github.com/cuongtranba/kanna/commit/c511f75a96cd6ebfdd031e3f7ad078ecdd760d82))
+
+## [1.110.0](https://github.com/cuongtranba/kanna/compare/v1.109.0...v1.110.0) (2026-11-16)
+
+
+### Features
+
+* **plugins:** plugin pages, useKannaWorkspace and boot start; cron fires on its armed model; Remote MCP public URL warning ([#1495](https://github.com/cuongtranba/kanna/issues/1495)) ([9462f60](https://github.com/cuongtranba/kanna/commit/9462f60fb11e7afe741dabd2efc508d993538973))
+
+## [1.109.0](https://github.com/cuongtranba/kanna/compare/v1.108.2...v1.109.0) (2026-11-14)
+
+
+### Features
+
+* deliver peer messages into a busy agent's running turn ([#1494](https://github.com/cuongtranba/kanna/issues/1494)) ([7edf051](https://github.com/cuongtranba/kanna/commit/7edf0511d1f001bd5df23ed3bf29ca399bd1f87e))
+* give Claude chats the CLI's claude_code tool preset instead of a hand-kept list ([#1492](https://github.com/cuongtranba/kanna/issues/1492)) ([ae59ad2](https://github.com/cuongtranba/kanna/commit/ae59ad2e2d6a7e036a53ff399552f47d92c6d15c))
+
+## [1.108.2](https://github.com/cuongtranba/kanna/compare/v1.108.1...v1.108.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* give Claude sessions ToolSearch so MCP tool schemas load on demand ([#1489](https://github.com/cuongtranba/kanna/issues/1489)) ([8cf53e9](https://github.com/cuongtranba/kanna/commit/8cf53e9ac4f4afd8e9dcb79199f0c5e40c7de832))
+
+## [1.108.1](https://github.com/cuongtranba/kanna/compare/v1.108.0...v1.108.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **prompts:** state loop rules as current facts, drop pressure register ([#1481](https://github.com/cuongtranba/kanna/issues/1481)) ([38b34fe](https://github.com/cuongtranba/kanna/commit/38b34fe5bfb80d639159f4cb783a2f3ef8e1d4df))
+
+## [1.108.0](https://github.com/cuongtranba/kanna/compare/v1.107.5...v1.108.0) (2026-11-11)
+
+
+### Features
+
+* let agents in different chats message each other ([#1478](https://github.com/cuongtranba/kanna/issues/1478)) ([21046f3](https://github.com/cuongtranba/kanna/commit/21046f3288bbaddf83c286d401d48032cc290a7c))
+
+## [1.107.5](https://github.com/cuongtranba/kanna/compare/v1.107.4...v1.107.5) (2026-11-10)
+
+
+### Bug Fixes
+
+* **prompts:** correct stale instructions found by a prompt audit ([#1473](https://github.com/cuongtranba/kanna/issues/1473)) ([2ed3b09](https://github.com/cuongtranba/kanna/commit/2ed3b0965c47902d88ee4eb2140aba40916dfd47))
+
+## [1.107.4](https://github.com/cuongtranba/kanna/compare/v1.107.3...v1.107.4) (2026-11-10)
+
+
+### Bug Fixes
+
+* **cron:** let a job be edited while a run is in flight ([#1471](https://github.com/cuongtranba/kanna/issues/1471)) ([053bd17](https://github.com/cuongtranba/kanna/commit/053bd17330e3a5b6d24ff35ca0b3a7b8e35fe2f0))
+
+## [1.107.3](https://github.com/cuongtranba/kanna/compare/v1.107.2...v1.107.3) (2026-11-09)
+
+
+### Bug Fixes
+
+* **client:** animate the mobile drawer and sheets as DESIGN.md specifies ([#1469](https://github.com/cuongtranba/kanna/issues/1469)) ([075f0e0](https://github.com/cuongtranba/kanna/commit/075f0e0bfd811e84acdcf4d1e18642c45fe82ecd))
+* **transcript:** keep the reader's place during mobile touch scrolling ([#1468](https://github.com/cuongtranba/kanna/issues/1468)) ([869bdb3](https://github.com/cuongtranba/kanna/commit/869bdb36e3bf497e71cfa71440b23a1d57313d18))
+
 ## [1.107.2](https://github.com/cuongtranba/kanna/compare/v1.107.1...v1.107.2) (2026-11-09)
 
 

@@ -114,13 +114,13 @@ a whole board (a 5k-issue import would otherwise blow up one turn), and every
 id is resolved against the chat's project before any write, so an agent cannot
 reach another project's board by guessing an id.
 
-**C3 has the decisions but not the map.** Five ADRs record why boards are
+**Read C3 first.** Five ADRs record why boards are
 shaped as they are — `adr-20260810-boards-sqlite-store` (SQLite, not the event
 log), `adr-20260811-board-column-semantics-single-source`,
 `adr-20260811-board-in-the-workspace`, `adr-20260811-board-owns-its-rendering`,
 `adr-20260811-card-start-work` — and they are the first thing to read before
-changing this feature. Boards also shipped without a **component** fact; three
-now carry it — `c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
+changing this feature. Three **component** facts carry the map —
+`c3-310` (boards-domain, `src/shared/boards/**`), `c3-232`
 (boards, `src/server/board-*.ts` plus the MCP and WS surfaces), and `c3-119`
 (boards-ui, `src/client/**/boards/**`) — each with a `code-map.yaml` block.
 
@@ -296,6 +296,26 @@ used to need. The deadline path is pinned by the `stalling-build-child`
 fixture test in `plugin-build.adapter.test.ts`; do not move the compile back
 in-process.
 
+**A plugin's own npm packages are installed, then bundled; Kanna checks the
+contract, never the package list.** `buildPluginBundles` runs `bun install` in the
+source directory first when it holds a `package.json` (`--frozen-lockfile` with a
+`bun.lock`/`bun.lockb`, `--no-save` without), under its own 5-minute deadline, so
+install and `plugin_validate` share one path and a plugin without `package.json`
+builds exactly as before. Every non-host package is bundled, because
+`build/server.js` is imported from the data directory where no `node_modules`
+exists. Host modules still resolve to Kanna's copy even from inside
+`node_modules`, so there is one React. The server build leaves `node:*`/`bun:*`
+external. In the client build, a package or builtin imported **directly by a
+plugin-own `*.server.*` file** becomes an inert stub (callable, constructible,
+`then` undefined, so a top-level `new WebClient()` still evaluates), and a builtin
+imported from any other plugin file is refused with a pointer to `*.server.ts`.
+The stub is per import, never per file: real plugins import their `.server.ts`
+files from `index.ts`, so stubbing whole files would turn exported values into
+stubs and blind `findServerLiteralLeaks`. `sourceDir` is canonicalised with
+`realpath` first because Bun reports importers by real path (`/private/var/…`
+on macOS). Pinned by the P13 cases and the `with-deps` fixture
+(`adr-20261117-plugin-npm-dependencies`).
+
 **A failed RPC is `200 {ok:false}`, not a 4xx.** The transport succeeded and the
 caller needs the plugin's own message; only a malformed REQUEST is a 4xx. A
 well-formed id that is not installed is `404`, and a **disabled** surface is
@@ -304,15 +324,10 @@ well-formed id that is not installed is `404`, and a **disabled** surface is
 **The id is validated before any path join.** It becomes a directory name
 downstream, so a traversal-shaped id is rejected at the routing layer.
 
-**Mounting cost three extractions, not three raised allowances.** Three modules
-sat EXACTLY on their architecture-budget ceilings, so each got the remedy the
-budget message prescribes: `SettingsPage.tsx` 2787 → 2449 (`SkillsSection.tsx`,
-which the plugin-system plan itself prescribed), `KannaSidebar.tsx` 1007 → 964
-(`SidebarUtilityNav.tsx` — also the natural home for plugin nav entries, which
-are navigation destinations exactly like Workflows/Cron/Settings), and
-`ChatTranscriptViewport.tsx`, which was two lines under the 700 threshold and so
-mounts the footer panel through `PluginsFooterSlot` to keep the call site to one
-import and one element.
+**Where plugin UI mounts.** Plugin nav entries live in `SidebarUtilityNav.tsx`,
+beside the other navigation destinations (Workflows/Cron/Settings), and the chat
+footer panel mounts through `PluginsFooterSlot`, so `ChatTranscriptViewport.tsx`
+carries one import and one element for it.
 
 **`usePluginContributions` is the whole wiring.** It turns the global switch into
 loaded contributions in `pluginContributionsStore`. Without it every mounted
@@ -370,11 +385,8 @@ prompt map is returned FROM `mergePluginCommands` rather than derived from the
 item list at the call site, so a dropped item can never still answer a lookup and
 hijack the catalog entry that beat it.
 
-**Provider-independent, and always was.** A plugin entry is prompt text Kanna
-inserts locally, so it works on every provider exactly as a builtin does. It
-predates the catalog itself becoming provider-independent (see **Local skills on
-every provider**), which is why `commandsForProvider` — the filter this merge
-used to sit after — no longer exists.
+**Provider-independent.** A plugin entry is prompt text Kanna inserts locally,
+so it works on every provider exactly as a builtin does.
 
 **Every client `add*` needs a no-op twin in
 `src/server/plugins/plugin-child-entry.adapter.ts`.** Both bundles compile from

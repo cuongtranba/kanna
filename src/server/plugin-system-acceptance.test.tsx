@@ -9,8 +9,28 @@ const HELLO = join(FIXTURES, "hello")
 const LEAKY = join(FIXTURES, "leaky")
 const THROWING = join(FIXTURES, "throwing")
 
+const WITH_DEPS = join(FIXTURES, "with-deps")
+
 const LEAKED_MARKER = "LEAKY_SERVER_SECRET_MUST_NOT_REACH_BROWSER"
 const HELLO_SERVER_MARKER = "HELLO_SERVER_ONLY_MARKER"
+const SERVER_PKG_MARKER = "SERVER_PKG_MARKER_MUST_NOT_REACH_BROWSER"
+const CLIENT_PKG_MARKER = "CLIENT_PKG_MARKER_REACHES_BROWSER"
+
+async function buildFailureFor(indexSource: string): Promise<string> {
+  const { mkdtemp, rm } = await import("node:fs/promises")
+  const { tmpdir } = await import("node:os")
+  const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
+  const dir = await mkdtemp(join(tmpdir(), "kanna-plugin-build-"))
+  try {
+    await Bun.write(join(dir, "kanna-plugin.json"), '{"id":"probe","name":"P","version":"1","kannaPluginApi":1}')
+    await Bun.write(join(dir, "index.ts"), indexSource)
+    const result = await buildPluginBundles({ sourceDir: dir, entry: "index.ts" })
+    expect(result.ok).toBe(false)
+    return result.ok ? "" : result.errors.join("\n")
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
 
 
 describe("P0 — manifest, paths, settings collection", () => {
@@ -81,15 +101,18 @@ describe("P1 — compile pipeline", () => {
     expect(result.client).not.toContain(LEAKED_MARKER)
   }, 60_000)
 
-  test("an off-allowlist module is refused with the documented message", async () => {
-    const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
-    const dir = join(FIXTURES, ".tmp-unlisted")
-    await Bun.write(join(dir, "kanna-plugin.json"), '{"id":"un","name":"U","version":"1","kannaPluginApi":1}')
-    await Bun.write(join(dir, "index.ts"), 'import _ from "lodash"\nexport default () => { void _; return () => {} }\n')
-    const result = await buildPluginBundles({ sourceDir: dir, entry: "index.ts" })
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.errors.join("\n")).toContain("is not available in plugin client code")
+  test("a package the plugin never installed fails the build and names the package", async () => {
+    const errors = await buildFailureFor(
+      'import missing from "kanna-plugin-never-installed"\nexport default () => { void missing; return () => {} }\n',
+    )
+    expect(errors).toContain("kanna-plugin-never-installed")
+  }, 60_000)
+
+  test("a Node builtin imported from a client file is refused with a pointer to *.server.ts", async () => {
+    const errors = await buildFailureFor(
+      'import { readFileSync } from "node:fs"\nexport default () => { void readFileSync; return () => {} }\n',
+    )
+    expect(errors).toContain('Module "node:fs" is server-only: import it from a *.server.ts file')
   }, 60_000)
 
   test("a bundler plugin that throws is reported, not surfaced as an unhandled rejection", async () => {
@@ -161,6 +184,7 @@ describe("P3 — HTTP surface inherits the auth gate", () => {
       recordClientError: () => {},
       setEnabled: async () => {},
       restore: () => {},
+      startEnabled: async () => {},
       start: async () => {},
       status: (id) => (id === "hello" ? { state: "running" } : undefined),
       call: async () => ({ ok: true, output: null }),
@@ -559,4 +583,48 @@ describe("P11 — installs persist across a restart", () => {
       await rm(homeDir, { recursive: true, force: true })
     }
   }, 120_000)
+})
+
+
+describe("P13 — a plugin bundles its own npm dependencies", () => {
+  test("install runs the plugin's bun install and its server handler uses a Node-only package", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { createPluginService } = await import("./plugins/plugin-service")
+
+    const homeDir = await mkdtemp(join(tmpdir(), "kanna-plugin-deps-"))
+    await rm(join(WITH_DEPS, "node_modules"), { recursive: true, force: true })
+    const service = createPluginService({ homeDir })
+    try {
+      await service.install({ sourceDir: WITH_DEPS })
+      await service.setEnabled("with-deps", true)
+      await service.start("with-deps")
+      const reply = await service.call("with-deps", "compress.roundTrip", { text: "zlib round trip" })
+      expect(reply).toEqual({ ok: true, output: { text: "zlib round trip", marker: SERVER_PKG_MARKER } })
+    } finally {
+      await service.stop("with-deps")
+      await rm(homeDir, { recursive: true, force: true })
+    }
+  }, 120_000)
+
+  test("a package reached only through *.server files stays out of the client bundle, which still evaluates", async () => {
+    const { buildPluginBundles } = await import("./plugins/plugin-build.adapter")
+    const built = await buildPluginBundles({ sourceDir: WITH_DEPS, entry: "index.ts" })
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.client).not.toContain(SERVER_PKG_MARKER)
+
+    const { createPluginHostRegistry } = await import("../client/plugins/hostModuleRegistry")
+    const { evaluatePluginModule } = await import("../client/plugins/evaluatePlugin")
+    const { createPluginContributionRegistry, createPluginContext } = await import(
+      "../client/plugins/contributionRegistry"
+    )
+    const mod = await evaluatePluginModule({ code: built.client, registry: createPluginHostRegistry(), pluginId: "with-deps" })
+    const contributions = createPluginContributionRegistry()
+    mod.default(createPluginContext("with-deps", contributions))
+
+    expect(contributions.getCommandCenterItems()).toMatchObject([
+      { name: "shout", description: "SHOUT", prompt: CLIENT_PKG_MARKER },
+    ])
+  }, 60_000)
 })

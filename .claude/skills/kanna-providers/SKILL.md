@@ -1,6 +1,6 @@
 ---
 name: kanna-providers
-description: Model and provider catalog in Kanna — customModels and mergeCustomModels, the 1M context-window option, custom Anthropic-compatible endpoints (the custom provider, resolveSdkEndpoint, endpointSpawnFingerprint, model alias env vars, contextWindow), and Codex failure classification (codexErrorInfo, willRetry). Use whenever a task touches PROVIDERS, provider-catalog, Settings → Models or Providers, sdk-endpoint, a wrong or downgraded model or context window, an Ollama/GLM/Qwen endpoint, or a Codex turn that failed or offered Retry.
+description: Model and provider catalog in Kanna — customModels and mergeCustomModels, the 1M context-window option, custom Anthropic-compatible endpoints (the custom provider, resolveSdkEndpoint, endpointSpawnFingerprint, model alias env vars, contextWindow), Codex failure classification (codexErrorInfo, willRetry), and the Antigravity provider (agy over ACP, AntigravityAcpManager, the agent-tools bridge). Use whenever a task touches PROVIDERS, provider-catalog, Settings → Models or Providers, sdk-endpoint, a wrong or downgraded model or context window, an Ollama/GLM/Qwen endpoint, a Codex turn that failed or offered Retry, or an agy or Antigravity chat that fails to start, resume or reach Kanna's peer tools.
 ---
 
 # Kanna providers and models
@@ -14,8 +14,7 @@ effective catalog at read time.
 
 - **Single source of truth.** `PROVIDERS` in `src/shared/types.ts` is the only
   built-in catalog. `src/server/provider-catalog.ts` `SERVER_PROVIDERS` is
-  `[...PROVIDERS]` — the former duplicate `HARD_CODED_CODEX_MODELS` was
-  removed (it drifted).
+  `[...PROVIDERS]`; a second hardcoded list drifts from it.
 - **Merge.** `mergeCustomModels(base, customModels)` (pure, in `types.ts`)
   makes the Settings list **the** catalog for a provider that has entries: the
   chat offers exactly the listed models, in list order, and a built-in the list
@@ -24,18 +23,13 @@ effective catalog at read time.
   the catalog is never empty, and `defaultModel` moves to the first listed model
   when the built-in default is not listed. `normalizeProviderModelId` resolves a
   selection of a removed model to a listed one rather than the built-in default.
-  It used to append the list over every built-in, so a model deleted in
-  Settings kept appearing in the chat picker.
-  **An override MERGES per field, it does not replace the object.** It used to
-  replace, and since the Settings form collects only id/label/efforts, a
-  hand-added entry for an id that already ships silently stripped every
-  capability it had no way to declare. A user's hand-added `claude-opus-5`
-  (createdAt 2026-07-25) shadowed the built-in's
-  `contextWindowOptions: ["200k","1m"]`; `getClaudeContextWindowOptions` then
-  returned `[]`, `ChatPreferenceControls` hid the 1M toggle (`length > 1`), and
-  `normalizeClaudeContextWindow` pinned every turn to 200k — visible only as a
-  `runConfig.model` with no `[1m]` suffix, and as auto-compaction at ~168k on a
-  chat the user believed was running on 1M. There is no "explicitly none" to
+  A model deleted in Settings therefore disappears from the chat picker.
+  **An override MERGES per field, it does not replace the object.** The Settings
+  form collects only id/label/efforts, so a replacing override of an id that
+  ships as a built-in would strip every capability it cannot declare: a
+  hand-added `claude-opus-5` would lose `contextWindowOptions`, hide the 1M
+  toggle and pin every turn to 200k, visible only as a `runConfig.model` with no
+  `[1m]` suffix and auto-compaction at ~168k. There is no "explicitly none" to
   preserve: `applyCustomModelPatch` collapses a cleared field to `undefined`,
   indistinguishable from never-set.
 - **A downgraded context window is logged, never silent.**
@@ -126,7 +120,7 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   endpoint answers `not_found_error: model 'claude-haiku-4-5-20251001' not
   found` (Ollama). `SdkEndpoint.aliasModel` is the vendor model for `custom` and
   `null` for `openrouter`, which serves real Claude ids and must not change;
-  `buildClaudeEnv` sets all six variables the bundled CLI (2.1.291) reads —
+  `buildClaudeEnv` sets all six variables the bundled CLI reads —
   `ANTHROPIC_DEFAULT_FABLE_MODEL`, `_OPUS_`, `_SONNET_`, `_HAIKU_MODEL`,
   `ANTHROPIC_SMALL_FAST_MODEL` (checked first for the background model) and
   `CLAUDE_CODE_SUBAGENT_MODEL` (`CLAUDE_MODEL_ALIAS_ENV_VARS`). Both spawn
@@ -135,7 +129,7 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   custom endpoint respawns rather than calling `setModel` (see the fingerprint).
 - **`contextWindow` (per endpoint, 4096..2,000,000 tokens, optional) becomes
   `CLAUDE_CODE_MAX_CONTEXT_TOKENS`.** For an id not starting with `claude-` the
-  CLI assumes a 200000 window (`u6e`) unless that variable is set, and only then
+  CLI assumes a 200000 window unless that variable is set, and only then
   does auto-compaction keep the session inside the real window. Do NOT use
   `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: it clamps to a 100k minimum, so a 64k Ollama
   model would never compact in time. The same number is Kanna's own meter
@@ -152,8 +146,8 @@ exactly like OpenRouter. ADR `adr-20261012-custom-anthropic-endpoints`.
   `unknown` (`modelUsageHasUnpricedModel`) and falls back to the turn price
   resolver, else reports no cost. This also makes OpenRouter turns use
   OpenRouter's real per-token price instead of the CLI's guess.
-- `normalizeSubagentEntry` and `normalizeDefaultProvider` now accept every
-  `AgentProvider`. Both used to drop `openrouter` silently.
+- `normalizeSubagentEntry` and `normalizeDefaultProvider` accept every
+  `AgentProvider`.
 
 ## Codex Failure Classification (`codexErrorInfo` + `willRetry`)
 
@@ -210,3 +204,69 @@ Not wired: `quota` (`usageLimitExceeded`) does not arm auto-continue —
 error (`claude-turn-runner.ts` catch branch); a `turn/completed` failure never
 reaches it, which is why c3-227's documented precondition ("a Claude or Codex
 turn emits a result event with subtype: error") is still only half true.
+
+## Antigravity (`agy` over ACP)
+
+The fifth provider runs Google's `agy` CLI (v1.5.9+) as an Agent Client Protocol
+server on stdio. c3 component `c3-250`, ADR `adr-20261117-antigravity-acp-provider`
+(why ACP, why auto-approve, why an HTTP MCP bridge). User docs:
+`wiki/src/content/docs/features/providers-models.mdx`.
+
+**Where it lives**
+
+- `src/server/antigravity-acp.ts` `AntigravityAcpManager`: one `agy` child per
+  chat (scope `main`) or subagent run (scope `sub:<runId>`), the counterpart of
+  `CodexAppServerManager`. `antigravity-acp-protocol.ts` decodes ACP envelopes,
+  `antigravity-acp-translator.ts` maps `session/update` onto transcript entries.
+- `src/server/antigravity-spawn.adapter.ts` is the only spawn site:
+  `agy acp --dangerously-skip-permissions`. `src/server/stdio-process.ts` is the
+  `StdioProcess` port Codex and Antigravity share, and
+  `src/server/test-helpers/fake-acp-process.ts` is the fake the tests drive.
+- Wiring: `claude-turn-starter.ts` (turn start), `claude-send-command.ts`
+  (`/compact` passthrough via `providerCompactsNatively`), `subagent-provider-run.ts`
+  (`runAntigravitySubagent`), `peer-messaging/create-peer-messaging.ts`
+  (constructs the manager and the bridge). Catalog and defaults live in
+  `src/shared/provider-model-types.ts` and `src/shared/settings/provider-defaults.ts`.
+
+**ACP facts that are easy to get wrong**
+
+- Developer instructions go in `session/new` as `_meta.antigravity.systemPrompt.append`
+  and persist across resume; `session/resume` falls back to `session/new` when agy
+  no longer has the session (`isRecoverableResumeError`).
+- Model and thinking level are `session/set_config_option`; plan mode is
+  `session/set_mode`. The plan document is the `write_file` artifact whose
+  `ArtifactMetadata.RequestFeedback` is true, proposed through `ExitPlanMode`.
+- Cancel is `session/cancel`. `/compact` is passed through (agy compacts natively).
+- No fork (a fork starts a new session), no steering (peer and queued messages wait
+  for the turn to end, `mid-turn-delivery.ts` returns false), no custom models,
+  no fast mode, no context-window picker, no `keep_alive` subagents.
+- Approvals are auto-granted by the spawn flag, parity with Codex `approvalPolicy: "never"`.
+  Do not add a permission card without revisiting the ADR.
+- `ask_question` arrives as plain text; `list_dir`, `grep_search` and `find_by_name`
+  render as generic tool entries.
+- Effort is `low | medium | high`, default `medium`; default model `gemini-4-carbon`.
+
+**Peer tools bridge** (`src/server/agent-tools-bridge.ts`). Codex gets
+`list_peer_chats`, `send_chat_message` and `wait_for_chat_message` as in-process
+`dynamicTools`; ACP has no such channel, so agy gets them as an HTTP MCP server at
+`AGENT_TOOLS_MCP_PATH` (`/agent-tools/mcp`), mounted in `http-dispatcher.ts` after
+remote MCP. Invariants a change must keep:
+
+- A random 32 byte bearer per main session maps to its chat id; the manager passes
+  it in `mcpServers` headers on `session/new` and `session/resume`, and revokes it
+  on `stopSession` and on failure. Subagent scopes get no grant. This is about the
+  bridge only: the user's custom MCP servers reach every scope, listed ahead of the
+  grant (`kanna-mcp` skill).
+- Only direct loopback POSTs: no `Origin`, `Forwarded`, `X-Forwarded-*`, `X-Real-IP`
+  or `CF-Connecting-IP` header. Otherwise 403; non-POST 405; missing, unknown or
+  revoked bearer 401; the OAuth discovery path 404 (agy must not start an OAuth flow).
+- `server.timeout(req, 0)` per request so `wait_for_chat_message` can hold it open.
+- agy reports no result for MCP calls, so the bridge outcome is recorded as the
+  `tool_result` of the agy tool call, also when the HTTP call lands before the ACP
+  `tool_call`.
+
+**Run it locally.** Install `agy` and log in (`agy` once, or `agy acp --login`), start
+`bun run dev`, pick Antigravity in the composer. Unit tests need no agy; they drive the
+fake ACP process: `bun run test src/server/antigravity-acp.test.ts
+src/server/agent-tools-bridge.test.ts`. Debug a stuck chat with `kanna-debug`; the
+stored session token is the agy session id.

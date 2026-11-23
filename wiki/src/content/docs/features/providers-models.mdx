@@ -5,13 +5,13 @@ description: Multi-provider chat, the OAuth pool, reasoning effort, context wind
 
 import Screenshot from '../../../components/Screenshot.astro'
 
-Kanna supports three providers — Claude, Codex (OpenAI), and OpenRouter —
-switchable per-chat from the composer.
+Kanna supports four providers — Claude, Codex (OpenAI), Antigravity (Google),
+and OpenRouter — switchable per-chat from the composer.
 
 ## Provider switcher
 
-The composer's provider button picks between Claude, Codex, and OpenRouter. Each
-provider exposes its own model list and reasoning controls.
+The composer's provider button picks between Claude, Codex, Antigravity, and
+OpenRouter. Each provider exposes its own model list and reasoning controls.
 
 <Screenshot
   light="/screenshots/light/settings-providers.png"
@@ -62,6 +62,50 @@ is not the one it resolved.
 Codex also has no compaction request of its own, so `/compact` on a Codex chat
 is [summarised by Kanna itself](/features/slash-commands/#compact).
 
+## Antigravity
+
+Antigravity runs Google's `agy` CLI. Kanna talks to it over the Agent Client
+Protocol on stdio, so one `agy` process serves a chat the way one `codex
+app-server` process serves a Codex chat.
+
+- **Prerequisites** — `agy` v1.5.9 or newer on the `PATH` of the shell that
+  starts Kanna, and logged in. Run `agy` once and sign in, or run
+  `agy acp --login`. Kanna injects no credentials of its own; if `agy` works in
+  your shell it works in Kanna.
+- **Models** — Gemini 4 Carbon *(default)*, Gemini 4 Argon, Gemini 4 Hydrogen,
+  Gemini 3.8 Flash, Claude Opus 5.5, Claude Sonnet 5.5.
+- **Reasoning effort** — low / medium *(default)* / high, set per chat. There is
+  no fast mode and no context-window picker.
+- **Plan mode** — the composer's plan toggle puts `agy` in its plan mode. When it
+  finishes planning, Kanna shows the plan document as a plan to approve, the same
+  way it does for Claude.
+- **Approvals** — `agy` is started with `--dangerously-skip-permissions`, so tool
+  calls run without a permission card. This matches Codex running with its
+  approval policy set to never; the agent can edit files and run commands in the
+  chat's directory without asking.
+- **Resume** — a chat keeps its `agy` session and resumes it after the process
+  or Kanna restarts. If `agy` no longer has that session, Kanna starts a new one
+  with the same instructions, and the model does not remember the earlier turns.
+- **`/compact`** — passed straight to `agy`, which compacts natively, so Kanna
+  does not summarise it itself. See [`/compact`](/features/slash-commands/#compact).
+- **Messaging between chats** — Kanna gives the agent `list_peer_chats`,
+  `send_chat_message` and `wait_for_chat_message`, served to `agy` as a local MCP
+  server. See [Messaging between chats](/guides/user/peer-messaging/#antigravity-chats).
+- **Subagents** — an [Antigravity subagent](/guides/user/subagents/) runs in its
+  own `agy` session. It does not get the messaging tools.
+
+Limits to know about:
+
+- **No fork.** Forking an Antigravity chat starts a new `agy` session; it does not
+  continue the original one.
+- **No steering.** A message sent mid-turn waits in the queue and runs when the
+  turn ends; it cannot redirect the running turn.
+- **No custom models.** Settings → Models cannot add Antigravity models.
+- **Questions arrive as plain text.** When `agy` asks you something, the question
+  shows as ordinary reply text, not as a question card.
+- **Some tools look generic.** `list_dir`, `grep_search` and `find_by_name` render
+  as generic tool entries rather than dedicated ones.
+
 ## OpenRouter
 
 - **API key auth** — set the LLM provider to OpenRouter and paste an OpenRouter
@@ -94,6 +138,7 @@ model that ships before Kanna knows about it is one form away from usable.
 Built-ins are never destroyed, so the catalog cannot end up empty.
 
 :::note
-Providers themselves are fixed — you can add models, not a fourth provider.
-OpenRouter is not editable here because its catalog is already fetched live.
+Providers themselves are fixed — you can add models, not a fifth provider.
+Antigravity and OpenRouter are not editable here: Antigravity's models are fixed,
+and OpenRouter's catalog is already fetched live.
 :::

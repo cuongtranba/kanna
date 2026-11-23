@@ -1,6 +1,7 @@
 import type { JsonValue } from "../shared/json"
 import type { HarnessEvent, HarnessToolRequest, HarnessTurn } from "./harness-types"
 import type { CodexAppServerManager } from "./codex-app-server"
+import type { AntigravityAcpManager } from "./antigravity-acp"
 import type {
   AgentProvider,
   CustomModelEntry,
@@ -9,7 +10,12 @@ import type {
   Subagent,
   TranscriptEntry,
 } from "../shared/types"
-import { isEndpointProvider, normalizeClaudeContextWindow, resolveClaudeApiModelId } from "../shared/types"
+import {
+  isAntigravityReasoningEffort,
+  isEndpointProvider,
+  normalizeClaudeContextWindow,
+  resolveClaudeApiModelId,
+} from "../shared/types"
 import { endpointEnvOf, type SdkEndpoint } from "./sdk-endpoint"
 import {
   buildCodexDeveloperInstructions,
@@ -19,6 +25,7 @@ import {
 } from "../shared/kanna-system-prompt"
 import type { ClaudeSessionHandle } from "./harness-types"
 import type { LiveTurnSource, ProviderRunStart } from "./subagent-orchestrator"
+import type { RunInjection } from "./subagent-run-injection"
 import type { StartClaudeSessionArgs } from "./claude-session-start"
 import { log } from "../shared/log"
 
@@ -57,6 +64,7 @@ export interface BuildSubagentProviderRunArgs {
   allowedPaths?: string[]
   startClaudeSession: (args: SubagentSessionArgs) => Promise<ClaudeSessionHandle>
   codexManager: CodexAppServerManager
+  antigravityManager: AntigravityAcpManager
   onToolRequest: (request: HarnessToolRequest) => Promise<JsonValue>
   authReady: (provider: AgentProvider) => Promise<boolean>
   pickOauthToken: () => { token: string; baseUrl?: string } | null
@@ -90,7 +98,10 @@ export function buildSubagentProviderRun(args: BuildSubagentProviderRunArgs): Pr
       const keepAlive = Boolean(opts?.keepAlive) && args.subagent.provider === "claude"
       if (args.subagent.provider === "claude" || isEndpointProvider(args.subagent.provider)) {
         const endpoint = await args.resolveEndpoint?.(args.subagent.provider, args.subagent.model) ?? null
-        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, endpoint })
+        return runClaudeSubagent({ args, initialPrompt, onChunk, onEntry, keepAlive, endpoint, injection: opts?.injection })
+      }
+      if (args.subagent.provider === "antigravity") {
+        return runAntigravitySubagent({ args, initialPrompt, onChunk, onEntry })
       }
       return runCodexSubagent({ args, initialPrompt, onChunk, onEntry })
     },
@@ -117,7 +128,7 @@ export function composeInitialPrompt(
   const instruction = userInstruction?.trim() ?? ""
   const primerText = primer?.trim() ?? ""
   if (instruction && primerText) {
-    return `User asked: ${instruction}\n\n${primerText}`
+    return `${primerText}\n\nUser asked: ${instruction}`
   }
   if (instruction) return `User asked: ${instruction}`
   if (primerText) return primerText
@@ -138,8 +149,10 @@ async function runClaudeSubagent(opts: {
   onEntry: (entry: TranscriptEntry) => void
   keepAlive: boolean
   endpoint: SdkEndpoint | null
+  injection: RunInjection | undefined
 }): Promise<{ text: string; usage?: ProviderUsage; live?: LiveTurnSource }> {
   const { args, initialPrompt, onChunk, onEntry, keepAlive, endpoint } = opts
+  const injection = keepAlive ? undefined : opts.injection
   const oauth = endpoint ? null : args.pickOauthToken()
   const session = await args.startClaudeSession({
     projectId: args.projectId,
@@ -159,15 +172,17 @@ async function runClaudeSubagent(opts: {
     systemPromptOverride: composeSubagentSystemPrompt(args.subagent.systemPrompt, subagentPromptOptions(args)),
     initialPrompt,
     restrictedAllowedPaths: args.allowedPaths,
-    keepAlive,
+    keepAlive: keepAlive || injection !== undefined,
     maxTurns: args.subagent.maxTurns,
   })
   args.abortSignal.addEventListener("abort", () => { session.interrupt() }, { once: true })
 
   if (!keepAlive) {
+    injection?.openTurn((promptId, text) => session.injectPrompt?.(promptId, text) ?? false, onEntry)
     try {
-      return await drainHarnessTurn(session, onChunk, onEntry)
+      return await drainHarnessTurn(session, onChunk, onEntry, injection)
     } finally {
+      injection?.closeTurn()
       session.close()
     }
   }
@@ -241,10 +256,44 @@ async function runCodexSubagent(opts: {
   }
 }
 
+async function runAntigravitySubagent(opts: {
+  args: BuildSubagentProviderRunArgs
+  initialPrompt: string
+  onChunk: (chunk: string) => void
+  onEntry: (entry: TranscriptEntry) => void
+}): Promise<{ text: string; usage?: ProviderUsage }> {
+  const { args, initialPrompt, onChunk, onEntry } = opts
+  const scope = `sub:${args.runId}` as const
+  args.abortSignal.addEventListener("abort", () => { args.antigravityManager.stopSession(args.chatId, scope) }, { once: true })
+  await args.antigravityManager.startSession({
+    chatId: args.chatId,
+    scope,
+    cwd: args.cwd,
+    sessionToken: null,
+    developerInstructions: buildCodexDeveloperInstructions(subagentPromptOptions(args)),
+  })
+  try {
+    const { modelOptions } = args.subagent
+    const turn = await args.antigravityManager.startTurn({
+      chatId: args.chatId,
+      scope,
+      content: initialPrompt,
+      model: args.subagent.model,
+      effort: isAntigravityReasoningEffort(modelOptions?.reasoningEffort) ? modelOptions.reasoningEffort : undefined,
+      planMode: false,
+      onToolRequest: args.onToolRequest,
+    })
+    return await drainHarnessTurn(turn, onChunk, onEntry)
+  } finally {
+    args.antigravityManager.stopSession(args.chatId, scope)
+  }
+}
+
 export async function drainOneTurn(
   iterator: AsyncIterator<HarnessEvent>,
   onChunk: (chunk: string) => void,
   onEntry: (entry: TranscriptEntry) => void,
+  injection?: RunInjection,
 ): Promise<{ text: string; usage?: ProviderUsage; sawResult: boolean; sawError: boolean }> {
   let accumulated = ""
   let usage: ProviderUsage | undefined
@@ -258,6 +307,10 @@ export async function drainOneTurn(
       case "session_token": break
       case "rate_limit": break
       case "live": break
+      case "prompt_delivered": {
+        injection?.delivered(event.promptId)
+        break
+      }
       case "transcript": {
         onEntry(event.entry)
         if (event.entry.kind === "assistant_text") {
@@ -293,9 +346,10 @@ async function drainHarnessTurn(
   turn: HarnessTurn,
   onChunk: (chunk: string) => void,
   onEntry: (entry: TranscriptEntry) => void,
+  injection?: RunInjection,
 ): Promise<{ text: string; usage?: ProviderUsage }> {
   const iterator = turn.stream[Symbol.asyncIterator]()
-  const { text, usage, sawResult, sawError } = await drainOneTurn(iterator, onChunk, onEntry)
+  const { text, usage, sawResult, sawError } = await drainOneTurn(iterator, onChunk, onEntry, injection)
   log.info("[kanna/subagent] drainHarnessTurn finished", {
     accumulatedChars: text.length,
     sawResult,

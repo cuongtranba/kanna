@@ -215,6 +215,37 @@ describe("runClaudeSession", () => {
     expect(stateChangeChatIds).toContain(session.chatId)
   })
 
+  test("a delivered-prompt event reaches the delivery hook before the next transcript entry is stored", async () => {
+    const session = makeSession()
+    const order: string[] = []
+    const deps = makeDeps(session, {
+      onPromptDelivered: async (_session, promptId) => { order.push(`delivered:${promptId}`) },
+      store: {
+        ...makeDeps(session).store,
+        appendMessage: async (_chatId, entry) => { order.push(`entry:${entry.kind}`) },
+      },
+    })
+    session.session.stream = fakeStream([
+      { type: "prompt_delivered", promptId: "p-1" },
+      { type: "transcript", entry: fakeSystemInitEntry() },
+    ])
+
+    await runClaudeSession(deps, session)
+
+    expect(order).toEqual(["delivered:p-1", "entry:system_init"])
+  })
+
+  test("injected messages the CLI never read are forgotten when the session ends, so the chat is not left busy", async () => {
+    const session = makeSession()
+    session.injectedPromptIds.add("p-1")
+    const deps = makeDeps(session)
+    session.session.stream = fakeStream([])
+
+    await runClaudeSession(deps, session)
+
+    expect(session.injectedPromptIds.size).toBe(0)
+  })
+
   test("session_token event → setSessionTokenForProvider called when session is current", async () => {
     const session = makeSession({ pendingPromptSeqs: [] })
     const tokenCalls: { chatId: string; provider: string; token: string | null }[] = []

@@ -1,20 +1,16 @@
 
-import type { AgentProvider, TranscriptEntry } from "../shared/types"
+import type { TranscriptEntry } from "../shared/types"
 import type { JsonValue } from "../shared/json"
+import { providerUsesSdkSession } from "../shared/provider-model-types"
 import { readPlanDecision } from "./claude-spawn-helpers"
 import type { ActiveTurn } from "./claude-session-state"
-import type { PendingToolSlots } from "./pending-tool-slot"
+import { discardedToolResult, type PendingToolSlots } from "./pending-tool-slot"
 import { normalizeToolContent } from "./claude-message-normalizer"
 import { timestamped } from "../shared/transcript-entry"
 
 
 interface ToolRespondStore {
   appendMessage(chatId: string, entry: TranscriptEntry): Promise<void>
-  setSessionTokenForProvider(
-    chatId: string,
-    provider: AgentProvider,
-    sessionToken: string | null,
-  ): Promise<void>
 }
 
 interface ToolRespondActiveTurnsMap {
@@ -38,14 +34,32 @@ export interface ToolRespondDeps {
   store: ToolRespondStore
 
   emitStateChange(chatId: string): void
+
+  cancel(chatId: string, options: { hideInterrupted: boolean }): Promise<void>
+
+  clearChatContext(chatId: string): Promise<void>
+
+  startApprovedPlanTurn(chatId: string, prompt: string): Promise<void>
 }
 
+function approvedPlanPrompt(plan: string, message: string): string {
+  const prompt = `Implement the following approved plan.\n\n${plan}`
+  return message ? `${prompt}\n\nAdditional guidance: ${message}` : prompt
+}
 
 export async function respondTool(
   deps: ToolRespondDeps,
   command: RespondToolCommand,
 ): Promise<void> {
-  const { activeTurns, pendingTools, store, emitStateChange } = deps
+  const {
+    activeTurns,
+    pendingTools,
+    store,
+    emitStateChange,
+    cancel,
+    clearChatContext,
+    startApprovedPlanTurn,
+  } = deps
 
   if (!pendingTools.has(command.chatId)) {
     throw new Error("No pending tool request")
@@ -70,18 +84,24 @@ export async function respondTool(
     active.waitStartedAt = null
   }
 
-  if (pending.tool.toolKind === "exit_plan_mode") {
+  const tool = pending.tool
+  if (tool.toolKind === "exit_plan_mode") {
     const { confirmed, clearContext, message = "" } = readPlanDecision(command.result)
+    const plan = tool.input.plan?.trim()
 
-    if (confirmed && clearContext) {
-      await store.setSessionTokenForProvider(command.chatId, pending.provider, null)
-      await store.appendMessage(
-        command.chatId,
-        timestamped({ kind: "context_cleared" }),
-      )
+    if (confirmed && clearContext && plan) {
+      pending.resolve(discardedToolResult(tool))
+      await cancel(command.chatId, { hideInterrupted: true })
+      if (activeTurns.get(command.chatId)) {
+        throw new Error("Chat is still running")
+      }
+      await clearChatContext(command.chatId)
+      await startApprovedPlanTurn(command.chatId, approvedPlanPrompt(plan, message))
+      emitStateChange(command.chatId)
+      return
     }
 
-    if (pending.provider === "codex" && active) {
+    if (!providerUsesSdkSession(pending.provider) && active) {
       active.postToolFollowUp = confirmed
         ? {
             content: message

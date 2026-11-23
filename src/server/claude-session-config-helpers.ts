@@ -3,6 +3,7 @@ import type { McpServerConfig, McpOAuthState } from "../shared/types"
 import type { ChatPermissionPolicy, ChatPermissionPolicyOverride } from "../shared/permission-policy"
 import { mergePolicyOverride } from "../shared/permission-policy"
 import { log } from "../shared/log"
+import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
 import { bearerUsableUntil } from "./mcp-oauth.adapter"
 
 
@@ -31,9 +32,10 @@ export interface ClaudeSessionConfigHelpersDeps {
 
 
 export function getEnabledCustomMcpServers(
-  deps: ClaudeSessionConfigHelpersDeps,
+  deps: Pick<ClaudeSessionConfigHelpersDeps, "getAppSettingsSnapshot">,
 ): readonly McpServerConfig[] {
-  return (deps.getAppSettingsSnapshot().customMcpServers ?? []).filter((s) => s.enabled)
+  return (deps.getAppSettingsSnapshot().customMcpServers ?? [])
+    .filter((s) => s.enabled && s.name !== KANNA_MCP_SERVER_NAME)
 }
 
 export interface OAuthBearers {
@@ -48,7 +50,7 @@ function earlierDeadline(a: number | null, b: number | null): number | null {
 }
 
 export async function buildOAuthBearers(
-  deps: ClaudeSessionConfigHelpersDeps,
+  deps: Pick<ClaudeSessionConfigHelpersDeps, "ensureFreshToken" | "persistOAuthState">,
   servers: readonly McpServerConfig[],
 ): Promise<OAuthBearers> {
   const byServerId = new Map<string, string>()
@@ -70,6 +72,29 @@ export async function buildOAuthBearers(
     }
   }
   return { byServerId, usableUntil }
+}
+
+export interface CustomMcpServerGrant {
+  servers: readonly McpServerConfig[]
+  usableUntil: number | null
+}
+
+export type ResolveCustomMcpServers = () => Promise<CustomMcpServerGrant>
+
+function withBearer(server: McpServerConfig, bearers: ReadonlyMap<string, string>): McpServerConfig {
+  const bearer = bearers.get(server.id)
+  if (server.transport === "stdio" || !bearer) return server
+  return { ...server, headers: { ...server.headers, Authorization: `Bearer ${bearer}` } }
+}
+
+export function createCustomMcpServerResolver(
+  deps: Pick<ClaudeSessionConfigHelpersDeps, "getAppSettingsSnapshot" | "ensureFreshToken" | "persistOAuthState">,
+): ResolveCustomMcpServers {
+  return async () => {
+    const enabled = getEnabledCustomMcpServers(deps)
+    const { byServerId, usableUntil } = await buildOAuthBearers(deps, enabled)
+    return { servers: enabled.map((server) => withBearer(server, byServerId)), usableUntil }
+  }
 }
 
 export function resolveChatPolicy(

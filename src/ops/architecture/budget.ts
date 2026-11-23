@@ -3,17 +3,17 @@ export const MODULE_LINE_THRESHOLD = 700
 
 export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/KannaSidebar.tsx": 906,
-  "src/client/app/SubagentsSection.tsx": 739,
+  "src/client/app/SubagentsSection.tsx": 726,
   "src/client/app/useAppGlobalState.ts": 1174,
   "src/client/app/useKannaState.ts": 790,
-  "src/client/components/chat-ui/ChatInput.tsx": 879,
+  "src/client/components/chat-ui/ChatInput.tsx": 871,
   "src/client/components/chat-ui/RightSidebar.tsx": 1975,
-  "src/server/agent-coordinator.ts": 1222,
-  "src/server/app-settings.ts": 1546,
+  "src/server/agent-coordinator.ts": 1205,
+  "src/server/app-settings.ts": 1537,
   "src/server/board-store.adapter.ts": 1294,
-  "src/server/codex-app-server.ts": 997,
-  "src/server/kanna-mcp.ts": 1009,
-  "src/server/subagent-orchestrator.ts": 1043,
+  "src/server/codex-app-server.ts": 957,
+  "src/server/kanna-mcp.ts": 966,
+  "src/server/subagent-orchestrator.ts": 1036,
 }
 
 export const PRODUCTION_EXCLUDES: readonly string[] = [
@@ -148,7 +148,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-mock-functions",
     include: TEST_SCOPE,
     pattern: "(^|[^.\\w])mock\\(|\\bjest\\.fn\\b|(?<!typeof )\\bvi\\.(fn|spyOn)\\b(?!\\s*[>,)\\]])",
-    max: 519,
+    max: 492,
     issue: 1375,
     rationale:
       "A mock function or spy asserts that a call happened, not that the user-visible result did, so it keeps passing when the real collaborator breaks and fails when an equivalent refactor reorders calls. Hand the code a real, in-memory, or deterministic fake through a parameter and assert the public outcome; a callback recorder is a plain array the fake pushes into. Re-baselined 516 → 519 when the suite moved to Vitest: the pattern now counts generic vi.fn<T>( and vi.spyOn( mocks that the bun spelling never matched.",
@@ -158,7 +158,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     include: TEST_SCOPE,
     pattern:
       "^\\s*(globalThis|window|console|Date|Math)\\.[A-Za-z_$]+\\s*=[^=]|process\\.env(\\.[A-Za-z_$]+|\\[[^\\]]+\\])\\s*=[^=]|delete process\\.env",
-    max: 94,
+    max: 75,
     issue: 1375,
     rationale:
       "Reassigning Date.now, fetch, window.confirm, console, or process.env changes state shared by every test in the one bun process. A failing assertion before the restore line leaks the patch into whichever test runs next, in filesystem order. Inject the clock, the dialog, the logger, the fetch, or the environment as a parameter with the production default instead.",
@@ -167,7 +167,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-sleeps",
     include: TEST_SCOPE,
     pattern: "\\bBun\\.sleep\\(|new Promise.*\\bsetTimeout\\b",
-    max: 104,
+    max: 96,
     issue: 1375,
     rationale:
       "A fixed delay is either too short on a slow CI runner, which makes the test flaky, or too long everywhere else, which makes the suite slow. Wait for the public state the test actually expects, by awaiting the promise that produces it or polling for it.",
@@ -194,7 +194,7 @@ export const TEST_PATTERN_BUDGETS: readonly PatternBudget[] = [
     id: "test-double-casts",
     include: TEST_SCOPE,
     pattern: "\\bas unknown as\\b",
-    max: 302,
+    max: 299,
     issue: 1375,
     rationale:
       "A double cast builds a value the type system says cannot exist, so the test exercises a state production never reaches and keeps compiling when the real type changes underneath it. Build the fixture through the public constructor or a complete literal.",
@@ -220,7 +220,7 @@ export const COUNT_BUDGETS: readonly CountBudget[] = [
   },
   {
     id: "code-clones",
-    max: 80,
+    max: 78,
     issue: 1379,
     rationale:
       "Maximal runs of duplicated 8-line windows (whitespace-normalized, structural lines skipped) across production modules. A copied block is a rule with several owners: a fix lands in one copy and the others drift. Give the rule one home and call it.",
@@ -237,10 +237,10 @@ export interface LintLimitPin {
 export const LINT_LIMIT_PINS: readonly LintLimitPin[] = [
   {
     rule: "eslint-js/complexity",
-    max: 96,
+    max: 95,
     issue: 893,
     rationale:
-      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (96), down from 122 when turn-failure settlement moved into claude-turn-failure.ts (#1379). The previous peak, the SettingsPage component (127), fell when the page became a table of per-page components; normalizeClaudeStreamMessage (82) is next.",
+      "Cyclomatic complexity per function. The peak is runClaudeSession in claude-session-runner.ts (95), down from 122 when turn-failure settlement moved into claude-turn-failure.ts (#1379) and to 95 when the thrown-error settlement and the fresh-session retry moved into helpers. The previous peak, the SettingsPage component (127), fell when the page became a table of per-page components; normalizeClaudeStreamMessage (82) is next.",
   },
   {
     rule: "eslint-js/max-params",

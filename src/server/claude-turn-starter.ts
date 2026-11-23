@@ -1,5 +1,6 @@
 import type { AgentProvider } from "../shared/types"
 import {
+  isAntigravityReasoningEffort,
   isCodexReasoningEffort,
   isEndpointProvider,
   providerUsesSdkSession,
@@ -30,6 +31,8 @@ import { decideMentionedProjectBindings } from "./project-mention-attach"
 import { pathExists } from "./project-paths-io.adapter"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
 import { buildCodexDeveloperInstructions } from "../shared/kanna-system-prompt"
+import { isPeerChatOrigin } from "../shared/command-origin"
+import { renderPeerPrompt } from "../shared/peer-messaging/render-prompt"
 import { timestamped } from "../shared/transcript-entry"
 import { appendTurnError } from "./claude-turn-outcome"
 import { errorMessage, projectNotFound } from "../shared/errors"
@@ -303,7 +306,8 @@ async function startTurnAfterTurnStarted(
     targetProvider,
     Boolean(args.userClearedContext),
   )
-  const typedPromptText = buildPromptText(args.promptOverride ?? args.content, args.attachments)
+  const promptBody = isPeerChatOrigin(args.origin) ? renderPeerPrompt(args.content, args.origin) : args.content
+  const typedPromptText = buildPromptText(args.promptOverride ?? promptBody, args.attachments)
   const userPromptText = providerUsesSdkSession(args.provider)
     ? withBeaconMentions(typedPromptText, args.content, deps.getBeacons(), deps.isBeaconOnline)
     : typedPromptText
@@ -354,6 +358,45 @@ async function startTurnAfterTurnStarted(
       provider: args.provider,
       model: args.model,
     })
+  } else if (args.provider === "antigravity") {
+    logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
+    await deps.antigravityManager.startSession({
+      chatId: args.chatId,
+      cwd: resolveSpawnPaths(chat, project.localPath).cwd,
+      sessionToken: pendingForkToken ? null : existingToken,
+      developerInstructions: buildCodexDeveloperInstructions({
+        ...instructionOptions,
+        stackProjects,
+        skills: deps.listSkills(args.chatId),
+        genui: isGenUIEnabled(),
+        peerMessaging: deps.antigravityManager.offersKannaTools,
+      }),
+    })
+    if (pendingForkToken) {
+      await deps.store.setPendingForkSessionToken(args.chatId, null)
+    }
+    logSendToStartingProfile(args.profile, "start_turn.session_ready", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
+    turn = await deps.antigravityManager.startTurn({
+      chatId: args.chatId,
+      content: promptContent,
+      model: args.model,
+      effort: isAntigravityReasoningEffort(args.effort) ? args.effort : undefined,
+      planMode: args.planMode,
+      onToolRequest,
+    })
+    logSendToStartingProfile(args.profile, "start_turn.provider_boot.ready", {
+      chatId: args.chatId,
+      provider: args.provider,
+      model: args.model,
+    })
   } else {
     logSendToStartingProfile(args.profile, "start_turn.provider_boot.begin", {
       chatId: args.chatId,
@@ -374,6 +417,7 @@ async function startTurnAfterTurnStarted(
         skills: deps.listSkills(args.chatId),
         genui: isGenUIEnabled(),
         planProgress: true,
+        peerMessaging: deps.codexManager.offersKannaTools,
       }),
     })
     if (pendingForkToken && sessionToken) {
@@ -432,6 +476,12 @@ async function startTurnAfterTurnStarted(
     compactionTurn: args.compactionTurn,
     userMessageId: appendedUserMessageId ?? deps.findLastUserMessageId(args.chatId),
     scheduleId: args.autoContinue?.scheduleId,
+    ...(isClaudeSdkProvider(args.provider) && (pendingForkToken ?? existingToken) !== null
+      ? {
+          retryOnFreshSession: () =>
+            startTurnForChat(deps, { ...args, appendUserPrompt: false, onTurnRecorded: undefined, profile: null }),
+        }
+      : {}),
   }
   deps.activeTurns.set(args.chatId, active)
   logSendToStartingProfile(args.profile, "start_turn.active_turn_registered", {

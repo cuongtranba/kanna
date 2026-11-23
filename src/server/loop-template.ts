@@ -92,8 +92,8 @@ function renderLoopPrompt(args: {
   ].join(" ")
 
   return [
-    "You are the ORCHESTRATOR of an autonomous loop. You do NOT do the work",
-    "yourself — you delegate it. Follow these steps EXACTLY every turn:",
+    "You orchestrate an autonomous loop: you delegate the work rather than",
+    "doing it yourself. Each turn, follow these steps in order:",
     "",
     `1. Read the current plan: call ${TASK_LIST_TOOL_NAME}({}).`,
     "   The task list is your ONLY durable state. It survives the /clear between",
@@ -152,7 +152,7 @@ function renderLoopPrompt(args: {
     "   prompt after the worker completes. Your ONLY durable state is the task",
     "   list — nothing you keep in your head survives.",
     "",
-    "HARD RULES (do not violate):",
+    "Rules:",
     "- You are the orchestrator. NEVER edit code yourself: do NOT use Edit,",
     "  Write, MultiEdit, or the Task/Agent tool. Kanna blocks these tools in",
     "  loop turns; attempting them wastes the turn.",
@@ -160,7 +160,6 @@ function renderLoopPrompt(args: {
     `  ${TASK_NOTE_TOOL_NAME}. A task's status cannot pile up the way a hand-`,
     "  written log could, which is why completed work never gets redone here.",
     "- Exactly ONE delegate_subagent per turn, then END THE TURN immediately.",
-    "- All progress lives in the task list, never in your context.",
     "",
     `Goal (for reference): ${goal}`,
     `Verify command: \`${verifyCommand}\``,

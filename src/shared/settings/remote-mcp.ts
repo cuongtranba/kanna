@@ -29,6 +29,18 @@ export function normalizeRemoteMcpPublicUrl(value: string | null): string | null
   return null
 }
 
+export function suggestRemoteMcpPublicUrl(publicUrl: string | null, pageHref: string): string | null {
+  if (publicUrl !== null) return null
+  let page: URL
+  try {
+    page = new URL(pageHref)
+  } catch {
+    return null
+  }
+  if (page.protocol !== "https:" || isLoopbackHostname(page.hostname)) return null
+  return page.origin
+}
+
 export function normalizeRemoteMcpSettings<T>(value: T, warnings: string[]): RemoteMcpSettings {
   const section = readSettingsSection(value, "remoteMcp", warnings)
   const enabled = section.boolean("enabled", REMOTE_MCP_SETTINGS_DEFAULTS.enabled)

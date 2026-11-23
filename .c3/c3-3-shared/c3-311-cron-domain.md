@@ -1,6 +1,6 @@
 ---
 id: c3-311
-c3-seal: ef8d893b18bff9db875bb9ba91fe3524fd563dd33c20e3338404c4dcaa053d5d
+c3-seal: 457ecc3bf1aa4504a4ddc9bb29e9aa4695cb9bd101211e766d73a710933bb44c
 title: cron-domain
 type: component
 category: feature
@@ -42,8 +42,9 @@ no quoting; every failure names the failing part, records the offending line,
 and, when unambiguous, carries a complete corrected line that is
 drift-guard-tested to re-parse; the `update` subcommand is disambiguated from
 arm by the field-name token — `mode` claims only when the line is exactly five
-tokens long, `schedule`/`instruction` claim only when no mode word follows
-position 3, and unknown field tokens fall through to `parseArm`; `CronJobPatch`
+tokens long, `schedule`/`instruction`/`model`/`effort` claim only when no mode word follows
+position 3, `model` and `effort` take exactly one value and `effort` only a
+Claude reasoning-effort level, and unknown field tokens fall through to `parseArm`; `CronJobPatch`
 is the typed partial that carries only the mutated field), `parseSchedule` (cron with 5 fields or 6
 with a LEADING second — node-cron's own sub-minute shape — with per-field
 range diagnostics, @shortcut expansion, validated wildcard padding for a

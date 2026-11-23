@@ -26,7 +26,7 @@ import {
   EMPTY_STATE_TEXT,
   EMPTY_STATE_TYPING_INTERVAL_MS,
   PANEL_TOGGLE_SETTLE_MS,
-  scrollTranscriptListToEnd,
+  isTranscriptPinnedToEnd,
 } from "./transcriptViewport"
 import { gitInitializeKey, projectOpenExternalKey } from "./projectActionKeys"
 import { useWorkflowsStore, selectRuns } from "../../stores/workflowsStore"
@@ -256,10 +256,10 @@ export function ChatTabContent({
   }, [clearShowScrollTimeout, setShowScrollToBottom, timer])
 
   const syncIsAtEndFromList = useCallback(() => {
-    const listState = transcriptListRef.current?.getState?.()
-    if (listState) {
-      onIsAtEndChange(listState.isAtEnd)
-    }
+    const list = transcriptListRef.current
+    const scrollNode = list?.getScrollableNode?.()
+    const pinned = isTranscriptPinnedToEnd(list, scrollNode instanceof HTMLElement ? scrollNode : null)
+    if (pinned !== null) onIsAtEndChange(pinned)
   }, [onIsAtEndChange])
 
   const scrollToTranscriptEnd = useCallback(async (animated = true) => {
@@ -551,30 +551,6 @@ export function ChatTabContent({
     })
   }, [dom, syncIsAtEndFromList])
 
-  useEffect(() => {
-    if (!isAtEndRef.current) return
-
-    let secondFrame: number | null = null
-    const firstFrame = timer.requestAnimationFrame(() => {
-      scrollTranscriptListToEnd(transcriptListRef.current, false)
-      secondFrame = timer.requestAnimationFrame(() => {
-        scrollTranscriptListToEnd(transcriptListRef.current, false)
-      })
-    })
-
-    return () => {
-      timer.cancelAnimationFrame(firstFrame)
-      if (secondFrame !== null) timer.cancelAnimationFrame(secondFrame)
-    }
-  }, [
-    state.commandError,
-    state.isDraining,
-    state.isProcessing,
-    state.messages.length,
-    state.queuedMessages.length,
-    state.runtimeStatus,
-    timer,
-  ])
 
 
   return (

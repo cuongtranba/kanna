@@ -211,7 +211,7 @@ export function buildBeaconToolList<TTool, TExtra>(
   }
 
   const beaconId = beaconIdField
-  const path = z.string().min(1)
+  const path = z.string().min(1).describe("Absolute path on the beacon, inside its read roots")
 
   const transferTools =
     deps.projectRoot === undefined
@@ -253,15 +253,29 @@ export function buildBeaconToolList<TTool, TExtra>(
     tool(
       "beacon_read",
       READ_DESCRIPTION,
-      { beaconId, path, offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).optional() },
+      {
+        beaconId,
+        path,
+        offset: z.number().int().min(0).optional().describe("Byte offset to start reading at (default 0)"),
+        limit: z.number().int().min(1).optional().describe("Most bytes to return (default 65536)"),
+      },
       (input) => run("beacon_read", "read", input),
     ),
     tool("beacon_stat", STAT_DESCRIPTION, { beaconId, path }, (input) => run("beacon_stat", "stat", input)),
-    tool("beacon_glob", GLOB_DESCRIPTION, { beaconId, path }, (input) => run("beacon_glob", "glob", input)),
+    tool(
+      "beacon_glob",
+      GLOB_DESCRIPTION,
+      { beaconId, path: z.string().min(1).describe("Absolute glob pattern with forward slashes, e.g. /home/me/notes/**/*.md; the directory before the first wildcard must be inside the read roots") },
+      (input) => run("beacon_glob", "glob", input),
+    ),
     tool(
       "beacon_grep",
       GREP_DESCRIPTION,
-      { beaconId, root: z.string().min(1), pattern: z.string().min(1) },
+      {
+        beaconId,
+        root: z.string().min(1).describe("Absolute directory to search recursively, inside the read roots"),
+        pattern: z.string().min(1).describe("Regular expression matched against each line"),
+      },
       (input) => run("beacon_grep", "grep", input),
     ),
     tool(
@@ -273,13 +287,18 @@ export function buildBeaconToolList<TTool, TExtra>(
     tool(
       "beacon_exec",
       EXEC_DESCRIPTION,
-      { beaconId, cmd: z.string().min(1), args: z.array(z.string()).optional(), cwd: z.string().min(1).optional() },
+      {
+        beaconId,
+        cmd: z.string().min(1).describe("Program to run, without arguments; no shell parses it"),
+        args: z.array(z.string()).optional().describe("Arguments passed to the program as-is"),
+        cwd: z.string().min(1).optional().describe("Absolute working directory on the beacon"),
+      },
       (input) => run("beacon_exec", "exec", input),
     ),
     tool(
       "beacon_script",
       SCRIPT_DESCRIPTION,
-      { beaconId, body: z.string().min(1) },
+      { beaconId, body: z.string().min(1).describe("Script text; runs with powershell.exe -NoProfile -Command on Windows beacons and /bin/sh -lc elsewhere") },
       (input) => run("beacon_script", "script", input),
     ),
   ]

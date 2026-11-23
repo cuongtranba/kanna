@@ -23,11 +23,9 @@ and fails lint.
 Spans nest through AsyncLocalStorage, so adding depth is a one-line `withSpan` at
 the call site with no handle to thread through the call chain.
 
-Already instrumented, and worth extending rather than duplicating: spans
-`kanna.turn.start` (the spawn pipeline), `kanna.subagent.run` (a loop's unit of
-work), `kanna.loop.wake.deliver`; counters `kanna.subagent.run.finished`,
-`kanna.autocontinue.fired`, `kanna.queued_message.recovered`,
-`kanna.loop.wake.recovered`; and process-memory gauges.
+Already instrumented, and worth extending rather than duplicating: the metric
+name constants exported from `src/server/observability.ts` are the full list
+(**What arrives** below summarizes them).
 
 Name new instruments `kanna.<area>.<thing>` so they group in Grafana alongside
 these.
@@ -250,7 +248,7 @@ Instrumented so far: `kanna.turn.start` (spawn pipeline), `kanna.subagent.run`
 `kanna.turn.tokens`, `kanna.turn.cost_usd`, `kanna.subagent.tokens`,
 `kanna.compaction.started` / `kanna.compaction.finished` with the
 `kanna.compaction.pre_tokens` / `.post_tokens` histograms (see **Compaction
-observability** above), and process-memory gauges. Spans nest via
+observability** in the `kanna-sessions` skill), and process-memory gauges. Spans nest via
 AsyncLocalStorage — add depth with a one-line `withSpan` at the call site, no
 handle threading.
 

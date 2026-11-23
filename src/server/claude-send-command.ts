@@ -12,12 +12,14 @@ import { MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES, shouldProactivelyCompact } from "
 import {
   codexServiceTierFromModelOptions,
   getServerProviderCatalog,
-  isClaudeSdkProvider,
+  providerCompactsNatively,
+  normalizeAntigravityModelOptions,
   normalizeClaudeModelOptions,
   normalizeCodexModelOptions,
   normalizeServerModel,
 } from "./provider-catalog"
 import { wrapSteeredMessage } from "../shared/steered-message"
+import { isPeerChatOrigin } from "../shared/command-origin"
 import { isChatBusy } from "./claude-session-state-queries"
 import type { SessionBackgroundTask } from "./claude-session-state"
 import {
@@ -64,6 +66,7 @@ interface ClaudeSessionsMap {
     backgroundTaskDeadlineAt: number
     backgroundTaskWakeCount: number
     selfWakeActive: boolean
+    injectedPromptIds: ReadonlySet<string>
     backgroundTaskWakeSuppressed: boolean
     noteUserSend(maxMs: number, now: number): void
   } | undefined
@@ -169,6 +172,16 @@ export function getProviderSettings(
     }
   }
 
+  if (provider === "antigravity") {
+    const modelOptions = normalizeAntigravityModelOptions(options.modelOptions, options.effort)
+    return {
+      model: normalizeServerModel(provider, options.model, customModels),
+      effort: modelOptions.reasoningEffort,
+      serviceTier: undefined,
+      planMode: catalog.supportsPlanMode ? Boolean(options.planMode) : false,
+    }
+  }
+
   const modelOptions = normalizeCodexModelOptions(options.modelOptions, options.effort)
   return {
     model: normalizeServerModel(provider, options.model, customModels),
@@ -260,7 +273,7 @@ export async function runBuiltinCommand(
     return
   }
 
-  const cliPassthrough = isClaudeSdkProvider(provider)
+  const cliPassthrough = providerCompactsNatively(provider)
   const cliCommand = command.instructions ? `/compact ${command.instructions}` : "/compact"
   await deps.startTurnForChat({
     chatId,
@@ -321,7 +334,8 @@ export async function dequeueAndStartQueuedMessage(
   const provider = resolveProvider(queuedMessage, chat.provider)
   const settings = resolveTurnProviderSettings(deps, chatId, provider, queuedMessage)
 
-  const builtin = options?.steered ? null : parseBuiltinCommand(queuedMessage.content)
+  const literalText = options?.steered === true || isPeerChatOrigin(queuedMessage.origin)
+  const builtin = literalText ? null : parseBuiltinCommand(queuedMessage.content)
   if (builtin) {
     await runBuiltinCommand(deps, chatId, builtin, provider, settings, release)
     await maybeStartNextQueuedMessage(deps, chatId)
@@ -334,7 +348,7 @@ export async function dequeueAndStartQueuedMessage(
     && !options.steered
     && isPromptAlreadyAppended(deps.store.getMessages(chatId), queuedMessage)
 
-  const expansion = options?.steered
+  const expansion = literalText
     ? null
     : resolveSlashExpansion(deps, chatId, provider, queuedMessage.content)
 

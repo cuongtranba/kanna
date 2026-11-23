@@ -1,6 +1,19 @@
 import { readIntEnv } from "./env-int"
 import type { ClaudeSessionLifecycleOptions } from "./agent-coordinator-types"
 
+export function resolveClaudeSessionLifecycle(
+  override: Partial<ClaudeSessionLifecycleOptions> | undefined,
+  defaults: ClaudeSessionLifecycleOptions,
+): ClaudeSessionLifecycleOptions {
+  return {
+    idleMs: override?.idleMs ?? defaults.idleMs,
+    maxResidentSessions: override?.maxResidentSessions ?? defaults.maxResidentSessions,
+    sweepIntervalMs: override?.sweepIntervalMs ?? defaults.sweepIntervalMs,
+    backgroundTaskMaxMs: override?.backgroundTaskMaxMs ?? defaults.backgroundTaskMaxMs,
+    backgroundTaskMaxWakes: override?.backgroundTaskMaxWakes ?? defaults.backgroundTaskMaxWakes,
+  }
+}
+
 export type RuntimeEnv = Readonly<Record<string, string | undefined>>
 
 export interface AgentRuntimeConfig {

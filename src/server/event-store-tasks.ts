@@ -29,6 +29,15 @@ export function projectChatTasks(
   return deriveChatTasks(chatTasksByChatId.get(chatId) ?? [], ctx)
 }
 
+export function clearChatTaskListEvents(
+  chatTasksByChatId: ReadonlyMap<string, readonly ChatTaskEvent[]>,
+  chatId: string,
+  now: number,
+): readonly ChatTaskEvent[] {
+  if ((chatTasksByChatId.get(chatId) ?? []).length === 0) return []
+  return [{ v: CHAT_TASK_EVENT_VERSION, timestamp: now, chatId, type: "chat_task_list_cleared" }]
+}
+
 export type PendingNativeTaskCalls = Map<string, NormalizedToolCall>
 
 function rememberPendingCall(pending: PendingNativeTaskCalls, tool: NormalizedToolCall): void {

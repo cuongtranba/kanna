@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  # Recovery path. A publish that fails (expired npm token, registry outage)
+  # Recovery path. A publish that fails (npm auth rejected, registry outage)
   # leaves the version tagged but unpublished, and re-running this workflow
   # cannot fix it: release-please reports `release_created: false` once the
   # release exists, so `publish` would skip. Dispatch the tag instead.
@@ -104,23 +104,26 @@ jobs:
         env:
           KANNA_OTEL: disabled
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
-          scope: "@cuongtran001"
-          # setup-node >=v5 auto-caches when package.json has a
-          # `packageManager` field; ours says bun@1.3.11 and there is no
-          # package-lock.json, so letting it probe risks a hard "lock file not
-          # found" failure. This job only runs `npm publish` — it never
-          # installs — so caching buys nothing. PR CI does NOT exercise this
-          # job (it runs only on a real release), so failing here would first
-          # surface mid-release. Disable it explicitly.
-          package-manager-cache: false
+      # npm authenticates through Trusted Publishing (OIDC): npmjs.com trusts
+      # this repository's `release-please.yml`, and the job's `id-token: write`
+      # lets npm exchange a GitHub OIDC token for a short-lived publish token.
+      # No NPM_TOKEN secret is read. The 90-day granular token it replaced
+      # expired silently and stranded 1.110.3, 1.111.0 and 1.112.0 behind a
+      # misleading `E404 Not Found` on PUT.
+      #
+      # No second setup-node with `registry-url` on purpose: that writes an
+      # .npmrc whose `_authToken=${NODE_AUTH_TOKEN}` (a placeholder when the
+      # variable is unset) gives npm a token to try instead of OIDC. npm's
+      # default registry is already registry.npmjs.org.
+      #
+      # Trusted publishing needs npm >= 11.5.1; Node 24 bundles an npm 11 that
+      # may be older, so the job pins a new enough npm 11 before publishing.
+      - name: Use npm with trusted publishing support
+        run: |
+          npm install --global "npm@^11.5.1"
+          npm --version
 
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # Separate from `publish` on purpose: a failed cross-compile must never
   # strand a tagged release unpublished on npm.

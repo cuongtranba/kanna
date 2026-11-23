@@ -134,6 +134,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
       },
       planMode: false,
     },
+    antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
     openrouter: {
       model: DEFAULT_OPENROUTER_SDK_MODEL,
       modelOptions: {},
@@ -158,6 +159,7 @@ const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   claudeDriver: { ...CLAUDE_DRIVER_DEFAULTS, lifecycle: { ...CLAUDE_LIFECYCLE_DEFAULTS } },
   globalPromptAppend: "",
   shareDefaultTtlHours: 24,
+  peerMessagesInbound: "accept",
   subagentRuntime: { runTimeoutMs: 600_000, defaultLoopSubagentId: null },
   packageUpdates: { ...PACKAGE_UPDATE_SETTINGS_DEFAULTS },
   plugins: PLUGIN_SETTINGS_DEFAULTS,

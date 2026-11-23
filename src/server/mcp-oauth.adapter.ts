@@ -4,6 +4,7 @@ import {
   exchangeAuthorization,
   refreshAuthorization,
 } from "@modelcontextprotocol/sdk/client/auth.js"
+import { OAuthError, ServerError, TemporarilyUnavailableError } from "@modelcontextprotocol/sdk/server/auth/errors.js"
 import type {
   OAuthClientMetadata,
   OAuthTokens,
@@ -278,7 +279,14 @@ export async function ensureFreshMcpToken(
     deps.persist(updated)
     return next.access_token
   } catch (err) {
-    deps.persist({ ...oauth, status: "error", errorMessage: `token refresh failed: ${causeText(toError(err))}` })
-    throw toError(err)
+    const error = toError(err)
+    if (authorizationServerRejected(error)) {
+      deps.persist({ ...oauth, status: "error", errorMessage: `token refresh failed: ${causeText(error)}` })
+    }
+    throw error
   }
+}
+
+function authorizationServerRejected(error: Error): boolean {
+  return error instanceof OAuthError && !(error instanceof ServerError) && !(error instanceof TemporarilyUnavailableError)
 }

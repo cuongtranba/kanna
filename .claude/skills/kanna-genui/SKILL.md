@@ -67,12 +67,12 @@ every `LINK_RULES_FOR_PARITY` rule, every character that forces a quoted label,
 and the tool name. It gates COVERAGE, not prose — reword freely, but a rule the
 repair knows must be one the prompt warns about.
 
-**The grammar fact this all rests on** (mermaid 11.15.0,
-`flowDiagram-I6XJVG4X.mjs` rule 116): the only plain-text run inside the `text`
+**The grammar fact this all rests on** (mermaid's flowchart lexer, the
+`flowDiagram-*.mjs` chunk; re-read it when the mermaid pin moves): the only plain-text run inside the `text`
 lexer state is `/^(?:[^\[\]\(\)\{\}\|\"]+)/`, so an unquoted label is readable
-iff it holds none of `[ ] ( ) { } | "`. Rule 95 (`[/`) longest-match-beats plain
+iff it holds none of `[ ] ( ) { } | "`. The `[/` rule longest-match-beats plain
 `[` and pushes `trapText`, which closes only on `/]` or `\]` — that is why
-`Current[/opt/app/current symlink]` dies. Rule 24 (`"`) is present in every
+`Current[/opt/app/current symlink]` dies. The `"` rule is present in every
 state, so quoting is the universal escape; a literal `"` is written `#quot;`.
 
 ## Generative UI (```kanna-ui, KANNA_GENUI)
@@ -102,10 +102,8 @@ executes.** ADR `adr-20260929-generative-ui`.
   them recursively. `$computed` and json-render's `push`/`pop`/`validateForm`
   built-ins are rejected. **Components re-parse their resolved props at render** — a
   bound value can resolve to anything.
-- **Inline is the default source for data the agent already holds.** The prompt
-  used to allow inline rows only "for a few rows the user gave you" and said to write
-  computed data to a file, so chat `494c0085` fetched six tables over MCP and then typed
-  them back out as scratch CSVs in the user's project. An inline dataset may now be
+- **Inline is the default source for data the agent already holds**, so fetched or
+  computed rows never become scratch files in the user's project. An inline dataset may be
   written as a table, `{"columns":[…],"rows":[[…],…]}` (the shape query tools already
   return), or as object rows. `datasetDeclSchema` normalizes the table to object rows at
   parse, so no consumer ever sees two shapes. `file` is for a data file that already
@@ -123,8 +121,8 @@ executes.** ADR `adr-20260929-generative-ui`.
   model wrote.
 - **One turn-end seam for both guards.** `composeTurnEndGuards` (`turn-end-guard.ts`)
   feeds the mermaid guard and the GenUI guard through the runner's existing
-  `turnEndGuard` dep — `runClaudeSession` has little complexity headroom (122 against a
-  127 ceiling), so a second call there is the wrong place for it. Codex turns get the GenUI guard only (its correction
+  `turnEndGuard` dep — `runClaudeSession` is the complexity peak pinned at the
+  `eslint-js/complexity` ceiling (`src/ops/architecture/budget.ts`), so a second call there is the wrong place for it. Codex turns get the GenUI guard only (its correction
   wording names no tool, because Codex has none). The escalation key is a content
   HASH: `ModelEscalation` logs its key, and a spec can carry inline financial rows.
 - **Actions have three classes** (`GENUI_ACTIONS`): `local` (json-render state),

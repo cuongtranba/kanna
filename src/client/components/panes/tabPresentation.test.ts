@@ -30,6 +30,12 @@ describe("describeTab", () => {
     expect(describeTab(target, { terminalTitles: { t1: "Terminal B" } }).label).toBe("Terminal B")
   })
 
+  test("titles a plugin page from its sidebar item, with a generic fallback", () => {
+    const target: PaneTabTarget = { kind: "page", page: "plugin", path: "/plugins/hello/main" }
+    expect(describeTab(target, { pluginPageTitles: { "/plugins/hello/main": "Hello" } }).label).toBe("Hello")
+    expect(describeTab(target, {}).label).toBe("Plugin")
+  })
+
   test("falls back to a generic terminal label", () => {
     expect(describeTab({ kind: "terminal", terminalId: "t1" }, {}).label).toBe("Terminal")
   })

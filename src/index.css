@@ -256,6 +256,41 @@
   --text-22: 1.375rem;
 }
 
+
+/*
+  ── The finger-tracked drawer (§07) ───────────────────────────────────────
+  On a phone motion IS the navigation, and the drawer's whole point is that
+  it follows the thumb rather than teleporting on release.
+
+  Two things happen here and nowhere else:
+
+  1. `display: flex` OVERRIDES the `hidden` a closed sidebar carries. That is
+     what lets a finger drag a closed drawer into view, and lets a drawer that
+     React has just closed slide out, without KannaSidebar re-rendering:
+     `open` stays false, so the FocusScope stays untrapped. This rule is
+     deliberately OUTSIDE every @layer. `hidden` is a Tailwind utility, and
+     the utilities layer beats the base layer whatever the specificity, so
+     inside @layer base this rule lost and a drag from the edge showed
+     nothing until release. Unlayered styles beat every layer.
+
+  2. The transform reads `--kanna-drawer-progress`, written per frame through
+     DomPort by `drawerVisual`, the one owner of drawer motion for a swipe and
+     for a tap alike. 0 is fully closed, 1 fully open — the same scale
+     `sidebarDragProgress` reports. The spring overshoots past 1 on its way
+     to rest; `min(0%, …)` stops the full-width shell there, because past
+     fully open it would slide right and bare a strip of the page beneath.
+
+  Scoped below md deliberately: the class should never appear on a desktop
+  viewport, and this media query means a bug that applied it anyway could not
+  move a docked sidebar.
+*/
+@media (max-width: 767px) {
+  .kanna-drawer-dragging .kanna-sidebar-shell {
+    display: flex;
+    transform: translateX(min(0%, calc((var(--kanna-drawer-progress, 1) - 1) * 100%)));
+  }
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -776,37 +811,6 @@
     a class the sidebar computes for itself — KannaSidebar sits exactly on its
     architecture-budget ceiling, and the shell already holds this flag.
   */
-  /*
-    ── The finger-tracked drawer (§07) ─────────────────────────────────────
-    On a phone motion IS the navigation, and the drawer's whole point is that
-    it follows the thumb rather than teleporting on release.
-
-    Two things happen here and nowhere else:
-
-    1. `display: flex` OVERRIDES the `hidden` a closed sidebar carries. That
-       is what lets a finger drag a closed drawer into view without React
-       re-rendering — `open` stays false, so the FocusScope stays untrapped
-       (trapping focus mid-swipe would be wrong) and `KannaSidebar` needs no
-       new prop, no new state and no new line. The class is applied only for
-       the length of a gesture, by `drawerVisual`.
-
-    2. The transform reads `--kanna-drawer-progress`, written per frame
-       through DomPort. 0 is fully closed, 1 fully open — the same scale
-       `sidebarDragProgress` reports, so the number the tests assert is the
-       number the pixels use.
-
-    Scoped below md deliberately: `sidebarDragProgress` already returns null
-    on a desktop viewport, so the class should never appear there, and this
-    media query means a bug that applied it anyway could not move a docked
-    sidebar.
-  */
-  @media (max-width: 767px) {
-    .kanna-drawer-dragging .kanna-sidebar-shell {
-      display: flex;
-      transform: translateX(calc((var(--kanna-drawer-progress, 1) - 1) * 100%));
-    }
-  }
-
   [data-kanna-spawning] .kanna-sidebar-shell {
     animation: kanna-shell-step-back calc(2 * var(--motion-carry)) var(--motion-ease-arriving) 260ms;
   }
@@ -958,6 +962,68 @@
 
   .kanna-live-caret[data-caret="idle"] {
     animation: kanna-cursor-blink 0.9s step-end infinite;
+  }
+
+  /*
+    ── Dialogs and sheets (DESIGN.md "Dialogs / Popovers / Sheets") ────────
+    Radix writes data-state and keeps a closing node mounted until its exit
+    animation ends, so both directions are plain CSS. A desktop dialog scales
+    0.98 → 1 with a fade; below md the same Content is a bottom sheet that
+    rises from under the screen edge and falls back on close. Movement is
+    `transform`, which composes after Tailwind's centring `translate`, so the
+    centring utilities and the keyframes never fight. The exit fills forwards
+    because its end state is invisible: the node unmounts on animationend and
+    must not flash back to rest for a frame first. Reduced motion is the one
+    global gate at the top of this file.
+  */
+  @keyframes kanna-overlay-in {
+    from { opacity: 0; }
+  }
+
+  @keyframes kanna-overlay-out {
+    to { opacity: 0; }
+  }
+
+  @keyframes kanna-dialog-in {
+    from { opacity: 0; transform: scale(0.98); }
+  }
+
+  @keyframes kanna-dialog-out {
+    to { opacity: 0; transform: scale(0.98); }
+  }
+
+  @keyframes kanna-sheet-in {
+    from { transform: translateY(100%); }
+  }
+
+  @keyframes kanna-sheet-out {
+    to { transform: translateY(100%); }
+  }
+
+  .kanna-dialog-overlay[data-state="open"] {
+    animation: kanna-overlay-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  .kanna-dialog-overlay[data-state="closed"] {
+    animation: kanna-overlay-out var(--motion-quick) var(--motion-ease-arriving) forwards;
+  }
+
+  .kanna-dialog-content[data-state="open"] {
+    animation: kanna-dialog-in var(--motion-quick) var(--motion-ease-arriving);
+  }
+
+  .kanna-dialog-content[data-state="closed"] {
+    animation: kanna-dialog-out var(--motion-instant) var(--motion-ease-arriving) forwards;
+  }
+
+  @media (max-width: 767px) {
+    .kanna-dialog-content[data-state="open"] {
+      animation: kanna-sheet-in var(--motion-panel) var(--motion-ease-panel);
+    }
+
+    .kanna-dialog-content[data-state="closed"] {
+      animation: kanna-sheet-out var(--motion-carry) var(--motion-ease-panel) forwards;
+    }
   }
 
 }

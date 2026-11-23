@@ -21,12 +21,13 @@ import {
 } from "./core-types.schema"
 import {
   chatProviderPreferencesSchema,
-  claudeModelOptionsSchema,
-  codexModelOptionsSchema,
   customModelEntrySchema,
   customModelInputSchema,
   customModelPatchSchema,
   openRouterModelOptionsSchema,
+  partialAntigravityModelOptionsSchema,
+  partialClaudeModelOptionsSchema,
+  partialCodexModelOptionsSchema,
   textSnippetInputSchema,
   textSnippetPatchSchema,
   textSnippetSchema,
@@ -54,6 +55,7 @@ import {
 import { mcpSourceInputSchema, mcpSourcePatchSchema, mcpSourceSchema } from "./mcp-sources/types.schema"
 import { serviceBusSettingsPatchSchema, serviceBusSettingsPublicSchema } from "./service-bus/jetstream-config.schema"
 import { subagentInputSchema, subagentPatchSchema, subagentSchema } from "./subagent-types.schema"
+import { peerInboundModeSchema } from "./peer-messaging/inbound.schema"
 import { assertParity } from "./type-parity"
 
 const oauthTokenEntrySchema = z.object({
@@ -114,8 +116,9 @@ export const appSettingsPatchSchema = z.object({
   defaultProvider: defaultProviderPreferenceSchema.optional(),
   providerDefaults: z
     .object({
-      claude: providerPreferencePatch(claudeModelOptionsSchema).optional(),
-      codex: providerPreferencePatch(codexModelOptionsSchema).optional(),
+      claude: providerPreferencePatch(partialClaudeModelOptionsSchema).optional(),
+      codex: providerPreferencePatch(partialCodexModelOptionsSchema).optional(),
+      antigravity: providerPreferencePatch(partialAntigravityModelOptionsSchema).optional(),
       openrouter: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
       custom: providerPreferencePatch(openRouterModelOptionsSchema).optional(),
     })
@@ -156,6 +159,7 @@ export const appSettingsPatchSchema = z.object({
   claudeDriver: z.object({ lifecycle: claudeLifecycleSettingsSchema.partial().optional() }).optional(),
   globalPromptAppend: z.string().optional(),
   shareDefaultTtlHours: z.number().optional(),
+  peerMessagesInbound: peerInboundModeSchema.optional(),
   subagentRuntime: subagentRuntimeSettingsSchema.partial().optional(),
   packageUpdates: packageUpdateSettingsSchema.partial().optional(),
   plugins: pluginSettingsSchema.partial().optional(),
@@ -209,6 +213,7 @@ export const appSettingsSnapshotSchema = z.object({
   claudeDriver: claudeDriverSettingsSchema,
   globalPromptAppend: z.string(),
   shareDefaultTtlHours: z.number(),
+  peerMessagesInbound: peerInboundModeSchema,
   subagentRuntime: subagentRuntimeSettingsSchema,
   packageUpdates: packageUpdateSettingsSchema,
   plugins: pluginSettingsSchema,

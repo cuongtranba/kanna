@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import { fallbackPathAfterClose, resolvePageRoute } from "./pageTabs"
+import { fallbackPathAfterClose, pluginPagePath, resolvePageRoute } from "./pageTabs"
 import { createDefaultLayout, createPane, createTab } from "./tree"
 import type { PaneLayout, PaneTabTarget } from "./types"
 
@@ -22,6 +22,15 @@ describe("resolvePageRoute", () => {
     expect(resolvePageRoute("/boards/p1")).toEqual({ page: "boards", params: { projectId: "p1" } })
     expect(resolvePageRoute("/inbox")).toEqual({ page: "inbox", params: {} })
     expect(resolvePageRoute("/inbox/t1")).toEqual({ page: "inbox", params: { threadId: "t1" } })
+  })
+
+  test("maps a plugin page to its plugin and surface", () => {
+    expect(pluginPagePath("hello", "main")).toBe("/plugins/hello/main")
+    expect(resolvePageRoute(pluginPagePath("hello", "main"))).toEqual({
+      page: "plugin",
+      params: { pluginId: "hello", surfaceId: "main" },
+    })
+    expect(resolvePageRoute("/plugins/hello")).toBeNull()
   })
 
   test("reads /boards/stack/x as a stack, not a project called stack", () => {

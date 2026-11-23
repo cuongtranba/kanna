@@ -1,0 +1,6 @@
+---
+target: c3-249
+scope: block
+base: c3-249#n14769@v1:sha256:98b1a73d20c5d45fa5127a36ed544a1649da50bd348b3c3a2ce32b323300561f
+---
+Owns cross-chat messaging: list_peer_chats, send_chat_message and wait_for_chat_message for Claude and Codex, the peer_chat origin that the server stamps on the queued message (with the sending subagent run and the message it answers, when present), the escaped prompt wrapper the target model sees, the inbound setting (global peerMessagesInbound and per-chat chat_peer_inbound_set), mid-turn delivery into a running turn, and the guardrails: valid target, inbound enabled, 100000 character cap, identical-content drop within 60 seconds, 6 per minute and 60 per hour per sender and target pair, 20 queued peer messages per target, and at most 5 messages injected into one turn. Notify-when-idle subscriptions and message waits are in memory, so they are lost on restart; a subscription fires once and expires after 12 hours, a wait ends after at most 600 seconds. A main chat and a Claude subagent can send; Codex subagents and inbox triage turns cannot. A peer message never runs as a builtin or slash command. Non-goals: no approval step, no persistence of subscriptions or waits, no messaging across machines.

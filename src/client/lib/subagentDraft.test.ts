@@ -27,6 +27,7 @@ const providerDefaults: ChatProviderPreferences = {
     modelOptions: { reasoningEffort: "low", fastMode: true },
     planMode: false,
   },
+  antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
   openrouter: {
     model: DEFAULT_OPENROUTER_SDK_MODEL,
     modelOptions: {},
@@ -200,6 +201,7 @@ describe("createDefaultSubagentDraft model fallback", () => {
     const prefs: ChatProviderPreferences = {
       claude: { model: "", modelOptions: { ...DEFAULT_CLAUDE_MODEL_OPTIONS }, planMode: false },
       codex: { model: "", modelOptions: { ...DEFAULT_CODEX_MODEL_OPTIONS }, planMode: false },
+      antigravity: { model: "gemini-4-carbon", modelOptions: { reasoningEffort: "medium" }, planMode: false },
       openrouter: { model: "", modelOptions: {}, planMode: false },
       custom: { model: "", modelOptions: {}, planMode: false },
     }

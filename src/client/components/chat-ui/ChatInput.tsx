@@ -31,8 +31,6 @@ import {
   type ModelOptions,
   type ProviderCatalogEntry,
   type Subagent,
-  isClaudeReasoningEffort,
-  isCodexReasoningEffort,
   normalizeClaudeContextWindow,
   resolveClaudeContextWindowTokens,
 } from "../../../shared/types"
@@ -52,6 +50,7 @@ import {
   NEW_CHAT_COMPOSER_ID,
   type ComposerState,
   useChatPreferencesStore,
+  withComposerReasoningEffort,
 } from "../../stores/chatPreferencesStore"
 import { useComposerArrival } from "./ComposerArrival"
 import { useComposerUploads } from "./useComposerUploads"
@@ -487,15 +486,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
   }
 
   function setReasoningEffort(reasoningEffort: string) {
-    updateComposerState((state): ComposerState => {
-      if (state.provider === "claude" && isClaudeReasoningEffort(reasoningEffort)) {
-        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
-      }
-      if (state.provider === "codex" && isCodexReasoningEffort(reasoningEffort)) {
-        return { ...state, modelOptions: { ...state.modelOptions, reasoningEffort } }
-      }
-      return state
-    })
+    updateComposerState((state) => withComposerReasoningEffort(state, reasoningEffort))
   }
 
   function setClaudeContextWindow(contextWindow: ClaudeContextWindow) {
@@ -592,6 +583,7 @@ const ChatInputInner = forwardRef<ChatInputHandle, Props>((
           switch (change.type) {
             case "claudeReasoningEffort":
             case "codexReasoningEffort":
+            case "antigravityReasoningEffort":
               setReasoningEffort(change.effort)
               break
             case "contextWindow":

@@ -149,8 +149,8 @@ with `keep_alive` (the MCP host rejects both set). Works for any provider
   prompt is the structured `<task-notification>` XML (`buildTaskNotification`
   in `claude-session-config.ts` — same format Claude Code's LocalAgentTask uses, so the model
   parses task identity/status natively). An ARMED loop delivery first (1) wipes
-  the chat's Claude `session_token` (main /clear equivalent — same machinery
-  `exit_plan_mode`'s clearContext branch uses) and (2) appends a
+  the chat's Claude `session_token` and closes or defers the warm session
+  (`clearClaudeSessionContext`, the machinery builtin /clear uses) and (2) appends a
   `context_cleared` transcript entry, omits `<result>` (the task list stays the
   loop's only durability contract) and appends the full loop discipline prompt
   after the notification; the next main turn is a FRESH Claude spawn. An

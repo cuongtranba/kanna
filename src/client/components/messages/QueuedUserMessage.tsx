@@ -4,6 +4,7 @@ import { renderMarkdownToReact } from "../lexical/markdown/lexicalToReact"
 import { ArrowUp, X } from "lucide-react"
 import { pendingActionKey, runPendingAction, usePendingAction } from "../../stores/pendingActionsStore"
 import { cn } from "../../lib/utils"
+import { OriginChip } from "./OriginChip"
 
 interface QueuedUserMessageProps {
   message: QueuedChatMessage
@@ -71,7 +72,7 @@ export function QueuedUserMessage({ message, onRemove, onSendNow }: QueuedUserMe
           </div>
           
         ) : null}
-
+        {message.origin ? <OriginChip origin={message.origin} linked /> : null}
       </div>
     </div>
   )

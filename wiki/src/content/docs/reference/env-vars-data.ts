@@ -20,7 +20,6 @@ export const envVars: EnvVar[] = [
   { name: 'KANNA_IMPORT_FOLLOW_POLL_MS', default: "2000", description: "Stat-poll tick interval driving the single-session-import live-tail FollowedSessionRegistry." },
   { name: 'KANNA_LOG_ANALYTICS', default: "0", description: "Set to \"1\" to log analytics payloads to stderr. Debugging aid." },
   { name: 'KANNA_LOG_CLAUDE_STEER', default: "0", description: "Set to \"1\" to log mid-turn steering messages sent to Claude. Debugging aid." },
-  { name: 'KANNA_MCP_TOOL_CALLBACKS', default: "0", description: "Set to \"1\" to route AskUserQuestion / ExitPlanMode / built-in shims through the durable approval protocol." },
   { name: 'KANNA_MEMLOG_MS', default: "60000", description: "Interval between \"[kanna/mem] rss=…\" process-memory log lines. Set to 0 to disable." },
   { name: 'KANNA_MERMAID_GUARD', default: "enabled", description: "Set to \"disabled\" to stop the end-of-turn check that asks the model to fix a mermaid diagram that would not render. The validate_mermaid tool stays registered either way." },
   { name: 'KANNA_NATS_RELEASE_BASE', default: "https://github.com/nats-io/nats-server/releases/download", description: "Where the embedded service bus downloads nats-server from. Machine-local test override; every download is still checked against that base's SHA256SUMS." },

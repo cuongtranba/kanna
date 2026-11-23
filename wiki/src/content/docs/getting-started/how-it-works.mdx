@@ -17,7 +17,7 @@ ideas explain almost everything else in these docs.
 
 The browser sends commands over a WebSocket. The **agent coordinator** runs each
 turn on a provider: the Claude Agent SDK (which also serves OpenRouter models)
-or the Codex app-server. The agent edits files in the chat's project or worktree,
+the Codex app-server, or `agy` over the Agent Client Protocol. The agent edits files in the chat's project or worktree,
 and calls tools: your own [MCP servers](/features/advanced/#custom-mcp-servers)
 and Kanna's tools for subagents, cron, boards and the task list.
 

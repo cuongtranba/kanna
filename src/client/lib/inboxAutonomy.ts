@@ -17,7 +17,7 @@ export const INBOX_AUTONOMY_LEVEL_LABEL: Readonly<Record<InboxAutonomyLevel, str
 export const SOURCE_DEFAULT_VALUE = "default"
 
 export const AUTO_NEEDS_REPLY_REASON = "Approve and Auto need a reply target on the source"
-export const AUTO_NEEDS_CLAUDE_REASON = "Auto needs a Claude handler: Codex cannot be stopped from sending on its own"
+export const AUTO_NEEDS_CLAUDE_REASON = "Auto needs a Claude handler: Codex and Antigravity cannot be stopped from sending on their own"
 
 export interface InboxAutonomyOption {
   value: string

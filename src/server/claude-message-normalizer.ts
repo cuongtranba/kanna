@@ -110,6 +110,7 @@ export interface ClaudeRawSdkMessage {
   rate_limit_info?: Record<string, string | number | boolean | null>
   session_id?: string
   parent_tool_use_id?: string | null
+  isReplay?: boolean
   event?: JsonValue
   stop_reason?: string | null
   task_id?: string

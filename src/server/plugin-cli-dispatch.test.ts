@@ -39,6 +39,7 @@ function createFakeService(overrides: Partial<PluginService> = {}): FakePluginSe
     },
     setEnabled: async () => {},
     restore: () => {},
+    startEnabled: async () => {},
     start: async () => {},
     status: () => undefined,
     call: async () => ({ ok: false, error: "not implemented" }),

@@ -13,7 +13,7 @@ Kanna persists every chat to a per-chat JSONL transcript on disk. When the user 
 Kanna stores transcripts under its data dir:
 
 - Production runtime: `~/.kanna/data/transcripts/<chatId>.jsonl`
-- Dev runtime (`KANNA_BRANDING_OVERRIDE=dev` or running `bun dev`): `~/.kanna-dev/data/transcripts/<chatId>.jsonl`
+- Dev runtime (`KANNA_RUNTIME_PROFILE=dev`, as `bun run dev` sets it): `~/.kanna-dev/data/transcripts/<chatId>.jsonl`
 
 The `<chatId>` is the UUID the user pastes. Try the prod path first; fall back to dev. If both miss, list the directory and grep — chat ids can collide with old / archived sessions and the user may have copied a partial id.
 
@@ -70,7 +70,7 @@ Pair `tool_call.tool.toolId` with `tool_result.toolId` to match a call to its re
 
 ## What to look for, by symptom
 
-- **"Session got stuck / hung"** → check the last `tool_call` without a matching `tool_result`. The agent is waiting on something that never returned. For `AskUserQuestion` / `ExitPlanMode` under `KANNA_MCP_TOOL_CALLBACKS=1`, cross-check `tool-requests.jsonl` for a pending durable approval.
+- **"Session got stuck / hung"** → check the last `tool_call` without a matching `tool_result`. The agent is waiting on something that never returned. For a beacon tool, cross-check `tool-requests.jsonl` for a pending durable approval; for `AskUserQuestion` / `ExitPlanMode`, check `turns.jsonl` for a `chat_tool_pending` with no matching `chat_tool_resolved`.
 - **"Tool failed"** → `--errors-only` lists every `isError: true`. The `content` field has the error string the SDK surfaced.
 - **"Model did the wrong thing"** → read the `user_prompt` then the next 1-2 `assistant_text` and `tool_call` entries. Often the prompt was ambiguous or an attachment was missing.
 - **"Permission denied / approval loop"** → search for `tool` names matching `mcp__kanna__*` and look at the result content; the durable approval protocol writes a deny reason there.

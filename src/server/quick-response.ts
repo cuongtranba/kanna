@@ -159,7 +159,6 @@ export async function runClaudeStructured(
       model: QUICK_RESPONSE_CLAUDE_MODEL,
       tools: [],
       systemPrompt: "",
-      effort: "low",
       permissionMode: "bypassPermissions",
       outputFormat: {
         type: "json_schema",

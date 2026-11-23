@@ -51,6 +51,7 @@ export const EVENT_ROUTES = {
   chat_read_state_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_source_hash_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_policy_override_set: { log: "chats", family: "chat", replayPriority: 9 },
+  chat_peer_inbound_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_compact_failures_set: { log: "chats", family: "chat", replayPriority: 9 },
   chat_deleted: { log: "chats", family: "chat", replayPriority: 10 },
   chat_archived: { log: "chats", family: "chat", replayPriority: 10 },
@@ -77,6 +78,7 @@ export const EVENT_ROUTES = {
   loop_run_outcome: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   loop_disarmed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_armed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
+  cron_updated: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_disarmed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_paused: { log: "schedules", family: "autoContinue", replayPriority: 11 },
   cron_resumed: { log: "schedules", family: "autoContinue", replayPriority: 11 },
@@ -92,6 +94,7 @@ export const EVENT_ROUTES = {
   chat_task_integrated: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_note: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_epoch_advanced: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
+  chat_task_list_cleared: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_native_synced: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
 } satisfies Record<StoreEventKind, EventRoute>
 

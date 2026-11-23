@@ -18,11 +18,12 @@ import { EventStore, type TurnOutcome } from "./event-store"
 import type { AnalyticsReporter } from "./analytics"
 import { NoopAnalyticsReporter } from "./analytics"
 import { CodexAppServerManager } from "./codex-app-server"
+import { AntigravityAcpManager } from "./antigravity-acp"
 import { type GenerateChatTitleResult, generateTitleForChatDetailed } from "./generate-title"
 import { QuickResponseAdapter } from "./quick-response"
 import type { HarnessTurn } from "./harness-types"
 import { startClaudeSession } from "./claude-session-start"
-import { DEFAULT_AGENT_RUNTIME_CONFIG } from "./agent-runtime-config"
+import { DEFAULT_AGENT_RUNTIME_CONFIG, resolveClaudeSessionLifecycle } from "./agent-runtime-config"
 import { readLlmProviderSnapshot } from "./llm-provider"
 import type { ChatAutomationEvent } from "./auto-continue/events"
 import { ClaudeLimitDetector, CodexLimitDetector, type LimitDetector } from "./auto-continue/limit-detector"
@@ -56,6 +57,8 @@ import { log } from "../shared/log"
 import type { SendToStartingProfile } from "./claude-steer-log"
 import type { SendMessageOptions, StartTurnForChatArgs } from "./claude-turn-starter-types"
 import type { ActiveTurn, ClaudeSessionState, StartingTurn } from "./claude-session-state"
+import { createMidTurnDelivery, type MidTurnDelivery } from "./peer-messaging/mid-turn-delivery"
+import { DetachedWork } from "./detached-work"
 import { runClaudeSession as runClaudeSessionLoop, type RunClaudeSessionDeps } from "./claude-session-runner"
 import {
   startTurnForChat as startTurnForChatFn,
@@ -168,50 +171,28 @@ import { currentBranchName, mergeLoopBranch } from "./loop-integrate-io.adapter"
 import { runVerifyCommand } from "./loop-verify-io.adapter"
 import { homedir } from "node:os"
 import { isClaudeSdkProvider } from "./provider-catalog"
-import { createMermaidGuard } from "./mermaid-guard"
-import { composeTurnEndGuards, type TurnEndGuard } from "./turn-end-guard"
-import { createGenUIGuard } from "./genui/genui-guard"
-import { isGenUIEnabled } from "./genui/genui-config"
-import type { DatasetDecl } from "../shared/genui"
+import type { TurnEndGuard } from "./turn-end-guard"
+import { createCoordinatorTurnEndGuards } from "./turn-end-guards"
 import { createCronRepair, type CronRepair } from "./cron/repair"
 import { createCronConfirm, type CronConfirm } from "./cron/confirm"
 import { createModelEscalation, type ModelEscalation } from "./model-escalation"
-import { parseMermaid } from "./mermaid-parse.adapter"
-import { repairMermaidSource } from "../shared/mermaidRepair"
 import { resolveChatCwd } from "./claude-session-config"
 import { createLocalSkillAccess, type LocalSkillAccess } from "./skill-invocation"
 import { readCatalogFileBody } from "./local-catalog-io.adapter"
-import {
-  addCounter,
-  recordHistogram,
-  TURN_COST_USD,
-  TURN_DURATION_MS,
-  TURN_TOKENS,
-} from "./observability"
-import { splitBilledTokens } from "../shared/token-pricing"
+import { recordHistogram, TURN_DURATION_MS } from "./observability"
+import { recordTurnSpend } from "./turn-spend"
 import type {
   AgentCoordinatorArgs,
   ClaudeSessionLifecycleOptions,
 } from "./agent-coordinator-types"
-
-function recordTurnSpend(active: ActiveTurn): void {
-  const usage = active.usage
-  if (!usage) return
-  const attributes = { provider: active.provider, model: active.model }
-  for (const [kind, count] of splitBilledTokens(usage)) {
-    addCounter(TURN_TOKENS, count, { ...attributes, kind })
-  }
-  const cost = usage.costUsd
-  if (cost !== undefined && Number.isFinite(cost) && cost >= 0) {
-    addCounter(TURN_COST_USD, cost, attributes)
-  }
-}
 
 export class AgentCoordinator {
   readonly store: EventStore
   private readonly onStateChange: (chatId?: string, options?: { immediate?: boolean }) => void
   readonly analytics: AnalyticsReporter
   readonly codexManager: CodexAppServerManager
+  readonly antigravityManager: AntigravityAcpManager
+  readonly midTurnDelivery: MidTurnDelivery
   readonly generateTitle: (messageContent: string, cwd: string) => Promise<GenerateChatTitleResult>
   readonly startClaudeSessionFn: NonNullable<AgentCoordinatorArgs["startClaudeSession"]>
   reportBackgroundError: ((message: string) => void) | null = null
@@ -227,7 +208,8 @@ export class AgentCoordinator {
   readonly scheduleManager: ScheduleManager | null
   readonly cronScheduler: import("./cron/scheduler").CronScheduler | null
   readonly cronSkipCoalescer = new CronSkipCoalescer()
-  private readonly pendingCronOutcomes = new Set<Promise<void>>()
+  private readonly cronOutcomes = new DetachedWork()
+  private readonly sessionRuns = new DetachedWork()
   private readonly unsubscribeTurnTerminal: () => void
   private readonly _cronRepair: CronRepair
   private readonly _cronConfirm: CronConfirm
@@ -256,6 +238,7 @@ export class AgentCoordinator {
   readonly boardRegistry: import("./board-registry").BoardRegistry | null
   readonly inboxRegistry: import("./inbox/inbox-registry").InboxRegistry | null
   readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
+  readonly peerMessenger: import("./peer-messaging/peer-messenger").PeerMessenger | null
   readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly liveBlocks: import("./live-block-throttle").LiveBlockHub | null
@@ -279,6 +262,16 @@ export class AgentCoordinator {
     this.onStateChange = args.onStateChange
     this.analytics = args.analytics ?? NoopAnalyticsReporter
     this.codexManager = args.codexManager ?? new CodexAppServerManager()
+    this.antigravityManager = args.antigravityManager ?? new AntigravityAcpManager()
+    this.midTurnDelivery = createMidTurnDelivery({
+      store: this.store,
+      activeTurns: this.activeTurns,
+      claudeSessions: this.claudeSessions,
+      steerCodexTurn: (chatId, text, clientUserMessageId) => this.codexManager.steerTurn(chatId, text, clientUserMessageId),
+      startNextQueued: async (chatId) => { await this.maybeStartNextQueuedMessage(chatId) },
+      after: (delayMs, run) => { setTimeout(run, delayMs) },
+      emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+    })
     this.generateTitle = args.generateTitle
       ?? ((messageContent, cwd) =>
         generateTitleForChatDetailed(messageContent, cwd, new QuickResponseAdapter({ oauthPool: args.oauthPool })))
@@ -303,25 +296,13 @@ export class AgentCoordinator {
         drain: true,
       }),
     })
-    const genuiDatasets = args.genuiDatasets
-    const checkGenUIDataset = async (chatId: string, decl: DatasetDecl) =>
-      (genuiDatasets ? await genuiDatasets.checkResolvable(chatId, decl) : null)
-    const genuiEscalation = this._buildModelEscalation({ name: "genui", enabled: isGenUIEnabled() })
-    this._codexTurnEndGuard = createGenUIGuard(genuiEscalation, checkGenUIDataset, false)
-    this._turnEndGuard = composeTurnEndGuards(
-      createMermaidGuard({
-        escalation: this._buildModelEscalation({
-          name: "mermaid",
-          enabled: config.mermaidGuardEnabled,
-        }),
-        parse: parseMermaid,
-        repair: (source) => {
-          const result = repairMermaidSource(source)
-          return { source: result.source, repaired: result.repairs.length > 0 }
-        },
-      }),
-      createGenUIGuard(genuiEscalation, checkGenUIDataset, true),
-    )
+    const turnEndGuards = createCoordinatorTurnEndGuards({
+      genuiDatasets: args.genuiDatasets,
+      buildEscalation: (opts) => this._buildModelEscalation(opts),
+      mermaidGuardEnabled: config.mermaidGuardEnabled,
+    })
+    this._turnEndGuard = turnEndGuards.claude
+    this._codexTurnEndGuard = turnEndGuards.codex
     const onTurnOutcome = args.onTurnOutcome
     this.unsubscribeTurnTerminal = this.store.subscribeTurnTerminal((chatId, outcome) => {
       this.handleTurnTerminal(chatId, outcome, onTurnOutcome)
@@ -358,6 +339,7 @@ export class AgentCoordinator {
       onBackgroundRunComplete: (chatId, runId, outcome) => {
         void this.deliverSubagentToMain(chatId, runId, outcome)
       },
+      redeliverPeerMessage: (chatId, content, origin) => this.peerMessenger?.deliverToChat(chatId, content, origin) ?? Promise.resolve(),
       maxLive: config.subagentMaxLive,
       liveIdleTimeoutMs: config.subagentIdleTimeoutMs,
       runTimeoutMs: (this.getAppSettingsSnapshot().subagentRuntime?.runTimeoutMs
@@ -368,17 +350,7 @@ export class AgentCoordinator {
     this.oauthPool = args.oauthPool ?? null
     this.toolCallback = args.toolCallback ?? null
     this.chatPolicy = args.chatPolicy ?? POLICY_DEFAULT
-    this.claudeSessionLifecycle = {
-      idleMs: args.claudeSessionLifecycle?.idleMs ?? config.claudeSessionLifecycle.idleMs,
-      maxResidentSessions: args.claudeSessionLifecycle?.maxResidentSessions
-        ?? config.claudeSessionLifecycle.maxResidentSessions,
-      sweepIntervalMs: args.claudeSessionLifecycle?.sweepIntervalMs
-        ?? config.claudeSessionLifecycle.sweepIntervalMs,
-      backgroundTaskMaxMs: args.claudeSessionLifecycle?.backgroundTaskMaxMs
-        ?? config.claudeSessionLifecycle.backgroundTaskMaxMs,
-      backgroundTaskMaxWakes: args.claudeSessionLifecycle?.backgroundTaskMaxWakes
-        ?? config.claudeSessionLifecycle.backgroundTaskMaxWakes,
-    }
+    this.claudeSessionLifecycle = resolveClaudeSessionLifecycle(args.claudeSessionLifecycle, config.claudeSessionLifecycle)
     this.claudeSessionSweepTimer = this.claudeSessionLifecycle.sweepIntervalMs > 0
       ? setInterval(() => { this.sweepIdleClaudeSessions() }, this.claudeSessionLifecycle.sweepIntervalMs)
       : null
@@ -387,6 +359,7 @@ export class AgentCoordinator {
     this.boardRegistry = args.boardRegistry ?? null
     this.inboxRegistry = args.inboxRegistry ?? null
     this.beaconRegistry = args.beaconRegistry ?? null
+    this.peerMessenger = args.peerMessenger ?? null
     this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.liveBlocks = args.liveBlocks ?? null
@@ -464,24 +437,22 @@ export class AgentCoordinator {
     if (outcome === "failed") void handleFailedLoopTurn(this.loopCommandDeps(), chatId)
     const tag = active?.cronRun
     if (!tag) return
-    const p = recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome).catch((error) => {
-      log.error("[kanna/cron] failed to record run outcome:", String(error))
-    })
-    this.pendingCronOutcomes.add(p)
-    p.finally(() => this.pendingCronOutcomes.delete(p))
+    this.cronOutcomes.track("[kanna/cron] failed to record run outcome:", recordCronTurnOutcomeFn(this.cronCommandDeps(), tag, outcome))
   }
 
   async dispose(gracefulTimeoutMs = 20_000): Promise<void> {
     this.unsubscribeTurnTerminal()
     if (this.claudeSessionSweepTimer) clearInterval(this.claudeSessionSweepTimer)
+    this.antigravityManager.stopAll()
     const closedPromises = [...this.claudeSessions.entries()].map(([chatId, session]) => {
       const closed = session.session.closed
       this.closeClaudeSession(chatId, session)
       return closed
     })
-    if (closedPromises.length === 0) return
+    const settling = [...closedPromises, ...this.sessionRuns.inFlight()]
+    if (settling.length === 0) return
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, gracefulTimeoutMs))
-    await Promise.race([Promise.allSettled(closedPromises), timeout])
+    await Promise.race([Promise.allSettled(settling), timeout])
   }
 
   getActiveStatuses() {
@@ -588,7 +559,7 @@ export class AgentCoordinator {
     }
   }
 
-  private cronCommandDeps(): CronCommandDeps {
+  private cronCommandDeps(): CronCommandDeps & { store: EventStore } {
     return {
       store: this.store,
       cronScheduler: this.cronScheduler,
@@ -630,7 +601,6 @@ export class AgentCoordinator {
     }
   }
 
-
   private cancelHandlerDeps(): CancelHandlerDeps {
     return {
       drainingStreams: this.drainingStreams,
@@ -641,10 +611,10 @@ export class AgentCoordinator {
       startingTurns: this.startingTurns,
       store: this.store,
       claudeSessions: this.claudeSessions,
+      closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       emitStateChange: (chatId) => this.emitStateChange(chatId),
     }
   }
-
 
   private chatManagementDeps(): ChatManagementDeps {
     return {
@@ -663,7 +633,6 @@ export class AgentCoordinator {
         this.dequeueAndStartQueuedMessage(chatId, queuedMessage, options),
     }
   }
-
 
   private sendCommandDeps(): SendCommandDeps {
     return {
@@ -692,6 +661,7 @@ export class AgentCoordinator {
       startClaudeSessionFn: this.startClaudeSessionFn,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       codexManager: this.codexManager,
+      antigravityManager: this.antigravityManager,
       oauthPool: this.oauthPool,
       subagentPendingResolvers: this.subagentPendingResolvers,
       realpath: realpathAdapter,
@@ -705,6 +675,9 @@ export class AgentCoordinator {
       readLlmProvider: () => this.readLlmProvider(),
       getCustomProviderCredential: (id) => this.getCustomProviderCredential(id),
       getArmedLoop: (chatId) => toArmedLoopInfo(this.isLoopArmed(chatId)),
+      isRunAlive: (chatId, runId) => this.isRunAlive(chatId, runId),
+      chatTaskStore: this.chatTaskStore(),
+      peerMessenger: this.peerMessenger ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
       getBeacons: this.getBeacons,
       toolCallback: this.toolCallback,
@@ -783,6 +756,9 @@ export class AgentCoordinator {
       pendingTools: this.pendingTools,
       store: this.store,
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
+      cancel: (chatId, options) => this.cancel(chatId, options),
+      clearChatContext: (chatId) => this.clearChatContext(chatId),
+      startApprovedPlanTurn: async (chatId, prompt) => this.dequeueAndStartQueuedMessage(chatId, await this.enqueueMessage(chatId, prompt, [], { planMode: false })),
     }
   }
 
@@ -871,6 +847,7 @@ export class AgentCoordinator {
       hasLiveWorkflow: (chatId) => hasLiveWorkflowFn(this.sessionLifecycle, chatId),
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
+      stopAntigravitySession: (chatId) => this.antigravityManager.stopSession(chatId),
       emitStateChange: (chatId) => this.emitStateChange(chatId),
     }
   }
@@ -884,6 +861,7 @@ export class AgentCoordinator {
       mentionedSubagentIdsByChat: this.mentionedSubagentIdsByChat,
       store: this.store,
       codexManager: this.codexManager,
+      antigravityManager: this.antigravityManager,
       subagentOrchestrator: this.getSubagentOrchestrator(),
       clearDrainingStream: (chatId) => this.clearDrainingStream(chatId),
       emitStateChange: (chatId, opts) => this.emitStateChange(chatId, opts),
@@ -945,6 +923,7 @@ export class AgentCoordinator {
       boardRegistry: this.boardRegistry ?? undefined,
       inboxRegistry: this.inboxRegistry ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
+      peerMessenger: this.peerMessenger ?? undefined,
       getBeacons: this.getBeacons,
       closeClaudeSession: (chatId, session) => this.closeClaudeSession(chatId, session),
       enforceClaudeSessionBudget: (protectedChatId?) => this.enforceClaudeSessionBudget(protectedChatId),
@@ -964,7 +943,7 @@ export class AgentCoordinator {
       resumeLoop: (chatId) => this.resumeLoop(chatId),
       resolveChatPolicy: (chatId) => this.resolveChatPolicy(chatId),
       getCostBaselineUsd: (chatId) => this.store.getLatestClaudeCumulativeCostUsd(chatId),
-      runClaudeSession: (session) => { void this.runClaudeSession(session) },
+      runClaudeSession: (session) => { this.sessionRuns.track("[kanna/agent] claude session run failed:", this.runClaudeSession(session)) },
       emitStateChange: (chatId) => { this.emitStateChange(chatId) },
       onCompaction: (event) => { this.handleCompaction(event) },
       onCliCommands: (commands) => { this.cliCommands?.record(commands) },
@@ -1042,6 +1021,9 @@ export class AgentCoordinator {
       handleAuthFailure: (session, detection) => handleAuthFailureFn(this.sessionErrorHandlerDeps(), session, detection),
       closeClaudeSession: (chatId, session) => { this.closeClaudeSession(chatId, session) },
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      onChatSettled: (chatId) => this.peerMessenger?.onChatSettled(chatId) ?? Promise.resolve(),
+      onPromptDelivered: (session, promptId) => this.midTurnDelivery.onPromptDelivered(session, promptId),
+      onTurnResult: (session) => { this.midTurnDelivery.onTurnResult(session) },
       turnEndGuard: this._turnEndGuard,
       onLiveBlock: this.liveBlocks
         ? (chatId, block) => { this.liveBlocks!.publish(chatId, block) }
@@ -1076,6 +1058,7 @@ export class AgentCoordinator {
       clearDrainingStream: (chatId) => { this.clearDrainingStream(chatId) },
       startTurnForChat: (args) => this.startTurnForChat(args),
       maybeStartNextQueuedMessage: (chatId) => this.maybeStartNextQueuedMessage(chatId),
+      onChatSettled: (chatId) => this.peerMessenger?.onChatSettled(chatId) ?? Promise.resolve(),
       stopCodexSession: (chatId) => this.codexManager.stopSession(chatId),
       turnEndGuard: this._codexTurnEndGuard,
     }
@@ -1193,9 +1176,8 @@ export class AgentCoordinator {
     )
   }
 
-  async drainCronOutcomes(): Promise<void> {
-    if (this.pendingCronOutcomes.size === 0) return
-    await Promise.allSettled([...this.pendingCronOutcomes])
+  drainCronOutcomes(): Promise<void> {
+    return this.cronOutcomes.drain()
   }
 
   listLiveSchedules(chatId: string): string[] {
@@ -1203,6 +1185,7 @@ export class AgentCoordinator {
   }
 
   async cancel(chatId: string, options?: { hideInterrupted?: boolean }) {
+    this.peerMessenger?.cancelWaits(chatId)
     return cancelChatFn(this.cancelHandlerDeps(), chatId, options)
   }
 

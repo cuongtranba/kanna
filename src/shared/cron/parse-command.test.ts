@@ -279,4 +279,24 @@ describe("update subcommand", () => {
     const error = errorOf("/cron update cron-a1 schedule")
     expect(error.part).toBe("schedule")
   })
+
+  test("model field parses to a model patch", () => {
+    expect(commandOf("/cron update cron-a1 model claude-sonnet-5-5")).toEqual({
+      sub: "update",
+      jobId: "cron-a1",
+      patch: { model: "claude-sonnet-5-5" },
+    })
+  })
+
+  test("effort field parses to a Claude reasoning-effort patch", () => {
+    expect(commandOf("/cron update cron-a1 effort low")).toEqual({
+      sub: "update",
+      jobId: "cron-a1",
+      patch: { modelOptions: { claude: { reasoningEffort: "low" } } },
+    })
+  })
+
+  test("an effort outside the Claude vocabulary is refused", () => {
+    expect(errorOf("/cron update cron-a1 effort bogus").part).toBe("subcommand")
+  })
 })

@@ -3,13 +3,6 @@ title: Troubleshooting
 description: When things go wrong.
 ---
 
-## Claude returns "Answer questions?" or appears to cancel
-
-The CLI auto-rejected the native `AskUserQuestion` / `ExitPlanMode` tools. Set
-`KANNA_MCP_TOOL_CALLBACKS=1` and restart, which routes those prompts through
-Kanna's own durable approval protocol instead — see
-[Security](/features/security-sandboxing/#durable-approval-protocol).
-
 ## My container or server lost all its chats on restart
 
 Almost certainly `KANNA_HOME`. **It is not a real variable** — Kanna has never

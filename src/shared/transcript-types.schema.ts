@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { agentProviderSchema } from "./core-types.schema"
-import { remoteMcpOriginSchema } from "./command-origin.schema"
+import { commandOriginSchema } from "./command-origin.schema"
 import { cronModeSchema } from "./cron/types.schema"
 import { inboundHandlerModeSchema } from "./inbound/handler.schema"
 import { jsonObjectSchema, jsonValueSchema } from "./genui/json-schema"
@@ -82,7 +82,7 @@ export const transcriptEntrySchema = z.discriminatedUnion("kind", [
     subagentMentions: z.array(z.object({ subagentId: z.string(), raw: z.string() })).optional(),
     unknownSubagentMentions: z.array(z.object({ name: z.string(), raw: z.string() })).optional(),
     expandedCommand: z.object({ name: z.string(), kind: z.enum(["command", "skill"]) }).optional(),
-    origin: remoteMcpOriginSchema.optional(),
+    origin: commandOriginSchema.optional(),
   }),
   entry("system_init", {
     provider: agentProviderSchema,

@@ -2,7 +2,8 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import type { z } from "zod"
 import type { pluginRuntimeStateSchema, pluginSummarySchema } from "../../shared/commands/results/plugins"
-import { errorMessage } from "../../shared/errors"
+import { errorMessage, toError } from "../../shared/errors"
+import { log as defaultLog } from "../../shared/log"
 import type { JsonValue } from "../../shared/json"
 import type { InstalledPluginConfig } from "../../shared/plugins/settings"
 import { createPluginLogRing, PLUGIN_LOG_DEFAULT_TAIL, type PluginLogEntry } from "../../shared/plugins/log-ring"
@@ -65,6 +66,7 @@ export interface PluginService {
   setEnabled(id: string, enabled: boolean): Promise<void>
   restore(): void
   start(id: string): Promise<void>
+  startEnabled(): Promise<void>
   status(id: string): { readonly state: PluginRuntimeState } | undefined
   call(id: string, method: string, params: JsonValue): Promise<PluginCallResult>
   stop(id: string): Promise<void>
@@ -96,11 +98,16 @@ function settlePendingCalls(record: PluginRuntimeRecord, result: PluginCallResul
   record.pendingCalls.clear()
 }
 
-export function createPluginService(
-  deps: { readonly homeDir?: string; readonly installed?: InstalledPluginStore } = {},
-): PluginService {
+export interface PluginServiceOptions {
+  readonly homeDir?: string
+  readonly installed?: InstalledPluginStore
+  readonly log?: (message: string) => void
+}
+
+export function createPluginService(deps: PluginServiceOptions = {}): PluginService {
   const homeDir = deps.homeDir ?? homedir()
   const installed = deps.installed
+  const logFailure = deps.log ?? ((message: string) => defaultLog.error(message))
   const registry = new Map<string, PluginRuntimeRecord>()
 
   function requireRecord(id: string): PluginRuntimeRecord {
@@ -204,11 +211,17 @@ export function createPluginService(
         onLog: (entry) => record.logRing.append({ ...entry, at: Date.now() }),
       })
       record.process = child
-      void child.exited.then(() => handleChildDisconnect(record))
+      const exitedBeforeReady = child.exited.then((code) => {
+        handleChildDisconnect(record)
+        throw new Error(`plugin "${id}" exited with code ${code} before it became ready`)
+      })
 
       let connection: PluginHostConnection
       try {
-        connection = await withTimeout(listener.ready, START_TIMEOUT_MS, `plugin "${id}" did not become ready in time`)
+        connection = await Promise.race([
+          withTimeout(listener.ready, START_TIMEOUT_MS, `plugin "${id}" did not become ready in time`),
+          exitedBeforeReady,
+        ])
       } finally {
         listener.stop()
       }
@@ -221,6 +234,15 @@ export function createPluginService(
       record.connection = null
       throw error instanceof Error ? error : new Error(errorMessage(error))
     }
+  }
+
+  async function startEnabled(): Promise<void> {
+    const enabledIds = [...registry.values()].filter((record) => record.enabled).map((record) => record.id)
+    await Promise.all(
+      enabledIds.map((id) =>
+        start(id).catch((error) => logFailure(`[kanna/plugins] could not start "${id}": ${toError(error).message}`)),
+      ),
+    )
   }
 
   function status(id: string): { readonly state: PluginRuntimeState } | undefined {
@@ -294,5 +316,5 @@ export function createPluginService(
     return record ? readPluginClientBundle(record.clientBundlePath) : null
   }
 
-  return { install, list, reload, restore, clientBundle, recordClientError, setEnabled, start, status, call, stop, logs }
+  return { install, list, reload, restore, clientBundle, recordClientError, setEnabled, start, startEnabled, status, call, stop, logs }
 }

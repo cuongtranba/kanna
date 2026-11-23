@@ -4,8 +4,9 @@ import * as reactJsxRuntimeModule from "react/jsx-runtime"
 import * as zodModule from "zod"
 import { type LoadedModule } from "../../shared/dynamic-module"
 import { CLIENT_HOST_MODULES, hostModuleUnavailableMessage } from "../../shared/plugins/host-modules"
+import { useKannaWorkspace } from "./pluginWorkspaceApi"
 
-const KANNA_PLUGIN_RUNTIME: Readonly<Record<string, LoadedModule>> = {}
+const KANNA_PLUGIN_RUNTIME: Readonly<Record<string, LoadedModule>> = { useKannaWorkspace }
 
 const HOST_MODULE_INSTANCES: Readonly<Record<string, LoadedModule>> = {
   "@kanna/plugin": KANNA_PLUGIN_RUNTIME,

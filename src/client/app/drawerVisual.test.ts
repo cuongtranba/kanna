@@ -116,4 +116,31 @@ describe("drawerVisual", () => {
     visual.release()
     expect(ports.classes.filter(([, force]) => !force)).toHaveLength(1)
   })
+
+  test("presenting a tapped open slides the drawer in from the closed edge and releases it", async () => {
+    const ports = recordingPorts()
+    const visual = createDrawerVisual(ports.dom, ports.timer)
+
+    const presented = visual.present(1)
+    ports.runTimers()
+    await presented
+
+    expect(ports.props[0]).toEqual(["--kanna-drawer-progress", "0"])
+    expect(ports.props.at(-1)).toEqual(["--kanna-drawer-progress", ""])
+    expect(ports.classes).toEqual([["kanna-drawer-dragging", true], ["kanna-drawer-dragging", false]])
+  })
+
+  test("presenting the edge a swipe already settled at does not replay the motion", async () => {
+    const ports = recordingPorts()
+    const visual = createDrawerVisual(ports.dom, ports.timer)
+    visual.track(0.4)
+    const settled = visual.settle(0)
+    ports.runTimers()
+    await settled
+    const writes = ports.props.length
+
+    await visual.present(0)
+
+    expect(ports.props).toHaveLength(writes)
+  })
 })
