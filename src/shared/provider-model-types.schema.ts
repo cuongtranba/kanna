@@ -60,6 +60,14 @@ export const modelOptionsSchema = z.object({
   custom: optionalSlotSchema.optional(),
 })
 
+export const strictModelOptionsSchema = z.strictObject({
+  claude: strictPartialClaudeModelOptionsSchema.optional(),
+  codex: strictPartialCodexModelOptionsSchema.optional(),
+  antigravity: strictPartialAntigravityModelOptionsSchema.optional(),
+  openrouter: optionalSlotSchema.optional(),
+  custom: optionalSlotSchema.optional(),
+})
+
 export const providerContextWindowOptionSchema = z.object({
   id: claudeContextWindowSchema,
   label: z.string(),
@@ -129,6 +137,7 @@ assertParity<z.output<typeof claudeModelOptionsSchema>, ClaudeModelOptions>()
 assertParity<z.output<typeof codexModelOptionsSchema>, CodexModelOptions>()
 assertParity<z.output<typeof openRouterModelOptionsSchema>, OpenRouterModelOptions>()
 assertParity<z.output<typeof modelOptionsSchema>, ModelOptions>()
+assertParity<z.output<typeof strictModelOptionsSchema>, ModelOptions>()
 assertParity<z.output<typeof providerContextWindowOptionSchema>, ProviderContextWindowOption>()
 assertParity<z.output<typeof customModelInputSchema>, CustomModelInput>()
 assertParity<z.output<typeof customModelPatchSchema>, CustomModelPatch>()

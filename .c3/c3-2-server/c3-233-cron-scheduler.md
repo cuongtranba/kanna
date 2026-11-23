@@ -1,6 +1,6 @@
 ---
 id: c3-233
-c3-seal: bf5aa30e4ea708f05d6802f12d23e70e65f848aa155a396487df29787035175c
+c3-seal: a86f9c8f7970f19e2973da9e0625f11ee332660b5650aa9c4a6aafde54ba3520
 title: cron-scheduler
 type: component
 category: feature
@@ -46,14 +46,20 @@ choke point, which cards the failure and offers it to the model together.
 The `update` case reads the current job from `deriveCronJobs`, merges the
 `CronJobPatch`, and emits ONE `cron_updated` event with the same `scheduleId`.
 `cron_updated` edits the definition in place: the read model overwrites
-instruction, mode, scheduleText and schedule and keeps runs, armedAt, paused
-and model, so an update is accepted while a run is in flight and that run still
+instruction, mode, scheduleText and schedule, overwrites model and modelOptions
+only when the event carries them (an event logged before they were updatable
+replays without wiping an armed model), and keeps runs, armedAt and paused. A
+patched modelOptions merges per provider into the stored one, so an effort
+change keeps a stored context window. `cronJobPatchSchema` is strict, so a
+`cron.update` patch with an unknown key is rejected instead of acknowledged as
+a no-op. `fireCronJob` enqueues the job's model and modelOptions, forcing the
+1M window when the model id carries the `[1m]` suffix, so an update is accepted while a run is in flight and that run still
 settles; `findRunningCronRuns` and `compactCronRunEvents` ignore it, unlike a
 re-arming `cron_armed`, which would orphan the live run. The scheduler mutates
 the existing armed job's schedule and re-arms it unless paused, so the next
 fire is re-timed at once and `runFire` re-arms the same object. The fire path
 reads the job at fire time, so the change applies from the next tick. The `update_cron` MCP tool
-wraps the update dispatch; a `cron.update` WS command exposes it from the UI.
+wraps the update dispatch (schedule, mode, instruction, model, effort); a `cron.update` WS command exposes it from the UI.
 `createCronRepair` is the repair offer: when the parser produced no suggestion of
 its own it enqueues a repair prompt and drains the queue (`/cron` starts no
 turn, so nothing else would), bounded to arm-shaped failures, one ask per

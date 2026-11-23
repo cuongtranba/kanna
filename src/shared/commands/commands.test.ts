@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
+import type { JsonObject } from "../json"
 import { COMMAND_REGISTRY, parseClientCommand } from "./index"
 
 describe("command registry", () => {
@@ -38,6 +39,16 @@ describe("command registry", () => {
       ok: true,
       command: { type: "settings.writeAppSettingsPatch", patch },
     })
+  })
+
+  test("cron.update accepts a model patch and rejects unknown patch keys, even inside modelOptions", () => {
+    const update = (patch: JsonObject) =>
+      parseClientCommand({ type: "cron.update", chatId: "chat-1", jobId: "cron-1", patch })
+
+    expect(update({ model: "claude-sonnet-5-5" }).ok).toBe(true)
+    expect(update({ modelOptions: { claude: { reasoningEffort: "low" } } }).ok).toBe(true)
+    expect(update({ bogus: 1 }).ok).toBe(false)
+    expect(update({ modelOptions: { claude: { effort: "low" } } }).ok).toBe(false)
   })
 
   test("an unknown command type is rejected", () => {

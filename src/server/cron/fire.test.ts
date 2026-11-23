@@ -207,6 +207,32 @@ describe("fireCronJob — armed model", () => {
     })
   })
 
+  test("a run starts with the reasoning effort the job was updated to", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily", "claude-opus-4-6")
+    await armJob(deps, "/cron update cron-abc effort low")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({
+      model: "claude-opus-4-6",
+      modelOptions: { claude: { reasoningEffort: "low" } },
+    })
+  })
+
+  test("a 1M-context model keeps the stored effort alongside the 1M window", async () => {
+    const { deps, enqueued } = makeDeps()
+    await armJob(deps, "/cron nightly report spawn @daily", "claude-opus-4-6[1m]")
+    await armJob(deps, "/cron update cron-abc effort medium")
+
+    await fireCronJob(deps, CHAT, "cron-abc")
+
+    expect(enqueued[0]!.options).toMatchObject({
+      model: "claude-opus-4-6",
+      modelOptions: { claude: { reasoningEffort: "medium", contextWindow: "1m" } },
+    })
+  })
+
   test("a job armed without a model leaves the model and provider to the defaults", async () => {
     const { deps, enqueued } = makeDeps()
     await armJob(deps, "/cron nightly report spawn @daily")
