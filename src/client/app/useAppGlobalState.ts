@@ -1044,7 +1044,7 @@ export function useAppGlobalState(
     const localPath = runtime?.localPath ?? localProjects?.projects[0]?.localPath ?? sidebarProjectGroups[0]?.localPath
     if (!localPath) return
     await surfaceCommandError(() => openExternal({ action, localPath, editor }))
-  }, [localProjects?.projects, openExternal, runtime?.localPath, sidebarProjectGroups])
+  }, [localProjects, openExternal, runtime?.localPath, sidebarProjectGroups])
 
   const handleCopyPath = useCallback(async (localPath: string) => {
     await surfaceCommandError(() => clipboard.writeText(localPath))
