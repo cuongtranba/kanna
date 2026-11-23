@@ -191,6 +191,12 @@ function applyEvent(
       epochRef.value = event.epoch
       return
     }
+    case "chat_task_list_cleared": {
+      tasks.clear()
+      notes.length = 0
+      epochRef.value = 0
+      return
+    }
     case "chat_task_native_synced": {
       syncNativeRows(tasks, event, epochRef.value)
     }

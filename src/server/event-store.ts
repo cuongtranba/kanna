@@ -567,6 +567,14 @@ export class EventStore implements PushEventStore {
     })
   }
 
+  async clearChatTaskList(chatId: string, now: number): Promise<void> {
+    await this.writer.serialize(async () => {
+      for (const event of ChatTasks.clearChatTaskListEvents(this.state.chatTasksByChatId, chatId, now)) {
+        await this.writer.appendInsideStep(this.layout.logPath(logOfEvent(event)), event, () => { this.applyEvent(event) })
+      }
+    })
+  }
+
   getChatTaskEvents(chatId: string): ChatTaskEvent[] {
     const list = this.state.chatTasksByChatId.get(chatId)
     return list ? [...list] : []

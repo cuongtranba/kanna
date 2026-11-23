@@ -64,6 +64,7 @@ export const BUS_SUBJECT_SUFFIX = {
   taskIntegrated: "task.integrated",
   taskNote: "task.note",
   taskEpochAdvanced: "task.epochAdvanced",
+  taskListCleared: "task.listCleared",
   taskNativeSynced: "task.nativeSynced",
 } as const
 

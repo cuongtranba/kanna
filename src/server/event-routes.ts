@@ -94,6 +94,7 @@ export const EVENT_ROUTES = {
   chat_task_integrated: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_note: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_epoch_advanced: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
+  chat_task_list_cleared: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
   chat_task_native_synced: { log: "chat-tasks", family: "chatTask", replayPriority: 5 },
 } satisfies Record<StoreEventKind, EventRoute>
 

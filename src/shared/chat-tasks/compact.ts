@@ -41,7 +41,15 @@ function evictableCompletedIds(events: readonly ChatTaskEvent[]): Set<string> {
   return new Set(completed.slice(0, Math.min(overflow, completed.length)).map((task) => task.id))
 }
 
-export function compactChatTaskEvents(events: readonly ChatTaskEvent[]): ChatTaskEvent[] {
+function lastClearIndex(events: readonly ChatTaskEvent[]): number {
+  for (let index = events.length - 1; index >= 0; index--) {
+    if (events[index]?.type === "chat_task_list_cleared") return index
+  }
+  return -1
+}
+
+export function compactChatTaskEvents(allEvents: readonly ChatTaskEvent[]): ChatTaskEvent[] {
+  const events = allEvents.slice(lastClearIndex(allEvents) + 1)
   const lastType = lastEventTypeByTask(events)
   const drop = evictableCompletedIds(events)
   for (const [id, type] of lastType) {
