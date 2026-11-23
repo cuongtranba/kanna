@@ -188,7 +188,7 @@ async function runClaudeSubagent(opts: {
   }
 
   const iterator = session.stream[Symbol.asyncIterator]()
-  let first: { text: string; usage?: ProviderUsage; sawResult: boolean; sawError: boolean }
+  let first: { text: string; usage?: ProviderUsage; sawResult: boolean }
   try {
     first = await drainOneTurn(iterator, onChunk, onEntry)
   } catch (err) {
@@ -294,11 +294,12 @@ export async function drainOneTurn(
   onChunk: (chunk: string) => void,
   onEntry: (entry: TranscriptEntry) => void,
   injection?: RunInjection,
-): Promise<{ text: string; usage?: ProviderUsage; sawResult: boolean; sawError: boolean }> {
+): Promise<{ text: string; usage?: ProviderUsage; sawResult: boolean }> {
   let accumulated = ""
   let usage: ProviderUsage | undefined
   let sawResult = false
-  let sawError = false
+  let apiErrorText: string | null = null
+  let failedResultText: string | null = null
   drain: while (true) {
     const next = await iterator.next()
     if (next.done) break
@@ -318,11 +319,11 @@ export async function drainOneTurn(
           accumulated += fragment
           onChunk(fragment)
         } else if (event.entry.kind === "api_error") {
-          sawError = true
+          apiErrorText = event.entry.text
         } else if (event.entry.kind === "result") {
           const e = event.entry
           sawResult = true
-          if (e.isError) sawError = true
+          if (e.isError) failedResultText = e.result
           usage = {
             inputTokens: e.usage?.inputTokens,
             outputTokens: e.usage?.outputTokens,
@@ -339,7 +340,11 @@ export async function drainOneTurn(
       }
     }
   }
-  return { text: accumulated, usage, sawResult, sawError }
+  const failed = sawResult ? failedResultText !== null : apiErrorText !== null
+  if (failed) {
+    throw new Error(failedResultText?.trim() || apiErrorText?.trim() || "Provider turn ended with an error")
+  }
+  return { text: accumulated, usage, sawResult }
 }
 
 async function drainHarnessTurn(
@@ -349,11 +354,10 @@ async function drainHarnessTurn(
   injection?: RunInjection,
 ): Promise<{ text: string; usage?: ProviderUsage }> {
   const iterator = turn.stream[Symbol.asyncIterator]()
-  const { text, usage, sawResult, sawError } = await drainOneTurn(iterator, onChunk, onEntry, injection)
+  const { text, usage, sawResult } = await drainOneTurn(iterator, onChunk, onEntry, injection)
   log.info("[kanna/subagent] drainHarnessTurn finished", {
     accumulatedChars: text.length,
     sawResult,
-    sawError,
     hasUsage: Boolean(usage),
   })
   return { text, usage }

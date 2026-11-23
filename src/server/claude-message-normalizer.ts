@@ -138,6 +138,11 @@ function durationMsOf(message: ClaudeRawSdkMessage): number {
   return numberOrUndefined(message.duration_ms, message.durationMs) ?? 0
 }
 
+function isFailedResult(message: ClaudeRawSdkMessage): boolean {
+  const reachedMaxTurnsGracefully = message.subtype === "error_max_turns"
+  return Boolean(message.is_error) && !reachedMaxTurnsGracefully
+}
+
 export function parseCompactMetadata(
   message: ClaudeRawSdkMessage,
 ): CompactBoundaryMetadata | undefined {
@@ -329,8 +334,8 @@ export function normalizeClaudeStreamMessage(message: ClaudeRawSdkMessage): Tran
       timestamped({
         kind: "result",
         messageId,
-        subtype: message.is_error ? "error" : "success",
-        isError: Boolean(message.is_error),
+        subtype: isFailedResult(message) ? "error" : "success",
+        isError: isFailedResult(message),
         durationMs: durationMsOf(message),
         result: typeof message.result === "string" ? message.result : stringFromUnknown(message.result),
         debugRaw,
