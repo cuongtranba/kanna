@@ -1,6 +1,6 @@
 
-import { DEFAULT_CLAUDE_MODEL_OPTIONS, type AgentProvider, type ChatAttachment, type QueuedChatMessage } from "../../shared/types"
-import { splitClaudeApiModelId } from "../../shared/provider-model-types"
+import { type AgentProvider, type ChatAttachment, type QueuedChatMessage } from "../../shared/types"
+import { splitClaudeApiModelId, type ModelOptions } from "../../shared/provider-model-types"
 import { hasActiveRun, type CronJobSnapshot, type CronRunSnapshot, type CronRunTag } from "../../shared/cron/types"
 import type { SendMessageOptions } from "../claude-turn-starter-types"
 import { chatAutomationEnvelope } from "../auto-continue/events"
@@ -195,15 +195,16 @@ async function writeSkip(
 }
 
 function cronRunOptions(job: CronJobSnapshot, cronRun: CronRunTag, provider: AgentProvider | null): SendMessageOptions {
-  if (job.model === undefined) return { cronRun }
-  const { modelId, contextWindow } = splitClaudeApiModelId(job.model)
+  if (job.model === undefined && job.modelOptions === undefined) return { cronRun }
+  const split = job.model !== undefined ? splitClaudeApiModelId(job.model) : null
+  const modelOptions: ModelOptions | undefined =
+    split?.contextWindow === "1m"
+      ? { ...job.modelOptions, claude: { ...job.modelOptions?.claude, contextWindow: "1m" } }
+      : job.modelOptions
   return {
     cronRun,
-    model: modelId,
-    ...(provider ? { provider } : {}),
-    ...(contextWindow === "1m"
-      ? { modelOptions: { claude: { reasoningEffort: DEFAULT_CLAUDE_MODEL_OPTIONS.reasoningEffort, contextWindow } } }
-      : {}),
+    ...(split ? { model: split.modelId, ...(provider ? { provider } : {}) } : {}),
+    ...(modelOptions !== undefined ? { modelOptions } : {}),
   }
 }
 

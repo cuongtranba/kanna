@@ -299,6 +299,37 @@ describe("update command", () => {
     expect(updateEvent.mode).toBe(firstArmed.mode)
     expect(entries.at(-1)).toMatchObject({ kind: "cron_job_change", change: "updated" })
   })
+
+  test("a model update changes the job's model and keeps its instruction and schedule", async () => {
+    const { deps, events } = makeDeps({ jobIds: ["cron-a1"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"), "claude-haiku-4-5")
+    await runCronCommand(deps, CHAT, parsed("/cron update cron-a1 model claude-sonnet-5-5"))
+    const [job] = deriveCronJobs(events, CHAT, 2_000_000)
+    expect(job).toMatchObject({
+      model: "claude-sonnet-5-5",
+      instruction: "check ci",
+      scheduleText: "every 5m",
+    })
+  })
+
+  test("an effort update after a model update keeps the model and merges into the stored options", async () => {
+    const { deps, events } = makeDeps({ jobIds: ["cron-a1"] })
+    await runCronCommand(deps, CHAT, parsed("/cron check ci inline every 5m"))
+    await runCronCommand(deps, CHAT, {
+      ok: true,
+      command: {
+        sub: "update",
+        jobId: "cron-a1",
+        patch: { model: "claude-sonnet-5-5", modelOptions: { claude: { contextWindow: "1m" } } },
+      },
+    })
+    await runCronCommand(deps, CHAT, parsed("/cron update cron-a1 effort low"))
+    const [job] = deriveCronJobs(events, CHAT, 2_000_000)
+    expect(job).toMatchObject({
+      model: "claude-sonnet-5-5",
+      modelOptions: { claude: { reasoningEffort: "low", contextWindow: "1m" } },
+    })
+  })
 })
 
 describe("disarmCronJobsForChat", () => {

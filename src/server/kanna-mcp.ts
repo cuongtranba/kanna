@@ -820,19 +820,19 @@ function buildCronToolList(args: {
     tools.push(
       tool(
         "update_cron",
-        "Edit one field (schedule, mode, or instruction) of an already-armed cron job in place. " +
+        "Edit one field (schedule, mode, instruction, model, or effort) of an already-armed cron job in place. " +
           "Use instead of arm_cron + /cron remove when the user wants to change a single field. " +
           "Call validate_cron first when changing the schedule. An update made while a run is in flight leaves that run untouched and applies from the next fire. " +
           "After a successful update, show the user what changed and confirm with AskUserQuestion.",
         {
           jobId: z.string().describe("The job ID returned by arm_cron or listed by /cron list."),
           field: z
-            .enum(["schedule", "mode", "instruction"])
+            .enum(["schedule", "mode", "instruction", "model", "effort"])
             .describe("Which field to change."),
           value: z
             .string()
             .describe(
-              "New value: a cron expression / shortcut / interval for schedule, 'inline' or 'spawn' for mode, or free text for instruction.",
+              "New value: a cron expression / shortcut / interval for schedule, 'inline' or 'spawn' for mode, free text for instruction, a model id for model, or low / medium / high / xhigh / max for effort.",
             ),
         },
         async (input) => {

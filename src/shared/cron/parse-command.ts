@@ -8,6 +8,7 @@ import {
   type CronParseError,
   type CronParseResult,
 } from "./types"
+import { CLAUDE_REASONING_OPTIONS, isClaudeReasoningEffort } from "../provider-model-types"
 import { levenshtein, parseSchedule } from "./parse-schedule"
 
 interface Token {
@@ -21,6 +22,7 @@ type Outcome =
   | { ok: false; error: Omit<CronParseError, "input"> }
 
 const MODE_HINT = "`inline` (runs in this chat, cleared each cycle) or `spawn` (a new chat per run)"
+const UPDATE_FIELDS_HINT = "`schedule`, `mode`, `instruction`, `model`, or `effort`"
 const ARM_SHAPE = "`/cron <instruction> <inline|spawn> <schedule>`"
 
 export const CRON_USAGE_LINES: readonly string[] = [
@@ -141,7 +143,7 @@ function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome
       ok: false,
       error: {
         part: "subcommand",
-        message: `\`/cron update ${jobId}\` needs a field: \`schedule\`, \`mode\`, or \`instruction\``,
+        message: `\`/cron update ${jobId}\` needs a field: ${UPDATE_FIELDS_HINT}`,
         suggestion: "/cron list",
       },
     }
@@ -159,13 +161,18 @@ function parseUpdate(line: string, tokens: Token[], modeLater: boolean): Outcome
     return parseUpdateFieldValue(line, tokens, field)
   }
 
+  if (field === "model" || field === "effort") {
+    if (modeLater) return null
+    return parseUpdateModelField(tokens, field)
+  }
+
   if (modeLater) return null
   return {
     ok: false,
     error: {
       part: "subcommand",
       message:
-        `\`/cron update\` accepts \`schedule\`, \`mode\`, or \`instruction\` as the field${field ? `, got "${field}"` : ""}`,
+        `\`/cron update\` accepts ${UPDATE_FIELDS_HINT} as the field${field ? `, got "${field}"` : ""}`,
     },
   }
 }
@@ -183,6 +190,32 @@ function parseUpdateMode(tokens: Token[]): Outcome {
     }
   }
   return { ok: true, command: { sub: "update", jobId, patch: { mode: value } } }
+}
+
+function parseUpdateModelField(tokens: Token[], field: "model" | "effort"): Outcome {
+  const jobId = tokens[2]!.text
+  if (tokens.length !== 5) {
+    return {
+      ok: false,
+      error: {
+        part: "subcommand",
+        message: `\`/cron update\` ${field} takes exactly one value, got ${tokens.length - 4}`,
+      },
+    }
+  }
+  const value = tokens[4]!.text
+  if (field === "model") return { ok: true, command: { sub: "update", jobId, patch: { model: value } } }
+  if (!isClaudeReasoningEffort(value)) {
+    const options = CLAUDE_REASONING_OPTIONS.map((option) => `\`${option.id}\``).join(", ")
+    return {
+      ok: false,
+      error: {
+        part: "subcommand",
+        message: `\`/cron update\` effort expects one of ${options}, got "${value}"`,
+      },
+    }
+  }
+  return { ok: true, command: { sub: "update", jobId, patch: { modelOptions: { claude: { reasoningEffort: value } } } } }
 }
 
 function parseUpdateFieldValue(line: string, tokens: Token[], field: "schedule" | "instruction"): Outcome {

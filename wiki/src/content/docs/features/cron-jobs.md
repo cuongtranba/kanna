@@ -40,7 +40,7 @@ spawned chat, and a status pill that goes **Running → Completed / Failed** liv
 /cron remove <id>                               disarm one job
 /cron pause <id>                                stop firing, keep the job
 /cron resume <id>                               start firing again
-/cron update <id> <schedule|mode|instruction> <value>   change one field in place
+/cron update <id> <schedule|mode|instruction|model|effort> <value>   change one field in place
 /cron                                           usage help
 ```
 
@@ -64,6 +64,15 @@ this, a spawned run would start on the provider default.
 Change a job's instruction, mode or schedule with `/cron update`, the pencil
 button on a job row, or the model's `update_cron` tool. The job keeps its id,
 its run history and its pause state.
+
+`/cron update <id> model <modelId>` switches the model every later run starts
+on, and `/cron update <id> effort <low|medium|high|xhigh|max>` sets the Claude
+reasoning effort for those runs. An effort change merges into the job's stored
+model options, so it keeps the context window the job already has. The
+`cron.update` command takes the same two settings as `model` and `modelOptions`
+(the shape `chat.send` takes) and rejects a patch that carries any key it does
+not know, at the top level or inside `modelOptions`, rather than acknowledging
+it and changing nothing.
 
 You can edit a job **while a run is in flight**. The run in progress finishes
 with the instruction and mode it started with; the change applies from the

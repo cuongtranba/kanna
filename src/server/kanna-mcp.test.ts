@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 import type { TranscriptEntry } from "../shared/types"
+import type { CronJobPatch } from "../shared/cron/types"
 import { buildDelegateProgressEmitter, buildKannaMcpTools, resolveOfferDownload, resolveWorkspaceFile } from "./kanna-mcp"
 import { POLICY_DEFAULT } from "../shared/permission-policy"
 import { TASK_DOC_SECTIONS } from "../shared/task-doc"
@@ -971,6 +972,32 @@ describe("arm_cron", () => {
     expect(desc).toMatch(/ambiguous/i)
     expect(desc).toMatch(/AskUserQuestion/i)
     expect(desc).toMatch(/confirm/i)
+  })
+})
+
+describe("update_cron", () => {
+  const updates: Array<{ jobId: string; patch: CronJobPatch }> = []
+  const invoke = (input: Record<string, unknown>) => {
+    const tools = buildKannaMcpTools({
+      ...makeArgs(undefined),
+      chatId: "c",
+      armCron: () => Promise.resolve({ jobId: "cron-a1" }),
+      updateCron: (jobId, patch) => {
+        updates.push({ jobId, patch })
+        return Promise.resolve()
+      },
+    })
+    const found = tools.find((t) => t.name === "update_cron")
+    if (!found) throw new Error("update_cron not registered")
+    return (found as { handler: (i: Record<string, unknown>, extra: unknown) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> })
+      .handler(input, undefined)
+  }
+
+  test("the model field reaches updateCron as a model patch", async () => {
+    updates.length = 0
+    const result = await invoke({ jobId: "cron-a1", field: "model", value: "claude-sonnet-5-5" })
+    expect(result.isError).toBeUndefined()
+    expect(updates).toEqual([{ jobId: "cron-a1", patch: { model: "claude-sonnet-5-5" } }])
   })
 })
 

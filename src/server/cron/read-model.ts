@@ -31,6 +31,7 @@ export function foldCronJobs(events: readonly ChatAutomationEvent[], chatId: str
             paused: event.paused ?? false,
             armedAt: event.timestamp,
             ...(event.model !== undefined ? { model: event.model } : {}),
+            ...(event.modelOptions !== undefined ? { modelOptions: event.modelOptions } : {}),
           },
           runs: [],
         })
@@ -42,6 +43,8 @@ export function foldCronJobs(events: readonly ChatAutomationEvent[], chatId: str
         accum.job.mode = event.mode
         accum.job.scheduleText = event.scheduleText
         accum.job.schedule = event.schedule
+        if (event.model !== undefined) accum.job.model = event.model
+        if (event.modelOptions !== undefined) accum.job.modelOptions = event.modelOptions
         break
       }
       case "cron_disarmed":
