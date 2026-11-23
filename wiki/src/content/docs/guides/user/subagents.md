@@ -32,8 +32,9 @@ Runs fail with a machine-readable code, so the reason is never guesswork:
 | `LOOP_DETECTED` | The subagent tried to delegate to itself, or to an ancestor in its chain |
 | `DEPTH_EXCEEDED` | The chain went deeper than `maxChainDepth` (default **1** — a subagent may not itself delegate) |
 | `CAP_EXCEEDED` | Too many live keep-alive sessions for this chat (`KANNA_SUBAGENT_MAX_LIVE`, default 5) |
-| `MAX_TURNS` | The run used more tool calls than the subagent's own limit |
+| `MAX_TURNS` | The run used more tool calls than the subagent's own limit. Claude subagents stop at the limit on their own and complete with the output they have, so they never report this code |
 | `AUTH_REQUIRED` | The subagent's provider has no usable credentials |
+| `PROVIDER_ERROR` | The provider ended the run with an error, for example `Selected model is at capacity`. The message is the provider's own error text; any partial reply stays in the run's transcript and is not returned as a result |
 | `NO_LIVE_SESSION` | A follow-up was sent to a `run_id` whose session is gone (idle-closed, cancelled, or already closed) |
 
 `DEPTH_EXCEEDED` at the default depth of 1 is the common surprise: subagents do
