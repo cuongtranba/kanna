@@ -22,6 +22,19 @@ export interface McpOAuthFlowState {
   metadata: AuthorizationServerMetadata
 }
 
+export interface McpOAuthPreRegisteredClient {
+  clientId: string
+  clientSecret?: string
+  callbackPort?: number
+}
+
+export const MCP_OAUTH_DEFAULT_CALLBACK_PORT = 8765
+
+export function mcpOAuthRedirectUri(preRegisteredClient?: Pick<McpOAuthPreRegisteredClient, "callbackPort">): string {
+  const port = preRegisteredClient?.callbackPort ?? MCP_OAUTH_DEFAULT_CALLBACK_PORT
+  return `http://localhost:${port}/callback`
+}
+
 export interface McpOAuthState {
   enabled: boolean
   status: "unauthenticated" | "authenticated" | "error"
@@ -29,6 +42,7 @@ export interface McpOAuthState {
   issuer?: string
   metadata?: AuthorizationServerMetadata
   clientByIssuer?: Record<string, OAuthClientInformationFull>
+  preRegisteredClient?: McpOAuthPreRegisteredClient
   tokens?: OAuthTokens
   obtainedAt?: number
   flow?: McpOAuthFlowState

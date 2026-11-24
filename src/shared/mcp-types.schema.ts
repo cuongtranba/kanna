@@ -27,6 +27,12 @@ const mcpOAuthFlowStateSchema = z.object({
   metadata: z.union([OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema]),
 })
 
+const mcpOAuthPreRegisteredClientSchema = z.object({
+  clientId: z.string(),
+  clientSecret: z.string().optional(),
+  callbackPort: z.number().optional(),
+})
+
 export const mcpOAuthStateSchema = z.object({
   enabled: z.boolean(),
   status: z.enum(["unauthenticated", "authenticated", "error"]),
@@ -34,6 +40,7 @@ export const mcpOAuthStateSchema = z.object({
   issuer: z.string().optional(),
   metadata: z.union([OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema]).optional(),
   clientByIssuer: z.record(z.string(), OAuthClientInformationFullSchema).optional(),
+  preRegisteredClient: mcpOAuthPreRegisteredClientSchema.optional(),
   tokens: OAuthTokensSchema.optional(),
   obtainedAt: z.number().optional(),
   flow: mcpOAuthFlowStateSchema.optional(),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test"
-import { mcpServerInputFromDraft, mcpServerToDraft } from "./mcpServerDraft"
+import { mcpOAuthFromDraft, mcpServerInputFromDraft, mcpServerToDraft } from "./mcpServerDraft"
 import type { McpServerConfig } from "../../shared/types"
 
 const BASE = {
@@ -55,5 +55,26 @@ describe("mcpServerDraft", () => {
       envText: "=nokey\nOK=1\nplain",
     })
     expect(input).toEqual({ name: "fs", transport: "stdio", command: "x", args: ["a", "b"], env: { OK: "1" }, cwd: undefined })
+  })
+
+  test("a new server with OAuth enabled is created with its pre-registered client, and a blank Client ID leaves none", () => {
+    const draft = {
+      ...mcpServerToDraft(null),
+      name: "slack",
+      transport: "http" as const,
+      url: "https://mcp.slack.com/mcp",
+      oauthClientId: " app-id ",
+      oauthClientSecret: "",
+      oauthCallbackPort: "3118",
+    }
+    expect(mcpServerInputFromDraft(draft, mcpOAuthFromDraft(draft, true, undefined))).toEqual({
+      name: "slack",
+      transport: "http",
+      url: "https://mcp.slack.com/mcp",
+      headers: {},
+      oauth: { enabled: true, status: "unauthenticated", preRegisteredClient: { clientId: "app-id", callbackPort: 3118 } },
+    })
+    const blank = { ...draft, oauthClientId: "  " }
+    expect(mcpOAuthFromDraft(blank, true, undefined)?.preRegisteredClient).toBeUndefined()
   })
 })
