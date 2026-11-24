@@ -64,9 +64,35 @@ HTML at the RFC8414 path — breaking auto-discovery. `mcp-oauth.adapter.ts`
 probes the OpenID path first, then falls back to RFC8414.
 
 **Two-step paste UX.** Kanna has no redirect server, so after the AS redirects
-the browser to `http://localhost:8765/callback?code=…`, the user copies that
+the browser to `http://localhost:8765/callback?code=…` (the port is
+`callbackPort` when a pre-registered client sets one), the user copies that
 URL from the browser address bar and pastes it into the Settings UI. The
 `completeMcpOAuth` WS command exchanges the code via PKCE and stores tokens.
+
+**A pre-registered client wins over DCR.** A server whose AS has no
+`registration_endpoint` (Slack, `https://mcp.slack.com/mcp`) cannot use DCR, so
+`McpOAuthState.preRegisteredClient` (`clientId`, optional `clientSecret`,
+optional `callbackPort`) carries the client of an OAuth app the user registered
+with the provider. `resolveClient` in `mcp-oauth.adapter.ts` is the one place
+that picks the client for start, complete and refresh: the pre-registered client
+first, built fresh from the stored fields on every call, otherwise
+`clientByIssuer[issuer]`. Never copy a pre-registered client into
+`clientByIssuer`: it would go stale when the user edits the id or secret.
+`registerClient` runs only when neither exists, and when the AS also lacks a
+`registration_endpoint` start throws an error naming the client id and the
+redirect URL (the SDK's own message says nothing the user can act on). The SDK
+chooses `client_secret_post` when a secret is present. `start` and `complete`
+build the next `McpOAuthState` field by field, so each must carry
+`preRegisteredClient` forward or the next step loses it. The editor saves the
+three fields with the server, and an update that leaves them unchanged sends no
+`oauth`, so a stale snapshot never overwrites tokens.
+
+**The redirect URI has one owner: `mcpOAuthRedirectUri` in
+`src/shared/mcp-types.ts`.** It is `http://localhost:<callbackPort>/callback`,
+default port `MCP_OAUTH_DEFAULT_CALLBACK_PORT` (8765). The adapter (DCR
+metadata, authorization request, code exchange) and the settings editor's hint
+both import it; do not write the URL anywhere else. A provider app must list
+exactly this URL.
 
 **Kanna registers as a native client (`application_type: "native"`).** A
 loopback redirect belongs to an app on the user's machine, which RFC 8252 calls
@@ -121,7 +147,7 @@ before throwing, and `startMcpOAuth` answers `alreadyAuthenticated` only while
 `bearerUsableUntil`); otherwise the Authenticate button would silently do
 nothing.
 
-**Storage.** OAuth state (`clientByIssuer`, `tokens`, `issuer`, `metadata`, `flow`) is
+**Storage.** OAuth state (`clientByIssuer`, `preRegisteredClient`, `tokens`, `issuer`, `metadata`, `flow`) is
 stored inside the server entry in `settings.json` (written with the default
 umask, mode 0644, not 0600 — do not rely on the file mode to protect a secret).
 The `flow` field is present only mid-flow and cleared on complete or cancel.

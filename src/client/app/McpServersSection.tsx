@@ -19,9 +19,10 @@ import { copyWithFeedback, useCopied } from "../stores/copyFeedbackStore"
 import {
   useMcpServersSectionStore,
 } from "../stores/mcpServersSectionStore"
+import { MCP_OAUTH_DEFAULT_CALLBACK_PORT } from "../../shared/types"
 import type { McpServerConfig, McpServerInput, McpServerPatch, McpServerTransport } from "../../shared/types"
 import type { McpOAuthCompleteResult, McpOAuthStartResult } from "../../shared/mcp-types.schema"
-import { mcpServerInputFromDraft } from "../lib/mcpServerDraft"
+import { mcpOAuthFromDraft, mcpOAuthRedirectUriFromDraft, mcpServerInputFromDraft } from "../lib/mcpServerDraft"
 import { mcpServerNameIssue } from "../../shared/settings/validation"
 import type { KannaState } from "./useKannaState"
 import type { SectionEditing } from "../lib/sectionEditing"
@@ -153,6 +154,9 @@ function McpServerEditor({
     cwd,
     url,
     headersText,
+    oauthClientId,
+    oauthClientSecret,
+    oauthCallbackPort,
     error,
     oauthEnabled,
     authFlowUrl,
@@ -258,7 +262,7 @@ function McpServerEditor({
     await submitEditorForm({
       patch: patchEditorForm,
       save: async () => {
-        const input = mcpServerInputFromDraft({ name, transport, command, argsText, envText, cwd, url, headersText })
+        const input = mcpServerInputFromDraft(editorForm, mcpOAuthFromDraft(editorForm, oauthEnabled, currentOauth))
         if (initial) {
           await handlers.onUpdate(initial.id, input)
         } else {
@@ -268,20 +272,17 @@ function McpServerEditor({
       onDone: onCancel,
     })
   }, [
-    argsText,
-    command,
-    cwd,
-    envText,
+    currentOauth,
+    editorForm,
     handlers,
-    headersText,
     initial,
-    name,
     nameError,
+    oauthEnabled,
     onCancel,
-    transport,
-    url,
     patchEditorForm,
   ])
+
+  const redirectUri = mcpOAuthRedirectUriFromDraft(editorForm)
 
   const onSubmitClick = useCallback(() => {
     runPendingAction(saveKey, submit)
@@ -425,6 +426,44 @@ function McpServerEditor({
                   <span>Enable</span>
                 </label>
               </div>
+              {oauthEnabled && (
+                <div className="grid gap-2">
+                  <div className="grid gap-1">
+                    <span className="text-xs font-medium text-foreground">Client ID (optional)</span>
+                    <Input
+                      value={oauthClientId}
+                      onChange={(e) => patchEditorForm({ oauthClientId: e.target.value })}
+                      className="font-mono text-xs"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-xs font-medium text-foreground">Client secret (optional)</span>
+                    <Input
+                      type="password"
+                      value={oauthClientSecret}
+                      onChange={(e) => patchEditorForm({ oauthClientSecret: e.target.value })}
+                      className="font-mono text-xs"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="grid gap-1">
+                    <span className="text-xs font-medium text-foreground">Callback port (optional)</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={oauthCallbackPort}
+                      onChange={(e) => patchEditorForm({ oauthCallbackPort: e.target.value })}
+                      placeholder={String(MCP_OAUTH_DEFAULT_CALLBACK_PORT)}
+                      className="w-32 font-mono text-xs"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Required when the provider does not support dynamic client registration (e.g. Slack). Register this redirect URL in the provider app: {redirectUri}
+                  </p>
+                </div>
+              )}
               {oauthEnabled && !initial && (
                 <p className="text-xs text-muted-foreground">
                   Save the server first, then authenticate.

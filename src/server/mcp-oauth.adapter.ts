@@ -6,28 +6,47 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js"
 import { OAuthError, ServerError, TemporarilyUnavailableError } from "@modelcontextprotocol/sdk/server/auth/errors.js"
 import type {
+  OAuthClientInformationFull,
+  OAuthClientInformationMixed,
   OAuthClientMetadata,
   OAuthTokens,
   AuthorizationServerMetadata,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
 import { toError } from "../shared/errors"
+import { mcpOAuthRedirectUri } from "../shared/types"
 import type { McpServerConfig, McpOAuthState, McpServerTestResult } from "../shared/types"
 
 function causeText(error: Error): string {
   return error.message || error.name
 }
 
-const REDIRECT_URI = "http://localhost:8765/callback"
-
 type LoopbackClientMetadata = OAuthClientMetadata & { application_type: "native" }
 
-const CLIENT_METADATA: LoopbackClientMetadata = {
-  application_type: "native",
-  client_name: "Kanna MCP OAuth",
-  redirect_uris: [REDIRECT_URI],
-  grant_types: ["authorization_code", "refresh_token"],
-  response_types: ["code"],
-  token_endpoint_auth_method: "none",
+function clientMetadataFor(redirectUri: string): LoopbackClientMetadata {
+  return {
+    application_type: "native",
+    client_name: "Kanna MCP OAuth",
+    redirect_uris: [redirectUri],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+  }
+}
+
+function resolveClient(oauth: McpOAuthState | undefined, issuer: string): OAuthClientInformationMixed | undefined {
+  const preRegistered = oauth?.preRegisteredClient
+  if (preRegistered?.clientId) {
+    return preRegistered.clientSecret
+      ? { client_id: preRegistered.clientId, client_secret: preRegistered.clientSecret }
+      : { client_id: preRegistered.clientId }
+  }
+  return oauth?.clientByIssuer?.[issuer]
+}
+
+function noDynamicRegistrationError(redirectUri: string): Error {
+  return new Error(
+    `This authorization server does not support dynamic client registration. Enter the client ID (and client secret, if required) of an OAuth app registered with that provider, with redirect URL ${redirectUri}`,
+  )
 }
 
 export interface McpOAuthDeps {
@@ -123,20 +142,24 @@ export async function startMcpOAuth(
     return { kind: "alreadyAuthenticated" }
   }
   const { issuer, scope, metadata } = await resolveAuthServer(serverUrl, fetchFn)
-  const existingClient = prev?.clientByIssuer?.[issuer]
-  const client =
-    existingClient ??
-    (await registerClient(issuer, {
+  const redirectUri = mcpOAuthRedirectUri(prev?.preRegisteredClient)
+  let client = resolveClient(prev, issuer)
+  let registeredClient: OAuthClientInformationFull | undefined
+  if (!client) {
+    if (!metadata.registration_endpoint) throw noDynamicRegistrationError(redirectUri)
+    registeredClient = await registerClient(issuer, {
       metadata,
-      clientMetadata: CLIENT_METADATA,
+      clientMetadata: clientMetadataFor(redirectUri),
       scope,
       fetchFn,
-    }))
+    })
+    client = registeredClient
+  }
   const state = crypto.randomUUID()
   const { authorizationUrl, codeVerifier } = await startAuthorization(issuer, {
     metadata,
     clientInformation: client,
-    redirectUrl: REDIRECT_URI,
+    redirectUrl: redirectUri,
     scope,
     state,
     resource: new URL(serverUrl),
@@ -145,7 +168,10 @@ export async function startMcpOAuth(
     enabled: true,
     status: "unauthenticated",
     issuer,
-    clientByIssuer: { ...(prev?.clientByIssuer ?? {}), [issuer]: client },
+    clientByIssuer: registeredClient
+      ? { ...(prev?.clientByIssuer ?? {}), [issuer]: registeredClient }
+      : prev?.clientByIssuer,
+    preRegisteredClient: prev?.preRegisteredClient,
     tokens: prev?.tokens,
     obtainedAt: prev?.obtainedAt,
     flow: {
@@ -179,7 +205,7 @@ export async function completeMcpOAuth(
   if (params.get("state") !== flow.state) throw new Error("OAuth state mismatch (possible CSRF)")
   const code = params.get("code")
   if (!code) throw new Error("callback URL missing authorization code")
-  const client = oauth.clientByIssuer?.[flow.issuer]
+  const client = resolveClient(oauth, flow.issuer)
   if (!client) throw new Error("missing registered client for issuer")
 
   let tokens: OAuthTokens
@@ -189,7 +215,7 @@ export async function completeMcpOAuth(
       clientInformation: client,
       authorizationCode: code,
       codeVerifier: flow.codeVerifier,
-      redirectUri: REDIRECT_URI,
+      redirectUri: mcpOAuthRedirectUri(oauth.preRegisteredClient),
       resource: new URL(requireNetworkUrl(config)),
       fetchFn,
     })
@@ -206,6 +232,7 @@ export async function completeMcpOAuth(
     issuer: flow.issuer,
     metadata: flow.metadata,
     clientByIssuer: oauth.clientByIssuer,
+    preRegisteredClient: oauth.preRegisteredClient,
     tokens,
     obtainedAt: Date.now(),
     flow: undefined,
@@ -259,7 +286,7 @@ export async function ensureFreshMcpToken(
   }
   const issuer = oauth.issuer
   if (!issuer) throw new Error("missing issuer for refresh")
-  const client = oauth.clientByIssuer?.[issuer]
+  const client = resolveClient(oauth, issuer)
   if (!client) throw new Error("missing client for refresh")
   const metadata = deps.metadataByIssuer?.[issuer] ?? oauth.metadata
   try {

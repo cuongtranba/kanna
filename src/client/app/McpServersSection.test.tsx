@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client"
 import "../lib/testing/setupHappyDom"
 import { makeFakeDomPort } from "../adapters/testing/makeFakePorts"
 import { McpServersSection } from "./McpServersSection"
-import type { McpServerConfig } from "../../shared/types"
+import type { McpServerConfig, McpServerPatch } from "../../shared/types"
 
 const noopHandlers = {
   onCreate: async () => {},
@@ -238,6 +238,40 @@ describe("McpServersSection — OAuth controls", () => {
     expect(authBtn).toBeDefined()
     await act(async () => { authBtn!.click() })
     expect(calledIds).toEqual(["design"])
+    await cleanup()
+  })
+})
+
+describe("McpServersSection — pre-registered OAuth client", () => {
+  test("saving a Client ID keeps the stored tokens and sends the pre-registered client with the update", async () => {
+    const updates: Array<{ id: string; patch: McpServerPatch }> = []
+    const tokens = { access_token: "AT", token_type: "Bearer" }
+    const server = httpServer("slack", { enabled: true, status: "authenticated", tokens })
+    const { container, cleanup } = await mount({
+      ...listProps,
+      servers: [server],
+      editing: { kind: "edit", id: "slack" },
+      handlers: { ...noopHandlers, onUpdate: async (id, patch) => { updates.push({ id, patch }) } },
+    })
+
+    await act(async () => {
+      type(container.querySelector<HTMLInputElement>('input[type="password"]')!, "s3cret")
+      type(container.querySelector<HTMLInputElement>('input[placeholder="8765"]')!, "3118")
+    })
+    const clientIdInput = [...container.querySelectorAll("span")]
+      .find((span) => span.textContent === "Client ID (optional)")
+      ?.parentElement?.querySelector("input")
+    await act(async () => { type(clientIdInput!, "slack-app-id") })
+
+    expect(container.textContent).toContain("http://localhost:3118/callback")
+    await clickText(container, "Save changes")
+
+    expect(updates.at(-1)?.patch.oauth).toEqual({
+      enabled: true,
+      status: "authenticated",
+      tokens,
+      preRegisteredClient: { clientId: "slack-app-id", clientSecret: "s3cret", callbackPort: 3118 },
+    })
     await cleanup()
   })
 })

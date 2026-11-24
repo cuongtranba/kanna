@@ -619,3 +619,94 @@ test("ensureFreshMcpToken refreshes using persisted oauth.metadata when metadata
   expect(saved?.status).toBe("authenticated")
   expect(saved?.metadata).toEqual({ token_endpoint: "https://as.test/oauth/token" } as unknown as AuthorizationServerMetadata)
 })
+
+interface SlackLikeAs {
+  fetchFn: typeof fetch
+  registrations: string[]
+  tokenBodies: URLSearchParams[]
+}
+
+function slackLikeAs(): SlackLikeAs {
+  const registrations: string[] = []
+  const tokenBodies: URLSearchParams[] = []
+  const json = (body: object, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+  const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString()
+    if (url === "https://mcp.test/mcp" && init?.method === "POST") {
+      return new Response("unauthorized", {
+        status: 401,
+        headers: { "www-authenticate": 'Bearer resource_metadata="https://mcp.test/.well-known/oauth-protected-resource"' },
+      })
+    }
+    if (url === "https://mcp.test/.well-known/oauth-protected-resource") {
+      return json({ authorization_servers: ["https://as.slack.test"], scopes_supported: ["search:read"] })
+    }
+    if (url === "https://as.slack.test/.well-known/oauth-authorization-server/") {
+      return json({
+        issuer: "https://as.slack.test",
+        authorization_endpoint: "https://as.slack.test/oauth/v2_user/authorize",
+        token_endpoint: "https://as.slack.test/api/oauth.v2.user.access",
+        token_endpoint_auth_methods_supported: ["client_secret_post"],
+        response_types_supported: ["code"],
+        code_challenge_methods_supported: ["S256"],
+      })
+    }
+    if (url === "https://as.slack.test/oauth/register") {
+      registrations.push(String(init?.body))
+      return json({ client_id: "dcr-client" }, 201)
+    }
+    if (url === "https://as.slack.test/api/oauth.v2.user.access") {
+      tokenBodies.push(new URLSearchParams(String(init?.body)))
+      return json({ access_token: "AT", refresh_token: "RT", token_type: "Bearer", expires_in: 3600 })
+    }
+    return new Response("not found", { status: 404 })
+  }) as typeof fetch
+  return { fetchFn, registrations, tokenBodies }
+}
+
+function slackConfig(oauth: McpOAuthState): McpServerConfig {
+  return { ...baseConfig(), url: "https://mcp.test/mcp", transport: "http", headers: {}, oauth }
+}
+
+test("a pre-registered client skips dynamic registration and carries its id, secret and callback port through the whole flow", async () => {
+  const as = slackLikeAs()
+  const persisted: McpOAuthState[] = []
+  const preRegisteredClient = { clientId: "slack-app-id", clientSecret: "slack-app-secret", callbackPort: 3118 }
+
+  const started = await startMcpOAuth(slackConfig({ enabled: true, status: "unauthenticated", preRegisteredClient }), {
+    fetchFn: as.fetchFn,
+    persist: (oauth) => persisted.push(oauth),
+  })
+
+  if (started.kind !== "authorizationUrl") throw new Error("expected an authorization URL")
+  const authorization = new URL(started.authorizationUrl)
+  expect(as.registrations).toEqual([])
+  expect(authorization.searchParams.get("client_id")).toBe("slack-app-id")
+  expect(authorization.searchParams.get("redirect_uri")).toBe("http://localhost:3118/callback")
+  const flowState = persisted.at(-1)
+  expect(flowState?.preRegisteredClient).toEqual(preRegisteredClient)
+  expect(flowState?.clientByIssuer).toBeUndefined()
+
+  const completed = await completeMcpOAuth(
+    slackConfig(flowState ?? { enabled: true, status: "unauthenticated" }),
+    `http://localhost:3118/callback?code=C&state=${authorization.searchParams.get("state")}`,
+    { fetchFn: as.fetchFn, persist: (oauth) => persisted.push(oauth), listTools: async () => 3 },
+  )
+
+  expect(completed.status).toBe("ok")
+  const body = as.tokenBodies.at(0)
+  expect(body?.get("client_id")).toBe("slack-app-id")
+  expect(body?.get("client_secret")).toBe("slack-app-secret")
+  expect(body?.get("redirect_uri")).toBe("http://localhost:3118/callback")
+  expect(persisted.at(-1)?.preRegisteredClient).toEqual(preRegisteredClient)
+})
+
+test("an authorization server without dynamic registration and no pre-registered client says which client to enter", async () => {
+  const as = slackLikeAs()
+
+  await expect(
+    startMcpOAuth(slackConfig({ enabled: true, status: "unauthenticated" }), { fetchFn: as.fetchFn, persist: () => {} }),
+  ).rejects.toThrow(/client ID.*http:\/\/localhost:8765\/callback/)
+  expect(as.registrations).toEqual([])
+})
