@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.115.0](https://github.com/cuongtranba/kanna/compare/v1.114.2...v1.115.0) (2026-11-24)
+
+
+### Features
+
+* **mcp-oauth:** support a pre-registered OAuth client so Slack's MCP server can authenticate ([#1537](https://github.com/cuongtranba/kanna/issues/1537)) ([1eb6acc](https://github.com/cuongtranba/kanna/commit/1eb6accaaebc4e7cfdfcf826082c4001097051a6))
+
 ## [1.114.2](https://github.com/cuongtranba/kanna/compare/v1.114.1...v1.114.2) (2026-11-23)
 
 
