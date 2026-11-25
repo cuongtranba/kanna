@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.115.1](https://github.com/cuongtranba/kanna/compare/v1.115.0...v1.115.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **mcp:** show the server's error reason when an MCP connection test fails ([#1540](https://github.com/cuongtranba/kanna/issues/1540)) ([e186328](https://github.com/cuongtranba/kanna/commit/e186328f27ba2c554eafc409da8d0c86089a36c1))
+
 ## [1.115.0](https://github.com/cuongtranba/kanna/compare/v1.114.2...v1.115.0) (2026-11-24)
 
 
