@@ -91,6 +91,33 @@ test("http 401 surfaces unauthorized", async () => {
   }
 }, 10_000)
 
+test("http 400 shows the server's JSON-RPC error reason, not only the status", async () => {
+  const reason = "App is not enabled for Slack MCP server access."
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: () => Response.json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: reason } }, { status: 400 }),
+  })
+  try {
+    const cfg: McpServerConfig = {
+      id: "id",
+      name: "test",
+      enabled: true,
+      createdAt: "",
+      updatedAt: "",
+      lastTest: { status: "untested" },
+      transport: "http",
+      url: `http://127.0.0.1:${server.port}/mcp`,
+      headers: {},
+    }
+    const result = await validateMcpServer(cfg, { timeoutMs: 3_000 })
+    if (result.status !== "error") throw new Error("expected error")
+    expect(result.message).toBe(`HTTP 400 from 127.0.0.1:${server.port}: ${reason}`)
+  } finally {
+    server.stop()
+  }
+}, 10_000)
+
 test("http connect test ends the server session so no session is left open", async () => {
   const sessionId = "session-1"
   const deletes: (string | null)[] = []
