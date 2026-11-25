@@ -118,6 +118,24 @@ describe("processTranscriptMessages", () => {
     expect(messages[0].result?.resolvedModel).toBe("claude-opus-5-5[1m]")
   })
 
+  test("a running subagent called without a model shows the model its own messages report", () => {
+    const nestedDebugRaw = JSON.stringify({
+      type: "assistant",
+      parent_tool_use_id: "tool-agent4",
+      message: { role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "looking" }] },
+    })
+    const messages = processTranscriptMessages([
+      entry({
+        kind: "tool_call",
+        tool: { kind: "tool", toolKind: "subagent_task", toolName: "Agent", toolId: "tool-agent4", input: { subagentType: "brandmio-researcher" } },
+      }),
+      entry({ kind: "assistant_text", text: "looking", debugRaw: nestedDebugRaw }),
+    ])
+
+    if (messages[0]?.kind !== "tool" || messages[0].toolKind !== "subagent_task") throw new Error("unexpected message")
+    expect(messages[0].input.model).toBe("claude-opus-5-5")
+  })
+
   test("Agent tool with no toolUseResult sidecar leaves result undefined (fallback)", () => {
     const messages = processTranscriptMessages([
       entry({

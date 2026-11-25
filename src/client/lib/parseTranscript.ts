@@ -1,5 +1,5 @@
 import { hydrateToolResult, STRUCTURED_RESULT_TOOL_KINDS } from "../../shared/tools"
-import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentToolStats, SystemInitEntry, ToolCallEntry, ToolRequestResolvedEntry, ToolResultEntry, ResultEntry, TranscriptEntry } from "../../shared/types"
+import type { HydratedToolCall, HydratedToolCallBase, HydratedTranscriptMessage, NormalizedToolCall, SubagentTaskResult, SubagentTaskToolCall, SubagentToolStats, SystemInitEntry, ToolCallEntry, ToolRequestResolvedEntry, ToolResultEntry, ResultEntry, TranscriptEntry } from "../../shared/types"
 import type { JsonArray, JsonObject, JsonValue } from "../../shared/json"
 import { isJsonObject } from "../../shared/json"
 import { asJsonValue } from "./asJsonValue"
@@ -152,12 +152,41 @@ function getSubagentTaskResultFromDebug(
   return hasSignal ? result : undefined
 }
 
+type SubagentAwaitingModel = { hydrated: MutableToolCall; input: SubagentTaskToolCall["input"] }
+
+function nestedAssistantFrameOf(
+  entry: TranscriptEntry,
+  awaiting: ReadonlyMap<string, SubagentAwaitingModel>,
+): { parentToolUseId: string; model: string } | undefined {
+  if (entry.kind !== "assistant_text" && entry.kind !== "assistant_thinking" && entry.kind !== "tool_call") return undefined
+  const debugRaw = entry.debugRaw
+  if (!debugRaw || ![...awaiting.keys()].some((toolId) => debugRaw.includes(toolId))) return undefined
+  let frame: JsonValue
+  try {
+    frame = JSON.parse(debugRaw)
+  } catch {
+    return undefined
+  }
+  if (!isJsonObject(frame) || !isJsonObject(frame.message)) return undefined
+  const parentToolUseId = str(frame.parent_tool_use_id)
+  const model = str(frame.message.model)
+  if (!parentToolUseId || !model || model === "<synthetic>") return undefined
+  return { parentToolUseId, model }
+}
+
 export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedTranscriptMessage[] {
   const pendingToolCalls = new Map<string, { hydrated: MutableToolCall; normalized: NormalizedToolCall }>()
+  const subagentsAwaitingModel = new Map<string, SubagentAwaitingModel>()
   const messages: HydratedTranscriptMessage[] = []
   let planWrite: string | undefined
 
   for (const entry of entries) {
+    const nested = subagentsAwaitingModel.size > 0 ? nestedAssistantFrameOf(entry, subagentsAwaitingModel) : undefined
+    const subagent = nested ? subagentsAwaitingModel.get(nested.parentToolUseId) : undefined
+    if (nested && subagent) {
+      subagent.hydrated.input = { ...subagent.input, model: nested.model }
+      subagentsAwaitingModel.delete(nested.parentToolUseId)
+    }
     switch (entry.kind) {
       case "user_prompt":
       case "account_info":
@@ -192,6 +221,9 @@ export function processTranscriptMessages(entries: TranscriptEntry[]): HydratedT
         const toolCall = hydrateToolCall(entry, planWrite)
         planWrite = planWriteAfter(entry.tool, planWrite)
         pendingToolCalls.set(entry.tool.toolId, { hydrated: toolCall, normalized: entry.tool })
+        if (entry.tool.toolKind === "subagent_task" && !entry.tool.input.model) {
+          subagentsAwaitingModel.set(entry.tool.toolId, { hydrated: toolCall, input: entry.tool.input })
+        }
         if (isMutableToolCallMsg(toolCall)) messages.push(toolCall)
         break
       }
