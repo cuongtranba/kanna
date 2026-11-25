@@ -189,7 +189,7 @@ export default function FlowSurface({ layout, height, label, selectedId, onSelec
         edges={edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
-        colorMode={theme ?? "light"}
+        forceColorMode={theme ?? "light"}
         fitView
         fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.2}
