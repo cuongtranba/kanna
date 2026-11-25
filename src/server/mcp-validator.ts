@@ -5,6 +5,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js"
 import type { McpServerConfig, McpServerTestResult } from "../shared/types"
 import { toError } from "../shared/errors"
+import { nonEmptyStringField, objectField, parseJsonObject } from "../shared/json"
 import { projectProcessEnv } from "./project-process-env"
 
 const DEFAULT_TIMEOUT_MS = 10_000
@@ -136,13 +137,13 @@ function formatError(
   } else {
     if (err instanceof StreamableHTTPError) {
       const code = err.code
-      if (code === 401 || code === 403) return "unauthorized (check headers/env)"
+      if (code === 401 || code === 403) return withServerReason("unauthorized (check headers/env)", raw)
       let host = "host"
       try {
         host = new URL(config.url).host
       } catch {
       }
-      return `HTTP ${code} from ${host}`
+      return withServerReason(`HTTP ${code} from ${host}`, raw)
     }
 
     const m = raw.match(/\b(\d{3})\b/)
@@ -159,4 +160,13 @@ function formatError(
   }
 
   return raw
+}
+
+function withServerReason(summary: string, errorMessage: string): string {
+  const bodyStart = errorMessage.indexOf("{")
+  if (bodyStart === -1) return summary
+  const body = parseJsonObject(errorMessage.slice(bodyStart))
+  const rpcError = body === null ? null : objectField(body, "error")
+  const reason = rpcError === null ? null : nonEmptyStringField(rpcError, "message")
+  return reason === null ? summary : `${summary}: ${reason}`
 }
