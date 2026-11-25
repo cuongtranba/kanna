@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.115.2](https://github.com/cuongtranba/kanna/compare/v1.115.1...v1.115.2) (2026-11-25)
+
+
+### Bug Fixes
+
+* **client:** show a running subagent's model when the Agent call names none ([#1542](https://github.com/cuongtranba/kanna/issues/1542)) ([e4351c0](https://github.com/cuongtranba/kanna/commit/e4351c082583a7b5d7b755c0abcc09182c15dd5a))
+
 ## [1.115.1](https://github.com/cuongtranba/kanna/compare/v1.115.0...v1.115.1) (2026-11-25)
 
 
