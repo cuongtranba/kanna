@@ -18,6 +18,7 @@ export interface TranscriptActionsContextValue {
   onToolRequestAnswer: (toolRequestId: string, decision: ToolRequestDecision) => Promise<void>
   onAutoContinueAccept: (scheduleId: string, scheduledAt: number) => Promise<void>
   onAutoContinueReschedule: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onAutoContinueResumeNow: (scheduleId: string) => Promise<void>
   onAutoContinueCancel: (scheduleId: string) => Promise<void>
   onRetryFailedTurn: ((resultMessageId: string) => void | Promise<void>) | undefined
   onCronRemove: ((jobId: string) => void) | undefined
@@ -64,6 +65,7 @@ export const DEFAULT_TRANSCRIPT_ACTIONS: TranscriptActionsContextValue = {
   onToolRequestAnswer: ASYNC_NOOP,
   onAutoContinueAccept: ASYNC_NOOP,
   onAutoContinueReschedule: ASYNC_NOOP,
+  onAutoContinueResumeNow: ASYNC_NOOP,
   onAutoContinueCancel: ASYNC_NOOP,
   onRetryFailedTurn: undefined,
   onCronRemove: undefined,

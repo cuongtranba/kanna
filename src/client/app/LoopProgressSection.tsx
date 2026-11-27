@@ -51,7 +51,7 @@ function HeaderAccessory({
 
 interface Props {
   loopProgress: LoopProgressSnapshot
-  onResume?: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onResume?: (scheduleId: string) => Promise<void>
 }
 
 function ResumeNowButton({
@@ -59,9 +59,9 @@ function ResumeNowButton({
   onResume,
 }: {
   scheduleId: string
-  onResume: (scheduleId: string, scheduledAt: number) => Promise<void>
+  onResume: (scheduleId: string) => Promise<void>
 }) {
-  const pendingKey = pendingActionKey("autoContinue.accept", scheduleId)
+  const pendingKey = pendingActionKey("autoContinue.resumeNow", scheduleId)
   const pending = usePendingAction(pendingKey)
   return (
     <Button
@@ -69,7 +69,7 @@ function ResumeNowButton({
       size="sm"
       className="ml-auto"
       pending={pending}
-      onClick={() => runPendingAction(pendingKey, () => onResume(scheduleId, Date.now()))}
+      onClick={() => runPendingAction(pendingKey, () => onResume(scheduleId))}
     >
       Resume now
     </Button>
@@ -95,7 +95,7 @@ export function LoopProgressSection({ loopProgress, onResume }: Props) {
             <span className="text-sm text-foreground">
               {rateLimit.scheduled ? "Resumes" : "Usage limit — resets"} {formatLocal(rateLimit.resetAt, rateLimit.tz)}
             </span>
-            {!rateLimit.scheduled && onResume ? (
+            {onResume ? (
               <ResumeNowButton scheduleId={rateLimit.scheduleId} onResume={onResume} />
             ) : null}
           </div>

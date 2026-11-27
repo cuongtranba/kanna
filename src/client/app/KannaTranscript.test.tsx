@@ -29,6 +29,7 @@ const DEFAULT_ACTIONS: TranscriptActionsContextValue = {
   onToolRequestAnswer: ASYNC_NOOP,
   onAutoContinueAccept: ASYNC_NOOP,
   onAutoContinueReschedule: ASYNC_NOOP,
+  onAutoContinueResumeNow: ASYNC_NOOP,
   onAutoContinueCancel: ASYNC_NOOP,
   onRetryFailedTurn: undefined,
   onCronRemove: undefined,

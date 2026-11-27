@@ -5,6 +5,7 @@ import { ackResult } from "./ws-router-ack"
 export interface AgentCtrlAgentDep {
   acceptAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
   rescheduleAutoContinue(chatId: string, scheduleId: string, scheduledAt: number): Promise<void>
+  fireAutoContinue(chatId: string, scheduleId: string): Promise<void>
   cancelAutoContinue(chatId: string, scheduleId: string, reason: "user" | "chat_deleted"): Promise<void>
   runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult): Promise<string | null>
 }
@@ -39,6 +40,12 @@ export async function handleAgentCtrlCommand(
     }
     case "autoContinue.reschedule": {
       await agent.rescheduleAutoContinue(command.chatId, command.scheduleId, command.scheduledAt)
+      send(ackResult(id, command))
+      await broadcastChatAndSidebar(command.chatId)
+      return true
+    }
+    case "autoContinue.resumeNow": {
+      await agent.fireAutoContinue(command.chatId, command.scheduleId)
       send(ackResult(id, command))
       await broadcastChatAndSidebar(command.chatId)
       return true
