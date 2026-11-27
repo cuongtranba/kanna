@@ -3,6 +3,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js"
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js"
 import type { McpServerConfig, McpServerTestResult } from "../shared/types"
 import { toError } from "../shared/errors"
 import { nonEmptyStringField, objectField, parseJsonObject } from "../shared/json"
@@ -70,6 +71,9 @@ export async function validateMcpServer(
     })
 
     await Promise.race([client.connect(transport), timeoutPromise])
+    if (!client.getServerCapabilities()?.tools) {
+      return { status: "ok", testedAt: new Date().toISOString(), toolCount: 0 }
+    }
     const tools = await Promise.race([client.listTools(), timeoutPromise])
     return {
       status: "ok",
@@ -131,7 +135,8 @@ function formatError(
   }
 
   if (config.transport === "stdio") {
-    if (raw.includes("ENOENT") || raw.includes("ENOTDIR") || raw.toLowerCase().includes("not found")) {
+    const methodNotFound = err instanceof McpError && err.code === ErrorCode.MethodNotFound
+    if (!methodNotFound && (raw.includes("ENOENT") || raw.includes("ENOTDIR") || raw.toLowerCase().includes("not found"))) {
       return `command not found: ${config.command}`
     }
   } else {

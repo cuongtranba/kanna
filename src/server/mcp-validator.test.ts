@@ -13,12 +13,21 @@ s.tool("ping", "p", async () => ({ content: [{ type: "text", text: "pong" }] }))
 await s.connect(new StdioServerTransport())
 `
 
+const STUB_SKILLS_ONLY_SCRIPT = `
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+const s = new McpServer({ name: "skills-only", version: "0.0.0" })
+await s.connect(new StdioServerTransport())
+`
+
 const STUB_SLEEPER_SCRIPT = `setInterval(() => {}, 1000)`
 
 const tmpStubOk = join(tmpdir(), `mcp-stub-ok-${process.pid}.mjs`)
+const tmpStubSkillsOnly = join(tmpdir(), `mcp-stub-skills-only-${process.pid}.mjs`)
 const tmpStubSleeper = join(tmpdir(), `mcp-stub-sleeper-${process.pid}.mjs`)
 
 await Bun.write(tmpStubOk, STUB_OK_SCRIPT)
+await Bun.write(tmpStubSkillsOnly, STUB_SKILLS_ONLY_SCRIPT)
 await Bun.write(tmpStubSleeper, STUB_SLEEPER_SCRIPT)
 
 function baseStdio(overrides: Partial<McpServerConfig> = {}): McpServerConfig {
@@ -41,6 +50,12 @@ test("stdio happy path returns ok with toolCount", async () => {
   const result = await validateMcpServer(baseStdio(), { timeoutMs: 10_000 })
   if (result.status !== "ok") throw new Error(`expected ok, got ${JSON.stringify(result)}`)
   expect(result.toolCount).toBeGreaterThanOrEqual(1)
+}, 15_000)
+
+test("stdio server without a tools capability connects ok with zero tools", async () => {
+  const result = await validateMcpServer(baseStdio({ args: [tmpStubSkillsOnly] } as Partial<McpServerConfig>), { timeoutMs: 10_000 })
+  if (result.status !== "ok") throw new Error(`expected ok, got ${JSON.stringify(result)}`)
+  expect(result.toolCount).toBe(0)
 }, 15_000)
 
 test("stdio ENOENT yields command not found message", async () => {
