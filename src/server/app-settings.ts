@@ -427,6 +427,7 @@ function normalizeMcpEntry<T>(value: T, warnings: string[]): McpServerConfig | n
     id,
     name,
     enabled: src.enabled !== false,
+    skills: src.skills !== false,
     createdAt: typeof src.createdAt === "string" ? src.createdAt : new Date().toISOString(),
     updatedAt: typeof src.updatedAt === "string" ? src.updatedAt : new Date().toISOString(),
     lastTest: normalizeMcpTestResult(src.lastTest),
@@ -832,6 +833,7 @@ function buildMcpFromInput(input: McpServerInput): McpServerConfig {
     id: randomUUID(),
     name: input.name.trim(),
     enabled: input.enabled !== false,
+    skills: input.skills !== false,
     createdAt: now,
     updatedAt: now,
     lastTest: { status: "untested" as const },
@@ -857,13 +859,12 @@ function buildMcpFromInput(input: McpServerInput): McpServerConfig {
 
 function applyMcpPatch(existing: McpServerConfig, patch: McpServerPatch): McpServerConfig {
   const now = new Date().toISOString()
-  const nextName = patch.name !== undefined ? patch.name.trim() : existing.name
-  const nextEnabled = patch.enabled !== undefined ? patch.enabled : existing.enabled
   const transport = patch.transport ?? existing.transport
   const shared = {
     id: existing.id,
-    name: nextName,
-    enabled: nextEnabled,
+    name: patch.name?.trim() ?? existing.name,
+    enabled: patch.enabled ?? existing.enabled,
+    skills: patch.skills ?? (existing.skills !== false),
     createdAt: existing.createdAt,
     updatedAt: now,
     lastTest: existing.lastTest,
@@ -1237,22 +1238,21 @@ const BEACON_CRUD: CollectionCrud<BeaconConfig, BeaconInput, BeaconPatch> = {
   notFound: beaconNotFound,
 }
 
+type McpEntryFields = { enabled: boolean } | { skills: boolean } | { lastTest: McpServerTestResult }
+
+function touchMcpEntry(current: McpServerConfig[], id: string, fields: McpEntryFields): McpServerConfig[] {
+  return current.map((s) => (s.id === id ? { ...s, ...fields, updatedAt: new Date().toISOString() } : s))
+}
+
 function applyMcpSetterPatch(
   current: McpServerConfig[],
   patch: NonNullable<AppSettingsPatch["customMcpServers"]>,
 ): McpServerConfig[] {
-  if (patch.setEnabled) {
-    const { id, enabled } = patch.setEnabled
-    return current.map((s) => (s.id === id ? { ...s, enabled, updatedAt: new Date().toISOString() } : s))
-  }
-  if (patch.setTestResult) {
-    const { id, result } = patch.setTestResult
-    return current.map((s) => (s.id === id ? { ...s, lastTest: result, updatedAt: new Date().toISOString() } : s))
-  }
-  if (patch.setOAuthState) {
-    const { id, oauth } = patch.setOAuthState
-    return current.map((s) => (s.id === id && s.transport !== "stdio" ? { ...s, oauth } : s))
-  }
+  const { setEnabled, setSkills, setTestResult, setOAuthState } = patch
+  if (setEnabled) return touchMcpEntry(current, setEnabled.id, { enabled: setEnabled.enabled })
+  if (setSkills) return touchMcpEntry(current, setSkills.id, { skills: setSkills.skills })
+  if (setTestResult) return touchMcpEntry(current, setTestResult.id, { lastTest: setTestResult.result })
+  if (setOAuthState) return current.map((s) => (s.id === setOAuthState.id && s.transport !== "stdio" ? { ...s, oauth: setOAuthState.oauth } : s))
   return current
 }
 

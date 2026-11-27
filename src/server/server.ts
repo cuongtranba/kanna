@@ -16,6 +16,7 @@ import { resolveVapidSubject } from "../shared/vapid-subject"
 import { AgentCoordinator } from "./agent-coordinator"
 import type { AgentToolsBridge } from "./agent-tools-bridge"
 import { createPeerMessaging } from "./peer-messaging/create-peer-messaging"
+import { startMcpSkills } from "./mcp-skills/mcp-skills-boot"
 import { createCustomMcpServerResolver } from "./claude-session-config-helpers"
 import { ensureFreshMcpToken } from "./mcp-oauth.adapter"
 import type { AgentCoordinatorArgs } from "./agent-coordinator-types"
@@ -130,6 +131,7 @@ export interface StartKannaServerOptions {
   trustProxy?: boolean
   onMigrationProgress?: (message: string) => void
   discoverProjects?: () => DiscoveredProject[]
+  homeDir?: string
   update?: {
     version: string
     fetchLatestVersion: (packageName: string) => Promise<string>
@@ -355,7 +357,7 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     () => appSettings.getSnapshot().claudeAuth.concurrencyDefault,
   )
   const diffStore = new DiffStore(undefined, oauthPool)
-  const { localCatalog, cliCommands } = await createSlashCommandSources(store.dataDir, () => router.scheduleBroadcast())
+  const { localCatalog, cliCommands } = await createSlashCommandSources(store.dataDir, () => router.scheduleBroadcast(), options.homeDir)
 
   const scheduleManager = new ScheduleManager({
     fire: async (chatId, scheduleId) => {
@@ -378,15 +380,25 @@ async function createApplicationServices(options: StartKannaServerOptions): Prom
     ensureFreshToken: (server, opts) => ensureFreshMcpToken(server, opts),
     persistOAuthState,
   })
+  const mcpSkills = startMcpSkills({
+    appSettings,
+    resolveServers: resolveCustomMcpServers,
+    store,
+    slashSources: { localCatalog, cliCommands },
+    onChange: () => router.scheduleBroadcast(),
+    lifetime,
+  })
   const { agentToolsBridge, ...peerMessaging } = createPeerMessaging(
     store,
     () => agent,
     () => appSettings.getSnapshot().peerMessagesInbound,
     resolveCustomMcpServers,
+    mcpSkills.host,
   )
   agent = new AgentCoordinator({
     store,
     ...peerMessaging,
+    mcpSkills,
     scheduleManager,
     cronScheduler,
     runtimeConfig: resolveAgentRuntimeConfig(process.env),
@@ -629,7 +641,7 @@ export async function startKannaServer(options: StartKannaServerOptions = {}) {
   const services = await createApplicationServices(options)
   const { store, diffStore, updateManager, appSettings, auth, sessionShareService, router, refreshDiscovery, beacon, analytics } = services
 
-  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery, bus: services.bus })
+  const remoteMcp = createRemoteMcpRuntime({ auth, appSettings, store, commands: router, refreshDiscovery, bus: services.bus, localCatalog: services.agent.localCatalog })
   const distDir = options.distDir ?? path.join(import.meta.dirname, "..", "..", "dist", "client")
   const hostname = options.host ?? "127.0.0.1"
   const trustProxy = options.trustProxy ?? false

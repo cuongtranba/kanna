@@ -2,6 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { ResumeLoopResult } from "./loop-wake-recovery"
 import { buildBoardToolList } from "./kanna-mcp-boards"
 import { buildInboxToolList } from "./kanna-mcp-inbox"
+import { buildMcpSkillToolList, type McpSkillTools } from "./kanna-mcp-skills"
 import { buildBeaconToolList } from "./kanna-mcp-beacon"
 import { buildPeerToolList } from "./kanna-mcp-peer"
 import type { PeerMessenger } from "./peer-messaging/peer-messenger"
@@ -49,8 +50,7 @@ import { validateMermaid } from "../shared/mermaid-validate"
 import { formatMermaidDefect } from "../shared/mermaid-report"
 import type { MermaidParsePort } from "../shared/mermaid-validation"
 import type { ToolCallbackService } from "./tool-callback"
-import type { ChatPermissionPolicy } from "../shared/permission-policy"
-import { POLICY_DEFAULT } from "../shared/permission-policy"
+import { POLICY_DEFAULT, type ChatPermissionPolicy } from "../shared/permission-policy"
 
 export interface OfferDownloadArgs {
   projectId: string
@@ -75,6 +75,7 @@ export interface KannaMcpArgs extends OfferDownloadArgs {
   getBeacons?: () => readonly BeaconConfig[]
   beaconToolsAllowed?: boolean
   peerMessenger?: PeerMessenger
+  mcpSkills?: McpSkillTools
   sessionId?: string
   tunnelGateway?: TunnelGateway | null
   toolCallback?: ToolCallbackService
@@ -520,7 +521,6 @@ const RUN_VERIFY_DESCRIPTION =
   + "the worker subagent both verify each iteration, and a real gate (lint + "
   + "typecheck + tests) costs a minute or more each time."
 
-
 function buildTrackingDocToolList(args: {
   cwd: string
   chatId: string | null
@@ -620,7 +620,6 @@ function buildTrackingDocToolList(args: {
     ...buildReplaceTrackingSectionTool(baseDir, loadOrSeed),
   ]
 }
-
 
 function writeNote(fileCreated: boolean, sectionCreated: boolean, abs: string): string {
   if (fileCreated) return ` (created ${abs} from the task-state skeleton)`
@@ -927,6 +926,7 @@ export function buildKannaMcpTools(args: KannaMcpArgs): KannaSdkToolList {
         : undefined,
     }, tool),
     ...buildPeerToolList<KannaSdkTool>(args.peerMessenger, chatId, args.delegationContext, tool),
+    ...buildMcpSkillToolList<KannaSdkTool>(args.mcpSkills, tool),
     ...buildPluginToolList<KannaSdkTool>(getPluginService(), chatId, args.delegationContext?.depth ?? 0, tool),
     ...buildChatTaskToolList<KannaSdkTool>(resolveChatTaskDeps(args, chatId), tool),
     ...buildRunVerifyToolList({ chatId, cwd, getArmedLoop: args.getArmedLoop }),

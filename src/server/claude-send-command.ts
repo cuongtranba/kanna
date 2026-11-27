@@ -115,6 +115,8 @@ export interface SendCommandDeps {
   runCronCommand(chatId: string, result: import("../shared/cron/types").CronParseResult, model?: string): Promise<string | null>
 
   expandSlashCommand(chatId: string, content: string): SlashCommandExpansion | null
+
+  expandMcpSkillCommand(chatId: string, content: string): SlashCommandExpansion | null
 }
 
 
@@ -296,6 +298,8 @@ function resolveSlashExpansion(
   provider: AgentProvider,
   content: string,
 ): SlashCommandExpansion | null {
+  const mcpExpansion = deps.expandMcpSkillCommand(chatId, content)
+  if (mcpExpansion) return mcpExpansion
   if (providerExpandsSlashCommands(provider)) return null
   return deps.expandSlashCommand(chatId, content)
 }

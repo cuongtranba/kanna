@@ -395,7 +395,7 @@ export interface ChatHistorySnapshot {
 
 export type SlashCommandKind = "command" | "skill"
 
-export type SlashCommandScope = "builtin" | "cli" | "personal" | "project" | "plugin"
+export type SlashCommandScope = "builtin" | "cli" | "personal" | "project" | "plugin" | "mcp"
 
 export interface SlashCommand {
   name: string
@@ -403,6 +403,7 @@ export interface SlashCommand {
   argumentHint: string
   kind?: SlashCommandKind
   scope?: SlashCommandScope
+  server?: string
 }
 
 export interface ProjectCommandsSnapshot {

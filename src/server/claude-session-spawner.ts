@@ -39,6 +39,7 @@ import type { OAuthBearers } from "./claude-session-config-helpers"
 import { isGenUIEnabled } from "./genui/genui-config"
 import { endpointEnvOf, endpointKeyOf, endpointSpawnFingerprint, resolveSdkEndpoint } from "./sdk-endpoint"
 import type { CustomProviderCredential } from "../shared/custom-providers"
+import type { McpSkillAccess } from "./mcp-skills/mcp-skill-access"
 
 const SELF_WAKE_PROVENANCE_PREFIX = "self-wake:"
 
@@ -87,6 +88,7 @@ export interface SpawnClaudeTurnDeps {
   inboxRegistry?: InboxRegistry
   beaconRegistry?: BeaconRegistry
   peerMessenger?: PeerMessenger
+  mcpSkills?: McpSkillAccess
   getBeacons?: () => readonly BeaconConfig[]
   closeClaudeSession: (chatId: string, session: ClaudeSessionState) => void
   enforceClaudeSessionBudget: (protectedChatId?: string) => void
@@ -165,6 +167,7 @@ export async function spawnClaudeTurn(
       stackProjects: args.stackProjects,
       genui: isGenUIEnabled(),
       peerMessaging: deps.peerMessenger !== undefined,
+      mcpSkills: await deps.mcpSkills?.roster(args.chatId),
     })
     const chatIdForCtx = args.chatId
     const delegationContext: KannaMcpDelegationContext = {
@@ -225,6 +228,7 @@ export async function spawnClaudeTurn(
           beaconRegistry: deps.beaconRegistry,
           getBeacons: deps.getBeacons,
           peerMessenger: deps.peerMessenger,
+          mcpSkills: deps.mcpSkills?.host,
         },
         toolCallback: deps.toolCallback ?? undefined,
         chatPolicy: deps.resolveChatPolicy(args.chatId),

@@ -14,6 +14,9 @@ import type { StorageBackend } from "../storage/backend"
 import { createRemoteMcpAuditLog } from "./remote-mcp-audit-log"
 import { currentRemoteMcpOrigin } from "./remote-mcp-call-scope"
 import { createDedupeStore } from "./remote-mcp-dedupe"
+import { createRemoteMcpSkillFiles } from "./remote-mcp-skill-files.adapter"
+import { createRemoteMcpSkills } from "./remote-mcp-skills"
+import type { LocalCatalogService } from "../local-catalog"
 import { createEventFeed, EVENT_FEED_SUBJECTS } from "./remote-mcp-event-feed"
 import type { RemoteMcpBearerVerifier } from "./remote-mcp-bearer"
 import { createRemoteMcpBearerVerifier } from "./remote-mcp-bearer"
@@ -39,6 +42,7 @@ export interface RemoteMcpRuntimeSources {
   refreshDiscovery: () => Promise<DiscoveredProject[]>
   bus: Pick<ServiceBus, "subscribe">
   storage?: StorageBackend
+  localCatalog?: Pick<LocalCatalogService, "skillSources" | "homeDir"> | null
 }
 
 const REMOTE_MCP_IDLE_TIMEOUT_SECONDS = 130
@@ -53,7 +57,7 @@ function joinSubscriptions(subscriptions: Array<() => void>): () => void {
   }
 }
 
-export function createRemoteMcpRuntime({ auth, appSettings, store, commands, refreshDiscovery, bus, storage }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
+export function createRemoteMcpRuntime({ auth, appSettings, store, commands, refreshDiscovery, bus, storage, localCatalog }: RemoteMcpRuntimeSources): RemoteMcpRuntime {
   const machineName = getMachineDisplayName()
   const audit = createRemoteMcpAuditLog({ storage: storage ?? new FsStorageBackend(), dataDir: store.dataDir })
   const dedupe = createDedupeStore({ now: Date.now })
@@ -63,8 +67,15 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands, ref
     const resource = auth?.backend.remoteMcpResource() ?? null
     return resource === null ? null : remoteMcpOriginOf(resource)
   }
+  const skills = localCatalog
+    ? createRemoteMcpSkills({
+      files: createRemoteMcpSkillFiles({ localCatalog, projects: () => store.listProjects() }),
+      now: Date.now,
+      onListChanged: () => mcp.notify.resourcesChanged(),
+    })
+    : null
   const mcp = createMcpHandler(
-    (request) => buildRemoteMcpServer({
+    async (request) => buildRemoteMcpServer({
       dispatchCommand,
       readSnapshot: commands.readSnapshot,
       refreshLocalProjects: async () => {
@@ -79,6 +90,7 @@ export function createRemoteMcpRuntime({ auth, appSettings, store, commands, ref
       audit,
       dedupe,
       eventFeed,
+      skills: await skills?.current(),
     }),
     { onerror: (error) => log.warn("[remote-mcp] handler error", error.message) },
   )

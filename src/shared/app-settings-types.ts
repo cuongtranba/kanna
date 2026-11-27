@@ -386,6 +386,7 @@ export interface AppSettingsPatch {
   uploads?: Partial<UploadSettings>
   subagents?: CollectionPatch<SubagentInput, SubagentPatch>
   customMcpServers?: CollectionPatch<McpServerInput, McpServerPatch> & SetEnabledPatch & {
+    setSkills?: { id: string; skills: boolean }
     setTestResult?: { id: string; result: McpServerTestResult }
     setOAuthState?: { id: string; oauth: McpOAuthState }
   }

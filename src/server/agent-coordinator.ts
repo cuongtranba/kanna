@@ -239,6 +239,7 @@ export class AgentCoordinator {
   readonly inboxRegistry: import("./inbox/inbox-registry").InboxRegistry | null
   readonly beaconRegistry: import("./beacon-registry").BeaconRegistry | null
   readonly peerMessenger: import("./peer-messaging/peer-messenger").PeerMessenger | null
+  readonly mcpSkills: import("./mcp-skills/mcp-skill-access").McpSkillAccess | null
   readonly getBeacons: () => readonly import("../shared/beacon-config").BeaconConfig[]
   readonly backgroundTaskOutputRegistry: import("./background-task-output-registry").BackgroundTaskOutputRegistry | null
   readonly liveBlocks: import("./live-block-throttle").LiveBlockHub | null
@@ -360,6 +361,7 @@ export class AgentCoordinator {
     this.inboxRegistry = args.inboxRegistry ?? null
     this.beaconRegistry = args.beaconRegistry ?? null
     this.peerMessenger = args.peerMessenger ?? null
+    this.mcpSkills = args.mcpSkills ?? null
     this.getBeacons = args.getBeacons ?? (() => [])
     this.backgroundTaskOutputRegistry = args.backgroundTaskOutputRegistry ?? null
     this.liveBlocks = args.liveBlocks ?? null
@@ -409,7 +411,6 @@ export class AgentCoordinator {
   getActiveTurnChatIds(): string[] {
     return [...this.activeTurns.keys()]
   }
-
 
   getClaudeSessionMap(): Map<string, ClaudeSessionState> { return this.claudeSessions }
   getActiveTurnMap(): Map<string, ActiveTurn> { return this.activeTurns }
@@ -651,9 +652,9 @@ export class AgentCoordinator {
       clearChatContext: (chatId) => this.clearChatContext(chatId),
       runCronCommand: (chatId, result, model) => this.runCronCommand(chatId, result, model),
       expandSlashCommand: (chatId, content) => this.skillAccess.expandSlashCommand(chatId, content),
+      expandMcpSkillCommand: (chatId, content) => this.mcpSkills?.expandSlashCommand(chatId, content) ?? null,
     }
   }
-
 
   private subagentWiringDeps(): SubagentWiringDeps {
     return {
@@ -683,8 +684,6 @@ export class AgentCoordinator {
       toolCallback: this.toolCallback,
     }
   }
-
-
 
   resolveBackgroundTaskMaxMs(): number {
     return this.claudeSessionLifecycle.backgroundTaskMaxMs
@@ -730,7 +729,6 @@ export class AgentCoordinator {
     closeClaudeSessionFn(this.sessionLifecycle, chatId, session, opts)
   }
 
-
   enforceClaudeSessionBudget(protectedChatId?: string): void {
     enforceClaudeSessionBudgetFn(this.sessionLifecycle, protectedChatId)
   }
@@ -738,8 +736,6 @@ export class AgentCoordinator {
   private sweepIdleClaudeSessions(now = Date.now()): void {
     sweepIdleClaudeSessionsFn(this.sessionStateQueryDeps(), now)
   }
-
-
 
   private subagentToolResponseDeps(): SubagentToolResponseDeps {
     return {
@@ -870,6 +866,7 @@ export class AgentCoordinator {
       isBeaconOnline: (beaconId) => this.beaconRegistry?.isOnline(beaconId) ?? false,
       getAppSettingsSnapshot: () => this.getAppSettingsSnapshot(),
       listSkills: (chatId) => this.skillAccess.listSkills(chatId),
+      mcpSkills: this.mcpSkills ?? undefined,
       generateTitleInBackground: (chatId, content, localPath, optimisticTitle) =>
         generateTitleInBackgroundFn(this.chatManagementDeps(), chatId, content, localPath, optimisticTitle),
       pendingTools: this.pendingTools,
@@ -920,6 +917,7 @@ export class AgentCoordinator {
       toolCallback: this.toolCallback,
       tunnelGateway: this.tunnelGateway,
       isLoopArmed: (chatId) => this.isLoopArmed(chatId),
+      mcpSkills: this.mcpSkills ?? undefined,
       boardRegistry: this.boardRegistry ?? undefined,
       inboxRegistry: this.inboxRegistry ?? undefined,
       beaconRegistry: this.beaconRegistry ?? undefined,
@@ -974,7 +972,6 @@ export class AgentCoordinator {
   async send(command: Extract<ClientCommand, { type: "chat.send" }>) {
     return sendCommandFn(this.sendCommandDeps(), command)
   }
-
 
   async enqueue(command: Extract<ClientCommand, { type: "message.enqueue" }>) {
     if (typeof command.autoResumeOnRateLimit === "boolean") {
@@ -1045,7 +1042,6 @@ export class AgentCoordinator {
     return runClaudeSessionLoop(this.runClaudeSessionDeps(), session)
   }
 
-
   private runTurnDeps(): RunTurnDeps {
     return {
       store: this.store,
@@ -1064,14 +1060,9 @@ export class AgentCoordinator {
     }
   }
 
-
-
   async emitAutoContinueEvent(event: ChatAutomationEvent): Promise<void> {
     await emitAutoContinueEventFn(this.autoContinueDeps(), event)
   }
-
-
-
 
   async fireAutoContinue(chatId: string, scheduleId: string) {
     return fireAutoContinueFn(this.autoContinueDeps(), chatId, scheduleId)

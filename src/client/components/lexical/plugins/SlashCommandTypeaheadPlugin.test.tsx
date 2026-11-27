@@ -5,11 +5,13 @@ import { $createSlashCommandNode, SlashCommandNode } from "../nodes/SlashCommand
 import {
   $applySlashCommandSelection,
   SlashCommandMenuOption,
+  SlashCommandRowContent,
   commandsForProvider,
   dedupeCommandsByName,
 } from "./SlashCommandTypeaheadPlugin"
 import { filterCommands, normalizeCommandName } from "../../../lib/slash-commands"
 import type { SlashCommand } from "../../../../shared/types"
+import { renderClientMarkup } from "../../../lib/testing/renderClientMarkup"
 
 
 function buildEditor() {
@@ -29,6 +31,7 @@ function makeCmd(
     argumentHint?: string
     kind?: SlashCommand["kind"]
     scope?: SlashCommand["scope"]
+    server?: string
   } = {},
 ): SlashCommand {
   return {
@@ -37,6 +40,7 @@ function makeCmd(
     argumentHint: opts.argumentHint ?? "",
     kind: opts.kind,
     scope: opts.scope,
+    server: opts.server,
   }
 }
 
@@ -338,5 +342,21 @@ describe("$applySlashCommandSelection", () => {
     })
     expect(JSON.stringify(editor.getEditorState().toJSON())).not.toContain("kanna-slash-command")
     expect(nodeCount).toBe(1)
+  })
+})
+
+
+describe("SlashCommandRowContent", () => {
+  it("badges an MCP skill with the server that serves it instead of the generic skill tag", async () => {
+    const { container, cleanup } = await renderClientMarkup(
+      <SlashCommandRowContent cmd={makeCmd("acme:refunds", { kind: "skill", scope: "mcp", server: "acme" })} />,
+    )
+    try {
+      expect(container.textContent).toContain("/acme:refunds")
+      expect(container.textContent).toContain("acme")
+      expect(container.textContent).not.toContain("skill")
+    } finally {
+      await cleanup()
+    }
   })
 })

@@ -257,6 +257,26 @@ last cursor and `timeoutSeconds` (default 45, at most 100). It returns the same
 `events` list when the time runs out. Without `after` it waits for the next
 event from now. Call it again with the returned `cursor` to keep following.
 
+## Skills
+
+Besides tools and resources, `/mcp` serves the Agent Skills on this machine through the MCP skills extension (`io.modelcontextprotocol/skills`). A client that supports it, such as one built on the SDK's `SkillsClient`, lists them with `skills/list`, reads each file with `resources/read` and lists a skill's folder with `resources/directory/read`. The server declares `directoryRead`, and the `kanna://` resources above keep working beside it.
+
+Skills appear under `skill://`, grouped by where they come from:
+
+| URI | Where it comes from |
+| --- | --- |
+| `skill://personal/<skill>/SKILL.md` | `~/.claude/skills` |
+| `skill://plugins/<plugin>/<skill>/SKILL.md` | Enabled Claude plugins |
+| `skill://projects/<projectId>/<skill>/SKILL.md` | The `.claude/skills` of each project that is not hidden or deleted |
+
+A personal or plugin skill is listed once, not once per project. Every file carries its size and sha256 digest, which a client can check. Names are made URI-safe, and if two skills would share a name in one group the first is kept and the other is skipped.
+
+The skill list reloads at most every 30 seconds, when the next request arrives, and clients are told when it changed. A skill folder is read through the SDK's folder reader. The folder itself may be a symlink, as with skills linked in from `~/.agents/skills`, but the reader refuses symlinks and `..` paths inside it. A skill over 512 files or 16 MiB is still listed, but clients that follow the extension, Kanna among them, decline to load it.
+
+A skill whose `SKILL.md` frontmatter is not valid YAML is left out of the list. The usual cause is an unquoted `description` that contains `: `. Claude Code accepts that, but the extension does not, so wrap the value in quotes.
+
+A client signed in with your password or an OAuth token can read every skill on the list, so keep secrets out of skill files.
+
 ## Duplicate protection
 
 Retrying `send_message` never starts the same work twice:

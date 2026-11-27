@@ -134,6 +134,7 @@ export const appSettingsPatchSchema = z.object({
     .object({
       ...collectionPatchShape(mcpServerInputSchema, mcpServerPatchSchema),
       ...setEnabledShape,
+      setSkills: z.object({ id: z.string(), skills: z.boolean() }).optional(),
       setTestResult: z.object({ id: z.string(), result: mcpServerTestResultSchema }).optional(),
       setOAuthState: z.object({ id: z.string(), oauth: mcpOAuthStateSchema }).optional(),
     })

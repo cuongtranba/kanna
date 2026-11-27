@@ -11,6 +11,7 @@ const noopHandlers = {
   onUpdate: async () => {},
   onDelete: async () => {},
   onSetEnabled: async () => {},
+  onSetSkills: async () => {},
   onTest: async () => {},
   onStartMcpOAuth: async (_id: string) => ({ ok: false as const, error: "noop" }),
   onCompleteMcpOAuth: async (_id: string, _callbackUrl: string) => ({ ok: false as const, error: "noop" }),

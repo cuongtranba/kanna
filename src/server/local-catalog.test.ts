@@ -318,3 +318,20 @@ describe("LocalCatalogService.skills", () => {
     ])
   })
 })
+
+describe("LocalCatalogService.skillSources", () => {
+  test("keeps a skill that another scope shadows, with its scope and plugin, and leaves commands out", () => {
+    const { svc } = makeStampedService(() => [
+      raw({ name: "deploy", kind: "skill", scope: "personal", filePath: "/home/u/.claude/skills/deploy/SKILL.md" }),
+      raw({ name: "deploy", kind: "skill", scope: "project", filePath: "/proj/.claude/skills/deploy/SKILL.md" }),
+      raw({ name: "acme:lint", kind: "skill", scope: "plugin", pluginName: "acme", filePath: "/plugins/acme/skills/lint/SKILL.md" }),
+      raw({ name: "review", kind: "command", scope: "project", filePath: "/proj/.claude/commands/review.md" }),
+    ])
+
+    expect(svc.skillSources("/proj").map(({ scope, pluginName, filePath }) => ({ scope, pluginName, filePath }))).toEqual([
+      { scope: "personal", pluginName: null, filePath: "/home/u/.claude/skills/deploy/SKILL.md" },
+      { scope: "plugin", pluginName: "acme", filePath: "/plugins/acme/skills/lint/SKILL.md" },
+      { scope: "project", pluginName: null, filePath: "/proj/.claude/skills/deploy/SKILL.md" },
+    ])
+  })
+})

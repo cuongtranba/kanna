@@ -1,5 +1,6 @@
 
 import type { SlashCommandKind } from "./types"
+import { READ_SKILL_TOOL } from "./mcp-skills/tool-specs"
 
 export interface SlashInvocation {
   name: string
@@ -114,4 +115,18 @@ export function buildSlashExpansion(args: {
   if (args.invocation.trailing) sections.push(args.invocation.trailing)
 
   return sections.filter((section) => section.length > 0).join("\n\n")
+}
+
+export function buildMcpSkillInvocation(args: {
+  entry: { name: string; server: string; uri: string }
+  invocation: SlashInvocation
+}): string {
+  const { entry, invocation } = args
+  const lines = [
+    `The user invoked the \`${entry.name}\` skill, served by the MCP server ${JSON.stringify(entry.server)}.`,
+    `Call \`${READ_SKILL_TOOL}\` with server ${JSON.stringify(entry.server)} and uri ${JSON.stringify(entry.uri)} to load it, then follow it for this request.`,
+  ]
+  if (invocation.args) lines.push(`Arguments: ${invocation.args}`)
+  if (invocation.trailing) lines.push("", invocation.trailing)
+  return lines.join("\n")
 }

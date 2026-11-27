@@ -12,6 +12,7 @@ import type { SubagentOrchestrator } from "../subagent-orchestrator"
 import type { MidTurnDelivery } from "./mid-turn-delivery"
 import { PeerMessenger, type PeerChatInfo } from "./peer-messenger"
 import { createCodexKannaTools } from "./peer-tools"
+import type { McpSkillTools } from "../kanna-mcp-skills"
 
 export interface PeerStoreView {
   readonly state: { readonly chatsById: ReadonlyMap<string, ChatRecord> }
@@ -40,9 +41,10 @@ export function createPeerMessaging(
   agent: () => PeerAgentView,
   globalInbound: () => PeerInboundMode,
   resolveCustomMcpServers: ResolveCustomMcpServers,
+  mcpSkills?: McpSkillTools,
 ): PeerMessagingServices {
   const peerMessenger = createPeerMessenger(store, agent, globalInbound)
-  const kannaTools = createCodexKannaTools(peerMessenger)
+  const kannaTools = createCodexKannaTools(peerMessenger, mcpSkills)
   const agentToolsBridge = new AgentToolsBridge(kannaTools)
   return {
     peerMessenger,
