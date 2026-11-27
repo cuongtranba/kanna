@@ -303,6 +303,11 @@ export function ChatTabContent({
     await surfaceCommandError(() => socket.command({ type: "autoContinue.reschedule", chatId: activeChatId, scheduleId, scheduledAt }))
   }, [activeChatId, socket])
 
+  const handleAutoContinueResumeNow = useCallback(async (scheduleId: string) => {
+    if (!activeChatId) return
+    await surfaceCommandError(() => socket.command({ type: "autoContinue.resumeNow", chatId: activeChatId, scheduleId }))
+  }, [activeChatId, socket])
+
   const handleCronRemove = useCallback((jobId: string) => {
     if (!activeChatId) return
     runPendingAction(
@@ -360,6 +365,7 @@ export function ChatTabContent({
     onToolRequestAnswer: state.handleToolRequestAnswer,
     onAutoContinueAccept: handleAutoContinueAccept,
     onAutoContinueReschedule: handleAutoContinueReschedule,
+    onAutoContinueResumeNow: handleAutoContinueResumeNow,
     onAutoContinueCancel: handleAutoContinueCancel,
     onRetryFailedTurn: handleRetryFailedTurn,
     onCronRemove: handleCronRemove,
@@ -401,6 +407,7 @@ export function ChatTabContent({
     state.handleToolRequestAnswer,
     handleAutoContinueAccept,
     handleAutoContinueReschedule,
+    handleAutoContinueResumeNow,
     handleAutoContinueCancel,
     handleRetryFailedTurn,
     handleCronRemove,

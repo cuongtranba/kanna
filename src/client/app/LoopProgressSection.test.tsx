@@ -121,20 +121,28 @@ describe("LoopProgressSection", () => {
     }
   })
 
-  test("scheduled rate-limit shows no Resume action", async () => {
+  test("scheduled rate-limit still offers Resume now, so a user who swapped accounts need not wait", async () => {
+    const calls: string[] = []
     const result = await renderForLoopCheck(
       <LoopProgressSection
         loopProgress={snapshot({
           rateLimit: { scheduleId: "sched-9", resetAt: Date.now() + 60_000, tz: "Asia/Saigon", scheduled: true },
         })}
-        onResume={() => Promise.resolve()}
+        onResume={(scheduleId) => {
+          calls.push(scheduleId)
+          return Promise.resolve()
+        }}
       />,
     )
     try {
       const button = [...document.body.querySelectorAll("button")].find(
-        (b) => (b.textContent ?? "").includes("Resume"),
+        (b) => (b.textContent ?? "").includes("Resume now"),
       )
-      expect(button).toBeUndefined()
+      expect(button).toBeDefined()
+      await act(async () => {
+        button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      })
+      expect(calls).toEqual(["sched-9"])
     } finally {
       await result.cleanup()
     }

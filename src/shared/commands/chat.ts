@@ -227,6 +227,13 @@ export const chatCommands = defineCommands(
     risk: "write",
     remote: REMOTE_ALLOWED,
   }),
+  defineCommand("autoContinue.resumeNow", {
+    result: noResult,
+    params: z.object(chatAndSchedule),
+    summary: "Resume a rate-limited chat now instead of waiting for its reset time.",
+    risk: "write",
+    remote: REMOTE_ALLOWED,
+  }),
   defineCommand("autoContinue.cancel", {
     result: noResult,
     params: z.object(chatAndSchedule),

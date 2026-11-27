@@ -132,7 +132,9 @@ so workers never edit the same checkout:
 The chat footer's **Progress** card lists the whole plan, one row per task,
 marked done, running, pending, blocked or failed, with a "Loop running" pill
 while it is armed. If the loop hits a rate limit the card shows when it resumes,
-plus a **Resume now** button.
+plus a **Resume now** button. Resume now sends the continue straight away, even
+when the reset time has already passed or a resume is already scheduled, so after
+switching to another OAuth account you need not wait for the reset.
 
 The card outlives a disarm, so a stopped loop still shows what it got through.
 

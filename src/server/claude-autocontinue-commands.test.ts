@@ -13,6 +13,8 @@ import {
   cancelAutoContinue,
   type AutoContinueCommandDeps,
 } from "./claude-autocontinue-commands"
+import { ScheduleManager, type Clock } from "./auto-continue/schedule-manager"
+import { waitFor } from "./test-helpers/wait-for"
 import type { QueuedChatMessage, TranscriptEntry } from "../shared/types"
 
 
@@ -365,6 +367,86 @@ describe("rescheduleAutoContinue", () => {
     await rescheduleAutoContinue(deps, "chat-1", "sched-1", Date.now() + 60_000)
     const rescheduled = store.events.find((e) => e.kind === "auto_continue_rescheduled")
     expect(rescheduled).toBeDefined()
+  })
+})
+
+
+describe("fireAutoContinue as Resume now", () => {
+  function proposedPastReset(): ChatAutomationEvent {
+    return {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_proposed",
+      timestamp: Date.now() - 7_200_000,
+      chatId: "chat-1",
+      scheduleId: "sched-1",
+      detectedAt: Date.now() - 7_200_000,
+      resetAt: Date.now() - 3_600_000,
+      tz: "UTC",
+    }
+  }
+
+  function manualClock() {
+    let now = Date.now()
+    const timers = new Map<number, { fn: () => void; at: number }>()
+    let nextId = 1
+    const clock: Clock = {
+      now: () => now,
+      setTimeout: (fn, delayMs) => { timers.set(nextId, { fn, at: now + delayMs }); return nextId++ },
+      clearTimeout: (id) => { timers.delete(id) },
+    }
+    const advance = (ms: number) => {
+      now += ms
+      for (const [id, timer] of [...timers]) {
+        if (timer.at <= now) { timers.delete(id); timer.fn() }
+      }
+    }
+    return { clock, advance }
+  }
+
+  test("sends the continue for a proposed schedule whose reset time already passed", async () => {
+    const store = makeStore()
+    await store.appendAutoContinueEvent(proposedPastReset())
+    const delivered: string[] = []
+    const deps = makeDeps({
+      store,
+      deliverPrompt: async (_, content) => { delivered.push(content); return makeQueuedMessage() },
+    })
+
+    await fireAutoContinue(deps, "chat-1", "sched-1")
+
+    expect(delivered).toEqual(["continue"])
+    expect(getChatSchedule(deps, "chat-1", "sched-1")?.state).toBe("fired")
+  })
+
+  test("resuming a scheduled continue early sends it once, and its original timer sends no second one", async () => {
+    const store = makeStore()
+    await store.appendAutoContinueEvent(proposedPastReset())
+    const delivered: string[] = []
+    const { clock, advance } = manualClock()
+    const deps = makeDeps({
+      store,
+      deliverPrompt: async (_, content) => { delivered.push(content); return makeQueuedMessage() },
+    })
+    deps.scheduleManager = new ScheduleManager({ clock, fire: (chatId, scheduleId) => fireAutoContinue(deps, chatId, scheduleId) })
+    await emitAutoContinueEvent(deps, {
+      v: AUTO_CONTINUE_EVENT_VERSION,
+      kind: "auto_continue_accepted",
+      timestamp: Date.now(),
+      chatId: "chat-1",
+      scheduleId: "sched-1",
+      scheduledAt: clock.now() + 3_600_000,
+      tz: "UTC",
+      source: "auto_setting",
+      resetAt: clock.now() + 3_600_000,
+      detectedAt: clock.now() - 100,
+    })
+
+    await fireAutoContinue(deps, "chat-1", "sched-1")
+    advance(3_600_001)
+    await fireAutoContinue(deps, "chat-1", "sched-1")
+    await waitFor(() => delivered.length >= 1)
+
+    expect(delivered).toEqual(["continue"])
   })
 })
 

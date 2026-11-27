@@ -76,9 +76,10 @@ export async function fireAutoContinue(
   if (!deps.store.getChat(chatId)) return
 
   const schedule = getChatSchedule(deps, chatId, scheduleId)
+  if (schedule?.state === "fired" || schedule?.state === "cancelled") return
   const promptToReplay = schedule?.prompt ?? "continue"
 
-  const event: ChatAutomationEvent = {
+  const event: AutoContinueScheduleEvent = {
     v: AUTO_CONTINUE_EVENT_VERSION,
     kind: "auto_continue_fired",
     timestamp: Date.now(),
@@ -87,6 +88,7 @@ export async function fireAutoContinue(
   }
   try {
     await deps.store.appendAutoContinueEvent(event)
+    deps.scheduleManager?.onEvent(event)
     await deps.deliverPrompt(chatId, promptToReplay, [], { autoContinue: { scheduleId } })
     addCounter(AUTOCONTINUE_FIRED, 1)
   } catch (error) {

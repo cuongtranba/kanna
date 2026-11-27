@@ -8,6 +8,7 @@ function makeAgent(overrides: Partial<AgentCtrlAgentDep> = {}): AgentCtrlAgentDe
   return {
     acceptAutoContinue: vi.fn(async () => {}),
     rescheduleAutoContinue: vi.fn(async () => {}),
+    fireAutoContinue: async () => {},
     cancelAutoContinue: vi.fn(async () => {}),
     runCronCommand: vi.fn(async () => null),
     ...overrides,

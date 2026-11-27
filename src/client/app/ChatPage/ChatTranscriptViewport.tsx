@@ -162,7 +162,7 @@ export const ChatTranscriptViewport = memo(({
     onSubagentExitPlanModeSubmit,
     schedules,
     cronJobs,
-    onAutoContinueAccept,
+    onAutoContinueResumeNow,
     tunnels,
     liveTunnelId,
     onTunnelAccept,
@@ -381,7 +381,7 @@ export const ChatTranscriptViewport = memo(({
         <div className="pb-4">
           <LoopProgressSection
             loopProgress={loopProgress}
-            onResume={onAutoContinueAccept}
+            onResume={onAutoContinueResumeNow}
           />
         </div>
       ) : null}
