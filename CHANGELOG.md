@@ -8,6 +8,13 @@
 > need to bring a piece of them back. If you had v0.106–v0.108 installed,
 > updating now will take you *down* to v0.105.0, which is expected.
 
+## [1.115.3](https://github.com/cuongtranba/kanna/compare/v1.115.2...v1.115.3) (2026-11-27)
+
+
+### Bug Fixes
+
+* **server:** make Resume now fire the rate-limited continue immediately ([#1546](https://github.com/cuongtranba/kanna/issues/1546)) ([31e5300](https://github.com/cuongtranba/kanna/commit/31e5300c02a8c323d483ab788d733b44716f0000))
+
 ## [1.115.2](https://github.com/cuongtranba/kanna/compare/v1.115.1...v1.115.2) (2026-11-25)
 
 
