@@ -36,7 +36,8 @@ Register your own MCP servers from **Settings → MCP servers**. Entries persist
 - **OAuth:** `http` and `sse` servers support OAuth 2.1 (PKCE + dynamic client registration + rotating refresh). Kanna has no redirect server, so after the provider redirects to `http://localhost:8765/callback?code=…` you copy that URL from the address bar and paste it back into Settings to complete the flow. Tokens refresh automatically before expiry.
 - **Pre-registered OAuth client:** some providers, Slack among them, do not support dynamic client registration. With OAuth enabled, fill in **Client ID** and, if the provider requires it, **Client secret** from an OAuth app you registered with that provider. **Callback port** is optional and defaults to 8765; the redirect URL to register is `http://localhost:<port>/callback`, and the editor shows it for the port you typed. A pre-registered client is used instead of dynamic registration, and editing it takes effect on the next Authenticate or token refresh. The secret is stored in `settings.json` beside the tokens.
 - **Example, Slack:** use the URL `https://mcp.slack.com/mcp`. Create or open a Slack app with the MCP feature enabled and add `http://localhost:8765/callback` as a redirect URL. Enable OAuth on the server, enter the app's client ID and secret, click **Authenticate**, approve in Slack, then paste the `http://localhost:8765/callback?code=…` URL from the address bar and click **Complete**.
-- **Connect-test:** creating or updating a server fires a list-tools probe; the row shows a status pill, and a manual **Test** button re-runs it.
+- **Skills:** a server that publishes Agent Skills (the MCP `io.modelcontextprotocol/skills` extension) has them offered to the model and to the `/` picker. Each row has a **Skills** checkbox next to **On**, on by default; switching it off removes that server's skills at once and leaves its tools alone. Skills need an `http`, `sse` or `stdio` server. See [Local skills & slash commands](#local-skills--slash-commands) for how they appear and what is checked.
+- **Connect-test:** creating or updating a server fires a list-tools probe; the row shows a status pill, and a manual **Test** button re-runs it. A server that offers no tools, such as one that only serves skills, passes with zero tools.
 - **Trust model:** user MCP tool calls auto-allow — if you installed it, Kanna trusts it.
 - **Secrets:** `settings.json` is written with your default file mode, not `0600`. On a shared machine, restrict the directory with `chmod 700 ~/.kanna/data`.
 
@@ -63,6 +64,17 @@ The timer-based `mcp__kanna__schedule_wakeup` tool and its `KANNA_MAX_AGENT_WAKE
 ## Local skills & slash commands
 
 The composer's `/` picker lists local Claude Code skills and slash commands discovered on disk alongside Kanna's built-ins, so installed plugin skills are one keystroke away, on every provider including Codex. `/clear`, `/compact` and `/cron` are Kanna's own — see [Slash commands](/features/slash-commands/).
+
+### Skills served by MCP servers
+
+Skills from your MCP servers sit beside local ones. Each is named `<server>:<name>`, using the server name from **Settings → MCP servers**. If two skills on the same server share a name, both use the skill path instead (`acme:billing/refunds`), and if the name matches a local command or skill it becomes `mcp:<server>:<name>`, so an MCP skill never shadows a local one. In the `/` picker an MCP skill shows its server name as the badge. Typing `/acme:refunds order 12` makes the model load that skill with the arguments, on every provider including Claude.
+
+The model sees each skill's name, description, server and URI under **MCP skills** in its instructions (up to 60), and loads one with `read_skill`. Kanna lists skills when it starts, when you change the server settings and again when a server's cache time (between one and ten minutes, five by default) runs out. A slow server never delays a chat: Kanna waits up to three seconds for a refresh and then uses what it has. Nothing is saved to disk.
+
+- **Verified:** every file is checked against the server's manifest for its size, its sha256 digest and, for `SKILL.md`, its frontmatter. A mismatch is refused and the skill is not loaded. A skill over 512 files or 16 MiB is declined.
+- **Supporting files:** `read_resource` reads only a file in the manifest of a skill already loaded with `read_skill`, on the same server; asking first is refused with "load the skill first". Text over 256 KiB is cut off with a note, and a binary file is reported only by its type and size.
+- **Dynamic skills:** a server may publish a skill as `dynamic`, with no file list to check. Kanna loads it but labels it unverified, and only reads files under its folder.
+- **Trust:** the content comes from the server, not from you. It arrives under a header naming the server and saying so, and an `allowed-tools` list in it is ignored: Kanna's own permissions apply.
 
 ## Text snippets
 

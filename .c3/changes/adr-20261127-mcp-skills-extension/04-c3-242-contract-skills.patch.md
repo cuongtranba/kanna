@@ -1,0 +1,6 @@
+---
+target: c3-242
+scope: insert
+base: c3-242#n14734@v1:sha256:9f2bb12154f7280c1e867d8713438bb72568b452b95e6fce0b108e6aadbc7586
+---
+| Skills | OUT | buildRemoteMcpServer attaches one SkillCatalog (SkillsExtension.load) before connect, which declares the io.modelcontextprotocol/skills extension with directoryRead and resources beside the kanna:// resources. createRemoteMcpSkillFiles serves a virtual tree over local skills: skill://personal/{skill} for ~/.claude/skills, skill://plugins/{plugin}/{skill} for enabled Claude plugins and skill://projects/{projectId}/{skill} for each live (not hidden or deleted) project's .claude/skills, so personal and plugin skills appear once and not once per project. Each real skill folder is delegated to nodeSkillFiles, which refuses symlinks and dot-dot paths, and the SDK enforces 512 files and 16 MiB per skill. The folders come from LocalCatalogService.skillSources. createRemoteMcpSkills loads the catalog lazily, reloads at most every 30 s before a request is built, and calls the handler's notify.resourcesChanged when a reload changes the listing; a failed load serves no skills | c3-231 | src/server/remote-mcp/remote-mcp-skill-files.adapter.ts, src/server/remote-mcp/remote-mcp-skills.ts, src/server/remote-mcp/remote-mcp-server.ts, src/server/remote-mcp/remote-mcp-boot.ts |

@@ -106,6 +106,7 @@ type DepsOptions = {
   transcript?: TranscriptEntry[]
   cronCalls?: Array<{ chatId: string; ok: boolean }>
   localCommands?: Record<string, { prompt: string; kind: "skill" | "command" }>
+  mcpCommands?: Record<string, string>
   expandCalls?: Array<{ chatId: string; content: string }>
 }
 
@@ -203,6 +204,11 @@ function makeDeps(opts: DepsOptions = {}): SendCommandDeps & { startTurnCalled: 
       const name = /^\/([\w:./-]+)/.exec(content.trim())?.[1] ?? ""
       const hit = opts.localCommands?.[name]
       return hit ? { prompt: hit.prompt, name, kind: hit.kind } : null
+    },
+    expandMcpSkillCommand: (_chatId: string, content: string) => {
+      const name = /^\/([\w:./-]+)/.exec(content.trim())?.[1] ?? ""
+      const prompt = opts.mcpCommands?.[name]
+      return prompt === undefined ? null : { prompt, name, kind: "skill" }
     },
   }
 }
@@ -989,6 +995,21 @@ describe("sendCommand — local slash commands", () => {
     expect(expandCalls).toHaveLength(0)
     expect(deps.startTurnCalled[0]!.promptOverride).toBeUndefined()
     expect(deps.startTurnCalled[0]!.content).toBe("/kanna-test src")
+  })
+
+  test("a claude chat still expands an MCP skill, since its CLI has never heard of /server:name", async () => {
+    const deps = makeDeps({ chatProvider: "claude", mcpCommands: { "acme:billing": "Call read_skill for acme." } })
+    await sendCommand(deps, {
+      type: "chat.send",
+      chatId: "chat-1",
+      content: "/acme:billing refund 12",
+      provider: "claude",
+    } as never)
+
+    const args = deps.startTurnCalled[0]!
+    expect(args.promptOverride).toBe("Call read_skill for acme.")
+    expect(args.content).toBe("/acme:billing refund 12")
+    expect(args.expandedCommand).toEqual({ name: "acme:billing", kind: "skill" })
   })
 
   test("openrouter is left alone too — same SDK, same catalog", async () => {

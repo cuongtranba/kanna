@@ -8,7 +8,7 @@ export const MODULE_ALLOWANCES: Readonly<Record<string, number>> = {
   "src/client/app/useKannaState.ts": 790,
   "src/client/components/chat-ui/ChatInput.tsx": 871,
   "src/client/components/chat-ui/RightSidebar.tsx": 1975,
-  "src/server/agent-coordinator.ts": 1205,
+  "src/server/agent-coordinator.ts": 1196,
   "src/server/app-settings.ts": 1537,
   "src/server/board-store.adapter.ts": 1294,
   "src/server/codex-app-server.ts": 957,

@@ -64,6 +64,7 @@ const mcpServerNetworkShape = {
 const mcpServerInputIdentityShape = {
   name: z.string(),
   enabled: z.boolean().optional(),
+  skills: z.boolean().optional(),
 }
 
 const mcpServerStdioFieldsSchema = z.object({ ...mcpServerStdioShape, ...mcpServerInputIdentityShape })
@@ -75,6 +76,7 @@ export const mcpServerInputSchema = z.union([mcpServerStdioFieldsSchema, mcpServ
 export const mcpServerPatchSchema = z.object({
   name: z.string().optional(),
   enabled: z.boolean().optional(),
+  skills: z.boolean().optional(),
   transport: mcpServerTransportSchema.optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
@@ -89,6 +91,7 @@ const mcpServerBaseShape = {
   id: z.string(),
   name: z.string(),
   enabled: z.boolean(),
+  skills: z.boolean().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   lastTest: mcpServerTestResultSchema,

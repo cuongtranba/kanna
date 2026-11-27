@@ -19,10 +19,18 @@ export interface LocalCatalogServiceOptions {
   homeDir: string
 }
 
+export interface LocalSkillSource {
+  name: string
+  scope: CatalogScope
+  pluginName: string | null
+  filePath: string
+}
+
 interface CacheRow {
   entries: SlashCommand[]
   winners: Map<string, RawCatalogEntry>
   skills: SkillRosterEntry[]
+  skillSources: LocalSkillSource[]
   stamps: Map<string, number>
   expiresAt: number
 }
@@ -172,13 +180,20 @@ export function reduceSkillRoster(raw: readonly RawCatalogEntry[]): SkillRosterE
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+export function reduceSkillSources(raw: readonly RawCatalogEntry[]): LocalSkillSource[] {
+  return raw
+    .filter((entry) => entry.kind === "skill")
+    .map((entry) => ({ name: entry.name, scope: entry.scope, pluginName: entry.pluginName, filePath: entry.filePath }))
+    .sort((a, b) => a.filePath.localeCompare(b.filePath))
+}
+
 export class LocalCatalogService {
   private readonly cache = new Map<string, CacheRow>()
   private readonly scan: LocalCatalogScanner
   private readonly statMtimes: LocalCatalogStatMtimes | undefined
   private readonly ttl: number
   private readonly now: () => number
-  private readonly homeDir: string
+  readonly homeDir: string
 
   constructor(opts: LocalCatalogServiceOptions) {
     this.scan = opts.scan
@@ -200,6 +215,10 @@ export class LocalCatalogService {
     return this.row(cwd).skills
   }
 
+  skillSources(cwd: string): LocalSkillSource[] {
+    return this.row(cwd).skillSources
+  }
+
   private row(cwd: string): CacheRow {
     const now = this.now()
     const cached = this.cache.get(cwd)
@@ -209,6 +228,7 @@ export class LocalCatalogService {
       entries: reduceCatalog(raw),
       winners: pickWinners(raw, { requireUserInvocable: true }),
       skills: reduceSkillRoster(raw),
+      skillSources: reduceSkillSources(raw),
       stamps: this.readStamps(cwd, raw),
       expiresAt: now + this.ttl,
     }

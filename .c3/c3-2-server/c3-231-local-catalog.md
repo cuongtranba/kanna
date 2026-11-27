@@ -1,6 +1,6 @@
 ---
 id: c3-231
-c3-seal: 18b907df4ff3a5d6771f5fa7ccf2137d8eb6a62a98ecfdab05eb80055919f75b
+c3-seal: 25f08c362274b518db58d2f7b6c65c4b82553dc4d07f008f42528be6355a376e
 title: local-catalog
 type: component
 category: feature
@@ -71,6 +71,7 @@ Owns the disk scan + dedupe + cache that turns raw `SKILL.md` and `.md` command 
 | LocalCatalogService.skills | OUT | cwd → SkillRosterEntry[] (name, description, absolute SKILL.md path) for the roster a provider with no skill machinery is told at session start. Skills only — a command template is user-invoked, not model-invoked — and deliberately INCLUDING user-invocable: false entries, which are hidden from the picker but still auto-triggerable | c3-210 | src/server/local-catalog.ts |
 | LocalCatalogService.resolve | OUT | (cwd, name) → the winning RawCatalogEntry incl. the filePath list drops, case-insensitive; restricted to user-invocable entries so a typed /name and the picker cannot disagree about which names exist. Reads the cached row — no rescan | c3-210 | src/server/local-catalog.ts |
 | ClaudeCliCommands | OUT | record(SDK rows) keeps builtin rows only, drops names starting with an underscore, ignores empty or identical lists, saves and notifies; list() returns the server-wide SlashCommand[] with scope cli. Fed by supportedCommands() at Claude session start and by commands\_changed pushes; loaded from claude-cli-commands.json in the data dir at boot so the picker is complete before any session runs | c3-210 | src/server/claude-cli-commands.ts |
+| LocalCatalogService.skillSources | OUT | cwd to LocalSkillSource[] (name, scope, pluginName, filePath) for every skill the scan found, including a skill a stronger scope shadows, sorted by path, from the same cached scan as list; homeDir is public so a caller can scan the personal and plugin scopes with the home folder as cwd. The remote /mcp skill tree is the consumer | c3-242 | src/server/local-catalog.ts, src/server/local-catalog.test.ts |
 
 ## Change Safety
 

@@ -240,7 +240,7 @@ export function createEnvelopeBuilder(deps: EnvelopeDeps): EnvelopeBuilder {
           data: {
             projectId: topic.projectId,
             commands: project
-              ? localCommandsForCwd({ localCatalog: agent.localCatalog, cliCommands: agent.cliCommands }, project.localPath)
+              ? localCommandsForCwd({ localCatalog: agent.localCatalog, cliCommands: agent.cliCommands, mcpSkills: agent.mcpSkills?.host }, project.localPath)
               : [],
           },
         }

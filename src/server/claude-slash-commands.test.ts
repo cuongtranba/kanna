@@ -4,6 +4,8 @@ import { localCommandsForCwd, type SlashCommandsDeps } from "./claude-slash-comm
 import { BUILTIN_SLASH_COMMANDS } from "../shared/builtin-commands"
 import { openClaudeCliCommands } from "./claude-cli-commands"
 import type { SlashCommand, SlashCommandScope } from "../shared/types"
+import { McpSkillHost } from "./mcp-skills/mcp-skill-host"
+import { ACME_REFUNDS, createInProcessSkillPort, manualClock, stdioServer } from "./mcp-skills/test-helpers/in-process-skill-port"
 
 
 const BUILTIN_NAMES = BUILTIN_SLASH_COMMANDS.map((c) => c.name)
@@ -18,6 +20,18 @@ function makeDeps(overrides: Partial<SlashCommandsDeps> = {}): SlashCommandsDeps
 
 
 describe("localCommandsForCwd", () => {
+  test("lists an MCP skill as a picker row tagged with its server", async () => {
+    const port = await createInProcessSkillPort({ acme: ACME_REFUNDS })
+    const host = new McpSkillHost({ port, servers: async () => [stdioServer("acme")], clock: manualClock() })
+    await host.refresh()
+
+    const rows = localCommandsForCwd(makeDeps({ mcpSkills: host }), "/cwd").filter((command) => command.scope === "mcp")
+
+    expect(rows).toEqual([
+      { name: "acme:refunds", description: "Issue a refund.", argumentHint: "", kind: "skill", scope: "mcp", server: "acme" },
+    ])
+  })
+
   test("returns the builtins when localCatalog is null", () => {
     expect(localCommandsForCwd(makeDeps({ localCatalog: null }), "/cwd")).toEqual([
       ...BUILTIN_SLASH_COMMANDS,

@@ -1,5 +1,5 @@
 # C3 Structural Index
-<!-- hash: sha256:541917236dce5b1444159532d5299a60dc4f9f0b0f060772f0f854a26e5e8045 -->
+<!-- hash: sha256:a987d128907a9a983d2f25a1326560f0bb73d951d9d5b8e6860b8432bfb74609 -->
 
 ## c3-0 — Kanna (system)
 
@@ -238,7 +238,7 @@ files: src/server/claude-oauth-probe.adapter.ts, src/server/oauth-pool/**/*.ts
 ## c3-226 — kanna-mcp-host (component)
 container: c3-2 | context: c3-0
 refs: ref-local-first-data, ref-strong-typing, ref-tool-hydration, rule-colocated-bun-test, rule-strong-typing
-files: src/server/canonical-args.ts, src/server/kanna-mcp-beacon-transfer.test.ts, src/server/kanna-mcp-beacon-transfer.ts, src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp-tool.ts, src/server/kanna-mcp-tools/**/*.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-bearer.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-server-test.ts, src/server/mcp-validator.ts, src/server/oauth-errors.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/structured-doc-io.adapter.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts, src/shared/structured-doc/**/*.ts
+files: src/server/canonical-args.ts, src/server/kanna-mcp-beacon-transfer.test.ts, src/server/kanna-mcp-beacon-transfer.ts, src/server/kanna-mcp-beacon.test.ts, src/server/kanna-mcp-beacon.ts, src/server/kanna-mcp-skills.ts, src/server/kanna-mcp-tool.ts, src/server/kanna-mcp-tools/**/*.ts, src/server/kanna-mcp.test.ts, src/server/kanna-mcp.ts, src/server/mcp-bearer.ts, src/server/mcp-oauth.adapter.ts, src/server/mcp-server-test.ts, src/server/mcp-skills/**/*.ts, src/server/mcp-validator.ts, src/server/oauth-errors.ts, src/server/permission-gate.test.ts, src/server/permission-gate.ts, src/server/structured-doc-io.adapter.ts, src/server/tool-callback.test.ts, src/server/tool-callback.ts, src/shared/mcp-skills/**/*.ts, src/shared/structured-doc/**/*.ts
 
 ## c3-227 — auto-continue (component)
 container: c3-2 | context: c3-0
@@ -1046,6 +1046,7 @@ src/server/kanna-mcp-beacon-transfer.test.ts → c3-226
 src/server/kanna-mcp-beacon-transfer.ts → c3-226
 src/server/kanna-mcp-beacon.test.ts → c3-226
 src/server/kanna-mcp-beacon.ts → c3-226
+src/server/kanna-mcp-skills.ts → c3-226
 src/server/kanna-mcp-tool.ts → c3-226
 src/server/kanna-mcp-tools/**/*.ts → c3-226
 src/server/kanna-mcp.test.ts → c3-226
@@ -1053,6 +1054,7 @@ src/server/kanna-mcp.ts → c3-226
 src/server/mcp-bearer.ts → c3-226
 src/server/mcp-oauth.adapter.ts → c3-226
 src/server/mcp-server-test.ts → c3-226
+src/server/mcp-skills/**/*.ts → c3-226
 src/server/mcp-validator.ts → c3-226
 src/server/oauth-errors.ts → c3-226
 src/server/permission-gate.test.ts → c3-226
@@ -1060,6 +1062,7 @@ src/server/permission-gate.ts → c3-226
 src/server/structured-doc-io.adapter.ts → c3-226
 src/server/tool-callback.test.ts → c3-226
 src/server/tool-callback.ts → c3-226
+src/shared/mcp-skills/**/*.ts → c3-226
 src/shared/structured-doc/**/*.ts → c3-226
 src/server/auto-continue/**/*.ts → c3-227
 src/server/session-share/**/*.ts → c3-228

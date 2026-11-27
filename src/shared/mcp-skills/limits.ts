@@ -1,0 +1,6 @@
+export const MCP_SKILL_RESOURCE_TEXT_MAX_BYTES = 256 * 1024
+export const MCP_SKILL_TTL_MIN_MS = 60_000
+export const MCP_SKILL_TTL_MAX_MS = 10 * 60_000
+export const MCP_SKILL_TTL_DEFAULT_MS = 5 * 60_000
+export const MCP_SKILL_ROSTER_WAIT_MS = 3_000
+export const MCP_SKILL_LOADED_MAX = 64

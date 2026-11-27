@@ -12,6 +12,7 @@ import type { CommandOrigin } from "../shared/command-origin"
 import type { CronRunTag } from "../shared/cron/types"
 import type { JsonValue } from "../shared/json"
 import type { KannaSystemPromptOptions, SkillRosterEntry } from "../shared/kanna-system-prompt"
+import type { McpSkillAccess } from "./mcp-skills/mcp-skill-access"
 import type { ChatRecord, ProjectRecord } from "./events"
 import type { ActiveTurn, ClaudeSessionState, CompactionTurnKind, StartingTurn } from "./claude-session-state"
 import type { PendingToolSlots } from "./pending-tool-slot"
@@ -72,6 +73,7 @@ export interface StartTurnDeps {
   isBeaconOnline: (beaconId: string) => boolean
   getAppSettingsSnapshot: () => StartTurnAppSettings
   listSkills: (chatId: string) => SkillRosterEntry[]
+  mcpSkills?: McpSkillAccess
   generateTitleInBackground: (chatId: string, content: string, localPath: string, optimisticTitle: string) => Promise<void>
   pendingTools: PendingToolSlots
   startClaudeTurn: (args: StartClaudeTurnArgs) => Promise<HarnessTurn>

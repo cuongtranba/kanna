@@ -1252,6 +1252,25 @@ describe("customMcpServers — CRUD patches", () => {
     mgr.dispose()
   })
 
+  test("a server offers skills by default, and switching them off survives an edit and a restart", async () => {
+    const filePath = await createTempFilePath()
+    const mgr = trackManager(new AppSettingsManager(filePath))
+    await mgr.initialize()
+    await mgr.writePatch({
+      customMcpServers: { create: { name: "fs", transport: "stdio", command: "/bin/a", args: [], env: {} } },
+    })
+    const id = mgr.getSnapshot().customMcpServers[0]!.id
+    expect(mgr.getSnapshot().customMcpServers[0]?.skills).toBe(true)
+
+    await mgr.writePatch({ customMcpServers: { setSkills: { id, skills: false } } })
+    await mgr.writePatch({ customMcpServers: { update: { id, patch: { name: "filesystem" } } } })
+    const restarted = trackManager(new AppSettingsManager(filePath))
+    await restarted.initialize()
+
+    expect(restarted.getSnapshot().customMcpServers[0]).toMatchObject({ name: "filesystem", skills: false })
+    mgr.dispose()
+  })
+
   test("setTestResult persists status", async () => {
     const filePath = await createTempFilePath()
     const mgr = trackManager(new AppSettingsManager(filePath))

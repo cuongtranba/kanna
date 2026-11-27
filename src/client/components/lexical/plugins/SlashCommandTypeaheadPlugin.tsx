@@ -87,16 +87,22 @@ export function $applySlashCommandSelection({
 }
 
 
-function SlashCommandRowContent({ cmd }: { cmd: SlashCommand }) {
+function commandBadge(cmd: SlashCommand): string | null {
+  if (cmd.scope === "mcp") return cmd.server ?? "mcp"
+  return cmd.kind === "skill" ? "skill" : null
+}
+
+export function SlashCommandRowContent({ cmd }: { cmd: SlashCommand }) {
+  const badge = commandBadge(cmd)
   return (
     <>
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="font-mono break-all sm:whitespace-nowrap sm:break-normal">
           /{normalizeCommandName(cmd.name)}
         </span>
-        {cmd.kind === "skill" ? (
-          <span className="shrink-0 rounded-sm border border-border bg-muted px-1 py-px text-xs font-medium tracking-wide text-muted-foreground">
-            skill
+        {badge ? (
+          <span className="min-w-0 max-w-32 truncate rounded-sm border border-border bg-muted px-1 py-px text-xs font-medium tracking-wide text-muted-foreground">
+            {badge}
           </span>
         ) : null}
         {cmd.argumentHint ? (

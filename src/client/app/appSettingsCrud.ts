@@ -78,3 +78,14 @@ export function useAppSettingsSetEnabled(
     [key, state],
   )
 }
+
+export function useAppSettingsSetMcpSkills(
+  state: Pick<KannaState, "handleWriteAppSettings">,
+): (id: string, skills: boolean) => Promise<void> {
+  return useCallback(
+    async (id, skills) => {
+      await state.handleWriteAppSettings({ customMcpServers: { setSkills: { id, skills } } })
+    },
+    [state],
+  )
+}

@@ -52,6 +52,7 @@ interface McpServerBase {
   id: string
   name: string
   enabled: boolean
+  skills?: boolean
   createdAt: string
   updatedAt: string
   lastTest: McpServerTestResult
@@ -77,12 +78,13 @@ export type McpServerConfig =
   | (McpServerBase & McpServerNetworkFields)
 
 export type McpServerInput =
-  | (McpServerStdioFields & { name: string; enabled?: boolean })
-  | (McpServerNetworkFields & { name: string; enabled?: boolean })
+  | (McpServerStdioFields & { name: string; enabled?: boolean; skills?: boolean })
+  | (McpServerNetworkFields & { name: string; enabled?: boolean; skills?: boolean })
 
 export type McpServerPatch = Partial<{
   name: string
   enabled: boolean
+  skills: boolean
   transport: McpServerTransport
   command: string
   args: string[]

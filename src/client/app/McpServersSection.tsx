@@ -29,6 +29,7 @@ import type { SectionEditing } from "../lib/sectionEditing"
 import {
   useAppSettingsCrudHandlers,
   useAppSettingsSetEnabled,
+  useAppSettingsSetMcpSkills,
   type AppSettingsCrudHandlers,
 } from "./appSettingsCrud"
 import { editorSubmitLabel, submitEditorForm } from "./settingsEditorForm"
@@ -45,6 +46,7 @@ function isMcpServerTransport(v: string): v is McpServerTransport {
 interface McpServersSectionHandlers
   extends AppSettingsCrudHandlers<McpServerInput, McpServerPatch> {
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
+  onSetSkills: (id: string, skills: boolean) => Promise<void>
   onTest: (id: string) => Promise<void>
   onStartMcpOAuth: (id: string) => Promise<McpOAuthStartResult>
   onCompleteMcpOAuth: (id: string, callbackUrl: string) => Promise<McpOAuthCompleteResult>
@@ -580,6 +582,7 @@ export function McpServersSettingsBranch(props: {
 
   const crud = useAppSettingsCrudHandlers("customMcpServers", props.state)
   const onSetEnabled = useAppSettingsSetEnabled("customMcpServers", props.state)
+  const onSetSkills = useAppSettingsSetMcpSkills(props.state)
 
   const handlers = useMemo<McpServersSectionHandlers>(
     () => ({
@@ -589,13 +592,14 @@ export function McpServersSettingsBranch(props: {
         setEditing({ kind: "list" })
       },
       onSetEnabled,
+      onSetSkills,
       onTest: async (id) => {
         await props.state.handleTestMcpServer(id)
       },
       onStartMcpOAuth: async (id) => props.state.handleStartMcpOAuth(id),
       onCompleteMcpOAuth: async (id, callbackUrl) => props.state.handleCompleteMcpOAuth(id, callbackUrl),
     }),
-    [crud, onSetEnabled, props.state, setEditing],
+    [crud, onSetEnabled, onSetSkills, props.state, setEditing],
   )
 
   return (

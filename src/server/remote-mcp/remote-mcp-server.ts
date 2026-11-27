@@ -1,4 +1,5 @@
 import { McpServer, type AuthInfo } from "@modelcontextprotocol/server"
+import type { SkillCatalog } from "@modelcontextprotocol/server/ext/skills"
 import { APP_VERSION } from "../../shared/branding"
 import type { ClientCommand, ServerEnvelope, SubscriptionTopic } from "../../shared/protocol"
 import type { AppSettingsManager } from "../app-settings"
@@ -26,12 +27,14 @@ export interface RemoteMcpHost {
   dedupe: DedupeStore
   eventFeed: EventFeed
   pollIntervalMs?: number
+  skills?: SkillCatalog | null
 }
 
 export function buildRemoteMcpServer(rawHost: RemoteMcpHost): McpServer {
   const host = withEgressRedaction(rawHost)
   const server = new McpServer({ name: "kanna", version: APP_VERSION }, { instructions: REMOTE_MCP_INSTRUCTIONS })
   server.server.registerCapabilities({ resources: { subscribe: true } })
+  host.skills?.attach(server)
   const tools = createToolRegistrar(server, { era: host.era, authInfo: host.authInfo, audit: host.audit })
   for (const tool of REMOTE_TOOLS) tool.register(tools, host)
   registerKannaResources(server, host)

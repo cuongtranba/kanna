@@ -13,6 +13,7 @@ import { domAdapter } from "../adapters/dom.adapter"
 export interface McpRowHandlers {
   onDelete: (id: string) => Promise<void>
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>
+  onSetSkills: (id: string, skills: boolean) => Promise<void>
   onTest: (id: string) => Promise<void>
 }
 
@@ -31,6 +32,8 @@ export function McpRow({
   const deletePending = usePendingAction(deleteKey)
   const setEnabledKey = pendingActionKey("mcpServers.setEnabled", server.id)
   const setEnabledPending = usePendingAction(setEnabledKey)
+  const setSkillsKey = pendingActionKey("mcpServers.setSkills", server.id)
+  const setSkillsPending = usePendingAction(setSkillsKey)
   const testKey = pendingActionKey("settings.testMcpServer", server.id)
   const testing = usePendingAction(testKey)
 
@@ -44,6 +47,11 @@ export function McpRow({
     const enabled = e.target.checked
     runPendingAction(setEnabledKey, () => handlers.onSetEnabled(server.id, enabled))
   }, [handlers, server.id, setEnabledKey])
+
+  const onToggleSkills = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const skills = e.target.checked
+    runPendingAction(setSkillsKey, () => handlers.onSetSkills(server.id, skills))
+  }, [handlers, server.id, setSkillsKey])
 
   const onTestClick = useCallback(() => {
     runPendingAction(testKey, () => handlers.onTest(server.id))
@@ -76,6 +84,18 @@ export function McpRow({
             aria-label="Enabled"
           />
           <span>On</span>
+        </label>
+        <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-muted-foreground">
+          {setSkillsPending ? <Spinner /> : null}
+          <input
+            type="checkbox"
+            checked={server.skills !== false}
+            disabled={setSkillsPending}
+            aria-busy={setSkillsPending || undefined}
+            onChange={onToggleSkills}
+            aria-label="Skills"
+          />
+          <span>Skills</span>
         </label>
         <Button
           variant="ghost"

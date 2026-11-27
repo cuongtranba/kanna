@@ -505,6 +505,9 @@ c3-226:
   - src/server/structured-doc-io.adapter.ts
   - src/shared/structured-doc/**/*.ts
   - src/server/mcp-server-test.ts
+  - src/server/kanna-mcp-skills.ts
+  - src/server/mcp-skills/**/*.ts
+  - src/shared/mcp-skills/**/*.ts
 c3-227:
   - src/server/auto-continue/**/*.ts
 c3-228:

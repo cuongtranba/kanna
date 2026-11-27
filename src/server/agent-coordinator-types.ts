@@ -54,6 +54,7 @@ export interface AgentCoordinatorArgs {
   inboxRegistry?: import("./inbox/inbox-registry").InboxRegistry
   beaconRegistry?: import("./beacon-registry").BeaconRegistry
   peerMessenger?: import("./peer-messaging/peer-messenger").PeerMessenger
+  mcpSkills?: import("./mcp-skills/mcp-skill-access").McpSkillAccess
   getBeacons?: () => readonly import("../shared/beacon-config").BeaconConfig[]
   subagentTranscriptRegistry?: import("./subagent-transcript-registry").SubagentTranscriptRegistry
   readLlmProvider?: () => Promise<LlmProviderSnapshot>

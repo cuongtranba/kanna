@@ -16,6 +16,8 @@ import {
 } from "../../shared/peer-messaging/tool-specs.schema"
 import { LIST_PEER_CHATS_TOOL, SEND_CHAT_MESSAGE_TOOL, WAIT_FOR_CHAT_MESSAGE_TOOL } from "../../shared/peer-messaging/tool-names"
 import type { PeerMessenger } from "./peer-messenger"
+import type { McpSkillTools } from "../kanna-mcp-skills"
+import { callMcpSkillTool, MCP_SKILL_TOOL_SPECS } from "../mcp-skills/mcp-skill-codex-tools"
 
 export interface PeerSubagent {
   runId: string
@@ -108,6 +110,10 @@ async function runPeerTool(
   return waitForChatMessage(messenger, chatId, parsed.data)
 }
 
-export function createCodexKannaTools(messenger: PeerMessenger): CodexKannaTools {
-  return { specs: PEER_TOOL_SPECS, call: (chatId, tool, args) => runPeerTool(messenger, chatId, tool, args) }
+export function createCodexKannaTools(messenger: PeerMessenger, skills?: McpSkillTools): CodexKannaTools {
+  return {
+    specs: skills ? [...PEER_TOOL_SPECS, ...MCP_SKILL_TOOL_SPECS] : PEER_TOOL_SPECS,
+    call: async (chatId, tool, args) =>
+      (await runPeerTool(messenger, chatId, tool, args)) ?? (skills ? await callMcpSkillTool(skills, tool, args) : null),
+  }
 }
