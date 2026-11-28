@@ -3,7 +3,7 @@ import {
   buildAttachmentHintText,
   buildPromptText,
   isPromptTooLongMessage,
-  isNoConversationFoundMessage,
+  isUnresumableSessionMessage,
   toSdkEffort,
   backgroundTaskIdsFromToolResult,
   backgroundTaskLaunchesFromToolResult,
@@ -102,18 +102,22 @@ describe("isPromptTooLongMessage", () => {
 })
 
 
-describe("isNoConversationFoundMessage", () => {
+describe("isUnresumableSessionMessage", () => {
   test("detects the session-id error string", () => {
-    expect(isNoConversationFoundMessage("No conversation found with session ID abc123")).toBe(true)
+    expect(isUnresumableSessionMessage("No conversation found with session ID abc123")).toBe(true)
+  })
+
+  test("detects the Code Mode resume refusal", () => {
+    expect(isUnresumableSessionMessage("Failed to resume session: This session was started in Code Mode (experimental), which is off in this run, so it can't be resumed.")).toBe(true)
   })
 
   test("is case-insensitive", () => {
-    expect(isNoConversationFoundMessage("no conversation found with session id XYZ")).toBe(true)
+    expect(isUnresumableSessionMessage("no conversation found with session id XYZ")).toBe(true)
   })
 
   test("returns false for unrelated strings", () => {
-    expect(isNoConversationFoundMessage("session not found")).toBe(false)
-    expect(isNoConversationFoundMessage("")).toBe(false)
+    expect(isUnresumableSessionMessage("session not found")).toBe(false)
+    expect(isUnresumableSessionMessage("")).toBe(false)
   })
 })
 

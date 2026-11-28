@@ -1,45 +1,26 @@
-import { describe, test, expect, beforeEach, vi } from "vite-plus/test"
-
-
-type FakeQuery = {
-  accountInfo: () => Promise<unknown>
-  interrupt: () => Promise<void>
-  close: () => void
-  setModel: (m: string) => Promise<void>
-  setPermissionMode: (m: string) => Promise<void>
-}
-
-let mockQueryFn: (args: unknown) => FakeQuery
-let capturedQueryArgs: unknown
-
-const defaultFakeQ = (): FakeQuery => ({
-  accountInfo: async () => ({ provider: "claude", label: "test" }),
-  interrupt: async () => {},
-  close: () => {},
-  setModel: async () => {},
-  setPermissionMode: async () => {},
-})
-
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: (args: unknown) => {
-    capturedQueryArgs = args
-    return mockQueryFn(args)
-  },
-}))
-
-vi.mock("./kanna-mcp", () => ({
-  createKannaMcpServer: () => ({ transport: "stdio", command: "echo", args: [] }),
-}))
-
-
-
+import { describe, test, expect, beforeEach } from "vite-plus/test"
 import {
   startClaudeSession,
   type CompactionEvent,
+  type StartClaudeSessionArgs,
   type StartClaudeSessionDeps,
 } from "./claude-session-start"
+import type { ClaudeQuery } from "./claude-sdk-queue"
 import { LOOP_BLOCKED_NATIVE_TOOLS } from "./claude-spawn-helpers"
 
+let mockQueryFn: () => ClaudeQuery
+let capturedQueryArgs: unknown
+let permissionModesSet: string[]
+
+const defaultFakeQ = (): ClaudeQuery => ({
+  accountInfo: async () => ({ email: "test@example.com" }),
+  interrupt: async () => {},
+  close: () => {},
+  setModel: async () => {},
+  setPermissionMode: async (mode) => { permissionModesSet.push(mode) },
+  supportedCommands: async () => [],
+  [Symbol.asyncIterator]: () => (async function* () {})(),
+})
 
 class FakeQueue<T> implements AsyncIterable<T> {
   private items: T[] = []
@@ -62,8 +43,13 @@ class FakeQueue<T> implements AsyncIterable<T> {
   }
 }
 
-function makeFakeDeps(): StartClaudeSessionDeps {
+function makeFakeDeps(bypassAllowed = false): StartClaudeSessionDeps {
   return {
+    query: (params) => {
+      capturedQueryArgs = params
+      return mockQueryFn()
+    },
+    isBypassPermissionsAllowed: () => bypassAllowed,
     buildCanUseTool: () => async () => ({ behavior: "allow" as const }),
     buildClaudeEnv: (env) => env,
     loopBlockedNativeTools: LOOP_BLOCKED_NATIVE_TOOLS,
@@ -75,7 +61,8 @@ function makeFakeDeps(): StartClaudeSessionDeps {
   }
 }
 
-const BASE_ARGS = {
+const BASE_ARGS: StartClaudeSessionArgs = {
+  codeMode: false,
   projectId: "proj-1",
   localPath: "/tmp/test",
   model: "claude-opus-4-5",
@@ -89,6 +76,7 @@ const BASE_ARGS = {
 beforeEach(() => {
   mockQueryFn = defaultFakeQ
   capturedQueryArgs = undefined
+  permissionModesSet = []
 })
 
 describe("startClaudeSession", () => {
@@ -155,10 +143,46 @@ describe("startClaudeSession", () => {
     expect(args.options.permissionMode).toBe("plan")
   })
 
-  test("planMode:false maps to permissionMode 'acceptEdits'", async () => {
-    await startClaudeSession({ ...BASE_ARGS, planMode: false }, makeFakeDeps())
-    const args = capturedQueryArgs as { options: { permissionMode: string } }
+  test("a non-plan session runs in bypassPermissions and opts in to the SDK flag when bypass is allowed", async () => {
+    await startClaudeSession({ ...BASE_ARGS, planMode: false }, makeFakeDeps(true))
+    const args = capturedQueryArgs as { options: { permissionMode: string; allowDangerouslySkipPermissions?: boolean } }
+    expect(args.options.permissionMode).toBe("bypassPermissions")
+    expect(args.options.allowDangerouslySkipPermissions).toBe(true)
+  })
+
+  test("a non-plan session falls back to acceptEdits when bypass is not allowed", async () => {
+    await startClaudeSession({ ...BASE_ARGS, planMode: false }, makeFakeDeps(false))
+    const args = capturedQueryArgs as { options: { permissionMode: string; allowDangerouslySkipPermissions?: boolean } }
     expect(args.options.permissionMode).toBe("acceptEdits")
+    expect(args.options.allowDangerouslySkipPermissions).toBeUndefined()
+  })
+
+  test("a plan session still opts in to the bypass flag so a later switch to bypass works", async () => {
+    await startClaudeSession({ ...BASE_ARGS, planMode: true }, makeFakeDeps(true))
+    const args = capturedQueryArgs as { options: { permissionMode: string; allowDangerouslySkipPermissions?: boolean } }
+    expect(args.options.permissionMode).toBe("plan")
+    expect(args.options.allowDangerouslySkipPermissions).toBe(true)
+  })
+
+  test("setPermissionMode switches between plan and the bypass or fallback mode", async () => {
+    const bypass = await startClaudeSession(BASE_ARGS, makeFakeDeps(true))
+    await bypass.setPermissionMode?.(true)
+    await bypass.setPermissionMode?.(false)
+    const fallback = await startClaudeSession(BASE_ARGS, makeFakeDeps(false))
+    await fallback.setPermissionMode?.(false)
+    expect(permissionModesSet).toEqual(["plan", "bypassPermissions", "acceptEdits"])
+  })
+
+  test("codeMode:true passes the Code Mode env through the SDK settings option", async () => {
+    await startClaudeSession({ ...BASE_ARGS, codeMode: true }, makeFakeDeps())
+    const args = capturedQueryArgs as { options: { settings?: unknown } }
+    expect(args.options.settings).toEqual({ env: { CLAUDE_CODE_EXPERIMENTAL_CODE_MODE: "1" } })
+  })
+
+  test("codeMode:false passes no settings option", async () => {
+    await startClaudeSession({ ...BASE_ARGS, codeMode: false }, makeFakeDeps())
+    const args = capturedQueryArgs as { options: Record<string, unknown> }
+    expect("settings" in args.options).toBe(false)
   })
 
   function envOfSpawn(): NodeJS.ProcessEnv {

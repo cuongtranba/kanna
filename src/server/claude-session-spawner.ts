@@ -1,4 +1,4 @@
-import type { AgentAppSettingsView } from "./agent-app-settings-view"
+import { claudeCodeModeOf, type AgentAppSettingsView } from "./agent-app-settings-view"
 import type { SlashCommand } from "@anthropic-ai/claude-agent-sdk"
 import type { ChatTaskStorePort } from "./kanna-mcp"
 
@@ -97,7 +97,7 @@ export interface SpawnClaudeTurnDeps {
   buildPoolUnavailableMessage: (reservedFor: string, scopeSuffix: string) => string
   listOpenRouterModelsFn: (() => Promise<OpenRouterModel[]>) | null
   getSubagents: () => Subagent[]
-  getAppSettingsSnapshot: () => Partial<Pick<AgentAppSettingsView, "globalPromptAppend" | "mcpSources" | "customMcpServers">>
+  getAppSettingsSnapshot: () => Partial<Pick<AgentAppSettingsView, "globalPromptAppend" | "mcpSources" | "customMcpServers" | "claudeCodeMode">>
   getEnabledCustomMcpServers: () => readonly McpServerConfig[]
   buildOAuthBearers: (servers: readonly McpServerConfig[]) => Promise<OAuthBearers>
   setupLoop: (chatId: string, input: LoopSetupInput) => Promise<SetupLoopHandlerResult>
@@ -194,6 +194,7 @@ export async function spawnClaudeTurn(
         model: sdkModel,
         effort: args.effort,
         planMode: args.planMode,
+        codeMode: claudeCodeModeOf(deps.getAppSettingsSnapshot()),
         sessionToken: args.sessionToken,
         forkSession: args.forkSession,
         oauthToken: picked?.token ?? null,

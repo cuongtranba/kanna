@@ -45,8 +45,13 @@ export function isPromptTooLongMessage(message: string): boolean {
     || /\bprompt\b.*\btoo\s+large\b/i.test(message)
 }
 
-export function isNoConversationFoundMessage(message: string): boolean {
-  return /No conversation found with session ID/i.test(message)
+const UNRESUMABLE_SESSION_PATTERNS: readonly RegExp[] = [
+  /No conversation found with session ID/i,
+  /This session was started in Code Mode/i,
+]
+
+export function isUnresumableSessionMessage(message: string): boolean {
+  return UNRESUMABLE_SESSION_PATTERNS.some((pattern) => pattern.test(message))
 }
 
 

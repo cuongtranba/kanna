@@ -97,6 +97,7 @@ const DEFAULT_KEYBINDINGS_SNAPSHOT: KeybindingsSnapshot = {
 
 const DEFAULT_APP_SETTINGS_SNAPSHOT: AppSettingsSnapshot = {
   analyticsEnabled: true,
+  claudeCodeMode: true,
   cloudflareTunnel: CLOUDFLARE_TUNNEL_DEFAULTS,
   push: PUSH_DEFAULTS,
   telemetry: TELEMETRY_DEFAULTS,

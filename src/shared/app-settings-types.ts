@@ -277,6 +277,7 @@ export interface KeybindingsSnapshot {
 
 export interface AppSettingsSnapshot {
   analyticsEnabled: boolean
+  claudeCodeMode: boolean
   browserSettingsMigrated: boolean
   theme: AppThemePreference
   typography: TypographySettings
@@ -362,6 +363,7 @@ interface SetEnabledPatch {
 
 export interface AppSettingsPatch {
   analyticsEnabled?: boolean
+  claudeCodeMode?: boolean
   browserSettingsMigrated?: boolean
   theme?: AppThemePreference
   typography?: Partial<TypographySettings>

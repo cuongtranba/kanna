@@ -682,3 +682,36 @@ describe("delegation provenance", () => {
     expect(context?.getParentUserMessageId()).toBe(`self-wake:${session.id}`)
   })
 })
+
+describe("Code Mode setting wiring", () => {
+  test("a spawn forwards the claudeCodeMode setting and defaults to on when the snapshot has none", async () => {
+    const forwarded: boolean[] = []
+    const settings: { claudeCodeMode?: boolean } = {}
+    const deps = makeDeps({
+      getAppSettingsSnapshot: () => settings,
+      startClaudeSessionFn: async (a) => { forwarded.push(a.codeMode); return makeFakeHandle() },
+    })
+
+    await spawnClaudeTurn(deps, makeArgs({ chatId: "chat-default" }))
+    settings.claudeCodeMode = false
+    await spawnClaudeTurn(deps, makeArgs({ chatId: "chat-off" }))
+
+    expect(forwarded).toEqual([true, false])
+  })
+
+  test("toggling the setting does not respawn a live session", async () => {
+    let starts = 0
+    const settings: { claudeCodeMode?: boolean } = { claudeCodeMode: true }
+    const deps = makeDeps({
+      getAppSettingsSnapshot: () => settings,
+      startClaudeSessionFn: async () => { starts += 1; return makeFakeHandle() },
+    })
+    const args = makeArgs()
+
+    await spawnClaudeTurn(deps, args)
+    settings.claudeCodeMode = false
+    await spawnClaudeTurn(deps, args)
+
+    expect(starts).toBe(1)
+  })
+})

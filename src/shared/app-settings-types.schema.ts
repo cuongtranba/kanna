@@ -105,6 +105,7 @@ const setEnabledShape = { setEnabled: z.object({ id: z.string(), enabled: z.bool
 
 export const appSettingsPatchSchema = z.object({
   analyticsEnabled: z.boolean().optional(),
+  claudeCodeMode: z.boolean().optional(),
   browserSettingsMigrated: z.boolean().optional(),
   theme: appThemePreferenceSchema.optional(),
   typography: typographySettingsSchema.partial().optional(),
@@ -186,6 +187,7 @@ export const keybindingsSnapshotSchema = z.object({
 
 export const appSettingsSnapshotSchema = z.object({
   analyticsEnabled: z.boolean(),
+  claudeCodeMode: z.boolean(),
   browserSettingsMigrated: z.boolean(),
   theme: appThemePreferenceSchema,
   typography: typographySettingsSchema,

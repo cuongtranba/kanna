@@ -42,6 +42,7 @@ async function writeSettingsFile(content: Record<string, unknown>) {
 function expectedSettingsSnapshot(filePath: string, overrides: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
   return {
     analyticsEnabled: true,
+    claudeCodeMode: true,
     browserSettingsMigrated: false,
     theme: "system",
     typography: TYPOGRAPHY_DEFAULTS,
@@ -147,6 +148,22 @@ describe("AppSettingsManager", () => {
     expect(payload.analyticsEnabled).toBe(true)
     expect(payload.analyticsUserId).toMatch(/^anon_/)
     expect(manager.getSnapshot()).toEqual(expectedSettingsSnapshot(filePath))
+
+    manager.dispose()
+  })
+
+  test("claudeCodeMode defaults to on and round-trips through writePatch", async () => {
+    const filePath = await createTempFilePath()
+    const manager = trackManager(new AppSettingsManager(filePath))
+
+    await manager.initialize()
+    expect(manager.getSnapshot().claudeCodeMode).toBe(true)
+
+    const snapshot = await manager.writePatch({ claudeCodeMode: false })
+    const payload = JSON.parse(await readFile(filePath, "utf8")) as { claudeCodeMode: boolean }
+
+    expect(snapshot.claudeCodeMode).toBe(false)
+    expect(payload.claudeCodeMode).toBe(false)
 
     manager.dispose()
   })

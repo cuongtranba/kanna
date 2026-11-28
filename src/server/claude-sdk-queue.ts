@@ -1,5 +1,12 @@
-import { type Query, type SlashCommand } from "@anthropic-ai/claude-agent-sdk"
+import { type query, type Query, type SDKMessage, type SlashCommand } from "@anthropic-ai/claude-agent-sdk"
 import { type ClaudeRawSdkMessage, isSdkToClaudeMessage } from "./claude-message-normalizer"
+
+export type ClaudeQuery = Pick<
+  Query,
+  "accountInfo" | "interrupt" | "close" | "setModel" | "setPermissionMode" | "supportedCommands"
+> & AsyncIterable<SDKMessage>
+
+export type ClaudeQueryPort = (params: Parameters<typeof query>[0]) => ClaudeQuery
 
 export class AsyncMessageQueue<T> implements AsyncIterable<T> {
   private readonly values: T[] = []
@@ -49,7 +56,7 @@ export class AsyncMessageQueue<T> implements AsyncIterable<T> {
 }
 
 export async function* toClaudeMessageStream(
-  q: Query,
+  q: AsyncIterable<SDKMessage>,
   onCommandsChanged?: (commands: SlashCommand[]) => void,
 ): AsyncGenerator<ClaudeRawSdkMessage> {
   for await (const m of q) {

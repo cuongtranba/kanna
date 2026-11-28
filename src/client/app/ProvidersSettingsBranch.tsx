@@ -15,6 +15,7 @@ import { useChatPreferencesStore } from "../stores/chatPreferencesStore"
 import { useGeneralSettingsStore } from "../stores/generalSettingsStore"
 import { useProvidersSectionStore } from "../stores/providersSectionStore"
 import { CustomProvidersSettingsBranch } from "./CustomProvidersSection"
+import { PendingSegmentedControl } from "./PendingSegmentedControl"
 import { QuickResponseRow } from "./QuickResponseRow"
 import { SettingsNumberRow } from "./SettingsNumberRow"
 import type { KannaState } from "./useKannaState"
@@ -25,6 +26,32 @@ const MIN_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_BOUND.min / 60_000)
 const MAX_IDLE_MINUTES = Math.round(CLAUDE_IDLE_TIMEOUT_MS_BOUND.max / 60_000)
 const IDLE_MINUTES_RANGE = { min: MIN_IDLE_MINUTES, max: MAX_IDLE_MINUTES } as const
 const DEFAULT_IDLE_MINUTES = Math.round(CLAUDE_LIFECYCLE_DEFAULTS.idleTimeoutMs / 60_000)
+
+const codeModeOptions = [
+  { value: "disabled" as const, label: "Off" },
+  { value: "enabled" as const, label: "On" },
+]
+
+function ClaudeCodeModeRow({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
+  const { writeAsync } = useAppSettingsWriter(state)
+  const claudeCodeMode = useAppSettingsStore((s) => s.settings?.claudeCodeMode)
+  return (
+    <SettingsRow
+      title="Code Mode (experimental)"
+      description="Let Claude batch many tool calls into one script. Applies to new Claude sessions; existing sessions keep the mode they started in."
+    >
+      <PendingSegmentedControl
+        pendingKey="settings.claudeCodeMode"
+        value={claudeCodeMode === false ? "disabled" : "enabled"}
+        onValueChange={async (next) => {
+          await writeAsync({ claudeCodeMode: next === "enabled" })
+        }}
+        options={codeModeOptions}
+        size="sm"
+      />
+    </SettingsRow>
+  )
+}
 
 function ClaudeLifecycleRows({ state }: { state: Pick<KannaState, "handleWriteAppSettings"> }) {
   const { write } = useAppSettingsWriter(state)
@@ -271,6 +298,7 @@ export function ProvidersSettingsBranch({ state }: { state: KannaState }) {
         </div>
       </SettingsRow>
 
+      <ClaudeCodeModeRow state={state} />
       <ClaudeLifecycleRows state={state} />
       <ProviderDefaultRows state={state} />
       <QuickResponseRow state={state} />

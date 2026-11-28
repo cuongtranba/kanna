@@ -2023,7 +2023,20 @@ describe("AgentCoordinator claude integration", () => {
     events.close()
   })
 
-  test("retries once on a fresh session when resuming a deleted Claude session fails with 'No conversation found'", async () => {
+  test.each([
+    {
+      name: "'No conversation found'",
+      result: "",
+      debugRaw:
+        '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: poisoned-old"]}',
+    },
+    {
+      name: "the Code Mode resume refusal",
+      result:
+        "Failed to resume session: This session was started in Code Mode (experimental), which is off in this run, so it can't be resumed.",
+      debugRaw: "",
+    },
+  ])("retries once on a fresh session when resuming a Claude session fails with $name", async ({ result, debugRaw }) => {
     const spawns: Array<{ sessionToken: string | null; prompts: string[] }> = []
     const streams: Array<AsyncEventQueue<any>> = []
 
@@ -2060,9 +2073,8 @@ describe("AgentCoordinator claude integration", () => {
                     subtype: "error",
                     isError: true,
                     durationMs: 0,
-                    result: "",
-                    debugRaw:
-                      '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["No conversation found with session ID: poisoned-old"]}',
+                    result,
+                    debugRaw,
                   })
                 : timestamped({ kind: "result", subtype: "success", isError: false, durationMs: 0, result: "" }),
             })
