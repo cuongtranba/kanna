@@ -1,6 +1,8 @@
 # Code Mode and programmatic tool execution for Kanna: research and recommendation
 
-Date: 2026-11-28. Status: research only, no implementation authorized. Base revision: `origin/main` at
+Date: 2026-11-28. Status: research plus a measured spike outside Kanna; no Kanna implementation yet.
+The owner's decisions on the open questions are recorded in section 10, and the measured results in
+section 3.2. Base revision: `origin/main` at
 `49141fb3` (Agent SDK `0.3.330`, bundled Claude Code CLI `2.1.330`). The local `main` checkout was 99
 commits behind at `6b8fd9d2`; every Kanna citation below was re-read on `49141fb3`.
 
@@ -21,33 +23,34 @@ Evidence labels used throughout:
    session in a terminal" [DOC]. The changelog for 2.1.332 fixes bugs in "Code Mode sessions in the
    Agent SDK and `claude -p`" [CHANGELOG], and the 2.1.332 binary's own refusal text says
    "claude -p and Agent SDK apps get it only when CLAUDE_CODE_EXPERIMENTAL_CODE_MODE is in the env block of
-   --settings (the SDK's settings option)" [RE]. A local probe confirmed that this path clears the
-   entrypoint and model gates [PROBE]. The documentation and the binary disagree, so the SDK path is
-   not a supported contract today.
-2. **Kanna would not lose a safety property it has today, but it would not gain one either.** Kanna's
-   Claude `canUseTool` allows every tool except `AskUserQuestion` and `ExitPlanMode`
-   (`src/server/claude-spawn-helpers.ts:72-101`) [CODE]. Claude chats therefore have no per-tool human
-   approval now; the real controls are `PreToolUse` hooks (loop guard, inbox guard), path confinement and
-   the user's own settings. Code Mode routes inner calls through rules and `PreToolUse` hooks under each
-   tool's usual name [DOC], but whether the SDK's in-process callback hooks see every inner call is
-   unverified, and the inbox guard is a security boundary.
-3. **No token, latency or correctness numbers for Code Mode in Kanna could be measured.** The final
-   Code Mode gate (organization policy read) needs a valid login. The standalone `~/.claude` OAuth
-   session has expired and could not be refreshed, Kanna's pooled tokens must not be extracted, and the
-   Agent Vault brokers no Anthropic credential. A reproducible harness and a synthetic dataset with
-   ground truth are in Appendix B. Anthropic's 98.7 % figure (Google Drive to Salesforce, 150,000 to
-   2,000 tokens) is one illustrative example and is not a Kanna expectation; Anthropic's own measured
-   PTC figures range from 38 % fewer input tokens on a 75-tool benchmark to 8 % *more* cost on
-   sequential single-call work [DOC].
-4. **Recommendation.**
-   - **Status quo now: GO.** Keep shipping without Code Mode.
-   - **Option A (native opt-in passthrough), as a gated spike behind a server env var on a dev
-     instance: CONDITIONAL GO.** Ship to users only after Anthropic documents the SDK surface or the
-     acceptance gates in section 9 pass on the pinned CLI.
-   - **Option B (Kanna-built sandboxed program runner): NO-GO for now.** It is a new orchestration and
-     isolation subsystem whose payoff is unmeasured, and Kanna's own Claude path would get it natively.
-     Revisit only if Codex or Antigravity sessions show a measured orchestration cost that matters.
-   - **Option C (hybrid): NO-GO** until B is justified on its own; C carries B's cost plus A's.
+   --settings (the SDK's settings option)" [RE]. With a Kanna pool token and the SDK `settings` option,
+   Code Mode ran end to end on CLI 2.1.332 [PROBE]. The documentation and the binary disagree, so the SDK
+   path is not a supported contract today; the owner accepted that risk (section 10).
+2. **Kanna's controls survive Code Mode in the probe.** Every inner call reached the SDK `PreToolUse`
+   callback hook under its usual name (2,289 of 2,289 `toolu_cc_` inner calls across 20 Code Mode runs), a hook deny inside a
+   script held (canary test), and an inner call that needed permission reached `canUseTool` with a
+   `toolu_cc_` id [PROBE]. The script runs in a sealed `vm` context with no `require`, `import`,
+   `process`, `fetch` or `Bun`, so its only reach is through tools [PROBE]. Kanna's own policy is
+   unchanged: `canUseTool` allows everything except `AskUserQuestion` and `ExitPlanMode`
+   (`src/server/claude-spawn-helpers.ts:72-101`) [CODE], which the owner confirmed as intended ("yolo").
+3. **Measured (Opus 5.5, 5 runs per arm; Haiku 5.5, 3 runs).** On a fan-out task (40 files, 13 broken
+   links) Code Mode cut model turns from 5 to 3 (p50), total input tokens by 39 % (93k to 57k, 95 % CI of
+   the difference excludes zero) and API time by 39 %, with equal correctness (all runs exact). Cost at
+   list price did not improve measurably (p50 USD 0.060 vs 0.080, CI spans zero) because cache writes
+   dominate small runs. On a single-search task (one grep) turns were unchanged, and the only saving was
+   a 23 % smaller fixed prefix. Code Mode also streams 200 to 390 inner tool rows per fan-out turn where the
+   baseline streams 4 to 10, which Kanna would render as rows. Anthropic's 98.7 % example is not
+   reproduced and is not a Kanna expectation.
+4. **Recommendation, after the owner's decisions.**
+   - **Option A (native opt-in passthrough): GO to an implementation plan**, default-on for eligible
+     chats as the owner asked, behind a server kill switch, with the work items in section 9 (stickiness,
+     eligibility, grouped rendering of inner calls, a visible resume failure).
+   - **Status quo** stays the behaviour for ineligible chats (Codex, Antigravity, OpenRouter, custom
+     endpoints, models older than 5.5).
+   - **Option B (Kanna-built sandboxed program runner): NO-GO.** Native Code Mode already gives Claude
+     chats the measured benefit with Kanna's hooks intact; B would rebuild it with a new security
+     perimeter. Revisit only for Codex or Antigravity on measured need.
+   - **Option C (hybrid): NO-GO**, for the same reason.
 
 ## 2. Verified external facts
 
@@ -127,13 +130,73 @@ transcripts were deleted afterwards.
 | `settings.env` = 1, `tools: [Read, Glob, Grep]` | no | policy-read notice (the expected `tools` refusal was masked; inconclusive) |
 | `settings.env` = 0 | no | none |
 
-Every run then failed with `Failed to authenticate: OAuth session expired and could not be refreshed`
-before any model request, so no tokens were spent.
+These first runs used the standalone `~/.claude` login, which had expired, so each failed with
+`Failed to authenticate: OAuth session expired and could not be refreshed` before any model request.
 
-**Conclusion:** the SDK entrypoint with the `settings` option is the opt-in mechanism in the binary
-Kanna would ship; the last gate needs a valid first-party login. Whether `REPL` then appears, how inner
-calls appear on the SDK stream, and whether SDK callback hooks and `canUseTool` fire for them are
-**unverified** (blocker B1 in section 8).
+### 3.1 Authenticated gate runs (owner approved using Kanna's token pool)
+
+The probe then loaded the one active first-party OAuth token from Kanna's pool
+(`~/.kanna/data/settings.json`, `claudeAuth.tokens`) in-process into `CLAUDE_CODE_OAUTH_TOKEN`, exactly
+as `buildClaudeEnv` does; the token was never printed or written. Permission mode `acceptEdits` and an
+allow-by-default `canUseTool` mirror Kanna. A `PreToolUse` callback hook logged every call and denied
+any call whose input mentioned `canary`.
+
+| Gate | Result | Label |
+| --- | --- | --- |
+| G1 start | Code Mode ran. `REPL` is **not** listed in `system/init` `tools`, and no notice is emitted when it is on; the only sign is that tools are called with `toolu_cc_` ids. | PROBE |
+| G1 resume | Resuming the Code Mode session without the setting fails: "Failed to resume session: This session was started in Code Mode (experimental), which is off in this run, so it can't be resumed." With the setting it resumes and hits the prompt cache. | PROBE |
+| G2 hooks | The SDK `PreToolUse` callback saw 2,289 of 2,289 inner calls across 20 Code Mode runs, under the tool's usual name (`Bash`, `Read`). | PROBE |
+| G2 deny | A hook deny on an inner `Read` of `secret/canary.txt` held; the canary value never reached the reply (2 of 2 runs per arm). | PROBE |
+| G2 canUseTool | An inner `git init` that acceptEdits does not auto-allow reached `canUseTool` with a `toolu_cc_` id; writes inside the working directory were auto-allowed, as for direct calls. | PROBE |
+| G3 stream | Each inner call arrives as a synthetic `assistant` message with one `tool_use` block (id `toolu_cc_…`, `parent_tool_use_id` null) followed by a `user` `tool_result`, in the same shape as a direct call. The `REPL` call itself, its code and its return value **never** appear on the SDK stream, and the SDK callback hooks never see `REPL`. The code is recorded only in the CLI's own session file under `~/.claude/projects/`. | PROBE |
+| Ambient authority | A script that tried `require('fs')`, `import('node:fs')`, `Bun.file`, `process.env`, `fetch` and `child_process` got: "Module loading (require) is not available in REPL — the vm context is sealed", "Bun is not defined", "process is not defined", "fetch is not defined". | PROBE |
+
+### 3.2 Benchmark results
+
+Arms: baseline vs Code Mode, same pinned binary (CLI 2.1.332), model, prompt, tools, permission mode and
+data. Order alternated per repetition. Runs are back to back within minutes, so after the first run of
+each arm they are warm-cache runs; no separate cold series was run (a cold run needs a gap of more than
+an hour). Raw rows: `/tmp/cm-probe-scripts/runs/*.json`. 35 runs in total, USD 1.92 at list price on the
+owner's subscription.
+
+**Fan-out task, Opus 5.5** (40 files, 13 broken links; n = 5 per arm; both arms 5/5 exact):
+
+| Metric | Baseline p50 | Baseline p95 | Code Mode p50 | Code Mode p95 | Change of p50 | 95 % CI of the difference |
+| --- | --- | --- | --- | --- | --- | --- |
+| Model turns | 5 | 11 | 3 | 4 | -40 % | -8 to -1 |
+| Tool calls (rows Kanna would render) | 4 | 10 | 216 | 388 | +5,300 % | -1 to 384 |
+| Total input tokens (fresh + cache read + cache write) | 93,221 | 219,474 | 57,274 | 72,259 | -39 % | -162,200 to -20,962 |
+| Cache-read tokens | 91,041 | 210,514 | 55,124 | 60,291 | -39 % | -155,390 to -30,750 |
+| Cache-write tokens | 2,170 | 8,938 | 6,789 | 16,485 | +213 % | -4,803 to 14,315 |
+| Output tokens | 1,226 | 2,383 | 965 | 1,121 | -21 % | -1,418 to -105 |
+| Cost, USD list | 0.060 | 0.161 | 0.080 | 0.161 | +34 % | -0.082 to 0.101 |
+| Wall time, ms | 24,208 | 40,168 | 21,425 | 23,796 | -11 % | -18,743 to 1,614 |
+| API time, ms | 23,505 | 39,385 | 14,249 | 16,181 | -39 % | -25,136 to -4,517 |
+
+**Fan-out task, Haiku 5.5** (n = 3 per arm; both 3/3 exact): turns 6 to 3, total input 117,448 to 43,384
+(-63 %, CI -107,476 to -12,648), cost USD 0.003 to 0.003, wall time 15.4 s to 16.3 s (no change).
+
+**Single-search task, Opus 5.5** (92 adapter files in a copy of `src/server`, 15 with `process.env`;
+n = 5 per arm; both 5/5 exact): both arms used one grep in two turns. Total input 34,905 to 27,050
+(-23 %, CI -7,858 to -7,855): the Code Mode request prefix is about 7,850 tokens smaller, a fixed saving
+per request. Cost and wall time unchanged.
+
+Reading the numbers:
+
+- Code Mode pays off where work fans out: fewer model round trips, less re-read context, faster API time.
+  It changes nothing for a task the baseline already does in one call.
+- Cost did not drop in these small runs: cache writes, which cost more than reads, vary run to run and
+  dominate at this size. Longer chats, where the re-read prefix grows each round trip (section 4.2),
+  are where the cache-read saving should matter; that is not yet measured.
+- In 1 of 5 Opus fan-out runs the model made 3 calls rather than looping; Code Mode is a capability the
+  model may not use.
+- Kanna-side volume grows: a fan-out turn streams 400 to 780 SDK messages instead of 17 to 38, and each
+  becomes a transcript entry and a rendered row unless Kanna groups them.
+- Small samples, one machine, one account, synthetic tasks, and fewer repetitions than section 7 asks
+  for (5 and 3, not 10), no cold series, and three of its five tasks (cross-session research, MCP fan-out,
+  sequential control) not yet run. Treat as directional, not as a guarantee.
+- The probe used CLI 2.1.332; Kanna pins SDK 0.3.330 (CLI 2.1.330). Re-run the gates on the version
+  Kanna ships.
 
 ## 4. Kanna today (findings, `49141fb3`)
 
@@ -216,35 +279,42 @@ sequenceDiagram
     participant S as "Kanna server"
     participant C as "Claude Code CLI (Code Mode on via settings.env)"
     participant M as "Anthropic API"
-    participant R as "REPL JS runtime (in CLI process)"
+    participant R as "REPL sealed vm context (in CLI process)"
     participant T as "Tools"
     S->>C: sendPrompt
     C->>M: request
-    M-->>C: tool_use REPL with code
-    C->>S: canUseTool REPL and PreToolUse REPL
+    M-->>C: tool_use REPL with code (not streamed to Kanna)
     C->>R: run script
     par inner calls in the script
         R->>C: Bash, Read, mcp__x__y
-        C->>S: canUseTool and PreToolUse under the tool's usual name
+        C->>S: PreToolUse callback, then canUseTool if the mode asks
         C->>T: execute
+        C-->>S: synthetic assistant tool_use and user tool_result (toolu_cc_ id)
         T-->>R: result stays in the script
     end
-    R-->>C: compact return value
-    C-->>S: REPL tool_result (code, result, stdout, toolsUsed)
+    R-->>C: compact return value (not streamed to Kanna)
     C->>M: one request with the compact result
     M-->>C: text
-    C-->>S: result
+    C-->>S: assistant text, then result (usage, cost)
 ```
 
-Steps 4 and 7 on the Kanna side are **documented for settings-file hooks but unverified for SDK
-callback hooks and `canUseTool`** (blocker B1).
+Every step on the Kanna side of this diagram was observed in section 3.1 [PROBE]. Kanna never sees
+the `REPL` call: not on the stream and not in its callback hooks.
 
 Required decisions and constraints:
 
 - **Eligibility** is computed once, from facts Kanna already has: provider `claude` (not `openrouter` or
-  `custom`, which set `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`), a 5.5-or-later model, not
-  path-confined, not a scheduled or background run that Code Mode refuses. Ineligible chats never pass
-  the setting, so the CLI never prints a refusal mid-chat.
+  `custom`, which set `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`), a 5.5-or-later model, and a
+  `claude_code` tool preset. Path-confined chats send an explicit tool list; adding `REPL` to it would
+  let them in (the sealed context reaches files only through tools, which the path policy already
+  governs), which is the owner's "as many chats as possible" choice but needs its own test. Ineligible
+  chats never pass the setting, so the CLI never prints a refusal mid-chat.
+- **Permission mode:** the owner chose "yolo". Code Mode scripts run in the background (up to two hours,
+  without blocking the chat) only in `auto` or `bypassPermissions`; in Kanna's `acceptEdits` they block
+  for up to ten minutes [DOC]. Moving Claude chats to `bypassPermissions` is a separate, visible change
+  and must keep the loop and inbox `PreToolUse` guards. The Code Mode page names `deny`/`ask` rules and
+  `PreToolUse` hooks as the controls that still apply in auto and `bypassPermissions` [DOC]; the probe
+  measured hooks only under `acceptEdits`, so a bypass-mode run of the canary test is a gate (G4).
 - **Stickiness:** a session started in Code Mode must always resume in Code Mode, and one started without
   it must stay without it [DOC]. The flag is therefore a property of the Claude session token, not of the
   chat's current preference. Switching mid-chat means `/clear` (new session), never an in-place toggle.
@@ -254,11 +324,16 @@ Required decisions and constraints:
 - **Token pool rotation:** the binary has a `credential_changed` reason that restarts without Code Mode
   when the signed-in principal changes [RE]. If Kanna's pool hands a respawned session a token for a
   different account, the resume may be refused. Pin the pool token per Code Mode session, or test it.
-- **Loop guard and inbox guard** must be proven to fire for inner calls (gate G2) before an armed loop or
-  an inbox-driven turn may use Code Mode; until then, eligibility excludes those chats.
-- **Rendering:** `REPL` maps to `unknown_tool` today. The minimum is a `code_program` tool kind showing the
-  script collapsed, `toolsUsed`, and the returned value; inner calls render as rows nested under it only if
-  the SDK stream carries them (unverified).
+- **Loop guard and inbox guard** are `PreToolUse` callback matchers, which saw every inner call in the
+  probe (G2). Keep a public-seam test that a guarded tool called from a script is denied, so a CLI update
+  that changes this fails CI rather than a user.
+- **Rendering and volume:** inner calls already arrive as ordinary `tool_call`/`tool_result` pairs, so the
+  existing normalizer records and audits each one with no change. The problem is volume: 200 to 390 rows
+  for one fan-out turn. Group consecutive `toolu_cc_` calls of one assistant step into one collapsed
+  "script ran N tool calls" row (counts by tool, failures, expand to the rows). The `REPL` code and return
+  value are not on the stream; showing them would mean reading the CLI's session file, which is out of
+  scope for a first version. Measure transcript bytes and snapshot size with grouped rows (CLAUDE.md
+  snapshot-size rule).
 - **Hooks in user settings:** `settingSources` includes `user`, so a user's own `PreToolUse` hooks apply
   too; Code Mode changes their failure semantics (`onFailure`) [DOC].
 
@@ -324,12 +399,12 @@ its own. Not recommended until then.
 | Maintenance | none | high churn: experimental, undocumented SDK path | high: owned security perimeter | highest |
 | Provider lock-in | none | Claude first-party only, 5.5+ models | none | mixed |
 | Reaches native tools (Bash, Read, Edit) | yes | yes | no, Kanna MCP tools only | partly |
-| Per-inner-call approval | none for Claude today | same as today, via rules and hooks if they fire | yes, Kanna owned | mixed |
-| Audit per inner call | full, one row per call | REPL row plus `toolsUsed`; inner rows unverified | full, Kanna owned | mixed |
-| Isolation of model-written code | n/a | JS outside the shell sandbox [DOC] | designed in | mixed |
-| Resume and fork | proven | one-way session property, fork unverified | Kanna owned | both |
-| Expected token and latency win | baseline | unmeasured in Kanna; vendor examples 0 to 98.7 % | unmeasured, plus Kanna overhead | unmeasured |
-| UX | familiar row per call | fewer rows, code hidden unless expanded | new nested program card | two shapes |
+| Per-inner-call approval | none for Claude today | same as today: hooks and `canUseTool` fire per inner call [PROBE] | yes, Kanna owned | mixed |
+| Audit per inner call | full, one row per call | full: every inner call streams as a normal row [PROBE]; the script itself is not visible | full, Kanna owned | mixed |
+| Isolation of model-written code | n/a | sealed `vm` context, no require/process/fetch [PROBE]; tool calls unsandboxed, as direct calls are | designed in | mixed |
+| Resume and fork | proven | resume verified, one-way; fork unverified | Kanna owned | both |
+| Measured token and latency win | baseline | fan-out: -39 % input tokens, -40 % turns, -39 % API time, cost flat; single call: -23 % fixed prefix only [PROBE] | unmeasured, plus Kanna overhead | unmeasured |
+| UX | familiar row per call | many more rows (200 to 390 per fan-out turn) unless grouped; code not visible | new nested program card | two shapes |
 
 ## 6. Threat model and invariants
 
@@ -344,15 +419,15 @@ New risks that programs add:
 
 | Threat | Why programs change it | Invariant | Control (A) | Control (B) |
 | --- | --- | --- | --- | --- |
-| Approval bypass | Many calls per approval, or calls hidden inside one script | Every side-effecting inner call meets the same gate as a direct call, under its own name | Prove G2; deny `REPL` in chats where hooks are the boundary until proven | Broker is the only capability; no batch approvals |
-| Privilege escalation through JS | JS reaches fs, net, env directly | Program code has no ambient authority beyond its tool broker | Not satisfiable: Claude Code runs JS and its file, web and MCP calls outside the sandbox [DOC]; needs a container or VM | Isolate with no fs, net, env |
+| Approval bypass | Many calls per approval, or calls hidden inside one script | Every side-effecting inner call meets the same gate as a direct call, under its own name | G2 passed: hooks saw 100 % of inner calls, a deny held, `canUseTool` fired [PROBE]; keep it as a CI test | Broker is the only capability; no batch approvals |
+| Privilege escalation through JS | JS reaches fs, net, env directly | Program code has no ambient authority beyond its tools | Observed: the script context is sealed (no require, import, process, fetch, Bun) [PROBE]; its tool calls run with the same rights as direct calls. A Node `vm` context is not a hardened security boundary; the owner accepted running without a container (section 10) | Isolate with no fs, net, env |
 | Secret exfiltration | Code can read a token and pass it to another call; telemetry can log it [DOC] | Credentials never enter model-visible or program-visible data | Keep `OTEL_LOG_TOOL_DETAILS` unset; `PostToolUse` redaction; secrets stay vault-injected | Bindings hold credentials, as in Cloudflare's design |
-| Destructive actions without human sight | A script can delete after a run-time-computed search | No hidden destructive action; no auto-approval of destructive tools | Kanna's acceptEdits plus allow-all `canUseTool` already allows this for direct calls; Code Mode removes the row-per-call visibility, so require inner-call rows (G3) | Destructive tools require per-call approval |
+| Destructive actions without human sight | A script can delete after a run-time-computed search | No hidden destructive action | The owner chose yolo, so no per-call approval, as for direct calls today; each inner call still lands as a transcript row (G3 observed), so grouping must keep failures and writes visible when collapsed | Destructive tools require per-call approval |
 | Runaway cost and resources | Loops, fan-out, large outputs | Bounded time, memory, call count, concurrency and output bytes | CLI limits: 10 min foreground, memory stop, output cut with a path to the full text [DOC, CHANGELOG] | Explicit budgets per run |
 | Partial failure | Script dies after some side effects | Side effects that finished are reported, never silently retried | Finished calls stay applied after Esc [DOC]; the model must be told | Per-call journal; non-idempotent calls never auto-retried |
 | Replay and resume | Restarted turn reruns side effects | Resume never re-executes a finished side effect | CLI resume drops script variables and tells the model [CHANGELOG] | Journal keyed by (programRunId, callIndex, argsHash), the ToolCallbackService dedup pattern |
 | Untrusted output steering code | Injected text changes run-time branches the classifier never saw [DOC] | Tool output is data, never code | Rules and hooks on calls, not on code | Program cannot `eval` tool output |
-| Audit loss | One REPL row hides N calls | Every inner call has an event with correlation id and provenance | Depends on G3 | Built in |
+| Audit loss | One REPL row hides N calls | Every inner call has an event with correlation id and provenance | Inner calls keep their own `toolu_cc_` id; the script that made them has no id on the stream, so calls are attributed to the assistant step, not to a program run | Built in |
 
 Non-negotiable invariants for any rollout: no hidden destructive action; no auto-approval introduced by
 Code Mode beyond what the chat already allows; every inner call attributable to its program run and
@@ -405,46 +480,58 @@ Reporting rule: no extrapolation from Anthropic's examples; publish per-task num
 
 | Id | Risk | Likelihood | Impact | Mitigation |
 | --- | --- | --- | --- | --- |
-| B1 | SDK callback hooks or `canUseTool` do not fire for some inner calls | unknown | high (inbox and loop guards bypassed) | Gate G2 before any user exposure |
+| B1 | SDK callback hooks or `canUseTool` stop firing for inner calls in a later CLI | low (passed on 2.1.332) | high (inbox and loop guards bypassed) | Public-seam test of a guarded tool called from a script; re-run on every SDK bump |
 | R2 | Undocumented SDK path changes or is removed | high | medium | Server env var, off by default; pin the SDK; re-run the gates on each SDK bump |
 | R3 | Code Mode session cannot resume after the flag, model or credential changes | medium | high (chat stuck) | Flag bound to session token; restrict models; pin pool token; visible failure |
-| R4 | Inner calls invisible in the transcript | medium | medium (audit and UX) | Gate G3; otherwise render `toolsUsed` and keep the REPL code expandable |
-| R5 | JS and its file, web and MCP calls run outside the shell sandbox | certain [DOC] | medium | Exclude path-confined and inbox chats; recommend container deployment for Code Mode |
-| R6 | Token savings smaller than overhead on Kanna workloads | unknown | low | Benchmark first; ship only on a measured win |
+| R4 | Transcript and UI flooding: hundreds of inner rows per turn | certain [PROBE] | medium (UX, snapshot size) | Group `toolu_cc_` rows per assistant step; measure snapshot bytes |
+| R5 | Tool calls from scripts run outside the shell sandbox, as direct calls do in Kanna | certain [DOC] | medium | Owner accepted (no container); the guards above stay the boundary |
+| R6 | No cost saving on short or single-call turns | measured [PROBE] | low | Expected; the win is round trips and context on fan-out work |
 | R7 | Pool token rotation triggers `credential_changed` | medium [RE] | medium | Pin a token per Code Mode session; test |
 | R8 | Code Mode bugs (lost replies, stalls) degrade long chats | medium [CHANGELOG] | medium | Dev-only spike; keep the status quo as default |
 | R9 | Option B isolation escape | medium | high | Do not build B without a dedicated security review |
 
-## 9. Rollout, rollback and phases (proposal, not authorized)
+## 9. Rollout, rollback and phases (proposal; implementation not yet started)
 
-**Opt-in shape:** off by default; a server-level environment variable (for example
-`KANNA_CLAUDE_CODE_MODE=1`, name to be confirmed with the wiki env-var list) enables eligibility; then a
-per-chat choice at chat creation. Never applied to an existing session. **Rollback:** unset the
-variable; new sessions start without Code Mode; existing Code Mode sessions keep resuming in Code Mode
-until `/clear`, because the CLI refuses to resume them otherwise. A managed-settings `0` blocks it
-everywhere [DOC].
+**Opt-in shape (after the owner's decisions):** Code Mode is on by default for every *new* Claude
+session that is eligible (section 5.1), with a server kill switch (an environment variable, name to be
+fixed against the wiki env-var list) that turns it off for new sessions. It is never applied to an
+existing session, because a session cannot change mode in either direction [DOC, PROBE]. **Rollback:**
+set the kill switch; new sessions start without Code Mode; existing Code Mode sessions keep resuming in
+Code Mode until `/clear`. A resume that the CLI refuses ("started in Code Mode … can't be resumed")
+must surface as a visible failed turn with a `/clear` hint, never a silent fresh session; today only
+"No conversation found" triggers the fresh-session retry (`claude-prompt-helpers.ts:49`), which is the
+right behaviour to keep.
 
-| Phase | Work | Acceptance gate |
-| --- | --- | --- |
-| P0 (done) | Source verification, gate probe, harness | This report |
-| P1 | Unblock auth (user runs `claude auth login` in a terminal); run Appendix B on SDK 0.3.332 | G1: `REPL` in init tools; a script runs end to end; resume with the flag works and without it fails visibly |
-| P2 | Parity spike in the harness: callback `PreToolUse` and `canUseTool` logging, a deny rule for `Bash(git push *)` | G2: 100 % of inner calls seen by the callback hook and by `canUseTool` when it would ask; deny honoured inside scripts. G3: the stream form of inner calls documented |
-| P3 | Benchmark (section 7) | Measured saving with confidence intervals on at least three tasks, correctness not lower, approval and audit parity 100 % |
-| P4 | Kanna dev-instance spike behind the server variable: `settings` option, fingerprint, eligibility, `code_program` tool kind | `bun run check`, focused tests on the public seam (eligibility and resume stickiness), manual golden path; c3 change and ADR |
-| P5 | Limited opt-in for the owner's chats | Two weeks without stuck resumes or parity failures |
+| Phase | Work | Acceptance gate | Status |
+| --- | --- | --- | --- |
+| P0 | Source verification, gate probe, harness | This report | done |
+| P1 | Authenticated start and resume (pool token) | G1: a script runs end to end; resume with the setting works and without it fails visibly | passed [PROBE] |
+| P2 | Parity: callback `PreToolUse` and `canUseTool` logging, hook deny, ambient-authority test | G2: 100 % of inner calls seen by the hook, deny held, `canUseTool` fired. G3: stream shape documented | passed [PROBE] |
+| P3 | Benchmark, 2 tasks, 2 models | Saving with confidence intervals, correctness not lower | passed for fan-out; no effect on single-call; cost flat (section 3.2) |
+| P4 | Kanna implementation: bump the SDK to 0.3.332 or later (CLI 2.1.332 has SDK resume fixes [CHANGELOG]); pass `settings.env` for eligible new sessions; record the mode with the session token and in the respawn fingerprint; restrict model switches to eligible models; group `toolu_cc_` rows; kill switch | `bun run check`; public-seam tests: an eligible chat starts in Code Mode, an ineligible one does not, a Code Mode session respawns in Code Mode, a guarded tool called from a script is denied; manual golden path; `/c3 change` and an ADR | needs a plan approved by the owner |
+| P5 | Yolo permission mode (`bypassPermissions`) for background scripts, if wanted | G4: canary deny and loop/inbox guard tests pass under `bypassPermissions` | needs a decision |
+| P6 | Measure in real chats | Kanna's own `turns.jsonl` usage before and after, per chat shape, for two weeks; no stuck resumes | after P4 |
 
-## 10. Open decisions needing human approval
+## 10. Decisions
 
-1. May the benchmark use a real Anthropic login (subscription usage), and on which account? It needs a
-   working `claude auth login`; Kanna pool tokens were not used.
-2. Is an undocumented Agent SDK path acceptable for a dev-only spike (P4), or must Kanna wait for
-   Anthropic to document SDK support?
-3. Should Code Mode chats be allowed to run with Kanna's allow-all `canUseTool`, or must per-call
-   approval for destructive tools (Bash writes, Edit outside the repo, side-effecting MCP tools) land
-   first, for Code Mode and direct calls alike?
-4. Which chats are excluded by policy: inbox-driven, loop-armed, path-confined, cron, subagents?
-5. Is a container or VM deployment a precondition for Code Mode, given the sandbox gap [DOC]?
-6. Whether Option B is ever wanted for Codex and Antigravity sessions, which would need its own
+Recorded from the owner on 2026-11-28:
+
+1. **Benchmark login:** yes, use the subscription. The standalone `~/.claude` login had expired, so the
+   owner chose Kanna's token pool; the probe loaded the active pool token in-process without printing
+   or writing it.
+2. **Undocumented Agent SDK path:** acceptable.
+3. **Per-call approval for destructive tools before Code Mode:** no; Kanna stays in "yolo" mode.
+4. **Which chats get Code Mode:** as many as possible. The remaining exclusions are the ones the CLI
+   itself refuses (endpoints with their own base URL or auth token, models older than 5.5, a tool list
+   without `REPL`, background or Remote Control sessions) plus whatever fails a gate.
+5. **Container or VM:** not needed.
+
+Still open:
+
+6. Whether P5 (`bypassPermissions` for Claude chats) is wanted; it is what lets long scripts run in the
+   background, and it changes behaviour for direct calls too.
+7. Whether path-confined chats should get `REPL` added to their explicit tool list (section 5.1).
+8. Whether Option B is ever wanted for Codex and Antigravity sessions, which would need its own
    measurement first.
 
 ## 11. Documentation and code disagreements found
@@ -501,4 +588,7 @@ for await (const m of query({ prompt, options })) { /* record init.tools, tool_u
   system notifications (key "code-mode-opt-in"), result.usage, num_turns, durations */ }
 ```
 
-The `hooks` logger is the parity check for gate G2; the run used in section 3 did not yet include it.
+The full harness used for sections 3.1 and 3.2 (`probe2.mjs`, `driver.sh`, `aggregate.mjs`) is in
+`/tmp/cm-probe-scripts/`; it adds the pool-token loader, the `PreToolUse` logger and canary deny, the
+`askperm`, `ambient`, `canary` and `adapters` tasks, alternating arm order, and the bootstrap
+aggregation.
