@@ -60,6 +60,7 @@ code:
   - src/server/claude-session-error-handler.ts
   - src/server/claude-session-spawner.ts
   - src/server/claude-session-start.ts
+  - src/server/claude-bypass-permissions.adapter.ts
   - src/server/claude-spawn-helpers.ts
   - src/server/claude-steer-log.ts
   - src/server/claude-subagent-tool-response.ts

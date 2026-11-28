@@ -172,6 +172,7 @@ c3-201:
   - src/types/bun-process-signals.d.ts
 c3-202:
   - src/server/app-settings.ts
+  - src/server/app-settings-boolean.ts
   - src/server/server.ts
   - src/server/scheduled-work-rehydrate.ts
   - src/server/router-housekeeping.ts
@@ -354,6 +355,7 @@ c3-210:
   - src/server/claude-session-error-handler.ts
   - src/server/claude-session-spawner.ts
   - src/server/claude-session-start.ts
+  - src/server/claude-bypass-permissions.adapter.ts
   - src/server/claude-spawn-helpers.ts
   - src/server/claude-steer-log.ts
   - src/server/claude-subagent-tool-response.ts

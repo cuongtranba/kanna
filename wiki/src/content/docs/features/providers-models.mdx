@@ -43,6 +43,30 @@ If a chat is quietly compacting far below the window you expected, the window
 probably fell back to 200k — Kanna logs a warning whenever the requested window
 is not the one it resolved.
 
+### Code Mode and permissions
+
+**Code Mode (experimental)** lets Claude write one script that batches many tool
+calls instead of issuing them one at a time. It is on by default and has an
+**Off / On** switch in **Settings → Providers → "Code Mode (experimental)"**. The
+switch applies to new Claude sessions, subagent runs included. A session keeps
+the mode it started in, and toggling the switch never restarts a live session.
+Claude Code decides eligibility itself: an older model, or a custom endpoint,
+starts the session without Code Mode. Each call a script makes still appears in
+the transcript as an ordinary tool call, and loop and Inbox guards still apply to
+it.
+
+A session that started in Code Mode cannot be resumed without it, for example
+after you turn the switch off or pick a model that Code Mode does not support.
+Kanna detects that refusal and reruns the turn on a fresh session primed with the
+chat history, the same recovery it uses when a Claude session file has been
+deleted.
+
+Claude chats run in `bypassPermissions` ("yolo") mode, so tool calls run without
+an approval prompt. Plan mode still plans first, and `AskUserQuestion` still asks.
+When Kanna runs as root and the environment is not marked as a sandbox
+(`IS_SANDBOX=1` or `CLAUDE_CODE_BUBBLEWRAP`), Claude Code refuses that mode, so
+Kanna falls back to `acceptEdits`.
+
 ## Codex
 
 - **Auth** — handled entirely by the `codex` CLI. Kanna spawns
