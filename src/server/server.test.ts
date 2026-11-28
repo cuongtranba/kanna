@@ -22,6 +22,7 @@ import { SERVICE_BUS_PUBLIC_DEFAULTS } from "../shared/service-bus/jetstream-con
 function makeSnapshot(overrides: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
   return {
     analyticsEnabled: true,
+    claudeCodeMode: true,
     browserSettingsMigrated: false,
     theme: "system",
     typography: TYPOGRAPHY_DEFAULTS,
@@ -151,6 +152,7 @@ describe("buildAgentAppSettingsView", () => {
   test("returns exactly the keys the AgentCoordinator consumes", () => {
     const view = buildAgentAppSettingsView(makeSnapshot())
     expect(Object.keys(view).sort()).toEqual([
+      "claudeCodeMode",
       "claudeDriver",
       "customMcpServers",
       "customModels",

@@ -6,9 +6,15 @@ exists. Resuming it ends at once with `error_during_execution` and
 `No conversation found with session ID`, before the model runs. A peer message is
 the usual trigger, because it lands on chats nobody has opened in weeks.
 
+A session started in Code Mode that is resumed without it (the setting turned off, or
+a model Code Mode does not support) fails with a message containing
+`This session was started in Code Mode` and ends `so it can't be resumed`. It takes
+the same path. `isUnresumableSessionMessage` owns both patterns, and the turn failure
+field is `sessionUnresumable`.
+
 `startTurnForChat` gives a Claude SDK turn that resumes a token a
 `retryOnFreshSession` closure on its `ActiveTurn`. When `settleFailedTurn` sees the
-missing conversation and the closure exists, it discards the session (the provider
+unresumable session and the closure exists, it discards the session (the provider
 token and `pendingForkSessionToken`), records no `turn_failed`, and returns
 `retry_on_fresh_session`. The runner then calls the closure instead of draining the
 queue (on a thrown error, at the end of `finally`). The retry reuses the turn's

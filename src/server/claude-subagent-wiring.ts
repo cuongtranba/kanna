@@ -18,6 +18,7 @@ import type { CodexAppServerManager } from "./codex-app-server"
 import type { AntigravityAcpManager } from "./antigravity-acp"
 import type { RealpathFn } from "./paths"
 import { resolveSubagentRoots } from "./paths"
+import { claudeCodeModeOf } from "./agent-app-settings-view"
 import { toJsonObject } from "./json-boundary"
 import { subagentPendingKey } from "./claude-subagent-tool-response"
 import { resolveProjectInstructions, resolveSpawnPaths, resolveStackProjects } from "./claude-session-config"
@@ -69,6 +70,7 @@ export interface SubagentWiringDeps {
   getAppSettingsSnapshot: () => {
     globalPromptAppend?: string
     customModels?: readonly CustomModelEntry[]
+    claudeCodeMode?: boolean
   }
   readLlmProvider: () => Promise<LlmProviderSnapshot>
   getCustomProviderCredential: (id: string) => CustomProviderCredential | null
@@ -109,6 +111,7 @@ export function buildClaudeSubagentStarter(
     const { byServerId: oauthBearers } = await deps.buildOAuthBearers(enabledMcpServers)
     return deps.startClaudeSessionFn({
       ...a,
+      codeMode: claudeCodeModeOf(deps.getAppSettingsSnapshot()),
       customMcpServers: enabledMcpServers,
       oauthBearers,
       toolCallback: scope.beaconToolsAllowed ? (deps.toolCallback ?? undefined) : undefined,

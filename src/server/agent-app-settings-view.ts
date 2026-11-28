@@ -2,6 +2,7 @@ import type { AppSettingsSnapshot } from "../shared/types"
 
 export interface AgentAppSettingsView {
   claudeDriver: AppSettingsSnapshot["claudeDriver"]
+  claudeCodeMode: AppSettingsSnapshot["claudeCodeMode"]
   globalPromptAppend: AppSettingsSnapshot["globalPromptAppend"]
   customMcpServers: AppSettingsSnapshot["customMcpServers"]
   mcpSources: AppSettingsSnapshot["mcpSources"]
@@ -14,6 +15,7 @@ export interface AgentAppSettingsView {
 export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentAppSettingsView {
   return {
     claudeDriver: snapshot.claudeDriver,
+    claudeCodeMode: snapshot.claudeCodeMode,
     globalPromptAppend: snapshot.globalPromptAppend,
     customMcpServers: snapshot.customMcpServers,
     mcpSources: snapshot.mcpSources,
@@ -22,4 +24,8 @@ export function buildAgentAppSettingsView(snapshot: AppSettingsSnapshot): AgentA
     providerDefaults: snapshot.providerDefaults,
     subagentRuntime: snapshot.subagentRuntime,
   }
+}
+
+export function claudeCodeModeOf(settings: Partial<Pick<AgentAppSettingsView, "claudeCodeMode">>): boolean {
+  return settings.claudeCodeMode !== false
 }

@@ -11,6 +11,7 @@ import { clampTabMinWidth } from "../shared/pane-tab-width"
 import { clampScrollback } from "../shared/terminal-scrollback"
 import { clampTerminalMinColumnWidth } from "../shared/terminal-column-width"
 import { applyMcpSourceSetters, checkMcpSourceServers, MCP_SOURCE_CRUD, normalizeMcpSources } from "./mcp-sources-settings"
+import { normalizeBooleanSetting } from "./app-settings-boolean"
 import { normalizePackageUpdateSettings } from "./app-settings-package-updates"
 import { mergeInstalledPluginsPatch, normalizePluginState } from "./plugins/plugin-settings"
 import {
@@ -113,6 +114,7 @@ type StatusPatch = Partial<Pick<OAuthTokenEntry,
 
 interface AppSettingsFile {
   analyticsEnabled?: boolean
+  claudeCodeMode?: boolean
   analyticsUserId?: string
   browserSettingsMigrated?: boolean
   theme?: string
@@ -670,11 +672,6 @@ function normalizeAppSettings<T>(
     warnings.push("Settings file must contain a JSON object")
   }
 
-  const analyticsEnabled = typeof source?.analyticsEnabled === "boolean" ? source.analyticsEnabled : true
-  if (source?.analyticsEnabled !== undefined && typeof source.analyticsEnabled !== "boolean") {
-    warnings.push("analyticsEnabled must be a boolean")
-  }
-
   const rawAnalyticsUserId = typeof source?.analyticsUserId === "string" ? source.analyticsUserId.trim() : ""
   if (source?.analyticsUserId !== undefined && typeof source.analyticsUserId !== "string") {
     warnings.push("analyticsUserId must be a string")
@@ -705,7 +702,8 @@ function normalizeAppSettings<T>(
 
   const editorPreset = normalizeEditorPreset(source?.editor?.preset)
   const state: AppSettingsState = {
-    analyticsEnabled,
+    analyticsEnabled: normalizeBooleanSetting("analyticsEnabled", source?.analyticsEnabled, true, warnings),
+    claudeCodeMode: normalizeBooleanSetting("claudeCodeMode", source?.claudeCodeMode, true, warnings),
     analyticsUserId,
     browserSettingsMigrated: source?.browserSettingsMigrated === true,
     theme: normalizeTheme(source?.theme),

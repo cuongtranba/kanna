@@ -399,7 +399,7 @@ the resolved `subagentId` + rendered prompt; replayed by `deriveLoopState`).
   at spawn via `options.disallowedTools`, so the model never sees them.
 - **Mid-turn guard is a PreToolUse hook, not `canUseTool`.** The SDK never
   consults `canUseTool` for a call the permission mode already approved, and
-  under `acceptEdits` that is every Edit/Write inside the working
+  under `acceptEdits` or `bypassPermissions` that is every Edit/Write inside the working
   directories. The SDK session registers a PreToolUse hook
   (`buildLoopGuardHooks`, `claude-session-start.ts`) that reads
   `isLoopArmed()` per call and denies the blocked tools, which also covers

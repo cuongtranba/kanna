@@ -13,7 +13,6 @@ const REMEDY =
 const LEGACY_MODULE_MOCKS = new Set([
   "src/client/components/messages/MermaidDiagram.test.tsx",
   "src/client/components/messages/file-preview/bodies/CodeBody.test.tsx",
-  "src/server/claude-session-start.test.ts",
 ])
 
 function walk(dir: string, out: string[] = []): string[] {

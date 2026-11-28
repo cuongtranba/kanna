@@ -4,12 +4,14 @@ import {
   type HookEvent,
   type HookInput,
   type HookJSONOutput,
+  type PermissionMode,
   type SDKUserMessage,
   type SlashCommand,
 } from "@anthropic-ai/claude-agent-sdk"
 import type { CompactionTrigger } from "../shared/transcript-types"
 import { createKannaMcpServer, type KannaMcpArgs } from "./kanna-mcp"
 import { KANNA_MCP_SERVER_NAME } from "../shared/tools"
+import { isBypassPermissionsAllowed } from "./claude-bypass-permissions.adapter"
 import { homedir } from "node:os"
 import type { UUID } from "node:crypto"
 import type { McpServerConfig } from "../shared/types"
@@ -28,7 +30,7 @@ import { toSdkEffort } from "./claude-prompt-helpers"
 import { buildInboxGuardMatcher, type InboxToolPolicy } from "./claude-inbox-guard"
 import { withAdditionalDirectoryMemory } from "./claude-spawn-helpers"
 import type { SdkEndpointEnv } from "./sdk-endpoint"
-import { AsyncMessageQueue, toClaudeMessageStream } from "./claude-sdk-queue"
+import { AsyncMessageQueue, toClaudeMessageStream, type ClaudeQueryPort } from "./claude-sdk-queue"
 import { createClaudeHarnessStream } from "./claude-harness-stream"
 import { parseConfiguredContextWindowFromModelId } from "./claude-usage-math"
 import { log } from "../shared/log"
@@ -38,6 +40,15 @@ import type { ToolCallbackService } from "./tool-callback"
 import type { ChatPermissionPolicy } from "../shared/permission-policy"
 import type { ModelPrice } from "../shared/token-pricing"
 import type { JsonValue } from "../shared/json"
+
+export const CLAUDE_CODE_MODE_SETTINGS = {
+  env: { CLAUDE_CODE_EXPERIMENTAL_CODE_MODE: "1" },
+}
+
+function claudePermissionMode(planMode: boolean, bypassAllowed: boolean): PermissionMode {
+  if (planMode) return "plan"
+  return bypassAllowed ? "bypassPermissions" : "acceptEdits"
+}
 
 export interface CompactionEvent {
   phase: "pre" | "post"
@@ -116,6 +127,8 @@ function buildSessionHooks(
 }
 
 export type StartClaudeSessionDeps = {
+  readonly query: ClaudeQueryPort
+  readonly isBypassPermissionsAllowed: () => boolean
   readonly buildCanUseTool: typeof buildCanUseTool
   readonly buildClaudeEnv: typeof buildClaudeEnv
   readonly loopBlockedNativeTools: readonly string[]
@@ -128,6 +141,8 @@ export type StartClaudeSessionDeps = {
 
 export function buildStartClaudeSessionDeps(): StartClaudeSessionDeps {
   return {
+    query,
+    isBypassPermissionsAllowed,
     buildCanUseTool,
     buildClaudeEnv,
     loopBlockedNativeTools: LOOP_BLOCKED_NATIVE_TOOLS,
@@ -150,6 +165,7 @@ export interface StartClaudeSessionArgs {
   model: string
   effort?: string
   planMode: boolean
+  codeMode: boolean
   sessionToken: string | null
   forkSession: boolean
   oauthToken: string | null
@@ -187,8 +203,9 @@ export async function startClaudeSession(
 
   const promptQueue = new _deps.AsyncMessageQueueCtor<SDKUserMessage>()
   const sessionHooks = buildSessionHooks(args, _deps.loopBlockedNativeTools)
+  const bypassAllowed = _deps.isBypassPermissionsAllowed()
 
-  const q = query({
+  const q = _deps.query({
     prompt: promptQueue,
     options: {
       cwd: args.localPath,
@@ -201,7 +218,9 @@ export async function startClaudeSession(
       ...(args.streamLiveBlocks === true ? { includePartialMessages: true } : {}),
       resume: args.sessionToken ?? undefined,
       forkSession: args.forkSession,
-      permissionMode: args.planMode ? "plan" : "acceptEdits",
+      permissionMode: claudePermissionMode(args.planMode, bypassAllowed),
+      ...(bypassAllowed ? { allowDangerouslySkipPermissions: true } : {}),
+      ...(args.codeMode ? { settings: CLAUDE_CODE_MODE_SETTINGS } : {}),
       canUseTool,
       ...(sessionHooks ? { hooks: sessionHooks } : {}),
       ...(args.maxTurns !== undefined ? { maxTurns: args.maxTurns } : {}),
@@ -313,7 +332,7 @@ export async function startClaudeSession(
       await q.setModel(model)
     },
     setPermissionMode: async (planMode: boolean) => {
-      await q.setPermissionMode(planMode ? "plan" : "acceptEdits")
+      await q.setPermissionMode(claudePermissionMode(planMode, bypassAllowed))
     },
     ...(args.keepAlive ? {
       pushChannelPrompt: async (content: string) => {

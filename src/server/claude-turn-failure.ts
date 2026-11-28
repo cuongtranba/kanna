@@ -1,6 +1,6 @@
 import type { LimitDetection, LimitDetector } from "./auto-continue/limit-detector"
 import type { AuthErrorDetection } from "./auto-continue/auth-error-detector"
-import { isNoConversationFoundMessage, isPromptTooLongMessage } from "./claude-prompt-helpers"
+import { isUnresumableSessionMessage, isPromptTooLongMessage } from "./claude-prompt-helpers"
 import type { ClaudeSessionState } from "./claude-session-state"
 
 export interface AuthErrorDetectable {
@@ -16,7 +16,7 @@ export interface FailureDetectors {
 export interface TurnFailure {
   limit: LimitDetection | null
   auth: AuthErrorDetection | null
-  conversationMissing: boolean
+  sessionUnresumable: boolean
   promptTooLong: boolean
 }
 
@@ -43,7 +43,7 @@ function classifyResultFailure(
   return {
     limit,
     auth,
-    conversationMissing: texts.some(isNoConversationFoundMessage),
+    sessionUnresumable: texts.some(isUnresumableSessionMessage),
     promptTooLong: texts.some(isPromptTooLongMessage),
   }
 }
@@ -58,7 +58,7 @@ function classifyThrownFailure(
   return {
     limit,
     auth,
-    conversationMissing: isNoConversationFoundMessage(error.message),
+    sessionUnresumable: isUnresumableSessionMessage(error.message),
     promptTooLong: isPromptTooLongMessage(error.message),
   }
 }
@@ -100,12 +100,12 @@ export async function settleFailedTurn(
     await settlement.recordTurnFailed(session.chatId, label)
     return "handled"
   }
-  if (failure.conversationMissing && freshSessionRetryAvailable) {
+  if (failure.sessionUnresumable && freshSessionRetryAvailable) {
     await settlement.discardInvalidSession(session)
     return "retry_on_fresh_session"
   }
   if (failed.kind === "result") await settlement.recordTurnFailed(session.chatId, failed.text)
   else await settlement.recordTurnError(session.chatId, failed.error.message)
-  if (failure.conversationMissing || failure.promptTooLong) await settlement.discardInvalidSession(session)
+  if (failure.sessionUnresumable || failure.promptTooLong) await settlement.discardInvalidSession(session)
   return "unhandled"
 }
